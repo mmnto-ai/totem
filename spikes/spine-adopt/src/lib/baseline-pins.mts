@@ -30,7 +30,7 @@ import { REPO_ROOT, sha256, SPIKE_ROOT } from './spike-env.mts';
 export const BASELINE_PIN = '6ca24d42';
 
 /** Which slice of a file a row's digest covers. */
-export type ByteIdentityRegion = 'file' | 'section:[opa]' | 'symbol:emitPolicy';
+export type ByteIdentityRegion = 'file' | 'section:[opa]' | `symbol:${string}`;
 
 export interface ByteIdentityPin {
   /** Repo-relative, forward-slashed. */
@@ -59,21 +59,82 @@ export function extractOpaSection(text: string): string | null {
 }
 
 /**
- * The `emitPolicy` SYMBOL's source text, from its `function emitPolicy(` line to
- * the line before the next top-level `function` / `export` / comment-block start.
- *
- * By SYMBOL, never by line number: the emitter's line numbers move whenever
- * anything above it in `src/lower.mts` changes, and the claim constraint 3 makes
- * is about the emitted BYTES, whose only source is this function.
+ * A line that OPENS a top-level declaration, and a `// ───` section rule. Together
+ * they are the terminator of a symbol region: the region runs from the symbol's own
+ * declaration line to the line BEFORE the next one of these.
  */
-export function extractEmitPolicySymbol(text: string): string | null {
+const TOP_LEVEL_DECL_START =
+  /^(?:export\s+)?(?:async\s+)?(?:function|const|let|var|class|interface|type|enum)\b/;
+const SECTION_RULE = /^\/\/ ───/;
+
+/**
+ * (§ S4, fold 1 F10 — `.totem/specs/seed20-apparatus-slice2-fold1.md`) ONE symbol's
+ * source text out of `src/lower.mts`, by NAME.
+ *
+ * The region starts at the line that DECLARES the symbol — `function <name>(`,
+ * `export function <name>(`, `const <name> =`, `export const <name> =`, or
+ * `export const <name>:` — and ends at the line before the next top-level
+ * declaration or `// ───` section rule.
+ *
+ * By SYMBOL, never by line number: every one of these moves whenever anything
+ * above it in `src/lower.mts` changes, and the claim constraint 3 makes is about
+ * the emitted BYTES, whose only sources are these seven symbols (charter § 5 K3
+ * names them).
+ *
+ * The region is a CONTIGUOUS text span, so a symbol whose next neighbour carries a
+ * doc comment includes that comment (`SAME_LINE_MARKERS` does). That is deliberate
+ * and stable at both pins: a wider region can only make the K6 claim stricter, and
+ * a narrower one would need a parser to draw the boundary.
+ */
+export function extractSymbolRegion(text: string, name: string): string | null {
+  const openers = [
+    `function ${name}(`,
+    `export function ${name}(`,
+    `const ${name} =`,
+    `export const ${name} =`,
+    `export const ${name}:`,
+  ];
   const lines = text.split('\n');
-  const start = lines.findIndex((l) => l.startsWith('function emitPolicy('));
+  const start = lines.findIndex((l) => openers.some((o) => l.startsWith(o)));
   if (start < 0) return null;
   let end = start + 1;
-  while (end < lines.length && !/^(?:export\b|function\b|\/\/ ───)/.test(lines[end]!)) end += 1;
+  while (
+    end < lines.length &&
+    !TOP_LEVEL_DECL_START.test(lines[end]!) &&
+    !SECTION_RULE.test(lines[end]!)
+  ) {
+    end += 1;
+  }
   return `${lines.slice(start, end).join('\n')}\n`;
 }
+
+/**
+ * (fold 1 F10) The SEVEN emitter symbols charter § 5 K3 names as the producers of
+ * non-comment policy bytes, in the charter's own order.
+ */
+export const EMITTER_SYMBOLS: readonly string[] = [
+  'emitPolicy',
+  'SAME_LINE_MARKERS',
+  'PRECEDING_LINE_MARKERS',
+  'globToRegexSource',
+  'packageSuffix',
+  'q',
+  'regoStringArray',
+];
+
+/**
+ * (fold 1 F10) The DISCLOSED deltas: a symbol whose region digest moved between
+ * `BASELINE_PIN` and this pin, with the owner's benignity statement.
+ *
+ * A row on this map does not FAIL the run — it is DISCLOSED, printed in the header
+ * and carried in `manifest.byteIdentity`. A row NOT on it that differs still
+ * refuses: the apparatus never decides that a delta is benign, it only carries the
+ * statement the owner already made in the design record.
+ */
+export const EXPECTED_DELTAS: Readonly<Record<string, string>> = {
+  packageSuffix:
+    "the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2.",
+};
 
 /**
  * The K6 rows (§ S4).
@@ -83,6 +144,11 @@ export function extractEmitPolicySymbol(text: string): string | null {
  * which throws when the heading or its backticked span is absent — so the schema
  * line the chain hashes cannot drift from the contract even within an unchanged
  * digest.
+ *
+ * (fold 1 F10) The four FILE/SECTION rows come first, then one `symbol:` row per
+ * emitter symbol — the seven the charter names, not `emitPolicy` alone: five of the
+ * six feeders sit OUTSIDE `emitPolicy`'s own region, so a byte-identity claim about
+ * the emitter alone left them unmeasured.
  */
 export const BYTE_IDENTITY_PINS: readonly ByteIdentityPin[] = [
   {
@@ -109,11 +175,52 @@ export const BYTE_IDENTITY_PINS: readonly ByteIdentityPin[] = [
     expected: '6de88005604d33727c38021f6adb8ef37b9c5219dd7689d9f727b2a799257f92',
     why: 'the OPA pin the whole differential is measured on. SECTION, not file: the Go/wazero rows were added after the baseline pin.',
   },
+  // (fold 1 F10) The seven emitter symbols, each digested over the region
+  // `extractSymbolRegion` draws. Every `expected` below was computed by the build
+  // leg from `git show 6ca24d42:spikes/spine-adopt/src/lower.mts` with THAT
+  // function — the same extractor that reads the working tree — so the two sides of
+  // the comparison are drawn by one rule.
   {
     path: 'spikes/spine-adopt/src/lower.mts',
     region: 'symbol:emitPolicy',
     expected: 'c41bb536bb4d6a015c687dbd6750e50277a337ee18336a6c5896efc37ce0bf1c',
-    why: 'constraint 3 — the EMITTED POLICY stays byte-stable, and this function is the only thing that emits it.',
+    why: 'constraint 3 — the EMITTED POLICY stays byte-stable, and this function is the body that emits it.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:SAME_LINE_MARKERS',
+    expected: '2824956ce95ad4b8f8ba1113ee0ec9bf3f5f99899af0c8a72ba138643c350516',
+    why: '§ Lowering 7 — the same-line suppression marker set, emitted verbatim into every policy.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:PRECEDING_LINE_MARKERS',
+    expected: '0365b26a686b71eccd4212206f790fcdbbb39ab8cc8bb5efd71cd1a407bce1ec',
+    why: '§ Lowering 7 — the preceding-line marker set, and the § Lowering 7 deferral`s own site.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:globToRegexSource',
+    expected: '059aa53ee4b42b993bddc0cfb3e40740c2eb8b42abd7fb58161cebbb33f008e4',
+    why: '§ Lowering 5 — every glob regex in the emitted policy and in `globs.json` comes from here.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:packageSuffix',
+    expected: '25fd4366d30f08d2506a14efac97e4b02374fa4dbbacdaf71ada231b9f99f637',
+    why: '§ Lowering 1 — the package name and the entrypoint, both emitted into the policy header.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:q',
+    expected: '1bf1fc350c0dfe130faffeae0994567e5fe47eda3fb5e03a94b4d2fa63458b4c',
+    why: 'every string literal the emitter writes is escaped by this function.',
+  },
+  {
+    path: 'spikes/spine-adopt/src/lower.mts',
+    region: 'symbol:regoStringArray',
+    expected: 'e11dedd9cf81a3cc70a76cb557b048131396bdb853b9ec831e2fab1a37160b93',
+    why: 'every Rego array literal in the emitted policy (globs, markers, patterns) is written by this function.',
   },
 ];
 
@@ -123,16 +230,24 @@ export interface ByteIdentityRow {
   expected: string;
   actual: string | null;
   eq: boolean;
+  /**
+   * (fold 1 F10) The owner's benignity statement when `eq` is false and the symbol
+   * is on `EXPECTED_DELTAS`; `null` otherwise. A row with `eq: false` and
+   * `disclosed: null` REFUSES the run.
+   */
+  disclosed: string | null;
 }
 
 /** Read one row's region out of the working tree and digest it. */
 function actualDigest(pin: ByteIdentityPin): string | null {
   const abs = path.join(REPO_ROOT, ...pin.path.split('/'));
   if (!fs.existsSync(abs)) return null;
-  const text = fs.readFileSync(abs, 'utf-8');
   if (pin.region === 'file') return sha256(fs.readFileSync(abs));
+  const text = fs.readFileSync(abs, 'utf-8');
   const region =
-    pin.region === 'section:[opa]' ? extractOpaSection(text) : extractEmitPolicySymbol(text);
+    pin.region === 'section:[opa]'
+      ? extractOpaSection(text)
+      : extractSymbolRegion(text, pin.region.slice('symbol:'.length));
   return region === null ? null : sha256(region);
 }
 
@@ -145,12 +260,17 @@ function actualDigest(pin: ByteIdentityPin): string | null {
 export function byteIdentityRows(): ByteIdentityRow[] {
   return BYTE_IDENTITY_PINS.map((p) => {
     const actual = actualDigest(p);
+    const eq = actual === p.expected;
+    const symbol = p.region.startsWith('symbol:') ? p.region.slice('symbol:'.length) : null;
     return {
       path: p.path,
       region: p.region,
       expected: p.expected,
       actual,
-      eq: actual === p.expected,
+      eq,
+      // Disclosure is only ever READ here — the string is the owner's, authored
+      // above. A delta with no statement beside it is not disclosed, it is a delta.
+      disclosed: eq || symbol === null ? null : (EXPECTED_DELTAS[symbol] ?? null),
     };
   });
 }
@@ -180,6 +300,25 @@ export const K3_CAPTURE_SHA256: Readonly<Record<string, string>> = {
     '2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881',
 };
 
+/**
+ * (fold 1 F1) The COMMENT-STRIPPED digest of the K3 capture, under the charter's
+ * own formula (`operations/310-seed20-target-preregistration.md:80`).
+ *
+ * Published as `manifest.k3Capture.policyRegoCodeSha256`, and asserted there against
+ * the value the apparatus recomputes from the capture bytes every run. It is NOT in
+ * `K3_CAPTURE_SHA256` because that map is keyed by spike-relative PATH and every
+ * entry is a whole-file digest the manifest re-measures with `spikeFileDigest` — a
+ * derived-text digest under a path key would be read as a file digest by the loop
+ * that iterates it.
+ *
+ * Computed by the build leg over `seed/controls/k3/k3-target.policy.rego` with
+ * `policyRegoCodeText` below. The pre-fold extractor also dropped blank lines and
+ * appended a newline and produced `9190876ae2db5786…`, which is not the number the
+ * charter's `score.mjs` will compute.
+ */
+export const K3_CAPTURE_POLICY_CODE_SHA256 =
+  '0f8223c74c1cc5560cfbfcb7c86590490eef3f6e269677c136ca0bcc0ce08e7b';
+
 /** Every spike-relative path this module pins, with its expected digest. */
 export const SPIKE_FILE_PINS: Readonly<Record<string, string>> = {
   ...K8_FIXTURE_SHA256,
@@ -193,15 +332,24 @@ export function spikeFileDigest(rel: string): string | null {
 }
 
 /**
- * The § 5 COMMENT-STRIPPED form of a published `policy.rego`: the code lines only —
- * every line whose first non-blank character is `#` removed, and every blank line
- * removed. Published as `manifest.k3Capture.policyRegoCodeSha256`, so the digest
- * the charter's § 5 asks for is the apparatus's own claim rather than a number
- * computed once by hand beside it.
+ * The § 5 COMMENT-STRIPPED form of a published `policy.rego`, VERBATIM from the
+ * charter (`mmnto-ai/totem-strategy:operations/310-seed20-target-preregistration.md:80`):
+ *
+ *   codeLines = emitted.split('\n').filter((l) => !l.trimStart().startsWith('#'))
+ *
+ * joined by `\n`. Nothing else: NO blank-line filter and NO trailing newline. The
+ * digest `score.mjs` computes on the other side of the seam is sha256 (UTF-8) over
+ * exactly this string, and a formula that differs by one byte produces a number that
+ * agrees with nothing (fold 1 F1 — the pre-fold extractor dropped blank lines and
+ * appended `\n`, and measured `9190876a…` where the charter measures `0f8223c7…`).
+ *
+ * Published as `manifest.k3Capture.policyRegoCodeSha256`, so the digest the
+ * charter's § 5 asks for is the apparatus's own claim, re-derived every run, rather
+ * than a number computed once by hand beside it.
  */
 export function policyRegoCodeText(policyRego: string): string {
-  const code = policyRego
+  return policyRego
     .split('\n')
-    .filter((l) => l.trim().length > 0 && !l.trimStart().startsWith('#'));
-  return `${code.join('\n')}\n`;
+    .filter((l) => !l.trimStart().startsWith('#'))
+    .join('\n');
 }

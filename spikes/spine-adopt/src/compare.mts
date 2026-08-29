@@ -368,7 +368,17 @@ interface PairResult {
   right: Arm;
   status: Status;
   explanation: string | null;
-  explanationClass?: string;
+  /**
+   * (fold 1 F12) PRESENT-AS-NULL on every pair, never omitted — the same rule
+   * `seedEntry` (C4) and `control` (C5) already follow, and the Go comparator's C9
+   * `explanationClass` follows on its side of the seam.
+   *
+   * An OPTIONAL key means a reader counting classes has to distinguish "this pair
+   * has no class" from "this producer does not emit the key", and the two are
+   * indistinguishable from the artifact. A MATCH row genuinely has no class; it says
+   * so.
+   */
+  explanationClass: string | null;
   detail: Record<string, unknown> | null;
 }
 
@@ -485,6 +495,7 @@ function comparePair(
       ...base,
       status: 'UNEXPLAINED-DIVERGENCE',
       explanation: null,
+      explanationClass: null,
       detail: {
         reason: 'ERROR ROW — an arm failed to produce a verdict',
         leftError: left.error,
@@ -513,6 +524,7 @@ function comparePair(
         ...base,
         status: 'UNEXPLAINED-DIVERGENCE',
         explanation: null,
+        explanationClass: null,
         detail: {
           reason:
             '`fired`/`matchCount` do not DERIVE from the violation multiset on one of the arms (§ Differential units)',
@@ -529,7 +541,7 @@ function comparePair(
         },
       };
     }
-    return { ...base, status: 'MATCH', explanation: null, detail: null };
+    return { ...base, status: 'MATCH', explanation: null, explanationClass: null, detail: null };
   }
 
   const ex = explain(left, right);
@@ -547,6 +559,7 @@ function comparePair(
     ...base,
     status: 'UNEXPLAINED-DIVERGENCE',
     explanation: null,
+    explanationClass: null,
     detail: {
       violations: violationsEqual ? 'equal' : multisetDiff(lv, rv),
       events: eventsEqual ? 'equal' : multisetDiff(le, re),

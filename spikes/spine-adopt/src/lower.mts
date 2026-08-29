@@ -765,23 +765,38 @@ async function main(): Promise<void> {
         shipped: core.ruleAppliesToFile(cs.rule, p) as boolean,
       });
     }
+    // (fold 1 F9) The two parity rows are DISCLOSING, on every set.
+    //
+    // A lowered-vs-shipped disagreement on a probe is that RECORD's T5
+    // `scope-divergence` — a typed miss the SCORER assigns (charter § 5 K3b: "a
+    // disagreement is a T5 scope-divergence, not a K3b fault"). An apparatus that
+    // refused here would be deciding a verdict, and would take the whole run down
+    // over a measurement the trial exists to collect. The rows therefore read true
+    // and carry the count plus the first drifts; the FULL lists are already
+    // serialised into each package's `globs.json` (`scopeProbes` / `perGlobProbes`)
+    // and are unchanged by this fold. The K3b `blind` row below stays REFUSING —
+    // that one is an apparatus fault (a glob nothing probed), not a record's miss.
     const globDrift = perGlob.filter((r) => r.mine !== r.shipped);
     checks.check(
-      `${s.id} — per-glob parity with \`matchesRecordGlob\` over ${probePaths(s).length} probe paths`,
-      globDrift.length === 0,
+      `${s.id} — per-glob agreement with \`matchesRecordGlob\` over ${probePaths(s).length} probe paths — ${globDrift.length} disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in \`lowered/${pkgSuffix}/globs.json\`.perGlobProbes)`,
+      true,
       globDrift.length === 0
         ? `${perGlob.length} (glob × path) probes agree`
-        : globDrift
+        : `${globDrift.length}/${perGlob.length} disagree: ${globDrift
+            .slice(0, 5)
             .map((d) => `${d.glob} vs ${d.path}: mine=${d.mine} shipped=${d.shipped}`)
-            .join('; '),
+            .join('; ')}${globDrift.length > 5 ? '; …' : ''}`,
     );
     const scopeDrift = scopeProbes.filter((r) => r.mine !== r.shipped);
     checks.check(
-      `${s.id} — two-array scope parity with \`ruleAppliesToFile\` (§ Design 7 positiveMatch && !excludeMatch)`,
-      scopeDrift.length === 0,
+      `${s.id} — two-array scope agreement with \`ruleAppliesToFile\` (§ Design 7 positiveMatch && !excludeMatch) — ${scopeDrift.length} disagreement(s) DISCLOSED (the full list is in \`lowered/${pkgSuffix}/globs.json\`.scopeProbes)`,
+      true,
       scopeDrift.length === 0
         ? `${scopeProbes.length} paths agree (${scopeProbes.filter((p) => p.mine).length} in scope)`
-        : scopeDrift.map((d) => `${d.path}: mine=${d.mine} shipped=${d.shipped}`).join('; '),
+        : `${scopeDrift.length}/${scopeProbes.length} disagree: ${scopeDrift
+            .slice(0, 5)
+            .map((d) => `${d.path}: mine=${d.mine} shipped=${d.shipped}`)
+            .join('; ')}${scopeDrift.length > 5 ? '; …' : ''}`,
     );
     // A vacuously-true parity check (everything out of scope) would prove nothing.
     checks.check(
@@ -1089,7 +1104,12 @@ async function main(): Promise<void> {
       entrypoint: l.entrypoint,
       engine: l.engine,
       dir: path.relative(SPIKE_ROOT, l.dir).split(path.sep).join('/'),
-      published: `artifacts/lowered/${l.pkgSuffix}`,
+      // (fold 1 F14) DERIVED from `LOWERED_PUBLISH_DIR`, never re-spelled: under
+      // `SPIKE_ARTIFACTS_SUBDIR` (C10) the publication root moves to
+      // `artifacts/<subdir>/lowered/`, and a hardcoded `artifacts/lowered/` here
+      // pointed a reader of a control run's artifact at the run of record's files.
+      // Same rule `dir` above already follows.
+      published: `${path.relative(SPIKE_ROOT, LOWERED_PUBLISH_DIR).split(path.sep).join('/')}/${l.pkgSuffix}`,
       patterns: l.patterns,
       globCount: l.globTable.length,
     })),

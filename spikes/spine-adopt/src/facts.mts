@@ -34,6 +34,7 @@ import {
   Checks,
   FACTS_DIR,
   fillManifestBundles,
+  readRunManifest,
   REPO_ROOT,
   sha256,
   writeArtifact,
@@ -501,6 +502,27 @@ async function main(): Promise<void> {
       .map((r) => bundleFileName(r)),
     [],
   );
+  // (fold 1 F5) The manifest DECLARED, before any stage ran, which fact bundles each
+  // K-control row would mint (`controlRecords[].bundleFixtureIds`). This is the
+  // measurement: the bundles actually minted for that row's specimen, compared to
+  // the declaration. Without it a control that silently minted nothing would be an
+  // ABSENCE — and an absence is the one thing a run cannot notice about itself.
+  for (const cr of (readRunManifest().controlRecords ?? []) as {
+    ruleId: string;
+    role: string;
+    bundleFixtureIds?: string[];
+  }[]) {
+    const declared = [...(cr.bundleFixtureIds ?? [])].sort();
+    const minted = records
+      .filter((r) => r.ruleId === cr.ruleId)
+      .map((r) => r.fixtureId)
+      .sort();
+    checks.eq(
+      `${cr.role} CONTROL — the fact bundles minted for \`r${cr.ruleId}\` are exactly the ones the manifest declared`,
+      minted,
+      declared,
+    );
+  }
   if (SWAP_EXAMPLES_FOR !== '') {
     const swappedIds = records
       .filter((r) => (r.provenance as { swapped?: boolean }).swapped === true)

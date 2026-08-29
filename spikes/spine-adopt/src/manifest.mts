@@ -22,6 +22,7 @@ import * as path from 'node:path';
 import {
   BASELINE_PIN,
   byteIdentityRows,
+  K3_CAPTURE_POLICY_CODE_SHA256,
   K3_CAPTURE_SHA256,
   K8_FIXTURE_SHA256,
   policyRegoCodeText,
@@ -29,6 +30,7 @@ import {
 } from './lib/baseline-pins.mts';
 import {
   activeRecordSet,
+  controlBundleFixtureIds,
   controlRecordPath,
   generatedSeedProbes,
   K3_CAPTURE_CHAIN,
@@ -41,6 +43,7 @@ import {
   type RecordRow,
   SEED_RECORD_PIN,
   sharedProbePaths,
+  SPECIMEN_PROBE_PATHS,
 } from './lib/record-sets.mts';
 import {
   ARTIFACTS_DIR,
@@ -67,6 +70,16 @@ const RECORD_LOWER_SOURCE = path.join(
   'spine',
   'record-lower.ts',
 );
+
+/**
+ * (fold 1 F13) The DEV seam for the clean-tree gate.
+ *
+ * `SPIKE_ALLOW_DIRTY_TREE=1` turns the `seed20`/`control` clean-tree FAIL check back
+ * into a recorded fact, because the slice's own § Verification loop runs the seed
+ * seam from a branch with uncommitted work by construction. The run of record does
+ * not set it, and the header states which arm the run is on either way.
+ */
+const ALLOW_DIRTY_TREE = process.env.SPIKE_ALLOW_DIRTY_TREE === '1';
 
 interface Resolved {
   version: string | null;
@@ -179,6 +192,10 @@ function main(): void {
       file: rowDigest(r).file,
       sha256: rowDigest(r).sha256,
       control: true as const,
+      // (C5 / fold 1 F5) PRESENT-AS-NULL, never omitted. A control row is not a
+      // seed entry by construction, and a reader grouping rows by `seedEntry` must
+      // not have to tell "no entry" apart from "this producer omits the key".
+      seedEntry: r.seedEntry,
       ruleId: r.ruleId,
       // The package a control record lowers to (§ Lowering 1). No control row is
       // twinned, so it never takes a `_<discriminator>` suffix.
@@ -186,6 +203,12 @@ function main(): void {
       // `K5` for the in-set M3 control (§ S3); the `control` record set's single row
       // is K3 arm B (§ S5), which is the only other control record that loads.
       role: path.resolve(r.recordFile) === path.resolve(K5_CONTROL_RECORD) ? 'K5' : 'K3',
+      // (fold 1 F5) The fact bundles this control row is DECLARED to mint, named at
+      // manifest time from the record's own bytes. `src/facts.mts` asserts after
+      // minting that the bundles carrying this row's specimen id are exactly these —
+      // so a control whose bundles silently went missing, or gained one, is a FAILED
+      // check rather than an absence the scorer has to notice.
+      bundleFixtureIds: controlBundleFixtureIds(r),
     }));
 
   // ── the corpus fixtures the set names ──
@@ -262,13 +285,35 @@ function main(): void {
   const k3PolicyText = fs.existsSync(K3_CAPTURE_POLICY)
     ? fs.readFileSync(K3_CAPTURE_POLICY, 'utf-8')
     : null;
+  // The § 5 CODE-ONLY digest, under the CHARTER's formula (fold 1 F1): the emitted
+  // policy minus lines whose first non-blank character is `#`, `\n`-joined. Blank
+  // lines are KEPT and there is no trailing newline — `score.mjs` computes the same
+  // number on its side of the seam, and a formula that differs by one byte produces
+  // a digest that agrees with nothing.
+  const policyRegoSha256 = spikeFileDigest('seed/controls/k3/k3-target.policy.rego');
+  const policyRegoCodeSha256 =
+    k3PolicyText === null ? null : sha256(policyRegoCodeText(k3PolicyText));
+  const chainSha256 = spikeFileDigest('seed/controls/k3/k3-target.chain.json');
+  // (fold 1 F2) `repinned: false` = the PINNED TARGET STANDS — all three recomputed
+  // digests equal the pins. `true` puts the measured values in `repinnedDigests`
+  // beside, so the scorer reads the disclosure from the manifest rather than
+  // discovering a moved target by comparing against a number nobody published.
+  const k3Pins = {
+    policyRegoSha256: K3_CAPTURE_SHA256['seed/controls/k3/k3-target.policy.rego']!,
+    policyRegoCodeSha256: K3_CAPTURE_POLICY_CODE_SHA256,
+    chainSha256: K3_CAPTURE_SHA256['seed/controls/k3/k3-target.chain.json']!,
+  };
+  const k3Measured = { policyRegoSha256, policyRegoCodeSha256, chainSha256 };
+  const k3Repinned =
+    policyRegoSha256 !== k3Pins.policyRegoSha256 ||
+    policyRegoCodeSha256 !== k3Pins.policyRegoCodeSha256 ||
+    chainSha256 !== k3Pins.chainSha256;
   const k3Capture = {
-    policyRegoSha256: spikeFileDigest('seed/controls/k3/k3-target.policy.rego'),
-    // The § 5 CODE-ONLY digest: the published policy minus comment lines and blank
-    // lines. The owner computed it read-only beside the charter; publishing it here
-    // makes it the apparatus's own claim, re-derived every run from the capture.
-    policyRegoCodeSha256: k3PolicyText === null ? null : sha256(policyRegoCodeText(k3PolicyText)),
-    chainSha256: spikeFileDigest('seed/controls/k3/k3-target.chain.json'),
+    policyRegoSha256,
+    policyRegoCodeSha256,
+    chainSha256,
+    repinned: k3Repinned,
+    ...(k3Repinned ? { repinnedDigests: { pinned: k3Pins, measured: k3Measured } } : {}),
     files: {
       policyRego: path.relative(SPIKE_ROOT, K3_CAPTURE_POLICY).split(path.sep).join('/'),
       chain: path.relative(SPIKE_ROOT, K3_CAPTURE_CHAIN).split(path.sep).join('/'),
@@ -277,9 +322,15 @@ function main(): void {
 
   // ── (§ S4) K6 byte identity against the baseline pin ──
   const byteIdentity = { baselinePin: BASELINE_PIN, files: byteIdentityRows() };
+  const disclosedDeltas = byteIdentity.files.filter((r) => !r.eq && r.disclosed !== null);
+  const undisclosedDeltas = byteIdentity.files.filter((r) => !r.eq && r.disclosed === null);
 
-  const probePaths = sharedProbePaths(recordSet);
-  const probePathsText = `${[...probePaths].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).join('\n')}\n`;
+  // (fold 1 F4/N3) PUBLISHED SORTED on every set — the digest below attests the
+  // published order, so the list a reader hashes is the list a reader sees. The
+  // FROZEN order the specimens' `globs.json` serialises is a separate thing and is
+  // published separately, as `probeGeneration.frozen`.
+  const probePaths = [...sharedProbePaths(recordSet)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const probePathsText = `${probePaths.join('\n')}\n`;
 
   const manifest: Record<string, unknown> = {
     generatedBy: 'spikes/spine-adopt/src/manifest.mts',
@@ -309,6 +360,12 @@ function main(): void {
       rule: PROBE_GENERATION_RULE,
       globCount: recordSet === 'seed20' ? generatedSeedProbes().length : 0,
       pairs: recordSet === 'seed20' ? generatedSeedProbes() : [],
+      // (fold 1 F3) The FROZEN 22, in AUTHORED order — the order they are serialised
+      // into each specimen's `globs.json`, whose sha256 is a chain component. It is
+      // an apparatus CONSTANT: the scorer cannot derive it from the corpus, and
+      // without it the sorted `probePaths` above cannot be split back into "frozen"
+      // and "generated". Published on every set, unchanged by the record set.
+      frozen: [...SPECIMEN_PROBE_PATHS],
     },
     // (C5/§ S3) The K-control records that LOADED this run, split out of `records`
     // so the scorer never has to filter the scored corpus itself.
@@ -419,6 +476,15 @@ function main(): void {
   console.log(
     `  byteIdentity      ${eqRows}/${byteIdentity.files.length} regions byte-identical to ${BASELINE_PIN}`,
   );
+  // (fold 1 F10) Every DISCLOSED delta is printed, with the owner's statement. A
+  // disclosed delta is still a delta: burying it in an artifact key would let the
+  // run read as clean in the log that a human actually looks at.
+  for (const r of disclosedDeltas) {
+    console.log(`  DISCLOSED DELTA   ${r.path} (${r.region}) — ${r.disclosed ?? ''}`);
+  }
+  // (fold 1 F13) Which arm the dirty-tree gate is on, stated in the header rather
+  // than left to be inferred from the presence of a FAILED check.
+  console.log(`  dirty tree allowed: ${ALLOW_DIRTY_TREE ? 'yes' : 'no'}`);
   console.log('─────────────────────────────────────────────────────────────────\n');
 
   checks.eq('the manifest names the ACTIVE record set', manifest.recordSet, recordSet);
@@ -438,18 +504,60 @@ function main(): void {
     trackedList.length > 0,
     `${trackedList.length} paths -> artifacts/${TRACKED_PATHS_ARTIFACT}`,
   );
-  // RECORDED, never gated (T17). `ok` is deliberately `true` either way: a dirty
-  // tree is a fact for the scorer, and a manifest that refused to be written in one
-  // would take the whole pipeline down over a scratch file.
-  checks.check(
-    "the working tree state at `runCommit` is RECORDED (not gated — a dirty tree is the scorer's to refuse)",
-    true,
+  // ── (fold 1 F4) the probe set: published sorted, and COMPLETE ──
+  checks.eq(
+    `\`probePaths\` is published in CODEPOINT order (${probePaths.length} paths; \`probePathsSha256\` attests that order)`,
+    probePaths.filter((p, i) => i > 0 && !(probePaths[i - 1]! < p)),
+    [],
+  );
+  // The frozen 22 are a chain-digest input and must survive every set unchanged as a
+  // SUBSET of the published list (their ORDER is published separately, as
+  // `probeGeneration.frozen`).
+  checks.eq(
+    'every one of the 22 frozen SPECIMEN_PROBE_PATHS is in the published probe set',
+    SPECIMEN_PROBE_PATHS.filter((p) => !probePaths.includes(p)),
+    [],
+  );
+  // On the seed set the list must additionally cover every record's own inline
+  // example path and the one corpus fixture — the paths each record is authored
+  // against. A sweep that omitted them measured scope over paths no record names.
+  const seedScoped = rows.filter((r) => !r.control);
+  checks.eq(
+    `every seed record's \`inlineFilePath\` and \`fixture.file\` is in the published probe set (${seedScoped.length} scored record(s))`,
+    recordSet === 'seed20'
+      ? [
+          ...seedScoped.map((r) => r.inlineFilePath),
+          ...seedScoped.flatMap((r) => (r.fixture ? [r.fixture.file] : [])),
+        ].filter((p) => !probePaths.includes(p))
+      : [],
+    [],
+  );
+  // (fold 1 F13) GATED on `seed20` and `control`, RECORDED on `specimens`.
+  //
+  // The run of record's artifacts claim to be the artifacts of `runCommit`. If the
+  // tree was dirty, they are the artifacts of something nobody can name — and the
+  // scorer, reading `workingTreeClean: false` in a manifest whose run already
+  // exited 0, would be refusing a run the apparatus had already called green.
+  // `SPIKE_ALLOW_DIRTY_TREE=1` is the DEV seam (the § Verification loop runs on a
+  // branch with uncommitted work by construction); the run of record does not set
+  // it, and the header prints which arm this run is on.
+  //
+  // On `specimens` it stays recorded-not-gated: `npm run all` is the developer loop
+  // and a manifest that refused over a scratch file would take it down.
+  const dirtyDetail =
     manifest.workingTreeClean === true
       ? 'clean'
       : `DIRTY: ${dirtyEntries.length} entr${dirtyEntries.length === 1 ? 'y' : 'ies'} from \`git status --porcelain\` — ${dirtyEntries
           .slice(0, 5)
           .map((l) => l.trim())
-          .join('; ')}${dirtyEntries.length > 5 ? '; …' : ''}`,
+          .join('; ')}${dirtyEntries.length > 5 ? '; …' : ''}`;
+  const dirtyGated = (recordSet === 'seed20' || recordSet === 'control') && !ALLOW_DIRTY_TREE;
+  checks.check(
+    dirtyGated
+      ? `the working tree at \`runCommit\` is CLEAN — REQUIRED on \`${recordSet}\` (§ S4 / fold 1 F13; set SPIKE_ALLOW_DIRTY_TREE=1 for a dev run)`
+      : "the working tree state at `runCommit` is RECORDED (not gated — a dirty tree is the scorer's to refuse)",
+    !dirtyGated || manifest.workingTreeClean === true,
+    ALLOW_DIRTY_TREE ? `${dirtyDetail} — SPIKE_ALLOW_DIRTY_TREE=1 (dev run)` : dirtyDetail,
   );
   const unresolved = Object.entries(manifest.toolchain as Record<string, Resolved>)
     .filter(([, v]) => v.version === null)
@@ -474,10 +582,21 @@ function main(): void {
 
   // ── (§ S4) K6 — one check per pinned region ──
   //
-  // A delta is a FAILED check and the run refuses. Whether a delta is BENIGN is the
-  // owner's to state in the design record; an apparatus that waved one through
-  // would be deciding exactly the thing it is not allowed to decide.
+  // A delta is a FAILED check and the run refuses — UNLESS the symbol is on
+  // `EXPECTED_DELTAS` with the owner's benignity statement (fold 1 F10), in which
+  // case the row is DISCLOSING: it reads true, and the statement is both the check's
+  // detail and a line in the header. Whether a delta is benign is the owner's to
+  // state in the design record; the apparatus only ever CARRIES that statement — it
+  // has none of its own, and an undisclosed delta still refuses.
   for (const r of byteIdentity.files) {
+    if (r.disclosed !== null) {
+      checks.check(
+        `K6 — \`${r.path}\` (${r.region}) DIFFERS from BASELINE_PIN ${BASELINE_PIN}, DISCLOSED by the owner`,
+        true,
+        `${r.expected} -> ${r.actual ?? 'null'} — ${r.disclosed}`,
+      );
+      continue;
+    }
     checks.eq(
       `K6 — \`${r.path}\` (${r.region}) is byte-identical to BASELINE_PIN ${BASELINE_PIN}`,
       r.actual,
@@ -490,6 +609,21 @@ function main(): void {
   for (const [rel, expected] of Object.entries(K3_CAPTURE_SHA256)) {
     checks.eq(`K3 CAPTURE — \`${rel}\` matches its pinned sha256`, spikeFileDigest(rel), expected);
   }
+  // (fold 1 F1) The § 5 comment-stripped digest, recomputed from the capture bytes
+  // and asserted against the pin. This is the number `score.mjs` compares the
+  // G7-published `policy.rego` against, so the apparatus states it as its own claim
+  // under the charter's formula rather than publishing whatever its extractor
+  // happened to compute.
+  checks.eq(
+    'K3 CAPTURE — the § 5 COMMENT-STRIPPED digest of `seed/controls/k3/k3-target.policy.rego` (charter formula: lines whose first non-blank char is `#` removed, `\\n`-joined, no trailing newline)',
+    k3Capture.policyRegoCodeSha256,
+    K3_CAPTURE_POLICY_CODE_SHA256,
+  );
+  checks.eq(
+    'K3 CAPTURE — `repinned` is false: all three recomputed capture digests equal their pins, so the pinned K3 target STANDS',
+    { repinned: k3Capture.repinned, undisclosedByteIdentityDeltas: undisclosedDeltas.length },
+    { repinned: false, undisclosedByteIdentityDeltas: 0 },
+  );
   for (const [rel, expected] of Object.entries(K8_FIXTURE_SHA256)) {
     checks.eq(`K8 FIXTURE — \`${rel}\` matches its pinned sha256`, spikeFileDigest(rel), expected);
   }

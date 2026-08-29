@@ -119,7 +119,13 @@ const K3_EXPECTED_TO_DIFFER: readonly string[] = [
 ];
 
 const K3_EXPECTED_IDENTICAL: readonly string[] = [
-  'regoComposition.components["factSchemaLine"]',
+  // (fold 1 F15) UNBRACKETED. `leafPaths` brackets a key only when the key itself
+  // contains a `.` — the charter's own spelling
+  // `regoComposition.components["policy.rego"]` exists because `policy.rego` does.
+  // `factSchemaLine` does not, so it is rendered dotted and the bracketed spelling
+  // matched no path at all: the row it was supposed to cover would have been tagged
+  // UNCOVERED if it ever differed, which is a positive claim silently unmade.
+  'regoComposition.components.factSchemaLine',
   'regoComposition.factSchemaLine',
   'manifestSha256',
   'entrypointManifest.canonicalPreimage',
@@ -704,7 +710,17 @@ function k5b(differential: Artifact, wazeroReport: Artifact, recordSet: RecordSe
   }));
   // The Go half is C7's: `wazero-report.json.errorRows` in the SAME shape. Until the
   // Go arm publishes it, this is NOT MEASURED — never assumed clean.
-  const goAcc = wazeroReport?.errorRows;
+  //
+  // (fold 1 F11) And it is read ONLY when the report names THIS run's record set.
+  // `wazero-probe/artifacts/wazero-report.json` is not wiped between record sets, so
+  // a seed20 run following a specimens run would otherwise read the specimens
+  // report's accounting — `outsideK5b: 0` with no control row at all — and score a
+  // clean K5b arm off an artifact that never saw the malformed bundle. The Go arm
+  // writes `recordSet` for exactly this (fold 1 G1); a report without the key is
+  // from before that change and is treated as stale, not as matching.
+  const goRecordSet = wazeroReport?.recordSet;
+  const goStale = wazeroReport !== null && goRecordSet !== recordSet;
+  const goAcc = goStale ? undefined : wazeroReport?.errorRows;
   const goRows = goAcc
     ? Object.entries((goAcc.perArm ?? {}) as Record<string, Artifact>).map(([arm, v]) => ({
         arm,
@@ -728,7 +744,11 @@ function k5b(differential: Artifact, wazeroReport: Artifact, recordSet: RecordSe
       ? `an arm reported error rows outside the K5b control, or the control did not produce exactly one: ${JSON.stringify(tsRows)}`
       : goAcc
         ? `every arm (${[...tsRows, ...goRows].map((r) => r.arm).join(', ')}) reports outsideK5b=0 with exactly one control error row`
-        : `the three TS arms report outsideK5b=0 with exactly one control error row; the wazero arm is NOT MEASURED — \`wazero-report.json.errorRows\` is absent (C7 is the Go leg's half of the seam)`,
+        : `the three TS arms report outsideK5b=0 with exactly one control error row; the wazero arm is NOT MEASURED — ${
+            goStale
+              ? `\`wazero-report.json\` is STALE: it carries recordSet=${JSON.stringify(goRecordSet ?? null)}, not ${JSON.stringify(recordSet)} (re-run \`go run . -spike-root ..\` in wazero-probe/ for this record set)`
+              : '`wazero-report.json.errorRows` is absent (C7 is the Go leg`s half of the seam)'
+          }`,
     rows: [...tsRows, ...goRows],
     evidence,
   };
@@ -753,7 +773,12 @@ function k6(manifest: Artifact): ControlRow {
   const unresolved = Object.entries((manifest.toolchain ?? {}) as Record<string, Artifact>)
     .filter(([, v]) => v?.version === null || v?.version === undefined)
     .map(([k]) => k);
-  const bad = files.filter((r) => r.eq !== true);
+  // (fold 1 F10) A row with `eq: false` and a `disclosed` string is the OWNER's
+  // stated benign delta (`EXPECTED_DELTAS` in `src/lib/baseline-pins.mts`) — it is
+  // reported, not counted as a fault. A delta with no statement beside it is a
+  // fault; the apparatus never authors the statement, it only carries one.
+  const disclosed = files.filter((r) => r.eq !== true && typeof r.disclosed === 'string');
+  const bad = files.filter((r) => r.eq !== true && typeof r.disclosed !== 'string');
   return {
     id: 'K6',
     refusing: true,
@@ -762,7 +787,10 @@ function k6(manifest: Artifact): ControlRow {
     // file would be deciding a question that is not its.
     ok: bad.length === 0,
     detail:
-      `${files.length - bad.length}/${files.length} pinned region(s) byte-identical to ${String(manifest.byteIdentity.baselinePin)}` +
+      `${files.filter((r) => r.eq === true).length}/${files.length} pinned region(s) byte-identical to ${String(manifest.byteIdentity.baselinePin)}` +
+      (disclosed.length > 0
+        ? ` — DISCLOSED DELTA: ${disclosed.map((r) => `${r.path} (${r.region}): ${String(r.disclosed)}`).join(' | ')}`
+        : '') +
       (bad.length > 0 ? ` — DELTA: ${bad.map((r) => `${r.path} (${r.region})`).join(', ')}` : '') +
       ` | toolchain: ${unresolved.length === 0 ? 'every version resolved' : `UNRESOLVED ${unresolved.join(', ')}`}` +
       ` | workingTreeClean: ${String(manifest.workingTreeClean)}`,
@@ -827,6 +855,20 @@ function k7(): ControlRow {
   };
 }
 
+/**
+ * (fold 1 F16) Does `message` name `token` as a WHOLE TOKEN?
+ *
+ * The predicate, verbatim: `(^|[^A-Za-z0-9_.])<token>([^A-Za-z0-9_]|$)`.
+ *
+ * Identifier characters bound it on both sides, so `fileGlobs` does not count as
+ * naming `fileGlob`. A `.` is excluded on the LEFT as well: the control's claim is
+ * that the parser NAMED the offending key, and a token appearing as the tail of a
+ * dotted path is the parser naming a location, not a key.
+ */
+function namesToken(message: string, token: string): boolean {
+  return new RegExp(`(^|[^A-Za-z0-9_.])${token}([^A-Za-z0-9_]|$)`).test(message);
+}
+
 async function k8(): Promise<ControlRow> {
   const evidence = K8_FIXTURES.map((f) => ({
     artifact: path.relative(SPIKE_ROOT, f.file).split(path.sep).join('/'),
@@ -875,7 +917,15 @@ async function k8(): Promise<ControlRow> {
       expect: f.expect,
       kind: f.kind,
       rejected: !outcome.ok,
-      namesTheField: !outcome.ok && message.includes(names),
+      // (fold 1 F16) A WHOLE-TOKEN match, never a substring.
+      //
+      // `fileGlob` is a substring of `fileGlobs`, which the § Design 5 schema
+      // legitimately names in unrelated messages — so `includes('fileGlob')` would
+      // read "unrecognized key at target.scope.fileGlobs" as evidence that the
+      // parser named the OFFENDING key `fileGlob`. The control's whole claim is that
+      // the rejection names the right field; a predicate that a near-miss satisfies
+      // does not check it.
+      namesTheField: !outcome.ok && namesToken(message, names),
       message,
     });
   }

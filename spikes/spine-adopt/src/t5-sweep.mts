@@ -54,6 +54,28 @@ const INVOCATION =
   '-d artifacts/lowered/<pkg>/policy.rego -d rego/build/<subdir>/<pkg>/t5-sweep.rego ' +
   '-i <input.json> data.t5sweep.in_scope_paths';
 
+/**
+ * (fold 1 F6) The same invocation as an ARGV ARRAY, holes and all — emitted BESIDE
+ * `invocation`, never instead of it (the 19:57Z mail accepted the string form).
+ *
+ * A reader reproducing the sweep has to re-tokenise the string; the array is the
+ * thing the stage actually spawns, so there is nothing to re-tokenise and no
+ * quoting convention to guess at.
+ */
+const INVOCATION_ARGV: readonly string[] = [
+  '<OPA_BIN>',
+  'eval',
+  '--format=json',
+  '--strict-builtin-errors',
+  '-d',
+  'artifacts/lowered/<pkg>/policy.rego',
+  '-d',
+  'rego/build/<subdir>/<pkg>/t5-sweep.rego',
+  '-i',
+  '<input.json>',
+  'data.t5sweep.in_scope_paths',
+];
+
 interface LoweringRow {
   specimen: string;
   seedEntry: string | null;
@@ -61,12 +83,19 @@ interface LoweringRow {
   package: string;
 }
 
+/**
+ * (fold 1 F8) A deposited row is EXACTLY these four keys.
+ *
+ * No timing: `rows[]` and `probeRows[]` have to be byte-identical between the
+ * scorer's evidence clone and its replay clone, and a wall-clock number makes that
+ * impossible by construction. The timings are published at the top level, where they
+ * are provenance rather than measurement.
+ */
 interface SweepRow {
   pkg: string;
   inScope: string[];
   shippedApplies: string[];
   disagreements: { path: string; in_scope: boolean; ruleAppliesToFile: boolean }[];
-  elapsedMs: number;
 }
 
 function spikeRel(abs: string): string {
@@ -115,7 +144,7 @@ function sweepPackage(
   wrapperAt: string,
   corpus: CorpusSweep,
   singleInputAt: string,
-): SweepRow {
+): { row: SweepRow; elapsedMs: number } {
   const argv = [
     'eval',
     '--format=json',
@@ -194,7 +223,7 @@ function sweepPackage(
     [],
   );
 
-  return { pkg: row.package, inScope, shippedApplies, disagreements, elapsedMs };
+  return { row: { pkg: row.package, inScope, shippedApplies, disagreements }, elapsedMs };
 }
 
 async function main(): Promise<void> {
@@ -241,17 +270,24 @@ async function main(): Promise<void> {
       contract:
         'spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. NOT MEASURED in this run.',
       status: 'SKIPPED — record pin commit not present locally',
+      // (fold 1 F17) The SKIPPED arm carries the SAME header and timings keys as the
+      // MEASURED one, empty. A consumer that reads `header.policies` or `timings`
+      // must not have to branch on `status` to avoid an undefined.
       header: {
         recordPin: pinHeader.pin,
         treeCount: 0,
         treeSha256: null,
         probeCount: probePaths.length,
         invocation: INVOCATION,
+        argv: INVOCATION_ARGV,
         mode: 'batched-set-comprehension',
         opaVersion: null,
         wrapperTemplateSha256,
         packages: [],
+        policies: {},
+        controlPackagesSkipped: [],
       },
+      timings: { totalMs: 0, perPackage: {} },
       rows: [],
       probeRows: [],
       checks: checks.rows,
@@ -315,8 +351,12 @@ async function main(): Promise<void> {
   const singleInputAt = path.join(tmp, 'single-input.json');
 
   const headerPackages: Record<string, unknown>[] = [];
+  const headerPolicies: Record<string, unknown> = {};
   const rows: SweepRow[] = [];
   const probeRows: SweepRow[] = [];
+  const perPackageTimings: Record<string, { rowsMs: number; probeRowsMs: number }> = {};
+  // (fold 1 F7) The K-control packages, named rather than silently absent.
+  const controlPackagesSkipped: string[] = [];
   const startedAll = Date.now();
 
   for (const row of lowering.lowered) {
@@ -340,48 +380,75 @@ async function main(): Promise<void> {
       );
     }
 
-    rows.push(
-      sweepPackage(
-        checks,
-        core,
-        compiled.rule,
-        row,
-        suffix,
-        policyAt,
-        wrapperAt,
-        treeCorpus,
-        singleInputAt,
-      ),
-    );
-    probeRows.push(
-      sweepPackage(
-        checks,
-        core,
-        compiled.rule,
-        row,
-        suffix,
-        policyAt,
-        wrapperAt,
-        probeCorpus,
-        singleInputAt,
-      ),
-    );
-
+    const policyRegoSha256 = sha256(fs.readFileSync(policyAt));
+    const wrapperSha256 = sha256(wrapperText);
     headerPackages.push({
       pkg: row.package,
       recordId: row.specimen,
       seedEntry: row.seedEntry ?? null,
       control: row.control === true,
-      policyRegoSha256: sha256(fs.readFileSync(policyAt)),
-      wrapperSha256: sha256(wrapperText),
+      policyRegoSha256,
+      wrapperSha256,
     });
+    // (fold 1 F6) The same identities keyed BY PACKAGE, so a reader holding a `pkg`
+    // from a row does not have to scan `packages[]` to learn which policy bytes and
+    // which wrapper that row was measured against. Emitted beside `packages[]`.
+    headerPolicies[row.package] = {
+      policyRegoSha256,
+      wrapperSha256,
+      recordId: row.specimen,
+      seedEntry: row.seedEntry ?? null,
+      control: row.control === true,
+    };
+
+    // (fold 1 F7) A K-CONTROL package is not swept.
+    //
+    // T5 is a per-record conjunct over the SCORED records; the K5 control is not one
+    // of them and is exercised by K5, in its own row. Sweeping it would put a
+    // 23rd `rows[]` entry in a deposit the scorer reads as the corpus, and the entry
+    // would be a control's scope answering a question nobody asked of it. Named in
+    // the header, never silently dropped.
+    if (row.control === true) {
+      controlPackagesSkipped.push(row.package);
+      continue;
+    }
+
+    const treeSweep = sweepPackage(
+      checks,
+      core,
+      compiled.rule,
+      row,
+      suffix,
+      policyAt,
+      wrapperAt,
+      treeCorpus,
+      singleInputAt,
+    );
+    const probeSweep = sweepPackage(
+      checks,
+      core,
+      compiled.rule,
+      row,
+      suffix,
+      policyAt,
+      wrapperAt,
+      probeCorpus,
+      singleInputAt,
+    );
+    rows.push(treeSweep.row);
+    probeRows.push(probeSweep.row);
+    perPackageTimings[row.package] = {
+      rowsMs: treeSweep.elapsedMs,
+      probeRowsMs: probeSweep.elapsedMs,
+    };
   }
 
-  // ── apparatus-fault arm: every lowered package has exactly one entry per corpus ──
+  // ── apparatus-fault arm: every SCORED lowered package has exactly one entry per corpus ──
+  const scoredCount = lowering.lowered.filter((l) => l.control !== true).length;
   checks.eq(
-    `T5 — every lowered package has exactly one \`rows[]\` entry and one \`probeRows[]\` entry (${lowering.lowered.length} lowered)`,
+    `T5 — every NON-CONTROL lowered package has exactly one \`rows[]\` entry and one \`probeRows[]\` entry (${scoredCount} scored of ${lowering.lowered.length} lowered; ${controlPackagesSkipped.length} control package(s) skipped)`,
     { rows: rows.length, probeRows: probeRows.length },
-    { rows: lowering.lowered.length, probeRows: lowering.lowered.length },
+    { rows: scoredCount, probeRows: scoredCount },
   );
 
   const totalMs = Date.now() - startedAll;
@@ -399,13 +466,20 @@ async function main(): Promise<void> {
       treeSha256: sha256(listText),
       probeCount: probePaths.length,
       invocation: INVOCATION,
+      argv: INVOCATION_ARGV,
       mode: 'batched-set-comprehension',
       opaVersion,
       wrapperTemplateSha256,
       packages: headerPackages,
+      policies: headerPolicies,
+      controlPackagesSkipped,
     },
     recordSet,
     elapsedMs: totalMs,
+    // (fold 1 F8) Timings live HERE, outside `rows[]`/`probeRows[]`: the two row
+    // lists must be byte-identical between the scorer's evidence clone and its
+    // replay clone, and a wall clock cannot be.
+    timings: { totalMs, perPackage: perPackageTimings },
     rows,
     probeRows,
     checks: checks.rows,

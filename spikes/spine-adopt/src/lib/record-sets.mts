@@ -189,6 +189,70 @@ function languageOf(yamlText: string): string | null {
   return m ? m[1]! : null;
 }
 
+/**
+ * The number of `examples[]` pairs a record declares, read from its own bytes the
+ * way `ruleIdOf` and `languageOf` read theirs.
+ *
+ * `  - bad:` at the two-space list indent under the top-level `examples:` key is the
+ * only shape any record in this apparatus uses (all 30 at the pin). Zero is refused
+ * loudly: `src/facts.mts` requires at least one pair, so a count of zero means the
+ * scanner missed the block, not that the record has none.
+ */
+function examplePairCountOf(yamlText: string, file: string): number {
+  const n = (yamlText.match(/^ {2}- bad:/gm) ?? []).length;
+  if (n === 0) {
+    throw new Error(
+      `record ${file} declares no \`examples[]\` pair at the \`  - bad:\` indent — the manifest cannot ` +
+        'name the fact bundles it will mint (§ S2 / fold 1 F5).',
+    );
+  }
+  return n;
+}
+
+/** True when the record declares a top-level `requires:` block with `scope: file`. */
+function requiresScopeFile(yamlText: string): boolean {
+  const at = yamlText.search(/^requires:$/m);
+  if (at < 0) return false;
+  // Scan only the block: the next line at column 0 closes it, so a `scope: file`
+  // belonging to some later key cannot be read as this one's.
+  for (const line of yamlText.slice(at).split('\n').slice(1)) {
+    if (/^\S/.test(line)) return false;
+    if (/^ {2}scope: file$/.test(line)) return true;
+  }
+  return false;
+}
+
+/**
+ * (fold 1 F5) The fact-bundle fixture ids a CONTROL row is declared to mint, named
+ * at manifest time from the record's own bytes.
+ *
+ * The spellings are `src/facts.mts`'s, reproduced exactly:
+ *
+ *   inline    `<id>-inline<ordinal-when-more-than-one>-<bad|good>` per `examples[]` pair
+ *   M3 fold   `<id>-control-unreadable` and `<id>-control-empty`, minted for the
+ *             set's `requires.scope: file` record — which on `seed20` is the K5
+ *             control itself
+ *
+ * `src/facts.mts` asserts after minting that the bundles carrying this row's
+ * specimen id are EXACTLY this list. Declared here and measured there, deliberately:
+ * a control whose bundles silently went missing would otherwise be an absence, and
+ * an absence is the one thing a run cannot notice about itself.
+ */
+export function controlBundleFixtureIds(row: RecordRow): string[] {
+  const yamlText = fs.readFileSync(row.recordFile, 'utf-8');
+  const pairs = examplePairCountOf(yamlText, path.basename(row.recordFile));
+  const ids: string[] = [];
+  for (let i = 0; i < pairs; i++) {
+    for (const arm of ['bad', 'good'] as const) {
+      ids.push(`${row.id}-inline${pairs > 1 ? `${i}` : ''}-${arm}`);
+    }
+  }
+  if (requiresScopeFile(yamlText)) {
+    ids.push(`${row.id}-control-unreadable`, `${row.id}-control-empty`);
+  }
+  return ids;
+}
+
 // ─── The sets ────────────────────────────────────────────────────────────────
 
 function specimensSet(): RecordRow[] {
@@ -679,17 +743,47 @@ export const PROBE_GENERATION_RULE =
 /** The pinned expectation the generator is asserted against (`seed/probe-pairs.json`). */
 export const PROBE_PAIRS_FILE = path.join(SEED_DIR, 'probe-pairs.json');
 
+let seed20ProbePathsCache: readonly string[] | null = null;
+
 /**
  * The shared probe list for a record set.
  *
- * The specimens list is FROZEN (it is a chain-digest component); the seed set is
- * that list plus every generated probe and twin, deduped and sorted by codepoint
- * so the list is a function of the corpus rather than of an emission order.
+ * The specimens list is FROZEN — exactly the 22 `SPECIMEN_PROBE_PATHS`, in authored
+ * order, because it is serialised into every specimen's `globs.json` and that file's
+ * sha256 is a component of the committed chain digests (constraint 3). The `control`
+ * set rebuilds one of those same specimens, so it takes the same frozen list.
+ *
+ * (fold 1 F4, `.totem/specs/seed20-apparatus-slice2-fold1.md` — the 19:23Z ruling
+ * my record dropped) The seed set is that frozen list PLUS:
+ *
+ *   - every seed record's `inlineFilePath` — the path each record's own inline
+ *     `examples[]` are served at, and therefore the one path the record is
+ *     GUARANTEED to consider in scope. A probe set that omitted them swept the
+ *     lowered scope over paths no record was authored against;
+ *   - every seed record's corpus `fixture.file` (one at the pin: `87aff037`'s);
+ *   - every generated probe and twin (§ S1).
+ *
+ * Deduped and sorted by CODEPOINT, so the list is a function of the corpus rather
+ * than of an emission order.
+ *
+ * The K5 control row's `inlineFilePath` is deliberately NOT here: the control is not
+ * a seed record, its path is not part of the scored corpus's scope question, and
+ * `src/lower.mts` probes every row's own inline path per record anyway (`probePaths`
+ * appends `s.inlineFilePath` to the shared list for the row being lowered). Adding
+ * it to the SHARED list would sweep a control's path across all 23 packages.
  */
 export function sharedProbePaths(setId: RecordSetId): readonly string[] {
   if (setId !== 'seed20') return SPECIMEN_PROBE_PATHS;
+  // Memoised per process: `src/lower.mts` calls this once per record (and again in
+  // each check name), and the seed corpus is frozen for the whole run — 22 record
+  // reads plus the glob census per call would be pure re-work.
+  if (seed20ProbePathsCache !== null) return seed20ProbePathsCache;
+  const seedRows = loadRecordSet('seed20').filter((r) => !r.control);
+  const inlinePaths = seedRows.map((r) => r.inlineFilePath);
+  const fixtureFiles = seedRows.flatMap((r) => (r.fixture ? [r.fixture.file] : []));
   const generated = generatedSeedProbes().flatMap((p) => [p.probe, p.twin]);
-  return [...new Set([...SPECIMEN_PROBE_PATHS, ...generated])].sort((a, b) =>
-    a < b ? -1 : a > b ? 1 : 0,
-  );
+  seed20ProbePathsCache = [
+    ...new Set([...SPECIMEN_PROBE_PATHS, ...inlinePaths, ...fixtureFiles, ...generated]),
+  ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return seed20ProbePathsCache;
 }
