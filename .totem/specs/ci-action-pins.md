@@ -1,4 +1,4 @@
-# ci-action-pins — SHA-pin every GitHub Action in mmnto-ai/totem
+# ci-action-pins — SHA-pin every Action in mmnto-ai/totem
 
 **Word:** operator, 2026-08-29, relayed cohort-wide (strategy-claude dispatch 2026-08-29T0132Z; status-claude's
 totem pin table 2026-08-29T0144Z). Sibling landings: mmnto-ai/totem-strategy#1150 (strategy, also charters the
@@ -14,7 +14,9 @@ Anchor issue: mmnto-ai/totem-strategy#1138. Each seat lands its own repo; nobody
   **Triage: tactical by nature; exceeds the 3-file count, so this spec's pin table is the design record** rather
   than the six-subsection doc (nothing architectural to enumerate).
 
-## Pin table (resolved 2026-08-29 from each action's tag via the GitHub API; floating major tags cross-checked)
+## Pin table
+
+Resolved 2026-08-29 from each action's tag via the GitHub API; floating major tags cross-checked.
 
 | as used                                         | pin                                                                                      |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -34,7 +36,9 @@ Anchor issue: mmnto-ai/totem-strategy#1138. Each seat lands its own repo; nobody
 The first five rows are status-claude's table, re-verified against the API this session; the rest are totem's
 own (the table covered 4 of the 13 workflow files).
 
-## Judgment calls (each verified against a primary, not the relayed word)
+## Judgment calls
+
+Each verified against a primary source, not the relayed word.
 
 1. **SARIF upload in `lint.yml` is KEPT, pinned.** The drop clause is conditioned on code scanning being
    disabled. On this repo `GET /repos/mmnto-ai/totem/code-scanning/analyses` lists ingested `totem-lint`
