@@ -948,6 +948,9 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const orchestrationBase = path.resolve(repoRoot, '.totem', 'orchestration');
   const isOwnHostedOutbox = (outbox: string): boolean => {
     const rel = path.relative(orchestrationBase, path.resolve(outbox));
+    // `rel === ''` would mean the outbox IS the orchestration base — impossible
+    // by construction (`enumerateOutboxes` only yields `<orchDir>/<agent>/outbox`,
+    // two levels below it), so the guard is a defensive floor, not a live arm.
     return rel.length > 0 && !path.isAbsolute(rel) && !rel.startsWith('..');
   };
   const senderFaults: SenderFault[] = [];

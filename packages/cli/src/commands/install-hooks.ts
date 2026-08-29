@@ -486,6 +486,14 @@ export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
   // legacy hand-set .totem/cache/.spec-completed marker is honored second.
   // The evidence line makes a stale pass VISIBLE (age from the artifact's own
   // createdAt); a freshness rule is a separate policy, deliberately not here.
+  //
+  // TWO READERS, ONE RULE: the same evidence rule is implemented independently
+  // in the repo's legacy `.gemini/hooks/BeforeTool.js` (`hasSpecEvidence` — a
+  // self-contained Gemini hook file that cannot import from packages/, so the
+  // logic cannot be shared as a module). `spec-evidence-readers.test.ts`
+  // executes BOTH readers against the same fixture checkouts and fails on any
+  // disagreement — change the rule here and there together, and extend that
+  // test's state list with any new evidence state.
   const strictBlock = `
 # Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690).
 # Evidence = a totem spec run artifact (.totem/artifacts/runs/*.json with a

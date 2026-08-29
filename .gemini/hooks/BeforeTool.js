@@ -14,7 +14,11 @@ const path = require('path');
 // pre-commit hook (install-hooks.ts buildPreCommitHook). NOTE: this file is not
 // registered in .gemini/settings.json (only SessionStart is) — it stays inert
 // until mmnto-ai/totem#2487 arms a BeforeTool hook; the rule is kept in step so
-// the two readers cannot diverge when it is.
+// the two readers cannot diverge when it is. TWO READERS, ONE RULE: this file
+// cannot import from packages/, so the logic is duplicated by necessity;
+// packages/cli/src/commands/spec-evidence-readers.test.ts executes this
+// function and the git hook's node script against the same fixture checkouts
+// and fails on any disagreement — change the rule in both places together.
 function hasSpecEvidence(gitRoot) {
   const runsDir = path.join(gitRoot, '.totem', 'artifacts', 'runs');
   let names = [];
