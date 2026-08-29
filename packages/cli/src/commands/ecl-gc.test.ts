@@ -939,6 +939,88 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
     expect(markExists(CS, COLLIDING)).toBe(true);
   });
+
+  // ─── Sender-fault wiring (mmnto-ai/totem#2685) ────────
+  //
+  // An own-outbox undeliverable dispatch used to red these gates through
+  // `poll.warnings` (the C4 arm). The fault moved to its own channel, so both
+  // gates name it EXPLICITLY — these rows are what makes that a preserved
+  // behavior rather than a silent green.
+  const OWN_FAULT = '2026-07-01T1010Z-lc-agy-blind-round.md';
+  const COMMA_TO = 'lc-agy, lc-codex';
+
+  it('C21 — an own-outbox undeliverable dispatch reds the A2.2 gate with a named reason (mmnto-ai/totem#2685)', () => {
+    ensureRepos(CROSTER);
+    // The compacting seat's OWN outbox, in the repo being compacted: both
+    // ownership conjuncts hold, so the poll returns a sender fault and no
+    // roster warning — the gate must red on the new channel alone.
+    writeInbound('totem', CS, OWN_FAULT, COMMA_TO);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(false);
+    // NON-VACUITY: the fault does NOT ride `warnings` any more, so dropping the
+    // explicit conjunct would green this gate and delete the mark below.
+    expect(r.warnings).toEqual([]);
+    expect(
+      r.gateReasons.some(
+        (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
+      ),
+    ).toBe(true);
+    expect(r.collected).toEqual([]);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
+
+  it('C22 — a fault appearing between the discovery poll and the A2.4 verify makes verifyComplete false', () => {
+    ensureRepos(CROSTER);
+    // A fault present at discovery reds A2.2 and returns before any delete, so
+    // the ONLY way to reach the A2.4 conjunct is the write-during-compaction
+    // race this self-check exists for: the undeliverable dispatch lands in the
+    // seat's own outbox at the instant of deletion (same induction idiom as
+    // C1c). Mutate the A2.4 sender-fault conjunct away and this row fails.
+    writeMark(CS, DIRECT_SWEPT);
+    const realUnlink = fs.unlinkSync.bind(fs);
+    const spy = vi.spyOn(fs, 'unlinkSync').mockImplementation((target) => {
+      realUnlink(target);
+      if (String(target).endsWith(DIRECT_SWEPT)) {
+        writeInbound('totem', CS, OWN_FAULT, COMMA_TO);
+      }
+    });
+    try {
+      const r = runCompact({ apply: true });
+      expect(r.gateComplete).toBe(true);
+      expect(r.collected).toEqual([DIRECT_SWEPT]);
+      // Not a resurface — nothing this run deleted came back; the verify is
+      // untrustworthy because the seat now hosts an undeliverable dispatch.
+      expect(r.resurfaced).toEqual([]);
+      expect(r.verifyComplete).toBe(false);
+      expect(
+        r.warnings.some(
+          (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
+        ),
+      ).toBe(true);
+      expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('C23 — a FOREIGN repo undeliverable dispatch keeps today’s warning-driven red gate (unchanged)', () => {
+    ensureRepos(CROSTER);
+    // Same dispatch, another repo's outbox: not this seat's to fix, so it stays
+    // on `warnings` and reds the gate through the C4 arm, unchanged by
+    // mmnto-ai/totem#2685.
+    writeInbound('totem-strategy', 'strategy-claude', OWN_FAULT, COMMA_TO);
+    writeMark(CS, DIRECT_SWEPT);
+
+    const r = runCompact({ apply: true });
+
+    expect(r.gateComplete).toBe(false);
+    expect(r.warnings.some((x) => /^unresolvable outbox address/.test(x))).toBe(true);
+    expect(r.gateReasons.every((x) => !/fix the to: before compacting/.test(x))).toBe(true);
+    expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
+  });
 });
 
 // ─── Roster resolution precedence (mmnto-ai/totem#2310) ──

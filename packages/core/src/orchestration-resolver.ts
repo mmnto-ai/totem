@@ -90,12 +90,19 @@ const AGENT_ID_TRAVERSAL_PATTERN = /[/\\\0]|\.\./;
  * Characters that no cohort agent-id legitimately contains and that are unsafe
  * in a filename token or a logged/rendered string: Unicode control characters
  * (`\p{Cc}` — terminal-injection into CLI logs and dispatch markdown),
- * whitespace, and the win32-reserved set `< > : " | ? *`. Complements
+ * whitespace, the win32-reserved set `< > : " | ? *`, and the comma. Complements
  * `AGENT_ID_TRAVERSAL_PATTERN` (separators, null byte, `..`) so that
  * `isPathSafeAgentId` is a full path-segment guard, not only a traversal
  * guard (CR R2 on mmnto-ai/totem#2134).
+ *
+ * The comma (mmnto-ai/totem#2685): ADR-098 `to:` is single-valued, and a
+ * hand-written comma list was undeliverable to every seat — the live
+ * 2026-08-26 specimen. The whitespace-bearing form was already refused by
+ * `\s`; the whitespace-free form (`--to "lc-agy,lc-codex"`) passed this guard
+ * and was written. No cohort agent-id carries a comma, so it is refused here
+ * at the same hard floor as the other characters.
  */
-const AGENT_ID_UNSAFE_CHAR_PATTERN = /[\p{Cc}\s<>:"|?*]/u;
+const AGENT_ID_UNSAFE_CHAR_PATTERN = /[\p{Cc}\s<>:"|?*,]/u;
 
 export function resolveOrchestrationPaths(repoRoot: string, agentId: string): OrchestrationPaths {
   // Defense-in-depth: reject path-traversal patterns in `agentId` before

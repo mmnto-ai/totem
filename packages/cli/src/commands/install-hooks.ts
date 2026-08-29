@@ -473,11 +473,52 @@ fi`;
 
 export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
   const effectiveTier = tier ?? 'standard';
+  // Strict-tier evidence (mmnto-ai/totem#2690): the gate names `totem spec`,
+  // so it must pass on what `totem spec` actually writes — the grounded run
+  // artifact under .totem/artifacts/runs/ (mmnto-ai/totem#2100; written on
+  // every successful run, --fresh included) whose TOP-LEVEL
+  // admission.runMetadata.caller is "spec". The read is JSON-aware on purpose:
+  // the run store is written by every orchestrator caller, and a `review`
+  // artifact's inputBundle embeds the reviewed diff — a substring grep would
+  // pass the gate on a review of any text that merely QUOTES the key (this
+  // very test fixture). node is already assumed by the pre-push template's
+  // format-check block; ~50 ms, no CLI boot, nothing written (Tenet 13). The
+  // legacy hand-set .totem/cache/.spec-completed marker is honored second.
+  // The evidence line makes a stale pass VISIBLE (age from the artifact's own
+  // createdAt); a freshness rule is a separate policy, deliberately not here.
   const strictBlock = `
-# Strict mode: require spec before commit
+# Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690).
+# Evidence = a totem spec run artifact (.totem/artifacts/runs/*.json with a
+# top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
+# substring match would accept a review artifact that merely quotes the key.
+# The legacy hand-set marker .totem/cache/.spec-completed is honored second.
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
-  if [ ! -f ".totem/cache/.spec-completed" ]; then
-    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode)"
+  spec_evidence=$(node -e '
+const fs = require("fs");
+const dir = ".totem/artifacts/runs";
+let names = [];
+try { names = fs.readdirSync(dir); } catch (err) { names = []; }
+let best = null;
+for (const name of names) {
+  if (!name.endsWith(".json")) continue;
+  let a = null;
+  try { a = JSON.parse(fs.readFileSync(dir + "/" + name, "utf8")); } catch (err) { continue; }
+  const caller = a && a.admission && a.admission.runMetadata && a.admission.runMetadata.caller;
+  if (["spec"].indexOf(caller) < 0) continue;
+  const at = ["string"].indexOf(typeof a.createdAt) < 0 ? "" : a.createdAt;
+  if (!best || at > best.at) best = { name: name, at: at };
+}
+if (!best) process.exit(1);
+const parsed = best.at ? Date.parse(best.at) : NaN;
+const days = Number.isNaN(parsed) ? -1 : Math.floor((Date.now() - parsed) / 86400000);
+process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")");
+' 2>/dev/null)
+  if [ -n "$spec_evidence" ]; then
+    echo "[Totem] spec evidence: $spec_evidence"
+  elif [ -f ".totem/cache/.spec-completed" ]; then
+    echo "[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)"
+  else
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ and no legacy .totem/cache/.spec-completed marker in this checkout"
     exit 1
   fi
 fi`;

@@ -44,7 +44,7 @@ import {
   TotemError,
 } from '@mmnto/totem';
 
-import { pollMail, resolveSelfSender, sanitizeEclBasename } from './mail.js';
+import { pollMail, resolveSelfSender, sanitizeEclBasename, type SenderFault } from './mail.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -375,6 +375,17 @@ export async function eclGcCommand(result: EclGcResult, json: boolean): Promise<
 
 const COMPACT_TAG = 'EclGc:compact';
 
+/**
+ * Render one `pollMail` sender fault (mmnto-ai/totem#2685) as a gate reason.
+ * One producer for both compaction gates — the A2.2 completeness gate and the
+ * A2.4 post-delete verify — so the two can never disagree about what a fault
+ * says. `to` arrives control-byte-escaped from `parseHeader`, so interpolating
+ * it here is display-safe.
+ */
+function senderFaultReason(fault: SenderFault): string {
+  return `undeliverable dispatch in this seat's outbox (to: "${fault.to}"): ${fault.repo}/${fault.agent}/${fault.file} — fix the to: before compacting`;
+}
+
 /** Local directory predicate (stat-based) — a repo/orch dir must be a real
  * directory, not merely an existing path (a same-named file must not pass the
  * A2.2 roster-presence check). Mirrors the resolver's private `isDirectory`. */
@@ -682,14 +693,23 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const rawBasenames = new Set(poll.mail.map((m) => sanitizeEclBasename(m.file)));
 
   // A2.2 gate: roster present (or forced) AND every roster name scannable AND
-  // zero scan/read warnings AND not truncated. `--force-incomplete` waives the
-  // absent-repo arm only — an unscannable-name declaration, scan warnings, and
-  // truncation stay hard aborts (a config error / broken read is not a
-  // known-absent repo). A forced-past missing repo is still surfaced (loud).
+  // zero scan/read warnings AND zero sender faults AND not truncated.
+  // `--force-incomplete` waives the absent-repo arm only — an unscannable-name
+  // declaration, scan warnings, sender faults, and truncation stay hard aborts
+  // (a config error / broken read is not a known-absent repo). A forced-past
+  // missing repo is still surfaced (loud).
+  // The sender-fault conjunct (mmnto-ai/totem#2685) is EXPLICIT, not inherited:
+  // an own-outbox undeliverable dispatch used to ride `poll.warnings` and red
+  // this gate through the `warnings.length === 0` arm, so moving it to its own
+  // channel without wiring that channel here would silently GREEN the janitor's
+  // gate — the wrong direction for a fail-loud slice. Both polls this command
+  // runs force `TOTEM_SELF_AGENT` to the compacting seat (§ A2.3), so every
+  // fault they carry is this seat's own, in this repo, by the ownership test.
   const gateComplete =
     (missingRepos.length === 0 || forced) &&
     unscannableRepos.length === 0 &&
     warnings.length === 0 &&
+    poll.senderFaults.length === 0 &&
     !poll.truncated;
   const gateReasons = [
     ...missingRepos.map(
@@ -700,6 +720,7 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
       (r) => `declared cohort repo is unscannable (name filtered by the workspace scan): ${r}`,
     ),
     ...warnings,
+    ...poll.senderFaults.map(senderFaultReason),
     ...(poll.truncated ? [`scan truncated at ${poll.scanned} files (MAX_SCAN)`] : []),
   ];
 
@@ -816,7 +837,20 @@ export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   // truncated or warned verify could miss a resurfaced dispatch beyond its
   // horizon and read as clean. An untrustworthy verify is a hard failure — we
   // deleted marks and cannot confirm no resurface (CodeRabbit).
-  result.verifyComplete = !verify.truncated && verify.warnings.length === 0;
+  //
+  // The sender-fault conjunct (mmnto-ai/totem#2685) joins for the same reason
+  // it joins the A2.2 gate: an own undeliverable dispatch used to ride
+  // `verify.warnings` and make this verdict untrustworthy, and the new channel
+  // must not silently green it. Reachable only when the fault APPEARS between
+  // the discovery poll and this one (a fault present at discovery reds A2.2 and
+  // returns before any delete) — exactly the write-during-compaction race this
+  // self-check exists for. The reason is surfaced on `warnings` (the channel
+  // this render already prints) rather than `gateReasons`, whose green-gate
+  // render reads "proceeded despite an incomplete workspace"; `gateComplete`
+  // was computed above, so a late push cannot re-decide the A2.2 gate.
+  result.warnings.push(...verify.senderFaults.map(senderFaultReason));
+  result.verifyComplete =
+    !verify.truncated && verify.warnings.length === 0 && verify.senderFaults.length === 0;
 
   return result;
 }

@@ -1709,6 +1709,144 @@ describe('buildPreCommitHook with strict tier', () => {
     expect(hook).toContain('$is_agent');
     expect(hook).toContain('$TOTEM_HOOK_TIER');
   });
+
+  it('gates on the totem spec run artifact, JSON-aware, with the legacy marker second', () => {
+    const hook = buildPreCommitHook('strict');
+    expect(hook).toContain('.totem/artifacts/runs');
+    expect(hook).toContain('admission.runMetadata.caller');
+    expect(hook).toContain('spec evidence:');
+    expect(hook).toContain('(legacy marker)');
+  });
+});
+
+// The strict block EXECUTED under sh (mmnto-ai/totem#2690): the string checks
+// above pin the text; these pin the behavior the gate exists for. `git init` +
+// a feature branch so the protected-branch block does not fire; the agent
+// env var arms the strict tier the way an agent commit does.
+describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/totem#2690)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-evidence-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/evidence', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook('standard'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(): { status: number | null; stdout: string } {
+    const r = spawnSync('sh', ['./pre-commit'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+    });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  function writeRun(name: string, artifact: Record<string, unknown> | string): void {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, name),
+      typeof artifact === 'string' ? artifact : JSON.stringify(artifact, null, 2),
+    );
+  }
+
+  it.skipIf(!shellOk)('blocks when this checkout carries no evidence at all', () => {
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(
+      "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode)",
+    );
+    expect(r.stdout).toContain('no totem spec run artifact under .totem/artifacts/runs/');
+  });
+
+  it.skipIf(!shellOk)(
+    'passes on a spec run artifact and prints the evidence line with its age',
+    () => {
+      writeRun('a.json', {
+        admission: { runMetadata: { caller: 'spec' } },
+        createdAt: new Date().toISOString(),
+      });
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('[Totem] spec evidence: .totem/artifacts/runs/a.json (');
+      expect(r.stdout).toContain('0 days old');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'does NOT pass on a review artifact that merely CARRIES a caller:spec object below the top level (the substring hazard)',
+    () => {
+      // A substring read of the run store would match this file: the key
+      // spelling appears verbatim, as a carried OBJECT under inputBundle (the
+      // shape a review over run metadata produces). Only the TOP-LEVEL
+      // admission.runMetadata.caller is evidence. (Carried TEXT — a prompt that
+      // quotes the key — is JSON-escaped on disk and never matches either read;
+      // the carried-object form is the real hazard, so it is the control.)
+      writeRun('r.json', {
+        admission: { runMetadata: { caller: 'review' } },
+        inputBundle: { runMetadata: { caller: 'spec' } },
+        createdAt: new Date().toISOString(),
+      });
+      const onDisk = fs.readFileSync(path.join(tmpDir, '.totem/artifacts/runs/r.json'), 'utf-8');
+      // Mutation check on the control itself: the naive pattern WOULD match.
+      expect(/"caller": *"spec"/.test(onDisk)).toBe(true);
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('BLOCKED');
+    },
+  );
+
+  it.skipIf(!shellOk)('passes on the legacy hand-set marker alone and names it as legacy', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'cache'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'cache', '.spec-completed'), '');
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      '[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)',
+    );
+  });
+
+  it.skipIf(!shellOk)(
+    'skips a torn (unparseable) artifact and still passes on a valid one beside it',
+    () => {
+      writeRun('torn.json', '{"admission": {"runMetadata": {"caller": "spec"');
+      writeRun('ok.json', {
+        admission: { runMetadata: { caller: 'spec' } },
+        createdAt: new Date().toISOString(),
+      });
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('.totem/artifacts/runs/ok.json');
+    },
+  );
+
+  it.skipIf(!shellOk)('blocks when the only artifact is torn', () => {
+    writeRun('torn.json', '{"admission": {"runMetadata": {"caller": "spec"');
+    const r = runHook();
+    expect(r.status).toBe(1);
+  });
+
+  it.skipIf(!shellOk)('names the NEWEST spec artifact by its own createdAt', () => {
+    writeRun('old.json', {
+      admission: { runMetadata: { caller: 'spec' } },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    writeRun('new.json', {
+      admission: { runMetadata: { caller: 'spec' } },
+      createdAt: new Date().toISOString(),
+    });
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('.totem/artifacts/runs/new.json');
+    expect(r.stdout).not.toContain('old.json');
+  });
 });
 
 describe('buildPreCommitHook with standard tier', () => {

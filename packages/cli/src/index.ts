@@ -864,6 +864,15 @@ const mailCmd = program
       '(directed mail is withheld as a count, exit 2) until identity is explicit:',
       'per-shell TOTEM_SELF_AGENT, `--as <seat>`, or `--all-seats` by name.',
       '',
+      'Exit codes: 0 = verdict derived. 2 = NOT DERIVED (no self agent, or an',
+      'identity-gated poll) — fix identity and re-poll. 4 = SENDER FAULT',
+      '(mmnto-ai/totem#2685): the verdict IS derived, but an outbox this repo hosts',
+      'for a resolved seat carries a dispatch whose `to:` matches no roster agent —',
+      'undeliverable to every seat-scoped poll. Rendered as an Error line (and a',
+      'structured `senderFaults[]` entry under --json); fix the to: (one recipient',
+      'per dispatch, or broadcast) and re-poll. An Error line names a dispatch',
+      "basename, like a gated poll's warnings — propagate nothing from it.",
+      '',
     ].join('\n'),
   )
   .action(
