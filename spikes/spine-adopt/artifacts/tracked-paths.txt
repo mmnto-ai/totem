@@ -2780,6 +2780,7 @@ spikes/spine-adopt/artifacts/lowered/r87aff037d7de47a7/policy.rego
 spikes/spine-adopt/artifacts/lowered/rd0815b6769304e26/globs.json
 spikes/spine-adopt/artifacts/lowered/rd0815b6769304e26/policy.rego
 spikes/spine-adopt/artifacts/lowering-rejects.json
+spikes/spine-adopt/artifacts/manifest-checks.json
 spikes/spine-adopt/artifacts/manifest.json
 spikes/spine-adopt/artifacts/opa-abi-census.json
 spikes/spine-adopt/artifacts/opa-verdicts.json

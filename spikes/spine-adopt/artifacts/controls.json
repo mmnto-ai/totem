@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "2f4fa71eb50d433b150dc39e36fedd0a51c83b7f",
-  "runCommit": "2f4fa71eb50d433b150dc39e36fedd0a51c83b7f",
+  "apparatusPin": "1d6b0a9aead9e803f3afc3a819ac438ab40ebb78",
+  "runCommit": "1d6b0a9aead9e803f3afc3a819ac438ab40ebb78",
   "recordSet": "specimens",
   "artifactsSubdir": null,
   "controls": [
@@ -374,7 +374,7 @@
           "namesTheField": true,
           "keyPath": "target.scope",
           "expectedPath": "target.scope.fileGlob",
-          "message": "specimen K8-unknown-key (D:\\Dev\\worktrees\\totem-totem-claude-seed20-slice2\\spikes\\spine-adopt\\seed\\controls\\k8\\k8-unknown-key.rule.yaml) FAILED parseRuleRecord: [Totem Error] spikes/spine-adopt/seed/controls/k8/k8-unknown-key.rule.yaml: target.scope — target.scope: Unrecognized key(s) in object: 'fileGlob'"
+          "message": "specimen K8-unknown-key (<spike>/seed/controls/k8/k8-unknown-key.rule.yaml) FAILED parseRuleRecord: [Totem Error] spikes/spine-adopt/seed/controls/k8/k8-unknown-key.rule.yaml: target.scope — target.scope: Unrecognized key(s) in object: 'fileGlob'"
         },
         {
           "id": "K8-missing-mandatory",
@@ -386,7 +386,7 @@
           "namesTheField": true,
           "keyPath": "message",
           "expectedPath": "message",
-          "message": "specimen K8-missing-mandatory (D:\\Dev\\worktrees\\totem-totem-claude-seed20-slice2\\spikes\\spine-adopt\\seed\\controls\\k8\\k8-missing-mandatory.rule.yaml) FAILED parseRuleRecord: [Totem Error] spikes/spine-adopt/seed/controls/k8/k8-missing-mandatory.rule.yaml: message — message: Required"
+          "message": "specimen K8-missing-mandatory (<spike>/seed/controls/k8/k8-missing-mandatory.rule.yaml) FAILED parseRuleRecord: [Totem Error] spikes/spine-adopt/seed/controls/k8/k8-missing-mandatory.rule.yaml: message — message: Required"
         }
       ],
       "evidence": [
@@ -457,6 +457,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "230717527d67d484dabd8ba2703b185c87cb0e8581517ba5a5a4be9d0b4abcf4",
+  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

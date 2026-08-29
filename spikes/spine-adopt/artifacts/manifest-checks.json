@@ -21,7 +21,7 @@
     {
       "name": "the tracked-path sweep set is non-empty and published beside the manifest",
       "ok": true,
-      "detail": "3081 paths -> artifacts/tracked-paths.txt"
+      "detail": "3082 paths -> artifacts/tracked-paths.txt"
     },
     {
       "name": "`probePaths` is published in CODEPOINT order (22 paths; `probePathsSha256` attests that order — the SHARED list on `specimens` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)",
@@ -141,7 +141,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"230717527d67d484dabd8ba2703b185c87cb0e8581517ba5a5a4be9d0b4abcf4\""
+      "detail": "\"0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -149,5 +149,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "230717527d67d484dabd8ba2703b185c87cb0e8581517ba5a5a4be9d0b4abcf4"
+  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599"
 }

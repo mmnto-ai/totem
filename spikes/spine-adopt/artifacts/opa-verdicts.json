@@ -138,219 +138,219 @@
   "recordCount": 7,
   "timings": [
     {
-      "coldEvalMicros": 355,
-      "compileMicros": 29071,
+      "coldEvalMicros": 359,
+      "compileMicros": 28802,
       "fixtureId": "a-corpus-fail",
-      "instantiateMicros": 267,
-      "specimen": "a",
-      "warmEvalMicrosMin": 239,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 253,
-      "compileMicros": 29071,
-      "fixtureId": "a-corpus-pass",
-      "instantiateMicros": 267,
-      "specimen": "a",
-      "warmEvalMicrosMin": 241,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 251,
-      "compileMicros": 29071,
-      "fixtureId": "a-inline-bad",
-      "instantiateMicros": 267,
+      "instantiateMicros": 276,
       "specimen": "a",
       "warmEvalMicrosMin": 237,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 245,
-      "compileMicros": 29071,
-      "fixtureId": "a-inline-good",
-      "instantiateMicros": 267,
+      "coldEvalMicros": 253,
+      "compileMicros": 28802,
+      "fixtureId": "a-corpus-pass",
+      "instantiateMicros": 276,
       "specimen": "a",
-      "warmEvalMicrosMin": 234,
+      "warmEvalMicrosMin": 242,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 73,
-      "compileMicros": 27025,
+      "coldEvalMicros": 257,
+      "compileMicros": 28802,
+      "fixtureId": "a-inline-bad",
+      "instantiateMicros": 276,
+      "specimen": "a",
+      "warmEvalMicrosMin": 235,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 260,
+      "compileMicros": 28802,
+      "fixtureId": "a-inline-good",
+      "instantiateMicros": 276,
+      "specimen": "a",
+      "warmEvalMicrosMin": 239,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 74,
+      "compileMicros": 24141,
       "fixtureId": "b-corpus-fail",
-      "instantiateMicros": 172,
+      "instantiateMicros": 200,
       "specimen": "b",
-      "warmEvalMicrosMin": 26,
+      "warmEvalMicrosMin": 25,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 25,
-      "compileMicros": 27025,
+      "coldEvalMicros": 30,
+      "compileMicros": 24141,
       "fixtureId": "b-corpus-pass",
-      "instantiateMicros": 172,
+      "instantiateMicros": 200,
       "specimen": "b",
       "warmEvalMicrosMin": 21,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 32,
-      "compileMicros": 27025,
+      "coldEvalMicros": 31,
+      "compileMicros": 24141,
       "fixtureId": "b-inline-bad",
-      "instantiateMicros": 172,
+      "instantiateMicros": 200,
       "specimen": "b",
       "warmEvalMicrosMin": 26,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 24,
-      "compileMicros": 27025,
+      "coldEvalMicros": 26,
+      "compileMicros": 24141,
       "fixtureId": "b-inline-good",
-      "instantiateMicros": 172,
+      "instantiateMicros": 200,
       "specimen": "b",
-      "warmEvalMicrosMin": 21,
+      "warmEvalMicrosMin": 20,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 132,
-      "compileMicros": 22978,
+      "coldEvalMicros": 125,
+      "compileMicros": 21232,
       "fixtureId": "c-corpus-fail",
-      "instantiateMicros": 170,
+      "instantiateMicros": 180,
       "specimen": "c",
-      "warmEvalMicrosMin": 61,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 53,
-      "compileMicros": 22978,
-      "fixtureId": "c-corpus-pass",
-      "instantiateMicros": 170,
-      "specimen": "c",
-      "warmEvalMicrosMin": 47,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 114,
-      "compileMicros": 22978,
-      "fixtureId": "c-inline-bad",
-      "instantiateMicros": 170,
-      "specimen": "c",
-      "warmEvalMicrosMin": 52,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 51,
-      "compileMicros": 22978,
-      "fixtureId": "c-inline-good",
-      "instantiateMicros": 170,
-      "specimen": "c",
-      "warmEvalMicrosMin": 46,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 109,
-      "compileMicros": 23679,
-      "fixtureId": "c-supp-corpus-fail",
-      "instantiateMicros": 169,
-      "specimen": "c-supp",
-      "warmEvalMicrosMin": 50,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 55,
-      "compileMicros": 23679,
-      "fixtureId": "c-supp-corpus-pass",
-      "instantiateMicros": 169,
-      "specimen": "c-supp",
-      "warmEvalMicrosMin": 46,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 55,
-      "compileMicros": 23679,
-      "fixtureId": "c-supp-inline-bad",
-      "instantiateMicros": 169,
-      "specimen": "c-supp",
-      "warmEvalMicrosMin": 50,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 66,
-      "compileMicros": 23679,
-      "fixtureId": "c-supp-inline-good",
-      "instantiateMicros": 169,
-      "specimen": "c-supp",
-      "warmEvalMicrosMin": 44,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 140,
-      "compileMicros": 20844,
-      "fixtureId": "d-line-inline-bad",
-      "instantiateMicros": 258,
-      "specimen": "d-line",
-      "warmEvalMicrosMin": 49,
+      "warmEvalMicrosMin": 62,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 59,
-      "compileMicros": 20844,
-      "fixtureId": "d-line-inline-good",
-      "instantiateMicros": 258,
-      "specimen": "d-line",
+      "compileMicros": 21232,
+      "fixtureId": "c-corpus-pass",
+      "instantiateMicros": 180,
+      "specimen": "c",
+      "warmEvalMicrosMin": 48,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 57,
+      "compileMicros": 21232,
+      "fixtureId": "c-inline-bad",
+      "instantiateMicros": 180,
+      "specimen": "c",
+      "warmEvalMicrosMin": 54,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 54,
+      "compileMicros": 21232,
+      "fixtureId": "c-inline-good",
+      "instantiateMicros": 180,
+      "specimen": "c",
+      "warmEvalMicrosMin": 46,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 111,
+      "compileMicros": 22997,
+      "fixtureId": "c-supp-corpus-fail",
+      "instantiateMicros": 182,
+      "specimen": "c-supp",
       "warmEvalMicrosMin": 50,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 117,
-      "compileMicros": 21098,
+      "coldEvalMicros": 56,
+      "compileMicros": 22997,
+      "fixtureId": "c-supp-corpus-pass",
+      "instantiateMicros": 182,
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 48,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 58,
+      "compileMicros": 22997,
+      "fixtureId": "c-supp-inline-bad",
+      "instantiateMicros": 182,
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 50,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 49,
+      "compileMicros": 22997,
+      "fixtureId": "c-supp-inline-good",
+      "instantiateMicros": 182,
+      "specimen": "c-supp",
+      "warmEvalMicrosMin": 45,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 132,
+      "compileMicros": 21734,
+      "fixtureId": "d-line-inline-bad",
+      "instantiateMicros": 215,
+      "specimen": "d-line",
+      "warmEvalMicrosMin": 51,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 60,
+      "compileMicros": 21734,
+      "fixtureId": "d-line-inline-good",
+      "instantiateMicros": 215,
+      "specimen": "d-line",
+      "warmEvalMicrosMin": 51,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 118,
+      "compileMicros": 23250,
       "fixtureId": "d-file-control-empty",
-      "instantiateMicros": 186,
+      "instantiateMicros": 180,
+      "specimen": "d-file",
+      "warmEvalMicrosMin": 50,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 57,
+      "compileMicros": 23250,
+      "fixtureId": "d-file-control-unreadable",
+      "instantiateMicros": 180,
       "specimen": "d-file",
       "warmEvalMicrosMin": 51,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 62,
-      "compileMicros": 21098,
-      "fixtureId": "d-file-control-unreadable",
-      "instantiateMicros": 186,
-      "specimen": "d-file",
-      "warmEvalMicrosMin": 50,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 55,
-      "compileMicros": 21098,
+      "coldEvalMicros": 56,
+      "compileMicros": 23250,
       "fixtureId": "d-file-inline-bad",
-      "instantiateMicros": 186,
+      "instantiateMicros": 180,
       "specimen": "d-file",
-      "warmEvalMicrosMin": 50,
+      "warmEvalMicrosMin": 49,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 60,
-      "compileMicros": 21098,
+      "coldEvalMicros": 59,
+      "compileMicros": 23250,
       "fixtureId": "d-file-inline-good",
-      "instantiateMicros": 186,
+      "instantiateMicros": 180,
       "specimen": "d-file",
-      "warmEvalMicrosMin": 50,
+      "warmEvalMicrosMin": 53,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 94,
-      "compileMicros": 19230,
+      "coldEvalMicros": 93,
+      "compileMicros": 23603,
       "fixtureId": "e-inline-bad",
-      "instantiateMicros": 196,
+      "instantiateMicros": 198,
       "specimen": "e",
       "warmEvalMicrosMin": 37,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 50,
-      "compileMicros": 19230,
+      "coldEvalMicros": 38,
+      "compileMicros": 23603,
       "fixtureId": "e-inline-good",
-      "instantiateMicros": 196,
+      "instantiateMicros": 198,
       "specimen": "e",
-      "warmEvalMicrosMin": 32,
+      "warmEvalMicrosMin": 33,
       "warmReps": 50
     }
   ],
