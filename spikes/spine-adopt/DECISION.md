@@ -79,10 +79,11 @@ OPA's `env.memory` import needs a ~120-line synthesized shim module (constant, n
 
 ### Enrichment — egg/egglog on DSL→IR normalization: **REJECT — plain typed IR wins** (pre-registered check, mechanically computed)
 
-Soundness held perfectly (27/27 claimed equivalences z3-verified UNSAT; tautologies disclosed — 5
-real proofs) and yield technically cleared (one rewrite-earned merge), but cost failed: 10/167
-patterns hit egg's node limit on AC churn (concat-assoc 259k firings) in BOTH the per-pattern and
-shared-e-graph arms, and 9 of the 19 locally-proven rules never fired on the real corpus. The
+Soundness held (27/27 claimed equivalences z3-verified UNSAT — 21 evidence-bearing, 6
+tautological by the report's own disclosure) and yield technically cleared (one rewrite-earned
+merge), but cost failed: 10/167 per-pattern runs stopped at egg's default node limit on AC churn
+(concat-assoc 259k firings), the shared e-graph stopped at the node limit too, and 9 of the 19
+locally-provable rules fired zero times on the real corpus. The
 decisive control: congruence closure + canonical char-class sets ALONE deliver 161 of the 162→160
 dedup — e-graph rewriting earned exactly one merge over free hash-consing. Adoption consequence:
 build the Spine IR with canonicalizing constructors (n-ary flattened, hash-consed, canonical
@@ -137,3 +138,19 @@ satellites consume core wasm through wazero with the env-shim pattern. What tote
 record grammar + lowering semantics, fact boundary (ast-grep facts as input data), proof-obligation
 design, evidence chains, and the gates — exactly the Tenet-5 split the round's scoring frame
 predicted.
+
+## Errata (2026-08-29)
+
+Two wording-vs-artifact corrections to the sealed record (`mmnto-ai/totem@6a0eb232`), raised by
+strategy-claude 2026-08-28T19:55Z while drafting the ADR-103 amendment
+(mmnto-ai/totem-strategy#1146, which quotes the artifact figures directly). Neither moves a verdict.
+
+- **egg soundness row** read "tautologies disclosed — 5 real proofs".
+  `egg-probe/artifacts/egg-report.json` `criteria.soundness.tautologicalQueries` =
+  `{count: 6, nonTautological: 21, of: 27}`; now "21 evidence-bearing, 6 tautological". The "5" was
+  propagated from strategy-codex's 0510Z verification prose, not read from the artifact.
+- **egg cost row** read "10/167 patterns hit egg's node limit … in BOTH the per-pattern and
+  shared-e-graph arms". The 10/167 is the per-pattern arm (`criteria.cost.failedSubCondition`); the
+  shared arm records one aggregate stop (`saturation.sharedEGraph.stopReason` =
+  `Some(NodeLimit(12884))`) with no per-pattern rows. Same row: "locally-proven" → "locally
+  provable" — DESIGN.md's authoring constraint; no per-rule proof artifact exists.
