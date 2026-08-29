@@ -150,9 +150,14 @@ function extractAstMatches(
  * the slice's § Verification (`facts/**` unchanged), so a `control: false` on every
  * one of them would move committed evidence to say what the index already says
  * present-as-false. The same shape `malformedFactsControl` already uses.
+ *
+ * `controlRecord: true` rides beside `control: true` (charter v1.1 E3 on strategy
+ * main at `7f3449d8`, 2026-08-29T22:30Z: "the control record's own `examples[]`
+ * bundles … flagged `provenance.controlRecord: true`") — the bound spelling, and
+ * the C5 spelling every row artifact already carries. Both present only when true.
  */
-function controlProvenance(s: { control: boolean }): { control?: true } {
-  return s.control ? { control: true } : {};
+function controlProvenance(s: { control: boolean }): { control?: true; controlRecord?: true } {
+  return s.control ? { control: true, controlRecord: true } : {};
 }
 
 /**
