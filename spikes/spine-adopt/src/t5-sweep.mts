@@ -180,7 +180,16 @@ function sweepPackage(
 
   // ── apparatus-fault arm: the set must be a set of CORPUS paths ──
   const corpusSet = new Set(corpus.paths);
-  const raw = (value as unknown[] | undefined) ?? [];
+  // `in_scope_paths` is a COMPLETE set-comprehension rule: an empty scope is `[]`,
+  // never undefined. An undefined or non-array result therefore means the query did
+  // not evaluate — an apparatus fault, named — and must never be read as "nothing in
+  // scope" (mmnto-ai/totem#2699 review round 1, CodeRabbit MAJOR).
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `T5 — ${suffix} (${corpus.label}): \`in_scope_paths\` did not evaluate to a set (got ${value === undefined ? 'undefined' : typeof value}) — apparatus fault, not an empty scope`,
+    );
+  }
+  const raw = value as unknown[];
   const malformed = raw.filter((m) => typeof m !== 'string' || !corpusSet.has(m));
   if (malformed.length > 0) {
     throw new Error(
@@ -255,7 +264,7 @@ async function main(): Promise<void> {
     sha256: string | null;
     file: string;
   };
-  if (pinHeader === undefined) {
+  if (pinHeader === undefined || (pinHeader as unknown) === null || typeof pinHeader !== 'object') {
     throw new Error(
       'the run manifest carries no `trackedPathsAtRecordPin` — re-run `npm run manifest` (it enumerates the sweep corpus).',
     );
@@ -355,7 +364,15 @@ async function main(): Promise<void> {
   if (!fs.existsSync(loweringAt)) {
     throw new Error(`${loweringAt} is missing — run \`npm run lower\` first.`);
   }
-  const lowering = JSON.parse(fs.readFileSync(loweringAt, 'utf-8')) as { lowered: LoweringRow[] };
+  let lowering: { lowered: LoweringRow[] };
+  try {
+    lowering = JSON.parse(fs.readFileSync(loweringAt, 'utf-8')) as { lowered: LoweringRow[] };
+  } catch (err) {
+    // (mmnto-ai/totem#2699 review round 1, GCA) name the artifact, not just the byte.
+    throw new Error(`[Totem Error] Failed to parse the lowering index at ${loweringAt}`, {
+      cause: err,
+    });
+  }
 
   const core = await loadCore();
   const intake = intakeRecordSet(core);

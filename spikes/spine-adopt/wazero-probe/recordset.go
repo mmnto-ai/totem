@@ -18,7 +18,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 )
 
 const (
@@ -55,8 +54,13 @@ const controlRecordSelectorRefusal = "CONTROL-RECORD SELECTOR"
 // run that honoured `SPIKE_RECORD_SET=seed20` while a control record was selected
 // would score the control-only corpus against the seed set's contract.
 func loadRecordSet() (string, error) {
-	v := strings.TrimSpace(os.Getenv(recordSetEnvVar))
-	control := strings.TrimSpace(os.Getenv(controlRecordEnvVar))
+	// RAW reads, not trimmed (mmnto-ai/totem#2699 review round 1, CodeRabbit): the
+	// artifact-root selector (`paths.go`) reads the same variables raw, so a
+	// whitespace-only `SPIKE_CONTROL_RECORD` must mean the same thing to both — it is
+	// non-empty on both, selects `control` here and `k3-control` there — and a padded
+	// `SPIKE_RECORD_SET` is an unknown set, refused below, never silently normalised.
+	v := os.Getenv(recordSetEnvVar)
+	control := os.Getenv(controlRecordEnvVar)
 	if control != "" && v != "" && v != recordSetControl {
 		return "", fmt.Errorf(
 			"%s — %s=%q selects the control-only build, whose record set is %q, but %s=%q names a different set. "+

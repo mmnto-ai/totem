@@ -87,8 +87,10 @@ fn read_json(path: &Path) -> Result<Value> {
 /// and the Go arm (`wazero-probe/paths.go`) validate it, so the three arms can
 /// never disagree on where a run lives. The lowered rows' `dir` is NOT touched
 /// here: `src/lower.mts` already writes it relative to the subdir'd build root.
-fn artifacts_dir(spike_root: &Path) -> Result<PathBuf> {
-    let base = spike_root.join("artifacts");
+/// The resolved artifact SUBDIR name for this run, or `None` for the base root —
+/// the ONE place the C10 selector is read on this arm, so the artifact root and the
+/// build root can never disagree.
+fn artifacts_subdir() -> Result<Option<String>> {
     match std::env::var("SPIKE_ARTIFACTS_SUBDIR") {
         Ok(name) if !name.is_empty() => {
             let valid = name
@@ -99,17 +101,42 @@ fn artifacts_dir(spike_root: &Path) -> Result<PathBuf> {
                     "SPIKE_ARTIFACTS_SUBDIR={name:?} is not a valid subdir name (expected ^[a-z0-9-]+$)"
                 );
             }
-            Ok(base.join(name))
+            Ok(Some(name))
         }
         // Fold 1 G2 (`.totem/specs/seed20-apparatus-slice2-fold1.md`): the control-only
         // build (`SPIKE_CONTROL_RECORD` set, no subdir named) defaults to `k3-control`
         // on EVERY arm — the TS arm already did; an arm that fell back to the base
         // root here would read the seed's facts against the control's lowering.
         _ => match std::env::var("SPIKE_CONTROL_RECORD") {
-            Ok(control) if !control.is_empty() => Ok(base.join("k3-control")),
-            _ => Ok(base),
+            Ok(control) if !control.is_empty() => Ok(Some("k3-control".to_owned())),
+            _ => Ok(None),
         },
     }
+}
+
+fn artifacts_dir(spike_root: &Path) -> Result<PathBuf> {
+    let base = spike_root.join("artifacts");
+    Ok(match artifacts_subdir()? {
+        Some(name) => base.join(name),
+        None => base,
+    })
+}
+
+/// The build root this run's lowering rows MUST sit directly under —
+/// `rego/build[/<subdir>]` — as a spike-relative, forward-slashed prefix.
+///
+/// mmnto-ai/totem#2699 review round 1 (Greptile P1): the Go arm refuses any lowering
+/// row whose `dir` is not an IMMEDIATE child of the resolved build root
+/// (`wazero-probe/paths.go`, refusal class `REGO BUILD ROOT`); this arm joined the
+/// row's `dir` to the spike root unchecked, so a stale or copied
+/// `lowering-rejects.json` under a control home (K4 / K7 / k3-control) could point
+/// the OPA and regorus arms at ANOTHER run's policy files and mint verdict evidence
+/// that is not this run's. Three arms, one boundary.
+fn expected_build_root() -> Result<String> {
+    Ok(match artifacts_subdir()? {
+        Some(name) => format!("rego/build/{name}"),
+        None => "rego/build".to_owned(),
+    })
 }
 
 fn load_lowering(spike_root: &Path) -> Result<Vec<LoweredRecord>> {
@@ -119,6 +146,7 @@ fn load_lowering(spike_root: &Path) -> Result<Vec<LoweredRecord>> {
         .get("lowered")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("{} carries no `lowered` array", at.display()))?;
+    let build_root = expected_build_root()?;
     let mut out = Vec::new();
     for r in rows {
         let get = |k: &str| -> Result<String> {
@@ -128,6 +156,24 @@ fn load_lowering(spike_root: &Path) -> Result<Vec<LoweredRecord>> {
                 .ok_or_else(|| anyhow!("lowering row missing `{k}`: {r}"))
         };
         let dir_rel = get("dir")?;
+        // REGO BUILD ROOT (see `expected_build_root`): an immediate child, never a
+        // prefix test — the base root is a parent of every subdir root, so a prefix
+        // test would discriminate in only one direction.
+        let immediate_child = dir_rel
+            .strip_prefix(&format!("{build_root}/"))
+            .map(|rest| !rest.is_empty() && !rest.contains('/'))
+            .unwrap_or(false);
+        if !immediate_child {
+            bail!(
+                "REGO BUILD ROOT — lowering row for `{}` names dir {:?}, which is not an immediate child of \
+                 this run's build root {:?} (SPIKE_ARTIFACTS_SUBDIR / SPIKE_CONTROL_RECORD). Refusing: a stale \
+                 or copied {} would point this host at another run's policy files (mmnto-ai/totem#2699)",
+                get("specimen")?,
+                dir_rel,
+                build_root,
+                at.display()
+            );
+        }
         out.push(LoweredRecord {
             specimen: get("specimen")?,
             rule_id: get("ruleId")?,

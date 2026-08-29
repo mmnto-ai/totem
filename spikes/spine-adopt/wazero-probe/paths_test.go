@@ -15,6 +15,10 @@ import (
 func TestArtifactsSubdirMovesBothRoots(t *testing.T) {
 	const root = "/spike"
 
+	// An inherited SPIKE_CONTROL_RECORD would select `k3-control` when the subdir is
+	// unset (fold 1 G2) and fail the base-root assertions for the wrong reason
+	// (mmnto-ai/totem#2699 review round 1, CodeRabbit).
+	t.Setenv(controlRecordEnvVar, "")
 	t.Setenv(artifactsSubdirEnvVar, "")
 	base, err := resolveSpikePaths(root)
 	if err != nil {
@@ -137,6 +141,10 @@ func TestPolicyWasmPathStaysUnderTheResolvedBuildRoot(t *testing.T) {
 
 	// And with no subdir the same seed row is the correct one, so the check is not
 	// simply "always refuse".
+	// An inherited SPIKE_CONTROL_RECORD would select `k3-control` when the subdir is
+	// unset (fold 1 G2) and fail the base-root assertions for the wrong reason
+	// (mmnto-ai/totem#2699 review round 1, CodeRabbit).
+	t.Setenv(controlRecordEnvVar, "")
 	t.Setenv(artifactsSubdirEnvVar, "")
 	base, err := resolveSpikePaths("/spike")
 	if err != nil {

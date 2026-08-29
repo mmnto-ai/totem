@@ -86,7 +86,15 @@ const WAZERO_ARTIFACTS = path.join(
 );
 
 function readJson(at: string): Artifact | null {
-  return fs.existsSync(at) ? JSON.parse(fs.readFileSync(at, 'utf-8')) : null;
+  if (!fs.existsSync(at)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(at, 'utf-8'));
+  } catch (err) {
+    // An artifact that exists but does not parse is an apparatus fault, named
+    // (mmnto-ai/totem#2699 review round 1, GCA): the raw SyntaxError said which
+    // byte, not which artifact.
+    throw new Error(`[Totem Error] Failed to parse the artifact at ${at}`, { cause: err });
+  }
 }
 
 /**
@@ -432,7 +440,12 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
   let armBOutcome: 'stands' | 'repinned' | 'disagrees' | 'not-measured' = 'not-measured';
   let armBRepinnedDigests: Record<string, unknown> | null = null;
   let armB: { ok: Ok; detail: string; rows: unknown[] };
-  const armBChain = readJson(path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`));
+  // (mmnto-ai/totem#2699 review round 1, CodeRabbit) a CROSS-RUN artifact — the
+  // control-only build's untracked home — is read with the tolerant reader: a
+  // half-written or truncated file there is arm B NOT MEASURED, never an abort of
+  // this stage. Read once; the digest below hashes the same bytes.
+  const armBChainAt = path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`);
+  const armBChain = tryReadJson(armBChainAt);
   const armBPolicyAt = path.join(K3_CONTROL_HOME, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
   if (!armBBound) {
     armB = {
@@ -447,9 +460,7 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
       rows: [],
     };
   } else {
-    const chainSha = sha256(
-      fs.readFileSync(path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`)),
-    );
+    const chainSha = sha256(fs.readFileSync(armBChainAt));
     const policySha = sha256(fs.readFileSync(armBPolicyAt));
     const rows = [
       {
@@ -703,7 +714,9 @@ function k4(): ControlRow {
     goodRows.every((r) => (r.violations ?? 0) === 0 && r.error === null);
   const t8AllMatch =
     (differential.summary?.total?.['UNEXPLAINED-DIVERGENCE'] ?? 1) === 0 &&
-    (differential.summary?.total?.['EXPLAINED-DIVERGENCE'] ?? 0) >= 0;
+    // The second conjunct states a falsifiable claim — the key is present and
+    // numeric — not the vacuous `>= 0` (mmnto-ai/totem#2699 review round 1, CodeRabbit).
+    typeof differential.summary?.total?.['EXPLAINED-DIVERGENCE'] === 'number';
   const ok = swapped.length > 0 && !t7Passes && t8AllMatch;
   return {
     id: 'K4',
@@ -1133,7 +1146,12 @@ async function k8(): Promise<ControlRow> {
         ? keyPath
         : '(no `[Totem Error] <file>: <keyPath> — <detail>` form — the § Design 5 parser did not name a field, so this rejection is not K8`s evidence: namesTheField=false)',
       expectedPath,
-      message,
+      // The parser's reason names the record by ABSOLUTE path. Republished
+      // spike-relative: an absolute path is this machine's, and two platforms of one
+      // run of record must write one string (mmnto-ai/totem#2699 review round 1,
+      // CodeRabbit). The inner `[Totem Error] <file>: <keyPath> — <detail>` form is
+      // intact — `<file>` merely loses its host prefix.
+      message: message.split(SPIKE_ROOT).join('<spike>').split(path.sep).join('/'),
     });
   }
   const bad = rows.filter((r) => !r.rejected || r.namesTheField !== true);
@@ -1159,8 +1177,11 @@ async function main(): Promise<void> {
   const certification = artifact('certification-report.json');
   const shipped = artifact('shipped-verdicts.json');
   const differential = artifact('differential-report.json');
-  const wazeroPairs = readJson(path.join(WAZERO_ARTIFACTS, 'wazero-pairs.json'));
-  const wazeroReport = readJson(path.join(WAZERO_ARTIFACTS, 'wazero-report.json'));
+  // Cross-run artifacts (the Go arm's tree is not wiped between runs): the tolerant
+  // reader, so a malformed leftover scores K5/K5b as STALE, never aborts the stage
+  // (mmnto-ai/totem#2699 review round 1, CodeRabbit).
+  const wazeroPairs = tryReadJson(path.join(WAZERO_ARTIFACTS, 'wazero-pairs.json'));
+  const wazeroReport = tryReadJson(path.join(WAZERO_ARTIFACTS, 'wazero-report.json'));
   // (fold 2 H4) THIS run's identity — the discriminator K5 and K5b hold the Go
   // artifacts to. `readRunManifest` refuses a manifest without it, so it is a string.
   const runDigest = String(manifest.runManifestSha256);

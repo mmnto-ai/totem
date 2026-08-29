@@ -513,10 +513,19 @@ async function main(): Promise<void> {
     );
     // (§ S3, constraint 4) The K5 control record IS the authored record, byte for
     // byte — checked by equality against the sibling rather than against a constant.
-    checks.eq(
-      'K5 CONTROL — `seed/controls/k5/d-requires-file.rule.yaml` is byte-identical to `records/d-requires-file.rule.yaml`',
-      fs.existsSync(K5_CONTROL_RECORD) ? sha256(fs.readFileSync(K5_CONTROL_RECORD)) : null,
-      fs.existsSync(K5_CONTROL_SIBLING) ? sha256(fs.readFileSync(K5_CONTROL_SIBLING)) : null,
+    // Both files must EXIST for the equality to mean anything: `null === null` would
+    // pass a deleted control and sibling as byte-identical and remove the K5 witness
+    // without failing this verifier (mmnto-ai/totem#2699 review round 1, CodeRabbit MAJOR).
+    const k5ControlSha = fs.existsSync(K5_CONTROL_RECORD)
+      ? sha256(fs.readFileSync(K5_CONTROL_RECORD))
+      : null;
+    const k5SiblingSha = fs.existsSync(K5_CONTROL_SIBLING)
+      ? sha256(fs.readFileSync(K5_CONTROL_SIBLING))
+      : null;
+    checks.check(
+      'K5 CONTROL — `seed/controls/k5/d-requires-file.rule.yaml` is byte-identical to `records/d-requires-file.rule.yaml` (both present)',
+      k5ControlSha !== null && k5SiblingSha !== null && k5ControlSha === k5SiblingSha,
+      `control=${k5ControlSha ?? 'MISSING'}, sibling=${k5SiblingSha ?? 'MISSING'}`,
     );
   }
 

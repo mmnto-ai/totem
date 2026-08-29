@@ -986,8 +986,13 @@ async function main(): Promise<void> {
   );
   // (G7) and the PUBLISHED tree holds exactly the same set, so an audit reading
   // `artifacts/lowered/` is reading the run's whole lowering, not a subset of it.
+  // One spike-relative spelling of the publication root for the check name, the
+  // `published` field and the console line — `artifacts/lowered` on the base run,
+  // `artifacts/<subdir>/lowered` under C10 (mmnto-ai/totem#2699 review round 1,
+  // CodeRabbit: two literals had survived fold 1's F14).
+  const publishRel = path.relative(SPIKE_ROOT, LOWERED_PUBLISH_DIR).split(path.sep).join('/');
   checks.eq(
-    `the published tree \`artifacts/lowered/\` holds EXACTLY the same ${lowered.length} packages`,
+    `the published tree \`${publishRel}/\` holds EXACTLY the same ${lowered.length} packages`,
     fs.readdirSync(LOWERED_PUBLISH_DIR).sort(),
     lowered.map((l) => l.pkgSuffix).sort(),
   );
@@ -1109,7 +1114,7 @@ async function main(): Promise<void> {
       // `artifacts/<subdir>/lowered/`, and a hardcoded `artifacts/lowered/` here
       // pointed a reader of a control run's artifact at the run of record's files.
       // Same rule `dir` above already follows.
-      published: `${path.relative(SPIKE_ROOT, LOWERED_PUBLISH_DIR).split(path.sep).join('/')}/${l.pkgSuffix}`,
+      published: `${publishRel}/${l.pkgSuffix}`,
       patterns: l.patterns,
       globCount: l.globTable.length,
     })),
@@ -1117,7 +1122,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`\n${lowered.length} policies -> ${path.relative(SPIKE_ROOT, REGO_BUILD_DIR)}`);
-  console.log(`${lowered.length} policies published -> artifacts/lowered/`);
+  console.log(`${lowered.length} policies published -> ${publishRel}/`);
   console.log(
     `${rejects.length + recordRejects.length} reject rows (${rejects.length} census evidence, ${recordRejects.length} record) -> ${out}`,
   );

@@ -475,7 +475,10 @@ function comparePair(
       explanation: explained
         ? 'MALFORMED-FACTS CONTROL (K5b) — a synthetic bundle whose `lines[]` carries a non-string member, so `facts_wellformed` is false, the entrypoint`s `result` is UNDEFINED and every arm must raise an ERROR ROW. Both arms raised THEIR OWN designed error. This is the strictness contract being exercised, not a divergence.'
         : null,
-      explanationClass: MALFORMED_FACTS_CONTROL,
+      // A class REQUIRES an explanation (mmnto-ai/totem#2699 review round 1, CodeRabbit):
+      // when the control DECLINES (`explained` false, `explanation` null) the class is
+      // null here exactly as `wazero-probe/compare.go` leaves it — one grammar (C9).
+      explanationClass: explained ? MALFORMED_FACTS_CONTROL : null,
       detail: {
         reason: explained
           ? 'both arms produced the designed error row for their own arm'
