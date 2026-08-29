@@ -8,14 +8,14 @@
 >
 > **Revision v3 (2026-08-29T05:47Z bounded round).** One round on v2's three deltas: (1) the substring-grep gate was FALSIFIED — a `review`-caller run artifact's `inputBundle` embeds the reviewed diff, so a review of this PR's own test fixture would pass the gate; replaced by a JSON-aware `node -e` read of the top-level key (hook-only, no CLI boot — the properties (a) was chosen for). (2) exit 4 concurred. (3) `BeforeTool.js` update-not-delete concurred, same JSON-aware read. The bus declared no further round before the PR; the PR's falsification leg is the next review.
 
-### Problem Statement
+## Problem Statement
 
 Two silent-failure classes in the CLI's own coordination surfaces, one slice:
 
 1. **mmnto-ai/totem#2685 — a hand-written dispatch whose `to:` resolves to no roster agent is undeliverable and only ever surfaces as a `Warning:` line on whatever seat happens to poll.** The roster sensor exists (`pollMail`, mmnto-ai/totem#2335 → mmnto-ai/totem#2344, `packages/cli/src/commands/mail.ts:934-938`) and is exit-neutral. The sender's own poll exits 0 with its inbox verdict, so the sender believes the round is out. Live specimen: the 2026-08-26 mmnto-ai/liquid-city#1148 blind round, `to: lc-agy, lc-codex, lc-gemini, lc-kimi`. `to:` is single-valued by ADR-098 (`parseHeader` captures one scalar; `DispatchHeader.to` is a string; the `mail mark` ownership check relies on it). **Corrected (review):** the `mail send --to` front door refuses comma lists only when they carry whitespace — `AGENT_ID_UNSAFE_CHAR_PATTERN = /[\p{Cc}\s<>:"|?*]/u` (`packages/core/src/orchestration-resolver.ts:98`) has no comma, so `--to "lc-agy,lc-codex"` passes the hard guard, draws only the advisory unknown-recipient warning (`mail.ts:1508-1519`), and IS written. The send side is in scope after all: one character in one pattern.
 2. **mmnto-ai/totem#2690 — the agent-strict pre-commit block gates on `.totem/cache/.spec-completed`, which no CLI path writes.** ~~`totem spec` records `.totem/cache/spec-<hash>.json` (the grounded run artifact)~~ **Struck (review, verified):** `.totem/cache/spec-<hash>.json` is the orchestrator's **TTL response cache** — written only when `ttlSeconds > 0 && !options.fresh` and the LLM returned content (`packages/cli/src/utils.ts:1116, :1403-1420`; body `{timestamp, content}`); a `--fresh` run writes none; a cache hit rewrites nothing. The mmnto-ai/totem#2100 **run artifact** is `.totem/artifacts/runs/<sha256>.json` via `saveRunArtifact` (`utils.ts:1476`), written on every successful synthesis including `--fresh`, gitignored per checkout (`.gitignore:56-58`), with the command tag at `admission.runMetadata.caller` (`"spec"` for `totem spec`; measured on today's worktree run and on 53 of the resident's 157 artifacts). A fresh checkout or `totem wt create` worktree runs the command the hook names and is still blocked; the resident tree passes only because of a hand-made 1-byte marker from 2026-03-29. `tools/pre-commit` is byte-locked to `buildPreCommitHook('standard')` (`tools-hook-parity.test.ts`); `doctor --parity` compares installed hooks against the builders. A second, independent reader of the marker exists: `.gemini/hooks/BeforeTool.js:22` — a pre-managed-era hand file (last touched `a653c523`), **not registered** in `.gemini/settings.json` (only `SessionStart` is) and not what the managed `GEMINI_BEFORE_TOOL` template (`init-templates.ts:487`) emits — inert today, but it names the same wrong evidence.
 
-### Architectural Context
+## Architectural Context
 
 - **Tenet 4 (Fail Loud, Never Drift):** both defects are the sender/committer believing a step succeeded when it did not.
 - **Tenet 13 (Sensors, Not Actuators):** rules out having `totem spec` write a flag file (the 2026-03-29 SHA-flag lesson). The hook gates on the data artifact the sensor already emits — now the _right_ artifact.
@@ -24,7 +24,7 @@ Two silent-failure classes in the CLI's own coordination surfaces, one slice:
 - **Exposure surface:** an ECL basename is recipient + compressed subject. The `/signon` constant (`init-templates.ts:1943`) and the CLI help (`index.ts:863-865`) already say "propagate nothing from a gated poll's warnings"; the fault line carries the same surface on the same poll and both constants say so in this slice (review, accepted).
 - **ADR-098 v0.4 / ADR-106:** `to:` derives from parsed leading frontmatter only (lesson-be5e3e55); one recipient per directed dispatch; `broadcast` is a routing literal.
 
-### Files to Examine / Modify
+## Files to Examine / Modify
 
 - `packages/cli/src/commands/mail.ts` — `MailPollResult` (+ `senderFaults`), the roster check in the `pollMail` loop (path-keyed ownership), `resolveMailExitCode` (+ the fault arm), `formatTextResult`, `mailCommand` return type.
 - `packages/cli/src/commands/ecl-gc.ts:689-693, :819` — gate wiring + a named `gateReasons` entry.

@@ -516,15 +516,23 @@ for (const name of names) {
   const at = ["string"].indexOf(typeof a.createdAt) < 0 ? "" : a.createdAt;
   if (!best || at > best.at) best = { name: name, at: at };
 }
-if (!best) process.exit(1);
+if (!best) process.exit(2);
 const parsed = best.at ? Date.parse(best.at) : NaN;
 const days = Number.isNaN(parsed) ? -1 : Math.floor((Date.now() - parsed) / 86400000);
 process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")");
 ' 2>/dev/null)
-  if [ -n "$spec_evidence" ]; then
+  # Reader status: 0 = evidence found · 2 = none found · anything else = the
+  # reader itself could not run (node missing from PATH, a crash) — reported
+  # distinctly, never as "no evidence"; the legacy marker still passes on its
+  # own so a broken runtime cannot regress a marker-bearing checkout.
+  reader_status=$?
+  if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
   elif [ -f ".totem/cache/.spec-completed" ]; then
     echo "[Totem] spec evidence: .totem/cache/.spec-completed (legacy marker)"
+  elif [ "$reader_status" != "2" ]; then
+    echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"
+    exit 1
   else
     echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ and no legacy .totem/cache/.spec-completed marker in this checkout"
     exit 1

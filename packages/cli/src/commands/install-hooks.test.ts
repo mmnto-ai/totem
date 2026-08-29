@@ -1757,6 +1757,47 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
     );
   }
 
+  // A `node` shim that fails: first on PATH, so the hook's reader cannot run.
+  // Exercises the reader-failure arm without touching the real runtime.
+  function shimNodeExiting(status: number): NodeJS.ProcessEnv {
+    const shimDir = path.join(tmpDir, 'node-shim');
+    fs.mkdirSync(shimDir, { recursive: true });
+    fs.writeFileSync(path.join(shimDir, 'node'), `#!/bin/sh\nexit ${status}\n`, { mode: 0o755 });
+    return {
+      ...process.env,
+      CLAUDE_CODE_AGENT: '1',
+      PATH: `${shimDir}${path.delimiter}${process.env.PATH ?? ''}`,
+    };
+  }
+
+  function runHookWith(env: NodeJS.ProcessEnv): { status: number | null; stdout: string } {
+    const r = spawnSync('sh', ['./pre-commit'], { cwd: tmpDir, encoding: 'utf-8', env });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  it.skipIf(!shellOk)(
+    'reports a reader that cannot run DISTINCTLY from missing evidence, and still fails closed',
+    () => {
+      const r = runHookWith(shimNodeExiting(5));
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        '[Totem] BLOCKED: the spec-evidence reader could not run (node exit status 5',
+      );
+      expect(r.stdout).not.toContain('no totem spec run artifact');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'the legacy marker still passes on its own when the reader cannot run',
+    () => {
+      fs.mkdirSync(path.join(tmpDir, '.totem', 'cache'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, '.totem', 'cache', '.spec-completed'), '');
+      const r = runHookWith(shimNodeExiting(127));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('(legacy marker)');
+    },
+  );
+
   it.skipIf(!shellOk)('blocks when this checkout carries no evidence at all', () => {
     const r = runHook();
     expect(r.status).toBe(1);

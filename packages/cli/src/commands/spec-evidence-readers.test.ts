@@ -149,10 +149,16 @@ describe('spec-evidence readers agree — git hook vs .gemini/hooks/BeforeTool.j
     // the file header must be updated with it.
     if (!geminiFileOk) return;
     const settingsPath = path.join(REPO_ROOT, '.gemini', 'settings.json');
+    // Premise, stated: the registration file must exist for "unregistered" to
+    // mean anything — a missing file is a premise failure, not an ENOENT.
+    expect(fs.existsSync(settingsPath), `${settingsPath} must exist`).toBe(true);
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as {
       hooks?: Record<string, unknown>;
     };
     expect(Object.keys(settings.hooks ?? {})).not.toContain('BeforeTool');
-    expect(fs.readFileSync(BEFORE_TOOL, 'utf-8')).toContain('not');
+    // The exact disclosure sentence, so deleting it fails this test.
+    expect(fs.readFileSync(BEFORE_TOOL, 'utf-8')).toContain(
+      'registered in .gemini/settings.json (only SessionStart is)',
+    );
   });
 });

@@ -963,11 +963,12 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     // NON-VACUITY: the fault does NOT ride `warnings` any more, so dropping the
     // explicit conjunct would green this gate and delete the mark below.
     expect(r.warnings).toEqual([]);
-    expect(
-      r.gateReasons.some(
-        (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
-      ),
-    ).toBe(true);
+    // Exactly ONE reason for the one fault — a duplicate emission would be a
+    // second defect hiding behind a `some`.
+    const faultReasons = r.gateReasons.filter(
+      (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
+    );
+    expect(faultReasons).toHaveLength(1);
     expect(r.collected).toEqual([]);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
   });
@@ -995,11 +996,10 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
       // untrustworthy because the seat now hosts an undeliverable dispatch.
       expect(r.resurfaced).toEqual([]);
       expect(r.verifyComplete).toBe(false);
-      expect(
-        r.warnings.some(
-          (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
-        ),
-      ).toBe(true);
+      const faultWarnings = r.warnings.filter(
+        (x) => x.includes(`totem/${CS}/${OWN_FAULT}`) && /fix the to: before compacting/.test(x),
+      );
+      expect(faultWarnings).toHaveLength(1);
       expect(resolveEclGcExitCode({ failed: [] }, r)).toBe(3);
     } finally {
       spy.mockRestore();
@@ -1017,8 +1017,8 @@ describe('compaction — cursor-coupled GC (A2.1–A2.4)', () => {
     const r = runCompact({ apply: true });
 
     expect(r.gateComplete).toBe(false);
-    expect(r.warnings.some((x) => /^unresolvable outbox address/.test(x))).toBe(true);
-    expect(r.gateReasons.every((x) => !/fix the to: before compacting/.test(x))).toBe(true);
+    expect(r.warnings.filter((x) => /^unresolvable outbox address/.test(x))).toHaveLength(1);
+    expect(r.gateReasons.filter((x) => /fix the to: before compacting/.test(x))).toHaveLength(0);
     expect(markExists(CS, DIRECT_SWEPT)).toBe(true);
   });
 });
