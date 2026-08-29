@@ -89,6 +89,20 @@ function readJson(at: string): Artifact | null {
   return fs.existsSync(at) ? JSON.parse(fs.readFileSync(at, 'utf-8')) : null;
 }
 
+/**
+ * (fold 3 J2) `readJson` for a file this stage must be able to find MISSING or
+ * MALFORMED without dying: the control-only build's own manifest is written by a
+ * different, earlier run, and a half-written one is a state to report — arm B ABSENT
+ * — not a state the seed run's controls pass may throw on.
+ */
+function tryReadJson(at: string): Artifact | null {
+  try {
+    return readJson(at);
+  } catch {
+    return null;
+  }
+}
+
 function artifact(name: string): Artifact | null {
   return readJson(path.join(ARTIFACTS_DIR, name));
 }
@@ -311,6 +325,9 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
       artifact: `k3-control/chains/${K3_CAPTURE_PACKAGE}.json`,
       path: '(arm B) the control-only rebuild',
     },
+    // (fold 3 J2) The control build's OWN manifest — what binds those bytes to this
+    // run rather than to whichever run last wrote the untracked tree.
+    { artifact: 'k3-control/manifest.json', path: '(arm B) recordSet + runCommit' },
     { artifact: 'manifest.json', path: 'k3Capture' },
   ];
 
@@ -323,7 +340,33 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
       K3_CAPTURE_SHA256['seed/controls/k3/k3-target.policy.rego'] &&
     manifest?.k3Capture?.chainSha256 === K3_CAPTURE_SHA256['seed/controls/k3/k3-target.chain.json'];
 
+  // (fold 2 H2, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The manifest's
+  // `k3Capture.repinned` is DECIDED by arm B — the control-only build's bytes against
+  // the pinned target — so it is reported below, beside the measurement it was taken
+  // from. `null` is "arm B not present in this run", never "the target stands"; the
+  // manifest states the outcome and this row says which arm produced it. It is read
+  // HERE, above arm A, because arm A's target depends on it (fold 3 J3).
+  const manifestRepinned = (manifest?.k3Capture ?? {}).repinned;
+  const manifestRepinnedFrom = (manifest?.k3Capture ?? {}).repinnedFrom ?? null;
+  const repinnedNote = `manifest.k3Capture.repinned=${JSON.stringify(manifestRepinned ?? null)} (from=${JSON.stringify(
+    manifestRepinnedFrom,
+  )}) — the manifest's own reading of THIS arm`;
+
   // ── arm A ──
+  //
+  // (fold 3 J3, `.totem/specs/seed20-apparatus-slice2-fold3.md`) The TARGET moves with
+  // the re-pin. When arm B re-pinned the control (`repinned === true`), the pinned
+  // capture copies are no longer what the apparatus emits, and comparing the seed
+  // chain against them would report the re-pin a second time as an arm-A fault. The
+  // target is then the RE-PINNED chain under `artifacts/k3-control/`; `repinnedFrom`
+  // names that set in the manifest, and the scorer reads it the same way. On every
+  // other outcome the target is the byte-pinned capture copy.
+  const armARepinnedTargetAt = path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`);
+  const armATargetIsRepinned = manifestRepinned === true;
+  const armATargetAt = armATargetIsRepinned ? armARepinnedTargetAt : K3_CAPTURE_CHAIN;
+  const armATargetRel = armATargetIsRepinned
+    ? `${manifestRepinnedFrom ?? 'artifacts/k3-control'}/chains/${K3_CAPTURE_PACKAGE}.json (the RE-PINNED target)`
+    : 'seed/controls/k3/k3-target.chain.json (the byte-pinned capture)';
   let armA: { ok: Ok; detail: string; rows: unknown[] };
   if (recordSet !== 'seed20') {
     armA = {
@@ -333,11 +376,11 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
     };
   } else {
     const current = readJson(path.join(ARTIFACTS_DIR, 'chains', `${K3_CAPTURE_PACKAGE}.json`));
-    const target = readJson(K3_CAPTURE_CHAIN);
+    const target = readJson(armATargetAt);
     if (current === null || target === null) {
       armA = {
         ok: null,
-        detail: `NOT MEASURED — ${current === null ? `artifacts/chains/${K3_CAPTURE_PACKAGE}.json` : 'seed/controls/k3/k3-target.chain.json'} is absent`,
+        detail: `NOT MEASURED — ${current === null ? `artifacts/chains/${K3_CAPTURE_PACKAGE}.json` : armATargetRel} is absent`,
         rows: [],
       };
     } else {
@@ -346,9 +389,10 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
       armA = {
         ok: bad.length === 0,
         detail:
-          bad.length === 0
+          (bad.length === 0
             ? `${rows.length} differing leaf path(s), every one on the charter's expected-to-differ list`
-            : `${bad.filter((r) => r.tag === 'UNCOVERED').length} UNCOVERED and ${bad.filter((r) => r.tag === 'identical-expected').length} expected-identical-but-differing path(s): ${bad.map((r) => `${r.path} [${r.tag}]`).join('; ')}`,
+            : `${bad.filter((r) => r.tag === 'UNCOVERED').length} UNCOVERED and ${bad.filter((r) => r.tag === 'identical-expected').length} expected-identical-but-differing path(s): ${bad.map((r) => `${r.path} [${r.tag}]`).join('; ')}`) +
+          ` | target: ${armATargetRel}`,
         rows,
       };
     }
@@ -356,28 +400,50 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
 
   // ── arm B ──
   //
-  // (fold 2 H2, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The manifest's
-  // `k3Capture.repinned` is DECIDED by this arm — the control-only build's bytes
-  // against the pinned target — so it is reported here, beside the measurement it was
-  // taken from. `null` is "arm B not present in this run", never "the target stands";
-  // the manifest states the outcome and this row says which arm produced it.
-  const manifestRepinned = (manifest?.k3Capture ?? {}).repinned;
-  const repinnedNote = `manifest.k3Capture.repinned=${JSON.stringify(manifestRepinned ?? null)} (from=${JSON.stringify(
-    (manifest?.k3Capture ?? {}).repinnedFrom ?? null,
-  )}) — the manifest's own reading of THIS arm`;
+  // (fold 3 J2) The bytes are not the measurement. `artifacts/k3-control/` is an
+  // UNTRACKED tree that survives between runs, so a build left over from another
+  // commit would otherwise be read as THIS run's arm B. Arm B is PRESENT only when the
+  // control build's own manifest beside those bytes says `recordSet: 'control'` AND
+  // its `runCommit` equals this run's — the identical binding `src/manifest.mts`
+  // applies, so the two artifacts cannot disagree about whether arm B happened.
+  const thisRunCommit = typeof manifest?.runCommit === 'string' ? manifest.runCommit : null;
+  const armBManifest = tryReadJson(path.join(K3_CONTROL_HOME, 'manifest.json'));
+  const armBBound =
+    armBManifest !== null &&
+    armBManifest.recordSet === 'control' &&
+    thisRunCommit !== null &&
+    armBManifest.runCommit === thisRunCommit;
+  const armBBindingDetail = !fs.existsSync(K3_CONTROL_HOME)
+    ? 'no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set)'
+    : armBManifest === null
+      ? 'no control-only build present: `artifacts/k3-control/manifest.json` is absent or unparseable'
+      : armBBound
+        ? `bound to this run: recordSet=control runCommit=${String(thisRunCommit)}`
+        : `STALE control-only build — \`artifacts/k3-control/manifest.json\` carries recordSet=${JSON.stringify(
+            armBManifest.recordSet ?? null,
+          )} runCommit=${JSON.stringify(
+            armBManifest.runCommit ?? null,
+          )}; arm B requires recordSet 'control' at THIS run's runCommit ${JSON.stringify(thisRunCommit)}`;
+
+  // (fold 3 J3) The FOUR outcomes, named. `stands` and `repinned` are both legitimate
+  // states of a run of record; `disagrees` is neither — it is the manifest and the
+  // controls artifact reporting different things about the same bytes, an apparatus
+  // fault. `not-measured` is arm B absent or unbound.
+  let armBOutcome: 'stands' | 'repinned' | 'disagrees' | 'not-measured' = 'not-measured';
+  let armBRepinnedDigests: Record<string, unknown> | null = null;
   let armB: { ok: Ok; detail: string; rows: unknown[] };
   const armBChain = readJson(path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`));
   const armBPolicyAt = path.join(K3_CONTROL_HOME, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
-  if (!fs.existsSync(K3_CONTROL_HOME)) {
+  if (!armBBound) {
     armB = {
       ok: null,
-      detail: `NOT MEASURED — control-only run not present: \`artifacts/k3-control/\` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | ${repinnedNote}`,
+      detail: `NOT MEASURED — ${armBBindingDetail} | ${repinnedNote}`,
       rows: [],
     };
   } else if (armBChain === null || !fs.existsSync(armBPolicyAt)) {
     armB = {
       ok: null,
-      detail: `NOT MEASURED — control-only run not present for ${K3_CAPTURE_PACKAGE}: ${armBChain === null ? 'its chain' : 'its published policy.rego'} is absent under artifacts/k3-control/ | ${repinnedNote}`,
+      detail: `NOT MEASURED — control-only run not present for ${K3_CAPTURE_PACKAGE}: ${armBChain === null ? 'its chain' : 'its published policy.rego'} is absent under artifacts/k3-control/ (${armBBindingDetail}) | ${repinnedNote}`,
       rows: [],
     };
   } else {
@@ -399,16 +465,56 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
         eq: policySha === K3_CAPTURE_SHA256['seed/controls/k3/k3-target.policy.rego'],
       },
     ];
+    // (fold 3 J3) A re-pin is DISCLOSED, never refused — on the apparatus too. The
+    // charter's clause is that an emitter delta which changes the emitted bytes
+    // RE-PINS the target; the apparatus's job is to say so and publish the digests the
+    // target moved to, not to refuse a run for doing what the charter describes. What
+    // it does refuse is DISAGREEMENT: bytes that differ from the captures while the
+    // manifest says they do not is the two artifacts of one run reporting different
+    // things about the same files, which no scorer can resolve.
+    const flat = (manifest?.k3Capture ?? {}) as Record<string, unknown>;
+    const flatKeysPresent =
+      typeof flat.repinnedPolicyRegoSha256 === 'string' &&
+      typeof flat.repinnedPolicyRegoCodeSha256 === 'string' &&
+      typeof flat.repinnedChainSha256 === 'string' &&
+      typeof flat.repinnedFrom === 'string';
+    const bytesStand = rows.every((r) => r.eq);
+    if (bytesStand) {
+      armBOutcome = 'stands';
+    } else if (manifestRepinned === true && flatKeysPresent) {
+      armBOutcome = 'repinned';
+      armBRepinnedDigests = {
+        repinnedPolicyRegoSha256: flat.repinnedPolicyRegoSha256,
+        repinnedPolicyRegoCodeSha256: flat.repinnedPolicyRegoCodeSha256,
+        repinnedChainSha256: flat.repinnedChainSha256,
+        repinnedFrom: flat.repinnedFrom,
+      };
+    } else {
+      armBOutcome = 'disagrees';
+    }
+    const diffText = rows
+      .filter((r) => !r.eq)
+      .map((r) => `${r.file}: ${r.sha256} != ${r.expected}`)
+      .join('; ');
     armB = {
-      ok: rows.every((r) => r.eq),
+      // `repinned` keeps `ok: true` for the K3 row: the measurement happened and its
+      // outcome is a disclosure. `disagrees` is `false`.
+      ok: armBOutcome !== 'disagrees',
       detail: `${
-        rows.every((r) => r.eq)
-          ? 'the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte'
-          : rows
-              .filter((r) => !r.eq)
-              .map((r) => `${r.file}: ${r.sha256} != ${r.expected}`)
-              .join('; ')
-      } | ${repinnedNote}`,
+        armBOutcome === 'stands'
+          ? 'STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte'
+          : armBOutcome === 'repinned'
+            ? `RE-PINNED (disclosed, not refused) — ${diffText}; the target moved to policy.rego ${String(
+                flat.repinnedPolicyRegoSha256,
+              )}, code ${String(flat.repinnedPolicyRegoCodeSha256)}, chain ${String(
+                flat.repinnedChainSha256,
+              )} (repinnedFrom ${String(flat.repinnedFrom)})`
+            : `DISAGREES — the bytes differ from the captures (${diffText}) but the manifest ${
+                manifestRepinned === true
+                  ? 'declares `repinned: true` WITHOUT the flat re-pinned digests'
+                  : `says \`repinned: ${JSON.stringify(manifestRepinned ?? null)}\``
+              }: the two artifacts of one run disagree — an apparatus fault`
+      } | ${armBBindingDetail} | ${repinnedNote}`,
       rows,
     };
   }
@@ -432,8 +538,19 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
       `arm A: ${armA.detail} | arm B: ${armB.detail} | capture pins: ${captureDrift.length === 0 ? 'both re-verified against the tree' : `DRIFT ${captureDrift.join(', ')}`}` +
       ` | manifest.k3Capture: ${manifestCaptureOk ? 'matches the captures' : 'DOES NOT match the captures'}`,
     rows: [
-      { arm: 'A', ok: armA.ok, detail: armA.detail, rows: armA.rows },
-      { arm: 'B', ok: armB.ok, detail: armB.detail, rows: armB.rows },
+      { arm: 'A', ok: armA.ok, detail: armA.detail, target: armATargetRel, rows: armA.rows },
+      {
+        arm: 'B',
+        ok: armB.ok,
+        // (fold 3 J3) The outcome as a NAMED token, so a reader does not parse prose to
+        // learn which of the four states this run measured. On `repinned` the flat
+        // digests the target moved to are copied from the manifest and carried here.
+        armB: armBOutcome,
+        binding: armBBindingDetail,
+        ...(armBRepinnedDigests ?? {}),
+        detail: armB.detail,
+        rows: armB.rows,
+      },
     ],
     evidence,
   };
@@ -980,18 +1097,22 @@ async function k8(): Promise<ControlRow> {
     // `message`) starts with the key path the parser named, AND the detail names
     // the field as a whole token. `tryCompileSpecimen` wraps the parser's own
     // `[Totem Error] <file>: <keyPath> — <detail>` inside `specimen … FAILED
-    // parseRuleRecord: …`; the inner form is what is parsed here. A message that
-    // does not carry the inner form falls back to the whole-token test on the whole
-    // message and SAYS so in `keyPath`.
+    // parseRuleRecord: …`; the inner form is what is parsed here.
+    //
+    // (fold 3 J5, `.totem/specs/seed20-apparatus-slice2-fold3.md`) NO inner form ⇒
+    // `namesTheField: false`. Fold 2 fell back to a whole-token test over the whole
+    // message, which is a different claim: K8's evidence is the § Design 5 PARSER
+    // naming the offending field, and a rejection from somewhere else on the intake
+    // path (a `compileRuleRecord` reason, say) can carry the token `message` or
+    // `fileGlob` in prose without the parser having named anything. The row's
+    // `keyPath` marker states that the form was absent.
     const expectedPath = f.kind === 'unknown-key' ? 'target.scope.fileGlob' : 'message';
     const inner = /\[Totem Error\] .*?: ([A-Za-z0-9_.]+) — (.*)$/s.exec(message);
     const keyPath = inner ? inner[1]! : null;
     const detail = inner ? inner[2]! : message;
     const keyPathCoversField =
       keyPath !== null && (expectedPath === keyPath || expectedPath.startsWith(`${keyPath}.`));
-    const namesTheField = inner
-      ? keyPathCoversField && namesToken(detail, names)
-      : namesToken(message, names);
+    const namesTheField = inner ? keyPathCoversField && namesToken(detail, names) : false;
     rows.push({
       id: f.id,
       file: path.relative(SPIKE_ROOT, f.file).split(path.sep).join('/'),
@@ -1010,7 +1131,7 @@ async function k8(): Promise<ControlRow> {
       namesTheField: !outcome.ok && namesTheField,
       keyPath: inner
         ? keyPath
-        : '(no `[Totem Error] <file>: <keyPath> — <detail>` form; whole-message token test)',
+        : '(no `[Totem Error] <file>: <keyPath> — <detail>` form — the § Design 5 parser did not name a field, so this rejection is not K8`s evidence: namesTheField=false)',
       expectedPath,
       message,
     });

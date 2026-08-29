@@ -391,12 +391,49 @@ function main(): void {
   // not re-measured" and "the target stands" are different claims, and only one of
   // them is evidence. The § 6 seam runs the control-only build FIRST, so the run of
   // record measures it.
+  //
+  // (fold 3 J2, `.totem/specs/seed20-apparatus-slice2-fold3.md`) And the bytes alone are
+  // not the measurement: `artifacts/k3-control/` is an UNTRACKED tree that survives
+  // between runs, so a build left over from another commit — or from a differently
+  // configured record set — would be read as this run's arm B and published as this
+  // run's `repinned`. Arm B is PRESENT only when the control build's OWN manifest
+  // beside those bytes says `recordSet: 'control'` AND its `runCommit` equals this
+  // run's HEAD. Anything else is arm B ABSENT, disclosed by name.
   const k3ControlRel = 'artifacts/k3-control';
   const k3ControlHome = path.join(SPIKE_ROOT, 'artifacts', 'k3-control');
   const armBPolicyAt = path.join(k3ControlHome, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
   const armBChainAt = path.join(k3ControlHome, 'chains', `${K3_CAPTURE_PACKAGE}.json`);
+  const armBManifestAt = path.join(k3ControlHome, 'manifest.json');
+  let armBManifest: Record<string, unknown> | null = null;
+  if (fs.existsSync(armBManifestAt)) {
+    try {
+      armBManifest = JSON.parse(fs.readFileSync(armBManifestAt, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      // Unparseable is ABSENT, never a throw: a half-written control build is a state
+      // the seed run has to report, not one it may die on.
+      armBManifest = null;
+    }
+  }
+  const armBBound =
+    armBManifest !== null &&
+    armBManifest.recordSet === 'control' &&
+    armBManifest.runCommit === head.out;
+  const armBBindingDetail = !fs.existsSync(k3ControlHome)
+    ? `no control-only build present: \`${k3ControlRel}/\` does not exist`
+    : armBManifest === null
+      ? `no control-only build present: \`${k3ControlRel}/manifest.json\` is absent or unparseable`
+      : armBBound
+        ? `bound to this run: \`${k3ControlRel}/manifest.json\` carries recordSet=control runCommit=${head.out}`
+        : `STALE control-only build — \`${k3ControlRel}/manifest.json\` carries recordSet=${JSON.stringify(
+            armBManifest.recordSet ?? null,
+          )} runCommit=${JSON.stringify(
+            armBManifest.runCommit ?? null,
+          )}; arm B requires recordSet 'control' at THIS run's HEAD ${head.out}`;
   const armBRebuilt =
-    fs.existsSync(armBPolicyAt) && fs.existsSync(armBChainAt)
+    armBBound && fs.existsSync(armBPolicyAt) && fs.existsSync(armBChainAt)
       ? {
           policyRegoSha256: sha256(fs.readFileSync(armBPolicyAt)),
           // The charter's § 5 code-only form, over the REBUILT policy — the same
@@ -628,6 +665,12 @@ function main(): void {
   for (const r of disclosedDeltas) {
     console.log(`  DISCLOSED DELTA   ${r.path} (${r.region}) — ${r.disclosed ?? ''}`);
   }
+  // (fold 3 J2/J4) Arm B's outcome and its BINDING, in the header — the § 6 order
+  // makes "was the control-only build present, and was it this run's" the first thing
+  // a reader of a seed run needs, and a stale untracked build is invisible otherwise.
+  console.log(
+    `  K3 arm B          repinned=${k3Repinned === null ? 'null (NOT MEASURED)' : String(k3Repinned)} — ${armBBindingDetail}`,
+  );
   // (fold 1 F13) Which arm the dirty-tree gate is on, stated in the header rather
   // than left to be inferred from the presence of a FAILED check.
   console.log(`  dirty tree allowed: ${ALLOW_DIRTY_TREE ? 'yes' : 'no'}`);
@@ -803,11 +846,40 @@ function main(): void {
     }`,
     true,
     k3Repinned === null
-      ? `\`${k3ControlRel}/lowered/${K3_CAPTURE_PACKAGE}/policy.rego\` and/or its chain are absent — run the § S5 seam with SPIKE_CONTROL_RECORD set; the disposition is \`controls.json\` K3 arm B's`
+      ? // (fold 3 J2) The detail NAMES why arm B is absent: no build, or a build bound
+        // to another run. "Absent" and "stale" are different states and a reader must
+        // not have to guess which one produced the `null`.
+        `${armBBindingDetail}${
+          armBBound
+            ? ` — but \`${k3ControlRel}/lowered/${K3_CAPTURE_PACKAGE}/policy.rego\` and/or its chain are absent`
+            : ''
+        } — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is \`controls.json\` K3 arm B's`
       : k3Repinned
-        ? `policy.rego ${armBRebuilt!.policyRegoSha256} (pin ${k3Pins.policyRegoSha256}); code ${armBRebuilt!.policyRegoCodeSha256} (pin ${k3Pins.policyRegoCodeSha256}); chain ${armBRebuilt!.chainSha256} (pin ${k3Pins.chainSha256})`
-        : 'the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte',
+        ? `policy.rego ${armBRebuilt!.policyRegoSha256} (pin ${k3Pins.policyRegoSha256}); code ${armBRebuilt!.policyRegoCodeSha256} (pin ${k3Pins.policyRegoCodeSha256}); chain ${armBRebuilt!.chainSha256} (pin ${k3Pins.chainSha256}) — ${armBBindingDetail}`
+        : `the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — ${armBBindingDetail}`,
   );
+  // ── (fold 3 J4) `null` is not scoreable ──────────────────────────────────────
+  //
+  // The row above DISCLOSES the outcome and never refuses, because a `true` is the
+  // scorer's to dispose of. `null` is a different thing: it is the ABSENCE of the
+  // measurement, and on the run of record the charter's § 6 order ("the control-only
+  // build runs FIRST") makes that absence an apparatus fault rather than a state of
+  // the world. So on `seed20` — and only there — it is a FAIL check. On `specimens`
+  // and `control` arm B is out of scope by construction and the outcome stays
+  // recorded-not-gated, in the disclosing row above.
+  //
+  // `SPIKE_ALLOW_DIRTY_TREE=1` is the same DEV seam the clean-tree gate uses (fold 1
+  // F13): a developer exercising the seed set without having run the control build is
+  // not producing a run of record, and the run of record does not set the flag.
+  if (recordSet === 'seed20') {
+    checks.check(
+      'K3 arm B PRESENT and bound to this run (§ 6: the control-only build runs FIRST)',
+      k3Repinned !== null || ALLOW_DIRTY_TREE,
+      k3Repinned !== null
+        ? `${armBBindingDetail}; repinned=${String(k3Repinned)}`
+        : `${armBBindingDetail}${ALLOW_DIRTY_TREE ? ' — SPIKE_ALLOW_DIRTY_TREE=1 (dev run), NOT gated' : ''}`,
+    );
+  }
   // The K6 rows above already FAIL one by one on an undisclosed delta; this states
   // the aggregate so the count is readable in `checks[]` without re-scanning them.
   checks.eq(
@@ -827,16 +899,18 @@ function main(): void {
     fs.existsSync(K5_CONTROL_RECORD) ? sha256(fs.readFileSync(K5_CONTROL_RECORD)) : null,
     fs.existsSync(K5_CONTROL_SIBLING) ? sha256(fs.readFileSync(K5_CONTROL_SIBLING)) : null,
   );
-  // (fold 2 H6) `checks` joins `bundles` + `bundlesSha256` in the probe: the manifest
-  // this stage WRITES carries all three, and the guard has to cover the file that is
-  // actually on disk rather than the object as it stood before the last write.
+  // (fold 3 J1) The probe covers EXACTLY the two keys the scorer's re-derivation also
+  // deletes. Fold 2's version added `checks` to it, which passed only because
+  // `computeRunManifestSha256` was deleting `checks` too — and the scorer is not: a
+  // `checks` key inside the manifest would have refused every run of record. The rows
+  // are published beside, as `artifacts/manifest-checks.json`, so the file this stage
+  // writes and the file the scorer hashes are the same object.
   checks.eq(
-    'the digest is stable under the pending `bundles` + `bundlesSha256` fill and this stage`s own `checks[]` (all three are outside the preimage)',
+    'the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)',
     computeRunManifestSha256({
       ...manifest,
       bundles: [{ fixtureId: 'x', sha256: 'y' }],
       bundlesSha256: computeBundlesSha256([{ fixtureId: 'x', sha256: 'y' }]),
-      checks: checks.rows,
     }),
     manifest.runManifestSha256,
   );
@@ -867,20 +941,33 @@ function main(): void {
   console.log(
     `\nrecordSet=${recordSet}  records=${records.length}  runManifestSha256=${String(manifest.runManifestSha256).slice(0, 16)}…`,
   );
-  // ── (fold 2 H6) the manifest publishes its OWN check rows ────────────────────
+  // ── (fold 3 J1) the manifest stage publishes its check rows BESIDE the manifest ──
   //
-  // The K6 byte-identity rows, the F1 code-digest row, the K3 `repinned` disclosure
-  // and the clean-tree row are measured HERE and, until now, existed only as stdout.
-  // The charter's "`checks[].ok` false in any artifact" could not reach them: the
-  // manifest was the one artifact this pipeline writes with no `checks[]`.
+  // The K6 byte-identity rows, the F1 code-digest row, the K3 arm-B rows and the
+  // clean-tree row are measured HERE and would otherwise exist only as stdout, out of
+  // reach of the charter's "`checks[].ok` false in any artifact".
   //
-  // Written LAST and OUTSIDE the digest preimage (`computeRunManifestSha256` deletes
-  // the key, like `bundles`), so publishing the rows cannot move the identity the
-  // artifacts written earlier in this run already committed to. Written BEFORE
-  // `checks.finish`, so a run that FAILS still publishes the rows that failed it —
-  // the failing run is exactly the one a reader needs the rows from.
-  writeArtifact(MANIFEST_ARTIFACT, { ...manifest, checks: checks.rows });
+  // Fold 2 (H6) put them INSIDE `manifest.json` outside the digest preimage. That is
+  // undone: the preimage is not the apparatus's to choose — the scorer re-derives
+  // `runManifestSha256` deleting `bundles`, `bundlesSha256` and the digest field only,
+  // so a `checks` key in the manifest refuses every run of record on a sha256 mismatch
+  // the apparatus itself would not see. The rows go to a SIBLING artifact instead.
+  //
+  // Written AFTER the manifest, so `writeArtifact` stamps it with THIS run's
+  // `runManifestSha256` (the stamp is read back from the file written above), and
+  // BEFORE `checks.finish`, so a run that FAILS still publishes the rows that failed
+  // it — the failing run is exactly the one a reader needs the rows from. It is NOT on
+  // `POST_FACTS_ARTIFACTS`: it is written before facts exist and makes no claim about
+  // fact bytes.
+  const checksOut = writeArtifact('manifest-checks.json', {
+    generatedBy: 'spikes/spine-adopt/src/manifest.mts',
+    contract:
+      'spec `.totem/specs/seed20-apparatus-slice2-fold3.md` § J1 — the manifest stage`s own `checks[]`, published beside `manifest.json` because the manifest`s key set is fixed by the scorer`s `runManifestSha256` re-derivation. Stamped with the `runManifestSha256` of the manifest these rows were measured against.',
+    recordSet,
+    checks: checks.rows,
+  });
   console.log(`manifest: ${out}`);
+  console.log(`manifest checks: ${checksOut}`);
   checks.finish('manifest');
 }
 

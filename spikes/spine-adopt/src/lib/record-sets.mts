@@ -239,13 +239,41 @@ function requiresScopeFile(yamlText: string): boolean {
  * an absence is the one thing a run cannot notice about itself.
  *
  * (fold 2 H9, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The M3 pair is
- * declared for the FIRST `requires.scope: file` CONTROL row of the loaded set only,
- * mirroring `src/facts.mts`'s own `find`: that stage mints the null/empty split ONCE,
- * for the first such row, so a second control record of the same shape would have
- * been declared to mint bundles nobody was ever going to mint — and the F5 check
- * would have failed for a control that behaved exactly as designed. `rows` is the
- * whole loaded set precisely so the declaration is a property of the SET, not of the
- * row read in isolation.
+ * declared for ONE row of the loaded set only, because `src/facts.mts` mints the
+ * null/empty split ONCE: a second record of the same shape would have been declared
+ * to mint bundles nobody was ever going to mint, and the F5 check would have failed
+ * for a control that behaved exactly as designed. `rows` is the whole loaded set
+ * precisely so the declaration is a property of the SET, not of the row read in
+ * isolation.
+ *
+ * (fold 3 J6, `.totem/specs/seed20-apparatus-slice2-fold3.md`) The predicate
+ * `src/facts.mts` actually uses is
+ *
+ *   intake.accepted.find((r) => requiresScopeOf(r.compiled.rule) === 'file')
+ *
+ * — the first ACCEPTED row of the loaded set whose COMPILED rule carries
+ * `requires.scope: file`, with NO `control` filter. This function's `find` differs on
+ * two axes: it reads the record's YAML text rather than the compiled rule (a
+ * declaration made at manifest time, before intake has run), and it restricts to
+ * `r.control`. The two coincide on every set the apparatus loads today, and for
+ * stated reasons rather than by luck:
+ *
+ *   - `specimens` — no control row at all, and `d-file` is the only
+ *     `requires.scope: file` record; the function is never called (it is called for
+ *     `controlRecords[]` rows only, of which there are none), so the declaration and
+ *     the mint cannot disagree.
+ *   - `seed20` — the seed's 22 records carry exactly one `requires:` record
+ *     (`5da43ea6`) and its scope is `line`, so the K5 control (§ S3) is the ONLY
+ *     `requires.scope: file` row in the set on either predicate, and it is a control.
+ *   - `control` — the single loaded row is a specimen record under `shared: false`
+ *     (`a`/`b`/`c`/`c-supp` only, § S5), none of which carries `requires:`; the
+ *     control seam does not run `src/facts.mts` at all.
+ *
+ * What would break the coincidence is a set carrying a NON-control
+ * `requires.scope: file` record ordered before the control — `facts.mts` would mint
+ * the split for that row while this function still declared it for the control. That
+ * set does not exist today; the F5 check in `src/facts.mts` is what would fail loudly
+ * if one were added, which is the intended failure mode.
  */
 export function controlBundleFixtureIds(row: RecordRow, rows: readonly RecordRow[]): string[] {
   const yamlText = fs.readFileSync(row.recordFile, 'utf-8');

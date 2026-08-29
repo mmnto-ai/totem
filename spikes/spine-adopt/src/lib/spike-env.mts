@@ -199,12 +199,16 @@ export function computeRunManifestSha256(manifest: Record<string, unknown>): str
   delete core.bundles;
   delete core.bundlesSha256;
   delete core.runManifestSha256;
-  // (fold 2 H6, `.totem/specs/seed20-apparatus-slice2-fold2.md`) `checks` is outside
-  // the preimage for the same reason `bundles` is: the manifest stage writes its own
-  // check rows into the manifest AFTER the digest is computed, so a digest that
-  // covered them could not be the digest the stage published. What the rows attest
-  // is the run that produced this manifest, not a second identity for it.
-  delete core.checks;
+  // (fold 3 J1, `.totem/specs/seed20-apparatus-slice2-fold3.md`) EXACTLY these three
+  // keys, and never a fourth. This function is not free to choose its preimage: the
+  // scorer re-derives `runManifestSha256` on its own side by deleting `bundles`,
+  // `bundlesSha256` and the digest field, and refuses the run on any mismatch
+  // (charter mmnto-ai/totem-strategy#1154 § 5). Fold 2's H6 deleted `checks` here as
+  // well and published the rows INSIDE the manifest — which would have made every run
+  // of record refuse, because the scorer's `core` still carries them. The rows now
+  // live in the sibling artifact `artifacts/manifest-checks.json` (`src/manifest.mts`),
+  // so the manifest the scorer hashes and the manifest this apparatus hashes are the
+  // same object.
   return sha256(`${JSON.stringify(core, null, 2)}\n`);
 }
 
@@ -330,16 +334,10 @@ export function bundlesSha256(forArtifact: string): string {
 export function fillManifestBundles(bundles: { fixtureId: string; sha256: string }[]): string {
   const m = readRunManifest();
   const next = { ...m, bundles, bundlesSha256: computeBundlesSha256(bundles) };
-  // (fold 2 H6) The manifest stage's own `checks[]` rows survive this rewrite. The
-  // spread carries them, but the claim is asserted rather than assumed: this is the
-  // one place the manifest is re-serialised by a LATER stage, and a silently dropped
-  // key would take the K6 rows, the F1 code-digest row and the clean-tree row out of
-  // the artifact the charter reads `checks[].ok` from.
-  if ('checks' in m && !('checks' in next)) {
-    throw new Error(
-      'filling manifest.bundles DROPPED the manifest stage`s `checks[]` rows (fold 2 H6) — they are published outside the digest preimage and must survive the rewrite.',
-    );
-  }
+  // (fold 3 J1) Fold 2's `checks`-survival guard is GONE with the key it guarded: the
+  // manifest stage's rows are published as `artifacts/manifest-checks.json`, which this
+  // function does not touch, and the guard could not fail in any case (the spread two
+  // lines up is what it asserted about).
   const recomputed = computeRunManifestSha256(next);
   if (recomputed !== m.runManifestSha256) {
     throw new Error(
