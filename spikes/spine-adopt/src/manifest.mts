@@ -225,7 +225,14 @@ function main(): void {
       `\`git ${SOURCE_TREE_STATUS_ARGV.join(' ')}\` failed in ${REPO_ROOT}: ${status.out}`,
     );
   const dirtyEntries = status.out.split('\n').filter((l) => l.trim().length > 0);
-  const artifactStatus = run('git', ['status', '--porcelain', '--', ...ARTIFACT_TREES], REPO_ROOT);
+  // `-uall` (fold 2, third-read note 3): an untracked control-run home is recorded
+  // file by file, not as one collapsed `?? …/k3-control/` directory entry — the
+  // provenance is per artifact.
+  const artifactStatus = run(
+    'git',
+    ['status', '--porcelain', '-uall', '--', ...ARTIFACT_TREES],
+    REPO_ROOT,
+  );
   if (!artifactStatus.ok)
     throw new Error(
       `\`git status --porcelain -- ${ARTIFACT_TREES.join(' ')}\` failed in ${REPO_ROOT}: ${artifactStatus.out}`,
@@ -487,7 +494,7 @@ function main(): void {
     // `artifacts/tracked-paths.txt` as they are, trailing newline included, and it is
     // deliberately unchanged.
     digestRule:
-      'sha256 over the sorted list, newline-joined, no trailing newline — equal to sha256sum of the published list file',
+      'governs `probePathsSha256`, `trackedPathsAtRecordPin.sha256` and `t5-sweep.json.header.treeSha256`: sha256 over the sorted list, newline-joined, NO trailing newline — equal to `sha256sum` of the published list file (`tracked-paths-at-record-pin.txt` is written without a final newline). NOT `trackedPaths.sha256` (T17, slice 1): that is the bytes of `tracked-paths.txt` as written, trailing newline included, unchanged.',
     // (§ S2) The probe list is a chain-digest input on the specimens set and a
     // GENERATED set on the seed set, so its identity is published beside it rather
     // than left for a reader to recompute with a different join/sort convention.

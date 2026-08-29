@@ -972,6 +972,26 @@ async function k8(): Promise<ControlRow> {
     // key. A rejection for some unrelated reason would pass a bare `!ok` and prove
     // nothing about the § Design 5 clause the control is for.
     const names = f.kind === 'unknown-key' ? 'fileGlob' : 'message';
+    // (fold 2 H10, the owner's ruling after the leg stopped on it) The parser names
+    // the offending field by KEY PATH — but zod raises `unrecognized_keys` at the
+    // CONTAINER path (`target.scope`), never at the key itself, so "last segment
+    // equals the field" cannot hold for the unknown-key class. The predicate that
+    // holds for both classes: the EXPECTED dotted path (`target.scope.fileGlob` /
+    // `message`) starts with the key path the parser named, AND the detail names
+    // the field as a whole token. `tryCompileSpecimen` wraps the parser's own
+    // `[Totem Error] <file>: <keyPath> — <detail>` inside `specimen … FAILED
+    // parseRuleRecord: …`; the inner form is what is parsed here. A message that
+    // does not carry the inner form falls back to the whole-token test on the whole
+    // message and SAYS so in `keyPath`.
+    const expectedPath = f.kind === 'unknown-key' ? 'target.scope.fileGlob' : 'message';
+    const inner = /\[Totem Error\] .*?: ([A-Za-z0-9_.]+) — (.*)$/s.exec(message);
+    const keyPath = inner ? inner[1]! : null;
+    const detail = inner ? inner[2]! : message;
+    const keyPathCoversField =
+      keyPath !== null && (expectedPath === keyPath || expectedPath.startsWith(`${keyPath}.`));
+    const namesTheField = inner
+      ? keyPathCoversField && namesToken(detail, names)
+      : namesToken(message, names);
     rows.push({
       id: f.id,
       file: path.relative(SPIKE_ROOT, f.file).split(path.sep).join('/'),
@@ -987,7 +1007,11 @@ async function k8(): Promise<ControlRow> {
       // parser named the OFFENDING key `fileGlob`. The control's whole claim is that
       // the rejection names the right field; a predicate that a near-miss satisfies
       // does not check it.
-      namesTheField: !outcome.ok && namesToken(message, names),
+      namesTheField: !outcome.ok && namesTheField,
+      keyPath: inner
+        ? keyPath
+        : '(no `[Totem Error] <file>: <keyPath> — <detail>` form; whole-message token test)',
+      expectedPath,
       message,
     });
   }
