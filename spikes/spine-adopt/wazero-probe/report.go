@@ -602,6 +602,9 @@ func run(root string) error {
 
 	// ── Write the verdict artifact ──
 	outDir := paths.Out
+	// Fold 2 H4: the run identity every TS artifact embeds, echoed into this arm's
+	// artifacts (present-as-null when the manifest carries none).
+	runIdentity := manifestRunIdentity(paths)
 	sort.Slice(allRows, func(i, j int) bool {
 		if allRows[i].RuleID != allRows[j].RuleID {
 			return allRows[i].RuleID < allRows[j].RuleID
@@ -641,7 +644,7 @@ func run(root string) error {
 	}
 
 	// ── Write the opa-vs-wazero pairs artifact ──
-	pairsAt, err := writePairsArtifact(outDir, recordSet, oVsW)
+	pairsAt, err := writePairsArtifact(outDir, recordSet, runIdentity, oVsW)
 	if err != nil {
 		return err
 	}
@@ -656,6 +659,8 @@ func run(root string) error {
 		// a STALE report (one left from another set's run) instead of reading it.
 		// `wazero-pairs.json` already carries the same key.
 		"recordSet": recordSet,
+		// Fold 2 H4: the run identity (present-as-null when the manifest has none).
+		"runManifestSha256": runIdentity,
 
 		"wazeroVersion": wazeroVersion(),
 		"goVersion":     goVersion(),

@@ -27,7 +27,7 @@ func firedCount(rows []pairResult, class string) int {
 	return n
 }
 
-func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, error) {
+func writePairsArtifact(outDir, recordSet string, runManifestSha256 *string, pairs []pairResult) (string, error) {
 	// Never nil: `null` would read as "not computed" where the summary claims a
 	// count, and this artifact exists to be counted.
 	rows := []pairResult{}
@@ -46,6 +46,11 @@ func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, e
 			"artifacts/differential-report.json's shape. rego/LOWERING.md § Comparator + spec § Differential units " +
 			"(\"a VERDICT is the violation MULTISET\", \"`fired` derives from violations\") supply the semantics, ported in compare.go.",
 		"recordSet": recordSet,
+		// Fold 2 H4: the run identity, present-as-null when the manifest carries
+		// none — `controls.mts` K5/K5b refuse a pairs artifact whose identity is not
+		// this run's (a leftover from an earlier run of the SAME set passed the
+		// record-set guard alone).
+		"runManifestSha256": runManifestSha256,
 		"armProvenance": map[string]any{
 			"opa":    "artifacts/opa-verdicts.json — spikes/spine-adopt/host/src/main.rs --arm opa (wasmtime), the SAME policy.wasm bytes",
 			"wazero": "wazero-probe/artifacts/wazero-verdicts.json — this probe, driving the OPA wasm ABI by hand under wazero",

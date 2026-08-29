@@ -61,6 +61,24 @@ func orAbsent(s *string) string {
 	return *s
 }
 
+// manifestRunIdentity returns the manifest's `runManifestSha256` (fold 2 H4,
+// `.totem/specs/seed20-apparatus-slice2-fold2.md`): the run identity every TS
+// artifact embeds, echoed into this arm's artifacts so `controls.mts` can refuse a
+// report left from ANOTHER run of the same record set. nil when the manifest is
+// unreadable or carries no such key — the artifact then says `null`, never a guess.
+func manifestRunIdentity(p spikePaths) *string {
+	var m struct {
+		RunManifestSha256 *string `json:"runManifestSha256"`
+	}
+	if err := readJSON(p.artifact("manifest.json"), &m); err != nil {
+		return nil
+	}
+	if m.RunManifestSha256 == nil || *m.RunManifestSha256 == "" {
+		return nil
+	}
+	return m.RunManifestSha256
+}
+
 // orAbsentBool renders a manifest boolean the same way: a missing key is
 // `(absent)`, never silently `false` — the header must not claim a clean tree
 // the manifest never attested (fold 1 G4, `seed20-apparatus-slice2-fold1.md`).

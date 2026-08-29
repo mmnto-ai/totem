@@ -819,7 +819,7 @@ func TestWritePairsArtifactShape(t *testing.T) {
 			Left: "opa", Right: "wazero", Status: statusExplained},
 	}
 	dir := t.TempDir()
-	at, err := writePairsArtifact(dir, recordSetSeed20, pairs)
+	at, err := writePairsArtifact(dir, recordSetSeed20, nil, pairs)
 	if err != nil {
 		t.Fatalf("writePairsArtifact: %v", err)
 	}
@@ -919,7 +919,7 @@ func TestWritePairsArtifactShape(t *testing.T) {
 
 	// A control row's flag must survive the round trip, or `false` everywhere
 	// would satisfy the assertions above vacuously.
-	controlAt, err := writePairsArtifact(t.TempDir(), recordSetSeed20, []pairResult{
+	controlAt, err := writePairsArtifact(t.TempDir(), recordSetSeed20, nil, []pairResult{
 		{RuleID: "k5", FixtureID: "k5-control-unreadable", Specimen: "d-file", Engine: "regex",
 			Control: true, Left: "opa", Right: "wazero", Status: statusMatch},
 	})
@@ -936,7 +936,7 @@ func TestWritePairsArtifactShape(t *testing.T) {
 
 	// An empty set must serialise as `[]`, never `null`: this artifact exists to
 	// be counted, and `null` reads as "not computed".
-	emptyAt, err := writePairsArtifact(t.TempDir(), recordSetSpecimens, nil)
+	emptyAt, err := writePairsArtifact(t.TempDir(), recordSetSpecimens, nil, nil)
 	if err != nil {
 		t.Fatalf("writePairsArtifact(empty): %v", err)
 	}
@@ -961,7 +961,7 @@ func TestWritePairsArtifactShape(t *testing.T) {
 // yields the same value and could not tell them apart.
 func TestAbsentSeedEntrySerialisesAsNull(t *testing.T) {
 	seeded := "6b1890e2"
-	at, err := writePairsArtifact(t.TempDir(), recordSetSpecimens, []pairResult{
+	at, err := writePairsArtifact(t.TempDir(), recordSetSpecimens, nil, []pairResult{
 		{RuleID: "a", FixtureID: "f1", Specimen: "s1", Engine: "regex",
 			Left: "opa", Right: "wazero", Status: statusMatch},
 		{RuleID: "b", FixtureID: "f2", Specimen: "s2", SeedEntry: &seeded, Engine: "regex",
