@@ -301,14 +301,26 @@ func TestLoadRecordSetReadsTheSharedSelector(t *testing.T) {
 	if got, err := loadRecordSet(); err != nil || got != recordSetSpecimens {
 		t.Errorf("unset %s = (%q, %v); want (%q, nil)", recordSetEnvVar, got, err, recordSetSpecimens)
 	}
-	// All THREE sets the spec declares, `control` included
-	// (mmnto-ai/totem#2694 C11).
-	for _, want := range []string{recordSetSpecimens, recordSetSeed20, recordSetControl} {
+	// The two corpus sets the spec declares are selectable by name alone.
+	for _, want := range []string{recordSetSpecimens, recordSetSeed20} {
 		t.Setenv(recordSetEnvVar, want)
 		if got, err := loadRecordSet(); err != nil || got != want {
 			t.Errorf("%s=%q = (%q, %v); want (%q, nil)", recordSetEnvVar, want, got, err, want)
 		}
 	}
+	// `control` by name WITHOUT a control record is a refusal (fold 1 G3 —
+	// `.totem/specs/seed20-apparatus-slice2-fold1.md`, mirroring the TS arm): the
+	// set is the one record `SPIKE_CONTROL_RECORD` names, so without it there is
+	// nothing to run. WITH the record it is accepted (C11).
+	t.Setenv(recordSetEnvVar, recordSetControl)
+	if got, err := loadRecordSet(); err == nil {
+		t.Errorf("%s=%q with %s unset was accepted as %q; want a refusal", recordSetEnvVar, recordSetControl, controlRecordEnvVar, got)
+	}
+	t.Setenv(controlRecordEnvVar, "records/c-supp-astgrep-compound-failopen-catch.rule.yaml")
+	if got, err := loadRecordSet(); err != nil || got != recordSetControl {
+		t.Errorf("%s=%q with %s set = (%q, %v); want (%q, nil)", recordSetEnvVar, recordSetControl, controlRecordEnvVar, got, err, recordSetControl)
+	}
+	t.Setenv(controlRecordEnvVar, "")
 	// A typo must not silently run the wrong set's semantics over the corpus —
 	// still refused, and the new set must not have widened the door.
 	for _, bad := range []string{"seed-20", "controls", "Control"} {

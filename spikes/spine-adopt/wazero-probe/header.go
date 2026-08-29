@@ -33,10 +33,11 @@ const absentValue = "(absent)"
 // the manifest carries far more than the header prints, and this arm must not
 // break when the TS half adds a key.
 type runManifestHeader struct {
-	RunCommit       *string `json:"runCommit"`
-	RecordPin       *string `json:"recordPin"`
-	ArtifactsSubdir *string `json:"artifactsSubdir"`
-	ControlRecord   *string `json:"controlRecord"`
+	RunCommit        *string `json:"runCommit"`
+	WorkingTreeClean *bool   `json:"workingTreeClean"`
+	RecordPin        *string `json:"recordPin"`
+	ArtifactsSubdir  *string `json:"artifactsSubdir"`
+	ControlRecord    *string `json:"controlRecord"`
 
 	Platform *struct {
 		OS      *string `json:"os"`
@@ -58,6 +59,19 @@ func orAbsent(s *string) string {
 		return absentValue
 	}
 	return *s
+}
+
+// orAbsentBool renders a manifest boolean the same way: a missing key is
+// `(absent)`, never silently `false` — the header must not claim a clean tree
+// the manifest never attested (fold 1 G4, `seed20-apparatus-slice2-fold1.md`).
+func orAbsentBool(b *bool) string {
+	if b == nil {
+		return absentValue
+	}
+	if *b {
+		return "true"
+	}
+	return "false"
 }
 
 // platformLine renders `os/arch release`, or `(absent)`.
@@ -117,6 +131,7 @@ func printRunHeader(p spikePaths) {
 	fmt.Printf("\n-- run environment (spec .totem/specs/seed20-apparatus-slice2.md S4) --\n")
 	fmt.Printf("  manifest          %s\n", manifestLine)
 	fmt.Printf("  runCommit         %s\n", orAbsent(m.RunCommit))
+	fmt.Printf("  workingTreeClean  %s\n", orAbsentBool(m.WorkingTreeClean))
 	fmt.Printf("  recordPin         %s\n", orAbsent(m.RecordPin))
 	fmt.Printf("  BASELINE_PIN      %s\n", m.baselinePin())
 	fmt.Printf("  artifactsSubdir   %s (%s)  manifest: %s\n",

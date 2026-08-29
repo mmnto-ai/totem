@@ -101,7 +101,14 @@ fn artifacts_dir(spike_root: &Path) -> Result<PathBuf> {
             }
             Ok(base.join(name))
         }
-        _ => Ok(base),
+        // Fold 1 G2 (`.totem/specs/seed20-apparatus-slice2-fold1.md`): the control-only
+        // build (`SPIKE_CONTROL_RECORD` set, no subdir named) defaults to `k3-control`
+        // on EVERY arm — the TS arm already did; an arm that fell back to the base
+        // root here would read the seed's facts against the control's lowering.
+        _ => match std::env::var("SPIKE_CONTROL_RECORD") {
+            Ok(control) if !control.is_empty() => Ok(base.join("k3-control")),
+            _ => Ok(base),
+        },
     }
 }
 

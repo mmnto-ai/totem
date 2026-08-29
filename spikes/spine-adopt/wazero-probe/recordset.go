@@ -71,7 +71,19 @@ func loadRecordSet() (string, error) {
 			return recordSetControl, nil
 		}
 		return recordSetSpecimens, nil
-	case recordSetSpecimens, recordSetSeed20, recordSetControl:
+	case recordSetSpecimens, recordSetSeed20:
+		return v, nil
+	case recordSetControl:
+		// Fold 1 G3 (`.totem/specs/seed20-apparatus-slice2-fold1.md`, N1): naming
+		// the control set WITHOUT a control record is a refusal here as it is on the
+		// TS arm — the set is defined by the one record `SPIKE_CONTROL_RECORD`
+		// names; without it there is no corpus to run.
+		if control == "" {
+			return "", fmt.Errorf(
+				"%s — %s=%q names the control-only set but %s is unset; the control set is the ONE record that "+
+					"variable names, so there is nothing to run (mmnto-ai/totem#2694 C11)",
+				controlRecordSelectorRefusal, recordSetEnvVar, v, controlRecordEnvVar)
+		}
 		return v, nil
 	default:
 		return "", fmt.Errorf(

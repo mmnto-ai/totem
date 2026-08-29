@@ -63,8 +63,18 @@ var artifactsSubdirRe = regexp.MustCompile(artifactsSubdirPattern)
 // would send a control run's outputs on top of the seed run's committed artifact
 // set, which is the exact accident the subdir exists to prevent.
 func loadArtifactsSubdir() (string, error) {
-	v := strings.TrimSpace(os.Getenv(artifactsSubdirEnvVar))
+	// NOT trimmed (fold 1 G2, `.totem/specs/seed20-apparatus-slice2-fold1.md`): the
+	// TS and Rust arms reject a value carrying whitespace, so this arm must too —
+	// three arms, one grammar. A padded name fails the pattern below.
+	v := os.Getenv(artifactsSubdirEnvVar)
 	if v == "" {
+		// Fold 1 G2: the control-only build (`SPIKE_CONTROL_RECORD` set, no subdir
+		// named) defaults to `k3-control` on EVERY arm — the TS arm already did; an
+		// arm that fell back to the base root would read the seed's facts against
+		// the control's lowering.
+		if os.Getenv(controlRecordEnvVar) != "" {
+			return "k3-control", nil
+		}
 		return "", nil
 	}
 	if !artifactsSubdirRe.MatchString(v) {

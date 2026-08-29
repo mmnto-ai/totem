@@ -651,6 +651,11 @@ func run(root string) error {
 		"question": "Can wazero, today, load and correctly evaluate the exact wasm artifacts this spike produced — " +
 			"i.e. is the Go-satellite lane viable on core wasm, and is anything about the component model needed at all?",
 		"answer": answer(tallyOf(sVsW), tallyOf(oVsW), len(pathDisagree)),
+		// Fold 1 G1 (`.totem/specs/seed20-apparatus-slice2-fold1.md`, M3): the report
+		// names the record set it was produced for, so `controls.mts` K5b can refuse
+		// a STALE report (one left from another set's run) instead of reading it.
+		// `wazero-pairs.json` already carries the same key.
+		"recordSet": recordSet,
 
 		"wazeroVersion": wazeroVersion(),
 		"goVersion":     goVersion(),
