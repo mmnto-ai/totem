@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "a05e69484709742360f0f5484753efd79471b400",
-  "runCommit": "a05e69484709742360f0f5484753efd79471b400",
+  "apparatusPin": "2f4fa71eb50d433b150dc39e36fedd0a51c83b7f",
+  "runCommit": "2f4fa71eb50d433b150dc39e36fedd0a51c83b7f",
   "recordSet": "specimens",
   "artifactsSubdir": null,
   "controls": [
@@ -87,18 +87,21 @@
       "id": "K3",
       "refusing": true,
       "ok": null,
-      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — control-only run not present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
           "ok": null,
           "detail": "NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens`",
+          "target": "seed/controls/k3/k3-target.chain.json (the byte-pinned capture)",
           "rows": []
         },
         {
           "arm": "B",
           "ok": null,
-          "detail": "NOT MEASURED — control-only run not present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm",
+          "armB": "not-measured",
+          "binding": "no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set)",
+          "detail": "NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm",
           "rows": []
         }
       ],
@@ -114,6 +117,10 @@
         {
           "artifact": "k3-control/chains/r87aff037d7de47a7.json",
           "path": "(arm B) the control-only rebuild"
+        },
+        {
+          "artifact": "k3-control/manifest.json",
+          "path": "(arm B) recordSet + runCommit"
         },
         {
           "artifact": "manifest.json",
@@ -412,7 +419,7 @@
     {
       "name": "K3 — NOT MEASURED",
       "ok": true,
-      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — control-only run not present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
       "name": "K3b — NOT MEASURED",
@@ -450,6 +457,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "606301088db6b1c9a14678ee9ec0964040dde1db038379d6ac1a3a47bd5dd8dd",
+  "runManifestSha256": "230717527d67d484dabd8ba2703b185c87cb0e8581517ba5a5a4be9d0b4abcf4",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

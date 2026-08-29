@@ -136,36 +136,36 @@
     "controlPackagesSkipped": []
   },
   "recordSet": "specimens",
-  "elapsedMs": 3885,
+  "elapsedMs": 3982,
   "timings": {
-    "totalMs": 3885,
+    "totalMs": 3982,
     "perPackage": {
       "totem.spike.r61dcb058bd1df15d": {
-        "rowsMs": 94,
+        "rowsMs": 96,
         "probeRowsMs": 31
       },
       "totem.spike.r2d962603591aa928": {
-        "rowsMs": 54,
+        "rowsMs": 53,
         "probeRowsMs": 30
       },
       "totem.spike.rd0815b6769304e26": {
         "rowsMs": 55,
-        "probeRowsMs": 29
+        "probeRowsMs": 31
       },
       "totem.spike.r87aff037d7de47a7": {
-        "rowsMs": 52,
+        "rowsMs": 55,
         "probeRowsMs": 30
       },
       "totem.spike.r0123456789abcdef_d_line": {
-        "rowsMs": 57,
-        "probeRowsMs": 30
+        "rowsMs": 58,
+        "probeRowsMs": 31
       },
       "totem.spike.r0123456789abcdef_d_file": {
-        "rowsMs": 62,
-        "probeRowsMs": 30
+        "rowsMs": 68,
+        "probeRowsMs": 31
       },
       "totem.spike.r0123456789abcdef_e": {
-        "rowsMs": 53,
+        "rowsMs": 55,
         "probeRowsMs": 31
       }
     }
@@ -5572,6 +5572,6 @@
       "detail": "{\"rows\":7,\"probeRows\":7}"
     }
   ],
-  "runManifestSha256": "606301088db6b1c9a14678ee9ec0964040dde1db038379d6ac1a3a47bd5dd8dd",
+  "runManifestSha256": "230717527d67d484dabd8ba2703b185c87cb0e8581517ba5a5a4be9d0b4abcf4",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

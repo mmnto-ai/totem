@@ -1751,6 +1751,7 @@
 .totem/specs/seed20-apparatus-round1.md
 .totem/specs/seed20-apparatus-slice2-fold1.md
 .totem/specs/seed20-apparatus-slice2-fold2.md
+.totem/specs/seed20-apparatus-slice2-fold3.md
 .totem/specs/seed20-apparatus-slice2.md
 .totem/specs/seed20-apparatus.md
 .totem/specs/silent-to-loud.md
