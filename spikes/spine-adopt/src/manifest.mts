@@ -173,6 +173,20 @@ function main(): void {
   const recordSet = activeRecordSet();
   const rows = loadRecordSet(recordSet);
 
+  // ── the clean-tree fact, measured FIRST — before this stage writes anything ──
+  //
+  // Fold 1 F13 (`.totem/specs/seed20-apparatus-slice2-fold1.md`) made a dirty tree
+  // a FAIL check on `seed20`/`control`, and the first exercise of that gate on a
+  // clean checkout refused itself: `tracked-paths.txt` is a COMMITTED artifact
+  // that this very stage regenerates, so measuring `git status --porcelain`
+  // after the write read the stage's own output as dirt. The fact the manifest
+  // attests is "was the tree clean when the run STARTED" — so it is taken here,
+  // before the first byte is written, and recorded as `workingTreeClean`.
+  const status = run('git', ['status', '--porcelain'], REPO_ROOT);
+  if (!status.ok)
+    throw new Error(`\`git status --porcelain\` failed in ${REPO_ROOT}: ${status.out}`);
+  const dirtyEntries = status.out.split('\n').filter((l) => l.trim().length > 0);
+
   // ── the record bytes, re-hashed at run time (constraint 5) ──
   //
   // (C5) `records[]` is the SCORED corpus and keeps its shape exactly; the K-control
@@ -239,14 +253,8 @@ function main(): void {
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   fs.writeFileSync(path.join(ARTIFACTS_DIR, TRACKED_PATHS_ARTIFACT), trackedText, 'utf-8');
 
-  // RECORDED, never gated (T17): the manifest states whether the tree the run
-  // happened in matched the commit it names. A dirty tree is the SCORER's to refuse
-  // — the apparatus emits the fact and decides no verdict (spec § "This slice is
-  // APPARATUS, never scoring").
-  const status = run('git', ['status', '--porcelain'], REPO_ROOT);
-  if (!status.ok)
-    throw new Error(`\`git status --porcelain\` failed in ${REPO_ROOT}: ${status.out}`);
-  const dirtyEntries = status.out.split('\n').filter((l) => l.trim().length > 0);
+  // `workingTreeClean` was measured at the top of main(), BEFORE the write above
+  // (T17 records it; fold 1 F13 gates it on the seed sets — see there).
 
   const head = run('git', ['rev-parse', 'HEAD'], REPO_ROOT);
   if (!head.ok) throw new Error(`\`git rev-parse HEAD\` failed in ${REPO_ROOT}: ${head.out}`);
