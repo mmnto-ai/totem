@@ -82,6 +82,31 @@ export interface MailEntry {
   filePath: string;
 }
 
+/**
+ * A dispatch this repo HOSTS that can never be delivered (mmnto-ai/totem#2685).
+ * Structured rather than a rendered string so `--json` consumers (totem-status
+ * inbox counts) can widen the shape later without a breaking change; the human
+ * `Error:` line is rendered FROM this by `formatTextResult`, never stored.
+ *
+ * `kind` is a one-member union today — the sender-fault CLASS is the channel's
+ * contract, not this one detector, so a second detector adds a member instead
+ * of a second channel.
+ */
+export interface SenderFault {
+  /** Discriminator: the `to:` names no roster agent. */
+  kind: 'undeliverable-to';
+  /** Repo basename hosting the outbox. */
+  repo: string;
+  /** Outbox-owner seat (filesystem truth — `slot.agent`, never `from:`). */
+  agent: string;
+  /** Outbox-relative filename of the undeliverable dispatch. */
+  file: string;
+  /** The verbatim (already control-byte-escaped) `to:` header value. */
+  to: string;
+  /** Non-null iff `to` carries a comma — the ADR-098 one-recipient rule. */
+  hint: string | null;
+}
+
 /** Aggregate result of a single poll. */
 export interface MailPollResult {
   /** Resolution metadata describing how SELF_AGENTS was determined. `source`
@@ -113,6 +138,20 @@ export interface MailPollResult {
    * mark-compaction or pin the verdict to INCOMPLETE (the falsification-round
    * regression this channel exists to prevent). */
   notices: string[];
+  /** Undeliverable dispatches in an outbox THIS repo hosts for a seat in the
+   * poll's self-set (mmnto-ai/totem#2685) — REQUIRED, always present (empty on
+   * a clean poll). Third channel, deliberately neither `warnings` nor
+   * `notices`: a sender fault is not a scan-integrity anomaly (the scan is
+   * complete and the inbox verdict IS derived), so it must not arm the #2516
+   * `INCOMPLETE` discriminator via `warnings`; and it must gate, so `notices`
+   * is wrong too. NOT gate-armed by proxy — every consumer wires it
+   * EXPLICITLY: `resolveMailExitCode` (exit 4), `formatTextResult` (`Error:`
+   * lines rendered from these objects), `ecl-gc`'s A2.2 gate and A2.4 verify,
+   * and `--json` (additive key). Written only by `pollMail`'s roster check
+   * (foreign-hosted outboxes keep the `warnings` line), bounded by `MAX_SCAN`,
+   * never mutated after the scan. A file that yields a fault yields NO roster
+   * warning — the two are disjoint by the ownership test. */
+  senderFaults: SenderFault[];
   /** Present iff the identity gate fired (mmnto-ai/totem#2204): a MULTI-seat
    * non-env resolution was polled without an explicit selector, so directed
    * dispatches addressed to union seats were withheld from `mail[]`. COUNT
@@ -603,6 +642,14 @@ function enumerateOutboxes(
 // (CR on #2639).
 const GATE_WARNING_PREFIX = 'identity-ambiguous poll:';
 
+// The one live sender-fault hint (mmnto-ai/totem#2685). A comma-joined `to:` is
+// the observed authoring error (the 2026-08-26 blind round shipped
+// `to: lc-agy, lc-codex, lc-gemini, lc-kimi`), and it parses as ONE scalar
+// recipient that matches no seat — so the cure is a rule, not a spelling fix.
+// ADR-098 v0.4: `to:` is single-valued.
+const COMMA_TO_HINT =
+  'a comma list is not a recipient — ADR-098 `to:` is single-valued; send one directed dispatch per recipient';
+
 /**
  * Programmatic entry point. Returns a structured `MailPollResult` for
  * consumers that want to render their own output (hooks, MCP audits,
@@ -887,6 +934,27 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     [...knownCohortAgents(workspace), ...selfResolution.agents].map((a) => a.toLowerCase()),
   );
 
+  // Sender-fault ownership test (mmnto-ai/totem#2685) — PATH-keyed, not
+  // label-keyed. A dispatch is OURS to fix iff its outbox-owner seat is in this
+  // poll's self-set AND the outbox itself resolves under THIS repo's
+  // `.totem/orchestration/`. The path conjunct is what keeps a same-named seat
+  // dir in another workspace repo (residue dir, second checkout, fan-out copy —
+  // doctrine/ecl-discipline.md) a foreign WARNING: the label alone would let
+  // another repo's stale copy red this seat's exit code and ecl-gc gate, with
+  // nothing here to fix. Two intended consequences: under `--all-seats` every
+  // host seat's outbox is own (dashboard semantics), and on an identity-gated
+  // poll the self-set is the union, so the rendered line says "an outbox this
+  // repo hosts" rather than "YOUR outbox".
+  const orchestrationBase = path.resolve(repoRoot, '.totem', 'orchestration');
+  const isOwnHostedOutbox = (outbox: string): boolean => {
+    const rel = path.relative(orchestrationBase, path.resolve(outbox));
+    // `rel === ''` would mean the outbox IS the orchestration base — impossible
+    // by construction (`enumerateOutboxes` only yields `<orchDir>/<agent>/outbox`,
+    // two levels below it), so the guard is a defensive floor, not a live arm.
+    return rel.length > 0 && !path.isAbsolute(rel) && !rel.startsWith('..');
+  };
+  const senderFaults: SenderFault[] = [];
+
   const mail: MailEntry[] = [];
   // Cross-sender basename-collision sensor (mmnto-ai/totem#2311, read-side
   // half of mmnto-ai/totem-strategy#827): dispatch filenames don't encode the
@@ -932,9 +1000,29 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     // it is a valid target. `header.to` is already control-byte-escaped by
     // `parseHeader`, so interpolating it into the warning is display-safe.
     if (toLower !== 'broadcast' && !rosterLower.has(toLower)) {
-      warnings.push(
-        `unresolvable outbox address: ${slot.repo}/${slot.agent}/${file} — to: "${header.to}" matches no roster agent; invisible to every seat-scoped poll`,
-      );
+      // Own-hosted ⇒ a SENDER FAULT (mmnto-ai/totem#2685), not a warning: the
+      // seat reading this line is the one that can fix it, and the warning it
+      // replaces was exit-neutral, so a sender's own poll exited 0 with a clean
+      // inbox verdict beside a dispatch that never left (Tenet 4). The two
+      // channels are DISJOINT per file — an own-hosted file emits no roster
+      // warning, so the #2516 INCOMPLETE discriminator (which keys on
+      // `warnings`) never fires on a complete scan that merely found a fault.
+      if (selfLower.has(slot.agent.toLowerCase()) && isOwnHostedOutbox(slot.outbox)) {
+        senderFaults.push({
+          kind: 'undeliverable-to',
+          repo: slot.repo,
+          agent: slot.agent,
+          file,
+          // Already control-byte-escaped by `parseHeader` — display-safe both
+          // interpolated into the `Error:` line and carried through `--json`.
+          to: header.to,
+          hint: header.to.includes(',') ? COMMA_TO_HINT : null,
+        });
+      } else {
+        warnings.push(
+          `unresolvable outbox address: ${slot.repo}/${slot.agent}/${file} — to: "${header.to}" matches no roster agent; invisible to every seat-scoped poll`,
+        );
+      }
     }
     if (toLower !== 'broadcast' && !selfLower.has(toLower)) continue;
     const senderSeat = slot.agent.toLowerCase();
@@ -1111,6 +1199,7 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
     workspace,
     warnings,
     notices,
+    senderFaults,
     ...(identityGated ? { seatGate: { withheldDirected } } : {}),
   };
 }
@@ -1132,9 +1221,18 @@ export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
  * listing, so the per-seat inbox verdict the caller asked for cannot be
  * asserted — exit 0 there would be the reassuring-lead class (#2516). The
  * named `--all-seats` union view never carries `seatGate` and stays exit 0.
+ *
+ * The SENDER-FAULT arm (mmnto-ai/totem#2685) is exit 4 — deliberately NOT 2,
+ * because it is the opposite of NOT-DERIVED: the verdict IS derived and
+ * rendered, and the seat has an undeliverable dispatch of its own beside it.
+ * One code carrying both is what a text consumer cannot disambiguate (the
+ * `/signon` constant reads exit 2 as "gated — fix identity", the wrong cure for
+ * a `to:` typo). NOT-DERIVED keeps PRECEDENCE when both hold: until identity
+ * resolves there is nothing in the outbox the caller can be told to fix.
  */
-export function resolveMailExitCode(result: MailPollResult): 0 | 2 {
-  return result.selfAgents.source === 'none' || result.seatGate !== undefined ? 2 : 0;
+export function resolveMailExitCode(result: MailPollResult): 0 | 2 | 4 {
+  if (result.selfAgents.source === 'none' || result.seatGate !== undefined) return 2;
+  return result.senderFaults.length > 0 ? 4 : 0;
 }
 
 export function formatTextResult(result: MailPollResult): string {
@@ -1151,6 +1249,25 @@ export function formatTextResult(result: MailPollResult): string {
   // qualifiers below (a notice never makes a complete scan read INCOMPLETE).
   if (result.notices.length > 0) {
     for (const n of result.notices) lines.push(`Note: ${n}`);
+  }
+  // Sender faults (mmnto-ai/totem#2685) render as `Error:` lines — one per
+  // fault, immediately BEFORE the verdict so the loudest line sits next to the
+  // thing the reader acts on. A fault never MASKS the inbox verdict: the
+  // verdict arms below are untouched and still render (a poll that fails loud
+  // about the outbox must still answer the question it was asked). "YOUR
+  // outbox" is claimed only for a single EXPLICIT identity (`source: 'env'`,
+  // one seat); every other shape (multi-seat, non-env, `--all-seats`) polls a
+  // union, so the line asserts only what the poll knows — this repo HOSTS the
+  // outbox. The `to:` value is already control-byte-escaped by `parseHeader`.
+  const faultOwner =
+    result.selfAgents.source === 'env' && result.selfAgents.agents.length === 1
+      ? 'YOUR outbox'
+      : 'an outbox this repo hosts';
+  for (const f of result.senderFaults) {
+    const hint = f.hint === null ? '' : ` ${f.hint}`;
+    lines.push(
+      `Error: undeliverable dispatch in ${faultOwner}: ${f.repo}/${f.agent}/${f.file} — to: "${f.to}" matches no roster agent; invisible to every seat-scoped poll. Fix the to: (one recipient per dispatch, or broadcast) and re-poll.${hint}`,
+    );
   }
   if (result.selfAgents.source === 'none') {
     // Unresolved self ⇒ refuse to render ANY inbox verdict (Tenet 4 fail-loud,
@@ -1236,7 +1353,7 @@ export function formatTextResult(result: MailPollResult): string {
 
 export async function mailCommand(
   opts: MailCommandOptions = {},
-): Promise<{ result: MailPollResult; exitCode: 0 | 2 }> {
+): Promise<{ result: MailPollResult; exitCode: 0 | 2 | 4 }> {
   let pollOpts = opts;
   if (opts.asSeat !== undefined) {
     if (opts.allSeats === true) {

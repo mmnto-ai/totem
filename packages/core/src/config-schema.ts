@@ -589,8 +589,11 @@ export const TotemConfigSchema = z.object({
   /** Optional: enforcement hook tier configuration */
   hooks: z
     .object({
-      /** Enforcement tier: 'strict' adds spec-completed checks and shield gates.
-       *  Agents are auto-detected and enforced at strict level regardless of this setting. */
+      /** Enforcement tier: 'strict' adds the spec-evidence check before commit — a
+       *  `totem spec` run artifact under `.totem/artifacts/runs/` (top-level
+       *  `admission.runMetadata.caller === 'spec'`, mmnto-ai/totem#2690) — and shield
+       *  gates. Agents are auto-detected and enforced at strict level regardless of
+       *  this setting. */
       tier: z.enum(['strict', 'standard']).default('standard'),
     })
     .optional(),

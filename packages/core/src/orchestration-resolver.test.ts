@@ -531,6 +531,15 @@ describe('isPathSafeAgentId — path-segment guard (mmnto-ai/totem#2134)', () =>
       expect(isPathSafeAgentId(id)).toBe(false);
     }
   });
+
+  it('rejects a comma — a multi-recipient list is not an agent-id (mmnto-ai/totem#2685)', () => {
+    // ADR-098 `to:` is single-valued. The whitespace-bearing list was already
+    // refused by `\s`; the whitespace-free form passed and was written as an
+    // undeliverable dispatch. Both shapes are refused at the same floor now.
+    for (const id of ['lc-agy,lc-codex', 'lc-agy, lc-codex', 'a,b,c', ',']) {
+      expect(isPathSafeAgentId(id)).toBe(false);
+    }
+  });
 });
 
 describe('knownCohortAgents — single-source recipient set', () => {

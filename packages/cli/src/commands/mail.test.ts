@@ -38,6 +38,7 @@ import {
   resolveMailExitCode,
   resolveSelfSender,
   sanitizeEclBasename,
+  type SenderFault,
   validateDispatchContent,
 } from './mail.js';
 
@@ -878,6 +879,11 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
       // Additive field (fold): a markerless tree emits zero notices — the
       // channel's existence is the only delta vs the pre-#2511 result shape.
       notices: [],
+      // Additive REQUIRED field (mmnto-ai/totem#2685): the `to: cohort` exhibit
+      // above lives in a FOREIGN repo's outbox (this poll's repo root is
+      // `<workspace>/totem`), so it stays a roster WARNING and this channel is
+      // empty — the ownership test, asserted inside the whole-shape snapshot.
+      senderFaults: [],
     });
   });
 });
@@ -1069,6 +1075,170 @@ describe('pollMail — outbox roster-validation sensor (mmnto-ai/totem#2335)', (
       { name: '2026-07-11T1200Z-cohort-2.md', to: 'cohort', subject: 'two' },
     ]);
     expect(poll().warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toHaveLength(2);
+  });
+
+  // ─── Sender-fault floor (mmnto-ai/totem#2685) ─────────
+  //
+  // The same detector, split by OWNERSHIP: a dispatch in an outbox THIS repo
+  // hosts for a seat in the poll's self-set is the polling seat's own problem
+  // (structured fault + `Error:` line + exit 4 + a red ecl-gc gate), while a
+  // foreign repo's undeliverable dispatch keeps the exit-neutral warning above.
+  // Live specimen: the 2026-08-26 blind round, `to: lc-agy, lc-codex,
+  // lc-gemini, lc-kimi` — a comma list parses as ONE scalar recipient matching
+  // no seat, so the sender's poll exited 0 with a clean inbox verdict beside a
+  // round that never left.
+  describe('own-hosted sender faults (mmnto-ai/totem#2685)', () => {
+    const COMMA_TO = 'lc-agy, lc-codex, lc-gemini, lc-kimi';
+    const COMMA_HINT =
+      'a comma list is not a recipient — ADR-098 `to:` is single-valued; send one directed dispatch per recipient';
+    const FAULT_FILE = '2026-08-26T0900Z-lc-agy-blind-round.md';
+
+    /** Write a dispatch into THIS repo's own outbox (`<workspace>/totem/…`). */
+    function writeOwnOutbox(seat: string, files: OutboxFile[]): void {
+      writeOutbox('totem', seat, files);
+    }
+
+    it('an own-hosted unresolvable `to:` yields ONE structured fault and NO roster warning for that file', () => {
+      writeOwnOutbox('totem-claude', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
+      const result = poll({ env: SELF_CLAUDE });
+      expect(result.senderFaults).toEqual([
+        {
+          kind: 'undeliverable-to',
+          repo: 'totem',
+          agent: 'totem-claude',
+          file: FAULT_FILE,
+          to: COMMA_TO,
+          hint: COMMA_HINT,
+        },
+      ]);
+      // NON-VACUITY: the channels are disjoint per file — routing the fault to
+      // `warnings` too would pin the verdict to INCOMPLETE on a complete scan.
+      expect(result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toEqual([]);
+      expect(result.warnings).toEqual([]);
+      expect(resolveMailExitCode(result)).toBe(4);
+    });
+
+    it('`hint` is non-null iff the `to:` carries a comma', () => {
+      writeOwnOutbox('totem-claude', [
+        { name: '2026-08-26T0901Z-typo.md', to: 'totem-claud', subject: 'fat-fingered' },
+      ]);
+      const result = poll({ env: SELF_CLAUDE });
+      expect(result.senderFaults).toHaveLength(1);
+      expect(result.senderFaults[0]!.to).toBe('totem-claud');
+      expect(result.senderFaults[0]!.hint).toBeNull();
+    });
+
+    it('renders an `Error:` line that never masks the inbox verdict', () => {
+      writeOwnOutbox('totem-claude', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
+      const text = formatTextResult(poll({ env: SELF_CLAUDE })).split('\n');
+      const errorIdx = text.findIndex((l) => l.startsWith('Error: '));
+      const verdictIdx = text.findIndex((l) => l.startsWith('No unread mail'));
+      expect(text[errorIdx]).toBe(
+        `Error: undeliverable dispatch in YOUR outbox: totem/totem-claude/${FAULT_FILE} — to: "${COMMA_TO}" matches no roster agent; invisible to every seat-scoped poll. Fix the to: (one recipient per dispatch, or broadcast) and re-poll. ${COMMA_HINT}`,
+      );
+      // The verdict STILL renders, after the fault line and unqualified: a
+      // sender fault is not a scan-integrity anomaly, so the #2516 INCOMPLETE
+      // discriminator (keyed on `warnings`) must stay silent.
+      expect(verdictIdx).toBeGreaterThan(errorIdx);
+      expect(text.join('\n')).not.toContain('INCOMPLETE');
+    });
+
+    it('--json carries the structured fault object (additive key)', async () => {
+      writeOwnOutbox('totem-claude', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
+      const writes: string[] = [];
+      const spy = vi
+        .spyOn(process.stdout, 'write')
+        .mockImplementation((chunk: string | Uint8Array) => {
+          writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+          return true;
+        });
+      let exitCode: number;
+      try {
+        ({ exitCode } = await mailCommand({
+          json: true,
+          repoRoot: selfRepoRoot(),
+          workspace,
+          env: SELF_CLAUDE,
+        }));
+      } finally {
+        spy.mockRestore();
+      }
+      const parsed = JSON.parse(writes[0]!) as MailPollResult;
+      expect(parsed.senderFaults).toEqual([
+        {
+          kind: 'undeliverable-to',
+          repo: 'totem',
+          agent: 'totem-claude',
+          file: FAULT_FILE,
+          to: COMMA_TO,
+          hint: COMMA_HINT,
+        },
+      ]);
+      expect(exitCode).toBe(4);
+    });
+
+    it('a same-named seat dir in a FOREIGN repo stays a warning naming that repo — never a fault', () => {
+      // PATH-keyed ownership, not label-keyed: `totem-claude` is in this poll's
+      // self-set, but the outbox lives in another workspace repo (residue dir,
+      // second checkout, fan-out copy). NON-VACUITY: a label-only test would
+      // fault here and hand this seat an exit-4 it cannot fix.
+      writeOutbox('liquid-city', 'totem-claude', [
+        { name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' },
+      ]);
+      const result = poll({ env: SELF_CLAUDE });
+      expect(result.senderFaults).toEqual([]);
+      const rosterWarnings = result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX));
+      expect(rosterWarnings).toHaveLength(1);
+      expect(rosterWarnings[0]).toContain(`liquid-city/totem-claude/${FAULT_FILE}`);
+      expect(resolveMailExitCode(result)).toBe(0);
+    });
+
+    it('an identity-gated poll says "an outbox this repo hosts" and stays exit 2 (NOT-DERIVED precedence)', () => {
+      // No explicit identity: `totem` resolves two seats via dirs∪map, so the
+      // self-set is a UNION — the poll cannot claim the outbox is YOURS.
+      writeOwnOutbox('totem-claude', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
+      const result = poll();
+      expect(result.seatGate).toBeDefined();
+      expect(result.senderFaults).toHaveLength(1);
+      const text = formatTextResult(result);
+      expect(text).toContain('Error: undeliverable dispatch in an outbox this repo hosts:');
+      expect(text).not.toContain('YOUR outbox');
+      // Exit 2: nothing in the outbox is worth telling this caller to fix until
+      // identity resolves — and exit 4 here would be read as "fix the to:".
+      expect(resolveMailExitCode(result)).toBe(2);
+    });
+
+    it('--all-seats + a fault in a PEER host seat outbox is exit 4 (dashboard semantics)', () => {
+      // The union view is asked for BY NAME, so every seat this repo hosts is
+      // "own" — the dashboard is the surface that should go red.
+      writeOwnOutbox('totem-gemini', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
+      const result = poll({ allSeats: true });
+      expect(result.seatGate).toBeUndefined();
+      expect(result.senderFaults.map((f) => f.agent)).toEqual(['totem-gemini']);
+      expect(formatTextResult(result)).toContain('an outbox this repo hosts');
+      expect(resolveMailExitCode(result)).toBe(4);
+    });
+
+    it('`to: broadcast` and an env self-id outside the cohort map never fault', () => {
+      writeOwnOutbox('totem-claude', [
+        { name: '2026-08-26T0902Z-broadcast-round.md', to: 'broadcast', subject: 'cohort-wide' },
+        { name: '2026-08-26T0903Z-custom-id-note.md', to: 'custom-id', subject: 'env self' },
+      ]);
+      const result = poll({ env: { TOTEM_SELF_AGENT: 'custom-id' } });
+      expect(result.senderFaults).toEqual([]);
+      expect(result.warnings.filter((w) => w.startsWith(UNRESOLVABLE_PREFIX))).toEqual([]);
+      expect(resolveMailExitCode(result)).toBe(0);
+    });
+
+    it('a clean poll carries an empty channel and stays exit 0', () => {
+      writeOwnOutbox('totem-claude', [
+        { name: '2026-08-26T0904Z-lc-claude-ok.md', to: 'lc-claude', subject: 'deliverable' },
+      ]);
+      const result = poll({ env: SELF_CLAUDE });
+      expect(result.senderFaults).toEqual([]);
+      expect(resolveMailExitCode(result)).toBe(0);
+      expect(formatTextResult(result)).not.toContain('Error:');
+    });
   });
 });
 
@@ -1937,11 +2107,35 @@ describe('resolveMailExitCode (unit)', () => {
       workspace: '/w',
       warnings: [],
       notices: [],
+      senderFaults: [],
     };
   }
   it('is 2 when self is unresolved (source none), 0 when resolved', () => {
     expect(resolveMailExitCode(result({ agents: [], source: 'none' }))).toBe(2);
     expect(resolveMailExitCode(result({ agents: ['totem-claude'], source: 'map' }))).toBe(0);
+  });
+
+  it('is 4 on a sender fault, and NOT-DERIVED keeps precedence over it (mmnto-ai/totem#2685)', () => {
+    const fault: SenderFault = {
+      kind: 'undeliverable-to',
+      repo: 'totem',
+      agent: 'totem-claude',
+      file: '2026-08-26T0900Z-blind-round.md',
+      to: 'lc-agy, lc-codex',
+      hint: 'a comma list is not a recipient — ADR-098 `to:` is single-valued; send one directed dispatch per recipient',
+    };
+    const resolved = {
+      ...result({ agents: ['totem-claude'], source: 'env' }),
+      senderFaults: [fault],
+    };
+    expect(resolveMailExitCode(resolved)).toBe(4);
+    // NOT-DERIVED (unresolved self) outranks the fault arm: until identity
+    // resolves there is nothing in the outbox the caller can be told to fix.
+    expect(resolveMailExitCode({ ...resolved, selfAgents: { agents: [], source: 'none' } })).toBe(
+      2,
+    );
+    // …and so does the identity gate.
+    expect(resolveMailExitCode({ ...resolved, seatGate: { withheldDirected: 1 } })).toBe(2);
   });
 });
 
