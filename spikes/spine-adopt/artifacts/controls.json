@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "5f273c73db5097f17a164f78269c6a1becb43a7f",
-  "runCommit": "5f273c73db5097f17a164f78269c6a1becb43a7f",
+  "apparatusPin": "773870c09f48f71f54a6fdc6c122ac01e3ef4bdd",
+  "runCommit": "773870c09f48f71f54a6fdc6c122ac01e3ef4bdd",
   "recordSet": "specimens",
   "artifactsSubdir": null,
   "controls": [
@@ -223,48 +223,101 @@
       "id": "K6",
       "refusing": true,
       "ok": true,
-      "detail": "5/5 pinned region(s) byte-identical to 6ca24d42 | toolchain: every version resolved | workingTreeClean: false",
+      "detail": "10/11 pinned region(s) byte-identical to 6ca24d42 — DISCLOSED DELTA: spikes/spine-adopt/src/lower.mts (symbol:packageSuffix): the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2. | toolchain: every version resolved | workingTreeClean: true",
       "rows": [
         {
           "path": "packages/core/src/spine/rule-record.ts",
           "region": "file",
           "expected": "34af45324b0d8298855ca4de6b20ee16089e2437d866267082c802ecd8faf1ff",
           "actual": "34af45324b0d8298855ca4de6b20ee16089e2437d866267082c802ecd8faf1ff",
-          "eq": true
+          "eq": true,
+          "disclosed": null
         },
         {
           "path": "packages/core/src/spine/record-lower.ts",
           "region": "file",
           "expected": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
           "actual": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
-          "eq": true
+          "eq": true,
+          "disclosed": null
         },
         {
           "path": "spikes/spine-adopt/rego/LOWERING.md",
           "region": "file",
           "expected": "d031189ed6a412e088f747b5e2a2f1ed8b6d8ec3e189db6efcffa775b31fd5f7",
           "actual": "d031189ed6a412e088f747b5e2a2f1ed8b6d8ec3e189db6efcffa775b31fd5f7",
-          "eq": true
+          "eq": true,
+          "disclosed": null
         },
         {
           "path": "spikes/spine-adopt/toolchain.lock",
           "region": "section:[opa]",
           "expected": "6de88005604d33727c38021f6adb8ef37b9c5219dd7689d9f727b2a799257f92",
           "actual": "6de88005604d33727c38021f6adb8ef37b9c5219dd7689d9f727b2a799257f92",
-          "eq": true
+          "eq": true,
+          "disclosed": null
         },
         {
           "path": "spikes/spine-adopt/src/lower.mts",
           "region": "symbol:emitPolicy",
           "expected": "c41bb536bb4d6a015c687dbd6750e50277a337ee18336a6c5896efc37ce0bf1c",
           "actual": "c41bb536bb4d6a015c687dbd6750e50277a337ee18336a6c5896efc37ce0bf1c",
-          "eq": true
+          "eq": true,
+          "disclosed": null
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:SAME_LINE_MARKERS",
+          "expected": "2824956ce95ad4b8f8ba1113ee0ec9bf3f5f99899af0c8a72ba138643c350516",
+          "actual": "2824956ce95ad4b8f8ba1113ee0ec9bf3f5f99899af0c8a72ba138643c350516",
+          "eq": true,
+          "disclosed": null
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:PRECEDING_LINE_MARKERS",
+          "expected": "0365b26a686b71eccd4212206f790fcdbbb39ab8cc8bb5efd71cd1a407bce1ec",
+          "actual": "0365b26a686b71eccd4212206f790fcdbbb39ab8cc8bb5efd71cd1a407bce1ec",
+          "eq": true,
+          "disclosed": null
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:globToRegexSource",
+          "expected": "059aa53ee4b42b993bddc0cfb3e40740c2eb8b42abd7fb58161cebbb33f008e4",
+          "actual": "059aa53ee4b42b993bddc0cfb3e40740c2eb8b42abd7fb58161cebbb33f008e4",
+          "eq": true,
+          "disclosed": null
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:packageSuffix",
+          "expected": "25fd4366d30f08d2506a14efac97e4b02374fa4dbbacdaf71ada231b9f99f637",
+          "actual": "442d640cd3be4d6bc0cf385fdfc4fe31bf9e36b8146f7fc70777f7e5a822c5b5",
+          "eq": false,
+          "disclosed": "the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2."
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:q",
+          "expected": "1bf1fc350c0dfe130faffeae0994567e5fe47eda3fb5e03a94b4d2fa63458b4c",
+          "actual": "1bf1fc350c0dfe130faffeae0994567e5fe47eda3fb5e03a94b4d2fa63458b4c",
+          "eq": true,
+          "disclosed": null
+        },
+        {
+          "path": "spikes/spine-adopt/src/lower.mts",
+          "region": "symbol:regoStringArray",
+          "expected": "e11dedd9cf81a3cc70a76cb557b048131396bdb853b9ec831e2fab1a37160b93",
+          "actual": "e11dedd9cf81a3cc70a76cb557b048131396bdb853b9ec831e2fab1a37160b93",
+          "eq": true,
+          "disclosed": null
         },
         {
           "toolchainUnresolved": []
         },
         {
-          "workingTreeClean": false
+          "workingTreeClean": true
         }
       ],
       "evidence": [
@@ -380,7 +433,7 @@
     {
       "name": "K6 — PASS",
       "ok": true,
-      "detail": "5/5 pinned region(s) byte-identical to 6ca24d42 | toolchain: every version resolved | workingTreeClean: false"
+      "detail": "10/11 pinned region(s) byte-identical to 6ca24d42 — DISCLOSED DELTA: spikes/spine-adopt/src/lower.mts (symbol:packageSuffix): the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2. | toolchain: every version resolved | workingTreeClean: true"
     },
     {
       "name": "K7 — NOT MEASURED (non-refusing)",
@@ -393,6 +446,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "050245eeb68830125abd3ee51eb413e5f46f322d0813b3eb194bb583ec20d449",
+  "runManifestSha256": "b360253bfc0e1e01b71977a50fec74e4cb7531e723b117a4eeb479f7bb1a4e00",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

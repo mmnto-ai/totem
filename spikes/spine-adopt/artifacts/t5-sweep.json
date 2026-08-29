@@ -8,6 +8,19 @@
     "treeSha256": "12bb0591b639037d795526af2fb746e157535a5595e4ac79d90805315035f438",
     "probeCount": 22,
     "invocation": "<OPA_BIN> eval --format=json --strict-builtin-errors -d artifacts/lowered/<pkg>/policy.rego -d rego/build/<subdir>/<pkg>/t5-sweep.rego -i <input.json> data.t5sweep.in_scope_paths",
+    "argv": [
+      "<OPA_BIN>",
+      "eval",
+      "--format=json",
+      "--strict-builtin-errors",
+      "-d",
+      "artifacts/lowered/<pkg>/policy.rego",
+      "-d",
+      "rego/build/<subdir>/<pkg>/t5-sweep.rego",
+      "-i",
+      "<input.json>",
+      "data.t5sweep.in_scope_paths"
+    ],
     "mode": "batched-set-comprehension",
     "opaVersion": "1.20.0",
     "wrapperTemplateSha256": "2f20d6ebcff989b200b784cc9e760d74254f6870fd2c5340cd21edba0a532385",
@@ -68,10 +81,95 @@
         "policyRegoSha256": "50cd2f2d98d6239e2d9c3546d088f22bd05bdb49495c06ce3636ace67cd79739",
         "wrapperSha256": "83492813a835f2000f292f8bdc10a9d8428ea56c921981322ac47708d434a4c0"
       }
-    ]
+    ],
+    "policies": {
+      "totem.spike.r61dcb058bd1df15d": {
+        "policyRegoSha256": "77942137614cd9016fc286a88c8db112f238b810196b49758ec30c0dd1b34829",
+        "wrapperSha256": "8b6fba445e998713ee9c4c4fd5778b4c36c32f563795b89ce8439f753b388e83",
+        "recordId": "a",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.r2d962603591aa928": {
+        "policyRegoSha256": "a84403a07362e8cbd04226c9dc6cce0dca18b9a0d64281a23ce77cfd8010d681",
+        "wrapperSha256": "b746cbca648228ae5c123f80dcb2b0abd51ad4460661121e6145c1096918dc82",
+        "recordId": "b",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.rd0815b6769304e26": {
+        "policyRegoSha256": "2b9c56249bf510a48aac842344145908a8ea570b310f8232dfab5cbe05e97d94",
+        "wrapperSha256": "42bc6f43c6707dc325711140159de01732b451cca864a70078afcbabbc3ea910",
+        "recordId": "c",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.r87aff037d7de47a7": {
+        "policyRegoSha256": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
+        "wrapperSha256": "feff370167219bf4239c8772c1986aa489ab1aa04dc5685cbc82b97e0168e3ef",
+        "recordId": "c-supp",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.r0123456789abcdef_d_line": {
+        "policyRegoSha256": "264ef7932ae142ff405b6ff21c8e669f75c1fad0d85f67a35795890a12f7c109",
+        "wrapperSha256": "585cab7b1bdfaee8edd30c08a8a1eedde2c740575350353a598b2ec8be7b405e",
+        "recordId": "d-line",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.r0123456789abcdef_d_file": {
+        "policyRegoSha256": "dcbcd77a041737297322928b74b650911c6eda6b4552bec20c70df5188382085",
+        "wrapperSha256": "157bd638c7b24e0a19c531985f297dcae9bd564fb3a892b3c33334e937ef115a",
+        "recordId": "d-file",
+        "seedEntry": null,
+        "control": false
+      },
+      "totem.spike.r0123456789abcdef_e": {
+        "policyRegoSha256": "50cd2f2d98d6239e2d9c3546d088f22bd05bdb49495c06ce3636ace67cd79739",
+        "wrapperSha256": "83492813a835f2000f292f8bdc10a9d8428ea56c921981322ac47708d434a4c0",
+        "recordId": "e",
+        "seedEntry": null,
+        "control": false
+      }
+    },
+    "controlPackagesSkipped": []
   },
   "recordSet": "specimens",
-  "elapsedMs": 4067,
+  "elapsedMs": 3917,
+  "timings": {
+    "totalMs": 3917,
+    "perPackage": {
+      "totem.spike.r61dcb058bd1df15d": {
+        "rowsMs": 96,
+        "probeRowsMs": 31
+      },
+      "totem.spike.r2d962603591aa928": {
+        "rowsMs": 52,
+        "probeRowsMs": 30
+      },
+      "totem.spike.rd0815b6769304e26": {
+        "rowsMs": 54,
+        "probeRowsMs": 31
+      },
+      "totem.spike.r87aff037d7de47a7": {
+        "rowsMs": 54,
+        "probeRowsMs": 30
+      },
+      "totem.spike.r0123456789abcdef_d_line": {
+        "rowsMs": 56,
+        "probeRowsMs": 31
+      },
+      "totem.spike.r0123456789abcdef_d_file": {
+        "rowsMs": 62,
+        "probeRowsMs": 30
+      },
+      "totem.spike.r0123456789abcdef_e": {
+        "rowsMs": 53,
+        "probeRowsMs": 30
+      }
+    }
+  },
   "rows": [
     {
       "pkg": "totem.spike.r61dcb058bd1df15d",
@@ -1423,8 +1521,7 @@
         "tools/vp-pr-cut-sensor.mjs",
         "totem.config.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 93
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r2d962603591aa928",
@@ -2882,8 +2979,7 @@
         "tests/clean-room/trap-caught-8.ts",
         "totem.config.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 53
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.rd0815b6769304e26",
@@ -3613,8 +3709,7 @@
         "packages/pack-agent-workflow/vitest.config.ts",
         "packages/pack-rust-architecture/vitest.config.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 56
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r87aff037d7de47a7",
@@ -4346,8 +4441,7 @@
         "packages/pack-agent-workflow/vitest.config.ts",
         "packages/pack-rust-architecture/vitest.config.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 64
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_d_line",
@@ -4391,8 +4485,7 @@
         "tools/update-wind-tunnel-sha.sh",
         "tools/wind-tunnel-sha.test.sh"
       ],
-      "disagreements": [],
-      "elapsedMs": 58
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_d_file",
@@ -4436,8 +4529,7 @@
         "tools/update-wind-tunnel-sha.sh",
         "tools/wind-tunnel-sha.test.sh"
       ],
-      "disagreements": [],
-      "elapsedMs": 57
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_e",
@@ -5169,8 +5261,7 @@
         "packages/pack-agent-workflow/vitest.config.ts",
         "packages/pack-rust-architecture/vitest.config.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 54
+      "disagreements": []
     }
   ],
   "probeRows": [
@@ -5212,8 +5303,7 @@
         "scripts/x.ts",
         "src/example.sh"
       ],
-      "disagreements": [],
-      "elapsedMs": 37
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r2d962603591aa928",
@@ -5239,8 +5329,7 @@
         "scripts/audit.ts",
         "scripts/x.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 30
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.rd0815b6769304e26",
@@ -5254,8 +5343,7 @@
         "packages/src/example.ts",
         "packages\\core\\src\\a.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 34
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r87aff037d7de47a7",
@@ -5271,8 +5359,7 @@
         "packages/src/example.ts",
         "packages\\core\\src\\a.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 30
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_d_line",
@@ -5292,8 +5379,7 @@
         "scripts/x.sh",
         "src/example.sh"
       ],
-      "disagreements": [],
-      "elapsedMs": 31
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_d_file",
@@ -5313,8 +5399,7 @@
         "scripts/x.sh",
         "src/example.sh"
       ],
-      "disagreements": [],
-      "elapsedMs": 31
+      "disagreements": []
     },
     {
       "pkg": "totem.spike.r0123456789abcdef_e",
@@ -5332,8 +5417,7 @@
         "packages/src/example.ts",
         "packages\\core\\src\\a.ts"
       ],
-      "disagreements": [],
-      "elapsedMs": 31
+      "disagreements": []
     }
   ],
   "checks": [
@@ -5483,11 +5567,11 @@
       "detail": "[]"
     },
     {
-      "name": "T5 — every lowered package has exactly one `rows[]` entry and one `probeRows[]` entry (7 lowered)",
+      "name": "T5 — every NON-CONTROL lowered package has exactly one `rows[]` entry and one `probeRows[]` entry (7 scored of 7 lowered; 0 control package(s) skipped)",
       "ok": true,
       "detail": "{\"rows\":7,\"probeRows\":7}"
     }
   ],
-  "runManifestSha256": "050245eeb68830125abd3ee51eb413e5f46f322d0813b3eb194bb583ec20d449",
+  "runManifestSha256": "b360253bfc0e1e01b71977a50fec74e4cb7531e723b117a4eeb479f7bb1a4e00",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

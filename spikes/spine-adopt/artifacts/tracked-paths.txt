@@ -1749,6 +1749,7 @@
 .totem/specs/refresh-gh-hooks.md
 .totem/specs/s14-probes.md
 .totem/specs/seed20-apparatus-round1.md
+.totem/specs/seed20-apparatus-slice2-fold1.md
 .totem/specs/seed20-apparatus-slice2.md
 .totem/specs/seed20-apparatus.md
 .totem/specs/silent-to-loud.md
@@ -2734,6 +2735,7 @@ spikes/spine-adopt/artifacts/chains/r2d962603591aa928.json
 spikes/spine-adopt/artifacts/chains/r61dcb058bd1df15d.json
 spikes/spine-adopt/artifacts/chains/r87aff037d7de47a7.json
 spikes/spine-adopt/artifacts/chains/rd0815b6769304e26.json
+spikes/spine-adopt/artifacts/controls.json
 spikes/spine-adopt/artifacts/differential-report.json
 spikes/spine-adopt/artifacts/expressibility-census.json
 spikes/spine-adopt/artifacts/facts-index.json
@@ -2782,6 +2784,8 @@ spikes/spine-adopt/artifacts/opa-verdicts.json
 spikes/spine-adopt/artifacts/records-verification.json
 spikes/spine-adopt/artifacts/regorus-verdicts.json
 spikes/spine-adopt/artifacts/shipped-verdicts.json
+spikes/spine-adopt/artifacts/t5-sweep.json
+spikes/spine-adopt/artifacts/tracked-paths-at-record-pin.txt
 spikes/spine-adopt/artifacts/tracked-paths.txt
 spikes/spine-adopt/artifacts/wasm-validation-mutation.json
 spikes/spine-adopt/egg-probe/Cargo.lock
@@ -3021,6 +3025,7 @@ spikes/spine-adopt/wazero-probe/header.go
 spikes/spine-adopt/wazero-probe/main.go
 spikes/spine-adopt/wazero-probe/pairs.go
 spikes/spine-adopt/wazero-probe/paths.go
+spikes/spine-adopt/wazero-probe/paths_fold1_test.go
 spikes/spine-adopt/wazero-probe/paths_test.go
 spikes/spine-adopt/wazero-probe/probe_test.go
 spikes/spine-adopt/wazero-probe/recordset.go
