@@ -32,8 +32,15 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { ARTIFACTS_DIR, Checks, OPA_BIN, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
-import { specimen } from './lib/specimens.mts';
+import { activeRecordSet, loadRecordSet, type RecordRow } from './lib/record-sets.mts';
+import {
+  ARTIFACTS_DIR,
+  Checks,
+  OPA_BIN,
+  readRunManifest,
+  SPIKE_ROOT,
+  writeArtifact,
+} from './lib/spike-env.mts';
 import { censusWasm, readBundleMember, readCStr, sha256 } from './lib/wasm-census.mts';
 
 /**
@@ -48,6 +55,7 @@ interface LoweringArtifact {
   factSchemaLine: string;
   lowered: {
     specimen: string;
+    seedEntry: string | null;
     ruleId: string;
     package: string;
     entrypoint: string;
@@ -55,6 +63,8 @@ interface LoweringArtifact {
     /** spike-relative, forward-slashed */
     dir: string;
   }[];
+  /** The typed per-record reject rows (§ G3). The census evidence rows carry no `stage`. */
+  rejects: { stage?: string }[];
 }
 
 function readLowering(): LoweringArtifact {
@@ -151,10 +161,41 @@ async function main(): Promise<void> {
   const chains: Record<string, unknown>[] = [];
   const censuses: Record<string, unknown>[] = [];
 
-  checks.eq('the lowering index carries all 7 records', lowering.lowered.length, 7);
+  // DERIVED across three independent readings: the MANIFEST says how many records
+  // the run loaded, the lowering artifact says how many it REJECTED, and the index
+  // says how many it lowered. A record that went missing between them is reported
+  // as that, once — instead of a stale literal naming itself.
+  const manifest = readRunManifest();
+  // (T3, mmnto-ai/totem#2694) Asserted, not assumed: a manifest whose `records` is
+  // missing or not an array would make `.length` `undefined`, `expectedLowered` NaN
+  // and the count check below fail with a number nobody can act on. Name the
+  // artifact and the command that rebuilds it instead.
+  if (!Array.isArray(manifest.records)) {
+    throw new Error(
+      `artifacts/manifest.json carries no \`records\` ARRAY (got ${JSON.stringify(
+        manifest.records,
+      )}) — the run manifest is invalid; re-run \`npm run manifest\`.`,
+    );
+  }
+  const declaredRecords = (manifest.records as unknown[]).length;
+  const stagedRejects = (lowering.rejects ?? []).filter((r) => typeof r.stage === 'string').length;
+  const expectedLowered = declaredRecords - stagedRejects;
+  checks.eq(
+    `the lowering index carries all ${expectedLowered} records`,
+    lowering.lowered.length,
+    expectedLowered,
+  );
+
+  const recordSet = activeRecordSet();
+  const rowById = new Map<string, RecordRow>(loadRecordSet(recordSet).map((r) => [r.id, r]));
 
   for (const row of lowering.lowered) {
-    const s = specimen(row.specimen);
+    const s = rowById.get(row.specimen);
+    if (!s) {
+      throw new Error(
+        `lowering row names record '${row.specimen}', which is not in the loaded record set (SPIKE_RECORD_SET=${recordSet}) — re-run \`npm run lower\`.`,
+      );
+    }
     const suffix = row.package.replace(/^totem\.spike\./, '');
     const dir = path.join(SPIKE_ROOT, ...row.dir.split('/'));
     const entrypoint = row.entrypoint;
@@ -218,6 +259,12 @@ async function main(): Promise<void> {
       contract:
         'rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact',
       specimen: s.id,
+      // G4's seed label, on the SEED SET ONLY. The seven specimen chains are
+      // published certificates whose bytes `src/certify-verify.mts` INV 2 holds to
+      // byte-EQUALITY against the committed ones (their `manifestSha256` marker puts
+      // that check in drift-detection mode), and the spec's constraint 3 makes those
+      // bytes a refusal condition — so a new key may not appear in them.
+      ...(s.seedEntry === null ? {} : { seedEntry: s.seedEntry }),
       ruleId: s.ruleId,
       package: `totem.spike.${suffix}`,
       entrypoint,
@@ -557,14 +604,17 @@ async function main(): Promise<void> {
       'rego/LOWERING.md § Host contract ("enumerates EVERY import the wasm instance requires") + spec § Spike 1 ("all imports/builtins enumerated"; "Census required builtins and OPA ABI imports BEFORE choosing the host path")',
     opaVersion: version,
     headline: {
-      hostImplementedBuiltinsAcrossAll7: [...allHostBuiltins].sort(),
-      distinctImportsAcrossAll7: [...allImports].sort(),
-      finding:
-        "ZERO host-implemented builtins across all 7 policies. `regex.match` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by `opa build`, not delegated to the host. The regex engine that actually runs is OPA's own wasm-compiled engine; neither the host language's regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see `engineProbes`), and the empty map is falsified by controls that DO demand `crypto.sha256` / `regex.find_n`.",
+      // (T4, mmnto-ai/totem#2694) FIXED key names beside the count as its own key.
+      // The count used to be interpolated INTO the key, so a run over a different
+      // record set published a differently-named field and every reader keyed on the
+      // old spelling silently read `undefined`.
+      censusedPolicies: censuses.length,
+      hostImplementedBuiltinsAcrossAll: [...allHostBuiltins].sort(),
+      distinctImportsAcrossAll: [...allImports].sort(),
+      finding: `ZERO host-implemented builtins across all ${censuses.length} policies. \`regex.match\` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by \`opa build\`, not delegated to the host. The regex engine that actually runs is OPA's own wasm-compiled engine; neither the host language's regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see \`engineProbes\`), and the empty map is falsified by controls that DO demand \`crypto.sha256\` / \`regex.find_n\`.`,
       hostPathConsequence:
         'The host never needs builtin injection for these policies, so `rust-opa-wasm`\'s fixed `builtins::resolve` table — which has no public extension point — is not a constraint here. It WOULD be for any policy using a builtin outside that table, and `regex.find_n` is the sharp case: it IS in the crate\'s table but its body is `bail!("not implemented")`, so such a policy loads fine and fails at CALL time.',
-      importSetVerdict:
-        'Every import is inside the documented OPA ABI set (env.memory + opa_abort + opa_builtin0..4). No unbounded host import. `env.opa_println` is NOT imported by any of the 7 modules, so a host that defines it simply goes unused.',
+      importSetVerdict: `Every import is inside the documented OPA ABI set (env.memory + opa_abort + opa_builtin0..4). No unbounded host import. \`env.opa_println\` is NOT imported by any of the ${censuses.length} modules, so a host that defines it simply goes unused.`,
     },
     emittedBuiltins: EMITTED_BUILTINS,
     perRecord: censuses,

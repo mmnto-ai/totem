@@ -27,9 +27,32 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { astQueryOf, compileSpecimen, loadCore, type CompiledSpecimen } from './lib/records.mts';
-import { Checks, FACTS_DIR, REPO_ROOT, writeArtifact } from './lib/spike-env.mts';
-import { fixtureAbsPath, SPECIMENS, type Specimen } from './lib/specimens.mts';
+import { activeRecordSet } from './lib/record-sets.mts';
+import { astQueryOf, intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
+import {
+  Checks,
+  FACTS_DIR,
+  fillManifestBundles,
+  REPO_ROOT,
+  sha256,
+  writeArtifact,
+} from './lib/spike-env.mts';
+import { fixtureAbsPath } from './lib/specimens.mts';
+
+/**
+ * K4's dev flag (spec § "K4 support"): `SPIKE_SWAP_EXAMPLES=<recordId>` swaps that
+ * record's inline `bad`/`good` bundles, so the scorer's K4 control — "T7 fails
+ * while T8 still MATCHes" — is runnable without editing a frozen record. Unset in
+ * every normal run; the swapped bundles are labelled `provenance.swapped: true` so
+ * a swapped run can never be mistaken for a clean one.
+ */
+const SWAP_EXAMPLES_FOR = process.env.SPIKE_SWAP_EXAMPLES ?? '';
+
+/**
+ * The G8 malformed-facts control's fixture id (spec § G8). Seed-set only: it must
+ * not change the 7-specimen artifacts.
+ */
+const MALFORMED_FACTS_FIXTURE_ID = 'm3-malformed-lines';
 
 export interface FactBundle {
   file: string;
@@ -38,6 +61,10 @@ export interface FactBundle {
   astMatches: unknown[];
 }
 
+// G4's `seedEntry` is carried on the INDEX row rather than on the bundle FILE:
+// the 24 committed bundles under `artifacts/facts/` are read byte-for-byte by the
+// Rust host and the Go probe, and a field added to all of them would move
+// committed evidence for a label the index already publishes.
 export interface FactRecord {
   fixtureId: string;
   specimen: string;
@@ -58,6 +85,16 @@ function linesOf(fileText: string): string[] {
 
 function extOf(file: string): string {
   return path.extname(file);
+}
+
+/** A compiled rule's `requires:` clause, read without widening the whole rule to `any`. */
+function requiresOf(rule: unknown): { pattern: string; scope: 'line' | 'file' } | null {
+  const r = (rule as { requires?: { pattern: string; scope: 'line' | 'file' } }).requires;
+  return r ?? null;
+}
+
+function requiresScopeOf(rule: unknown): 'line' | 'file' | null {
+  return requiresOf(rule)?.scope ?? null;
 }
 
 /**
@@ -104,8 +141,21 @@ function extractAstMatches(
   return batched;
 }
 
+/**
+ * `<ruleId>-<specimen>-<rest>.json`.
+ *
+ * The `<ruleId>-<specimen>-` PREFIX is load-bearing: the Rust host's join
+ * (`host/src/main.rs:787`) and the Go probe's both check it, because three
+ * specimens share the pinned id and a ruleId-only join would fan one bundle across
+ * all three. Every fixture id already starts with its specimen id, so this is a
+ * no-op for them; the G8 control's id (`m3-malformed-lines`) deliberately does
+ * not, and gets the prefix prepended rather than a relaxed join on the host side.
+ */
 function bundleFileName(rec: FactRecord): string {
-  return `${rec.ruleId}-${rec.fixtureId}.json`;
+  const stem = rec.fixtureId.startsWith(`${rec.specimen}-`)
+    ? rec.fixtureId
+    : `${rec.specimen}-${rec.fixtureId}`;
+  return `${rec.ruleId}-${stem}.json`;
 }
 
 async function main(): Promise<void> {
@@ -116,6 +166,12 @@ async function main(): Promise<void> {
   for (const stale of fs.readdirSync(FACTS_DIR)) {
     if (stale.endsWith('.json')) fs.rmSync(path.join(FACTS_DIR, stale));
   }
+
+  // (G3) Only records that passed BOTH gates get bundles: a rejected record has no
+  // policy, so a bundle for it would be a fixture nothing can be evaluated against.
+  const intake = intakeRecordSet(core);
+  const recordSet = activeRecordSet();
+  const seedEntryById = new Map(intake.rows.map((r) => [r.specimen.id, r.specimen.seedEntry]));
 
   const records: FactRecord[] = [];
   const compiledById = new Map<string, CompiledSpecimen>();
@@ -136,8 +192,9 @@ async function main(): Promise<void> {
   }
 
   // ── 1. the corpus fixtures named in the specimen table ──
-  for (const s of SPECIMENS) {
-    const cs = compileSpecimen(core, s);
+  for (const row of intake.accepted) {
+    const s = row.specimen;
+    const cs = row.compiled!;
     compiledById.set(s.id, cs);
     const query = astQueryOf(cs.rule);
 
@@ -223,10 +280,13 @@ async function main(): Promise<void> {
   }
 
   // ── 2. every record's own inline `examples[]` (the exemplars' pairs included) ──
-  for (const s of SPECIMENS) {
+  for (const row of intake.accepted) {
+    const s = row.specimen;
     const cs = compiledById.get(s.id)!;
     const query = astQueryOf(cs.rule);
     const examples = cs.record.examples as { bad: string; good: string }[];
+    // K4's dev flag: this record's `bad`/`good` inline bundles are served SWAPPED.
+    const swapped = SWAP_EXAMPLES_FOR !== '' && SWAP_EXAMPLES_FOR === s.id;
     checks.check(
       `specimen ${s.id} — record carries at least one example pair`,
       examples.length >= 1,
@@ -240,7 +300,8 @@ async function main(): Promise<void> {
 
     for (let i = 0; i < examples.length; i++) {
       for (const arm of ['bad', 'good'] as const) {
-        const fileText = examples[i]![arm];
+        const servedArm = swapped ? (arm === 'bad' ? 'good' : 'bad') : arm;
+        const fileText = examples[i]![servedArm];
         const lines = linesOf(fileText);
         const fixtureId = `${s.id}-inline${examples.length > 1 ? `${i}` : ''}-${arm}`;
         emit({
@@ -254,6 +315,14 @@ async function main(): Promise<void> {
             recordFile: path.relative(REPO_ROOT, s.recordFile).split(path.sep).join('/'),
             exampleOrdinal: i,
             examplePairHash: cs.parsed.examplePairHashes?.[i]?.hash ?? null,
+            ...(swapped
+              ? {
+                  swapped: true,
+                  swapFlag: `SPIKE_SWAP_EXAMPLES=${s.id}`,
+                  servedArm,
+                  note: "K4 CONTROL — this bundle carries the OTHER arm's source. The run is not a clean one; the label is the only thing that says so.",
+                }
+              : {}),
           },
           astQuery: query,
           factBundle: {
@@ -277,43 +346,106 @@ async function main(): Promise<void> {
 
   // ── 3. the M3-fold controls: the unreadable arm and the empty-file arm ──
   //
-  // Both belong to specimen (d)'s `scope: file` variant — the only arm where the
+  // Both belong to the set's `requires.scope: file` record — the only arm where the
   // distinction is observable, because `requires.scope: line` never reads a file.
-  const dFile = SPECIMENS.find((x) => x.id === 'd-file')!;
-  const dFileCompiled = compiledById.get('d-file')!;
-  const triggerLine = (dFileCompiled.record.examples as { bad: string }[])[0]!.bad;
+  // Selected by that PROPERTY rather than by the id `d-file`, so a set that has no
+  // such record skips the controls with a named reason instead of crashing on a
+  // missing specimen. (The seed set has none: only `5da43ea6` carries `requires`,
+  // and its scope is `line`.)
+  const m3Row = intake.accepted.find((r) => requiresScopeOf(r.compiled!.rule) === 'file');
+  if (m3Row) {
+    const dFile = m3Row.specimen;
+    const dFileCompiled = m3Row.compiled!;
+    const triggerLine = (dFileCompiled.record.examples as { bad: string }[])[0]!.bad;
+    const requiresPattern = String(requiresOf(dFileCompiled.rule)?.pattern);
 
-  emit({
-    fixtureId: 'd-file-control-unreadable',
-    specimen: 'd-file',
-    ruleId: dFile.ruleId,
-    engine: dFileCompiled.engine,
-    source: 'synthetic-control',
-    arm: 'unreadable',
-    provenance: {
-      mirrors: 'record-runtime.test.ts:385-394 — "fires when the file cannot be read at all"',
-      note: 'fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.',
-      expectation: 'context absent => fail TOWARD flagging => FIRES',
-    },
-    astQuery: null,
-    factBundle: { file: 'scripts/absent.sh', fileText: null, lines: [triggerLine], astMatches: [] },
-  });
+    emit({
+      fixtureId: `${dFile.id}-control-unreadable`,
+      specimen: dFile.id,
+      ruleId: dFile.ruleId,
+      engine: dFileCompiled.engine,
+      source: 'synthetic-control',
+      arm: 'unreadable',
+      provenance: {
+        mirrors: 'record-runtime.test.ts:385-394 — "fires when the file cannot be read at all"',
+        note: 'fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.',
+        expectation: 'context absent => fail TOWARD flagging => FIRES',
+      },
+      astQuery: null,
+      factBundle: {
+        file: 'scripts/absent.sh',
+        fileText: null,
+        lines: [triggerLine],
+        astMatches: [],
+      },
+    });
 
-  emit({
-    fixtureId: 'd-file-control-empty',
-    specimen: 'd-file',
-    ruleId: dFile.ruleId,
-    engine: dFileCompiled.engine,
-    source: 'synthetic-control',
-    arm: 'empty',
-    provenance: {
-      note: "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
-      expectation:
-        "requires.pattern 'LC_ALL=C' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent.",
-    },
-    astQuery: null,
-    factBundle: { file: 'scripts/empty.sh', fileText: '', lines: [triggerLine], astMatches: [] },
-  });
+    emit({
+      fixtureId: `${dFile.id}-control-empty`,
+      specimen: dFile.id,
+      ruleId: dFile.ruleId,
+      engine: dFileCompiled.engine,
+      source: 'synthetic-control',
+      arm: 'empty',
+      provenance: {
+        note: "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
+        expectation: `requires.pattern '${requiresPattern}' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent.`,
+      },
+      astQuery: null,
+      factBundle: { file: 'scripts/empty.sh', fileText: '', lines: [triggerLine], astMatches: [] },
+    });
+  } else {
+    checks.check(
+      'M3 FOLD — SKIPPED with a named reason: this record set carries no `requires.scope: file` record, so the null/empty/content split is not constructible from it',
+      true,
+      `record set ${recordSet}; requires scopes present: ${JSON.stringify(
+        [
+          ...new Set(intake.accepted.map((r) => requiresScopeOf(r.compiled!.rule) ?? 'none')),
+        ].sort(),
+      )}`,
+    );
+  }
+
+  // ── 4. (G8) the malformed-facts control, seed set ONLY ──
+  //
+  // ONE synthetic bundle whose `lines[]` carries a NON-STRING member, so the
+  // lowered `facts_wellformed` guard is false, `result` is UNDEFINED and every host
+  // must raise an ERROR ROW rather than read a zero-violation verdict. It is the
+  // K5b control: the strictness contract, exercised end-to-end instead of asserted.
+  //
+  // GATED ON THE SEED SET because it must not change the 7-specimen artifacts
+  // (§ G8, explicitly). The comparator carves it out under the named explanation
+  // class `MALFORMED-FACTS-CONTROL`, so it can never render as an unexplained
+  // divergence or manufacture a parity divergence.
+  const k3Row = intake.accepted.find((r) => r.specimen.fixture !== null) ?? intake.accepted[0];
+  if (recordSet === 'seed20' && k3Row) {
+    const cs = compiledById.get(k3Row.specimen.id)!;
+    const goodLine = (cs.record.examples as { bad: string }[])[0]!.bad.split('\n')[0]!;
+    emit({
+      fixtureId: MALFORMED_FACTS_FIXTURE_ID,
+      specimen: k3Row.specimen.id,
+      ruleId: k3Row.specimen.ruleId,
+      engine: cs.engine,
+      source: 'synthetic-control',
+      arm: 'malformed',
+      provenance: {
+        malformedFactsControl: true,
+        contract: 'spec `.totem/specs/seed20-apparatus.md` § G8 (K5b)',
+        note: 'lines[] carries a NON-STRING member, so `facts_wellformed` is false and the entrypoint`s `result` is UNDEFINED. Every arm — wasmtime, regorus, wazero AND the shipped harness — must produce an ERROR ROW for this bundle, never a clean zero and never a missing row.',
+        expectation:
+          'error row on every arm; carved out by `src/compare.mts` under the explanation class MALFORMED-FACTS-CONTROL; counted as the ONE expected error row per arm in the run-level errorRows accounting.',
+      },
+      astQuery: null,
+      factBundle: {
+        file: k3Row.specimen.inlineFilePath,
+        fileText: goodLine,
+        // The second member is a NUMBER. Deliberately not a string that looks like
+        // one: `is_string` is what the guard tests.
+        lines: [goodLine, 42],
+        astMatches: [],
+      } as unknown as FactBundle,
+    });
+  }
 
   // ── the fact-boundary invariant ──
   const astBundles = records.filter((r) => r.astQuery !== null);
@@ -328,25 +460,66 @@ async function main(): Promise<void> {
     astBundles.some((r) => r.factBundle.astMatches.length > 0),
     `${astBundles.filter((r) => r.factBundle.astMatches.length > 0).length} of ${astBundles.length} ast bundles have ≥1 match`,
   );
-  checks.check(
-    'M3 FOLD — the three fileText states are all present: null, empty, and content',
-    records.some((r) => r.factBundle.fileText === null) &&
-      records.some((r) => r.factBundle.fileText === '') &&
-      records.some((r) => (r.factBundle.fileText ?? '').length > 0),
-    `null=${records.filter((r) => r.factBundle.fileText === null).length}, empty=${records.filter((r) => r.factBundle.fileText === '').length}, content=${records.filter((r) => (r.factBundle.fileText ?? '').length > 0).length}`,
-  );
+  if (m3Row) {
+    checks.check(
+      'M3 FOLD — the three fileText states are all present: null, empty, and content',
+      records.some((r) => r.factBundle.fileText === null) &&
+        records.some((r) => r.factBundle.fileText === '') &&
+        records.some((r) => (r.factBundle.fileText ?? '').length > 0),
+      `null=${records.filter((r) => r.factBundle.fileText === null).length}, empty=${records.filter((r) => r.factBundle.fileText === '').length}, content=${records.filter((r) => (r.factBundle.fileText ?? '').length > 0).length}`,
+    );
+  }
   const names = records.map((r) => bundleFileName(r));
   checks.eq('bundle filenames are unique', names.length, new Set(names).size);
+  // The host and the probe both join on the `<ruleId>-<specimen>-` filename prefix
+  // (`host/src/main.rs:787`). Asserted here, where the names are minted, so a
+  // fixture id that broke the join is caught before three arms disagree about it.
+  checks.eq(
+    'every bundle filename carries the `<ruleId>-<specimen>-` join prefix the hosts check',
+    records
+      .filter((r) => !bundleFileName(r).startsWith(`${r.ruleId}-${r.specimen}-`))
+      .map((r) => bundleFileName(r)),
+    [],
+  );
+  if (SWAP_EXAMPLES_FOR !== '') {
+    const swappedIds = records
+      .filter((r) => (r.provenance as { swapped?: boolean }).swapped === true)
+      .map((r) => r.fixtureId);
+    checks.check(
+      `K4 CONTROL — SPIKE_SWAP_EXAMPLES=${SWAP_EXAMPLES_FOR} swapped this record's inline arms; the run is NOT a clean one`,
+      swappedIds.length > 0,
+      swappedIds.length > 0
+        ? swappedIds.join(', ')
+        : `no record with id ${JSON.stringify(SWAP_EXAMPLES_FOR)} is in the loaded set`,
+    );
+  }
+
+  // (G5) the manifest's `bundles[]` and its `bundlesSha256`, filled BEFORE the index
+  // is written — the run's identity now names the exact fact bytes every arm was
+  // evaluated against, and `facts-index.json` is itself a post-facts artifact that
+  // must carry that digest (mmnto-ai/totem#2694, T15).
+  const manifestAt = fillManifestBundles(
+    records.map((r) => ({
+      fixtureId: r.fixtureId,
+      sha256: sha256(fs.readFileSync(path.join(FACTS_DIR, bundleFileName(r)))),
+    })),
+  );
 
   const index = writeArtifact('facts-index.json', {
     generatedBy: 'spikes/spine-adopt/src/facts.mts',
     spec: '.totem/specs/spine-spike.md § Data model deltas (FactBundle) + § Differential units',
+    // (C1, mmnto-ai/totem#2694) The fact corpus names its own record set. The Go
+    // probe REFUSES a corpus whose `recordSet` differs from its `SPIKE_RECORD_SET`
+    // before any cardinality or join check, so a stale corpus cannot be read as the
+    // set the reader thinks it asked for.
+    recordSet,
     factsDir: path.relative(REPO_ROOT, FACTS_DIR).split(path.sep).join('/'),
     bundleCount: records.length,
     bundles: records.map((r) => ({
       file: bundleFileName(r),
       fixtureId: r.fixtureId,
       specimen: r.specimen,
+      seedEntry: seedEntryById.get(r.specimen) ?? null,
       ruleId: r.ruleId,
       engine: r.engine,
       source: r.source,
@@ -359,12 +532,16 @@ async function main(): Promise<void> {
             : 'content',
       lineCount: r.factBundle.lines.length,
       astMatchCount: r.factBundle.astMatches.length,
+      ...((r.provenance as { malformedFactsControl?: boolean }).malformedFactsControl === true
+        ? { malformedFactsControl: true }
+        : {}),
     })),
     checks: checks.rows,
   });
 
   console.log(`\n${records.length} fact bundles written to ${FACTS_DIR}`);
   console.log(`index: ${index}`);
+  console.log(`manifest bundles filled: ${manifestAt}`);
   checks.finish('facts');
 }
 

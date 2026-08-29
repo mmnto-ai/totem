@@ -1,0 +1,22 @@
+schemaVersion: 1
+
+severity: warning
+message: "Do not use the 'suppress' event for runtime execution failures — it lacks the appropriate interface and misrepresents the architectural intent of suppression."
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: "emit('suppress', $$$ARGS)"
+  scope:
+    fileGlobs:
+      - 'packages/core/**/*.ts'
+    excludeGlobs:
+      - '**/*.test.*'
+      - '**/*.spec.*'
+
+examples:
+  - bad: "emit('suppress', { ruleId, reason: 'ast-grep scan threw' });"
+    good: "onRuleEvent('error', { ruleId, reason: 'ast-grep scan threw' });"
+
+curation:
+  sourceLesson: 'lesson-5b85fe53468964e1'

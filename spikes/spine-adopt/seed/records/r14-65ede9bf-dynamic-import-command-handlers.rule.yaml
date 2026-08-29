@@ -1,0 +1,23 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Dynamic imports must be confined to CLI command handlers (packages/cli/src/commands/). Move this dynamic import into a command handler file.'
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'import($MODULE)'
+  scope:
+    fileGlobs:
+      - 'packages/cli/src/**/*.ts'
+    excludeGlobs:
+      - 'packages/cli/src/commands/**/*.ts'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: "const { runOrient } = await import('../commands/orient.js');"
+    good: "import { runOrient } from '../commands/orient.js';"
+
+curation:
+  sourceLesson: 'lesson-65ede9bfdf6995fe'

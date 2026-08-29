@@ -1,0 +1,730 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lower.mts",
+  "contract": "spikes/spine-adopt/rego/LOWERING.md § Lowering 5",
+  "profile": "§ Design 7 record dialect — packages/core/src/sys/glob.ts RECORD_DIALECT_PROFILE (barePatternMatchesBasename:false, starActivation:all, optionalSyntax:{}, crossSegmentWildcard:\".*\", normalizePatternSeparators:false, case-SENSITIVE)",
+  "ruleId": "d0815b6769304e26",
+  "specimen": "c",
+  "package": "totem.spike.rd0815b6769304e26",
+  "table": [
+    {
+      "kind": "fileGlobs",
+      "glob": "packages/**/*.ts",
+      "regex": "^packages/(?:[^/]+/)*[^/]*\\.ts$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": "**/*.test.ts",
+      "regex": "^(?:[^/]+/)*[^/]*\\.test\\.ts$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": "**/*.spec.ts",
+      "regex": "^(?:[^/]+/)*[^/]*\\.spec\\.ts$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "regex": "^packages/cli/src/orchestrators/shell-orchestrator\\.ts$"
+    }
+  ],
+  "scopeProbes": [
+    {
+      "path": "packages/core/src/spawn-site.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-d0815b6769304e26.md",
+      "mine": false,
+      "shipped": false
+    }
+  ],
+  "perGlobProbes": [
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/core/src/spawn-site.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/core/src/spawn-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/core/src/spawn-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/core/src/spawn-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/**/*.ts",
+      "path": ".totem/tests/test-d0815b6769304e26.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.ts",
+      "path": ".totem/tests/test-d0815b6769304e26.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.ts",
+      "path": ".totem/tests/test-d0815b6769304e26.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "path": ".totem/tests/test-d0815b6769304e26.md",
+      "mine": false,
+      "shipped": false
+    }
+  ]
+}

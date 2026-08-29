@@ -7,6 +7,7 @@
   "specimens": [
     {
       "specimen": "a",
+      "seedEntry": null,
       "class": "regex",
       "recordFile": "spikes/spine-adopt/records/a-regex-lessons-rm-guard.rule.yaml",
       "ruleId": "61dcb058bd1df15d",
@@ -68,6 +69,7 @@
     },
     {
       "specimen": "b",
+      "seedEntry": null,
       "class": "flat ast-grep",
       "recordFile": "spikes/spine-adopt/records/b-astgrep-flat-empty-catch.rule.yaml",
       "ruleId": "2d962603591aa928",
@@ -107,6 +109,7 @@
     },
     {
       "specimen": "c",
+      "seedEntry": null,
       "class": "compound ast-grep",
       "recordFile": "spikes/spine-adopt/records/c-astgrep-compound-spawn-shell.rule.yaml",
       "ruleId": "d0815b6769304e26",
@@ -158,6 +161,7 @@
     },
     {
       "specimen": "c-supp",
+      "seedEntry": null,
       "class": "compound ast-grep",
       "recordFile": "spikes/spine-adopt/records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
       "ruleId": "87aff037d7de47a7",
@@ -205,6 +209,7 @@
     },
     {
       "specimen": "d-line",
+      "seedEntry": null,
       "class": "requires (§ D8)",
       "recordFile": "spikes/spine-adopt/records/d-requires-line.rule.yaml",
       "ruleId": "0123456789abcdef",
@@ -249,6 +254,7 @@
     },
     {
       "specimen": "d-file",
+      "seedEntry": null,
       "class": "requires (§ D8)",
       "recordFile": "spikes/spine-adopt/records/d-requires-file.rule.yaml",
       "ruleId": "0123456789abcdef",
@@ -293,6 +299,7 @@
     },
     {
       "specimen": "e",
+      "seedEntry": null,
       "class": "exception",
       "recordFile": "spikes/spine-adopt/records/e-exception-excludeglobs.rule.yaml",
       "ruleId": "0123456789abcdef",
@@ -762,5 +769,6 @@
       "ok": true,
       "detail": "3 paths"
     }
-  ]
+  ],
+  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340"
 }

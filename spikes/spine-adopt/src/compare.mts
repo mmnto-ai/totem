@@ -24,7 +24,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { ARTIFACTS_DIR, Checks, FACTS_DIR, writeArtifact } from './lib/spike-env.mts';
+import { activeRecordSet } from './lib/record-sets.mts';
+import {
+  ARTIFACTS_DIR,
+  Checks,
+  FACTS_DIR,
+  readRunManifest,
+  sha256,
+  writeArtifact,
+} from './lib/spike-env.mts';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +54,8 @@ interface NormalRow {
   ruleId: string;
   fixtureId: string;
   specimen: string;
+  /** G4 — the seed entry beside the specimen, so a rule's N records group. */
+  seedEntry: string | null;
   engine: string;
   /** null when the arm produced an ERROR ROW rather than a verdict. */
   violations: RegoViolation[] | null;
@@ -55,6 +65,55 @@ interface NormalRow {
   error: string | null;
   /** Set on the shipped arm: how each ordinal was obtained. */
   ordinalDerivation?: string;
+}
+
+/**
+ * (C3, mmnto-ai/totem#2694) The ONE definition of an arm's error text: a NON-EMPTY
+ * string, or `null`. An `error: ""` is not an error row — reading it as one would
+ * turn a clean verdict into an UNEXPLAINED divergence carrying no message. The Go
+ * half already requires non-empty (`wazero-probe`, pinned by
+ * `TestShippedEmptyErrorStringIsNotAnErrorRow`); this is the same rule on this side.
+ */
+function errorTextOf(raw: unknown): string | null {
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
+}
+
+/**
+ * (C2, mmnto-ai/totem#2694) The DESIGNED error each arm produces on the K5b
+ * malformed-facts control — one per arm, spelled here and nowhere else on this side
+ * (the Go half spells the same texts in `wazero-probe/compare.go`).
+ *
+ * `shipped` refuses the bundle itself; the two wasm arms return an EMPTY RESULT SET
+ * because the lowered `facts_wellformed` guard leaves `result` undefined; regorus
+ * reports the same undefined rule in its own words. The predicate is per-arm on
+ * PURPOSE: an arm carrying ANOTHER arm's error text — a trap, a decode failure, a
+ * copy-paste in a host — is exactly the thing a shared "both errored" test would
+ * absorb, and it must surface as UNEXPLAINED instead.
+ */
+const DESIGNED_CONTROL_ERROR: Record<Arm, { match: 'startsWith' | 'contains'; text: string }> = {
+  shipped: { match: 'startsWith', text: 'MALFORMED FACTS' },
+  opa: { match: 'contains', text: 'EMPTY RESULT SET' },
+  // `UNDEFINED/non-object` — the host's exact regorus phrasing (host/src/main.rs
+  // `bail!("regorus returned an UNDEFINED/non-object result …")`), NOT the bare
+  // `UNDEFINED`: the opa arm's designed text also contains `UNDEFINED` ("the
+  // entrypoint's `result` rule was UNDEFINED"), so the bare marker would let an
+  // opa-shaped error on the regorus arm satisfy regorus's own predicate.
+  regorus: { match: 'contains', text: 'UNDEFINED/non-object' },
+};
+
+/** Whether `error` is the designed K5b error FOR THIS ARM (C2). */
+function isDesignedControlError(arm: Arm, errorText: string | null): boolean {
+  if (errorText === null || errorText.length === 0) return false;
+  const designed = DESIGNED_CONTROL_ERROR[arm];
+  return designed.match === 'startsWith'
+    ? errorText.startsWith(designed.text)
+    : errorText.includes(designed.text);
+}
+
+/** How the designed error for an arm reads, for a detail line. */
+function designedControlErrorLabel(arm: Arm): string {
+  const d = DESIGNED_CONTROL_ERROR[arm];
+  return `${arm}: error ${d.match === 'startsWith' ? 'begins' : 'contains'} \`${d.text}\``;
 }
 
 function readArtifact(name: string): any {
@@ -137,10 +196,34 @@ function deriveShippedOrdinals(
   };
 }
 
-function normaliseShipped(rows: any[], bundles: Map<string, any>): NormalRow[] {
+function normaliseShipped(
+  rows: any[],
+  bundles: Map<string, any>,
+  seedEntryByFixture: Map<string, string | null>,
+): NormalRow[] {
   return rows.map((r) => {
     const bundle = bundles.get(r.fixtureId);
     if (!bundle) throw new Error(`shipped row ${r.fixtureId} has no FactBundle`);
+    // (G8/K5b) The shipped arm's own ERROR ROW. It carries no arms by construction —
+    // there is no verdict over a malformed FactBundle — so the `armsAgree` and
+    // ordinal-derivation machinery below has nothing to read. Surfaced as an error
+    // row, exactly like the wasmtime/regorus/wazero arms do for the same bundle.
+    const shippedError = errorTextOf(r.error);
+    if (shippedError !== null) {
+      return {
+        arm: 'shipped' as const,
+        ruleId: r.ruleId,
+        fixtureId: r.fixtureId,
+        specimen: r.specimen,
+        seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+        engine: r.engine,
+        violations: null,
+        events: null,
+        fired: null,
+        matchCount: null,
+        error: shippedError,
+      };
+    }
     // Reducing a two-arm shipped row to `arms[0]` is only sound while the
     // artifact records that the arms AGREE. For regex specimens the two arms are
     // different dispatchers — `applyRulesToAdditions` (arm1-pin) and
@@ -171,6 +254,7 @@ function normaliseShipped(rows: any[], bundles: Map<string, any>): NormalRow[] {
       ruleId: r.ruleId,
       fixtureId: r.fixtureId,
       specimen: r.specimen,
+      seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
       engine: r.engine,
       violations: d.violations,
       // The shipped event context's `line` is the line NUMBER; the Violation's
@@ -185,22 +269,40 @@ function normaliseShipped(rows: any[], bundles: Map<string, any>): NormalRow[] {
   });
 }
 
-function normaliseRego(arm: 'opa' | 'regorus', rows: any[]): NormalRow[] {
-  return rows.map((r) => ({
-    arm,
-    ruleId: r.ruleId,
-    fixtureId: r.fixtureId,
-    specimen: r.specimen,
-    engine: r.engine,
-    violations: r.error === null ? (r.violations as RegoViolation[]) : null,
-    events:
-      r.error === null
-        ? (r.events as RegoEvent[]).map((e) => ({ kind: e.kind, line: e.line_number }))
-        : null,
-    fired: r.fired,
-    matchCount: r.matchCount,
-    error: r.error ?? null,
-  }));
+/**
+ * The host arms' rows.
+ *
+ * `seedEntry` is joined in from the fact index rather than read off the row: the
+ * Rust host and the Go probe emit the wasmtime row shape unchanged, so the label is
+ * attached HERE, where the join key already is, instead of by editing a host that
+ * needs no other change for the seed set.
+ */
+function normaliseRego(
+  arm: 'opa' | 'regorus',
+  rows: any[],
+  seedEntryByFixture: Map<string, string | null>,
+): NormalRow[] {
+  return rows.map((r) => {
+    // (C3) The SAME non-empty-string rule as the shipped arm above: an `error: ""`
+    // from a host is not an error row, and the verdict beside it is the real one.
+    const errorText = errorTextOf(r.error);
+    return {
+      arm,
+      ruleId: r.ruleId,
+      fixtureId: r.fixtureId,
+      specimen: r.specimen,
+      seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+      engine: r.engine,
+      violations: errorText === null ? (r.violations as RegoViolation[]) : null,
+      events:
+        errorText === null
+          ? (r.events as RegoEvent[]).map((e) => ({ kind: e.kind, line: e.line_number }))
+          : null,
+      fired: r.fired,
+      matchCount: r.matchCount,
+      error: errorText,
+    };
+  });
 }
 
 // ─── Multiset comparison ─────────────────────────────────────────────────────
@@ -250,13 +352,24 @@ interface PairResult {
   ruleId: string;
   fixtureId: string;
   specimen: string;
+  /** G4 — the seed entry beside the specimen, so a rule's N pairs group. */
+  seedEntry: string | null;
   engine: string;
   left: Arm;
   right: Arm;
   status: Status;
   explanation: string | null;
+  explanationClass?: string;
   detail: Record<string, unknown> | null;
 }
+
+/**
+ * The SECOND registered explanation class (spec `.totem/specs/seed20-apparatus.md`
+ * § G8). It applies to exactly one fixture — the synthetic malformed-facts control
+ * — and it is keyed on that bundle's own `provenance.malformedFactsControl`, never
+ * on a divergence SHAPE, so it cannot widen to cover a real disagreement.
+ */
+const MALFORMED_FACTS_CONTROL = 'MALFORMED-FACTS-CONTROL';
 
 /**
  * The ONE registered explanation class.
@@ -291,15 +404,68 @@ function explain(
   return null;
 }
 
-function comparePair(left: NormalRow, right: NormalRow): PairResult {
+function comparePair(
+  left: NormalRow,
+  right: NormalRow,
+  opts: { malformedFactsControl?: boolean } = {},
+): PairResult {
   const base = {
     ruleId: left.ruleId,
     fixtureId: left.fixtureId,
     specimen: left.specimen,
+    seedEntry: left.seedEntry ?? right.seedEntry ?? null,
     engine: left.engine,
     left: left.arm,
     right: right.arm,
   };
+
+  // (G8/K5b) The malformed-facts control, carved out BEFORE the error-row branch.
+  //
+  // Its whole point is that every arm errors on it, so leaving it to the branch
+  // below would render the one bundle that PROVES the strictness contract as an
+  // UNEXPLAINED divergence — and, on the opa-vs-regorus and shipped-vs-wazero
+  // pairings, would manufacture a parity divergence out of two arms behaving
+  // identically and correctly. The carve-out is keyed on the FIXTURE, from the
+  // bundle's own provenance, and it is narrow in the way that matters: if an arm
+  // ever produced a VERDICT here instead of an error, that is reported as the
+  // failure it is rather than absorbed by the class.
+  if (opts.malformedFactsControl) {
+    // (C2/T9, mmnto-ai/totem#2694) "Both errored" is NOT the predicate. Each arm has
+    // ONE designed error on this fixture, and the carve-out fires only when BOTH
+    // sides carry a non-empty error AND each side's error is ITS OWN arm's designed
+    // one. Any other pairing — a trap, a decode failure, an arm reporting another
+    // arm's error text — is an UNEXPLAINED divergence carrying both messages.
+    const leftDesigned = isDesignedControlError(left.arm, left.error);
+    const rightDesigned = isDesignedControlError(right.arm, right.error);
+    const bothErrored = left.error !== null && right.error !== null;
+    const explained = bothErrored && leftDesigned && rightDesigned;
+    const offenders = [
+      ...(left.error === null ? [`${left.arm} produced a VERDICT, not an error row`] : []),
+      ...(right.error === null ? [`${right.arm} produced a VERDICT, not an error row`] : []),
+      ...(left.error !== null && !leftDesigned
+        ? [`${left.arm}'s error is not its designed one (${designedControlErrorLabel(left.arm)})`]
+        : []),
+      ...(right.error !== null && !rightDesigned
+        ? [`${right.arm}'s error is not its designed one (${designedControlErrorLabel(right.arm)})`]
+        : []),
+    ];
+    return {
+      ...base,
+      status: explained ? 'EXPLAINED-DIVERGENCE' : 'UNEXPLAINED-DIVERGENCE',
+      explanation: explained
+        ? 'MALFORMED-FACTS CONTROL (K5b) — a synthetic bundle whose `lines[]` carries a non-string member, so `facts_wellformed` is false, the entrypoint`s `result` is UNDEFINED and every arm must raise an ERROR ROW. Both arms raised THEIR OWN designed error. This is the strictness contract being exercised, not a divergence.'
+        : null,
+      explanationClass: MALFORMED_FACTS_CONTROL,
+      detail: {
+        reason: explained
+          ? 'both arms produced the designed error row for their own arm'
+          : `THE DESIGNED-ERROR PREDICATE DID NOT HOLD: ${offenders.join('; ')}`,
+        designedErrors: [designedControlErrorLabel(left.arm), designedControlErrorLabel(right.arm)],
+        leftError: left.error,
+        rightError: right.error,
+      },
+    };
+  }
 
   // An error row from either side is a divergence, never a clean zero. This is
   // the strictness contract arriving at the comparator: the OPA arm turns an
@@ -362,6 +528,7 @@ function comparePair(left: NormalRow, right: NormalRow): PairResult {
       ...base,
       status: 'EXPLAINED-DIVERGENCE',
       explanation: ex.explanation,
+      explanationClass: 'ORDINAL-DERIVATION-ONLY',
       detail: ex.detail,
     };
   }
@@ -400,6 +567,7 @@ function selfTest(checks: Checks): void {
     ruleId: 'd0815b6769304e26',
     fixtureId: 'c-corpus-fail',
     specimen: 'c',
+    seedEntry: null,
     engine: 'ast-grep',
     violations: [
       { rule_id: 'd0815b6769304e26', line_number: 2, ordinal: 0 },
@@ -495,8 +663,97 @@ function selfTest(checks: Checks): void {
     },
   ];
 
-  for (const m of mutants) {
-    const got = comparePair(m.left, m.right);
+  // (C2 self-probe — round-1 falsification leg, M5) The per-arm designed-error
+  // predicate had no falsifier on this side: the control bundle exists only on
+  // `seed20`, so on the committed specimens baseline `MALFORMED-FACTS-CONTROL`
+  // fires zero times and `isDesignedControlError` never runs. These synthetic
+  // control pairs exercise it on EVERY run of the comparator, both record sets,
+  // and their rows land in `differential-report.json.checks` — the Go half's
+  // `TestPairsClassification` covers the same cases for the wazero pairings.
+  const controlRow = (arm: Arm, errorText: string): NormalRow =>
+    base({
+      arm,
+      fixtureId: 'm3-malformed-lines',
+      violations: null,
+      events: null,
+      fired: null,
+      matchCount: null,
+      error: errorText,
+    });
+  const SHIPPED_DESIGNED =
+    'MALFORMED FACTS — lines[1] is number; the shipped harness produced no verdict';
+  const OPA_DESIGNED =
+    "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies…";
+  const REGORUS_DESIGNED =
+    'regorus returned an UNDEFINED/non-object result for data.totem.spike.r0.result: null';
+  const control = { malformedFactsControl: true };
+  const controlMutants: {
+    name: string;
+    left: NormalRow;
+    right: NormalRow;
+    expect: Status;
+    opts: { malformedFactsControl?: boolean };
+  }[] = [
+    {
+      name: 'C2 CONTROL — shipped MALFORMED FACTS vs opa EMPTY RESULT SET (each arm its OWN designed error) is EXPLAINED',
+      left: controlRow('shipped', SHIPPED_DESIGNED),
+      right: controlRow('opa', OPA_DESIGNED),
+      expect: 'EXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: 'C2 CONTROL — opa EMPTY RESULT SET vs regorus UNDEFINED/non-object is EXPLAINED',
+      left: controlRow('opa', OPA_DESIGNED),
+      right: controlRow('regorus', REGORUS_DESIGNED),
+      expect: 'EXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: "C2 CONTROL — the OTHER arm's text on the shipped side (EMPTY RESULT SET where MALFORMED FACTS is designed) is UNEXPLAINED",
+      left: controlRow('shipped', OPA_DESIGNED),
+      right: controlRow('opa', OPA_DESIGNED),
+      expect: 'UNEXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: 'C2 CONTROL — bare `UNDEFINED` on regorus (the opa phrasing, not regorus`s `UNDEFINED/non-object`) is UNEXPLAINED',
+      left: controlRow('opa', OPA_DESIGNED),
+      right: controlRow('regorus', "the entrypoint's `result` rule was UNDEFINED"),
+      expect: 'UNEXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: 'C2 CONTROL — a wasm trap beside a designed error (both errored, wrong text) is UNEXPLAINED',
+      left: controlRow('opa', 'error while executing at wasm backtrace: opa_builtin1'),
+      right: controlRow('regorus', REGORUS_DESIGNED),
+      expect: 'UNEXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: 'C2 CONTROL — a clean verdict on one arm of the control is UNEXPLAINED (the control did not control)',
+      left: controlRow('shipped', SHIPPED_DESIGNED),
+      right: base({
+        arm: 'opa',
+        fixtureId: 'm3-malformed-lines',
+        violations: [],
+        events: [],
+        fired: false,
+        matchCount: 0,
+      }),
+      expect: 'UNEXPLAINED-DIVERGENCE',
+      opts: control,
+    },
+    {
+      name: 'C2 CONTROL — the same designed pair on a fixture NOT flagged as the control is UNEXPLAINED (the carve-out is keyed on provenance, never on error shape)',
+      left: controlRow('shipped', SHIPPED_DESIGNED),
+      right: controlRow('opa', OPA_DESIGNED),
+      expect: 'UNEXPLAINED-DIVERGENCE',
+      opts: {},
+    },
+  ];
+
+  for (const m of [...mutants.map((x) => ({ ...x, opts: {} })), ...controlMutants]) {
+    const got = comparePair(m.left, m.right, m.opts);
     checks.check(
       `DETECTOR ${m.name}`,
       got.status === m.expect,
@@ -516,17 +773,63 @@ function main(): void {
   const regorusArt = readArtifact('regorus-verdicts.json');
 
   const bundles = new Map<string, any>();
+  // (G8) The malformed-facts control set, read from each bundle's OWN provenance —
+  // never a fixture id hardcoded here. A comparator that named the control itself
+  // could carve out a fixture the fact producer never marked.
+  const malformedFactsControls = new Set<string>();
+  // (M3, round-1 falsification leg) The manifest's `bundles[]` attests what the
+  // FACTS STAGE WROTE; nothing downstream had re-checked that the bytes the arms
+  // then read are those bytes. The comparator is the verdict stage, so it is the
+  // place to bind them: every bundle on disk must hash to the manifest's attestation
+  // (the fill hashes the bundle FILE bytes — `src/facts.mts` — so this hashes the
+  // same thing), every attested bundle must be on disk, and nothing else may be.
+  const onDisk = new Map<string, string>();
   for (const f of fs
     .readdirSync(FACTS_DIR)
     .filter((f) => f.endsWith('.json'))
     .sort()) {
-    const rec = JSON.parse(fs.readFileSync(path.join(FACTS_DIR, f), 'utf-8'));
+    const raw = fs.readFileSync(path.join(FACTS_DIR, f));
+    const rec = JSON.parse(raw.toString('utf-8'));
     bundles.set(rec.fixtureId, rec.factBundle);
+    onDisk.set(rec.fixtureId, sha256(raw));
+    if (rec.provenance?.malformedFactsControl === true) malformedFactsControls.add(rec.fixtureId);
   }
+  const attested = new Map<string, string>(
+    (readRunManifest().bundles as { fixtureId: string; sha256: string }[]).map((b) => [
+      b.fixtureId,
+      b.sha256,
+    ]),
+  );
+  const bundleDrift: string[] = [];
+  for (const [id, digest] of onDisk) {
+    const want = attested.get(id);
+    if (want === undefined) bundleDrift.push(`${id}: on disk but NOT attested by the manifest`);
+    else if (want !== digest)
+      bundleDrift.push(`${id}: bytes on disk differ from the manifest's attestation`);
+  }
+  for (const id of attested.keys()) {
+    if (!onDisk.has(id)) bundleDrift.push(`${id}: attested by the manifest but MISSING on disk`);
+  }
+  checks.check(
+    "FACT BYTES — every bundle the arms read hashes to the manifest's attestation, and the attested set is exactly the set on disk (the run identity BINDS the evaluated fact bytes, not just records them)",
+    bundleDrift.length === 0 && onDisk.size > 0,
+    bundleDrift.length === 0
+      ? `${onDisk.size}/${attested.size} bundles verified against manifest.bundles`
+      : bundleDrift.join(' | '),
+  );
 
-  const shipped = normaliseShipped(shippedArt.verdictRows, bundles);
-  const opa = normaliseRego('opa', opaArt.verdictRows);
-  const regorus = normaliseRego('regorus', regorusArt.verdictRows);
+  // (G4) the seed label, joined in from the fact index so every arm's rows carry it
+  // — including the two the Rust host emits, which keep the wasmtime row shape.
+  const factsIndex = readArtifact('facts-index.json') as {
+    bundles: { fixtureId: string; seedEntry?: string | null }[];
+  };
+  const seedEntryByFixture = new Map<string, string | null>(
+    factsIndex.bundles.map((b) => [b.fixtureId, b.seedEntry ?? null]),
+  );
+
+  const shipped = normaliseShipped(shippedArt.verdictRows, bundles, seedEntryByFixture);
+  const opa = normaliseRego('opa', opaArt.verdictRows, seedEntryByFixture);
+  const regorus = normaliseRego('regorus', regorusArt.verdictRows, seedEntryByFixture);
 
   // The fixture count is a DECLARED property of the arms and of the fact-bundle
   // directory, not a constant of this comparator. Deriving it means an arm that
@@ -563,20 +866,43 @@ function main(): void {
   checks.eq('every shipped pair has an opa row AND a regorus row (no silent skip)', missing, []);
 
   // A differential over rows that all say "nothing fired" would be vacuous.
-  checks.check(
-    'the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation',
-    shipped.some((r) => r.fired) &&
-      shipped.some((r) => !r.fired) &&
-      shipped.some((r) => (r.matchCount ?? 0) > 1),
-    `${shipped.filter((r) => r.fired).length} fired / ${shipped.filter((r) => !r.fired).length} silent / max matchCount ${Math.max(...shipped.map((r) => r.matchCount ?? 0))}`,
-  );
+  //
+  // Two claims, and only the first is about the APPARATUS. "Fires and stays silent"
+  // must hold on any set worth running. "At least one row is multi-violation" is a
+  // property of the RECORDS: it needs a bundle carrying two matches, and a frozen
+  // record set either has one or does not. On a set with none the second half is
+  // reported as the finding it is — the ast ORDINAL axis is unexercised there, so
+  // the ORDINAL-DERIVATION-ONLY class cannot fire — instead of reddening the run
+  // for a fact about the corpus. The `specimens` set keeps the full assertion.
+  const detail = `${shipped.filter((r) => r.fired).length} fired / ${shipped.filter((r) => !r.fired).length} silent / max matchCount ${Math.max(...shipped.map((r) => r.matchCount ?? 0))}`;
+  const firesAndSilences = shipped.some((r) => r.fired) && shipped.some((r) => !r.fired);
+  const multiViolation = shipped.some((r) => (r.matchCount ?? 0) > 1);
+  if (multiViolation || activeRecordSet() === 'specimens') {
+    checks.check(
+      'the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation',
+      firesAndSilences && multiViolation,
+      detail,
+    );
+  } else {
+    checks.check(
+      'the corpus is DISCRIMINATING — the shipped arm both fires and stays silent',
+      firesAndSilences,
+      detail,
+    );
+    checks.check(
+      'MULTI-VIOLATION — SKIPPED with a named reason: NO bundle in this record set carries more than one violation, so the ast ORDINAL axis (§ Lowering 1, "the ordinal is the match index") is UNEXERCISED here and the ORDINAL-DERIVATION-ONLY class cannot fire (a corpus property of the frozen set, not an apparatus defect)',
+      true,
+      detail,
+    );
+  }
 
   const pairs: PairResult[] = [];
   for (const k of [...S.keys()].sort()) {
-    pairs.push(comparePair(S.get(k)!, O.get(k)!));
-    pairs.push(comparePair(S.get(k)!, R.get(k)!));
+    const opts = { malformedFactsControl: malformedFactsControls.has(S.get(k)!.fixtureId) };
+    pairs.push(comparePair(S.get(k)!, O.get(k)!, opts));
+    pairs.push(comparePair(S.get(k)!, R.get(k)!, opts));
     // opa vs regorus: the arm-to-arm differential the spec asks for separately.
-    pairs.push(comparePair(O.get(k)!, R.get(k)!));
+    pairs.push(comparePair(O.get(k)!, R.get(k)!, opts));
   }
 
   const by = (l: Arm, r: Arm) => pairs.filter((p) => p.left === l && p.right === r);
@@ -595,6 +921,58 @@ function main(): void {
 
   const unexplained = pairs.filter((p) => p.status === 'UNEXPLAINED-DIVERGENCE');
   const explained = pairs.filter((p) => p.status === 'EXPLAINED-DIVERGENCE');
+
+  // ── (G8) the whole-run ERROR ROW accounting ──
+  //
+  // "0 outside K5b" is only a claim if the K5b bundle is subtracted EXPLICITLY and
+  // the remainder is asserted to be zero. Counted per arm from the arms' own rows,
+  // so the number is the hosts' report and not the comparator's opinion.
+  const armRows: [Arm, NormalRow[]][] = [
+    ['shipped', shipped],
+    ['opa', opa],
+    ['regorus', regorus],
+  ];
+  const errorRowAccounting = {
+    contract:
+      'spec `.totem/specs/seed20-apparatus.md` § G8 — the whole-run errorRows count EXCLUDES exactly the malformed-facts control bundle when the summary says "0 outside K5b".',
+    k5bControlFixtureIds: [...malformedFactsControls].sort(),
+    perArm: Object.fromEntries(
+      armRows.map(([arm, rowsOfArm]) => {
+        const errored = rowsOfArm.filter((r) => r.error !== null);
+        const fromControl = errored.filter((r) => malformedFactsControls.has(r.fixtureId));
+        return [
+          arm,
+          {
+            total: errored.length,
+            fromK5bControl: fromControl.length,
+            outsideK5b: errored.length - fromControl.length,
+            outsideK5bFixtureIds: errored
+              .filter((r) => !malformedFactsControls.has(r.fixtureId))
+              .map((r) => r.fixtureId)
+              .sort(),
+          },
+        ];
+      }),
+    ),
+  };
+  const outsideK5b = armRows.flatMap(([, rowsOfArm]) =>
+    rowsOfArm.filter((r) => r.error !== null && !malformedFactsControls.has(r.fixtureId)),
+  );
+  checks.eq(
+    'ERROR ROWS — zero outside the K5b malformed-facts control, on every arm',
+    outsideK5b.map((r) => `${r.arm}/${r.fixtureId}`).sort(),
+    [],
+  );
+  if (malformedFactsControls.size > 0) {
+    checks.eq(
+      `ERROR ROWS — the K5b control (${[...malformedFactsControls].join(', ')}) produced EXACTLY ONE error row on each of the three arms (never a clean zero, never a missing row)`,
+      armRows.map(
+        ([arm, rowsOfArm]) =>
+          `${arm}:${rowsOfArm.filter((r) => r.error !== null && malformedFactsControls.has(r.fixtureId)).length}`,
+      ),
+      ['shipped:1', 'opa:1', 'regorus:1'],
+    );
+  }
 
   for (const [label, t] of Object.entries(summary)) {
     console.log(
@@ -640,11 +1018,23 @@ function main(): void {
         id: 'ORDINAL-DERIVATION-ONLY',
         fires:
           'the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs',
-        timesFired: explained.length,
+        timesFired: explained.filter((p) => p.explanationClass === 'ORDINAL-DERIVATION-ONLY')
+          .length,
         rationale:
-          'Deliberately the ONLY registered class. A wider rule would launder a real semantic divergence as "explained", which is the failure a differential exists to prevent.',
+          'A wider rule would launder a real semantic divergence as "explained", which is the failure a differential exists to prevent.',
+      },
+      {
+        id: MALFORMED_FACTS_CONTROL,
+        fires:
+          "the pair's fixture is a synthetic malformed-facts bundle (marked `provenance.malformedFactsControl` by the fact producer) AND both arms produced an error row AND each arm's error is ITS OWN designed error for this control (" +
+          `${designedControlErrorLabel('shipped')}; ${designedControlErrorLabel('opa')}; ${designedControlErrorLabel('regorus')}` +
+          ") — any other paired errors (a trap, a decode failure, the other arm's text) stay UNEXPLAINED with both messages",
+        timesFired: explained.filter((p) => p.explanationClass === MALFORMED_FACTS_CONTROL).length,
+        rationale:
+          'Spec § G8 (K5b). The control exists to make every arm error, so without a carve-out the one bundle that PROVES the strictness contract would render as an unexplained divergence and, arm-to-arm, would manufacture a parity divergence out of two arms behaving identically. Keyed on the FIXTURE, never on a divergence shape, and it does NOT fire when an arm produced a verdict instead of an error — that is reported as the failure it is.',
       },
     ],
+    errorRows: errorRowAccounting,
     summary,
     unexplained,
     explained,

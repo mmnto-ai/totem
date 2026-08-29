@@ -71,3 +71,25 @@ version = "1.96.1"
 verified = "measured on the operator's Windows machine 2026-08-28, the platform the Windows arm's rows were recorded on"
 reports = "cargo 1.96.1 (356927216 2026-06-26) / rustc 1.96.1 (31fca3adb 2026-06-26)"
 consumed_by = ".github/workflows/spine-spike-linux.yml — dtolnay/rust-toolchain `with: toolchain`"
+
+# ── Go TOOLCHAIN + wazero (the Go satellite arm, wazero-probe/) ───────────────
+# Neither is a downloaded binary, so neither has a URL/sha256 row above: wazero
+# is a Go MODULE pinned by `wazero-probe/go.mod` + `go.sum` (h1 checksums,
+# verified by the module proxy on every fetch), and the Go compiler is pinned by
+# go.mod's `go` directive, which the Linux workflow installs via actions/setup-go
+# `go-version-file`. Both are RECORDED here so this lock stays the single place a
+# reader looks for every toolchain the apparatus runs; the run manifest (G5,
+# `src/manifest.mts`) re-resolves both at run time and the K6 attestation carries
+# the RESOLVED values, never these declarations. A wazero CLI is deliberately not
+# provisioned: the probe embeds wazero as a library, and its verdict rows are the
+# apparatus's shape, not a CLI's.
+
+[go]
+version = "1.26.2"
+verified = "measured on the operator's Windows machine 2026-08-29 (go version go1.26.2 windows/amd64), the platform the Windows arm's rows were recorded on"
+consumed_by = "wazero-probe/go.mod `go` directive; .github/workflows/spine-spike-linux.yml — actions/setup-go `with: go-version-file`"
+
+[wazero]
+version = "v1.12.0"
+verified = "wazero-probe/go.mod require + go.sum h1 checksums (module-proxy verified on fetch)"
+consumed_by = "wazero-probe/go.mod — github.com/tetratelabs/wazero"

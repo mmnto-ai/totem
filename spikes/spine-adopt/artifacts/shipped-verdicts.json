@@ -33,6 +33,7 @@
         }
       ],
       "specimen": "d-file",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/empty.sh",
       "fileTextState": "empty",
@@ -104,6 +105,7 @@
         }
       ],
       "specimen": "d-file",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/absent.sh",
       "fileTextState": "null",
@@ -175,6 +177,7 @@
         }
       ],
       "specimen": "d-file",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/x.sh",
       "fileTextState": "content",
@@ -238,6 +241,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "d-file",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/x.sh",
       "fileTextState": "content",
@@ -279,6 +283,7 @@
         }
       ],
       "specimen": "d-line",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/x.sh",
       "fileTextState": "content",
@@ -342,6 +347,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "d-line",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/x.sh",
       "fileTextState": "content",
@@ -383,6 +389,7 @@
         }
       ],
       "specimen": "e",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/a.ts",
       "fileTextState": "content",
@@ -423,6 +430,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "e",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/a.ts",
       "fileTextState": "content",
@@ -456,6 +464,7 @@
         }
       ],
       "specimen": "b",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "scripts/audit.ts",
       "fileTextState": "content",
@@ -496,6 +505,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "b",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "scripts/audit.ts",
       "fileTextState": "content",
@@ -529,6 +539,7 @@
         }
       ],
       "specimen": "b",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "scripts/audit.ts",
       "fileTextState": "content",
@@ -569,6 +580,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "b",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "scripts/audit.ts",
       "fileTextState": "content",
@@ -602,6 +614,7 @@
         }
       ],
       "specimen": "a",
+      "seedEntry": null,
       "engine": "regex",
       "file": "src/example.sh",
       "fileTextState": "content",
@@ -665,6 +678,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "a",
+      "seedEntry": null,
       "engine": "regex",
       "file": "src/example.sh",
       "fileTextState": "content",
@@ -706,6 +720,7 @@
         }
       ],
       "specimen": "a",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/deploy.sh",
       "fileTextState": "content",
@@ -769,6 +784,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "a",
+      "seedEntry": null,
       "engine": "regex",
       "file": "scripts/deploy.sh",
       "fileTextState": "content",
@@ -810,6 +826,7 @@
         }
       ],
       "specimen": "c-supp",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -850,6 +867,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "c-supp",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -883,6 +901,7 @@
         }
       ],
       "specimen": "c-supp",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/catch-site.ts",
       "fileTextState": "content",
@@ -923,6 +942,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "c-supp",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/catch-site.ts",
       "fileTextState": "content",
@@ -963,6 +983,7 @@
         }
       ],
       "specimen": "c",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -1015,6 +1036,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "c",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -1048,6 +1070,7 @@
         }
       ],
       "specimen": "c",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/spawn-site.ts",
       "fileTextState": "content",
@@ -1088,6 +1111,7 @@
       "matchCount": 0,
       "events": [],
       "specimen": "c",
+      "seedEntry": null,
       "engine": "ast-grep",
       "file": "packages/core/src/spawn-site.ts",
       "fileTextState": "content",
@@ -1456,7 +1480,7 @@
     {
       "name": "a VERDICT is the violation multiset, NOT a count of fixture lines (at least one row proves they differ)",
       "ok": true,
-      "detail": "14 of 24 rows have matchCount !== lineCount"
+      "detail": "14 of 24 verdict rows have matchCount !== lineCount (0 error row(s) excluded)"
     },
     {
       "name": "ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)",
@@ -1598,5 +1622,7 @@
       "ok": true,
       "detail": "{\"LC_ALL=C (pinned — does NOT match '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":1,\"bounded\":1},\"content\":{\"sync\":0,\"bounded\":0}},\"a* (matches '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":0,\"bounded\":0},\"content\":{\"sync\":0,\"bounded\":0}},\"^$ (matches '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":0,\"bounded\":0},\"content\":{\"sync\":1,\"bounded\":1}}}"
     }
-  ]
+  ],
+  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340",
+  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

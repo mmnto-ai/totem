@@ -1,0 +1,2131 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lower.mts",
+  "contract": "spikes/spine-adopt/rego/LOWERING.md § Lowering 5",
+  "profile": "§ Design 7 record dialect — packages/core/src/sys/glob.ts RECORD_DIALECT_PROFILE (barePatternMatchesBasename:false, starActivation:all, optionalSyntax:{}, crossSegmentWildcard:\".*\", normalizePatternSeparators:false, case-SENSITIVE)",
+  "ruleId": "61dcb058bd1df15d",
+  "specimen": "a",
+  "package": "totem.spike.r61dcb058bd1df15d",
+  "table": [
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.sh",
+      "regex": "^(?:[^/]+/)*[^/]*\\.sh$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.bash",
+      "regex": "^(?:[^/]+/)*[^/]*\\.bash$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.zsh",
+      "regex": "^(?:[^/]+/)*[^/]*\\.zsh$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.md",
+      "regex": "^(?:[^/]+/)*[^/]*\\.md$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.ts",
+      "regex": "^(?:[^/]+/)*[^/]*\\.ts$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.js",
+      "regex": "^(?:[^/]+/)*[^/]*\\.js$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.cjs",
+      "regex": "^(?:[^/]+/)*[^/]*\\.cjs$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.mjs",
+      "regex": "^(?:[^/]+/)*[^/]*\\.mjs$"
+    },
+    {
+      "kind": "fileGlobs",
+      "glob": ".claude/**/*",
+      "regex": "^\\.claude/(?:[^/]+/)*[^/]*$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": "**/*.test.*",
+      "regex": "^(?:[^/]+/)*[^/]*\\.test\\.[^/]*$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": "**/*.spec.*",
+      "regex": "^(?:[^/]+/)*[^/]*\\.spec\\.[^/]*$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": ".totem/lessons/**",
+      "regex": "^\\.totem/lessons/.*$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": ".totem/lessons.md",
+      "regex": "^\\.totem/lessons\\.md$"
+    },
+    {
+      "kind": "excludeGlobs",
+      "glob": ".totem/tests/**",
+      "regex": "^\\.totem/tests/.*$"
+    }
+  ],
+  "scopeProbes": [
+    {
+      "path": "scripts/deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "a/b/c/deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "scripts/audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "src/example.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "scripts/x.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "deep/nest/x.cjs",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "scripts/x.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": ".claude/agents/foo.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": ".claude/x",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "notes.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    }
+  ],
+  "perGlobProbes": [
+    {
+      "glob": "**/*.sh",
+      "path": "scripts/deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "a/b/c/deploy.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "src/example.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "scripts/x.sh",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "deep/nest/x.cjs",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/x.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".claude/agents/foo.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".claude/agents/foo.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".claude/x",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".totem/lessons.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".totem/lessons.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".totem/tests/test-x.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".totem/tests/test-x.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.js",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "notes.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.sh",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.bash",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.zsh",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.md",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.js",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.cjs",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.mjs",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".claude/**/*",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.test.*",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.spec.*",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons/**",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/lessons.md",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": ".totem/tests/**",
+      "path": ".totem/tests/test-61dcb058bd1df15d.md",
+      "mine": true,
+      "shipped": true
+    }
+  ]
+}

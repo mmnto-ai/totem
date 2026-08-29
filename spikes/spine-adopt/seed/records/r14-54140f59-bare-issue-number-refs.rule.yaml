@@ -1,0 +1,21 @@
+schemaVersion: 1
+
+severity: error
+message: 'Issue numbers are only unique within a single repository;'
+
+target:
+  type: regex
+  pattern: '(^|[^a-zA-Z0-9-_./])#\d+'
+  scope:
+    fileGlobs:
+      - 'packages/cli/**/*.ts'
+      - 'apps/cli/**/*.ts'
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: "const helpText = 'Tracked in #2655 — see the changelog.';"
+    good: "const helpText = 'Tracked in mmnto-ai/totem#2655 — see the changelog.';"
+
+curation:
+  sourceLesson: 'lesson-54140f59be3e6e44'

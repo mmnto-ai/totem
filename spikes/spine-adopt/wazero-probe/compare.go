@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 type violation struct {
@@ -54,6 +55,12 @@ type normalRow struct {
 	MatchCount *int
 	Error      string // "" ⇒ no error
 
+	// Absent marks a row this arm did not produce AT ALL, as distinct from an
+	// error row (which the arm produced deliberately). The distinction is
+	// load-bearing: the malformed-facts control is EXPLAINED only when both arms
+	// actually errored, so a missing row must not be able to satisfy it.
+	Absent bool
+
 	OrdinalDerivation string
 }
 
@@ -66,9 +73,22 @@ const (
 )
 
 type pairResult struct {
-	RuleID      string         `json:"ruleId"`
-	FixtureID   string         `json:"fixtureId"`
-	Specimen    string         `json:"specimen"`
+	RuleID    string `json:"ruleId"`
+	FixtureID string `json:"fixtureId"`
+	Specimen  string `json:"specimen"`
+
+	// SeedEntry is the seed rule's hash8 for a `seed20` record and is ABSENT on the
+	// `specimens` set, where records come from no seed entry at all.
+	//
+	// It is a POINTER, and deliberately carries no `omitempty`: the key must stay
+	// PRESENT and serialise as JSON `null` (mmnto-ai/totem#2694 C4 — "`seedEntry`
+	// absent ⇒ JSON `null` in every artifact, TS and Go alike"). A plain string
+	// serialises the absent value as `""`, which reads as a seed entry whose id is
+	// the empty string and disagrees with the TS comparator's `null` for the same
+	// fact; `omitempty` would drop the key entirely, which reads as "this artifact
+	// does not model seedEntry".
+	SeedEntry *string `json:"seedEntry"`
+
 	Engine      string         `json:"engine"`
 	Left        string         `json:"left"`
 	Right       string         `json:"right"`
@@ -232,14 +252,193 @@ func explain(left, right normalRow) (string, map[string]any) {
 	return "", nil
 }
 
+// malformedFactsControlFixture is the K5b control bundle: a FactBundle carrying a
+// non-string member in `lines[]`, so `facts_wellformed` is false, the entrypoint's
+// `result` rule is UNDEFINED, and BOTH wasm arms must return an EMPTY RESULT SET —
+// which `entrypointValue` turns into an error row on purpose.
+//
+// Its whole point is to make the strictness contract OBSERVABLE, so the comparator
+// names the designed error instead of reporting it as a divergence
+// (mmnto-ai/totem-strategy#1154 § G8 — the comparator "carves it out with a named
+// explanation class (MALFORMED-FACTS-CONTROL) so it never renders as
+// UNEXPLAINED-DIVERGENCE and never manufactures a parity-divergence").
+//
+// The carve-out is deliberately NARROW. It is keyed on this one fixture id, it
+// fires only when BOTH arms actually errored, it requires each side's error to be
+// ITS OWN arm's designed error (see matchesDesignedControlError), and it declines
+// when either arm produced a clean verdict — a control that stopped controlling is
+// a finding, not an explanation. Widening any of the four would launder a real
+// divergence.
+const malformedFactsControlFixture = "m3-malformed-lines"
+
+// The DESIGNED error each arm produces on the malformed-facts control
+// (mmnto-ai/totem#2694 round-1 fold, C2 — "each arm has ONE designed error for
+// that bundle").
+//
+// They live HERE, in the non-test half, because the predicate they feed is
+// production behaviour: a copy spelled out in probe_test.go would let the shipped
+// texts drift from the pinned ones and the test would still pass.
+//
+// The two shapes differ because the two failures happen in different places. The
+// shipped harness never evaluates a policy: it rejects the malformed bundle itself
+// and its message BEGINS with the designed text. The wasm arms evaluate the policy
+// and fail inside entrypointValue (main.go), whose message CONTAINS the designed
+// text, so a runtime-supplied prefix cannot break the match.
+const (
+	shippedDesignedControlError = "MALFORMED FACTS"
+	wasmDesignedControlError    = "EMPTY RESULT SET"
+)
+
+// designedControlError is one arm's designed error: the text, and whether the
+// arm's message must BEGIN with it or merely CONTAIN it.
+type designedControlError struct {
+	text     string
+	prefixed bool
+}
+
+// designedControlErrors is the ONE table the predicate and its description both
+// read, so the two cannot drift into disagreeing about what an arm must say. An
+// arm absent from it can never satisfy the carve-out.
+var designedControlErrors = map[string]designedControlError{
+	"shipped": {text: shippedDesignedControlError, prefixed: true},
+	"opa":     {text: wasmDesignedControlError},
+	"wazero":  {text: wasmDesignedControlError},
+}
+
+// matchesDesignedControlError reports whether `msg` is the error THIS arm is
+// designed to produce on the malformed-facts control.
+//
+// The per-arm predicate is the whole point (the round-1 finding): "both rows carry
+// SOME error" is satisfied by a wazero trap or a decode failure just as well as by
+// the designed outcome, so an explanation keyed on that would hide a real
+// divergence behind the control. Matching each side against its own arm's designed
+// text keeps the carve-out to the outcome it was built to observe.
+//
+// An arm with no registered designed error can never be explained, and neither can
+// an empty message. That is the safe direction: a new arm reaching this fixture
+// reports UNEXPLAINED until its designed error is written down here.
+func matchesDesignedControlError(arm, msg string) bool {
+	d, ok := designedControlErrors[arm]
+	if !ok {
+		return false
+	}
+	if d.prefixed {
+		return strings.HasPrefix(msg, d.text)
+	}
+	return strings.Contains(msg, d.text)
+}
+
+// designedControlErrorOf states, in one phrase, what an arm's error must look like
+// to satisfy the control. It exists so an off-script pair REPORTS the bar it
+// missed: a detail carrying two error strings and no statement of what was
+// expected leaves the reader to rediscover the predicate.
+func designedControlErrorOf(arm string) string {
+	d, ok := designedControlErrors[arm]
+	if !ok {
+		return "no designed control error is registered for this arm, so it can never satisfy the carve-out"
+	}
+	if d.prefixed {
+		return "begins " + d.text
+	}
+	return "contains " + d.text
+}
+
+const malformedFactsControlExplanation = "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a " +
+	"non-string member: on the wasm arms (opa, wazero) `facts_wellformed` is false and the entrypoint's `result` rule is " +
+	"UNDEFINED (an EMPTY RESULT SET error row); the shipped harness never evaluates a policy over it and refuses the bundle " +
+	"(a MALFORMED FACTS error row). Each arm's error row is that arm's DESIGNED outcome of the strictness contract, not a " +
+	"divergence between the runtimes — and only that designed error qualifies; any other error on either side is UNEXPLAINED."
+
+const absentRowReason = "ABSENT ROW — an arm produced no row at all for this (ruleId, fixtureId). " +
+	"This is not an error row: the arm did not decide and then fail, it never reached the fixture."
+
+// compareControlPair classifies the malformed-facts control.
+//
+// It runs BEFORE every other branch, including the MATCH branch: if both arms
+// returned a clean verdict for this fixture — even the same clean verdict — the
+// control did not fire and the run must say so.
+func compareControlPair(base pairResult, left, right normalRow) pairResult {
+	switch {
+	case left.Absent || right.Absent:
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason":      absentRowReason,
+			"leftAbsent":  left.Absent,
+			"rightAbsent": right.Absent,
+			"control":     "the malformed-facts control cannot be satisfied by a MISSING row — an arm that never evaluated the control proves nothing about the strictness contract",
+		}
+	case left.Error != "" && right.Error != "":
+		leftDesigned := matchesDesignedControlError(left.Arm, left.Error)
+		rightDesigned := matchesDesignedControlError(right.Arm, right.Error)
+		if leftDesigned && rightDesigned {
+			ex := malformedFactsControlExplanation
+			base.Status = statusExplained
+			base.Explanation = &ex
+			base.Detail = map[string]any{
+				"reason":     "MALFORMED-FACTS-CONTROL",
+				"leftError":  left.Error,
+				"rightError": right.Error,
+			}
+			return base
+		}
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason": "MALFORMED-FACTS-CONTROL ERRORED OFF-SCRIPT — both arms errored on the control bundle, but at " +
+				"least one error is NOT the error its arm is designed to produce here. A trap or a decode failure is " +
+				"also an error row, and explaining it away as the control would hide a real divergence, so this pair " +
+				"carries both messages instead",
+			"leftError":          left.Error,
+			"rightError":         right.Error,
+			"leftMatchesDesign":  leftDesigned,
+			"rightMatchesDesign": rightDesigned,
+			"designedErrors": map[string]string{
+				left.Arm:  designedControlErrorOf(left.Arm),
+				right.Arm: designedControlErrorOf(right.Arm),
+			},
+		}
+	default:
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason": "MALFORMED-FACTS-CONTROL DID NOT FIRE — this bundle must produce an ERROR ROW on BOTH arms; " +
+				"at least one arm returned a clean verdict, so the strictness contract the control exists to observe is not holding",
+			"leftError":  left.Error,
+			"rightError": right.Error,
+		}
+	}
+	return base
+}
+
 func comparePair(left, right normalRow) pairResult {
+	// Identity is taken from whichever side HAS it: one of the two rows may be a
+	// synthesised absent row, and reading the specimen off it unconditionally
+	// would file the pair under the empty specimen.
+	pick := func(a, b string) string {
+		if a != "" {
+			return a
+		}
+		return b
+	}
 	base := pairResult{
-		RuleID:    left.RuleID,
-		FixtureID: left.FixtureID,
-		Specimen:  left.Specimen,
-		Engine:    left.Engine,
+		RuleID:    pick(left.RuleID, right.RuleID),
+		FixtureID: pick(left.FixtureID, right.FixtureID),
+		Specimen:  pick(left.Specimen, right.Specimen),
+		Engine:    pick(left.Engine, right.Engine),
 		Left:      left.Arm,
 		Right:     right.Arm,
+	}
+
+	if base.FixtureID == malformedFactsControlFixture {
+		return compareControlPair(base, left, right)
+	}
+
+	if left.Absent || right.Absent {
+		base.Status = statusUnexplained
+		base.Detail = map[string]any{
+			"reason":      absentRowReason,
+			"leftAbsent":  left.Absent,
+			"rightAbsent": right.Absent,
+		}
+		return base
 	}
 
 	if left.Error != "" || right.Error != "" {

@@ -61,8 +61,21 @@ func clockGranularityMicros() float64 {
 
 // ─── Inputs ──────────────────────────────────────────────────────────────────
 
+// loweredRecord is one row of `artifacts/lowering-rejects.json.lowered[]`.
+//
+// Every naming field here is READ from that artifact, never re-derived: the
+// package/entrypoint suffix rule is the TS lowering's to state (the twinned seed
+// rules take a `_<language>` suffix while single-record rules do not), and a Go
+// copy of that rule would be a second source of truth that drifts silently.
+//
+// The artifact carries additive fields this arm does not model (`seedEntry` is
+// modelled; `manifestSha256`, `patterns`, `globCount` are not). encoding/json
+// ignores unknown fields by default and this struct deliberately keeps it that
+// way — no DisallowUnknownFields — so a later additive field cannot break the
+// Go arm.
 type loweredRecord struct {
 	Specimen   string `json:"specimen"`
+	SeedEntry  string `json:"seedEntry"`
 	RuleID     string `json:"ruleId"`
 	Package    string `json:"package"`
 	Entrypoint string `json:"entrypoint"`
@@ -143,22 +156,135 @@ func loadFacts(root string) ([]factFile, error) {
 	return out, nil
 }
 
-// joinIsSound mirrors the wasmtime arm's guard: three records share the pinned id
-// `0123456789abcdef`, so a ruleId-only join would fan one fixture across
-// d-line, d-file and e.
+// joinsTo is the join PREDICATE: a fact bundle belongs to a lowered record when
+// the PAIR (ruleId, specimen) agrees — never ruleId alone.
+//
+// A ruleId-only join is unsound in BOTH record sets. On `specimens` three records
+// share the pinned exemplar id `0123456789abcdef`, so it would fan one fixture
+// across d-line, d-file and e. On `seed20` the two TWINNED rules carry a single
+// lessonHash across two records that differ only in `specimen` (the `-js` sibling)
+// and in the `_<language>` package suffix, so it would fan each twin's fixtures
+// across both languages and score the JavaScript record against the TypeScript
+// record's bundles.
+func joinsTo(rec loweredRecord, f factFile) bool {
+	return f.RuleID == rec.RuleID && f.Specimen == rec.Specimen
+}
+
+// joinIsSound re-checks a joined pair against the bundle's OWN declared identity,
+// so a corpus whose filenames and field values disagree is caught rather than
+// scored.
+//
+// The filename prefix is built from the BUNDLE's declared (ruleId, specimen)
+// rather than the record's, and the specimen is compared EXACTLY. Building it
+// from the record and testing only `strings.HasPrefix` is unsound on a twinned
+// rule: `6b1890e2…-empty-string-in-whitelist-` is a prefix of
+// `6b1890e2…-empty-string-in-whitelist-js-inline-bad.json`, so the TypeScript
+// record's guard would wave through the JavaScript record's bundle. The exact
+// specimen comparison is what makes the key the pair.
 func joinIsSound(rec loweredRecord, f factFile) error {
 	if f.RuleID != rec.RuleID {
 		return fmt.Errorf("join defect: bundle %s claims ruleId %s but record %s carries %s",
 			f.FileName, f.RuleID, rec.Specimen, rec.RuleID)
 	}
+	if f.Specimen != rec.Specimen {
+		return fmt.Errorf("join defect: bundle %s claims specimen %s but was joined to record %s (ruleId %s) — "+
+			"the join key is the PAIR (ruleId, specimen), and these records share a ruleId",
+			f.FileName, f.Specimen, rec.Specimen, rec.RuleID)
+	}
 	if f.Engine != rec.Engine {
 		return fmt.Errorf("join defect: bundle %s claims engine %s but record %s lowered as %s",
 			f.FileName, f.Engine, rec.Specimen, rec.Engine)
 	}
-	if want := rec.RuleID + "-" + rec.Specimen + "-"; !strings.HasPrefix(f.FileName, want) {
-		return fmt.Errorf("join defect: bundle %s does not carry the expected `%s` filename prefix", f.FileName, want)
+	if want := f.RuleID + "-" + f.Specimen + "-"; !strings.HasPrefix(f.FileName, want) {
+		return fmt.Errorf("join defect: bundle %s does not carry the `%s` filename prefix its own ruleId/specimen fields declare",
+			f.FileName, want)
 	}
 	return nil
+}
+
+// factsIndexPath is where the fact corpus's index lives, named once so the
+// refusals below and the count derivation cannot point at different files.
+func factsIndexPath(root string) string {
+	return filepath.Join(root, "artifacts", "facts-index.json")
+}
+
+// factsIndex is `artifacts/facts-index.json` as far as this arm models it.
+//
+// RecordSet is a POINTER so an ABSENT key is distinguishable from an empty one.
+// The refusal C1 asks for is "this corpus does not say which record set generated
+// it", and a plain string would decode a pre-C1 corpus as `""` and then compare
+// that against the selector — reporting the wrong condition, or, if the selector
+// were ever empty, none at all.
+type factsIndex struct {
+	RecordSet   *string `json:"recordSet"`
+	BundleCount int     `json:"bundleCount"`
+}
+
+// recordSetIdentityRefusal is the class name every record-set identity refusal
+// carries, in the house style of the other named refusals (`EMPTY RESULT SET`,
+// `ABSENT ROW`). It is a constant so the tests assert on the same token the probe
+// prints rather than on a re-spelled copy of the sentence.
+const recordSetIdentityRefusal = "RECORD-SET IDENTITY"
+
+// loadFactsIndex reads the fact corpus's index and REFUSES a corpus that was not
+// generated for the SELECTED record set (mmnto-ai/totem#2694 C1 / G10).
+//
+// The identity check is the first thing done with the index, before any count is
+// read off it and before any bundle is joined to a record, because cardinality
+// cannot detect the failure it guards: the index stores only `bundleCount`, and a
+// corpus generated for another record set can agree on that count by coincidence —
+// at which point every downstream check runs green against the wrong contract.
+// A missing field is refused just as hard as a mismatched one; the TS half writes
+// it on every run now, so its absence means the corpus predates this contract and
+// its provenance is simply unknown.
+func loadFactsIndex(root, recordSet string) (factsIndex, error) {
+	var idx factsIndex
+	at := factsIndexPath(root)
+	if err := readJSON(at, &idx); err != nil {
+		return idx, err
+	}
+	if idx.RecordSet == nil {
+		return idx, fmt.Errorf("%s — %s declares no `recordSet`, so the fact corpus does not say which record set "+
+			"generated it and cannot be scored against the selected %q set (%s). Regenerate the corpus with "+
+			"`npm run facts` (mmnto-ai/totem#2694 C1)",
+			recordSetIdentityRefusal, at, recordSet, recordSetEnvVar)
+	}
+	if *idx.RecordSet != recordSet {
+		return idx, fmt.Errorf("%s — %s was generated for the %q record set but this run selects %q (%s). Refusing "+
+			"before any cardinality or join check: the index carries only `bundleCount`, which a corpus from another "+
+			"record set can match by coincidence, and every row would then be scored against the wrong contract",
+			recordSetIdentityRefusal, at, *idx.RecordSet, recordSet, recordSetEnvVar)
+	}
+	return idx, nil
+}
+
+// expectedRowCount DERIVES the per-arm verdict-row cardinality from the run's own
+// inputs. It is never a literal: the seven-specimen set has 24 bundles and the
+// seed20 set has a different number, and a hardcoded count would either fail the
+// trial set outright or, worse, pass it while a whole record's rows were missing.
+//
+// The index and the directory are cross-checked against each other, because the
+// number is only worth what its source is worth: an index that disagrees with the
+// corpus it indexes cannot ground a cardinality assertion, so that disagreement
+// stops the run rather than picking a winner.
+//
+// It reads the index through loadFactsIndex, so no count can be derived from a
+// corpus whose record-set identity has not been checked first.
+func expectedRowCount(root, recordSet string, facts []factFile) (int, error) {
+	at := factsIndexPath(root)
+	idx, err := loadFactsIndex(root, recordSet)
+	if err != nil {
+		return 0, err
+	}
+	if idx.BundleCount != len(facts) {
+		return 0, fmt.Errorf("%s declares bundleCount %d but artifacts/facts holds %d bundle files — "+
+			"the fact corpus and its own index disagree, so no row cardinality can be derived from them",
+			at, idx.BundleCount, len(facts))
+	}
+	if idx.BundleCount == 0 {
+		return 0, fmt.Errorf("%s declares no bundles — run `npm run facts` first", at)
+	}
+	return idx.BundleCount, nil
 }
 
 // ─── Verdict extraction ──────────────────────────────────────────────────────
@@ -500,9 +626,17 @@ func loadPolicy(ctx context.Context, cache wazero.CompilationCache, wasmBytes []
 		compileMicros, time.Since(tInst).Microseconds(), nil
 }
 
+// policyWasmPath resolves a record's built module from the `dir` the lowering
+// artifact declares. The directory is READ, never re-derived from the ruleId: the
+// package-suffix rule that names it (the `_<language>` twins, the `_<specimen>`
+// exemplar siblings) belongs to the TS lowering.
+func policyWasmPath(root string, rec loweredRecord) string {
+	dir := filepath.Join(append([]string{root}, strings.Split(rec.Dir, "/")...)...)
+	return filepath.Join(dir, "policy.wasm")
+}
+
 func runSpecimen(ctx context.Context, root string, cache wazero.CompilationCache, rec loweredRecord, facts []factFile) (*specimenResult, error) {
-	wasmPath := filepath.Join(append([]string{root}, strings.Split(rec.Dir, "/")...)...)
-	wasmPath = filepath.Join(wasmPath, "policy.wasm")
+	wasmPath := policyWasmPath(root, rec)
 	wasmBytes, err := os.ReadFile(wasmPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s — run `npm run lower && npm run build-wasm` first: %w", wasmPath, err)
@@ -560,7 +694,7 @@ func runSpecimen(ctx context.Context, root string, cache wazero.CompilationCache
 	}
 
 	for _, f := range facts {
-		if f.Specimen != rec.Specimen {
+		if !joinsTo(rec, f) {
 			continue
 		}
 		if err := joinIsSound(rec, f); err != nil {

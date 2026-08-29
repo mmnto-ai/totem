@@ -1,0 +1,23 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Dynamic imports should only be used in command entry points, not in utility or adapter layers. Move this dynamic import to the command entry point to prevent startup latency issues.'
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: 'import($MODULE)'
+  scope:
+    fileGlobs:
+      - 'packages/cli/src/**/*.ts'
+    excludeGlobs:
+      - 'packages/cli/src/commands/**/*.ts'
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: "const { chalk } = await import('chalk');"
+    good: "import chalk from 'chalk';"
+
+curation:
+  sourceLesson: 'lesson-0167a783f75b5ecd'

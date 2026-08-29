@@ -7,7 +7,7 @@
 //
 // Spec `.totem/specs/spine-spike.md` § Actuator slice, "Invariants to lock":
 //
-//   all 7 specimen bundles certify PASS with chains byte-identical to the
+//   every lowered record's bundle certifies PASS with chains byte-identical to the
 //   pre-slice chains EXCEPT the added manifest field (the extension is additive;
 //   record/rego/wasm hashes unchanged); both negative fixtures BLOCK with typed
 //   reasons on both platforms; every host's failure rule proven by fixture, not
@@ -47,7 +47,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { ARTIFACTS_DIR, Checks, REPO_ROOT, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
+import { activeRecordSet } from './lib/record-sets.mts';
+import {
+  ARTIFACTS_DIR,
+  Checks,
+  readRunManifest,
+  REPO_ROOT,
+  SPIKE_ROOT,
+  writeArtifact,
+} from './lib/spike-env.mts';
 import { canonicalJson, censusWasm, entrypointManifest, sha256 } from './lib/wasm-census.mts';
 
 const CHAINS_DIR = path.join(ARTIFACTS_DIR, 'chains');
@@ -250,9 +258,24 @@ function main(): void {
   }
   const report = JSON.parse(fs.readFileSync(reportAt, 'utf-8')) as Report;
 
-  // ── INVARIANT 1: all 7 specimen bundles certify PASS ──
+  // ── INVARIANT 1: every lowered record's bundle certifies PASS ──
+  //
+  // The count is DERIVED from the run manifest's record list minus the lowering's
+  // typed reject rows, which is a reading independent of the report being checked.
+  const recordSet = activeRecordSet();
+  const manifest = readRunManifest();
+  const lowering = JSON.parse(
+    fs.readFileSync(path.join(ARTIFACTS_DIR, 'lowering-rejects.json'), 'utf-8'),
+  ) as { rejects?: { stage?: string }[] };
+  const expectedSpecimenBundles =
+    (manifest.records as unknown[]).length -
+    (lowering.rejects ?? []).filter((r) => typeof r.stage === 'string').length;
   const specimens = report.certifications.filter((c) => c.kind === 'specimen');
-  checks.eq('INV 1 — the report carries all 7 specimen bundles', specimens.length, 7);
+  checks.eq(
+    `INV 1 — the report carries all ${expectedSpecimenBundles} specimen bundles`,
+    specimens.length,
+    expectedSpecimenBundles,
+  );
   checks.eq(
     'INV 1 — every specimen bundle certifies PASS',
     specimens.filter((s) => s.status !== 'PASS').map((s) => `${s.id}:${s.reason}`),
@@ -280,36 +303,93 @@ function main(): void {
     .filter(Boolean)
     .map((l) => path.posix.basename(l))
     .sort();
-  checks.eq(
-    'INV 2 — the published chain set is exactly the pre-slice committed chain set',
-    chainFiles,
-    committedNames,
+  // The committed chains ARE the seven-specimen baseline: the comparison against
+  // them is a claim about THAT set and has no referent for any other. On another
+  // record set the whole committed-vs-published half of INV 2 is SKIPPED with a
+  // named reason, and the per-chain claims that do not need a committed referent —
+  // (d) the manifest re-derivation, (e) the five-member binding, (f) the guarded
+  // result path — still run on every published chain.
+  //
+  // (T13, mmnto-ai/totem#2694) The gate is keyed on the MANIFEST's record set, not
+  // on the environment. `SPIKE_RECORD_SET` describes the process; the manifest
+  // describes the run that was DECLARED at step 0. (The chains themselves trace to
+  // the environment too — `src/lower.mts` selects the set via `activeRecordSet()`,
+  // and `certify.mts` never reads the manifest's set — so what actually keeps
+  // "chains on disk" and "gate" in the same run is the AGREEMENT check below, not
+  // the manifest alone; round-1 falsification leg, m6.) Keying the gate on the
+  // environment let `SPIKE_RECORD_SET=seed20` skip the committed-vs-published half
+  // over a `artifacts/chains/` still holding specimen certificates — the invariant
+  // silently not run, and nothing contradicting it. The two must agree, and a
+  // disagreement is a FAILED check, never a skip.
+  const manifestRecordSet = manifest.recordSet;
+  checks.check(
+    "INV 2 — the manifest's record set and `SPIKE_RECORD_SET` AGREE (the artifacts on disk and this process are the same run)",
+    manifestRecordSet === recordSet,
+    `manifest.recordSet=${JSON.stringify(manifestRecordSet)}, activeRecordSet()=${JSON.stringify(recordSet)}` +
+      (manifestRecordSet === recordSet
+        ? ''
+        : ' — re-run `npm run all` for this record set before certifying'),
   );
+  const committedChainsApply = manifestRecordSet === 'specimens';
+  if (committedChainsApply) {
+    checks.eq(
+      'INV 2 — the published chain set is exactly the pre-slice committed chain set',
+      chainFiles,
+      committedNames,
+    );
+  } else {
+    checks.check(
+      `INV 2 — SKIPPED with the named reason \`committed-chains-are-the-specimens-baseline\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's), and \`artifacts/chains/\` at HEAD holds the ${committedNames.length} seven-specimen certificates`,
+      true,
+      `published: ${chainFiles.length}; committed at HEAD: ${committedNames.length}`,
+    );
+  }
 
   const preservation: Record<string, unknown>[] = [];
   const modesRun: Record<string, ChainMode> = {};
   for (const name of chainFiles) {
     const currentText = fs.readFileSync(path.join(CHAINS_DIR, name), 'utf-8');
-    const committedText = gitShow(`spikes/spine-adopt/artifacts/chains/${name}`);
-    if (committedText === null) {
+    const committedText = committedChainsApply
+      ? gitShow(`spikes/spine-adopt/artifacts/chains/${name}`)
+      : null;
+    if (committedChainsApply && committedText === null) {
       checks.check(`INV 2 — ${name}: a committed chain exists at HEAD`, false, 'git show failed');
       continue;
     }
 
     // (a)+(b)+(c): the bidirectional comparison. The mode is chosen from the
     // COMMITTED file's own shape, so this check survives its own commit.
-    const cmp = compareChainAgainstCommitted(name, currentText, committedText);
-    modesRun[name] = cmp.mode;
-    for (const r of cmp.rows) checks.check(r.name, r.ok, r.detail);
+    const cmp =
+      committedText === null
+        ? null
+        : compareChainAgainstCommitted(name, currentText, committedText);
+    if (cmp) {
+      modesRun[name] = cmp.mode;
+      for (const r of cmp.rows) checks.check(r.name, r.ok, r.detail);
+    }
 
-    const committed = JSON.parse(committedText) as Record<string, unknown>;
+    const committed = (committedText === null ? {} : JSON.parse(committedText)) as Record<
+      string,
+      unknown
+    >;
     const current = JSON.parse(currentText) as Record<string, unknown>;
-    const changed = Object.keys(committed).filter(
-      (k) => JSON.stringify(committed[k]) !== JSON.stringify(current[k]),
-    );
-    const added = Object.keys(current)
-      .filter((k) => !(k in committed))
-      .sort();
+    // (T18, mmnto-ai/totem#2694) With no committed referent these are NOT empty and
+    // "every key added", they are UNKNOWABLE — `{}` is a stand-in, not a chain. They
+    // report `null`, exactly as `mode`, `allModeChecksPassed` and `preservedBytes`
+    // already do on the same branch, so a reader cannot mistake "nothing to compare
+    // against" for "nothing changed".
+    const changed =
+      committedText === null
+        ? null
+        : Object.keys(committed).filter(
+            (k) => JSON.stringify(committed[k]) !== JSON.stringify(current[k]),
+          );
+    const added =
+      committedText === null
+        ? null
+        : Object.keys(current)
+            .filter((k) => !(k in committed))
+            .sort();
 
     // (d) the manifest hash, RE-DERIVED here from the module rather than trusted
     //     from the report — an independent second reading of the same artifact.
@@ -364,13 +444,15 @@ function main(): void {
 
     preservation.push({
       chain: name,
-      mode: cmp.mode,
+      mode: cmp?.mode ?? null,
       modeReason:
-        cmp.mode === 'drift-detection'
-          ? `the committed chain carries \`${POST_SLICE_MARKER}\` — the slice is committed, so the claim is byte-EQUALITY`
-          : `the committed chain has no \`${POST_SLICE_MARKER}\` — a pre-slice baseline, so the claim is the additive extension`,
-      allModeChecksPassed: cmp.rows.every((r) => r.ok),
-      preservedBytes: cmp.preservedBytes,
+        cmp === null
+          ? `no committed referent — the manifest's record set is \`${String(manifestRecordSet)}\`, so the committed-vs-published half of INV 2 is skipped for this chain`
+          : cmp.mode === 'drift-detection'
+            ? `the committed chain carries \`${POST_SLICE_MARKER}\` — the slice is committed, so the claim is byte-EQUALITY`
+            : `the committed chain has no \`${POST_SLICE_MARKER}\` — a pre-slice baseline, so the claim is the additive extension`,
+      allModeChecksPassed: cmp === null ? null : cmp.rows.every((r) => r.ok),
+      preservedBytes: cmp?.preservedBytes ?? null,
       publishedBytes: currentText.length,
       changedKeys: changed,
       addedKeys: added,

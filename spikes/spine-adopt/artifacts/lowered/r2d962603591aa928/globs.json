@@ -1,0 +1,272 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lower.mts",
+  "contract": "spikes/spine-adopt/rego/LOWERING.md § Lowering 5",
+  "profile": "§ Design 7 record dialect — packages/core/src/sys/glob.ts RECORD_DIALECT_PROFILE (barePatternMatchesBasename:false, starActivation:all, optionalSyntax:{}, crossSegmentWildcard:\".*\", normalizePatternSeparators:false, case-SENSITIVE)",
+  "ruleId": "2d962603591aa928",
+  "specimen": "b",
+  "package": "totem.spike.r2d962603591aa928",
+  "table": [
+    {
+      "kind": "fileGlobs",
+      "glob": "**/*.ts",
+      "regex": "^(?:[^/]+/)*[^/]*\\.ts$"
+    }
+  ],
+  "scopeProbes": [
+    {
+      "path": "scripts/audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-ast-empty-catch.md",
+      "mine": false,
+      "shipped": false
+    }
+  ],
+  "perGlobProbes": [
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "audit.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/src/example.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "scripts/x.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "**/*.ts",
+      "path": ".totem/tests/test-ast-empty-catch.md",
+      "mine": false,
+      "shipped": false
+    }
+  ]
+}

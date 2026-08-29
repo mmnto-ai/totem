@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+severity: warning
+message: 'Do not include empty strings in branch whitelists — if branch resolution fails, an empty string will silently bypass security gates. Use explicit branch names only.'
+
+target:
+  type: ast-grep
+  language: javascript
+  pattern: '[$$$BEFORE, "", $$$AFTER]'
+  scope:
+    fileGlobs:
+      - '**/*.js'
+
+examples:
+  - bad: 'const PROTECTED_BRANCHES = ["main", "", "release"];'
+    good: 'const PROTECTED_BRANCHES = ["main", "release"];'
+
+curation:
+  sourceLesson: 'lesson-6b1890e2dbda3331'

@@ -1,0 +1,27 @@
+schemaVersion: 1
+
+severity: warning
+message: "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to prevent argument injection of untrusted strings like branch or tag names."
+
+target:
+  type: regex
+  pattern: 'git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?:[''"`]?\$[{(]?\w|[''"`]?\$\w)'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.mjs'
+      - '**/*.cjs'
+
+requires:
+  pattern: '\s--\s'
+  scope: line
+
+examples:
+  - bad: 'git log $UNTRUSTED_REF'
+    good: 'git log "$UNTRUSTED_REF" -- .'
+
+curation:
+  sourceLesson: 'lesson-5da43ea60b66e96e'

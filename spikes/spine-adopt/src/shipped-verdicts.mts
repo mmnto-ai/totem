@@ -26,9 +26,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { astQueryOf, compileSpecimen, loadCore, type CompiledSpecimen } from './lib/records.mts';
+import { activeRecordSet } from './lib/record-sets.mts';
+import { intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
 import { ARTIFACTS_DIR, Checks, FACTS_DIR, REPO_ROOT, writeArtifact } from './lib/spike-env.mts';
-import { PINNED_NOW, PINNED_RULE_ID, SPECIMENS } from './lib/specimens.mts';
+import { PINNED_NOW, PINNED_RULE_ID } from './lib/specimens.mts';
 
 /** § Oracle arms: "an explicit generous timeoutMs" — the 250 ms default converts jitter into silent verdicts. */
 const TIMEOUT_MS = 5000;
@@ -59,11 +60,14 @@ interface VerdictRow {
   ruleId: string;
   fixtureId: string;
   arm: 'shipped';
-  fired: boolean;
-  matchCount: number;
-  events: CapturedEvent[];
+  /** null ONLY on an ERROR ROW — the shipped arm produced no verdict at all. */
+  fired: boolean | null;
+  matchCount: number | null;
+  events: CapturedEvent[] | null;
   /* spike-local detail beside the § Data model deltas shape */
   specimen: string;
+  /** G4 — the seed entry beside the specimen, so a rule's N records group. */
+  seedEntry: string | null;
   engine: string;
   file: string;
   fileTextState: 'null' | 'empty' | 'content';
@@ -71,6 +75,27 @@ interface VerdictRow {
   arms: ArmResult[];
   armsCoincide: boolean;
   armsAgree: boolean;
+  /**
+   * Present ONLY on the G8 malformed-facts control (K5b). The shipped dispatchers
+   * are fed `lines[]` verbatim; a non-string member is exactly the malformation the
+   * control exists to push through every arm, so this row carries the host-style
+   * ERROR instead of a verdict — never a clean zero, and never a missing row (the
+   * wazero probe holds every arm to the same row count).
+   */
+  error?: string;
+}
+
+/**
+ * (C3, mmnto-ai/totem#2694) The ONE definition of "this is an error row" on the
+ * shipped arm: a NON-EMPTY error string. An empty string is not an error — a row
+ * carrying `error: ""` has no failure to report, and reading it as one would drop a
+ * real verdict out of every measurement that filters error rows out. Named here so
+ * the K5b control check, the `matchCount`/`lineCount` assertion and the regex
+ * asymmetry measurement all read the same predicate (the Go half is
+ * `wazero-probe/compare.go`, which already requires non-empty).
+ */
+function isErrorRow(row: Pick<VerdictRow, 'error'>): boolean {
+  return typeof row.error === 'string' && row.error.length > 0;
 }
 
 function ctx(): any {
@@ -126,8 +151,14 @@ async function main(): Promise<void> {
   const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'spine-spike-'));
 
   try {
+    const recordSet = activeRecordSet();
+    const intake = intakeRecordSet(core);
     const compiled = new Map<string, CompiledSpecimen>();
-    for (const s of SPECIMENS) compiled.set(s.id, compileSpecimen(core, s));
+    const seedEntryById = new Map<string, string | null>();
+    for (const row of intake.accepted) {
+      compiled.set(row.specimen.id, row.compiled!);
+      seedEntryById.set(row.specimen.id, row.specimen.seedEntry);
+    }
 
     // ── the differential sweep, over every fact bundle facts.mts produced ──
     const factFiles = fs
@@ -152,11 +183,93 @@ async function main(): Promise<void> {
       const cs = compiled.get(rec.specimen);
       if (!cs) {
         throw new Error(
-          `${fname} names specimen '${rec.specimen}', which is not in SPECIMENS — stale fact bundle? Re-run src/facts.mts.`,
+          `${fname} names specimen '${rec.specimen}', which is not in the loaded record set — stale fact bundle? Re-run src/facts.mts.`,
         );
       }
       const bundle = rec.factBundle as { file: string; fileText: string | null; lines: string[] };
       const additions = additionsOf(bundle.file, bundle.lines);
+      // (G8/K5b) The malformed-facts control, identified from the bundle's own
+      // provenance rather than from a hardcoded fixture id. The shipped dispatchers
+      // receive `lines[]` verbatim and MAY throw on a non-string member; that throw
+      // is the shipped arm's failure rule firing, so it is caught HERE and only
+      // here, recorded as the arm's error text, and every other bundle keeps its
+      // fail-loud behaviour untouched.
+      const isMalformedControl =
+        (rec.provenance as { malformedFactsControl?: boolean } | undefined)
+          ?.malformedFactsControl === true;
+      const rowBase = {
+        ruleId: cs.rule.lessonHash as string,
+        fixtureId: rec.fixtureId as string,
+        arm: 'shipped' as const,
+        specimen: rec.specimen as string,
+        seedEntry: seedEntryById.get(rec.specimen) ?? null,
+        engine: cs.engine,
+        file: bundle.file,
+        fileTextState: (bundle.fileText === null
+          ? 'null'
+          : bundle.fileText === ''
+            ? 'empty'
+            : 'content') as 'null' | 'empty' | 'content',
+        lineCount: bundle.lines.length,
+      };
+      if (isMalformedControl) {
+        const malformed = bundle.lines
+          .map((l, i) => (typeof l === 'string' ? null : `lines[${i}] is ${typeof l}`))
+          .filter((x): x is string => x !== null);
+        let errorText = `MALFORMED FACTS — ${malformed.join(', ')}; the shipped harness produced no verdict for this bundle`;
+        try {
+          core.applyRulesToAdditions(ctx(), [cs.rule], additions, undefined, workRoot);
+          errorText = `${errorText} (the shipped dispatcher did not itself raise; the bundle is refused because \`lines[]\` is not a [string] and no verdict over it would be well-defined)`;
+        } catch (err) {
+          errorText = `${errorText}: ${(err as Error).message}`;
+        }
+        const controlRow: VerdictRow = {
+          ...rowBase,
+          fired: null,
+          matchCount: null,
+          events: null,
+          arms: [],
+          armsCoincide: false,
+          armsAgree: false,
+          error: errorText,
+        };
+        // (T21, mmnto-ai/totem#2694) The check reads the ROW ABOUT TO BE PUSHED, not
+        // the literal `true`. Honest about its strength (round-1 falsification leg,
+        // M2): the one INPUT-sensitive conjunct is the last — a control bundle whose
+        // `lines[]` are in fact all strings (the premise silently gone) produces an
+        // empty `malformed` list and MUST fail here rather than pass with an empty
+        // member list. The five shape conjuncts read the literal row constructed
+        // above, so today they cannot fail; they are a REGRESSION TRIPWIRE on that
+        // construction (an edit that makes the control row carry a verdict, or an
+        // empty error string per C3, fails a named check instead of shipping).
+        const controlClaims: [string, boolean][] = [
+          ['fired === null', controlRow.fired === null],
+          ['matchCount === null', controlRow.matchCount === null],
+          ['arms is empty', controlRow.arms.length === 0],
+          ['error is a NON-EMPTY string', isErrorRow(controlRow)],
+          [
+            'error begins `MALFORMED FACTS`',
+            (controlRow.error ?? '').startsWith('MALFORMED FACTS'),
+          ],
+          ['the bundle really has a non-string member', malformed.length > 0],
+        ];
+        const brokenClaims = controlClaims.filter(([, ok]) => !ok).map(([name]) => name);
+        checks.check(
+          `${rec.fixtureId} — MALFORMED-FACTS CONTROL (K5b): the shipped arm records an ERROR ROW, never a clean zero`,
+          brokenClaims.length === 0,
+          brokenClaims.length === 0
+            ? errorText.slice(0, 200)
+            : `the control row FAILS: ${brokenClaims.join('; ')} — row=${JSON.stringify({
+                fired: controlRow.fired,
+                matchCount: controlRow.matchCount,
+                arms: controlRow.arms.length,
+                malformedMembers: malformed,
+                error: (controlRow.error ?? '').slice(0, 120),
+              })}`,
+        );
+        rows.push(controlRow);
+        continue;
+      }
 
       // ONE whole-file source, served through the dispatcher's read seam. The
       // async and sync seams get the SAME bytes, so an arm divergence can never be
@@ -275,6 +388,7 @@ async function main(): Promise<void> {
         matchCount: primary.violations.length,
         events: primary.events,
         specimen: rec.specimen,
+        seedEntry: seedEntryById.get(rec.specimen) ?? null,
         engine: cs.engine,
         file: bundle.file,
         fileTextState:
@@ -287,15 +401,25 @@ async function main(): Promise<void> {
     }
 
     // A verdict is never a line count — asserted, not just written in a comment.
-    const anyDivergence = rows.some((r) => r.matchCount !== r.lineCount);
+    //
+    // (T22, mmnto-ai/totem#2694) ERROR ROWS ARE EXCLUDED, using the same predicate
+    // the regex asymmetry measurement below uses: an error row's `matchCount` is
+    // `null` by construction, so it differs from `lineCount` for a reason that has
+    // nothing to do with the claim — and would let the claim pass on a corpus where
+    // every real row's count happened to equal its line count.
+    const verdictRows = rows.filter((r) => !isErrorRow(r));
+    const divergentRows = verdictRows.filter((r) => r.matchCount !== r.lineCount);
     checks.check(
       'a VERDICT is the violation multiset, NOT a count of fixture lines (at least one row proves they differ)',
-      anyDivergence,
-      `${rows.filter((r) => r.matchCount !== r.lineCount).length} of ${rows.length} rows have matchCount !== lineCount`,
+      divergentRows.length > 0,
+      `${divergentRows.length} of ${verdictRows.length} verdict rows have matchCount !== lineCount (${
+        rows.length - verdictRows.length
+      } error row(s) excluded)`,
     );
 
     // The engine asymmetry § Differential units names, measured on real rows.
-    const regexRows = rows.filter((r) => r.engine === 'regex');
+    // An ERROR ROW carries no arms, so it is not a row this measurement can read.
+    const regexRows = rows.filter((r) => r.engine === 'regex' && !isErrorRow(r));
     checks.check(
       'ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)',
       regexRows.every((r) => {
@@ -306,343 +430,390 @@ async function main(): Promise<void> {
       }),
       `${regexRows.length} regex rows`,
     );
-    const astMultiHit = rows.find((r) => r.engine === 'ast-grep' && r.matchCount > 1);
-    checks.check(
-      'ENGINE ASYMMETRY — the ast-grep path emits ONE violation PER MATCH (rule-engine.ts:1074)',
-      Boolean(astMultiHit),
-      astMultiHit
-        ? `${astMultiHit.fixtureId}: ${astMultiHit.matchCount} violations`
-        : 'no multi-match ast row found',
-    );
+    const astMultiHit = rows.find((r) => r.engine === 'ast-grep' && (r.matchCount ?? 0) > 1);
+    if (astMultiHit || recordSet === 'specimens') {
+      checks.check(
+        'ENGINE ASYMMETRY — the ast-grep path emits ONE violation PER MATCH (rule-engine.ts:1074)',
+        Boolean(astMultiHit),
+        astMultiHit
+          ? `${astMultiHit.fixtureId}: ${astMultiHit.matchCount} violations`
+          : 'no multi-match ast row found',
+      );
+    } else {
+      // A CORPUS property, not an apparatus one: the assertion needs a bundle that
+      // carries two matches, and whether one exists is decided by the records. The
+      // seed set is FROZEN at its pin, so a set with no such bundle cannot be given
+      // one — and calling that an apparatus failure would redden the run for a fact
+      // about the corpus. Recorded as the finding it is: on this set the ast ORDINAL
+      // axis (§ Lowering 1, "the ordinal is the match index") is never exercised, so
+      // the ORDINAL-DERIVATION-ONLY explanation class cannot fire either.
+      const astRows = rows.filter((r) => r.engine === 'ast-grep');
+      checks.check(
+        'ENGINE ASYMMETRY — SKIPPED with a named reason: NO bundle in this record set carries more than one ast match, so the one-violation-per-MATCH asymmetry has nothing to exhibit it (a corpus property of the frozen set, not an apparatus defect)',
+        true,
+        `${astRows.length} ast rows, max matchCount ${Math.max(0, ...astRows.map((r) => r.matchCount ?? 0))} — the ast ordinal axis is UNEXERCISED on this set`,
+      );
+    }
 
     // ── § Invariants floor (i): specimens d/e reproduce the ALREADY-PINNED verdicts ──
     //
     // Replayed as the pinned tests write them — same rule ids, same additions,
     // same dispatchers, and for the file arm the same REAL temp worktree (no
     // injected reader), because that is what `record-runtime.test.ts:336-395` does.
+    //
+    // BOTH this replay and the M3 null/empty split below are properties of the
+    // SPECIMENS set specifically: they replay `record-runtime.test.ts` against the
+    // two exemplar transcriptions, and they hand-construct controls from
+    // specimen (d)'s `requires.scope: file` YAML. No other record set carries
+    // either, so on another set they are SKIPPED with a named reason rather than
+    // approximated against a record that is not the pins' subject.
+    const pinsApply = recordSet === 'specimens';
     const pins: { pin: string; ok: boolean; detail: string }[] = [];
-    function pin(name: string, ok: boolean, detail: string): void {
-      pins.push({ pin: name, ok, detail });
-      checks.check(`PIN — ${name}`, ok, detail);
+    const splitMatrix: Record<string, Record<string, { sync: number; bounded: number }>> = {};
+    if (!pinsApply) {
+      checks.check(
+        'PIN REPRODUCTION + M3 NULL/EMPTY SPLIT — SKIPPED with a named reason: both replay `record-runtime.test.ts` against the two exemplar transcriptions, which only the `specimens` record set carries',
+        true,
+        `record set ${recordSet}; exemplar transcriptions in the loaded set: ${intake.rows.filter((r) => r.specimen.exemplarFactory).length}`,
+      );
     }
+    if (pinsApply) {
+      function pin(name: string, ok: boolean, detail: string): void {
+        pins.push({ pin: name, ok, detail });
+        checks.check(`PIN — ${name}`, ok, detail);
+      }
 
-    const dLine = compiled.get('d-line')!.rule;
-    const add = (file: string, line: string, lineNumber = 1) => ({
-      file,
-      line,
-      lineNumber,
-      precedingLine: null,
-    });
+      const dLine = compiled.get('d-line')!.rule;
+      const add = (file: string, line: string, lineNumber = 1) => ({
+        file,
+        line,
+        lineNumber,
+        precedingLine: null,
+      });
 
-    const pinBad = core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('scripts/x.sh', 'git log --oneline')],
-    );
-    pin(
-      'd-line (test:289-304) FIRES on its own `bad` example, lessonHash === the pinned RULE_ID',
-      pinBad.length === 1 && pinBad[0].rule.lessonHash === PINNED_RULE_ID,
-      `${pinBad.length} violation(s), hash=${pinBad[0]?.rule.lessonHash}`,
-    );
-    const pinGood = core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('scripts/x.sh', 'LC_ALL=C git log --oneline')],
-    );
-    pin(
-      'd-line (test:298-303) stays SILENT on its own `good` example',
-      pinGood.length === 0,
-      `${pinGood.length} violation(s)`,
-    );
-
-    const evGood: string[] = [];
-    core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('scripts/x.sh', 'LC_ALL=C git log --oneline')],
-      (k: string) => evGood.push(k),
-    );
-    const evBad: string[] = [];
-    core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('scripts/x.sh', 'git log --oneline')],
-      (k: string) => evBad.push(k),
-    );
-    pin(
-      'd-line (test:306-324) required-context-present emits NO event; firing emits exactly [trigger]',
-      JSON.stringify(evGood) === '[]' && JSON.stringify(evBad) === '["trigger"]',
-      `good=${JSON.stringify(evGood)} bad=${JSON.stringify(evBad)}`,
-    );
-    const pinTs = core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('scripts/x.ts', 'git log --oneline')],
-    );
-    const pinCjs = core.applyRulesToAdditions(
-      ctx(),
-      [dLine],
-      [add('deep/nest/x.cjs', 'git log --oneline')],
-    );
-    pin(
-      'd-line (test:326-333) record dialect at dispatch — `**/*.sh`/`**/*.cjs` match, `.ts` does not',
-      pinTs.length === 0 && pinCjs.length === 1,
-      `.ts=${pinTs.length} .cjs=${pinCjs.length}`,
-    );
-
-    // d-file: the pinned block builds a REAL worktree and passes NO reader.
-    const dFile = compiled.get('d-file')!.rule;
-    const pinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-'));
-    // try/finally: any throw between mkdtemp and rmSync would otherwise ORPHAN
-    // the temp worktree, and a failing run is exactly when that happens.
-    try {
-      fs.mkdirSync(path.join(pinDir, 'scripts'), { recursive: true });
-      fs.writeFileSync(
-        path.join(pinDir, 'scripts', 'pinned.sh'),
-        ['export LC_ALL=C', 'git log --oneline'].join('\n'),
-        'utf-8',
-      );
-      fs.writeFileSync(
-        path.join(pinDir, 'scripts', 'unpinned.sh'),
-        ['git log --oneline'].join('\n'),
-        'utf-8',
-      );
-
-      const pinSatisfied = core.applyRulesToAdditions(
+      const pinBad = core.applyRulesToAdditions(
         ctx(),
-        [dFile],
-        [add('scripts/pinned.sh', 'git log --oneline', 2)],
-        undefined,
-        pinDir,
+        [dLine],
+        [add('scripts/x.sh', 'git log --oneline')],
       );
       pin(
-        'd-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file',
-        pinSatisfied.length === 0,
-        `${pinSatisfied.length} violation(s)`,
+        'd-line (test:289-304) FIRES on its own `bad` example, lessonHash === the pinned RULE_ID',
+        pinBad.length === 1 && pinBad[0].rule.lessonHash === PINNED_RULE_ID,
+        `${pinBad.length} violation(s), hash=${pinBad[0]?.rule.lessonHash}`,
       );
-      const pinUnsatisfied = core.applyRulesToAdditions(
+      const pinGood = core.applyRulesToAdditions(
         ctx(),
-        [dFile],
-        [add('scripts/unpinned.sh', 'git log --oneline')],
-        undefined,
-        pinDir,
+        [dLine],
+        [add('scripts/x.sh', 'LC_ALL=C git log --oneline')],
       );
       pin(
-        'd-file (test:374-383) FIRES when the file never satisfies the requirement',
-        pinUnsatisfied.length === 1,
-        `${pinUnsatisfied.length} violation(s)`,
+        'd-line (test:298-303) stays SILENT on its own `good` example',
+        pinGood.length === 0,
+        `${pinGood.length} violation(s)`,
       );
-      const pinAbsent = core.applyRulesToAdditions(
-        ctx(),
-        [dFile],
-        [add('scripts/absent.sh', 'git log --oneline')],
-        undefined,
-        pinDir,
-      );
-      pin(
-        'd-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)',
-        pinAbsent.length === 1,
-        `${pinAbsent.length} violation(s)`,
-      );
-    } finally {
-      fs.rmSync(pinDir, { recursive: true, force: true });
-    }
 
-    // e: the ast pins, replayed with the pinned `run()` helper's exact shape.
-    const eRule = compiled.get('e')!.rule;
-    const eExamples = compiled.get('e')!.record.examples as { bad: string; good: string }[];
-    const runE = async (file: string, source: string) =>
-      core.applyAstRulesToAdditions(
+      const evGood: string[] = [];
+      core.applyRulesToAdditions(
+        ctx(),
+        [dLine],
+        [add('scripts/x.sh', 'LC_ALL=C git log --oneline')],
+        (k: string) => evGood.push(k),
+      );
+      const evBad: string[] = [];
+      core.applyRulesToAdditions(
+        ctx(),
+        [dLine],
+        [add('scripts/x.sh', 'git log --oneline')],
+        (k: string) => evBad.push(k),
+      );
+      pin(
+        'd-line (test:306-324) required-context-present emits NO event; firing emits exactly [trigger]',
+        JSON.stringify(evGood) === '[]' && JSON.stringify(evBad) === '["trigger"]',
+        `good=${JSON.stringify(evGood)} bad=${JSON.stringify(evBad)}`,
+      );
+      const pinTs = core.applyRulesToAdditions(
+        ctx(),
+        [dLine],
+        [add('scripts/x.ts', 'git log --oneline')],
+      );
+      const pinCjs = core.applyRulesToAdditions(
+        ctx(),
+        [dLine],
+        [add('deep/nest/x.cjs', 'git log --oneline')],
+      );
+      pin(
+        'd-line (test:326-333) record dialect at dispatch — `**/*.sh`/`**/*.cjs` match, `.ts` does not',
+        pinTs.length === 0 && pinCjs.length === 1,
+        `.ts=${pinTs.length} .cjs=${pinCjs.length}`,
+      );
+
+      // d-file: the pinned block builds a REAL worktree and passes NO reader.
+      const dFile = compiled.get('d-file')!.rule;
+      const pinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-p310-'));
+      // try/finally: any throw between mkdtemp and rmSync would otherwise ORPHAN
+      // the temp worktree, and a failing run is exactly when that happens.
+      try {
+        fs.mkdirSync(path.join(pinDir, 'scripts'), { recursive: true });
+        fs.writeFileSync(
+          path.join(pinDir, 'scripts', 'pinned.sh'),
+          ['export LC_ALL=C', 'git log --oneline'].join('\n'),
+          'utf-8',
+        );
+        fs.writeFileSync(
+          path.join(pinDir, 'scripts', 'unpinned.sh'),
+          ['git log --oneline'].join('\n'),
+          'utf-8',
+        );
+
+        const pinSatisfied = core.applyRulesToAdditions(
+          ctx(),
+          [dFile],
+          [add('scripts/pinned.sh', 'git log --oneline', 2)],
+          undefined,
+          pinDir,
+        );
+        pin(
+          'd-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file',
+          pinSatisfied.length === 0,
+          `${pinSatisfied.length} violation(s)`,
+        );
+        const pinUnsatisfied = core.applyRulesToAdditions(
+          ctx(),
+          [dFile],
+          [add('scripts/unpinned.sh', 'git log --oneline')],
+          undefined,
+          pinDir,
+        );
+        pin(
+          'd-file (test:374-383) FIRES when the file never satisfies the requirement',
+          pinUnsatisfied.length === 1,
+          `${pinUnsatisfied.length} violation(s)`,
+        );
+        const pinAbsent = core.applyRulesToAdditions(
+          ctx(),
+          [dFile],
+          [add('scripts/absent.sh', 'git log --oneline')],
+          undefined,
+          pinDir,
+        );
+        pin(
+          'd-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)',
+          pinAbsent.length === 1,
+          `${pinAbsent.length} violation(s)`,
+        );
+      } finally {
+        fs.rmSync(pinDir, { recursive: true, force: true });
+      }
+
+      // e: the ast pins, replayed with the pinned `run()` helper's exact shape.
+      const eRule = compiled.get('e')!.rule;
+      const eExamples = compiled.get('e')!.record.examples as { bad: string; good: string }[];
+      const runE = async (file: string, source: string) =>
+        core.applyAstRulesToAdditions(
+          ctx(),
+          [eRule],
+          [add(file, source)],
+          os.tmpdir(),
+          undefined,
+          undefined,
+          async () => source,
+        );
+      const eBad = await runE('packages/core/src/a.ts', eExamples[0]!.bad);
+      pin(
+        'e (test:415-420) FIRES on its own `bad` example; hash === RULE_ID; message names the ban',
+        eBad.length === 1 &&
+          eBad[0].rule.lessonHash === PINNED_RULE_ID &&
+          String(eBad[0].rule.message).includes('fail-open catch is banned'),
+        `${eBad.length} violation(s), hash=${eBad[0]?.rule.lessonHash}`,
+      );
+      const eGood = await runE('packages/core/src/a.ts', eExamples[0]!.good);
+      pin(
+        'e (test:422-424) stays SILENT on its own `good` example',
+        eGood.length === 0,
+        `${eGood.length}`,
+      );
+      const eExcluded = await runE('packages/core/src/a.test.ts', eExamples[0]!.bad);
+      pin(
+        'e (test:426-428) honours `excludeGlobs` at dispatch — the same bad source in a test file is out of scope',
+        eExcluded.length === 0,
+        `${eExcluded.length}`,
+      );
+      const eOutside = await runE('scripts/a.ts', eExamples[0]!.bad);
+      pin(
+        'e (test:430-432) honours the positive glob — the same bad source outside `packages/` is out of scope',
+        eOutside.length === 0,
+        `${eOutside.length}`,
+      );
+
+      // ── § Invariants floor (iii): requires-satisfied ⇒ no violation AND no suppress event ──
+      //
+      // On BOTH regex arms, and contrasted against a real `// totem-ignore`
+      // suppression so "silence" and "suppression" are shown to be distinguishable
+      // at the dispatcher seam rather than asserted to be.
+      const satisfiedAdds = additionsOf('scripts/x.sh', ['LC_ALL=C git log --oneline']);
+      const s1 = collector();
+      const sv1 = core.applyRulesToAdditions(
+        ctx(),
+        [dLine],
+        satisfiedAdds,
+        s1.onRuleEvent,
+        workRoot,
+      );
+      const s2 = collector();
+      const sr2 = await core.applyRulesToAdditionsBounded(
+        ctx(),
+        [dLine],
+        satisfiedAdds,
+        { evaluator, timeoutMode: 'strict', repoRoot: workRoot },
+        s2.onRuleEvent,
+      );
+      checks.check(
+        'REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the sync arm',
+        sv1.length === 0 && s1.events.length === 0,
+        `${sv1.length} violations, events=${JSON.stringify(s1.events.map((e) => e.kind))}`,
+      );
+      checks.check(
+        'REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the bounded arm',
+        sr2.violations.length === 0 && s2.events.length === 0,
+        `${sr2.violations.length} violations, events=${JSON.stringify(s2.events.map((e) => e.kind))}`,
+      );
+
+      // The contrast: a PLAIN `// totem-ignore` (never `totem-context:` — the
+      // fail-soft attestation machinery at rule-engine.ts:498-510 injects an extra
+      // engine Violation, which would contaminate the multiset).
+      const ignoredAdds = additionsOf('scripts/x.sh', ['git log --oneline // totem-ignore']);
+      const i1 = collector();
+      const iv1 = core.applyRulesToAdditions(ctx(), [dLine], ignoredAdds, i1.onRuleEvent, workRoot);
+      checks.check(
+        'CONTRAST — a plain `// totem-ignore` also yields no violation, but DOES emit a `suppress` event',
+        iv1.length === 0 && i1.events.some((e) => e.kind === 'suppress'),
+        `${iv1.length} violations, events=${JSON.stringify(i1.events.map((e) => e.kind))}`,
+      );
+      checks.check(
+        'CONTRAST — requires-silence and totem-ignore-suppression are therefore DISTINGUISHABLE at the seam',
+        s1.events.length === 0 && i1.events.some((e) => e.kind === 'suppress'),
+        `requires-satisfied events=${JSON.stringify(s1.events.map((e) => e.kind))} vs ignore events=${JSON.stringify(i1.events.map((e) => e.kind))}`,
+      );
+
+      // The same contrast on the ast arm, using specimen (e) — the spec's synthetic
+      // suppression arm for the exception specimen.
+      const eIgnoreSource = `${eExamples[0]!.bad} // totem-ignore`;
+      const ei = collector();
+      const eIgnored = await core.applyAstRulesToAdditions(
         ctx(),
         [eRule],
-        [add(file, source)],
+        additionsOf('packages/core/src/a.ts', [eIgnoreSource]),
         os.tmpdir(),
+        ei.onRuleEvent,
         undefined,
-        undefined,
-        async () => source,
-      );
-    const eBad = await runE('packages/core/src/a.ts', eExamples[0]!.bad);
-    pin(
-      'e (test:415-420) FIRES on its own `bad` example; hash === RULE_ID; message names the ban',
-      eBad.length === 1 &&
-        eBad[0].rule.lessonHash === PINNED_RULE_ID &&
-        String(eBad[0].rule.message).includes('fail-open catch is banned'),
-      `${eBad.length} violation(s), hash=${eBad[0]?.rule.lessonHash}`,
-    );
-    const eGood = await runE('packages/core/src/a.ts', eExamples[0]!.good);
-    pin(
-      'e (test:422-424) stays SILENT on its own `good` example',
-      eGood.length === 0,
-      `${eGood.length}`,
-    );
-    const eExcluded = await runE('packages/core/src/a.test.ts', eExamples[0]!.bad);
-    pin(
-      'e (test:426-428) honours `excludeGlobs` at dispatch — the same bad source in a test file is out of scope',
-      eExcluded.length === 0,
-      `${eExcluded.length}`,
-    );
-    const eOutside = await runE('scripts/a.ts', eExamples[0]!.bad);
-    pin(
-      'e (test:430-432) honours the positive glob — the same bad source outside `packages/` is out of scope',
-      eOutside.length === 0,
-      `${eOutside.length}`,
-    );
-
-    // ── § Invariants floor (iii): requires-satisfied ⇒ no violation AND no suppress event ──
-    //
-    // On BOTH regex arms, and contrasted against a real `// totem-ignore`
-    // suppression so "silence" and "suppression" are shown to be distinguishable
-    // at the dispatcher seam rather than asserted to be.
-    const satisfiedAdds = additionsOf('scripts/x.sh', ['LC_ALL=C git log --oneline']);
-    const s1 = collector();
-    const sv1 = core.applyRulesToAdditions(ctx(), [dLine], satisfiedAdds, s1.onRuleEvent, workRoot);
-    const s2 = collector();
-    const sr2 = await core.applyRulesToAdditionsBounded(
-      ctx(),
-      [dLine],
-      satisfiedAdds,
-      { evaluator, timeoutMode: 'strict', repoRoot: workRoot },
-      s2.onRuleEvent,
-    );
-    checks.check(
-      'REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the sync arm',
-      sv1.length === 0 && s1.events.length === 0,
-      `${sv1.length} violations, events=${JSON.stringify(s1.events.map((e) => e.kind))}`,
-    );
-    checks.check(
-      'REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the bounded arm',
-      sr2.violations.length === 0 && s2.events.length === 0,
-      `${sr2.violations.length} violations, events=${JSON.stringify(s2.events.map((e) => e.kind))}`,
-    );
-
-    // The contrast: a PLAIN `// totem-ignore` (never `totem-context:` — the
-    // fail-soft attestation machinery at rule-engine.ts:498-510 injects an extra
-    // engine Violation, which would contaminate the multiset).
-    const ignoredAdds = additionsOf('scripts/x.sh', ['git log --oneline // totem-ignore']);
-    const i1 = collector();
-    const iv1 = core.applyRulesToAdditions(ctx(), [dLine], ignoredAdds, i1.onRuleEvent, workRoot);
-    checks.check(
-      'CONTRAST — a plain `// totem-ignore` also yields no violation, but DOES emit a `suppress` event',
-      iv1.length === 0 && i1.events.some((e) => e.kind === 'suppress'),
-      `${iv1.length} violations, events=${JSON.stringify(i1.events.map((e) => e.kind))}`,
-    );
-    checks.check(
-      'CONTRAST — requires-silence and totem-ignore-suppression are therefore DISTINGUISHABLE at the seam',
-      s1.events.length === 0 && i1.events.some((e) => e.kind === 'suppress'),
-      `requires-satisfied events=${JSON.stringify(s1.events.map((e) => e.kind))} vs ignore events=${JSON.stringify(i1.events.map((e) => e.kind))}`,
-    );
-
-    // The same contrast on the ast arm, using specimen (e) — the spec's synthetic
-    // suppression arm for the exception specimen.
-    const eIgnoreSource = `${eExamples[0]!.bad} // totem-ignore`;
-    const ei = collector();
-    const eIgnored = await core.applyAstRulesToAdditions(
-      ctx(),
-      [eRule],
-      additionsOf('packages/core/src/a.ts', [eIgnoreSource]),
-      os.tmpdir(),
-      ei.onRuleEvent,
-      undefined,
-      async () => eIgnoreSource,
-    );
-    checks.check(
-      'CONTRAST (ast arm) — plain `// totem-ignore` on the matched construct suppresses and emits `suppress`',
-      eIgnored.length === 0 && ei.events.some((e) => e.kind === 'suppress'),
-      `${eIgnored.length} violations, events=${JSON.stringify(ei.events.map((e) => e.kind))}`,
-    );
-
-    // ── § Invariants floor (iv): the null / empty split ──
-    //
-    // HAND-CONSTRUCTED per the spec: the pinned requirement `LC_ALL=C` does not
-    // match `''`, so it cannot expose the split on its own. Two extra records are
-    // lowered whose `requires.pattern` DOES match the empty string (`a*`, `^$`).
-    // Everything else — target, scope, severity — is held fixed, so the only
-    // moving part is whether the requirement matches `''`.
-    const dFileYaml = compiled.get('d-file')!.yamlText;
-    function withRequires(pattern: string): any {
-      // A FUNCTION replacer, never a string one: `$'` / `$&` / `` $` `` are
-      // substitution directives in a string replacement, so a requirement like
-      // `^$` would silently splice the rest of the document in. (Measured: it did.)
-      const yaml = dFileYaml.replace(/^  pattern: 'LC_ALL=C'$/m, () => `  pattern: '${pattern}'`);
-      if (yaml === dFileYaml)
-        throw new Error(`requires-pattern substitution missed for ${pattern}`);
-      const outcome = core.compileRuleRecord(
-        core.parseRuleRecord(
-          yaml,
-          `spikes/spine-adopt/records/CONTROL-requires-${pattern}.rule.yaml`,
-        ),
-        { ruleId: PINNED_RULE_ID, now: PINNED_NOW },
-      );
-      if (outcome.kind !== 'compiled')
-        throw new Error(`control requires:'${pattern}' did not lower: ${outcome.reason}`);
-      return outcome.rule;
-    }
-
-    const splitAdds = additionsOf('scripts/probe.sh', ['git log --oneline']);
-    async function verdictFor(
-      rule: any,
-      fileText: string | null,
-    ): Promise<{ sync: number; bounded: number }> {
-      const read = (p: string) => (p === 'scripts/probe.sh' ? fileText : null);
-      const sync = core.applyRulesToAdditions(ctx(), [rule], splitAdds, undefined, workRoot, read);
-      const bounded = await core.applyRulesToAdditionsBounded(
-        ctx(),
-        [rule],
-        splitAdds,
-        {
-          evaluator,
-          timeoutMode: 'strict',
-          repoRoot: workRoot,
-          readStrategy: async (p: string) => read(p),
-        },
-        undefined,
-      );
-      return { sync: sync.length, bounded: bounded.violations.length };
-    }
-
-    const splitMatrix: Record<string, Record<string, { sync: number; bounded: number }>> = {};
-    const controls: { label: string; rule: any; matchesEmpty: boolean }[] = [
-      { label: "LC_ALL=C (pinned — does NOT match '')", rule: dFile, matchesEmpty: false },
-      { label: "a* (matches '')", rule: withRequires('a*'), matchesEmpty: true },
-      { label: "^$ (matches '')", rule: withRequires('^$'), matchesEmpty: true },
-    ];
-    for (const c of controls) {
-      checks.eq(
-        `CONTROL requires:'${c.label}' — the JS matcher's own verdict on the empty string`,
-        new RegExp(c.rule.requires.pattern).test(''),
-        c.matchesEmpty,
-      );
-      splitMatrix[c.label] = {
-        null: await verdictFor(c.rule, null),
-        empty: await verdictFor(c.rule, ''),
-        content: await verdictFor(c.rule, 'export LC_ALL=C\ngit log --oneline'),
-      };
-    }
-
-    for (const c of controls) {
-      const m = splitMatrix[c.label]!;
-      checks.check(
-        `NULL ARM — requires:'${c.label}' with fileText:null FIRES on both arms (fail toward flagging)`,
-        m.null!.sync === 1 && m.null!.bounded === 1,
-        `sync=${m.null!.sync} bounded=${m.null!.bounded}`,
+        async () => eIgnoreSource,
       );
       checks.check(
-        `EMPTY ARM — requires:'${c.label}' with fileText:'' ${c.matchesEmpty ? 'is SATISFIED (silent)' : 'is UNMET (fires)'} on both arms`,
-        c.matchesEmpty
-          ? m.empty!.sync === 0 && m.empty!.bounded === 0
-          : m.empty!.sync === 1 && m.empty!.bounded === 1,
-        `sync=${m.empty!.sync} bounded=${m.empty!.bounded}`,
+        'CONTRAST (ast arm) — plain `// totem-ignore` on the matched construct suppresses and emits `suppress`',
+        eIgnored.length === 0 && ei.events.some((e) => e.kind === 'suppress'),
+        `${eIgnored.length} violations, events=${JSON.stringify(ei.events.map((e) => e.kind))}`,
+      );
+
+      // ── § Invariants floor (iv): the null / empty split ──
+      //
+      // HAND-CONSTRUCTED per the spec: the pinned requirement `LC_ALL=C` does not
+      // match `''`, so it cannot expose the split on its own. Two extra records are
+      // lowered whose `requires.pattern` DOES match the empty string (`a*`, `^$`).
+      // Everything else — target, scope, severity — is held fixed, so the only
+      // moving part is whether the requirement matches `''`.
+      const dFileYaml = compiled.get('d-file')!.yamlText;
+      function withRequires(pattern: string): any {
+        // A FUNCTION replacer, never a string one: `$'` / `$&` / `` $` `` are
+        // substitution directives in a string replacement, so a requirement like
+        // `^$` would silently splice the rest of the document in. (Measured: it did.)
+        const yaml = dFileYaml.replace(/^  pattern: 'LC_ALL=C'$/m, () => `  pattern: '${pattern}'`);
+        if (yaml === dFileYaml)
+          throw new Error(`requires-pattern substitution missed for ${pattern}`);
+        const outcome = core.compileRuleRecord(
+          core.parseRuleRecord(
+            yaml,
+            `spikes/spine-adopt/records/CONTROL-requires-${pattern}.rule.yaml`,
+          ),
+          { ruleId: PINNED_RULE_ID, now: PINNED_NOW },
+        );
+        if (outcome.kind !== 'compiled')
+          throw new Error(`control requires:'${pattern}' did not lower: ${outcome.reason}`);
+        return outcome.rule;
+      }
+
+      const splitAdds = additionsOf('scripts/probe.sh', ['git log --oneline']);
+      async function verdictFor(
+        rule: any,
+        fileText: string | null,
+      ): Promise<{ sync: number; bounded: number }> {
+        const read = (p: string) => (p === 'scripts/probe.sh' ? fileText : null);
+        const sync = core.applyRulesToAdditions(
+          ctx(),
+          [rule],
+          splitAdds,
+          undefined,
+          workRoot,
+          read,
+        );
+        const bounded = await core.applyRulesToAdditionsBounded(
+          ctx(),
+          [rule],
+          splitAdds,
+          {
+            evaluator,
+            timeoutMode: 'strict',
+            repoRoot: workRoot,
+            readStrategy: async (p: string) => read(p),
+          },
+          undefined,
+        );
+        return { sync: sync.length, bounded: bounded.violations.length };
+      }
+
+      const controls: { label: string; rule: any; matchesEmpty: boolean }[] = [
+        { label: "LC_ALL=C (pinned — does NOT match '')", rule: dFile, matchesEmpty: false },
+        { label: "a* (matches '')", rule: withRequires('a*'), matchesEmpty: true },
+        { label: "^$ (matches '')", rule: withRequires('^$'), matchesEmpty: true },
+      ];
+      for (const c of controls) {
+        checks.eq(
+          `CONTROL requires:'${c.label}' — the JS matcher's own verdict on the empty string`,
+          new RegExp(c.rule.requires.pattern).test(''),
+          c.matchesEmpty,
+        );
+        splitMatrix[c.label] = {
+          null: await verdictFor(c.rule, null),
+          empty: await verdictFor(c.rule, ''),
+          content: await verdictFor(c.rule, 'export LC_ALL=C\ngit log --oneline'),
+        };
+      }
+
+      for (const c of controls) {
+        const m = splitMatrix[c.label]!;
+        checks.check(
+          `NULL ARM — requires:'${c.label}' with fileText:null FIRES on both arms (fail toward flagging)`,
+          m.null!.sync === 1 && m.null!.bounded === 1,
+          `sync=${m.null!.sync} bounded=${m.null!.bounded}`,
+        );
+        checks.check(
+          `EMPTY ARM — requires:'${c.label}' with fileText:'' ${c.matchesEmpty ? 'is SATISFIED (silent)' : 'is UNMET (fires)'} on both arms`,
+          c.matchesEmpty
+            ? m.empty!.sync === 0 && m.empty!.bounded === 0
+            : m.empty!.sync === 1 && m.empty!.bounded === 1,
+          `sync=${m.empty!.sync} bounded=${m.empty!.bounded}`,
+        );
+      }
+      checks.check(
+        "M3 SPLIT — null and '' DIVERGE on a ''-matching requirement, and AGREE on one that does not",
+        splitMatrix["a* (matches '')"]!.null!.sync !==
+          splitMatrix["a* (matches '')"]!.empty!.sync &&
+          splitMatrix["^$ (matches '')"]!.null!.sync !==
+            splitMatrix["^$ (matches '')"]!.empty!.sync &&
+          splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.null!.sync ===
+            splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.empty!.sync,
+        JSON.stringify(splitMatrix),
       );
     }
-    checks.check(
-      "M3 SPLIT — null and '' DIVERGE on a ''-matching requirement, and AGREE on one that does not",
-      splitMatrix["a* (matches '')"]!.null!.sync !== splitMatrix["a* (matches '')"]!.empty!.sync &&
-        splitMatrix["^$ (matches '')"]!.null!.sync !==
-          splitMatrix["^$ (matches '')"]!.empty!.sync &&
-        splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.null!.sync ===
-          splitMatrix["LC_ALL=C (pinned — does NOT match '')"]!.empty!.sync,
-      JSON.stringify(splitMatrix),
-    );
 
     // ── artifact ──
     const out = writeArtifact('shipped-verdicts.json', {

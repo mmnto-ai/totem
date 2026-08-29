@@ -1,0 +1,23 @@
+schemaVersion: 1
+
+severity: warning
+message: 'BSD sed on macOS does not support \x1b hex escapes. Use perl or ''col -b'' to strip ANSI color codes for cross-platform compatibility.'
+
+target:
+  type: regex
+  pattern: 'sed\s+.*\\x1b'
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.zsh'
+      - '**/*.ksh'
+
+examples:
+  - bad: |-
+      sed 's/\x1b\[[0-9;]*m//g' totem-lint.log
+    good: |-
+      perl -pe 's/\e\[[0-9;]*m//g' totem-lint.log
+
+curation:
+  sourceLesson: 'lesson-89184bb5fd960848'

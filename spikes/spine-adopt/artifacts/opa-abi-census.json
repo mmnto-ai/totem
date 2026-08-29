@@ -3,8 +3,9 @@
   "contract": "rego/LOWERING.md § Host contract (\"enumerates EVERY import the wasm instance requires\") + spec § Spike 1 (\"all imports/builtins enumerated\"; \"Census required builtins and OPA ABI imports BEFORE choosing the host path\")",
   "opaVersion": "1.20.0",
   "headline": {
-    "hostImplementedBuiltinsAcrossAll7": [],
-    "distinctImportsAcrossAll7": [
+    "censusedPolicies": 7,
+    "hostImplementedBuiltinsAcrossAll": [],
+    "distinctImportsAcrossAll": [
       "env.memory:memory",
       "env.opa_abort:function",
       "env.opa_builtin0:function",
@@ -1695,5 +1696,7 @@
       "ok": true,
       "detail": "[]"
     }
-  ]
+  ],
+  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340",
+  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }
