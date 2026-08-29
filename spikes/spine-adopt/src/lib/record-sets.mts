@@ -237,8 +237,17 @@ function requiresScopeFile(yamlText: string): boolean {
  * specimen id are EXACTLY this list. Declared here and measured there, deliberately:
  * a control whose bundles silently went missing would otherwise be an absence, and
  * an absence is the one thing a run cannot notice about itself.
+ *
+ * (fold 2 H9, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The M3 pair is
+ * declared for the FIRST `requires.scope: file` CONTROL row of the loaded set only,
+ * mirroring `src/facts.mts`'s own `find`: that stage mints the null/empty split ONCE,
+ * for the first such row, so a second control record of the same shape would have
+ * been declared to mint bundles nobody was ever going to mint — and the F5 check
+ * would have failed for a control that behaved exactly as designed. `rows` is the
+ * whole loaded set precisely so the declaration is a property of the SET, not of the
+ * row read in isolation.
  */
-export function controlBundleFixtureIds(row: RecordRow): string[] {
+export function controlBundleFixtureIds(row: RecordRow, rows: readonly RecordRow[]): string[] {
   const yamlText = fs.readFileSync(row.recordFile, 'utf-8');
   const pairs = examplePairCountOf(yamlText, path.basename(row.recordFile));
   const ids: string[] = [];
@@ -247,7 +256,10 @@ export function controlBundleFixtureIds(row: RecordRow): string[] {
       ids.push(`${row.id}-inline${pairs > 1 ? `${i}` : ''}-${arm}`);
     }
   }
-  if (requiresScopeFile(yamlText)) {
+  const firstM3 = rows.find(
+    (r) => r.control && requiresScopeFile(fs.readFileSync(r.recordFile, 'utf-8')),
+  );
+  if (requiresScopeFile(yamlText) && firstM3 === row) {
     ids.push(`${row.id}-control-unreadable`, `${row.id}-control-empty`);
   }
   return ids;
@@ -743,7 +755,14 @@ export const PROBE_GENERATION_RULE =
 /** The pinned expectation the generator is asserted against (`seed/probe-pairs.json`). */
 export const PROBE_PAIRS_FILE = path.join(SEED_DIR, 'probe-pairs.json');
 
-let seed20ProbePathsCache: readonly string[] | null = null;
+/**
+ * (fold 2 H11) The memo, KEYED BY RECORD SET.
+ *
+ * A single-slot cache was correct only because the one caller that reaches it is the
+ * seed branch; keyed by set id it cannot become wrong if another set ever memoises
+ * here, and the key says what the cached value is a function of.
+ */
+const sharedProbePathsCache = new Map<RecordSetId, readonly string[]>();
 
 /**
  * The shared probe list for a record set.
@@ -766,24 +785,31 @@ let seed20ProbePathsCache: readonly string[] | null = null;
  * Deduped and sorted by CODEPOINT, so the list is a function of the corpus rather
  * than of an emission order.
  *
- * The K5 control row's `inlineFilePath` is deliberately NOT here: the control is not
- * a seed record, its path is not part of the scored corpus's scope question, and
- * `src/lower.mts` probes every row's own inline path per record anyway (`probePaths`
- * appends `s.inlineFilePath` to the shared list for the row being lowered). Adding
- * it to the SHARED list would sweep a control's path across all 23 packages.
+ * The K5 control row's `inlineFilePath` is not ADDED here — and it does not have to
+ * be. (fold 2 H11, the fact rather than the intention:) the control row is built from
+ * the `d-file` specimen declaration, whose `inlineFilePath` is `scripts/x.sh`
+ * (`src/lib/specimens.mts`), and `scripts/x.sh` is ALREADY one of the frozen 22
+ * (`SPECIMEN_PROBE_PATHS` above). So it is in the shared list on every set, by way of
+ * the frozen literals, and no branch here can remove it. What this function does not
+ * do is append control rows' inline paths as a CLASS: the controls are not scored
+ * records, and `src/lower.mts` probes each row's own inline path per record anyway
+ * (`probePaths` appends `s.inlineFilePath` to the shared list for the row being
+ * lowered).
  */
 export function sharedProbePaths(setId: RecordSetId): readonly string[] {
   if (setId !== 'seed20') return SPECIMEN_PROBE_PATHS;
-  // Memoised per process: `src/lower.mts` calls this once per record (and again in
-  // each check name), and the seed corpus is frozen for the whole run — 22 record
-  // reads plus the glob census per call would be pure re-work.
-  if (seed20ProbePathsCache !== null) return seed20ProbePathsCache;
+  // Memoised per process (keyed by set — fold 2 H11): `src/lower.mts` calls this once
+  // per record (and again in each check name), and the seed corpus is frozen for the
+  // whole run — 22 record reads plus the glob census per call would be pure re-work.
+  const cached = sharedProbePathsCache.get(setId);
+  if (cached !== undefined) return cached;
   const seedRows = loadRecordSet('seed20').filter((r) => !r.control);
   const inlinePaths = seedRows.map((r) => r.inlineFilePath);
   const fixtureFiles = seedRows.flatMap((r) => (r.fixture ? [r.fixture.file] : []));
   const generated = generatedSeedProbes().flatMap((p) => [p.probe, p.twin]);
-  seed20ProbePathsCache = [
+  const list = [
     ...new Set([...SPECIMEN_PROBE_PATHS, ...inlinePaths, ...fixtureFiles, ...generated]),
   ].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  return seed20ProbePathsCache;
+  sharedProbePathsCache.set(setId, list);
+  return list;
 }

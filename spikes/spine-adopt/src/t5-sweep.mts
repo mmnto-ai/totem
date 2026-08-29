@@ -48,11 +48,28 @@ import {
 
 const TEMPLATE_FILE = path.join(REGO_DIR, 't5-sweep.rego.tmpl');
 
-/** The exact argv this stage runs, with the per-package holes named. */
+/**
+ * The exact argv this stage runs, with the per-package holes named.
+ *
+ * (fold 2 H8, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The POLICY path carries
+ * the `<subdir>` hole too. It always did in fact — `LOWERED_PUBLISH_DIR` derives from
+ * `ARTIFACTS_DIR`, which is subdir-aware (C10) — but the published template named
+ * `artifacts/lowered/…`, so a reader reproducing a K4 or control-only sweep would have
+ * pointed `opa eval` at the run of record's policies while believing they were the
+ * subdir'd ones. The empty-subdir convention is the same on both holes and is stated
+ * in the deposit's `contract`.
+ */
 const INVOCATION =
   '<OPA_BIN> eval --format=json --strict-builtin-errors ' +
-  '-d artifacts/lowered/<pkg>/policy.rego -d rego/build/<subdir>/<pkg>/t5-sweep.rego ' +
+  '-d artifacts/<subdir>/lowered/<pkg>/policy.rego -d rego/build/<subdir>/<pkg>/t5-sweep.rego ' +
   '-i <input.json> data.t5sweep.in_scope_paths';
+
+/**
+ * (fold 2 H8) What an EMPTY `<subdir>` means in the two paths above, stated once and
+ * carried into the deposit's `contract` on both arms.
+ */
+const SUBDIR_HOLE_NOTE =
+  'In `invocation`/`argv`, `<subdir>` is `manifest.artifactsSubdir`; when it is null the segment is ELIDED, not empty — `artifacts/lowered/<pkg>/policy.rego` and `rego/build/<pkg>/t5-sweep.rego`.';
 
 /**
  * (fold 1 F6) The same invocation as an ARGV ARRAY, holes and all — emitted BESIDE
@@ -68,7 +85,7 @@ const INVOCATION_ARGV: readonly string[] = [
   '--format=json',
   '--strict-builtin-errors',
   '-d',
-  'artifacts/lowered/<pkg>/policy.rego',
+  'artifacts/<subdir>/lowered/<pkg>/policy.rego',
   '-d',
   'rego/build/<subdir>/<pkg>/t5-sweep.rego',
   '-i',
@@ -267,8 +284,7 @@ async function main(): Promise<void> {
     );
     const skipped = writeArtifact('t5-sweep.json', {
       generatedBy: 'spikes/spine-adopt/src/t5-sweep.mts',
-      contract:
-        'spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. NOT MEASURED in this run.',
+      contract: `spec \`.totem/specs/seed20-apparatus-slice2.md\` § S6 — T5 scope sweep. NOT MEASURED in this run. ${SUBDIR_HOLE_NOTE}`,
       status: 'SKIPPED — record pin commit not present locally',
       // (fold 1 F17) The SKIPPED arm carries the SAME header and timings keys as the
       // MEASURED one, empty. A consumer that reads `header.policies` or `timings`
@@ -287,6 +303,13 @@ async function main(): Promise<void> {
         policies: {},
         controlPackagesSkipped: [],
       },
+      // (fold 2 H7) `recordSet` and `elapsedMs` mirror the MEASURED arm, in the same
+      // position. Fold 1 F17 mirrored `header` and `timings` and stopped one key
+      // short of the two top-level ones — so a consumer keying a sweep by record set
+      // (the staleness question every other artifact answers) read `undefined` on a
+      // SKIPPED deposit and could not tell it apart from a sweep of another corpus.
+      recordSet,
+      elapsedMs: 0,
       timings: { totalMs: 0, perPackage: {} },
       rows: [],
       probeRows: [],
@@ -309,7 +332,12 @@ async function main(): Promise<void> {
     );
   }
   const listText = fs.readFileSync(listAt, 'utf-8');
-  const paths = listText.split('\n').filter((l) => l.length > 0);
+  // (fold 2 H1) The published list has NO trailing newline, so `split('\n')` yields
+  // exactly the paths and NOTHING is dropped. The filter that used to sit here would
+  // now hide the very drift this re-read exists to catch: a re-appearing trailing
+  // newline would be silently trimmed and the count check would still pass while
+  // `treeSha256` — the file's bytes — moved. The count check below is the guard.
+  const paths = listText.split('\n');
   checks.eq(
     `T5 — the sweep corpus read back from \`artifacts/${TRACKED_PATHS_AT_RECORD_PIN_ARTIFACT}\` is the one the manifest attests (${pinHeader.count} paths)`,
     { count: paths.length, sha256: sha256(listText) },
@@ -458,7 +486,8 @@ async function main(): Promise<void> {
   const out = writeArtifact('t5-sweep.json', {
     generatedBy: 'spikes/spine-adopt/src/t5-sweep.mts',
     contract:
-      "spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. The charter names a per-path pair {in_scope, ruleAppliesToFile}; it is DERIVED from the two sorted lists per package (`in_scope` = path ∈ `inScope`, `ruleAppliesToFile` = path ∈ `shippedApplies`), so the deposit is O(in-scope) rather than O(tree) per package and loses nothing. `rows[]` sweeps the record-pin tree; `probeRows[]` sweeps `manifest.probePaths[]` in the same shape. Every disagreement is listed in full and DEPOSITED, never refused — the scorer types each as that record's T5 scope-divergence. The apparatus refuses only on apparatus fault (an `opa eval` non-zero exit, a lowered package with no entry, a malformed set).",
+      "spec `.totem/specs/seed20-apparatus-slice2.md` § S6 — T5 scope sweep. The charter names a per-path pair {in_scope, ruleAppliesToFile}; it is DERIVED from the two sorted lists per package (`in_scope` = path ∈ `inScope`, `ruleAppliesToFile` = path ∈ `shippedApplies`), so the deposit is O(in-scope) rather than O(tree) per package and loses nothing. `rows[]` sweeps the record-pin tree; `probeRows[]` sweeps `manifest.probePaths[]` in the same shape. Every disagreement is listed in full and DEPOSITED, never refused — the scorer types each as that record's T5 scope-divergence. The apparatus refuses only on apparatus fault (an `opa eval` non-zero exit, a lowered package with no entry, a malformed set). " +
+      SUBDIR_HOLE_NOTE,
     status: 'MEASURED',
     header: {
       recordPin: pinHeader.pin,

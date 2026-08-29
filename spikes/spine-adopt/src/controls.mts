@@ -355,20 +355,29 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
   }
 
   // ── arm B ──
+  //
+  // (fold 2 H2, `.totem/specs/seed20-apparatus-slice2-fold2.md`) The manifest's
+  // `k3Capture.repinned` is DECIDED by this arm — the control-only build's bytes
+  // against the pinned target — so it is reported here, beside the measurement it was
+  // taken from. `null` is "arm B not present in this run", never "the target stands";
+  // the manifest states the outcome and this row says which arm produced it.
+  const manifestRepinned = (manifest?.k3Capture ?? {}).repinned;
+  const repinnedNote = `manifest.k3Capture.repinned=${JSON.stringify(manifestRepinned ?? null)} (from=${JSON.stringify(
+    (manifest?.k3Capture ?? {}).repinnedFrom ?? null,
+  )}) — the manifest's own reading of THIS arm`;
   let armB: { ok: Ok; detail: string; rows: unknown[] };
   const armBChain = readJson(path.join(K3_CONTROL_HOME, 'chains', `${K3_CAPTURE_PACKAGE}.json`));
   const armBPolicyAt = path.join(K3_CONTROL_HOME, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
   if (!fs.existsSync(K3_CONTROL_HOME)) {
     armB = {
       ok: null,
-      detail:
-        'NOT MEASURED — control-only run not present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set)',
+      detail: `NOT MEASURED — control-only run not present: \`artifacts/k3-control/\` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | ${repinnedNote}`,
       rows: [],
     };
   } else if (armBChain === null || !fs.existsSync(armBPolicyAt)) {
     armB = {
       ok: null,
-      detail: `NOT MEASURED — control-only run not present for ${K3_CAPTURE_PACKAGE}: ${armBChain === null ? 'its chain' : 'its published policy.rego'} is absent under artifacts/k3-control/`,
+      detail: `NOT MEASURED — control-only run not present for ${K3_CAPTURE_PACKAGE}: ${armBChain === null ? 'its chain' : 'its published policy.rego'} is absent under artifacts/k3-control/ | ${repinnedNote}`,
       rows: [],
     };
   } else {
@@ -392,12 +401,14 @@ function k3(recordSet: RecordSetId, manifest: Artifact): ControlRow {
     ];
     armB = {
       ok: rows.every((r) => r.eq),
-      detail: rows.every((r) => r.eq)
-        ? 'the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte'
-        : rows
-            .filter((r) => !r.eq)
-            .map((r) => `${r.file}: ${r.sha256} != ${r.expected}`)
-            .join('; '),
+      detail: `${
+        rows.every((r) => r.eq)
+          ? 'the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte'
+          : rows
+              .filter((r) => !r.eq)
+              .map((r) => `${r.file}: ${r.sha256} != ${r.expected}`)
+              .join('; ')
+      } | ${repinnedNote}`,
       rows,
     };
   }
@@ -589,11 +600,57 @@ function k4(): ControlRow {
   };
 }
 
+/**
+ * (fold 2 H4, `.totem/specs/seed20-apparatus-slice2-fold2.md`) Is a Go artifact THIS
+ * RUN's, or a leftover?
+ *
+ * `recordSet` alone cannot answer it. `wazero-probe/artifacts/` is not wiped between
+ * runs, so a second `seed20` run — a re-run after a fix, a K4 swap run, the control
+ * seam — leaves a report that names the right corpus and measured a different one.
+ * The run identity does answer it: `runManifestSha256` is the pre-facts identity of
+ * exactly one run, and the Go arm writes the value it reads from the manifest it
+ * already opens for its header.
+ *
+ * An ABSENT `runManifestSha256` is STALE, never "matching": a report from before the
+ * Go half of this fold landed made no claim about which run it measured, and reading
+ * it as fresh is the derived-summary failure the apparatus exists to avoid.
+ */
+function goArtifactFreshness(
+  artifactName: string,
+  value: Artifact,
+  recordSet: RecordSetId,
+  runDigest: string,
+): { fresh: boolean; reason: string | null } {
+  if (value === null) {
+    return { fresh: false, reason: `wazero-probe/artifacts/${artifactName} is absent` };
+  }
+  if (value.recordSet !== recordSet) {
+    return {
+      fresh: false,
+      reason: `${artifactName} carries recordSet=${JSON.stringify(value.recordSet ?? null)}, not ${JSON.stringify(recordSet)} (a stale probe artifact)`,
+    };
+  }
+  if (typeof value.runManifestSha256 !== 'string') {
+    return {
+      fresh: false,
+      reason: `${artifactName} carries NO \`runManifestSha256\` — it cannot say which run it measured, so it is STALE (the Go arm writes the manifest digest it reads for its own header; fold 2 H4)`,
+    };
+  }
+  if (value.runManifestSha256 !== runDigest) {
+    return {
+      fresh: false,
+      reason: `${artifactName} is STALE: runManifestSha256=${value.runManifestSha256.slice(0, 16)}…, this run is ${runDigest.slice(0, 16)}… (same record set, different run)`,
+    };
+  }
+  return { fresh: true, reason: null };
+}
+
 function k5(
   shipped: Artifact,
   differential: Artifact,
   wazeroPairs: Artifact,
   recordSet: RecordSetId,
+  runDigest: string,
 ): ControlRow {
   const evidence = [
     {
@@ -644,9 +701,11 @@ function k5(
     });
   }
   // The opa–wazero half is only readable when the Go probe ran FOR THIS RUN. A
-  // `wazero-pairs.json` from a different record set is a STALE artifact, and reading
-  // it would be the derived-summary failure this apparatus exists to avoid.
-  const wazeroFresh = wazeroPairs !== null && wazeroPairs.recordSet === recordSet;
+  // `wazero-pairs.json` from a different record set — or from a different RUN of the
+  // same set (fold 2 H4) — is a STALE artifact, and reading it would be the
+  // derived-summary failure this apparatus exists to avoid.
+  const freshness = goArtifactFreshness('wazero-pairs.json', wazeroPairs, recordSet, runDigest);
+  const wazeroFresh = freshness.fresh;
   const wazeroRows = wazeroFresh
     ? ids.map((id) => {
         const p = ((wazeroPairs.pairs ?? []) as Artifact[]).find(
@@ -665,17 +724,18 @@ function k5(
       ? `the M3 bundles did not report fired:true / matchCount:1 / error:null / MATCH — ${JSON.stringify(rows)}`
       : wazeroFresh
         ? `${rows.length} M3 bundle(s) fired with matchCount 1, no error, MATCH on shipped-opa AND opa-wazero`
-        : `${rows.length} M3 bundle(s) verified on the TS arms; the opa-wazero half is NOT MEASURED — ${
-            wazeroPairs === null
-              ? 'wazero-probe/artifacts/wazero-pairs.json is absent'
-              : `wazero-pairs.json carries recordSet=${JSON.stringify(wazeroPairs.recordSet)}, not ${JSON.stringify(recordSet)} (a stale probe artifact)`
-          } (run \`go run . -spike-root ..\` in wazero-probe/ for this record set)`,
+        : `${rows.length} M3 bundle(s) verified on the TS arms; the opa-wazero half is NOT MEASURED — ${freshness.reason} (run \`go run . -spike-root ..\` in wazero-probe/ for this run)`,
     rows: [...rows, ...wazeroRows],
     evidence,
   };
 }
 
-function k5b(differential: Artifact, wazeroReport: Artifact, recordSet: RecordSetId): ControlRow {
+function k5b(
+  differential: Artifact,
+  wazeroReport: Artifact,
+  recordSet: RecordSetId,
+  runDigest: string,
+): ControlRow {
   const evidence = [
     { artifact: 'differential-report.json', path: 'errorRows' },
     { artifact: 'wazero-report.json', path: 'errorRows' },
@@ -718,9 +778,12 @@ function k5b(differential: Artifact, wazeroReport: Artifact, recordSet: RecordSe
   // clean K5b arm off an artifact that never saw the malformed bundle. The Go arm
   // writes `recordSet` for exactly this (fold 1 G1); a report without the key is
   // from before that change and is treated as stale, not as matching.
-  const goRecordSet = wazeroReport?.recordSet;
-  const goStale = wazeroReport !== null && goRecordSet !== recordSet;
-  const goAcc = goStale ? undefined : wazeroReport?.errorRows;
+  //
+  // (fold 2 H4) Keyed on the RUN, not on the set: two `seed20` runs share a record
+  // set and are different runs, and the second one's control rows say nothing about
+  // the first. `runManifestSha256` is the discriminator, and its ABSENCE is stale.
+  const goFreshness = goArtifactFreshness('wazero-report.json', wazeroReport, recordSet, runDigest);
+  const goAcc = goFreshness.fresh ? wazeroReport?.errorRows : undefined;
   const goRows = goAcc
     ? Object.entries((goAcc.perArm ?? {}) as Record<string, Artifact>).map(([arm, v]) => ({
         arm,
@@ -745,9 +808,8 @@ function k5b(differential: Artifact, wazeroReport: Artifact, recordSet: RecordSe
       : goAcc
         ? `every arm (${[...tsRows, ...goRows].map((r) => r.arm).join(', ')}) reports outsideK5b=0 with exactly one control error row`
         : `the three TS arms report outsideK5b=0 with exactly one control error row; the wazero arm is NOT MEASURED — ${
-            goStale
-              ? `\`wazero-report.json\` is STALE: it carries recordSet=${JSON.stringify(goRecordSet ?? null)}, not ${JSON.stringify(recordSet)} (re-run \`go run . -spike-root ..\` in wazero-probe/ for this record set)`
-              : '`wazero-report.json.errorRows` is absent (C7 is the Go leg`s half of the seam)'
+            goFreshness.reason ??
+            '`wazero-report.json.errorRows` is absent (C7 is the Go leg`s half of the seam)'
           }`,
     rows: [...tsRows, ...goRows],
     evidence,
@@ -954,6 +1016,9 @@ async function main(): Promise<void> {
   const differential = artifact('differential-report.json');
   const wazeroPairs = readJson(path.join(WAZERO_ARTIFACTS, 'wazero-pairs.json'));
   const wazeroReport = readJson(path.join(WAZERO_ARTIFACTS, 'wazero-report.json'));
+  // (fold 2 H4) THIS run's identity — the discriminator K5 and K5b hold the Go
+  // artifacts to. `readRunManifest` refuses a manifest without it, so it is a string.
+  const runDigest = String(manifest.runManifestSha256);
 
   const controls: ControlRow[] = [
     k1(recordSet, lowering),
@@ -961,8 +1026,8 @@ async function main(): Promise<void> {
     k3(recordSet, manifest),
     k3b(recordSet, lowering),
     k4(),
-    k5(shipped, differential, wazeroPairs, recordSet),
-    k5b(differential, wazeroReport, recordSet),
+    k5(shipped, differential, wazeroPairs, recordSet, runDigest),
+    k5b(differential, wazeroReport, recordSet, runDigest),
     k6(manifest),
     k7(),
     await k8(),

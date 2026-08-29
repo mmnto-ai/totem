@@ -507,18 +507,27 @@ async function main(): Promise<void> {
   // measurement: the bundles actually minted for that row's specimen, compared to
   // the declaration. Without it a control that silently minted nothing would be an
   // ABSENCE — and an absence is the one thing a run cannot notice about itself.
+  //
+  // (fold 2 H9, `.totem/specs/seed20-apparatus-slice2-fold2.md`) Joined on the row's
+  // `id` — the `specimen` every bundle carries — and NEVER on `ruleId`. The specimen
+  // table pins one `PINNED_RULE_ID` across several declarations (`src/lib/specimens.mts`),
+  // so a `ruleId` join can sweep an unrelated record's bundles into a control's
+  // measurement, or find bundles for a control that minted none. The declaration
+  // (`src/lib/record-sets.mts controlBundleFixtureIds`) is keyed on `<id>-…` for the
+  // same reason.
   for (const cr of (readRunManifest().controlRecords ?? []) as {
+    id: string;
     ruleId: string;
     role: string;
     bundleFixtureIds?: string[];
   }[]) {
     const declared = [...(cr.bundleFixtureIds ?? [])].sort();
     const minted = records
-      .filter((r) => r.ruleId === cr.ruleId)
+      .filter((r) => r.specimen === cr.id)
       .map((r) => r.fixtureId)
       .sort();
     checks.eq(
-      `${cr.role} CONTROL — the fact bundles minted for \`r${cr.ruleId}\` are exactly the ones the manifest declared`,
+      `${cr.role} CONTROL — the fact bundles minted for \`${cr.id}\` (rule \`r${cr.ruleId}\`) are exactly the ones the manifest declared`,
       minted,
       declared,
     );

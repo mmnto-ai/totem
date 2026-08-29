@@ -34,6 +34,7 @@ import {
   controlRecordPath,
   generatedSeedProbes,
   K3_CAPTURE_CHAIN,
+  K3_CAPTURE_PACKAGE,
   K3_CAPTURE_POLICY,
   K5_CONTROL_RECORD,
   K5_CONTROL_SIBLING,
@@ -81,13 +82,40 @@ const RECORD_LOWER_SOURCE = path.join(
  */
 const ALLOW_DIRTY_TREE = process.env.SPIKE_ALLOW_DIRTY_TREE === '1';
 
+/**
+ * (fold 2 H3) The three trees a run WRITES, excluded from the clean-tree gate and
+ * recorded beside it. Repo-relative and forward-slashed: they are git pathspecs, not
+ * filesystem paths, so they never take `path.join`.
+ */
+const ARTIFACT_TREES: readonly string[] = [
+  'spikes/spine-adopt/artifacts',
+  'spikes/spine-adopt/wazero-probe/artifacts',
+  'spikes/spine-adopt/rego/build',
+];
+
+/**
+ * (fold 2 H3) The PATHSPEC of the gated measurement — the whole repository MINUS the
+ * three output trees. Published verbatim, space-joined, as
+ * `manifest.workingTreeCleanScope`, so the scope of the claim is readable from the
+ * artifact rather than inferable from prose.
+ */
+const SOURCE_TREE_PATHSPEC: readonly string[] = ['.', ...ARTIFACT_TREES.map((t) => `:!${t}`)];
+
+/** `git status --porcelain -- <SOURCE_TREE_PATHSPEC>`, as the argv actually spawned. */
+const SOURCE_TREE_STATUS_ARGV: readonly string[] = [
+  'status',
+  '--porcelain',
+  '--',
+  ...SOURCE_TREE_PATHSPEC,
+];
+
 interface Resolved {
   version: string | null;
   resolvedFrom: string;
   unresolvedReason?: string;
 }
 
-function run(cmd: string, args: string[], cwd = SPIKE_ROOT): { ok: boolean; out: string } {
+function run(cmd: string, args: readonly string[], cwd = SPIKE_ROOT): { ok: boolean; out: string } {
   const r = spawnSync(cmd, args, { cwd, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 });
   if (r.error || r.status !== 0) {
     return { ok: false, out: (r.stderr || r.stdout || String(r.error ?? 'no output')).trim() };
@@ -182,10 +210,27 @@ function main(): void {
   // after the write read the stage's own output as dirt. The fact the manifest
   // attests is "was the tree clean when the run STARTED" — so it is taken here,
   // before the first byte is written, and recorded as `workingTreeClean`.
-  const status = run('git', ['status', '--porcelain'], REPO_ROOT);
+  //
+  // (fold 2 H3, `.totem/specs/seed20-apparatus-slice2-fold2.md`) And it attests the
+  // SOURCE tree, not the output trees. `artifacts/`, `wazero-probe/artifacts/` and
+  // `rego/build/` are this run's OWN outputs: a seam that runs the control-only build
+  // before the seed run has written into `artifacts/k3-control/` by construction, and
+  // gating on that dirt would make the § 6 sequence unrunnable without
+  // `SPIKE_ALLOW_DIRTY_TREE` — which is to say, unrunnable on the run of record. The
+  // three trees are EXCLUDED from the gated measurement and RECORDED beside it, as
+  // `artifactTreeEntries` (T17 provenance, never gated).
+  const status = run('git', SOURCE_TREE_STATUS_ARGV, REPO_ROOT);
   if (!status.ok)
-    throw new Error(`\`git status --porcelain\` failed in ${REPO_ROOT}: ${status.out}`);
+    throw new Error(
+      `\`git ${SOURCE_TREE_STATUS_ARGV.join(' ')}\` failed in ${REPO_ROOT}: ${status.out}`,
+    );
   const dirtyEntries = status.out.split('\n').filter((l) => l.trim().length > 0);
+  const artifactStatus = run('git', ['status', '--porcelain', '--', ...ARTIFACT_TREES], REPO_ROOT);
+  if (!artifactStatus.ok)
+    throw new Error(
+      `\`git status --porcelain -- ${ARTIFACT_TREES.join(' ')}\` failed in ${REPO_ROOT}: ${artifactStatus.out}`,
+    );
+  const artifactTreeEntries = artifactStatus.out.split('\n').filter((l) => l.trim().length > 0);
 
   // ── the record bytes, re-hashed at run time (constraint 5) ──
   //
@@ -206,6 +251,12 @@ function main(): void {
       file: rowDigest(r).file,
       sha256: rowDigest(r).sha256,
       control: true as const,
+      // (fold 2 H9) The ROW ID — the `specimen` every fact bundle, verdict row and
+      // pair carries. `ruleId` is NOT that key: the specimen table pins one
+      // `PINNED_RULE_ID` across several declarations, so a control row and an
+      // unrelated specimen can share a `ruleId` while naming different bundles.
+      // `src/facts.mts` joins the F5 declaration on this.
+      id: r.id,
       // (C5 / fold 1 F5) PRESENT-AS-NULL, never omitted. A control row is not a
       // seed entry by construction, and a reader grouping rows by `seedEntry` must
       // not have to tell "no entry" apart from "this producer omits the key".
@@ -222,7 +273,11 @@ function main(): void {
       // minting that the bundles carrying this row's specimen id are exactly these —
       // so a control whose bundles silently went missing, or gained one, is a FAILED
       // check rather than an absence the scorer has to notice.
-      bundleFixtureIds: controlBundleFixtureIds(r),
+      //
+      // (fold 2 H9) The whole loaded set is passed, because the M3 pair is minted
+      // ONCE per run — `src/facts.mts` finds the FIRST `requires.scope: file` row —
+      // so which control row declares it is a property of the set.
+      bundleFixtureIds: controlBundleFixtureIds(r, rows),
     }));
 
   // ── the corpus fixtures the set names ──
@@ -280,7 +335,15 @@ function main(): void {
         .filter(Boolean)
         .sort()
     : [];
-  const pinText = `${pinList.join('\n')}\n`;
+  // (fold 2 H1) NO TRAILING NEWLINE — the published file's bytes ARE the digest's
+  // preimage, and the preimage is the sorted list `\n`-joined. The scorer's rule and
+  // the apparatus's file-bytes rule are the same rule only if the file stops at the
+  // last path. `sha256sum artifacts/tracked-paths-at-record-pin.txt` reproduces
+  // `trackedPathsAtRecordPin.sha256` exactly, and so does hashing the joined list.
+  // `artifacts/tracked-paths.txt` (T17, slice 1) is NOT changed: the scorer hashes
+  // that one as file bytes as they are, and moving it would move a published digest
+  // nothing asked to move.
+  const pinText = pinList.join('\n');
   if (pinTree.ok) {
     fs.writeFileSync(
       path.join(ARTIFACTS_DIR, TRACKED_PATHS_AT_RECORD_PIN_ARTIFACT),
@@ -302,26 +365,68 @@ function main(): void {
   const policyRegoCodeSha256 =
     k3PolicyText === null ? null : sha256(policyRegoCodeText(k3PolicyText));
   const chainSha256 = spikeFileDigest('seed/controls/k3/k3-target.chain.json');
-  // (fold 1 F2) `repinned: false` = the PINNED TARGET STANDS — all three recomputed
-  // digests equal the pins. `true` puts the measured values in `repinnedDigests`
-  // beside, so the scorer reads the disclosure from the manifest rather than
-  // discovering a moved target by comparing against a number nobody published.
+
+  // ── (fold 2 H2) `repinned` is decided by K3 ARM B, or not at all ─────────────
+  //
+  // Fold 1's reading re-hashed the byte-pinned capture copies and compared them to
+  // the constants pinned FROM those same copies: a tautology that could only read
+  // `false`, published as if it were a measurement. The predicate the charter's
+  // clause actually names is arm B's — the CONTROL-ONLY BUILD's emitted bytes against
+  // the pinned target. An emitter delta that changes the emitted bytes changes arm B
+  // and re-pins; one that does not (the `packageSuffix` rename, H5) does not.
+  //
+  // The control-only build publishes into its OWN artifact set, `artifacts/k3-control/`
+  // — a complete set beside the run, whose root is fixed by § S5's `SPIKE_ARTIFACTS_SUBDIR`
+  // default. It is therefore resolved from `SPIKE_ROOT` and NEVER from `ARTIFACTS_DIR`:
+  // a seed run under its own subdir must still find the control build where it is.
+  //
+  // Absent ⇒ `repinned: null` with `repinnedFrom: null`. NOT `false`: "the target was
+  // not re-measured" and "the target stands" are different claims, and only one of
+  // them is evidence. The § 6 seam runs the control-only build FIRST, so the run of
+  // record measures it.
+  const k3ControlRel = 'artifacts/k3-control';
+  const k3ControlHome = path.join(SPIKE_ROOT, 'artifacts', 'k3-control');
+  const armBPolicyAt = path.join(k3ControlHome, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
+  const armBChainAt = path.join(k3ControlHome, 'chains', `${K3_CAPTURE_PACKAGE}.json`);
+  const armBRebuilt =
+    fs.existsSync(armBPolicyAt) && fs.existsSync(armBChainAt)
+      ? {
+          policyRegoSha256: sha256(fs.readFileSync(armBPolicyAt)),
+          // The charter's § 5 code-only form, over the REBUILT policy — the same
+          // extractor the capture's own digest is taken with (fold 1 F1).
+          policyRegoCodeSha256: sha256(policyRegoCodeText(fs.readFileSync(armBPolicyAt, 'utf-8'))),
+          chainSha256: sha256(fs.readFileSync(armBChainAt)),
+        }
+      : null;
   const k3Pins = {
     policyRegoSha256: K3_CAPTURE_SHA256['seed/controls/k3/k3-target.policy.rego']!,
     policyRegoCodeSha256: K3_CAPTURE_POLICY_CODE_SHA256,
     chainSha256: K3_CAPTURE_SHA256['seed/controls/k3/k3-target.chain.json']!,
   };
-  const k3Measured = { policyRegoSha256, policyRegoCodeSha256, chainSha256 };
-  const k3Repinned =
-    policyRegoSha256 !== k3Pins.policyRegoSha256 ||
-    policyRegoCodeSha256 !== k3Pins.policyRegoCodeSha256 ||
-    chainSha256 !== k3Pins.chainSha256;
+  const k3Repinned: boolean | null =
+    armBRebuilt === null
+      ? null
+      : armBRebuilt.policyRegoSha256 !== k3Pins.policyRegoSha256 ||
+        armBRebuilt.policyRegoCodeSha256 !== k3Pins.policyRegoCodeSha256 ||
+        armBRebuilt.chainSha256 !== k3Pins.chainSha256;
   const k3Capture = {
     policyRegoSha256,
     policyRegoCodeSha256,
     chainSha256,
     repinned: k3Repinned,
-    ...(k3Repinned ? { repinnedDigests: { pinned: k3Pins, measured: k3Measured } } : {}),
+    // FLAT keys, and only on the arm that has something to disclose: a re-pin
+    // publishes the three digests the target MOVED TO, so the scorer reads the new
+    // number from the manifest rather than discovering it by comparing against a
+    // number nobody published. `repinnedFrom` names the artifact set the measurement
+    // came from on both measured arms, and is `null` when there was no measurement.
+    ...(k3Repinned === true
+      ? {
+          repinnedPolicyRegoSha256: armBRebuilt!.policyRegoSha256,
+          repinnedPolicyRegoCodeSha256: armBRebuilt!.policyRegoCodeSha256,
+          repinnedChainSha256: armBRebuilt!.chainSha256,
+          repinnedFrom: k3ControlRel,
+        }
+      : { repinnedFrom: k3Repinned === false ? k3ControlRel : null }),
     files: {
       policyRego: path.relative(SPIKE_ROOT, K3_CAPTURE_POLICY).split(path.sep).join('/'),
       chain: path.relative(SPIKE_ROOT, K3_CAPTURE_CHAIN).split(path.sep).join('/'),
@@ -337,8 +442,16 @@ function main(): void {
   // published order, so the list a reader hashes is the list a reader sees. The
   // FROZEN order the specimens' `globs.json` serialises is a separate thing and is
   // published separately, as `probeGeneration.frozen`.
-  const probePaths = [...sharedProbePaths(recordSet)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
-  const probePathsText = `${probePaths.join('\n')}\n`;
+  //
+  // (fold 2 H11) The SOURCE list is held separately from the published one, because
+  // the sortedness check below is a claim about what `sharedProbePaths` PRODUCED. Read
+  // off the already-sorted `probePaths` it could not fail whatever the generator did.
+  const sourceProbePaths = sharedProbePaths(recordSet);
+  const probePaths = [...sourceProbePaths].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  // (fold 2 H1) The same rule as the record-pin list: sorted, `\n`-joined, NO trailing
+  // newline. `probePaths` has no published list FILE, so the rule is stated once in
+  // the manifest (`digestRule`) and used by both digests.
+  const probePathsText = probePaths.join('\n');
 
   const manifest: Record<string, unknown> = {
     generatedBy: 'spikes/spine-adopt/src/manifest.mts',
@@ -348,7 +461,18 @@ function main(): void {
     runCommit: head.out,
     // T17 — a FACT about the run, not a gate: `trackedPaths` below is the tree at
     // `runCommit`, and this says whether the tree the run actually read matched it.
+    //
+    // (fold 2 H3) SOURCE-tree scoped. What it attests is that the source the run read
+    // equals `runCommit`; the run's own output trees are excluded and recorded below.
     workingTreeClean: dirtyEntries.length === 0,
+    // (fold 2 H3) The pathspec the claim above was measured over, verbatim.
+    workingTreeCleanScope: SOURCE_TREE_PATHSPEC.join(' '),
+    // (fold 2 H3) The state of the three EXCLUDED trees — `artifacts/`,
+    // `wazero-probe/artifacts/` and `rego/build/` — as `git status --porcelain` lines.
+    // RECORDED, NEVER GATED: the seam writes into them by construction (the K3
+    // control-only build lands in `artifacts/k3-control/` before the seed run starts),
+    // so their dirt is the run happening, not the tree drifting. T17 provenance.
+    artifactTreeEntries,
     recordPin: SEED_RECORD_PIN,
     recordPinApplies:
       recordSet === 'seed20'
@@ -357,10 +481,17 @@ function main(): void {
     records,
     fixtures,
     probePaths,
+    // (fold 2 H1) The digest rule, stated ONCE for the two list digests this manifest
+    // publishes under it — `probePathsSha256` and `trackedPathsAtRecordPin.sha256`.
+    // `trackedPaths.sha256` (T17, slice 1) is NOT under this rule: it is the bytes of
+    // `artifacts/tracked-paths.txt` as they are, trailing newline included, and it is
+    // deliberately unchanged.
+    digestRule:
+      'sha256 over the sorted list, newline-joined, no trailing newline — equal to sha256sum of the published list file',
     // (§ S2) The probe list is a chain-digest input on the specimens set and a
     // GENERATED set on the seed set, so its identity is published beside it rather
     // than left for a reader to recompute with a different join/sort convention.
-    // Same shape as `trackedPaths.sha256`: sorted, `\n`-joined, trailing newline.
+    // (fold 2 H1) Under `digestRule` above — no trailing newline.
     probePathsSha256: sha256(probePathsText),
     // (§ S1/§ S2) How the seed's probes were DERIVED, and what the derivation
     // produced. `[]` on `specimens`, whose list is frozen literals by construction.
@@ -513,9 +644,24 @@ function main(): void {
     `${trackedList.length} paths -> artifacts/${TRACKED_PATHS_ARTIFACT}`,
   );
   // ── (fold 1 F4) the probe set: published sorted, and COMPLETE ──
+  //
+  // (fold 2 H11) Measured on the SOURCE list, before the sort above — otherwise the
+  // row asserts a property of an expression two lines up and cannot fail whatever
+  // `sharedProbePaths` returned.
+  //
+  // The claim is set-dependent, and the row says which one it made. On `seed20` the
+  // generator is CONTRACTED to return a codepoint-sorted, deduped list (§ S1), so its
+  // output is asserted directly and a regression in the generator fails here. On
+  // `specimens`/`control` the shared list is the FROZEN 22 in AUTHORED order — a
+  // chain-digest input that must not be reordered (constraint 3) — so sortedness is a
+  // property of the PUBLISHED list alone, and that is what the row measures.
+  const sortedness = (list: readonly string[]) =>
+    list.filter((p, i) => i > 0 && !(list[i - 1]! < p));
   checks.eq(
-    `\`probePaths\` is published in CODEPOINT order (${probePaths.length} paths; \`probePathsSha256\` attests that order)`,
-    probePaths.filter((p, i) => i > 0 && !(probePaths[i - 1]! < p)),
+    recordSet === 'seed20'
+      ? `\`sharedProbePaths('seed20')\` returns its ${sourceProbePaths.length} paths ALREADY in codepoint order, before the manifest re-sorts them (§ S1; \`probePathsSha256\` attests the published order)`
+      : `\`probePaths\` is published in CODEPOINT order (${probePaths.length} paths; \`probePathsSha256\` attests that order — the SHARED list on \`${recordSet}\` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)`,
+    sortedness(recordSet === 'seed20' ? sourceProbePaths : probePaths),
     [],
   );
   // The frozen 22 are a chain-digest input and must survive every set unchanged as a
@@ -529,17 +675,21 @@ function main(): void {
   // On the seed set the list must additionally cover every record's own inline
   // example path and the one corpus fixture — the paths each record is authored
   // against. A sweep that omitted them measured scope over paths no record names.
-  const seedScoped = rows.filter((r) => !r.control);
-  checks.eq(
-    `every seed record's \`inlineFilePath\` and \`fixture.file\` is in the published probe set (${seedScoped.length} scored record(s))`,
-    recordSet === 'seed20'
-      ? [
-          ...seedScoped.map((r) => r.inlineFilePath),
-          ...seedScoped.flatMap((r) => (r.fixture ? [r.fixture.file] : [])),
-        ].filter((p) => !probePaths.includes(p))
-      : [],
-    [],
-  );
+  //
+  // (fold 2 H11) EMITTED ONLY ON `seed20`. On the other sets the row compared `[]`
+  // against `[]` — a row that reads PASS in every artifact and measures nothing, which
+  // is worse than an absent row: a reader counting green checks counts it.
+  if (recordSet === 'seed20') {
+    const seedScoped = rows.filter((r) => !r.control);
+    checks.eq(
+      `every seed record's \`inlineFilePath\` and \`fixture.file\` is in the published probe set (${seedScoped.length} scored record(s))`,
+      [
+        ...seedScoped.map((r) => r.inlineFilePath),
+        ...seedScoped.flatMap((r) => (r.fixture ? [r.fixture.file] : [])),
+      ].filter((p) => !probePaths.includes(p)),
+      [],
+    );
+  }
   // (fold 1 F13) GATED on `seed20` and `control`, RECORDED on `specimens`.
   //
   // The run of record's artifacts claim to be the artifacts of `runCommit`. If the
@@ -552,13 +702,16 @@ function main(): void {
   //
   // On `specimens` it stays recorded-not-gated: `npm run all` is the developer loop
   // and a manifest that refused over a scratch file would take it down.
+  // (fold 2 H3) The detail names the SCOPE and states the excluded trees' recorded
+  // state beside it, so "clean" is never read as a claim about the artifact trees.
+  const scopeNote = `scope: \`git status --porcelain -- ${SOURCE_TREE_PATHSPEC.join(' ')}\`; the ${ARTIFACT_TREES.length} excluded output tree(s) carry ${artifactTreeEntries.length} recorded entr${artifactTreeEntries.length === 1 ? 'y' : 'ies'} (\`artifactTreeEntries\`, never gated)`;
   const dirtyDetail =
     manifest.workingTreeClean === true
-      ? 'clean'
-      : `DIRTY: ${dirtyEntries.length} entr${dirtyEntries.length === 1 ? 'y' : 'ies'} from \`git status --porcelain\` — ${dirtyEntries
+      ? `clean — ${scopeNote}`
+      : `DIRTY: ${dirtyEntries.length} entr${dirtyEntries.length === 1 ? 'y' : 'ies'} — ${dirtyEntries
           .slice(0, 5)
           .map((l) => l.trim())
-          .join('; ')}${dirtyEntries.length > 5 ? '; …' : ''}`;
+          .join('; ')}${dirtyEntries.length > 5 ? '; …' : ''} — ${scopeNote}`;
   const dirtyGated = (recordSet === 'seed20' || recordSet === 'control') && !ALLOW_DIRTY_TREE;
   checks.check(
     dirtyGated
@@ -627,10 +780,33 @@ function main(): void {
     k3Capture.policyRegoCodeSha256,
     K3_CAPTURE_POLICY_CODE_SHA256,
   );
+  // (fold 2 H2) DISCLOSING, never refusing. `repinned` is now a real predicate over
+  // K3 arm B, and each of its three outcomes is a legitimate state of a run: the
+  // control-only build was not present (`null`), it reproduced the pinned target
+  // (`false`), or the target moved (`true`). Whether a `true` is acceptable is the
+  // DISPOSITION, and the disposition lives in `controls.json` K3 — a manifest that
+  // exited 1 on it would be deciding a question that is not the apparatus's.
+  checks.check(
+    `K3 CAPTURE — \`repinned\` MEASURED from arm B (the control-only build under \`${k3ControlRel}/\`): ${
+      k3Repinned === null
+        ? 'NOT MEASURED (null)'
+        : k3Repinned
+          ? 'TRUE — the pinned target MOVED'
+          : 'FALSE — the pinned target STANDS'
+    }`,
+    true,
+    k3Repinned === null
+      ? `\`${k3ControlRel}/lowered/${K3_CAPTURE_PACKAGE}/policy.rego\` and/or its chain are absent — run the § S5 seam with SPIKE_CONTROL_RECORD set; the disposition is \`controls.json\` K3 arm B's`
+      : k3Repinned
+        ? `policy.rego ${armBRebuilt!.policyRegoSha256} (pin ${k3Pins.policyRegoSha256}); code ${armBRebuilt!.policyRegoCodeSha256} (pin ${k3Pins.policyRegoCodeSha256}); chain ${armBRebuilt!.chainSha256} (pin ${k3Pins.chainSha256})`
+        : 'the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte',
+  );
+  // The K6 rows above already FAIL one by one on an undisclosed delta; this states
+  // the aggregate so the count is readable in `checks[]` without re-scanning them.
   checks.eq(
-    'K3 CAPTURE — `repinned` is false: all three recomputed capture digests equal their pins, so the pinned K3 target STANDS',
-    { repinned: k3Capture.repinned, undisclosedByteIdentityDeltas: undisclosedDeltas.length },
-    { repinned: false, undisclosedByteIdentityDeltas: 0 },
+    'K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)',
+    undisclosedDeltas.map((r) => `${r.path} (${r.region})`),
+    [],
   );
   for (const [rel, expected] of Object.entries(K8_FIXTURE_SHA256)) {
     checks.eq(`K8 FIXTURE — \`${rel}\` matches its pinned sha256`, spikeFileDigest(rel), expected);
@@ -644,12 +820,16 @@ function main(): void {
     fs.existsSync(K5_CONTROL_RECORD) ? sha256(fs.readFileSync(K5_CONTROL_RECORD)) : null,
     fs.existsSync(K5_CONTROL_SIBLING) ? sha256(fs.readFileSync(K5_CONTROL_SIBLING)) : null,
   );
+  // (fold 2 H6) `checks` joins `bundles` + `bundlesSha256` in the probe: the manifest
+  // this stage WRITES carries all three, and the guard has to cover the file that is
+  // actually on disk rather than the object as it stood before the last write.
   checks.eq(
-    'the digest is stable under the pending `bundles` + `bundlesSha256` fill (both are outside the preimage)',
+    'the digest is stable under the pending `bundles` + `bundlesSha256` fill and this stage`s own `checks[]` (all three are outside the preimage)',
     computeRunManifestSha256({
       ...manifest,
       bundles: [{ fixtureId: 'x', sha256: 'y' }],
       bundlesSha256: computeBundlesSha256([{ fixtureId: 'x', sha256: 'y' }]),
+      checks: checks.rows,
     }),
     manifest.runManifestSha256,
   );
@@ -680,6 +860,19 @@ function main(): void {
   console.log(
     `\nrecordSet=${recordSet}  records=${records.length}  runManifestSha256=${String(manifest.runManifestSha256).slice(0, 16)}…`,
   );
+  // ── (fold 2 H6) the manifest publishes its OWN check rows ────────────────────
+  //
+  // The K6 byte-identity rows, the F1 code-digest row, the K3 `repinned` disclosure
+  // and the clean-tree row are measured HERE and, until now, existed only as stdout.
+  // The charter's "`checks[].ok` false in any artifact" could not reach them: the
+  // manifest was the one artifact this pipeline writes with no `checks[]`.
+  //
+  // Written LAST and OUTSIDE the digest preimage (`computeRunManifestSha256` deletes
+  // the key, like `bundles`), so publishing the rows cannot move the identity the
+  // artifacts written earlier in this run already committed to. Written BEFORE
+  // `checks.finish`, so a run that FAILS still publishes the rows that failed it —
+  // the failing run is exactly the one a reader needs the rows from.
+  writeArtifact(MANIFEST_ARTIFACT, { ...manifest, checks: checks.rows });
   console.log(`manifest: ${out}`);
   checks.finish('manifest');
 }

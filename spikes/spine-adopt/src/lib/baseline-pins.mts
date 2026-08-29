@@ -123,17 +123,44 @@ export const EMITTER_SYMBOLS: readonly string[] = [
 ];
 
 /**
- * (fold 1 F10) The DISCLOSED deltas: a symbol whose region digest moved between
- * `BASELINE_PIN` and this pin, with the owner's benignity statement.
+ * (fold 2 H5, `.totem/specs/seed20-apparatus-slice2-fold2.md`) One DISCLOSED delta,
+ * keyed on the DIGEST PAIR rather than on the symbol name.
+ *
+ * `expected` is the `BASELINE_PIN` digest (the same value the row's pin carries) and
+ * `actual` is the digest at THIS pin. Both were computed by the build leg with
+ * `extractSymbolRegion` below over `git show 6ca24d42:spikes/spine-adopt/src/lower.mts`
+ * and over the working tree — the same extractor that draws the measured region.
+ */
+export interface ExpectedDelta {
+  expected: string;
+  actual: string;
+  reason: string;
+}
+
+/**
+ * (fold 1 F10, re-keyed by fold 2 H5) The DISCLOSED deltas: a symbol whose region
+ * digest moved between `BASELINE_PIN` and this pin, with the owner's benignity
+ * statement.
  *
  * A row on this map does not FAIL the run — it is DISCLOSED, printed in the header
  * and carried in `manifest.byteIdentity`. A row NOT on it that differs still
  * refuses: the apparatus never decides that a delta is benign, it only carries the
  * statement the owner already made in the design record.
+ *
+ * (fold 2 H5) The disclosure holds for ONE pair of digests, never for the symbol as
+ * such. A statement about the `specimenId` -> `discriminator` rename says nothing
+ * about the NEXT edit to `packageSuffix`, and a name-keyed map would have waved that
+ * one through too — so the measured `actual` must equal the pinned `actual` (and the
+ * row's `expected` must still be the pin this statement was written against) or the
+ * delta is undisclosed and refuses.
  */
-export const EXPECTED_DELTAS: Readonly<Record<string, string>> = {
-  packageSuffix:
-    "the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2.",
+export const EXPECTED_DELTAS: Readonly<Record<string, ExpectedDelta>> = {
+  packageSuffix: {
+    expected: '25fd4366d30f08d2506a14efac97e4b02374fa4dbbacdaf71ada231b9f99f637',
+    actual: '442d640cd3be4d6bc0cf385fdfc4fe31bf9e36b8146f7fc70777f7e5a822c5b5',
+    reason:
+      "the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2.",
+  },
 };
 
 /**
@@ -262,16 +289,16 @@ export function byteIdentityRows(): ByteIdentityRow[] {
     const actual = actualDigest(p);
     const eq = actual === p.expected;
     const symbol = p.region.startsWith('symbol:') ? p.region.slice('symbol:'.length) : null;
-    return {
-      path: p.path,
-      region: p.region,
-      expected: p.expected,
-      actual,
-      eq,
-      // Disclosure is only ever READ here — the string is the owner's, authored
-      // above. A delta with no statement beside it is not disclosed, it is a delta.
-      disclosed: eq || symbol === null ? null : (EXPECTED_DELTAS[symbol] ?? null),
-    };
+    const declared = symbol === null ? undefined : EXPECTED_DELTAS[symbol];
+    // (fold 2 H5) Disclosure is only ever READ here — the string is the owner's,
+    // authored above — and it holds for ONE digest pair. A delta with no statement
+    // beside it, or one whose measured digest is not the digest the statement was
+    // written about, is not disclosed: it is a delta, and it refuses.
+    const disclosed =
+      eq || declared === undefined || declared.expected !== p.expected || declared.actual !== actual
+        ? null
+        : declared.reason;
+    return { path: p.path, region: p.region, expected: p.expected, actual, eq, disclosed };
   });
 }
 
