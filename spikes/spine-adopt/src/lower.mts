@@ -960,10 +960,25 @@ async function main(): Promise<void> {
         [...SAME_LINE_MARKERS, ...PRECEDING_LINE_MARKERS].some((m) => l.includes(m)),
     );
   });
+  // (T5, mmnto-ai/totem#2694) An EMPTY facts directory is not a measurement. With no
+  // bundles on disk `markerBearing` is empty for the trivial reason, and the note
+  // would publish "Unreachable on all 0 fact bundles" — an unreachability claim with
+  // nothing behind it. Say what was actually the case instead.
   const reachability =
-    markerBearing.length === 0
-      ? `Unreachable on all ${factBundleFiles.length} fact bundles (none carries a suppression marker)`
-      : `Reachable: ${markerBearing.length} of ${factBundleFiles.length} fact bundles carry a suppression marker (${markerBearing.join(', ')})`;
+    factBundleFiles.length === 0
+      ? 'NOT MEASURED — no fact bundles on disk (`npm run facts` has not run for this record set; run it before reading this note as a reachability claim)'
+      : markerBearing.length === 0
+        ? `Unreachable on all ${factBundleFiles.length} fact bundles (none carries a suppression marker)`
+        : `Reachable: ${markerBearing.length} of ${factBundleFiles.length} fact bundles carry a suppression marker (${markerBearing.join(', ')})`;
+  // The CONSEQUENCE the note draws from that measurement is only available when
+  // there was one. Byte-identical to the old text whenever bundles exist; with none
+  // it says so instead of publishing "changes no differential row" off an unmeasured
+  // reachability. (Beyond T15/T5's letter, named for the seat: T5 forbids the
+  // unmeasured CLAIM, and the trailing clause is the same claim one sentence on.)
+  const reachabilityConsequence =
+    factBundleFiles.length === 0
+      ? ' — and with nothing measured, this note makes NO claim about differential rows'
+      : ', so it changes no differential row';
 
   const out = writeArtifact('lowering-rejects.json', {
     generatedBy: 'spikes/spine-adopt/src/lower.mts',
@@ -988,7 +1003,7 @@ async function main(): Promise<void> {
         clause: '§ Lowering 6 vs § Lowering 7',
         finding:
           'The contract does not order the suppression check against the requires check. A match that is BOTH suppressed and requires-satisfied could emit `suppress` or emit nothing.',
-        resolution: `MEASURED in the shipped source: all three dispatchers check \`requires\` FIRST and \`continue\` before any \`onRuleEvent\` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. ${reachability}, so it changes no differential row.`,
+        resolution: `MEASURED in the shipped source: all three dispatchers check \`requires\` FIRST and \`continue\` before any \`onRuleEvent\` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. ${reachability}${reachabilityConsequence}.`,
         affected: [],
       },
       {

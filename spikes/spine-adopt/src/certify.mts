@@ -990,12 +990,34 @@ async function main(): Promise<void> {
   // bundle that silently went missing from the directory is reported as that.
   const expectedMeasured =
     (readRunManifest().bundles as unknown[]).length - malformedControls.length;
+  // (T19, mmnto-ai/totem#2694) The check has TWO independent failure modes and the
+  // detail must name whichever fired. A count mismatch with zero rejects used to
+  // print "N/N accepted" beside a FAIL — the detail contradicting its own verdict
+  // and naming neither number.
+  const countMismatch = factFiles.length !== expectedMeasured;
+  const sentinelDetail = [
+    ...(countMismatch
+      ? [
+          `COUNT MISMATCH — expected ${expectedMeasured} measured bundles (manifest.bundles ${
+            (readRunManifest().bundles as unknown[]).length
+          } minus ${malformedControls.length} control(s)), found ${factFiles.length} on disk`,
+        ]
+      : []),
+    ...(factRejects.length > 0
+      ? [
+          `${factRejects.length} REJECTED: ${factRejects
+            .map((r) => `${r.file}: ${r.errs.join('; ')}`)
+            .join(' | ')}`,
+        ]
+      : []),
+    ...(countMismatch || factRejects.length > 0
+      ? []
+      : [`${factFiles.length}/${factFiles.length} accepted`]),
+  ].join('; ');
   checks.check(
     `SENTINEL — the validator is NOT vacuously strict: all ${factFiles.length} measured FactBundles validate`,
-    factRejects.length === 0 && factFiles.length === expectedMeasured,
-    factRejects.length === 0
-      ? `${factFiles.length}/${factFiles.length} accepted`
-      : factRejects.map((r) => `${r.file}: ${r.errs.join('; ')}`).join(' | '),
+    factRejects.length === 0 && !countMismatch,
+    sentinelDetail,
   );
   for (const f of malformedControls) {
     const errs = validateFactBundle(readBundleFile(f).factBundle);

@@ -141,8 +141,8 @@ func writeJSONFile(t *testing.T, path string, v any) {
 func TestExpectedRowCountDerivesFromTheCorpus(t *testing.T) {
 	for _, n := range []int{3, 7, 24, 61} {
 		root := t.TempDir()
-		writeJSONFile(t, filepath.Join(root, "artifacts", "facts-index.json"), map[string]any{"bundleCount": n})
-		got, err := expectedRowCount(root, make([]factFile, n))
+		writeIndex(t, root, recordSetSpecimens, n)
+		got, err := expectedRowCount(root, recordSetSpecimens, make([]factFile, n))
 		if err != nil {
 			t.Fatalf("expectedRowCount over %d bundles: %v", n, err)
 		}
@@ -152,32 +152,112 @@ func TestExpectedRowCountDerivesFromTheCorpus(t *testing.T) {
 	}
 }
 
+// writeIndex writes a facts-index.json carrying both of the fields this arm reads:
+// the record-set identity (C1) and the bundle count.
+func writeIndex(t *testing.T, root, recordSet string, bundleCount int) {
+	t.Helper()
+	writeJSONFile(t, filepath.Join(root, "artifacts", "facts-index.json"),
+		map[string]any{"recordSet": recordSet, "bundleCount": bundleCount})
+}
+
 // TestExpectedRowCountRejectsADisagreeingIndex pins the cross-check: a count is
 // only worth its source, so an index that disagrees with the directory it indexes
 // must stop the run rather than pick a winner.
 func TestExpectedRowCountRejectsADisagreeingIndex(t *testing.T) {
 	root := t.TempDir()
-	writeJSONFile(t, filepath.Join(root, "artifacts", "facts-index.json"), map[string]any{"bundleCount": 24})
-	if _, err := expectedRowCount(root, make([]factFile, 23)); err == nil {
+	writeIndex(t, root, recordSetSpecimens, 24)
+	if _, err := expectedRowCount(root, recordSetSpecimens, make([]factFile, 23)); err == nil {
 		t.Fatal("an index declaring 24 bundles over a 23-bundle corpus was accepted; the disagreement must be an error")
 	}
-	if _, err := expectedRowCount(root, nil); err == nil {
+	if _, err := expectedRowCount(root, recordSetSpecimens, nil); err == nil {
 		t.Fatal("an empty corpus was accepted")
 	}
 
 	empty := t.TempDir()
-	writeJSONFile(t, filepath.Join(empty, "artifacts", "facts-index.json"), map[string]any{"bundleCount": 0})
-	if _, err := expectedRowCount(empty, nil); err == nil {
+	writeIndex(t, empty, recordSetSpecimens, 0)
+	if _, err := expectedRowCount(empty, recordSetSpecimens, nil); err == nil {
 		t.Fatal("a zero-bundle index was accepted; there is nothing to hold an arm to")
+	}
+}
+
+// TestFactsIndexRecordSetIdentityIsEnforced is the falsifier for the cardinality
+// check standing in for a provenance check (mmnto-ai/totem#2694 C1 / G10): a
+// corpus generated for ANOTHER record set can carry the right bundleCount, so the
+// count alone cannot detect it. Each case here would pass every cardinality check
+// in this file.
+func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
+	// The case the finding names: a seed20 corpus under a specimens run. The count
+	// agrees, so only the identity can refuse it. The selector comes through the
+	// SAME seam the probe uses — the environment variable, via loadRecordSet — so
+	// this covers the wiring and not just the comparison.
+	t.Setenv(recordSetEnvVar, recordSetSpecimens)
+	selected, err := loadRecordSet()
+	if err != nil || selected != recordSetSpecimens {
+		t.Fatalf("loadRecordSet under %s=%s = (%q, %v)", recordSetEnvVar, recordSetSpecimens, selected, err)
+	}
+	mismatched := t.TempDir()
+	writeIndex(t, mismatched, recordSetSeed20, 24)
+	_, err = expectedRowCount(mismatched, selected, make([]factFile, 24))
+	if err == nil {
+		t.Fatal("a corpus generated for `seed20` was accepted under a `specimens` run; the record-set identity must refuse it")
+	}
+	if !strings.Contains(err.Error(), recordSetIdentityRefusal) {
+		t.Errorf("the refusal does not name itself as a %s refusal: %v", recordSetIdentityRefusal, err)
+	}
+	for _, want := range []string{recordSetSeed20, recordSetSpecimens} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("the refusal does not name %q, so it cannot say which corpus met which run: %v", want, err)
+		}
+	}
+	// The refusal must come from loadFactsIndex, i.e. BEFORE the count is derived:
+	// with a DISAGREEING corpus the identity error is still the one reported.
+	if _, err := expectedRowCount(mismatched, recordSetSpecimens, make([]factFile, 23)); err == nil ||
+		!strings.Contains(err.Error(), recordSetIdentityRefusal) {
+		t.Errorf("the identity check does not run before the cardinality check: %v", err)
+	}
+
+	// A pre-C1 corpus (no `recordSet` at all) is refused just as hard: the TS half
+	// writes the field on every run now, so its absence means unknown provenance.
+	missing := t.TempDir()
+	writeJSONFile(t, filepath.Join(missing, "artifacts", "facts-index.json"), map[string]any{"bundleCount": 24})
+	_, err = expectedRowCount(missing, recordSetSpecimens, make([]factFile, 24))
+	if err == nil {
+		t.Fatal("a corpus declaring no `recordSet` was accepted; a missing identity is refused too")
+	}
+	if !strings.Contains(err.Error(), recordSetIdentityRefusal) {
+		t.Errorf("the missing-field refusal does not name itself as a %s refusal: %v", recordSetIdentityRefusal, err)
+	}
+
+	// And the matching case still passes, so the guard is not simply "always no".
+	for _, set := range []string{recordSetSpecimens, recordSetSeed20} {
+		root := t.TempDir()
+		writeIndex(t, root, set, 24)
+		if got, err := expectedRowCount(root, set, make([]factFile, 24)); err != nil || got != 24 {
+			t.Errorf("a corpus generated for %q was refused under its own record set: (%d, %v)", set, got, err)
+		}
 	}
 }
 
 // TestExpectedRowCountMatchesTheLiveCorpus checks the derivation against whatever
 // set is actually on disk, so the unit-level tests above cannot pass while the
 // real index is shaped differently.
+//
+// The record set is taken from the INDEX rather than from the environment: this
+// test is about the cardinality derivation over whatever corpus is built, and
+// pinning it to the selector would turn "you built the seed corpus and ran
+// `go test` without SPIKE_RECORD_SET" — a state the probe itself refuses by
+// design — into a test failure here.
 func TestExpectedRowCountMatchesTheLiveCorpus(t *testing.T) {
 	_, facts := loadCorpus(t)
-	got, err := expectedRowCount(spikeRoot, facts)
+	var idx factsIndex
+	if err := readJSON(factsIndexPath(spikeRoot), &idx); err != nil {
+		t.Skipf("no fact index — run `npm run facts` first: %v", err)
+	}
+	if idx.RecordSet == nil {
+		t.Skipf("the fact corpus on disk predates the `recordSet` identity (mmnto-ai/totem#2694 C1) — "+
+			"regenerate it with `npm run facts`; %s carries no such field", factsIndexPath(spikeRoot))
+	}
+	got, err := expectedRowCount(spikeRoot, *idx.RecordSet, facts)
 	if err != nil {
 		t.Fatalf("expectedRowCount on the live corpus: %v", err)
 	}
@@ -388,13 +468,23 @@ func errorRowFor(arm, fixture, msg string) normalRow {
 	}
 }
 
-const emptyResultSetError = "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED"
+// The DESIGNED error texts are IMPORTED from compare.go, never re-spelled here
+// (mmnto-ai/totem#2694 G9): a second copy of the pinned text would let the shipped
+// predicate drift while these tests went on passing against their own literal.
+// What the test adds is the runtime-supplied tail each real message carries, so
+// the assertions run against message SHAPES the arms actually produce rather than
+// against the bare constants.
+var (
+	emptyResultSetError = wasmDesignedControlError + " — the entrypoint's `result` rule was UNDEFINED"
+	malformedFactsError = shippedDesignedControlError + " — lines[1] is number; the shipped harness produced " +
+		"no verdict for this bundle"
+)
 
 // TestPairsClassification covers the three statuses the pairs artifact can carry,
 // including the narrow malformed-facts carve-out and every way it must DECLINE.
 func TestPairsClassification(t *testing.T) {
-	vs := []violation{{"87aff037d7de47a7", 4, 0}}
-	es := []event{{"trigger", 4}}
+	vs := []violation{{RuleID: "87aff037d7de47a7", LineNumber: 4, Ordinal: 0}}
+	es := []event{{Kind: "trigger", Line: 4}}
 
 	t.Run("identical rows MATCH", func(t *testing.T) {
 		got := comparePair(rowFor("opa", "c-supp-corpus-fail", vs, es), rowFor("wazero", "c-supp-corpus-fail", vs, es))
@@ -416,18 +506,73 @@ func TestPairsClassification(t *testing.T) {
 		}
 	})
 
-	t.Run("both arms erroring on the malformed-facts control is EXPLAINED", func(t *testing.T) {
-		got := comparePair(
-			errorRowFor("opa", malformedFactsControlFixture, emptyResultSetError),
-			errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError))
-		if got.Status != statusExplained {
-			t.Fatalf("status = %s, want %s", got.Status, statusExplained)
+	// The carve-out fires only when EACH side carries ITS OWN arm's designed error
+	// (mmnto-ai/totem#2694 C2/G9). Both pairings the Go arm emits are covered:
+	// opa–wazero (both wasm, both `EMPTY RESULT SET`) and shipped–wazero (the
+	// shipped harness reports the malformed bundle itself, so its message BEGINS
+	// with `MALFORMED FACTS`).
+	t.Run("both arms erroring with THEIR OWN designed error is EXPLAINED", func(t *testing.T) {
+		for _, c := range []struct {
+			name        string
+			left, right normalRow
+		}{
+			{"opa `EMPTY RESULT SET` vs wazero `EMPTY RESULT SET`",
+				errorRowFor("opa", malformedFactsControlFixture, emptyResultSetError),
+				errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError)},
+			{"shipped `MALFORMED FACTS…` vs wazero `EMPTY RESULT SET`",
+				errorRowFor("shipped", malformedFactsControlFixture, malformedFactsError),
+				errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError)},
+		} {
+			got := comparePair(c.left, c.right)
+			if got.Status != statusExplained {
+				t.Fatalf("%s: status = %s, want %s (detail %v)", c.name, got.Status, statusExplained, got.Detail)
+			}
+			if got.Detail["reason"] != "MALFORMED-FACTS-CONTROL" {
+				t.Errorf("%s: reason = %v, want MALFORMED-FACTS-CONTROL", c.name, got.Detail["reason"])
+			}
+			if got.Explanation == nil || !strings.Contains(*got.Explanation, "MALFORMED-FACTS-CONTROL") {
+				t.Errorf("%s: explanation = %v", c.name, got.Explanation)
+			}
 		}
-		if got.Detail["reason"] != "MALFORMED-FACTS-CONTROL" {
-			t.Errorf("reason = %v, want MALFORMED-FACTS-CONTROL", got.Detail["reason"])
-		}
-		if got.Explanation == nil || !strings.Contains(*got.Explanation, "MALFORMED-FACTS-CONTROL") {
-			t.Errorf("explanation = %v", got.Explanation)
+	})
+
+	// The finding this fold answers: "both rows carry SOME error" also describes a
+	// wazero trap and a decode failure, so a carve-out keyed on that would hide a
+	// real divergence behind the control. Each case below is two error rows on the
+	// control fixture that the OLD predicate explained away.
+	t.Run("an off-script error on the control is UNEXPLAINED and carries both messages", func(t *testing.T) {
+		for _, c := range []struct {
+			name        string
+			left, right normalRow
+		}{
+			{"a wazero TRAP against opa's designed error — the divergence the old predicate hid",
+				errorRowFor("opa", malformedFactsControlFixture, emptyResultSetError),
+				errorRowFor("wazero", malformedFactsControlFixture, "some trap")},
+			{"the shipped arm carrying the WASM arms' error — its designed error is `MALFORMED FACTS`, not this",
+				errorRowFor("shipped", malformedFactsControlFixture, emptyResultSetError),
+				errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError)},
+			{"a wasm arm carrying the SHIPPED arm's error — the texts are not interchangeable",
+				errorRowFor("opa", malformedFactsControlFixture, malformedFactsError),
+				errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError)},
+			{"a decode failure that merely MENTIONS the designed text late is not the shipped arm's error",
+				errorRowFor("shipped", malformedFactsControlFixture, "decode failure: "+malformedFactsError),
+				errorRowFor("wazero", malformedFactsControlFixture, emptyResultSetError)},
+		} {
+			got := comparePair(c.left, c.right)
+			if got.Status != statusUnexplained {
+				t.Errorf("%s: status = %s, want %s", c.name, got.Status, statusUnexplained)
+				continue
+			}
+			if got.Explanation != nil {
+				t.Errorf("%s: an off-script error was explained away: %v", c.name, *got.Explanation)
+			}
+			if got.Detail["leftError"] != c.left.Error || got.Detail["rightError"] != c.right.Error {
+				t.Errorf("%s: the pair must carry BOTH messages, got left=%v right=%v",
+					c.name, got.Detail["leftError"], got.Detail["rightError"])
+			}
+			if r, _ := got.Detail["reason"].(string); !strings.Contains(r, "MALFORMED-FACTS-CONTROL") {
+				t.Errorf("%s: the reason does not name the control it declined: %v", c.name, got.Detail["reason"])
+			}
 		}
 	})
 
@@ -489,13 +634,14 @@ func TestPairsClassification(t *testing.T) {
 // TestWritePairsArtifactShape pins the deliverable's shape: the row keys G10 names
 // and a summary whose counts derive from the rows it ships.
 func TestWritePairsArtifactShape(t *testing.T) {
+	seedA, seedB := "71935fe9", "6b1890e2"
 	pairs := []pairResult{
-		{RuleID: "b", FixtureID: "f2", Specimen: "s2", SeedEntry: "6b1890e2", Engine: "regex",
+		{RuleID: "b", FixtureID: "f2", Specimen: "s2", SeedEntry: &seedB, Engine: "regex",
 			Left: "opa", Right: "wazero", Status: statusMatch},
-		{RuleID: "a", FixtureID: "f1", Specimen: "s1", SeedEntry: "71935fe9", Engine: "ast-grep",
+		{RuleID: "a", FixtureID: "f1", Specimen: "s1", SeedEntry: &seedA, Engine: "ast-grep",
 			Left: "opa", Right: "wazero", Status: statusUnexplained,
 			Detail: map[string]any{"reason": "ERROR ROW — an arm failed to produce a verdict"}},
-		{RuleID: "a", FixtureID: malformedFactsControlFixture, Specimen: "s1", SeedEntry: "71935fe9", Engine: "ast-grep",
+		{RuleID: "a", FixtureID: malformedFactsControlFixture, Specimen: "s1", SeedEntry: &seedA, Engine: "ast-grep",
 			Left: "opa", Right: "wazero", Status: statusExplained},
 	}
 	dir := t.TempDir()
@@ -509,8 +655,11 @@ func TestWritePairsArtifactShape(t *testing.T) {
 		RecordSet   string         `json:"recordSet"`
 		Summary     map[string]int `json:"summary"`
 		Pairs       []struct {
-			Specimen  string  `json:"specimen"`
-			SeedEntry string  `json:"seedEntry"`
+			Specimen string `json:"specimen"`
+			// A POINTER on the reading side too: decoding `null` into a string is a
+			// no-op in Go, so a plain field would read a `null` seedEntry as `""` and
+			// this test could not tell the two apart (mmnto-ai/totem#2694 C4).
+			SeedEntry *string `json:"seedEntry"`
 			FixtureID string  `json:"fixtureId"`
 			Left      string  `json:"left"`
 			Right     string  `json:"right"`
@@ -544,7 +693,7 @@ func TestWritePairsArtifactShape(t *testing.T) {
 		if p.Left != "opa" || p.Right != "wazero" {
 			t.Errorf("pair %s is labelled %s vs %s", p.FixtureID, p.Left, p.Right)
 		}
-		if p.SeedEntry == "" || p.Specimen == "" || p.Status == "" {
+		if p.SeedEntry == nil || *p.SeedEntry == "" || p.Specimen == "" || p.Status == "" {
 			t.Errorf("pair %s is missing a key of the (specimen, seedEntry, fixtureId, status) tuple: %+v", p.FixtureID, p)
 		}
 	}
@@ -561,6 +710,47 @@ func TestWritePairsArtifactShape(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"pairs": []`) {
 		t.Error("an empty pair set did not serialise as `[]`")
+	}
+}
+
+// TestAbsentSeedEntrySerialisesAsNull pins C4 (mmnto-ai/totem#2694): a record with
+// no seed entry — every row of the `specimens` set — writes the key as JSON
+// `null`, matching the TS artifacts.
+//
+// Both failure modes are asserted, because each is a silent one. `""` is what a
+// plain string field emits, and it reads downstream as a seed entry whose id is
+// the empty string; a MISSING key is what `omitempty` emits, and it reads as an
+// artifact that does not model seedEntry at all. The assertion is made on the
+// BYTES rather than on a decode, since decoding `null` and `""` into a Go string
+// yields the same value and could not tell them apart.
+func TestAbsentSeedEntrySerialisesAsNull(t *testing.T) {
+	seeded := "6b1890e2"
+	at, err := writePairsArtifact(t.TempDir(), recordSetSpecimens, []pairResult{
+		{RuleID: "a", FixtureID: "f1", Specimen: "s1", Engine: "regex",
+			Left: "opa", Right: "wazero", Status: statusMatch},
+		{RuleID: "b", FixtureID: "f2", Specimen: "s2", SeedEntry: &seeded, Engine: "regex",
+			Left: "opa", Right: "wazero", Status: statusMatch},
+	})
+	if err != nil {
+		t.Fatalf("writePairsArtifact: %v", err)
+	}
+	b, err := os.ReadFile(at)
+	if err != nil {
+		t.Fatalf("reading the artifact: %v", err)
+	}
+	text := string(b)
+	if !strings.Contains(text, `"seedEntry": null`) {
+		t.Error("an absent seed entry did not serialise as `null`")
+	}
+	if strings.Contains(text, `"seedEntry": ""`) {
+		t.Error("an absent seed entry serialised as `\"\"`; the TS comparator reads that as an id, not as absent")
+	}
+	if n := strings.Count(text, `"seedEntry"`); n != 2 {
+		t.Errorf("the artifact carries %d `seedEntry` keys over 2 pairs; the key must stay PRESENT on every row "+
+			"(no `omitempty`), because a dropped key reads as an artifact that does not model it", n)
+	}
+	if !strings.Contains(text, `"seedEntry": "`+seeded+`"`) {
+		t.Error("a PRESENT seed entry no longer serialises as its string; the pointer must not swallow the value")
 	}
 }
 

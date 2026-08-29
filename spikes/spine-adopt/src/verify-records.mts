@@ -406,37 +406,84 @@ async function main(): Promise<void> {
   // SKIPS with a named reason when the pin commit is not in this clone (a CI
   // shallow checkout has no `r14/seed-20-translation` history).
   if (recordSet === 'seed20') {
-    const hasPin =
-      spawnSync('git', ['cat-file', '-e', `${SEED_RECORD_PIN}^{commit}`], {
-        cwd: REPO_ROOT,
-        encoding: 'utf-8',
-      }).status === 0;
-    if (!hasPin) {
+    // (T6, mmnto-ai/totem#2694) A non-zero EXIT means "git ran and said no". A
+    // `status` of `null` or a set `error` means git did not run at all (not on PATH,
+    // spawn refused, killed by a signal) — a different fact entirely, and reading it
+    // as "the pin is not in this clone" would SKIP the constraint-5 comparison on a
+    // broken toolchain and call that a pass.
+    const pinProbe = spawnSync('git', ['cat-file', '-e', `${SEED_RECORD_PIN}^{commit}`], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+    });
+    const gitDidNotRun = pinProbe.error !== undefined || pinProbe.status === null;
+    if (gitDidNotRun) {
+      checks.check(
+        `SEED PIN — \`git\` COULD NOT BE EXECUTED, so the seed copies were not compared against the pin (this is a FAILURE, not the \`pin-commit-not-present-locally\` skip)`,
+        false,
+        `spawnSync git cat-file -e ${SEED_RECORD_PIN}^{commit} in ${REPO_ROOT}: ` +
+          `error=${pinProbe.error ? (pinProbe.error as Error).message : 'none'}, ` +
+          `status=${JSON.stringify(pinProbe.status)}, signal=${JSON.stringify(pinProbe.signal)}`,
+      );
+    } else if (pinProbe.status !== 0) {
       checks.check(
         `SEED PIN — SKIPPED with the named reason \`pin-commit-not-present-locally\`: ${SEED_RECORD_PIN} is not in this clone, so the copies cannot be compared against the pinned blobs`,
         true,
         'run in a full clone of mmnto-ai/totem with the `r14/seed-20-translation` history fetched',
       );
     } else {
-      const drift: string[] = [];
-      for (const f of fs.readdirSync(SEED_RECORDS_DIR).filter((n) => n.endsWith('.rule.yaml'))) {
-        const pinned = spawnSync(
-          'git',
-          ['cat-file', 'blob', `${SEED_RECORD_PIN}:.totem/rules/${f}`],
-          { cwd: REPO_ROOT, maxBuffer: 16 * 1024 * 1024 },
-        );
-        if (pinned.status !== 0) {
-          drift.push(`${f}: absent at the pin`);
-          continue;
-        }
-        const mine = fs.readFileSync(path.join(SEED_RECORDS_DIR, f));
-        if (sha256(pinned.stdout as Buffer) !== sha256(mine)) drift.push(`${f}: BYTES DIFFER`);
-      }
-      checks.eq(
-        `SEED PIN — every seed/records/ copy is BYTE-IDENTICAL to \`${SEED_RECORD_PIN}:.totem/rules/<file>\``,
-        drift,
-        [],
+      // (T7) BOTH directions. Enumerating only the local copies proves nothing about
+      // a record that exists at the pin and was never copied: the sweep would simply
+      // not look at it, and 22 copies of a 23-record pin would pass. So the pinned
+      // tree is enumerated too, and each side reports what the other is missing.
+      const pinnedList = spawnSync(
+        'git',
+        ['ls-tree', '-r', '--name-only', SEED_RECORD_PIN, '--', '.totem/rules/'],
+        { cwd: REPO_ROOT, encoding: 'utf-8', maxBuffer: 16 * 1024 * 1024 },
       );
+      if (pinnedList.error !== undefined || pinnedList.status !== 0) {
+        checks.check(
+          `SEED PIN — the pinned rule tree could NOT be enumerated (\`git ls-tree -r --name-only ${SEED_RECORD_PIN} -- .totem/rules/\`)`,
+          false,
+          `error=${pinnedList.error ? (pinnedList.error as Error).message : 'none'}, status=${JSON.stringify(
+            pinnedList.status,
+          )}, stderr=${String(pinnedList.stderr ?? '')
+            .trim()
+            .slice(0, 200)}`,
+        );
+      } else {
+        const pinnedNames = (pinnedList.stdout ?? '')
+          .split('\n')
+          .map((l) => l.trim())
+          .filter((l) => l.endsWith('.rule.yaml'))
+          .map((l) => path.posix.basename(l))
+          .sort();
+        const localNames = fs
+          .readdirSync(SEED_RECORDS_DIR)
+          .filter((n) => n.endsWith('.rule.yaml'))
+          .sort();
+        const drift: string[] = [];
+        for (const f of pinnedNames) {
+          if (!localNames.includes(f)) drift.push(`${f}: absent locally`);
+        }
+        for (const f of localNames) {
+          const pinned = spawnSync(
+            'git',
+            ['cat-file', 'blob', `${SEED_RECORD_PIN}:.totem/rules/${f}`],
+            { cwd: REPO_ROOT, maxBuffer: 16 * 1024 * 1024 },
+          );
+          if (pinned.status !== 0) {
+            drift.push(`${f}: absent at the pin`);
+            continue;
+          }
+          const mine = fs.readFileSync(path.join(SEED_RECORDS_DIR, f));
+          if (sha256(pinned.stdout as Buffer) !== sha256(mine)) drift.push(`${f}: BYTES DIFFER`);
+        }
+        checks.eq(
+          `SEED PIN — the ${pinnedNames.length} \`.rule.yaml\` files at \`${SEED_RECORD_PIN}:.totem/rules/\` and the ${localNames.length} under seed/records/ are the SAME SET, each pair byte-identical`,
+          drift,
+          [],
+        );
+      }
     }
   }
 

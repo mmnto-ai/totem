@@ -28,6 +28,7 @@ import {
 import {
   ARTIFACTS_DIR,
   Checks,
+  computeBundlesSha256,
   computeRunManifestSha256,
   MANIFEST_ARTIFACT,
   OPA_BIN,
@@ -156,9 +157,17 @@ function main(): void {
       return { file, sha256: fs.existsSync(abs) ? sha256(fs.readFileSync(abs)) : null };
     });
 
-  // ── T5's sweep set: `git ls-files` at HEAD, sorted, published beside the manifest ──
-  const ls = run('git', ['ls-files'], REPO_ROOT);
-  if (!ls.ok) throw new Error(`\`git ls-files\` failed in ${REPO_ROOT}: ${ls.out}`);
+  // ── T5's sweep set: the tree at the RECORDED COMMIT, sorted, published beside
+  //    the manifest ──
+  //
+  // `git ls-tree -r HEAD`, never `git ls-files` (mmnto-ai/totem#2694, T17):
+  // `ls-files` reads the INDEX, so a staged add or a staged delete would put paths
+  // in the sweep set that are not at the commit `runCommit` names — the manifest
+  // would say HEAD and mean something else. The index's disagreement with the tree
+  // is recorded separately, as `workingTreeClean`.
+  const ls = run('git', ['ls-tree', '-r', '--name-only', 'HEAD'], REPO_ROOT);
+  if (!ls.ok)
+    throw new Error(`\`git ls-tree -r --name-only HEAD\` failed in ${REPO_ROOT}: ${ls.out}`);
   const trackedList = ls.out
     .split('\n')
     .map((l) => l.trim())
@@ -167,6 +176,15 @@ function main(): void {
   const trackedText = `${trackedList.join('\n')}\n`;
   fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
   fs.writeFileSync(path.join(ARTIFACTS_DIR, TRACKED_PATHS_ARTIFACT), trackedText, 'utf-8');
+
+  // RECORDED, never gated (T17): the manifest states whether the tree the run
+  // happened in matched the commit it names. A dirty tree is the SCORER's to refuse
+  // — the apparatus emits the fact and decides no verdict (spec § "This slice is
+  // APPARATUS, never scoring").
+  const status = run('git', ['status', '--porcelain'], REPO_ROOT);
+  if (!status.ok)
+    throw new Error(`\`git status --porcelain\` failed in ${REPO_ROOT}: ${status.out}`);
+  const dirtyEntries = status.out.split('\n').filter((l) => l.trim().length > 0);
 
   const head = run('git', ['rev-parse', 'HEAD'], REPO_ROOT);
   if (!head.ok) throw new Error(`\`git rev-parse HEAD\` failed in ${REPO_ROOT}: ${head.out}`);
@@ -177,6 +195,9 @@ function main(): void {
       'spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).',
     recordSet,
     runCommit: head.out,
+    // T17 — a FACT about the run, not a gate: `trackedPaths` below is the tree at
+    // `runCommit`, and this says whether the tree the run actually read matched it.
+    workingTreeClean: dirtyEntries.length === 0,
     recordPin: SEED_RECORD_PIN,
     recordPinApplies:
       recordSet === 'seed20'
@@ -186,7 +207,8 @@ function main(): void {
     fixtures,
     probePaths: sharedProbePaths(recordSet),
     trackedPaths: {
-      source: 'git ls-files at HEAD, sorted (T5 sweep set)',
+      source:
+        'git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)',
       list: `artifacts/${TRACKED_PATHS_ARTIFACT}`,
       count: trackedList.length,
       sha256: sha256(trackedText),
@@ -194,6 +216,10 @@ function main(): void {
     // Filled by `src/facts.mts` (§ G5, "filled after facts"). Outside the digest
     // preimage, so filling it cannot move the identity earlier artifacts carry.
     bundles: [] as { fixtureId: string; sha256: string }[],
+    // T15 — computed by `fillManifestBundles` from the list above, and embedded
+    // beside `runManifestSha256` in every artifact written after facts. `null` here
+    // is the honest pre-facts state: the bundle set does not exist yet.
+    bundlesSha256: null as string | null,
     toolchain: {
       opa: fromBinary('the pinned OPA binary', OPA_BIN, ['version']),
       rust: fromBinary('the installed cargo', 'cargo', ['--version']),
@@ -234,6 +260,19 @@ function main(): void {
     trackedList.length > 0,
     `${trackedList.length} paths -> artifacts/${TRACKED_PATHS_ARTIFACT}`,
   );
+  // RECORDED, never gated (T17). `ok` is deliberately `true` either way: a dirty
+  // tree is a fact for the scorer, and a manifest that refused to be written in one
+  // would take the whole pipeline down over a scratch file.
+  checks.check(
+    "the working tree state at `runCommit` is RECORDED (not gated — a dirty tree is the scorer's to refuse)",
+    true,
+    manifest.workingTreeClean === true
+      ? 'clean'
+      : `DIRTY: ${dirtyEntries.length} entr${dirtyEntries.length === 1 ? 'y' : 'ies'} from \`git status --porcelain\` — ${dirtyEntries
+          .slice(0, 5)
+          .map((l) => l.trim())
+          .join('; ')}${dirtyEntries.length > 5 ? '; …' : ''}`,
+  );
   const unresolved = Object.entries(manifest.toolchain as Record<string, Resolved>)
     .filter(([, v]) => v.version === null)
     .map(([k, v]) => `${k} (${v.resolvedFrom}: ${v.unresolvedReason ?? 'unresolved'})`);
@@ -251,9 +290,36 @@ function main(): void {
       : `UNRESOLVED (recorded as null, not fabricated): ${unresolved.join('; ')}`,
   );
   checks.eq(
-    'the digest is stable under the pending `bundles` fill (it is outside the preimage)',
-    computeRunManifestSha256({ ...manifest, bundles: [{ fixtureId: 'x', sha256: 'y' }] }),
+    'the digest is stable under the pending `bundles` + `bundlesSha256` fill (both are outside the preimage)',
+    computeRunManifestSha256({
+      ...manifest,
+      bundles: [{ fixtureId: 'x', sha256: 'y' }],
+      bundlesSha256: computeBundlesSha256([{ fixtureId: 'x', sha256: 'y' }]),
+    }),
     manifest.runManifestSha256,
+  );
+  // T15 — and the SECOND digest is a real function of the bundle bytes, order-free.
+  // Without this the pre-facts digest would be the whole identity again, which is
+  // exactly the gap it exists to close.
+  const probeA = [
+    { fixtureId: 'b', sha256: '2'.repeat(64) },
+    { fixtureId: 'a', sha256: '1'.repeat(64) },
+  ];
+  const probeB = [
+    { fixtureId: 'a', sha256: '1'.repeat(64) },
+    { fixtureId: 'b', sha256: '2'.repeat(64) },
+  ];
+  const probeC = [
+    { fixtureId: 'a', sha256: '1'.repeat(64) },
+    { fixtureId: 'b', sha256: '3'.repeat(64) },
+  ];
+  checks.check(
+    '`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)',
+    computeBundlesSha256(probeA) === computeBundlesSha256(probeB) &&
+      computeBundlesSha256(probeB) !== computeBundlesSha256(probeC),
+    `sorted-equal=${computeBundlesSha256(probeA) === computeBundlesSha256(probeB)}, bytes-differ=${
+      computeBundlesSha256(probeB) !== computeBundlesSha256(probeC)
+    }`,
   );
 
   console.log(

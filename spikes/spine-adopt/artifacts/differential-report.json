@@ -21,7 +21,7 @@
     },
     {
       "id": "MALFORMED-FACTS-CONTROL",
-      "fires": "the pair's fixture is a synthetic malformed-facts bundle (marked `provenance.malformedFactsControl` by the fact producer) AND both arms produced the error row it exists to force",
+      "fires": "the pair's fixture is a synthetic malformed-facts bundle (marked `provenance.malformedFactsControl` by the fact producer) AND both arms produced an error row AND each arm's error is ITS OWN designed error for this control (shipped: error begins `MALFORMED FACTS`; opa: error contains `EMPTY RESULT SET`; regorus: error contains `UNDEFINED/non-object`) — any other paired errors (a trap, a decode failure, the other arm's text) stay UNEXPLAINED with both messages",
       "timesFired": 0,
       "rationale": "Spec § G8 (K5b). The control exists to make every arm error, so without a carve-out the one bundle that PROVES the strictness contract would render as an unexplained divergence and, arm-to-arm, would manufacture a parity divergence out of two arms behaving identically. Keyed on the FIXTURE, never on a divergence shape, and it does NOT fire when an arm produced a verdict instead of an error — that is reported as the failure it is."
     }
@@ -982,6 +982,46 @@
       "detail": "expected EXPLAINED-DIVERGENCE, got EXPLAINED-DIVERGENCE"
     },
     {
+      "name": "DETECTOR C2 CONTROL — shipped MALFORMED FACTS vs opa EMPTY RESULT SET (each arm its OWN designed error) is EXPLAINED",
+      "ok": true,
+      "detail": "expected EXPLAINED-DIVERGENCE, got EXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — opa EMPTY RESULT SET vs regorus UNDEFINED/non-object is EXPLAINED",
+      "ok": true,
+      "detail": "expected EXPLAINED-DIVERGENCE, got EXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — the OTHER arm's text on the shipped side (EMPTY RESULT SET where MALFORMED FACTS is designed) is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — bare `UNDEFINED` on regorus (the opa phrasing, not regorus`s `UNDEFINED/non-object`) is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — a wasm trap beside a designed error (both errored, wrong text) is UNEXPLAINED",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — a clean verdict on one arm of the control is UNEXPLAINED (the control did not control)",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "DETECTOR C2 CONTROL — the same designed pair on a fixture NOT flagged as the control is UNEXPLAINED (the carve-out is keyed on provenance, never on error shape)",
+      "ok": true,
+      "detail": "expected UNEXPLAINED-DIVERGENCE, got UNEXPLAINED-DIVERGENCE"
+    },
+    {
+      "name": "FACT BYTES — every bundle the arms read hashes to the manifest's attestation, and the attested set is exactly the set on disk (the run identity BINDS the evaluated fact bytes, not just records them)",
+      "ok": true,
+      "detail": "24/24 bundles verified against manifest.bundles"
+    },
+    {
       "name": "the fact bundles and the OPA arm agree on the fixture count",
       "ok": true,
       "detail": "24"
@@ -1042,5 +1082,6 @@
       "detail": "0"
     }
   ],
-  "runManifestSha256": "0f443c032f56e951f258277bd2c5ee72157d5d2e7ad596c6f750b0685bb3a216"
+  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340",
+  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

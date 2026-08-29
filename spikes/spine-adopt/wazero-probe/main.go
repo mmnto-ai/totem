@@ -202,6 +202,62 @@ func joinIsSound(rec loweredRecord, f factFile) error {
 	return nil
 }
 
+// factsIndexPath is where the fact corpus's index lives, named once so the
+// refusals below and the count derivation cannot point at different files.
+func factsIndexPath(root string) string {
+	return filepath.Join(root, "artifacts", "facts-index.json")
+}
+
+// factsIndex is `artifacts/facts-index.json` as far as this arm models it.
+//
+// RecordSet is a POINTER so an ABSENT key is distinguishable from an empty one.
+// The refusal C1 asks for is "this corpus does not say which record set generated
+// it", and a plain string would decode a pre-C1 corpus as `""` and then compare
+// that against the selector — reporting the wrong condition, or, if the selector
+// were ever empty, none at all.
+type factsIndex struct {
+	RecordSet   *string `json:"recordSet"`
+	BundleCount int     `json:"bundleCount"`
+}
+
+// recordSetIdentityRefusal is the class name every record-set identity refusal
+// carries, in the house style of the other named refusals (`EMPTY RESULT SET`,
+// `ABSENT ROW`). It is a constant so the tests assert on the same token the probe
+// prints rather than on a re-spelled copy of the sentence.
+const recordSetIdentityRefusal = "RECORD-SET IDENTITY"
+
+// loadFactsIndex reads the fact corpus's index and REFUSES a corpus that was not
+// generated for the SELECTED record set (mmnto-ai/totem#2694 C1 / G10).
+//
+// The identity check is the first thing done with the index, before any count is
+// read off it and before any bundle is joined to a record, because cardinality
+// cannot detect the failure it guards: the index stores only `bundleCount`, and a
+// corpus generated for another record set can agree on that count by coincidence —
+// at which point every downstream check runs green against the wrong contract.
+// A missing field is refused just as hard as a mismatched one; the TS half writes
+// it on every run now, so its absence means the corpus predates this contract and
+// its provenance is simply unknown.
+func loadFactsIndex(root, recordSet string) (factsIndex, error) {
+	var idx factsIndex
+	at := factsIndexPath(root)
+	if err := readJSON(at, &idx); err != nil {
+		return idx, err
+	}
+	if idx.RecordSet == nil {
+		return idx, fmt.Errorf("%s — %s declares no `recordSet`, so the fact corpus does not say which record set "+
+			"generated it and cannot be scored against the selected %q set (%s). Regenerate the corpus with "+
+			"`npm run facts` (mmnto-ai/totem#2694 C1)",
+			recordSetIdentityRefusal, at, recordSet, recordSetEnvVar)
+	}
+	if *idx.RecordSet != recordSet {
+		return idx, fmt.Errorf("%s — %s was generated for the %q record set but this run selects %q (%s). Refusing "+
+			"before any cardinality or join check: the index carries only `bundleCount`, which a corpus from another "+
+			"record set can match by coincidence, and every row would then be scored against the wrong contract",
+			recordSetIdentityRefusal, at, *idx.RecordSet, recordSet, recordSetEnvVar)
+	}
+	return idx, nil
+}
+
 // expectedRowCount DERIVES the per-arm verdict-row cardinality from the run's own
 // inputs. It is never a literal: the seven-specimen set has 24 bundles and the
 // seed20 set has a different number, and a hardcoded count would either fail the
@@ -211,12 +267,13 @@ func joinIsSound(rec loweredRecord, f factFile) error {
 // number is only worth what its source is worth: an index that disagrees with the
 // corpus it indexes cannot ground a cardinality assertion, so that disagreement
 // stops the run rather than picking a winner.
-func expectedRowCount(root string, facts []factFile) (int, error) {
-	var idx struct {
-		BundleCount int `json:"bundleCount"`
-	}
-	at := filepath.Join(root, "artifacts", "facts-index.json")
-	if err := readJSON(at, &idx); err != nil {
+//
+// It reads the index through loadFactsIndex, so no count can be derived from a
+// corpus whose record-set identity has not been checked first.
+func expectedRowCount(root, recordSet string, facts []factFile) (int, error) {
+	at := factsIndexPath(root)
+	idx, err := loadFactsIndex(root, recordSet)
+	if err != nil {
 		return 0, err
 	}
 	if idx.BundleCount != len(facts) {

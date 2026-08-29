@@ -49,9 +49,12 @@ func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, e
 				"would otherwise fan one fixture across siblings.",
 		},
 		"explanationClasses": []map[string]any{{
-			"id":        "MALFORMED-FACTS-CONTROL",
-			"fires":     "fixtureId == " + malformedFactsControlFixture + " AND both arms returned an error row",
-			"declines":  "either arm returned a clean verdict, or either arm produced no row at all",
+			"id": "MALFORMED-FACTS-CONTROL",
+			"fires": "fixtureId == " + malformedFactsControlFixture + " AND both arms returned an error row AND each arm's error is " +
+				"ITS OWN designed error for this control (shipped: begins `" + shippedDesignedControlError + "`; opa/wazero: contains `" +
+				wasmDesignedControlError + "`)",
+			"declines": "either arm returned a clean verdict, or either arm produced no row at all, or either arm's error is not its " +
+				"designed one (a trap, a decode failure, the other arm's text) — reported UNEXPLAINED with both messages",
 			"rationale": malformedFactsControlExplanation,
 		}},
 		"summary": map[string]any{

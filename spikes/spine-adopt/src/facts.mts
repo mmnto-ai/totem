@@ -494,9 +494,25 @@ async function main(): Promise<void> {
     );
   }
 
+  // (G5) the manifest's `bundles[]` and its `bundlesSha256`, filled BEFORE the index
+  // is written — the run's identity now names the exact fact bytes every arm was
+  // evaluated against, and `facts-index.json` is itself a post-facts artifact that
+  // must carry that digest (mmnto-ai/totem#2694, T15).
+  const manifestAt = fillManifestBundles(
+    records.map((r) => ({
+      fixtureId: r.fixtureId,
+      sha256: sha256(fs.readFileSync(path.join(FACTS_DIR, bundleFileName(r)))),
+    })),
+  );
+
   const index = writeArtifact('facts-index.json', {
     generatedBy: 'spikes/spine-adopt/src/facts.mts',
     spec: '.totem/specs/spine-spike.md § Data model deltas (FactBundle) + § Differential units',
+    // (C1, mmnto-ai/totem#2694) The fact corpus names its own record set. The Go
+    // probe REFUSES a corpus whose `recordSet` differs from its `SPIKE_RECORD_SET`
+    // before any cardinality or join check, so a stale corpus cannot be read as the
+    // set the reader thinks it asked for.
+    recordSet,
     factsDir: path.relative(REPO_ROOT, FACTS_DIR).split(path.sep).join('/'),
     bundleCount: records.length,
     bundles: records.map((r) => ({
@@ -522,15 +538,6 @@ async function main(): Promise<void> {
     })),
     checks: checks.rows,
   });
-
-  // (G5) the manifest's `bundles[]`, filled here — the run's identity now names the
-  // exact fact bytes every arm was evaluated against.
-  const manifestAt = fillManifestBundles(
-    records.map((r) => ({
-      fixtureId: r.fixtureId,
-      sha256: sha256(fs.readFileSync(path.join(FACTS_DIR, bundleFileName(r)))),
-    })),
-  );
 
   console.log(`\n${records.length} fact bundles written to ${FACTS_DIR}`);
   console.log(`index: ${index}`);

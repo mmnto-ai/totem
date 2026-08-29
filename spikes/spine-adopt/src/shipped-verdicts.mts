@@ -85,6 +85,19 @@ interface VerdictRow {
   error?: string;
 }
 
+/**
+ * (C3, mmnto-ai/totem#2694) The ONE definition of "this is an error row" on the
+ * shipped arm: a NON-EMPTY error string. An empty string is not an error — a row
+ * carrying `error: ""` has no failure to report, and reading it as one would drop a
+ * real verdict out of every measurement that filters error rows out. Named here so
+ * the K5b control check, the `matchCount`/`lineCount` assertion and the regex
+ * asymmetry measurement all read the same predicate (the Go half is
+ * `wazero-probe/compare.go`, which already requires non-empty).
+ */
+function isErrorRow(row: Pick<VerdictRow, 'error'>): boolean {
+  return typeof row.error === 'string' && row.error.length > 0;
+}
+
 function ctx(): any {
   return { logger: { warn: () => {} }, state: { hasWarnedShieldContext: false } };
 }
@@ -210,12 +223,7 @@ async function main(): Promise<void> {
         } catch (err) {
           errorText = `${errorText}: ${(err as Error).message}`;
         }
-        checks.check(
-          `${rec.fixtureId} — MALFORMED-FACTS CONTROL (K5b): the shipped arm records an ERROR ROW, never a clean zero`,
-          true,
-          errorText.slice(0, 200),
-        );
-        rows.push({
+        const controlRow: VerdictRow = {
           ...rowBase,
           fired: null,
           matchCount: null,
@@ -224,7 +232,42 @@ async function main(): Promise<void> {
           armsCoincide: false,
           armsAgree: false,
           error: errorText,
-        });
+        };
+        // (T21, mmnto-ai/totem#2694) The check reads the ROW ABOUT TO BE PUSHED, not
+        // the literal `true`. Honest about its strength (round-1 falsification leg,
+        // M2): the one INPUT-sensitive conjunct is the last — a control bundle whose
+        // `lines[]` are in fact all strings (the premise silently gone) produces an
+        // empty `malformed` list and MUST fail here rather than pass with an empty
+        // member list. The five shape conjuncts read the literal row constructed
+        // above, so today they cannot fail; they are a REGRESSION TRIPWIRE on that
+        // construction (an edit that makes the control row carry a verdict, or an
+        // empty error string per C3, fails a named check instead of shipping).
+        const controlClaims: [string, boolean][] = [
+          ['fired === null', controlRow.fired === null],
+          ['matchCount === null', controlRow.matchCount === null],
+          ['arms is empty', controlRow.arms.length === 0],
+          ['error is a NON-EMPTY string', isErrorRow(controlRow)],
+          [
+            'error begins `MALFORMED FACTS`',
+            (controlRow.error ?? '').startsWith('MALFORMED FACTS'),
+          ],
+          ['the bundle really has a non-string member', malformed.length > 0],
+        ];
+        const brokenClaims = controlClaims.filter(([, ok]) => !ok).map(([name]) => name);
+        checks.check(
+          `${rec.fixtureId} — MALFORMED-FACTS CONTROL (K5b): the shipped arm records an ERROR ROW, never a clean zero`,
+          brokenClaims.length === 0,
+          brokenClaims.length === 0
+            ? errorText.slice(0, 200)
+            : `the control row FAILS: ${brokenClaims.join('; ')} — row=${JSON.stringify({
+                fired: controlRow.fired,
+                matchCount: controlRow.matchCount,
+                arms: controlRow.arms.length,
+                malformedMembers: malformed,
+                error: (controlRow.error ?? '').slice(0, 120),
+              })}`,
+        );
+        rows.push(controlRow);
         continue;
       }
 
@@ -358,16 +401,25 @@ async function main(): Promise<void> {
     }
 
     // A verdict is never a line count — asserted, not just written in a comment.
-    const anyDivergence = rows.some((r) => r.matchCount !== r.lineCount);
+    //
+    // (T22, mmnto-ai/totem#2694) ERROR ROWS ARE EXCLUDED, using the same predicate
+    // the regex asymmetry measurement below uses: an error row's `matchCount` is
+    // `null` by construction, so it differs from `lineCount` for a reason that has
+    // nothing to do with the claim — and would let the claim pass on a corpus where
+    // every real row's count happened to equal its line count.
+    const verdictRows = rows.filter((r) => !isErrorRow(r));
+    const divergentRows = verdictRows.filter((r) => r.matchCount !== r.lineCount);
     checks.check(
       'a VERDICT is the violation multiset, NOT a count of fixture lines (at least one row proves they differ)',
-      anyDivergence,
-      `${rows.filter((r) => r.matchCount !== r.lineCount).length} of ${rows.length} rows have matchCount !== lineCount`,
+      divergentRows.length > 0,
+      `${divergentRows.length} of ${verdictRows.length} verdict rows have matchCount !== lineCount (${
+        rows.length - verdictRows.length
+      } error row(s) excluded)`,
     );
 
     // The engine asymmetry § Differential units names, measured on real rows.
     // An ERROR ROW carries no arms, so it is not a row this measurement can read.
-    const regexRows = rows.filter((r) => r.engine === 'regex' && r.error === undefined);
+    const regexRows = rows.filter((r) => r.engine === 'regex' && !isErrorRow(r));
     checks.check(
       'ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)',
       regexRows.every((r) => {

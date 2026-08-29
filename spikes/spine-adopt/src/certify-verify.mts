@@ -309,7 +309,28 @@ function main(): void {
   // named reason, and the per-chain claims that do not need a committed referent —
   // (d) the manifest re-derivation, (e) the five-member binding, (f) the guarded
   // result path — still run on every published chain.
-  const committedChainsApply = recordSet === 'specimens';
+  //
+  // (T13, mmnto-ai/totem#2694) The gate is keyed on the MANIFEST's record set, not
+  // on the environment. `SPIKE_RECORD_SET` describes the process; the manifest
+  // describes the run that was DECLARED at step 0. (The chains themselves trace to
+  // the environment too — `src/lower.mts` selects the set via `activeRecordSet()`,
+  // and `certify.mts` never reads the manifest's set — so what actually keeps
+  // "chains on disk" and "gate" in the same run is the AGREEMENT check below, not
+  // the manifest alone; round-1 falsification leg, m6.) Keying the gate on the
+  // environment let `SPIKE_RECORD_SET=seed20` skip the committed-vs-published half
+  // over a `artifacts/chains/` still holding specimen certificates — the invariant
+  // silently not run, and nothing contradicting it. The two must agree, and a
+  // disagreement is a FAILED check, never a skip.
+  const manifestRecordSet = manifest.recordSet;
+  checks.check(
+    "INV 2 — the manifest's record set and `SPIKE_RECORD_SET` AGREE (the artifacts on disk and this process are the same run)",
+    manifestRecordSet === recordSet,
+    `manifest.recordSet=${JSON.stringify(manifestRecordSet)}, activeRecordSet()=${JSON.stringify(recordSet)}` +
+      (manifestRecordSet === recordSet
+        ? ''
+        : ' — re-run `npm run all` for this record set before certifying'),
+  );
+  const committedChainsApply = manifestRecordSet === 'specimens';
   if (committedChainsApply) {
     checks.eq(
       'INV 2 — the published chain set is exactly the pre-slice committed chain set',
@@ -318,7 +339,7 @@ function main(): void {
     );
   } else {
     checks.check(
-      `INV 2 — SKIPPED with the named reason \`committed-chains-are-the-specimens-baseline\`: the ${chainFiles.length} published chain(s) belong to record set \`${recordSet}\`, and \`artifacts/chains/\` at HEAD holds the ${committedNames.length} seven-specimen certificates`,
+      `INV 2 — SKIPPED with the named reason \`committed-chains-are-the-specimens-baseline\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's), and \`artifacts/chains/\` at HEAD holds the ${committedNames.length} seven-specimen certificates`,
       true,
       `published: ${chainFiles.length}; committed at HEAD: ${committedNames.length}`,
     );
@@ -352,12 +373,23 @@ function main(): void {
       unknown
     >;
     const current = JSON.parse(currentText) as Record<string, unknown>;
-    const changed = Object.keys(committed).filter(
-      (k) => JSON.stringify(committed[k]) !== JSON.stringify(current[k]),
-    );
-    const added = Object.keys(current)
-      .filter((k) => !(k in committed))
-      .sort();
+    // (T18, mmnto-ai/totem#2694) With no committed referent these are NOT empty and
+    // "every key added", they are UNKNOWABLE — `{}` is a stand-in, not a chain. They
+    // report `null`, exactly as `mode`, `allModeChecksPassed` and `preservedBytes`
+    // already do on the same branch, so a reader cannot mistake "nothing to compare
+    // against" for "nothing changed".
+    const changed =
+      committedText === null
+        ? null
+        : Object.keys(committed).filter(
+            (k) => JSON.stringify(committed[k]) !== JSON.stringify(current[k]),
+          );
+    const added =
+      committedText === null
+        ? null
+        : Object.keys(current)
+            .filter((k) => !(k in committed))
+            .sort();
 
     // (d) the manifest hash, RE-DERIVED here from the module rather than trusted
     //     from the report — an independent second reading of the same artifact.
@@ -415,7 +447,7 @@ function main(): void {
       mode: cmp?.mode ?? null,
       modeReason:
         cmp === null
-          ? `no committed referent — record set \`${recordSet}\`, so the committed-vs-published half of INV 2 is skipped for this chain`
+          ? `no committed referent — the manifest's record set is \`${String(manifestRecordSet)}\`, so the committed-vs-published half of INV 2 is skipped for this chain`
           : cmp.mode === 'drift-detection'
             ? `the committed chain carries \`${POST_SLICE_MARKER}\` — the slice is committed, so the claim is byte-EQUALITY`
             : `the committed chain has no \`${POST_SLICE_MARKER}\` — a pre-slice baseline, so the claim is the additive extension`,

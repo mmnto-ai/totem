@@ -166,6 +166,17 @@ async function main(): Promise<void> {
   // says how many it lowered. A record that went missing between them is reported
   // as that, once — instead of a stale literal naming itself.
   const manifest = readRunManifest();
+  // (T3, mmnto-ai/totem#2694) Asserted, not assumed: a manifest whose `records` is
+  // missing or not an array would make `.length` `undefined`, `expectedLowered` NaN
+  // and the count check below fail with a number nobody can act on. Name the
+  // artifact and the command that rebuilds it instead.
+  if (!Array.isArray(manifest.records)) {
+    throw new Error(
+      `artifacts/manifest.json carries no \`records\` ARRAY (got ${JSON.stringify(
+        manifest.records,
+      )}) — the run manifest is invalid; re-run \`npm run manifest\`.`,
+    );
+  }
   const declaredRecords = (manifest.records as unknown[]).length;
   const stagedRejects = (lowering.rejects ?? []).filter((r) => typeof r.stage === 'string').length;
   const expectedLowered = declaredRecords - stagedRejects;
@@ -593,8 +604,13 @@ async function main(): Promise<void> {
       'rego/LOWERING.md § Host contract ("enumerates EVERY import the wasm instance requires") + spec § Spike 1 ("all imports/builtins enumerated"; "Census required builtins and OPA ABI imports BEFORE choosing the host path")',
     opaVersion: version,
     headline: {
-      [`hostImplementedBuiltinsAcrossAll${censuses.length}`]: [...allHostBuiltins].sort(),
-      [`distinctImportsAcrossAll${censuses.length}`]: [...allImports].sort(),
+      // (T4, mmnto-ai/totem#2694) FIXED key names beside the count as its own key.
+      // The count used to be interpolated INTO the key, so a run over a different
+      // record set published a differently-named field and every reader keyed on the
+      // old spelling silently read `undefined`.
+      censusedPolicies: censuses.length,
+      hostImplementedBuiltinsAcrossAll: [...allHostBuiltins].sort(),
+      distinctImportsAcrossAll: [...allImports].sort(),
       finding: `ZERO host-implemented builtins across all ${censuses.length} policies. \`regex.match\` — the builtin that decides every verdict in this spike — is COMPILED NATIVELY INTO THE WASM by \`opa build\`, not delegated to the host. The regex engine that actually runs is OPA's own wasm-compiled engine; neither the host language's regex crate nor the Go RE2 binary is in the evaluation path. Measured to agree with the Go binary on every discriminating probe (see \`engineProbes\`), and the empty map is falsified by controls that DO demand \`crypto.sha256\` / \`regex.find_n\`.`,
       hostPathConsequence:
         'The host never needs builtin injection for these policies, so `rust-opa-wasm`\'s fixed `builtins::resolve` table — which has no public extension point — is not a constraint here. It WOULD be for any policy using a builtin outside that table, and `regex.find_n` is the sharp case: it IS in the crate\'s table but its body is `bail!("not implemented")`, so such a policy loads fine and fails at CALL time.',

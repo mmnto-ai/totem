@@ -124,7 +124,11 @@ func normaliseRego(arm string, rows []regoRow) []normalRow {
 			Specimen: r.Specimen, Engine: r.Engine,
 			Fired: r.Fired, MatchCount: r.MatchCount,
 		}
-		if r.Error != nil {
+		// C3 on EVERY arm (round-1 falsification leg, M1): an error row is a
+		// NON-EMPTY error string. `error: ""` is a verdict row — reading it as an
+		// error would silently drop the violations it carries and classify the
+		// row oppositely to the TS comparator (`errorTextOf` in compare.mts).
+		if r.Error != nil && *r.Error != "" {
 			n.Error = *r.Error
 		} else {
 			n.Violations = r.Violations
@@ -150,7 +154,9 @@ func normaliseWazero(rows []verdictRow) ([]normalRow, error) {
 			RuleID: r.RuleID, FixtureID: r.FixtureID, Specimen: r.Specimen,
 			Engine: r.Engine, Fired: r.Fired, MatchCount: r.MatchCount, Error: r.Error,
 		}
-		if r.Error == nil {
+		// Same C3 rule as normaliseRego: only a NON-EMPTY error withholds the
+		// verdict fields.
+		if r.Error == nil || *r.Error == "" {
 			rr.Violations = []violation{}
 			for _, raw := range r.Violations {
 				var v violation
@@ -238,7 +244,11 @@ func run(root string) error {
 	// its index. Nothing below may write the count as a literal: the number is a
 	// property of the selected record set, not of the seven specimens this probe
 	// was first built against.
-	want, err := expectedRowCount(root, facts)
+	//
+	// This is also where the corpus's OWN record-set identity is checked against
+	// the selector (C1): the count is read through loadFactsIndex, which refuses a
+	// corpus generated for another set before anything is derived from it.
+	want, err := expectedRowCount(root, recordSet, facts)
 	if err != nil {
 		return err
 	}
@@ -422,8 +432,12 @@ func run(root string) error {
 			comparePair(rowOrAbsent(S, k, "shipped"), w),
 			comparePair(rowOrAbsent(O, k, "opa"), w))
 	}
+	// Set ONLY when the record actually carries a seed entry: an absent one stays
+	// nil and serialises as JSON `null`, never as `""` (mmnto-ai/totem#2694 C4).
 	for i := range pairs {
-		pairs[i].SeedEntry = seedEntryOf[pairs[i].Specimen]
+		if s := seedEntryOf[pairs[i].Specimen]; s != "" {
+			pairs[i].SeedEntry = &s
+		}
 	}
 	by := func(l, r string) []pairResult {
 		var out []pairResult
