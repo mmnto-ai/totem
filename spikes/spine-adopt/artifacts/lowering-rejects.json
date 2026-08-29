@@ -42,6 +42,7 @@
       "corpus": "pack-agent-workflow",
       "censusClass": "lookaround",
       "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "control": false,
       "verdict": {
         "role": "evidence-row:bddfbd2ec1c75eaf",
         "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
@@ -58,6 +59,7 @@
       "corpus": "root",
       "censusClass": "backreference",
       "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+      "control": false,
       "verdict": {
         "role": "evidence-row:80192e6ac2a1dd3c",
         "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
@@ -74,6 +76,7 @@
     {
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "ruleId": "61dcb058bd1df15d",
       "package": "totem.spike.r61dcb058bd1df15d",
       "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
@@ -95,6 +98,7 @@
     {
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "ruleId": "2d962603591aa928",
       "package": "totem.spike.r2d962603591aa928",
       "entrypoint": "totem/spike/r2d962603591aa928/result",
@@ -107,6 +111,7 @@
     {
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "ruleId": "d0815b6769304e26",
       "package": "totem.spike.rd0815b6769304e26",
       "entrypoint": "totem/spike/rd0815b6769304e26/result",
@@ -119,6 +124,7 @@
     {
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "ruleId": "87aff037d7de47a7",
       "package": "totem.spike.r87aff037d7de47a7",
       "entrypoint": "totem/spike/r87aff037d7de47a7/result",
@@ -131,6 +137,7 @@
     {
       "specimen": "d-line",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_line",
       "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
@@ -160,6 +167,7 @@
     {
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_file",
       "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
@@ -189,6 +197,7 @@
     {
       "specimen": "e",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_e",
       "entrypoint": "totem/spike/r0123456789abcdef_e/result",
@@ -516,6 +525,6 @@
       "detail": "rego/build/r0123456789abcdef_e"
     }
   ],
-  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340",
+  "runManifestSha256": "050245eeb68830125abd3ee51eb413e5f46f322d0813b3eb194bb583ec20d449",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

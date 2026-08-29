@@ -3,83 +3,91 @@
   "checks": [
     {
       "name": "DETECTOR IDENTITY — an unperturbed pair MATCHES (the detector is not stuck on \"divergent\")",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — a shifted line_number is UNEXPLAINED",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — a DROPPED violation is UNEXPLAINED (multiplicity, not just membership)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — an identical violation multiset with a DIVERGENT event stream is UNEXPLAINED",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — a `suppress` event where the other arm emitted `trigger` is UNEXPLAINED (kind is compared, not just line)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — an ERROR ROW is UNEXPLAINED, never a clean zero",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — `fired`/`matchCount` that do NOT derive from the violation multiset is UNEXPLAINED",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — an ORDINAL-ONLY permutation is EXPLAINED (and only this one is)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "DETECTOR MUTANT — an ORDINAL-ONLY permutation carrying a NON-DERIVING `matchCount` is UNEXPLAINED (the explanation branch does not skip the derivation check)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "shipped arm produced 24 verdict rows",
-      "passed": true
+      "ok": true
     },
     {
       "name": "opa (wasmtime) arm produced 24 verdict rows",
-      "passed": true
+      "ok": true
     },
     {
       "name": "wazero arm produced 24 verdict rows",
-      "passed": true
+      "ok": true
     },
     {
       "name": "the join key (ruleId, fixtureId) is unique on every arm",
-      "passed": true
+      "ok": true
     },
     {
       "name": "every shipped pair has a wazero row (no silent skip)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "the corpus is DISCRIMINATING — the shipped arm both fires and stays silent, and at least one row is multi-violation",
-      "passed": true
+      "ok": true
     },
     {
       "name": "shipped-vs-wazero — every pair MATCHES (the ruled PASS criterion: identical violation multisets AND event streams on every fixture)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "opa(wasmtime)-vs-wazero — no unexplained divergence (the SAME wasm artifact under two runtimes)",
-      "passed": true
+      "ok": true
     },
     {
       "name": "the CLASSIC eval-context sequence and the ONE-SHOT `opa_eval` fast path agree on every fixture",
-      "passed": true
+      "ok": true
+    },
+    {
+      "name": "ERROR ROWS — zero outside the K5b malformed-facts control, on every arm (wazero)",
+      "ok": true
+    },
+    {
+      "name": "no wazero verdict row carries a PRESENT but EMPTY error (C3 — an empty error string is a verdict row, so the two error-row predicates cannot disagree)",
+      "ok": true
     },
     {
       "name": "every fixture exercised BOTH ABI paths",
-      "passed": true
+      "ok": true
     },
     {
       "name": "every module's own `builtins` export is EMPTY — the host implements no builtin, so the opa_builtin0..4 stubs are provably never called",
-      "passed": true
+      "ok": true
     }
   ],
   "comparedAgainst": {
@@ -96,6 +104,18 @@
     "explained": [],
     "note": "Verbatim. Empty arrays mean no divergence was found, not that none was looked for — the detector is exercised against 9 synthetic mutants in `checks` before any real row is compared.",
     "unexplained": []
+  },
+  "errorRows": {
+    "contract": "spec `.totem/specs/seed20-apparatus.md` § G8 — the whole-run errorRows count EXCLUDES exactly the malformed-facts control bundle when the summary says \"0 outside K5b\".",
+    "k5bControlFixtureIds": [],
+    "perArm": {
+      "wazero": {
+        "total": 0,
+        "fromK5bControl": 0,
+        "outsideK5b": 0,
+        "outsideK5bFixtureIds": []
+      }
+    }
   },
   "evalSequence": {
     "bothPathsRun": "Every fixture is evaluated through BOTH sequences and the dumped JSON is compared structurally. A hand-driven ABI can produce a plausible verdict through one path while mis-driving the heap; two paths with different allocation discipline agreeing is much harder to fake.",
@@ -177,305 +197,305 @@
     }
   },
   "timingsMicros": {
-    "clockGranularityMicros": 303,
+    "clockGranularityMicros": 304.5,
     "coldEval": {
-      "max": 654.584,
-      "mean": 202.876,
-      "median": 140.16,
-      "min": 40.008
+      "max": 649.352,
+      "mean": 200.419,
+      "median": 120.44,
+      "min": 39.712
     },
     "coldReps": 25,
     "comparisonToWasmtimeArm": "artifacts/opa-verdicts.json reports a MIN over 50 individually-timed reps (cold 246-355us, warm 236-241us on specimen a). Those are minima and these are means, and they were taken through a different host crate, so treat any cross-runtime comparison as indicative only — this probe was built to answer CORRECTNESS, not to benchmark.",
     "compilePerSpecimen": {
-      "max": 64637,
-      "mean": 62746.714,
-      "median": 62790,
-      "min": 60658
+      "max": 65304,
+      "mean": 62173.571,
+      "median": 63981,
+      "min": 58472
     },
     "instantiatePerSpecimen": {
-      "max": 0,
-      "mean": 0,
-      "median": 0,
+      "max": 1565,
+      "mean": 585,
+      "median": 504,
       "min": 0
     },
-    "method": "This host's monotonic clock resolves to ~303 us, which is LARGER than one eval, so no per-call measurement is meaningful. Every eval number here is therefore a BATCH mean: one timer around N evaluations, divided by N. Warm = 200 evals on one already-warm instance. Cold = the FIRST eval on each of 25 instances that were all built before the timer started, so instantiation is excluded. Compile and instantiate are single coarse readings per specimen and are only reliable to ~303 us; compile is ~65ms and comfortably above the noise, instantiate is NOT and should be read as 'sub-millisecond' rather than as a figure.",
+    "method": "This host's monotonic clock resolves to ~304 us, which is LARGER than one eval, so no per-call measurement is meaningful. Every eval number here is therefore a BATCH mean: one timer around N evaluations, divided by N. Warm = 200 evals on one already-warm instance. Cold = the FIRST eval on each of 25 instances that were all built before the timer started, so instantiation is excluded. Compile and instantiate are single coarse readings per specimen and are only reliable to ~304 us; compile is ~65ms and comfortably above the noise, instantiate is NOT and should be read as 'sub-millisecond' rather than as a figure.",
     "perFixture": [
       {
         "specimen": "a",
         "fixtureId": "a-corpus-fail",
-        "compileMicros": 64034,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 654.584,
+        "compileMicros": 64213,
+        "instantiateMicros": 504,
+        "coldEvalMicrosMean": 649.352,
         "coldReps": 25,
-        "warmEvalMicrosMean": 540.626,
-        "warmOneShotEvalMicrosMean": 529.9995,
+        "warmEvalMicrosMean": 519.5315,
+        "warmOneShotEvalMicrosMean": 530.149,
         "warmReps": 200
       },
       {
         "specimen": "a",
         "fixtureId": "a-corpus-pass",
-        "compileMicros": 64034,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 647.088,
+        "compileMicros": 64213,
+        "instantiateMicros": 504,
+        "coldEvalMicrosMean": 639.532,
         "coldReps": 25,
-        "warmEvalMicrosMean": 528.717,
-        "warmOneShotEvalMicrosMean": 527.774,
+        "warmEvalMicrosMean": 532.0225,
+        "warmOneShotEvalMicrosMean": 551.145,
         "warmReps": 200
       },
       {
         "specimen": "a",
         "fixtureId": "a-inline-bad",
-        "compileMicros": 64034,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 632.2,
+        "compileMicros": 64213,
+        "instantiateMicros": 504,
+        "coldEvalMicrosMean": 611.288,
         "coldReps": 25,
-        "warmEvalMicrosMean": 511.1365,
-        "warmOneShotEvalMicrosMean": 526.9545,
+        "warmEvalMicrosMean": 526.695,
+        "warmOneShotEvalMicrosMean": 531.7315,
         "warmReps": 200
       },
       {
         "specimen": "a",
         "fixtureId": "a-inline-good",
-        "compileMicros": 64034,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 586.892,
+        "compileMicros": 64213,
+        "instantiateMicros": 504,
+        "coldEvalMicrosMean": 583.172,
         "coldReps": 25,
-        "warmEvalMicrosMean": 525.0125,
-        "warmOneShotEvalMicrosMean": 532.261,
+        "warmEvalMicrosMean": 514.5275,
+        "warmOneShotEvalMicrosMean": 514.083,
         "warmReps": 200
       },
       {
         "specimen": "b",
         "fixtureId": "b-corpus-fail",
-        "compileMicros": 62790,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 40.012,
+        "compileMicros": 59309,
+        "instantiateMicros": 1004,
+        "coldEvalMicrosMean": 84.184,
         "coldReps": 25,
-        "warmEvalMicrosMean": 42.5385,
-        "warmOneShotEvalMicrosMean": 38.6075,
+        "warmEvalMicrosMean": 33.18,
+        "warmOneShotEvalMicrosMean": 40.6465,
         "warmReps": 200
       },
       {
         "specimen": "b",
         "fixtureId": "b-corpus-pass",
-        "compileMicros": 62790,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 60.072,
+        "compileMicros": 59309,
+        "instantiateMicros": 1004,
+        "coldEvalMicrosMean": 60.512,
         "coldReps": 25,
-        "warmEvalMicrosMean": 35.082,
-        "warmOneShotEvalMicrosMean": 30.12,
+        "warmEvalMicrosMean": 32.2205,
+        "warmOneShotEvalMicrosMean": 29.3485,
         "warmReps": 200
       },
       {
         "specimen": "b",
         "fixtureId": "b-inline-bad",
-        "compileMicros": 62790,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 40.008,
+        "compileMicros": 59309,
+        "instantiateMicros": 1004,
+        "coldEvalMicrosMean": 39.712,
         "coldReps": 25,
-        "warmEvalMicrosMean": 40.598,
-        "warmOneShotEvalMicrosMean": 40.292,
+        "warmEvalMicrosMean": 38.067,
+        "warmOneShotEvalMicrosMean": 35.411,
         "warmReps": 200
       },
       {
         "specimen": "b",
         "fixtureId": "b-inline-good",
-        "compileMicros": 62790,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 80.116,
+        "compileMicros": 59309,
+        "instantiateMicros": 1004,
+        "coldEvalMicrosMean": 40.376,
         "coldReps": 25,
-        "warmEvalMicrosMean": 30.633,
-        "warmOneShotEvalMicrosMean": 32.524,
+        "warmEvalMicrosMean": 34.838,
+        "warmOneShotEvalMicrosMean": 27.614,
         "warmReps": 200
       },
       {
         "specimen": "c",
         "fixtureId": "c-corpus-fail",
-        "compileMicros": 60743,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 145.136,
+        "compileMicros": 59205,
+        "instantiateMicros": 1022,
+        "coldEvalMicrosMean": 144.5,
         "coldReps": 25,
-        "warmEvalMicrosMean": 119.712,
-        "warmOneShotEvalMicrosMean": 125.413,
+        "warmEvalMicrosMean": 118.175,
+        "warmOneShotEvalMicrosMean": 113.5665,
         "warmReps": 200
       },
       {
         "specimen": "c",
         "fixtureId": "c-corpus-pass",
-        "compileMicros": 60743,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 140.312,
+        "compileMicros": 59205,
+        "instantiateMicros": 1022,
+        "coldEvalMicrosMean": 120.016,
         "coldReps": 25,
-        "warmEvalMicrosMean": 94.225,
-        "warmOneShotEvalMicrosMean": 98.1655,
+        "warmEvalMicrosMean": 95.74,
+        "warmOneShotEvalMicrosMean": 95.5705,
         "warmReps": 200
       },
       {
         "specimen": "c",
         "fixtureId": "c-inline-bad",
-        "compileMicros": 60743,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 160.672,
+        "compileMicros": 59205,
+        "instantiateMicros": 1022,
+        "coldEvalMicrosMean": 126.896,
         "coldReps": 25,
-        "warmEvalMicrosMean": 103.756,
-        "warmOneShotEvalMicrosMean": 104.6405,
+        "warmEvalMicrosMean": 102.88,
+        "warmOneShotEvalMicrosMean": 98.719,
         "warmReps": 200
       },
       {
         "specimen": "c",
         "fixtureId": "c-inline-good",
-        "compileMicros": 60743,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 140.636,
+        "compileMicros": 59205,
+        "instantiateMicros": 1022,
+        "coldEvalMicrosMean": 120.032,
         "coldReps": 25,
-        "warmEvalMicrosMean": 97.292,
-        "warmOneShotEvalMicrosMean": 98.117,
+        "warmEvalMicrosMean": 98.8915,
+        "warmOneShotEvalMicrosMean": 103.591,
         "warmReps": 200
       },
       {
         "specimen": "c-supp",
         "fixtureId": "c-supp-corpus-fail",
-        "compileMicros": 60658,
+        "compileMicros": 63981,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 206.232,
+        "coldEvalMicrosMean": 120.44,
         "coldReps": 25,
-        "warmEvalMicrosMean": 100.481,
-        "warmOneShotEvalMicrosMean": 98.8735,
+        "warmEvalMicrosMean": 120.0415,
+        "warmOneShotEvalMicrosMean": 111.267,
         "warmReps": 200
       },
       {
         "specimen": "c-supp",
         "fixtureId": "c-supp-corpus-pass",
-        "compileMicros": 60658,
+        "compileMicros": 63981,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 80.004,
+        "coldEvalMicrosMean": 149.46,
         "coldReps": 25,
-        "warmEvalMicrosMean": 91.5035,
-        "warmOneShotEvalMicrosMean": 90.038,
+        "warmEvalMicrosMean": 98.281,
+        "warmOneShotEvalMicrosMean": 97.1955,
         "warmReps": 200
       },
       {
         "specimen": "c-supp",
         "fixtureId": "c-supp-inline-bad",
-        "compileMicros": 60658,
+        "compileMicros": 63981,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 163.492,
+        "coldEvalMicrosMean": 120.116,
         "coldReps": 25,
-        "warmEvalMicrosMean": 92.867,
-        "warmOneShotEvalMicrosMean": 103.002,
+        "warmEvalMicrosMean": 100.3675,
+        "warmOneShotEvalMicrosMean": 101.0415,
         "warmReps": 200
       },
       {
         "specimen": "c-supp",
         "fixtureId": "c-supp-inline-good",
-        "compileMicros": 60658,
+        "compileMicros": 63981,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 100.204,
+        "coldEvalMicrosMean": 285.304,
         "coldReps": 25,
-        "warmEvalMicrosMean": 88.1965,
-        "warmOneShotEvalMicrosMean": 94.4245,
+        "warmEvalMicrosMean": 88.9445,
+        "warmOneShotEvalMicrosMean": 90.858,
         "warmReps": 200
       },
       {
         "specimen": "d-line",
         "fixtureId": "d-line-inline-bad",
-        "compileMicros": 64637,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 120.936,
+        "compileMicros": 58472,
+        "instantiateMicros": 1565,
+        "coldEvalMicrosMean": 95.752,
         "coldReps": 25,
-        "warmEvalMicrosMean": 103.618,
-        "warmOneShotEvalMicrosMean": 103.948,
+        "warmEvalMicrosMean": 97.5165,
+        "warmOneShotEvalMicrosMean": 93.55,
         "warmReps": 200
       },
       {
         "specimen": "d-line",
         "fixtureId": "d-line-inline-good",
-        "compileMicros": 64637,
-        "instantiateMicros": 0,
-        "coldEvalMicrosMean": 140.124,
+        "compileMicros": 58472,
+        "instantiateMicros": 1565,
+        "coldEvalMicrosMean": 145.184,
         "coldReps": 25,
-        "warmEvalMicrosMean": 101.356,
-        "warmOneShotEvalMicrosMean": 104.9255,
+        "warmEvalMicrosMean": 96.787,
+        "warmOneShotEvalMicrosMean": 111.0795,
         "warmReps": 200
       },
       {
         "specimen": "d-file",
         "fixtureId": "d-file-control-empty",
-        "compileMicros": 62788,
+        "compileMicros": 65304,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 120.012,
+        "coldEvalMicrosMean": 119.968,
         "coldReps": 25,
-        "warmEvalMicrosMean": 93.4935,
-        "warmOneShotEvalMicrosMean": 109.519,
+        "warmEvalMicrosMean": 97.46,
+        "warmOneShotEvalMicrosMean": 105.3525,
         "warmReps": 200
       },
       {
         "specimen": "d-file",
         "fixtureId": "d-file-control-unreadable",
-        "compileMicros": 62788,
+        "compileMicros": 65304,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 141.856,
+        "coldEvalMicrosMean": 90.504,
         "coldReps": 25,
-        "warmEvalMicrosMean": 99.423,
-        "warmOneShotEvalMicrosMean": 97.0475,
+        "warmEvalMicrosMean": 120.5175,
+        "warmOneShotEvalMicrosMean": 126.966,
         "warmReps": 200
       },
       {
         "specimen": "d-file",
         "fixtureId": "d-file-inline-bad",
-        "compileMicros": 62788,
+        "compileMicros": 65304,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 122.972,
+        "coldEvalMicrosMean": 120.84,
         "coldReps": 25,
-        "warmEvalMicrosMean": 99.595,
-        "warmOneShotEvalMicrosMean": 98.579,
+        "warmEvalMicrosMean": 98.691,
+        "warmOneShotEvalMicrosMean": 108.824,
         "warmReps": 200
       },
       {
         "specimen": "d-file",
         "fixtureId": "d-file-inline-good",
-        "compileMicros": 62788,
+        "compileMicros": 65304,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 140.16,
+        "coldEvalMicrosMean": 142.984,
         "coldReps": 25,
-        "warmEvalMicrosMean": 102.894,
-        "warmOneShotEvalMicrosMean": 104.393,
+        "warmEvalMicrosMean": 99.6305,
+        "warmOneShotEvalMicrosMean": 99.855,
         "warmReps": 200
       },
       {
         "specimen": "e",
         "fixtureId": "e-inline-bad",
-        "compileMicros": 63577,
+        "compileMicros": 64731,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 125.192,
+        "coldEvalMicrosMean": 119.928,
         "coldReps": 25,
-        "warmEvalMicrosMean": 65.84,
-        "warmOneShotEvalMicrosMean": 63.051,
+        "warmEvalMicrosMean": 65.71,
+        "warmOneShotEvalMicrosMean": 63.702,
         "warmReps": 200
       },
       {
         "specimen": "e",
         "fixtureId": "e-inline-good",
-        "compileMicros": 63577,
+        "compileMicros": 64731,
         "instantiateMicros": 0,
-        "coldEvalMicrosMean": 80.116,
+        "coldEvalMicrosMean": 80.004,
         "coldReps": 25,
-        "warmEvalMicrosMean": 62.52,
-        "warmOneShotEvalMicrosMean": 62.1655,
+        "warmEvalMicrosMean": 60.9265,
+        "warmOneShotEvalMicrosMean": 60.1815,
         "warmReps": 200
       }
     ],
     "warmEvalClassic": {
-      "max": 540.626,
-      "mean": 157.13,
-      "median": 99.423,
-      "min": 30.633
+      "max": 532.023,
+      "mean": 157.985,
+      "median": 98.691,
+      "min": 32.221
     },
     "warmEvalOneShot": {
-      "max": 532.261,
-      "mean": 158.951,
-      "median": 98.874,
-      "min": 30.12
+      "max": 551.145,
+      "mean": 160.06,
+      "median": 101.042,
+      "min": 27.614
     },
     "warmReps": 200
   },

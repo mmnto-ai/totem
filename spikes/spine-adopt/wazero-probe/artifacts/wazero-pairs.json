@@ -13,10 +13,18 @@
   "contract": "mmnto-ai/totem-strategy#1154 § G10 — the wazero arm's differential rows, in artifacts/differential-report.json's shape. rego/LOWERING.md § Comparator + spec § Differential units (\"a VERDICT is the violation MULTISET\", \"`fired` derives from violations\") supply the semantics, ported in compare.go.",
   "explanationClasses": [
     {
+      "declines": "any difference in the (rule_id, line_number) multiset or in the event stream — a wider rule would launder a real semantic divergence as \"explained\", which is the failure a differential exists to prevent",
+      "fires": "the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs",
+      "id": "ORDINAL-DERIVATION-ONLY",
+      "rationale": "ORDINAL-DERIVATION ONLY — the (rule_id, line_number) violation multisets and the event streams are identical; the arms differ only on the ordinal, which the shipped side does not carry natively and which this comparator reconstructs from the FactBundle. Not a semantic divergence.",
+      "timesFired": 0
+    },
+    {
       "declines": "either arm returned a clean verdict, or either arm produced no row at all, or either arm's error is not its designed one (a trap, a decode failure, the other arm's text) — reported UNEXPLAINED with both messages",
       "fires": "fixtureId == m3-malformed-lines AND both arms returned an error row AND each arm's error is ITS OWN designed error for this control (shipped: begins `MALFORMED FACTS`; opa/wazero: contains `EMPTY RESULT SET`)",
       "id": "MALFORMED-FACTS-CONTROL",
-      "rationale": "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a non-string member: on the wasm arms (opa, wazero) `facts_wellformed` is false and the entrypoint's `result` rule is UNDEFINED (an EMPTY RESULT SET error row); the shipped harness never evaluates a policy over it and refuses the bundle (a MALFORMED FACTS error row). Each arm's error row is that arm's DESIGNED outcome of the strictness contract, not a divergence between the runtimes — and only that designed error qualifies; any other error on either side is UNEXPLAINED."
+      "rationale": "MALFORMED-FACTS-CONTROL — the K5b control bundle. Its `lines[]` carries a non-string member: on the wasm arms (opa, wazero) `facts_wellformed` is false and the entrypoint's `result` rule is UNDEFINED (an EMPTY RESULT SET error row); the shipped harness never evaluates a policy over it and refuses the bundle (a MALFORMED FACTS error row). Each arm's error row is that arm's DESIGNED outcome of the strictness contract, not a divergence between the runtimes — and only that designed error qualifies; any other error on either side is UNEXPLAINED.",
+      "timesFired": 0
     }
   ],
   "generatedBy": "spikes/spine-adopt/wazero-probe (go run .)",
@@ -26,11 +34,13 @@
       "fixtureId": "d-file-control-empty",
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -38,11 +48,13 @@
       "fixtureId": "d-file-control-unreadable",
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -50,11 +62,13 @@
       "fixtureId": "d-file-inline-bad",
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -62,11 +76,13 @@
       "fixtureId": "d-file-inline-good",
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -74,11 +90,13 @@
       "fixtureId": "d-line-inline-bad",
       "specimen": "d-line",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -86,11 +104,13 @@
       "fixtureId": "d-line-inline-good",
       "specimen": "d-line",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -98,11 +118,13 @@
       "fixtureId": "e-inline-bad",
       "specimen": "e",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -110,11 +132,13 @@
       "fixtureId": "e-inline-good",
       "specimen": "e",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -122,11 +146,13 @@
       "fixtureId": "b-corpus-fail",
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -134,11 +160,13 @@
       "fixtureId": "b-corpus-pass",
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -146,11 +174,13 @@
       "fixtureId": "b-inline-bad",
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -158,11 +188,13 @@
       "fixtureId": "b-inline-good",
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -170,11 +202,13 @@
       "fixtureId": "a-corpus-fail",
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -182,11 +216,13 @@
       "fixtureId": "a-corpus-pass",
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -194,11 +230,13 @@
       "fixtureId": "a-inline-bad",
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -206,11 +244,13 @@
       "fixtureId": "a-inline-good",
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "engine": "regex",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -218,11 +258,13 @@
       "fixtureId": "c-supp-corpus-fail",
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -230,11 +272,13 @@
       "fixtureId": "c-supp-corpus-pass",
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -242,11 +286,13 @@
       "fixtureId": "c-supp-inline-bad",
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -254,11 +300,13 @@
       "fixtureId": "c-supp-inline-good",
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -266,11 +314,13 @@
       "fixtureId": "c-corpus-fail",
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -278,11 +328,13 @@
       "fixtureId": "c-corpus-pass",
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -290,11 +342,13 @@
       "fixtureId": "c-inline-bad",
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     },
     {
@@ -302,11 +356,13 @@
       "fixtureId": "c-inline-good",
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "engine": "ast-grep",
       "left": "opa",
       "right": "wazero",
       "status": "MATCH",
       "explanation": null,
+      "explanationClass": null,
       "detail": null
     }
   ],
