@@ -28,6 +28,23 @@ import (
 // `spikes/spine-adopt/wazero-probe`.
 const spikeRoot = ".."
 
+// testPaths resolves the artifact roots the probe would resolve for `root`.
+//
+// It NEUTRALISES `SPIKE_ARTIFACTS_SUBDIR` first (mmnto-ai/totem#2694 C10): the
+// fixtures below write into `<root>/artifacts/...` directly, so a subdir left in
+// the developer's shell would send every read one directory deeper and turn these
+// tests into skips. The subdir's own behaviour is pinned by
+// TestArtifactsSubdirMovesBothRoots, which sets the variable deliberately.
+func testPaths(t *testing.T, root string) spikePaths {
+	t.Helper()
+	t.Setenv(artifactsSubdirEnvVar, "")
+	p, err := resolveSpikePaths(root)
+	if err != nil {
+		t.Fatalf("resolveSpikePaths(%q): %v", root, err)
+	}
+	return p
+}
+
 // ─── Corpus helpers (record-set agnostic) ────────────────────────────────────
 
 // builtRecord is one lowered record whose policy.wasm exists, already linked.
@@ -40,11 +57,12 @@ type builtRecord struct {
 // loadCorpus reads the CURRENT record set's lowering index and fact corpus.
 func loadCorpus(t *testing.T) ([]loweredRecord, []factFile) {
 	t.Helper()
-	recs, err := loadLowering(spikeRoot)
+	p := testPaths(t, spikeRoot)
+	recs, err := loadLowering(p)
 	if err != nil {
 		t.Skipf("no lowering index — run `npm run lower` first: %v", err)
 	}
-	facts, err := loadFacts(spikeRoot)
+	facts, err := loadFacts(p)
 	if err != nil {
 		t.Skipf("no fact corpus — run `npm run facts` first: %v", err)
 	}
@@ -56,7 +74,11 @@ func loadCorpus(t *testing.T) ([]loweredRecord, []factFile) {
 // rule (the `_<language>` twin suffix among them) is the TS lowering's to state.
 func openPolicy(t *testing.T, rec loweredRecord) (*builtRecord, bool) {
 	t.Helper()
-	wasm, err := os.ReadFile(policyWasmPath(spikeRoot, rec))
+	at, err := policyWasmPath(testPaths(t, spikeRoot), rec)
+	if err != nil {
+		t.Fatalf("policyWasmPath(%s): %v", rec.Specimen, err)
+	}
+	wasm, err := os.ReadFile(at)
 	if err != nil {
 		return nil, false
 	}
@@ -142,7 +164,7 @@ func TestExpectedRowCountDerivesFromTheCorpus(t *testing.T) {
 	for _, n := range []int{3, 7, 24, 61} {
 		root := t.TempDir()
 		writeIndex(t, root, recordSetSpecimens, n)
-		got, err := expectedRowCount(root, recordSetSpecimens, make([]factFile, n))
+		got, err := expectedRowCount(testPaths(t, root), recordSetSpecimens, make([]factFile, n))
 		if err != nil {
 			t.Fatalf("expectedRowCount over %d bundles: %v", n, err)
 		}
@@ -166,16 +188,16 @@ func writeIndex(t *testing.T, root, recordSet string, bundleCount int) {
 func TestExpectedRowCountRejectsADisagreeingIndex(t *testing.T) {
 	root := t.TempDir()
 	writeIndex(t, root, recordSetSpecimens, 24)
-	if _, err := expectedRowCount(root, recordSetSpecimens, make([]factFile, 23)); err == nil {
+	if _, err := expectedRowCount(testPaths(t, root), recordSetSpecimens, make([]factFile, 23)); err == nil {
 		t.Fatal("an index declaring 24 bundles over a 23-bundle corpus was accepted; the disagreement must be an error")
 	}
-	if _, err := expectedRowCount(root, recordSetSpecimens, nil); err == nil {
+	if _, err := expectedRowCount(testPaths(t, root), recordSetSpecimens, nil); err == nil {
 		t.Fatal("an empty corpus was accepted")
 	}
 
 	empty := t.TempDir()
 	writeIndex(t, empty, recordSetSpecimens, 0)
-	if _, err := expectedRowCount(empty, recordSetSpecimens, nil); err == nil {
+	if _, err := expectedRowCount(testPaths(t, empty), recordSetSpecimens, nil); err == nil {
 		t.Fatal("a zero-bundle index was accepted; there is nothing to hold an arm to")
 	}
 }
@@ -197,7 +219,7 @@ func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
 	}
 	mismatched := t.TempDir()
 	writeIndex(t, mismatched, recordSetSeed20, 24)
-	_, err = expectedRowCount(mismatched, selected, make([]factFile, 24))
+	_, err = expectedRowCount(testPaths(t, mismatched), selected, make([]factFile, 24))
 	if err == nil {
 		t.Fatal("a corpus generated for `seed20` was accepted under a `specimens` run; the record-set identity must refuse it")
 	}
@@ -211,7 +233,7 @@ func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
 	}
 	// The refusal must come from loadFactsIndex, i.e. BEFORE the count is derived:
 	// with a DISAGREEING corpus the identity error is still the one reported.
-	if _, err := expectedRowCount(mismatched, recordSetSpecimens, make([]factFile, 23)); err == nil ||
+	if _, err := expectedRowCount(testPaths(t, mismatched), recordSetSpecimens, make([]factFile, 23)); err == nil ||
 		!strings.Contains(err.Error(), recordSetIdentityRefusal) {
 		t.Errorf("the identity check does not run before the cardinality check: %v", err)
 	}
@@ -220,7 +242,7 @@ func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
 	// writes the field on every run now, so its absence means unknown provenance.
 	missing := t.TempDir()
 	writeJSONFile(t, filepath.Join(missing, "artifacts", "facts-index.json"), map[string]any{"bundleCount": 24})
-	_, err = expectedRowCount(missing, recordSetSpecimens, make([]factFile, 24))
+	_, err = expectedRowCount(testPaths(t, missing), recordSetSpecimens, make([]factFile, 24))
 	if err == nil {
 		t.Fatal("a corpus declaring no `recordSet` was accepted; a missing identity is refused too")
 	}
@@ -232,7 +254,7 @@ func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
 	for _, set := range []string{recordSetSpecimens, recordSetSeed20} {
 		root := t.TempDir()
 		writeIndex(t, root, set, 24)
-		if got, err := expectedRowCount(root, set, make([]factFile, 24)); err != nil || got != 24 {
+		if got, err := expectedRowCount(testPaths(t, root), set, make([]factFile, 24)); err != nil || got != 24 {
 			t.Errorf("a corpus generated for %q was refused under its own record set: (%d, %v)", set, got, err)
 		}
 	}
@@ -249,15 +271,16 @@ func TestFactsIndexRecordSetIdentityIsEnforced(t *testing.T) {
 // design — into a test failure here.
 func TestExpectedRowCountMatchesTheLiveCorpus(t *testing.T) {
 	_, facts := loadCorpus(t)
+	p := testPaths(t, spikeRoot)
 	var idx factsIndex
-	if err := readJSON(factsIndexPath(spikeRoot), &idx); err != nil {
+	if err := readJSON(factsIndexPath(p), &idx); err != nil {
 		t.Skipf("no fact index — run `npm run facts` first: %v", err)
 	}
 	if idx.RecordSet == nil {
 		t.Skipf("the fact corpus on disk predates the `recordSet` identity (mmnto-ai/totem#2694 C1) — "+
-			"regenerate it with `npm run facts`; %s carries no such field", factsIndexPath(spikeRoot))
+			"regenerate it with `npm run facts`; %s carries no such field", factsIndexPath(p))
 	}
-	got, err := expectedRowCount(spikeRoot, *idx.RecordSet, facts)
+	got, err := expectedRowCount(p, *idx.RecordSet, facts)
 	if err != nil {
 		t.Fatalf("expectedRowCount on the live corpus: %v", err)
 	}
@@ -269,20 +292,83 @@ func TestExpectedRowCountMatchesTheLiveCorpus(t *testing.T) {
 // ─── Record set selector ─────────────────────────────────────────────────────
 
 func TestLoadRecordSetReadsTheSharedSelector(t *testing.T) {
+	// The control-record selector participates in this decision (C11), so it is
+	// neutralised here: a value left in the developer's shell would otherwise
+	// make every case below a refusal.
+	t.Setenv(controlRecordEnvVar, "")
+
 	t.Setenv(recordSetEnvVar, "")
 	if got, err := loadRecordSet(); err != nil || got != recordSetSpecimens {
 		t.Errorf("unset %s = (%q, %v); want (%q, nil)", recordSetEnvVar, got, err, recordSetSpecimens)
 	}
-	for _, want := range []string{recordSetSpecimens, recordSetSeed20} {
+	// All THREE sets the spec declares, `control` included
+	// (mmnto-ai/totem#2694 C11).
+	for _, want := range []string{recordSetSpecimens, recordSetSeed20, recordSetControl} {
 		t.Setenv(recordSetEnvVar, want)
 		if got, err := loadRecordSet(); err != nil || got != want {
 			t.Errorf("%s=%q = (%q, %v); want (%q, nil)", recordSetEnvVar, want, got, err, want)
 		}
 	}
-	// A typo must not silently run the wrong set's semantics over the corpus.
-	t.Setenv(recordSetEnvVar, "seed-20")
-	if got, err := loadRecordSet(); err == nil {
-		t.Errorf("%s=%q was accepted as %q; an unknown set must be an error", recordSetEnvVar, "seed-20", got)
+	// A typo must not silently run the wrong set's semantics over the corpus —
+	// still refused, and the new set must not have widened the door.
+	for _, bad := range []string{"seed-20", "controls", "Control"} {
+		t.Setenv(recordSetEnvVar, bad)
+		if got, err := loadRecordSet(); err == nil {
+			t.Errorf("%s=%q was accepted as %q; an unknown set must be an error", recordSetEnvVar, bad, got)
+		}
+	}
+}
+
+// TestControlRecordSelectorRefusesAConflictingSet pins C11's two-variable rule
+// (mmnto-ai/totem#2694): `SPIKE_CONTROL_RECORD` SELECTS the `control` set, and
+// naming it beside any other record set is a refusal on both halves of the seam.
+//
+// The refusal matters because the failure it prevents is silent: a control-only
+// corpus scored against the seed set's contract would report a green run over one
+// record where 23 were expected — and the cardinality check would be the only
+// thing to notice, in a run that never says which decision it honoured.
+func TestControlRecordSelectorRefusesAConflictingSet(t *testing.T) {
+	const controlPath = "records/c-supp-astgrep-compound-failopen-catch.rule.yaml"
+
+	// Selected alone: the control set, with no SPIKE_RECORD_SET at all.
+	t.Setenv(recordSetEnvVar, "")
+	t.Setenv(controlRecordEnvVar, controlPath)
+	if got, err := loadRecordSet(); err != nil || got != recordSetControl {
+		t.Errorf("%s=%q with %s unset = (%q, %v); want (%q, nil) — the control record SELECTS the control set",
+			controlRecordEnvVar, controlPath, recordSetEnvVar, got, err, recordSetControl)
+	}
+
+	// Agreeing with the record set: accepted, so the rule is not "always refuse".
+	t.Setenv(recordSetEnvVar, recordSetControl)
+	if got, err := loadRecordSet(); err != nil || got != recordSetControl {
+		t.Errorf("%s=%q with %s=%q = (%q, %v); the two selectors AGREE here",
+			controlRecordEnvVar, controlPath, recordSetEnvVar, recordSetControl, got, err)
+	}
+
+	// Disagreeing: refused, and the refusal names itself and both values.
+	for _, set := range []string{recordSetSeed20, recordSetSpecimens} {
+		t.Setenv(recordSetEnvVar, set)
+		got, err := loadRecordSet()
+		if err == nil {
+			t.Fatalf("%s=%q beside %s=%q was accepted as %q; the conflict must refuse",
+				controlRecordEnvVar, controlPath, recordSetEnvVar, set, got)
+		}
+		if !strings.Contains(err.Error(), controlRecordSelectorRefusal) {
+			t.Errorf("the refusal does not name itself as a %s refusal: %v", controlRecordSelectorRefusal, err)
+		}
+		for _, want := range []string{set, controlPath, recordSetControl} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the refusal does not name %q, so it cannot say which selectors disagreed: %v", want, err)
+			}
+		}
+	}
+
+	// And with no control record the record set stands on its own.
+	t.Setenv(controlRecordEnvVar, "")
+	t.Setenv(recordSetEnvVar, recordSetSeed20)
+	if got, err := loadRecordSet(); err != nil || got != recordSetSeed20 {
+		t.Errorf("%s=%q with %s unset = (%q, %v); the refusal must need BOTH variables",
+			recordSetEnvVar, recordSetSeed20, controlRecordEnvVar, got, err)
 	}
 }
 
@@ -312,9 +398,22 @@ func TestIsRequiredFollowsTheRecordSet(t *testing.T) {
 		}
 	}
 
+	// `control` is treated like `seed20` — all rows required
+	// (mmnto-ai/totem#2694 C11). The control-only build carries one record, and
+	// exempting it would leave the run with no required row at all.
+	for _, specimen := range []string{"c-supp", "d-file", "", "anything-at-all"} {
+		if !isRequired(recordSetControl, specimen) {
+			t.Errorf("isRequired(%q, %q) = false; every record of the control-only build is required",
+				recordSetControl, specimen)
+		}
+	}
+
 	// The two sets must genuinely differ, or the generalisation is vacuous.
 	if isRequired(recordSetSpecimens, "b") == isRequired(recordSetSeed20, "b") {
 		t.Error("isRequired answers the same for both record sets; the required subset is not set-dependent")
+	}
+	if isRequired(recordSetSpecimens, "b") == isRequired(recordSetControl, "b") {
+		t.Error("isRequired answers the same for `specimens` and `control`; the required subset is not set-dependent")
 	}
 }
 
@@ -331,6 +430,19 @@ func TestRequiredSubsetDescriptionTracksTheSet(t *testing.T) {
 	}
 	if got := requiredSubsetDescription(recordSetSpecimens, recs); !strings.Contains(got, "specimen-a") {
 		t.Errorf("the specimens gloss lost the rows it names: %q", got)
+	}
+
+	// `control` has a gloss of its own (mmnto-ai/totem#2694 C11): it must name the
+	// selector that chose the record and must not describe itself as the seed set.
+	control := requiredSubsetDescription(recordSetControl, recs[:1])
+	if !strings.Contains(control, controlRecordEnvVar) {
+		t.Errorf("the control gloss does not name %s, the selector that chose the record: %q", controlRecordEnvVar, control)
+	}
+	if strings.Contains(control, recordSetSeed20) || strings.Contains(control, "specimen-a") {
+		t.Errorf("the control gloss describes another record set: %q", control)
+	}
+	if !strings.Contains(control, "1") {
+		t.Errorf("the control gloss does not report the record count it describes: %q", control)
 	}
 }
 
@@ -446,6 +558,19 @@ func TestLoweredRecordIgnoresAdditiveFields(t *testing.T) {
 	if rec.Entrypoint != "e" || rec.Dir != "rego/build/p" {
 		t.Errorf("the modelled naming fields were not read from the artifact: %+v", rec)
 	}
+	// C5 (mmnto-ai/totem#2694): `control` is READ from the row, and its ABSENCE is
+	// `false` — the honest default for a specimen row and for any artifact written
+	// before the TS half published the field.
+	if rec.Control {
+		t.Errorf("control = true on a row that declares none; an absent flag is `false`, never true")
+	}
+	var control loweredRecord
+	if err := json.Unmarshal([]byte(`{"specimen":"d-file","control":true,"ruleId":"aa","dir":"rego/build/p"}`), &control); err != nil {
+		t.Fatalf("decoding a control row: %v", err)
+	}
+	if !control.Control {
+		t.Error("control = false on a row declaring `\"control\": true`; the flag must be read, not inferred")
+	}
 }
 
 // ─── Pair classification ─────────────────────────────────────────────────────
@@ -494,6 +619,33 @@ func TestPairsClassification(t *testing.T) {
 		if got.Left != "opa" || got.Right != "wazero" {
 			t.Errorf("pair is labelled %s vs %s", got.Left, got.Right)
 		}
+		// A MATCH belongs to NO explanation class (mmnto-ai/totem#2694 C9): the
+		// class is nil here and serialises as `null`, never as a class id that
+		// would let a MATCH be counted among the explained divergences.
+		if got.ExplanationClass != nil {
+			t.Errorf("a MATCH carries explanationClass %q; a matching pair explains nothing", *got.ExplanationClass)
+		}
+	})
+
+	// C9: the two classes the Go arm can assign, each pinned to the id the TS
+	// comparator publishes. A class id is what the scorer joins on, so a row that
+	// carried the right prose under the wrong id would be unreadable to it.
+	t.Run("an ORDINAL-only divergence carries the ordinal class", func(t *testing.T) {
+		// Same (rule_id, line_number) multiset and the same events; only the
+		// ordinal differs — the one axis the shipped arm does not carry natively.
+		left := rowFor("opa", "c-supp-corpus-fail", vs, es)
+		right := rowFor("wazero", "c-supp-corpus-fail",
+			[]violation{{RuleID: "87aff037d7de47a7", LineNumber: 4, Ordinal: 1}}, es)
+		got := comparePair(left, right)
+		if got.Status != statusExplained {
+			t.Fatalf("status = %s, want %s (detail %v)", got.Status, statusExplained, got.Detail)
+		}
+		if got.ExplanationClass == nil || *got.ExplanationClass != ordinalDerivationOnlyClass {
+			t.Errorf("explanationClass = %v, want %q", got.ExplanationClass, ordinalDerivationOnlyClass)
+		}
+		if got.Explanation == nil || !strings.HasPrefix(*got.Explanation, "ORDINAL-DERIVATION ONLY") {
+			t.Errorf("explanation = %v", got.Explanation)
+		}
 	})
 
 	t.Run("an error row on an ordinary fixture is UNEXPLAINED", func(t *testing.T) {
@@ -527,11 +679,16 @@ func TestPairsClassification(t *testing.T) {
 			if got.Status != statusExplained {
 				t.Fatalf("%s: status = %s, want %s (detail %v)", c.name, got.Status, statusExplained, got.Detail)
 			}
-			if got.Detail["reason"] != "MALFORMED-FACTS-CONTROL" {
-				t.Errorf("%s: reason = %v, want MALFORMED-FACTS-CONTROL", c.name, got.Detail["reason"])
+			if got.Detail["reason"] != malformedFactsControlClass {
+				t.Errorf("%s: reason = %v, want %s", c.name, got.Detail["reason"], malformedFactsControlClass)
 			}
-			if got.Explanation == nil || !strings.Contains(*got.Explanation, "MALFORMED-FACTS-CONTROL") {
+			if got.Explanation == nil || !strings.Contains(*got.Explanation, malformedFactsControlClass) {
 				t.Errorf("%s: explanation = %v", c.name, got.Explanation)
+			}
+			// C9: the class id, beside the prose. Asserted against the constant
+			// compare.go publishes, never a re-spelled literal.
+			if got.ExplanationClass == nil || *got.ExplanationClass != malformedFactsControlClass {
+				t.Errorf("%s: explanationClass = %v, want %q", c.name, got.ExplanationClass, malformedFactsControlClass)
 			}
 		}
 	})
@@ -565,6 +722,11 @@ func TestPairsClassification(t *testing.T) {
 			}
 			if got.Explanation != nil {
 				t.Errorf("%s: an off-script error was explained away: %v", c.name, *got.Explanation)
+			}
+			// A declined pair carries NO class either (C9): a class id without an
+			// explanation would still let the row be counted as explained.
+			if got.ExplanationClass != nil {
+				t.Errorf("%s: an off-script error was filed under class %q", c.name, *got.ExplanationClass)
 			}
 			if got.Detail["leftError"] != c.left.Error || got.Detail["rightError"] != c.right.Error {
 				t.Errorf("%s: the pair must carry BOTH messages, got left=%v right=%v",
@@ -651,20 +813,26 @@ func TestWritePairsArtifactShape(t *testing.T) {
 	}
 
 	var doc struct {
-		GeneratedBy string         `json:"generatedBy"`
-		RecordSet   string         `json:"recordSet"`
-		Summary     map[string]int `json:"summary"`
-		Pairs       []struct {
+		GeneratedBy        string         `json:"generatedBy"`
+		RecordSet          string         `json:"recordSet"`
+		Summary            map[string]int `json:"summary"`
+		ExplanationClasses []struct {
+			ID         string `json:"id"`
+			TimesFired int    `json:"timesFired"`
+		} `json:"explanationClasses"`
+		Pairs []struct {
 			Specimen string `json:"specimen"`
 			// A POINTER on the reading side too: decoding `null` into a string is a
 			// no-op in Go, so a plain field would read a `null` seedEntry as `""` and
 			// this test could not tell the two apart (mmnto-ai/totem#2694 C4).
-			SeedEntry *string `json:"seedEntry"`
-			FixtureID string  `json:"fixtureId"`
-			Left      string  `json:"left"`
-			Right     string  `json:"right"`
-			Status    string  `json:"status"`
-			Detail    *string `json:"-"`
+			SeedEntry        *string `json:"seedEntry"`
+			Control          bool    `json:"control"`
+			FixtureID        string  `json:"fixtureId"`
+			Left             string  `json:"left"`
+			Right            string  `json:"right"`
+			Status           string  `json:"status"`
+			ExplanationClass *string `json:"explanationClass"`
+			Detail           *string `json:"-"`
 		} `json:"pairs"`
 	}
 	if err := readJSON(at, &doc); err != nil {
@@ -696,6 +864,62 @@ func TestWritePairsArtifactShape(t *testing.T) {
 		if p.SeedEntry == nil || *p.SeedEntry == "" || p.Specimen == "" || p.Status == "" {
 			t.Errorf("pair %s is missing a key of the (specimen, seedEntry, fixtureId, status) tuple: %+v", p.FixtureID, p)
 		}
+	}
+
+	// C9 — the class vocabulary the artifact publishes is the TS comparator's,
+	// both ids, and `timesFired` counts the rows actually shipped.
+	classes := map[string]int{}
+	for _, c := range doc.ExplanationClasses {
+		classes[c.ID] = c.TimesFired
+	}
+	for _, id := range []string{ordinalDerivationOnlyClass, malformedFactsControlClass} {
+		if _, ok := classes[id]; !ok {
+			t.Errorf("explanationClasses does not publish %q; the two arms must share one class vocabulary", id)
+		}
+	}
+	if classes[malformedFactsControlClass] != 0 || classes[ordinalDerivationOnlyClass] != 0 {
+		t.Errorf("timesFired is not derived from the rows: no row here carries a class, got %v", classes)
+	}
+
+	// C5 / C9 on the BYTES: a MATCH row must carry `"explanationClass": null` and
+	// `"control": false` — present keys with their absent/false values, never a
+	// dropped key. A decode cannot tell a missing key from a false one, so the
+	// assertion is made on the serialised text.
+	matchBytes, err := os.ReadFile(at)
+	if err != nil {
+		t.Fatalf("re-reading the artifact bytes: %v", err)
+	}
+	if n := strings.Count(string(matchBytes), `"explanationClass": null`); n != 3 {
+		t.Errorf("%d of 3 rows serialise `\"explanationClass\": null`; the key must be PRESENT on every row", n)
+	}
+	if n := strings.Count(string(matchBytes), `"control": false`); n != 3 {
+		t.Errorf("%d of 3 rows serialise `\"control\": false`; C5 requires the flag present-as-false, never omitted", n)
+	}
+	for _, p := range doc.Pairs {
+		if p.ExplanationClass != nil {
+			t.Errorf("pair %s carries explanationClass %q; none of these rows was classified",
+				p.FixtureID, *p.ExplanationClass)
+		}
+		if p.Control {
+			t.Errorf("pair %s decoded control=true; none of these rows is a control record", p.FixtureID)
+		}
+	}
+
+	// A control row's flag must survive the round trip, or `false` everywhere
+	// would satisfy the assertions above vacuously.
+	controlAt, err := writePairsArtifact(t.TempDir(), recordSetSeed20, []pairResult{
+		{RuleID: "k5", FixtureID: "k5-control-unreadable", Specimen: "d-file", Engine: "regex",
+			Control: true, Left: "opa", Right: "wazero", Status: statusMatch},
+	})
+	if err != nil {
+		t.Fatalf("writePairsArtifact(control): %v", err)
+	}
+	cb, err := os.ReadFile(controlAt)
+	if err != nil {
+		t.Fatalf("reading the control artifact: %v", err)
+	}
+	if !strings.Contains(string(cb), `"control": true`) {
+		t.Error("a control record's row did not serialise `\"control\": true`")
 	}
 
 	// An empty set must serialise as `[]`, never `null`: this artifact exists to
@@ -751,6 +975,26 @@ func TestAbsentSeedEntrySerialisesAsNull(t *testing.T) {
 	}
 	if !strings.Contains(text, `"seedEntry": "`+seeded+`"`) {
 		t.Error("a PRESENT seed entry no longer serialises as its string; the pointer must not swallow the value")
+	}
+
+	// The same byte-level method for the keys C5 and C9 add
+	// (mmnto-ai/totem#2694): `explanationClass` is present-as-`null` and `control`
+	// is present-as-`false` on every row, so the per-row key count is 2 over 2
+	// pairs — the count is what catches an `omitempty` creeping onto either.
+	for _, k := range []string{"explanationClass", "control"} {
+		if n := strings.Count(text, `"`+k+`"`); n != 2 {
+			t.Errorf("the artifact carries %d `%s` keys over 2 pairs; the key must stay PRESENT on every row", n, k)
+		}
+	}
+	if n := strings.Count(text, `"explanationClass": null`); n != 2 {
+		t.Errorf("%d of 2 rows serialise `\"explanationClass\": null`; an unclassified row must say `null`, "+
+			"never `\"\"` (a class whose id is empty) and never a dropped key", n)
+	}
+	if strings.Contains(text, `"explanationClass": ""`) {
+		t.Error("an absent explanation class serialised as `\"\"`; the TS comparator reads that as a class id")
+	}
+	if n := strings.Count(text, `"control": false`); n != 2 {
+		t.Errorf("%d of 2 rows serialise `\"control\": false`; C5 requires the flag present-as-false", n)
 	}
 }
 
