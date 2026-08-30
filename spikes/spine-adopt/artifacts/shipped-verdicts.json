@@ -268,24 +268,99 @@
       "armsAgree": true
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "d-line-inline-bad",
+      "ruleId": "0167a783f75b5ecd",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
       "arm": "shipped",
       "fired": true,
       "matchCount": 1,
       "events": [
         {
           "kind": "trigger",
-          "ruleId": "0123456789abcdef",
-          "file": "scripts/x.sh",
+          "ruleId": "0167a783f75b5ecd",
+          "file": "packages/cli/src/adapters/loader.ts",
           "line": 1,
           "justification": null
         }
       ],
-      "specimen": "d-line",
-      "seedEntry": null,
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/adapters/loader.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "0167a783f75b5ecd",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const { chalk } = await import('chalk');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "0167a783f75b5ecd",
+              "file": "packages/cli/src/adapters/loader.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "0167a783f75b5ecd",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/adapters/loader.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "49dd9e4fd02d692b",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "49dd9e4fd02d692b",
+          "file": "packages/core/src/prompt.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
       "engine": "regex",
-      "file": "scripts/x.sh",
+      "file": "packages/core/src/prompt.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -294,18 +369,18 @@
           "dispatcher": "applyRulesToAdditions",
           "violations": [
             {
-              "ruleId": "0123456789abcdef",
+              "ruleId": "49dd9e4fd02d692b",
               "lineNumber": 1
             }
           ],
           "violationLines": [
-            "git log --oneline"
+            "const PROMPT = 'Summarize the diff in 200 characters or less.';"
           ],
           "events": [
             {
               "kind": "trigger",
-              "ruleId": "0123456789abcdef",
-              "file": "scripts/x.sh",
+              "ruleId": "49dd9e4fd02d692b",
+              "file": "packages/core/src/prompt.ts",
               "line": 1,
               "justification": null
             }
@@ -317,18 +392,18 @@
           "dispatcher": "applyRulesToAdditionsBounded",
           "violations": [
             {
-              "ruleId": "0123456789abcdef",
+              "ruleId": "49dd9e4fd02d692b",
               "lineNumber": 1
             }
           ],
           "violationLines": [
-            "git log --oneline"
+            "const PROMPT = 'Summarize the diff in 200 characters or less.';"
           ],
           "events": [
             {
               "kind": "trigger",
-              "ruleId": "0123456789abcdef",
-              "file": "scripts/x.sh",
+              "ruleId": "49dd9e4fd02d692b",
+              "file": "packages/core/src/prompt.ts",
               "line": 1,
               "justification": null
             }
@@ -340,347 +415,16 @@
       "armsAgree": true
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "d-line-inline-good",
+      "ruleId": "49dd9e4fd02d692b",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
       "arm": "shipped",
       "fired": false,
       "matchCount": 0,
       "events": [],
-      "specimen": "d-line",
-      "seedEntry": null,
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
       "engine": "regex",
-      "file": "scripts/x.sh",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyRulesToAdditions",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": null
-        },
-        {
-          "oracle": "arm2-lint",
-          "dispatcher": "applyRulesToAdditionsBounded",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": []
-        }
-      ],
-      "armsCoincide": false,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "e-inline-bad",
-      "arm": "shipped",
-      "fired": true,
-      "matchCount": 1,
-      "events": [
-        {
-          "kind": "trigger",
-          "ruleId": "0123456789abcdef",
-          "file": "packages/core/src/a.ts",
-          "line": 1,
-          "justification": null
-        }
-      ],
-      "specimen": "e",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "packages/core/src/a.ts",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [
-            {
-              "ruleId": "0123456789abcdef",
-              "lineNumber": 1
-            }
-          ],
-          "violationLines": [
-            "try { risky() } catch (e) { log(e) }"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "0123456789abcdef",
-              "file": "packages/core/src/a.ts",
-              "line": 1,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "e-inline-good",
-      "arm": "shipped",
-      "fired": false,
-      "matchCount": 0,
-      "events": [],
-      "specimen": "e",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "packages/core/src/a.ts",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-corpus-fail",
-      "arm": "shipped",
-      "fired": true,
-      "matchCount": 1,
-      "events": [
-        {
-          "kind": "trigger",
-          "ruleId": "2d962603591aa928",
-          "file": "scripts/audit.ts",
-          "line": 1,
-          "justification": null
-        }
-      ],
-      "specimen": "b",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "scripts/audit.ts",
-      "fileTextState": "content",
-      "lineCount": 3,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [
-            {
-              "ruleId": "2d962603591aa928",
-              "lineNumber": 1
-            }
-          ],
-          "violationLines": [
-            "try {"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "2d962603591aa928",
-              "file": "scripts/audit.ts",
-              "line": 1,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-corpus-pass",
-      "arm": "shipped",
-      "fired": false,
-      "matchCount": 0,
-      "events": [],
-      "specimen": "b",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "scripts/audit.ts",
-      "fileTextState": "content",
-      "lineCount": 5,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-inline-bad",
-      "arm": "shipped",
-      "fired": true,
-      "matchCount": 1,
-      "events": [
-        {
-          "kind": "trigger",
-          "ruleId": "2d962603591aa928",
-          "file": "scripts/audit.ts",
-          "line": 1,
-          "justification": null
-        }
-      ],
-      "specimen": "b",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "scripts/audit.ts",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [
-            {
-              "ruleId": "2d962603591aa928",
-              "lineNumber": 1
-            }
-          ],
-          "violationLines": [
-            "try { new RegExp(pattern) } catch (err) {}"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "2d962603591aa928",
-              "file": "scripts/audit.ts",
-              "line": 1,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-inline-good",
-      "arm": "shipped",
-      "fired": false,
-      "matchCount": 0,
-      "events": [],
-      "specimen": "b",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "scripts/audit.ts",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-corpus-fail",
-      "arm": "shipped",
-      "fired": true,
-      "matchCount": 1,
-      "events": [
-        {
-          "kind": "trigger",
-          "ruleId": "61dcb058bd1df15d",
-          "file": "src/example.sh",
-          "line": 1,
-          "justification": null
-        }
-      ],
-      "specimen": "a",
-      "seedEntry": null,
-      "engine": "regex",
-      "file": "src/example.sh",
-      "fileTextState": "content",
-      "lineCount": 1,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyRulesToAdditions",
-          "violations": [
-            {
-              "ruleId": "61dcb058bd1df15d",
-              "lineNumber": 1
-            }
-          ],
-          "violationLines": [
-            "`git rm .totem/lessons.md` — destructive command in any script"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "61dcb058bd1df15d",
-              "file": "src/example.sh",
-              "line": 1,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": null
-        },
-        {
-          "oracle": "arm2-lint",
-          "dispatcher": "applyRulesToAdditionsBounded",
-          "violations": [
-            {
-              "ruleId": "61dcb058bd1df15d",
-              "lineNumber": 1
-            }
-          ],
-          "violationLines": [
-            "`git rm .totem/lessons.md` — destructive command in any script"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "61dcb058bd1df15d",
-              "file": "src/example.sh",
-              "line": 1,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": []
-        }
-      ],
-      "armsCoincide": false,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-corpus-pass",
-      "arm": "shipped",
-      "fired": false,
-      "matchCount": 0,
-      "events": [],
-      "specimen": "a",
-      "seedEntry": null,
-      "engine": "regex",
-      "file": "src/example.sh",
+      "file": "packages/core/src/prompt.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -705,24 +449,24 @@
       "armsAgree": true
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-inline-bad",
+      "ruleId": "54140f59be3e6e44",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
       "arm": "shipped",
       "fired": true,
       "matchCount": 1,
       "events": [
         {
           "kind": "trigger",
-          "ruleId": "61dcb058bd1df15d",
-          "file": "scripts/deploy.sh",
+          "ruleId": "54140f59be3e6e44",
+          "file": "packages/cli/src/commands/issue.ts",
           "line": 1,
           "justification": null
         }
       ],
-      "specimen": "a",
-      "seedEntry": null,
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
       "engine": "regex",
-      "file": "scripts/deploy.sh",
+      "file": "packages/cli/src/commands/issue.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -731,18 +475,18 @@
           "dispatcher": "applyRulesToAdditions",
           "violations": [
             {
-              "ruleId": "61dcb058bd1df15d",
+              "ruleId": "54140f59be3e6e44",
               "lineNumber": 1
             }
           ],
           "violationLines": [
-            "git rm .totem/lessons.md"
+            "const helpText = 'Tracked in #2655 — see the changelog.';"
           ],
           "events": [
             {
               "kind": "trigger",
-              "ruleId": "61dcb058bd1df15d",
-              "file": "scripts/deploy.sh",
+              "ruleId": "54140f59be3e6e44",
+              "file": "packages/cli/src/commands/issue.ts",
               "line": 1,
               "justification": null
             }
@@ -754,18 +498,18 @@
           "dispatcher": "applyRulesToAdditionsBounded",
           "violations": [
             {
-              "ruleId": "61dcb058bd1df15d",
+              "ruleId": "54140f59be3e6e44",
               "lineNumber": 1
             }
           ],
           "violationLines": [
-            "git rm .totem/lessons.md"
+            "const helpText = 'Tracked in #2655 — see the changelog.';"
           ],
           "events": [
             {
               "kind": "trigger",
-              "ruleId": "61dcb058bd1df15d",
-              "file": "scripts/deploy.sh",
+              "ruleId": "54140f59be3e6e44",
+              "file": "packages/cli/src/commands/issue.ts",
               "line": 1,
               "justification": null
             }
@@ -777,16 +521,16 @@
       "armsAgree": true
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-inline-good",
+      "ruleId": "54140f59be3e6e44",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
       "arm": "shipped",
       "fired": false,
       "matchCount": 0,
       "events": [],
-      "specimen": "a",
-      "seedEntry": null,
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
       "engine": "regex",
-      "file": "scripts/deploy.sh",
+      "file": "packages/cli/src/commands/issue.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -808,11 +552,740 @@
         }
       ],
       "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "5b85fe53468964e1",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "5b85fe53468964e1",
+          "file": "packages/core/src/emit-site.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "engine": "ast-grep",
+      "file": "packages/core/src/emit-site.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "5b85fe53468964e1",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "emit('suppress', { ruleId, reason: 'ast-grep scan threw' });"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "5b85fe53468964e1",
+              "file": "packages/core/src/emit-site.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "5b85fe53468964e1",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "engine": "ast-grep",
+      "file": "packages/core/src/emit-site.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "5da43ea60b66e96e",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "5da43ea60b66e96e",
+          "file": "scripts/release.sh",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "engine": "regex",
+      "file": "scripts/release.sh",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "5da43ea60b66e96e",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "git log $UNTRUSTED_REF"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "5da43ea60b66e96e",
+              "file": "scripts/release.sh",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "5da43ea60b66e96e",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "git log $UNTRUSTED_REF"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "5da43ea60b66e96e",
+              "file": "scripts/release.sh",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "5da43ea60b66e96e",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "engine": "regex",
+      "file": "scripts/release.sh",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6467c35159c1504d",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "6467c35159c1504d",
+          "file": "packages/cli/src/index.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/index.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "6467c35159c1504d",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const { renderBanner } = await import('./banner.js');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "6467c35159c1504d",
+              "file": "packages/cli/src/index.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6467c35159c1504d",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/index.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "65ede9bfdf6995fe",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "65ede9bfdf6995fe",
+          "file": "packages/cli/src/handlers/run.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/handlers/run.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "65ede9bfdf6995fe",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const { runOrient } = await import('../commands/orient.js');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "65ede9bfdf6995fe",
+              "file": "packages/cli/src/handlers/run.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "65ede9bfdf6995fe",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/handlers/run.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "6b1890e2dbda3331",
+          "file": "packages/core/src/branches.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "engine": "ast-grep",
+      "file": "packages/core/src/branches.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "6b1890e2dbda3331",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "6b1890e2dbda3331",
+              "file": "packages/core/src/branches.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "engine": "ast-grep",
+      "file": "packages/core/src/branches.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "6b1890e2dbda3331",
+          "file": "scripts/branches.js",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "engine": "ast-grep",
+      "file": "scripts/branches.js",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "6b1890e2dbda3331",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "6b1890e2dbda3331",
+              "file": "scripts/branches.js",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "engine": "ast-grep",
+      "file": "scripts/branches.js",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b2b62eb1e8693fc",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "6b2b62eb1e8693fc",
+          "file": "packages/core/src/log-site.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "engine": "ast-grep",
+      "file": "packages/core/src/log-site.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "6b2b62eb1e8693fc",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "log.error('compile failed: ' + msg);"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "6b2b62eb1e8693fc",
+              "file": "packages/core/src/log-site.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "6b2b62eb1e8693fc",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "6b2b62eb1e8693fc",
+          "file": "packages/core/src/log-site.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "engine": "ast-grep",
+      "file": "packages/core/src/log-site.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "6b2b62eb1e8693fc",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "log.error('Totem Error', 'compile failed: ' + msg);"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "6b2b62eb1e8693fc",
+              "file": "packages/core/src/log-site.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "71935fe9a742137b",
+          "file": "packages/core/src/cast.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "engine": "ast-grep",
+      "file": "packages/core/src/cast.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "71935fe9a742137b",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const pattern = String(input.pattern);"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "71935fe9a742137b",
+              "file": "packages/core/src/cast.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "engine": "ast-grep",
+      "file": "packages/core/src/cast.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "71935fe9a742137b",
+          "file": "scripts/cast.js",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "engine": "ast-grep",
+      "file": "scripts/cast.js",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "71935fe9a742137b",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const pattern = String(input.pattern);"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "71935fe9a742137b",
+              "file": "scripts/cast.js",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "engine": "ast-grep",
+      "file": "scripts/cast.js",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
       "armsAgree": true
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-corpus-fail",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
       "arm": "shipped",
       "fired": true,
       "matchCount": 1,
@@ -825,8 +1298,8 @@
           "justification": null
         }
       ],
-      "specimen": "c-supp",
-      "seedEntry": null,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -861,13 +1334,13 @@
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-corpus-pass",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
       "arm": "shipped",
       "fired": false,
       "matchCount": 0,
       "events": [],
-      "specimen": "c-supp",
-      "seedEntry": null,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "engine": "ast-grep",
       "file": "packages/src/example.ts",
       "fileTextState": "content",
@@ -887,7 +1360,7 @@
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-inline-bad",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
       "arm": "shipped",
       "fired": true,
       "matchCount": 1,
@@ -900,8 +1373,8 @@
           "justification": null
         }
       ],
-      "specimen": "c-supp",
-      "seedEntry": null,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "engine": "ast-grep",
       "file": "packages/core/src/catch-site.ts",
       "fileTextState": "content",
@@ -917,7 +1390,7 @@
             }
           ],
           "violationLines": [
-            "try { doWork() } catch (err) { return null }"
+            "try { risky() } catch (e) { log(e) }"
           ],
           "events": [
             {
@@ -936,13 +1409,13 @@
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-inline-good",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
       "arm": "shipped",
       "fired": false,
       "matchCount": 0,
       "events": [],
-      "specimen": "c-supp",
-      "seedEntry": null,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "engine": "ast-grep",
       "file": "packages/core/src/catch-site.ts",
       "fileTextState": "content",
@@ -961,118 +1434,148 @@
       "armsAgree": true
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-corpus-fail",
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "m3-malformed-lines",
       "arm": "shipped",
-      "fired": true,
-      "matchCount": 2,
-      "events": [
-        {
-          "kind": "trigger",
-          "ruleId": "d0815b6769304e26",
-          "file": "packages/src/example.ts",
-          "line": 2,
-          "justification": null
-        },
-        {
-          "kind": "trigger",
-          "ruleId": "d0815b6769304e26",
-          "file": "packages/src/example.ts",
-          "line": 3,
-          "justification": null
-        }
-      ],
-      "specimen": "c",
-      "seedEntry": null,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "engine": "ast-grep",
-      "file": "packages/src/example.ts",
+      "file": "packages/core/src/catch-site.ts",
       "fileTextState": "content",
-      "lineCount": 3,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [
-            {
-              "ruleId": "d0815b6769304e26",
-              "lineNumber": 2
-            },
-            {
-              "ruleId": "d0815b6769304e26",
-              "lineNumber": 3
-            }
-          ],
-          "violationLines": [
-            "spawn('ls', ['-la'], { shell: true });",
-            "spawnSync('pnpm', ['test'], { cwd: '/tmp', shell: true });"
-          ],
-          "events": [
-            {
-              "kind": "trigger",
-              "ruleId": "d0815b6769304e26",
-              "file": "packages/src/example.ts",
-              "line": 2,
-              "justification": null
-            },
-            {
-              "kind": "trigger",
-              "ruleId": "d0815b6769304e26",
-              "file": "packages/src/example.ts",
-              "line": 3,
-              "justification": null
-            }
-          ],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
+      "lineCount": 2,
+      "fired": null,
+      "matchCount": null,
+      "events": null,
+      "arms": [],
+      "armsCoincide": false,
+      "armsAgree": false,
+      "error": "MALFORMED FACTS — lines[1] is number; the shipped harness produced no verdict for this bundle (the shipped dispatcher did not itself raise; the bundle is refused because `lines[]` is not a [string] and no verdict over it would be well-defined)"
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-corpus-pass",
-      "arm": "shipped",
-      "fired": false,
-      "matchCount": 0,
-      "events": [],
-      "specimen": "c",
-      "seedEntry": null,
-      "engine": "ast-grep",
-      "file": "packages/src/example.ts",
-      "fileTextState": "content",
-      "lineCount": 4,
-      "arms": [
-        {
-          "oracle": "arm1-pin",
-          "dispatcher": "applyAstRulesToAdditions",
-          "violations": [],
-          "violationLines": [],
-          "events": [],
-          "timeoutOutcomes": null
-        }
-      ],
-      "armsCoincide": true,
-      "armsAgree": true
-    },
-    {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-inline-bad",
+      "ruleId": "89184bb5fd960848",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
       "arm": "shipped",
       "fired": true,
       "matchCount": 1,
       "events": [
         {
           "kind": "trigger",
-          "ruleId": "d0815b6769304e26",
-          "file": "packages/core/src/spawn-site.ts",
+          "ruleId": "89184bb5fd960848",
+          "file": "scripts/color.sh",
           "line": 1,
           "justification": null
         }
       ],
-      "specimen": "c",
-      "seedEntry": null,
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
+      "engine": "regex",
+      "file": "scripts/color.sh",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "89184bb5fd960848",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "sed 's/\\x1b\\[[0-9;]*m//g' totem-lint.log"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "89184bb5fd960848",
+              "file": "scripts/color.sh",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "89184bb5fd960848",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "sed 's/\\x1b\\[[0-9;]*m//g' totem-lint.log"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "89184bb5fd960848",
+              "file": "scripts/color.sh",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "89184bb5fd960848",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
+      "engine": "regex",
+      "file": "scripts/color.sh",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "aa7a588d48e74503",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "aa7a588d48e74503",
+          "file": "packages/core/src/a.test.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
       "engine": "ast-grep",
-      "file": "packages/core/src/spawn-site.ts",
+      "file": "packages/core/src/a.test.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -1081,18 +1584,18 @@
           "dispatcher": "applyAstRulesToAdditions",
           "violations": [
             {
-              "ruleId": "d0815b6769304e26",
+              "ruleId": "aa7a588d48e74503",
               "lineNumber": 1
             }
           ],
           "violationLines": [
-            "spawn('ls -la', { shell: true });"
+            "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });"
           ],
           "events": [
             {
               "kind": "trigger",
-              "ruleId": "d0815b6769304e26",
-              "file": "packages/core/src/spawn-site.ts",
+              "ruleId": "aa7a588d48e74503",
+              "file": "packages/core/src/a.test.ts",
               "line": 1,
               "justification": null
             }
@@ -1104,16 +1607,491 @@
       "armsAgree": true
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-inline-good",
+      "ruleId": "aa7a588d48e74503",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
       "arm": "shipped",
       "fired": false,
       "matchCount": 0,
       "events": [],
-      "specimen": "c",
-      "seedEntry": null,
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
       "engine": "ast-grep",
-      "file": "packages/core/src/spawn-site.ts",
+      "file": "packages/core/src/a.test.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "b237bcf3b52381b1",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "b237bcf3b52381b1",
+          "file": "packages/cli/src/assets/patterns.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/assets/patterns.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "b237bcf3b52381b1",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const CREDENTIAL_RE = new RegExp('(password|passwd|pwd|secret)\\\\s*[:=]', 'i');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "b237bcf3b52381b1",
+              "file": "packages/cli/src/assets/patterns.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "b237bcf3b52381b1",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "b237bcf3b52381b1",
+          "file": "packages/cli/src/assets/patterns.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/assets/patterns.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "b237bcf3b52381b1",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "const CREDENTIAL_RE = new RegExp('(password|passwd|secret)\\\\s*[:=]', 'i');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "b237bcf3b52381b1",
+              "file": "packages/cli/src/assets/patterns.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "b973609688ec2888",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "b973609688ec2888",
+          "file": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "b973609688ec2888",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "b973609688ec2888",
+              "file": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "b973609688ec2888",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "engine": "ast-grep",
+      "file": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "be74c55caa9fd60c",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "be74c55caa9fd60c",
+          "file": ".github/workflows/ci.yml",
+          "line": 2,
+          "justification": null
+        }
+      ],
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "engine": "regex",
+      "file": ".github/workflows/ci.yml",
+      "fileTextState": "content",
+      "lineCount": 2,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "be74c55caa9fd60c",
+              "lineNumber": 2
+            }
+          ],
+          "violationLines": [
+            "  run: git checkout ${{ inputs.ref }}"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "be74c55caa9fd60c",
+              "file": ".github/workflows/ci.yml",
+              "line": 2,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "be74c55caa9fd60c",
+              "lineNumber": 2
+            }
+          ],
+          "violationLines": [
+            "  run: git checkout ${{ inputs.ref }}"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "be74c55caa9fd60c",
+              "file": ".github/workflows/ci.yml",
+              "line": 2,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "be74c55caa9fd60c",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "be74c55caa9fd60c",
+          "file": ".github/workflows/ci.yml",
+          "line": 3,
+          "justification": null
+        }
+      ],
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "engine": "regex",
+      "file": ".github/workflows/ci.yml",
+      "fileTextState": "content",
+      "lineCount": 4,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "be74c55caa9fd60c",
+              "lineNumber": 3
+            }
+          ],
+          "violationLines": [
+            "    REQUESTED_REF: ${{ inputs.ref }}"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "be74c55caa9fd60c",
+              "file": ".github/workflows/ci.yml",
+              "line": 3,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "be74c55caa9fd60c",
+              "lineNumber": 3
+            }
+          ],
+          "violationLines": [
+            "    REQUESTED_REF: ${{ inputs.ref }}"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "be74c55caa9fd60c",
+              "file": ".github/workflows/ci.yml",
+              "line": 3,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "d5faa14cbb8b50fb",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "d5faa14cbb8b50fb",
+          "file": "docs/overview.md",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "engine": "regex",
+      "file": "docs/overview.md",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "d5faa14cbb8b50fb",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "The compiler guarantees complete coverage of every edge case."
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "d5faa14cbb8b50fb",
+              "file": "docs/overview.md",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "d5faa14cbb8b50fb",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "The compiler guarantees complete coverage of every edge case."
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "d5faa14cbb8b50fb",
+              "file": "docs/overview.md",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "d5faa14cbb8b50fb",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "engine": "regex",
+      "file": "docs/overview.md",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "d940b2c9ffe92e99",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "engine": "ast-grep",
+      "file": "packages/core/src/exec-site.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyAstRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        }
+      ],
+      "armsCoincide": true,
+      "armsAgree": true
+    },
+    {
+      "ruleId": "d940b2c9ffe92e99",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "engine": "ast-grep",
+      "file": "packages/core/src/exec-site.ts",
       "fileTextState": "content",
       "lineCount": 1,
       "arms": [
@@ -1130,112 +2108,13 @@
       "armsAgree": true
     }
   ],
-  "pinReproduction": [
-    {
-      "pin": "d-line (test:289-304) FIRES on its own `bad` example, lessonHash === the pinned RULE_ID",
-      "ok": true,
-      "detail": "1 violation(s), hash=0123456789abcdef"
-    },
-    {
-      "pin": "d-line (test:298-303) stays SILENT on its own `good` example",
-      "ok": true,
-      "detail": "0 violation(s)"
-    },
-    {
-      "pin": "d-line (test:306-324) required-context-present emits NO event; firing emits exactly [trigger]",
-      "ok": true,
-      "detail": "good=[] bad=[\"trigger\"]"
-    },
-    {
-      "pin": "d-line (test:326-333) record dialect at dispatch — `**/*.sh`/`**/*.cjs` match, `.ts` does not",
-      "ok": true,
-      "detail": ".ts=0 .cjs=1"
-    },
-    {
-      "pin": "d-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file",
-      "ok": true,
-      "detail": "0 violation(s)"
-    },
-    {
-      "pin": "d-file (test:374-383) FIRES when the file never satisfies the requirement",
-      "ok": true,
-      "detail": "1 violation(s)"
-    },
-    {
-      "pin": "d-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)",
-      "ok": true,
-      "detail": "1 violation(s)"
-    },
-    {
-      "pin": "e (test:415-420) FIRES on its own `bad` example; hash === RULE_ID; message names the ban",
-      "ok": true,
-      "detail": "1 violation(s), hash=0123456789abcdef"
-    },
-    {
-      "pin": "e (test:422-424) stays SILENT on its own `good` example",
-      "ok": true,
-      "detail": "0"
-    },
-    {
-      "pin": "e (test:426-428) honours `excludeGlobs` at dispatch — the same bad source in a test file is out of scope",
-      "ok": true,
-      "detail": "0"
-    },
-    {
-      "pin": "e (test:430-432) honours the positive glob — the same bad source outside `packages/` is out of scope",
-      "ok": true,
-      "detail": "0"
-    }
-  ],
-  "nullEmptySplit": {
-    "LC_ALL=C (pinned — does NOT match '')": {
-      "null": {
-        "sync": 1,
-        "bounded": 1
-      },
-      "empty": {
-        "sync": 1,
-        "bounded": 1
-      },
-      "content": {
-        "sync": 0,
-        "bounded": 0
-      }
-    },
-    "a* (matches '')": {
-      "null": {
-        "sync": 1,
-        "bounded": 1
-      },
-      "empty": {
-        "sync": 0,
-        "bounded": 0
-      },
-      "content": {
-        "sync": 0,
-        "bounded": 0
-      }
-    },
-    "^$ (matches '')": {
-      "null": {
-        "sync": 1,
-        "bounded": 1
-      },
-      "empty": {
-        "sync": 0,
-        "bounded": 0
-      },
-      "content": {
-        "sync": 1,
-        "bounded": 1
-      }
-    }
-  },
+  "pinReproduction": [],
+  "nullEmptySplit": {},
   "checks": [
     {
       "name": "fact bundles are present (run `src/facts.mts` first)",
       "ok": true,
-      "detail": "24 bundles"
+      "detail": "47 bundles"
     },
     {
       "name": "d-file-control-empty — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
@@ -1278,351 +2157,451 @@
       "detail": "arm1=[] events=- | arm2=[] events=-"
     },
     {
-      "name": "d-line-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "0167a783-dynamic-import-utility-layer-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "49dd9e4f-llm-character-counting-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "d-line-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "name": "49dd9e4f-llm-character-counting-inline-bad — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
-      "detail": "arm1=[{\"ruleId\":\"0123456789abcdef\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"0123456789abcdef\",\"lineNumber\":1}] events=trigger"
+      "detail": "arm1=[{\"ruleId\":\"49dd9e4fd02d692b\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"49dd9e4fd02d692b\",\"lineNumber\":1}] events=trigger"
     },
     {
-      "name": "d-line-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "49dd9e4f-llm-character-counting-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "d-line-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "name": "49dd9e4f-llm-character-counting-inline-good — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
       "detail": "arm1=[] events=- | arm2=[] events=-"
     },
     {
-      "name": "e-inline-bad — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "e-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "e-inline-good — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "e-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "b-corpus-fail — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "b-corpus-fail — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "b-corpus-pass — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "b-corpus-pass — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "b-inline-bad — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "b-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "b-inline-good — ast dispatcher emitted no warnings",
-      "ok": true,
-      "detail": "clean"
-    },
-    {
-      "name": "b-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
-      "ok": true,
-      "detail": "0 violations, 0 events"
-    },
-    {
-      "name": "a-corpus-fail — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "54140f59-bare-issue-number-refs-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "a-corpus-fail — the two dispatcher arms agree (violations AND event streams)",
+      "name": "54140f59-bare-issue-number-refs-inline-bad — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
-      "detail": "arm1=[{\"ruleId\":\"61dcb058bd1df15d\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"61dcb058bd1df15d\",\"lineNumber\":1}] events=trigger"
+      "detail": "arm1=[{\"ruleId\":\"54140f59be3e6e44\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"54140f59be3e6e44\",\"lineNumber\":1}] events=trigger"
     },
     {
-      "name": "a-corpus-pass — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "54140f59-bare-issue-number-refs-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "a-corpus-pass — the two dispatcher arms agree (violations AND event streams)",
+      "name": "54140f59-bare-issue-number-refs-inline-good — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
       "detail": "arm1=[] events=- | arm2=[] events=-"
     },
     {
-      "name": "a-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "a-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "name": "5da43ea6-git-double-dash-separator-inline-bad — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
-      "detail": "arm1=[{\"ruleId\":\"61dcb058bd1df15d\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"61dcb058bd1df15d\",\"lineNumber\":1}] events=trigger"
+      "detail": "arm1=[{\"ruleId\":\"5da43ea60b66e96e\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"5da43ea60b66e96e\",\"lineNumber\":1}] events=trigger"
     },
     {
-      "name": "a-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "name": "5da43ea6-git-double-dash-separator-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
       "ok": true,
       "detail": "0"
     },
     {
-      "name": "a-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "name": "5da43ea6-git-double-dash-separator-inline-good — the two dispatcher arms agree (violations AND event streams)",
       "ok": true,
       "detail": "arm1=[] events=- | arm2=[] events=-"
     },
     {
-      "name": "c-supp-corpus-fail — ast dispatcher emitted no warnings",
+      "name": "6467c351-dynamic-import-cli-entry-inline-bad — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-supp-corpus-fail — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6467c351-dynamic-import-cli-entry-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-supp-corpus-pass — ast dispatcher emitted no warnings",
+      "name": "6467c351-dynamic-import-cli-entry-inline-good — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-supp-corpus-pass — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6467c351-dynamic-import-cli-entry-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-supp-inline-bad — ast dispatcher emitted no warnings",
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-bad — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-supp-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-supp-inline-good — ast dispatcher emitted no warnings",
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-good — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-supp-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-corpus-fail — ast dispatcher emitted no warnings",
+      "name": "6b1890e2-empty-string-in-whitelist-inline-bad — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-corpus-fail — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6b1890e2-empty-string-in-whitelist-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-corpus-pass — ast dispatcher emitted no warnings",
+      "name": "6b1890e2-empty-string-in-whitelist-inline-good — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-corpus-pass — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6b1890e2-empty-string-in-whitelist-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-inline-bad — ast dispatcher emitted no warnings",
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-bad — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
-      "name": "c-inline-good — ast dispatcher emitted no warnings",
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-good — ast dispatcher emitted no warnings",
       "ok": true,
       "detail": "clean"
     },
     {
-      "name": "c-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-fail — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-fail — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-pass — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-pass — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "m3-malformed-lines — MALFORMED-FACTS CONTROL (K5b): the shipped arm records an ERROR ROW, never a clean zero",
+      "ok": true,
+      "detail": "MALFORMED FACTS — lines[1] is number; the shipped harness produced no verdict for this bundle (the shipped dispatcher did not itself raise; the bundle is refused because `lines[]` is not a [string] an"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[{\"ruleId\":\"89184bb5fd960848\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"89184bb5fd960848\",\"lineNumber\":1}] events=trigger"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[] events=- | arm2=[] events=-"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[{\"ruleId\":\"be74c55caa9fd60c\",\"lineNumber\":2}] events=trigger | arm2=[{\"ruleId\":\"be74c55caa9fd60c\",\"lineNumber\":2}] events=trigger"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[{\"ruleId\":\"be74c55caa9fd60c\",\"lineNumber\":3}] events=trigger | arm2=[{\"ruleId\":\"be74c55caa9fd60c\",\"lineNumber\":3}] events=trigger"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[{\"ruleId\":\"d5faa14cbb8b50fb\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"d5faa14cbb8b50fb\",\"lineNumber\":1}] events=trigger"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[] events=- | arm2=[] events=-"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-bad — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-bad — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
+      "ok": true,
+      "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-good — ast dispatcher emitted no warnings",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
     },
     {
       "name": "a VERDICT is the violation multiset, NOT a count of fixture lines (at least one row proves they differ)",
       "ok": true,
-      "detail": "14 of 24 verdict rows have matchCount !== lineCount (0 error row(s) excluded)"
+      "detail": "23 of 46 verdict rows have matchCount !== lineCount (1 error row(s) excluded)"
     },
     {
       "name": "ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)",
       "ok": true,
-      "detail": "10 regex rows"
+      "detail": "16 regex rows"
     },
     {
-      "name": "ENGINE ASYMMETRY — the ast-grep path emits ONE violation PER MATCH (rule-engine.ts:1074)",
+      "name": "ENGINE ASYMMETRY — SKIPPED with a named reason: NO bundle in this record set carries more than one ast match, so the one-violation-per-MATCH asymmetry has nothing to exhibit it (a corpus property of the frozen set, not an apparatus defect)",
       "ok": true,
-      "detail": "c-corpus-fail: 2 violations"
+      "detail": "31 ast rows, max matchCount 1 — the ast ordinal axis is UNEXERCISED on this set"
     },
     {
-      "name": "PIN — d-line (test:289-304) FIRES on its own `bad` example, lessonHash === the pinned RULE_ID",
+      "name": "PIN REPRODUCTION + M3 NULL/EMPTY SPLIT — SKIPPED with a named reason: both replay `record-runtime.test.ts` against the two exemplar transcriptions, which only the `specimens` record set carries",
       "ok": true,
-      "detail": "1 violation(s), hash=0123456789abcdef"
-    },
-    {
-      "name": "PIN — d-line (test:298-303) stays SILENT on its own `good` example",
-      "ok": true,
-      "detail": "0 violation(s)"
-    },
-    {
-      "name": "PIN — d-line (test:306-324) required-context-present emits NO event; firing emits exactly [trigger]",
-      "ok": true,
-      "detail": "good=[] bad=[\"trigger\"]"
-    },
-    {
-      "name": "PIN — d-line (test:326-333) record dialect at dispatch — `**/*.sh`/`**/*.cjs` match, `.ts` does not",
-      "ok": true,
-      "detail": ".ts=0 .cjs=1"
-    },
-    {
-      "name": "PIN — d-file (test:363-372) silent when the requirement is satisfied ELSEWHERE in the file",
-      "ok": true,
-      "detail": "0 violation(s)"
-    },
-    {
-      "name": "PIN — d-file (test:374-383) FIRES when the file never satisfies the requirement",
-      "ok": true,
-      "detail": "1 violation(s)"
-    },
-    {
-      "name": "PIN — d-file (test:385-394) FIRES when the file cannot be read at all (fails toward flagging)",
-      "ok": true,
-      "detail": "1 violation(s)"
-    },
-    {
-      "name": "PIN — e (test:415-420) FIRES on its own `bad` example; hash === RULE_ID; message names the ban",
-      "ok": true,
-      "detail": "1 violation(s), hash=0123456789abcdef"
-    },
-    {
-      "name": "PIN — e (test:422-424) stays SILENT on its own `good` example",
-      "ok": true,
-      "detail": "0"
-    },
-    {
-      "name": "PIN — e (test:426-428) honours `excludeGlobs` at dispatch — the same bad source in a test file is out of scope",
-      "ok": true,
-      "detail": "0"
-    },
-    {
-      "name": "PIN — e (test:430-432) honours the positive glob — the same bad source outside `packages/` is out of scope",
-      "ok": true,
-      "detail": "0"
-    },
-    {
-      "name": "REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the sync arm",
-      "ok": true,
-      "detail": "0 violations, events=[]"
-    },
-    {
-      "name": "REQUIRES-SATISFIED ⇒ no violation AND no event of ANY kind, on the bounded arm",
-      "ok": true,
-      "detail": "0 violations, events=[]"
-    },
-    {
-      "name": "CONTRAST — a plain `// totem-ignore` also yields no violation, but DOES emit a `suppress` event",
-      "ok": true,
-      "detail": "0 violations, events=[\"suppress\"]"
-    },
-    {
-      "name": "CONTRAST — requires-silence and totem-ignore-suppression are therefore DISTINGUISHABLE at the seam",
-      "ok": true,
-      "detail": "requires-satisfied events=[] vs ignore events=[\"suppress\"]"
-    },
-    {
-      "name": "CONTRAST (ast arm) — plain `// totem-ignore` on the matched construct suppresses and emits `suppress`",
-      "ok": true,
-      "detail": "0 violations, events=[\"suppress\"]"
-    },
-    {
-      "name": "CONTROL requires:'LC_ALL=C (pinned — does NOT match '')' — the JS matcher's own verdict on the empty string",
-      "ok": true,
-      "detail": "false"
-    },
-    {
-      "name": "CONTROL requires:'a* (matches '')' — the JS matcher's own verdict on the empty string",
-      "ok": true,
-      "detail": "true"
-    },
-    {
-      "name": "CONTROL requires:'^$ (matches '')' — the JS matcher's own verdict on the empty string",
-      "ok": true,
-      "detail": "true"
-    },
-    {
-      "name": "NULL ARM — requires:'LC_ALL=C (pinned — does NOT match '')' with fileText:null FIRES on both arms (fail toward flagging)",
-      "ok": true,
-      "detail": "sync=1 bounded=1"
-    },
-    {
-      "name": "EMPTY ARM — requires:'LC_ALL=C (pinned — does NOT match '')' with fileText:'' is UNMET (fires) on both arms",
-      "ok": true,
-      "detail": "sync=1 bounded=1"
-    },
-    {
-      "name": "NULL ARM — requires:'a* (matches '')' with fileText:null FIRES on both arms (fail toward flagging)",
-      "ok": true,
-      "detail": "sync=1 bounded=1"
-    },
-    {
-      "name": "EMPTY ARM — requires:'a* (matches '')' with fileText:'' is SATISFIED (silent) on both arms",
-      "ok": true,
-      "detail": "sync=0 bounded=0"
-    },
-    {
-      "name": "NULL ARM — requires:'^$ (matches '')' with fileText:null FIRES on both arms (fail toward flagging)",
-      "ok": true,
-      "detail": "sync=1 bounded=1"
-    },
-    {
-      "name": "EMPTY ARM — requires:'^$ (matches '')' with fileText:'' is SATISFIED (silent) on both arms",
-      "ok": true,
-      "detail": "sync=0 bounded=0"
-    },
-    {
-      "name": "M3 SPLIT — null and '' DIVERGE on a ''-matching requirement, and AGREE on one that does not",
-      "ok": true,
-      "detail": "{\"LC_ALL=C (pinned — does NOT match '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":1,\"bounded\":1},\"content\":{\"sync\":0,\"bounded\":0}},\"a* (matches '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":0,\"bounded\":0},\"content\":{\"sync\":0,\"bounded\":0}},\"^$ (matches '')\":{\"null\":{\"sync\":1,\"bounded\":1},\"empty\":{\"sync\":0,\"bounded\":0},\"content\":{\"sync\":1,\"bounded\":1}}}"
+      "detail": "record set seed20; exemplar transcriptions in the loaded set: 1"
     }
   ],
-  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
-  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
+  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
+  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

@@ -6,6 +6,8 @@
   "source": "synthetic-control",
   "arm": "empty",
   "provenance": {
+    "control": true,
+    "controlRecord": true,
     "note": "fileText: '' — READABLE but zero-length. Distinct from null: the requirement is EVALUATED against the empty string, so the verdict depends on whether requires.pattern matches ''. The split is measured in shipped-verdicts.mts against a hand-constructed ''-matching requirement.",
     "expectation": "requires.pattern 'LC_ALL=C' does NOT match '' => FIRES; a ''-matching requirement (e.g. 'a*') IS satisfied => silent."
   },

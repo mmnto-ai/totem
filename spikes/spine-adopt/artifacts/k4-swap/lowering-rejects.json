@@ -87,7 +87,7 @@
       "control": false,
       "ruleId": "1a7080ebf6162de3",
       "stage": "shipped-compile",
-      "reason": "specimen 1a7080eb-inline-secrets-agent-config (D:\\Dev\\worktrees\\totem-totem-claude-controls-at-pin\\spikes\\spine-adopt\\seed\\records\\r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
+      "reason": "specimen 1a7080eb-inline-secrets-agent-config (D:\\Dev\\worktrees\\totem-totem-claude-ror\\spikes\\spine-adopt\\seed\\records\\r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
     }
   ],
   "lowered": [
@@ -1376,6 +1376,6 @@
       "detail": "rego/build/k4-swap/r0123456789abcdef"
     }
   ],
-  "runManifestSha256": "90450073219abb547b3064edc2c9016910da53f8baa0feae1ed5b3aa1a0e7424",
+  "runManifestSha256": "32662d3693976a2c52d2f8839a473917a001696fb43e20cdfcfb36833714c76d",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }

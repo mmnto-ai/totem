@@ -1,0 +1,33 @@
+{
+  "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+  "specimen": "87aff037-fail-open-catch-ban",
+  "ruleId": "87aff037d7de47a7",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "5e15c9817320158b4a8275dbb358ba74af1b203da33abb1dd520c3c241d64f04"
+  },
+  "astQuery": {
+    "rule": {
+      "kind": "catch_clause",
+      "not": {
+        "has": {
+          "kind": "throw_statement",
+          "stopBy": "end"
+        }
+      }
+    },
+    "language": "TypeScript"
+  },
+  "factBundle": {
+    "file": "packages/core/src/catch-site.ts",
+    "fileText": "try { risky() } catch (e) { log(e); throw e }",
+    "lines": [
+      "try { risky() } catch (e) { log(e); throw e }"
+    ],
+    "astMatches": []
+  }
+}

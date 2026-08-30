@@ -348,88 +348,88 @@
     ]
   },
   "recordSet": "seed20",
-  "elapsedMs": 13822,
+  "elapsedMs": 14347,
   "timings": {
-    "totalMs": 13822,
+    "totalMs": 14347,
     "perPackage": {
       "totem.spike.r0167a783f75b5ecd": {
-        "rowsMs": 68,
-        "probeRowsMs": 40
+        "rowsMs": 71,
+        "probeRowsMs": 45
       },
       "totem.spike.r49dd9e4fd02d692b": {
-        "rowsMs": 85,
-        "probeRowsMs": 39
+        "rowsMs": 84,
+        "probeRowsMs": 41
       },
       "totem.spike.r54140f59be3e6e44": {
-        "rowsMs": 64,
-        "probeRowsMs": 39
+        "rowsMs": 62,
+        "probeRowsMs": 41
       },
       "totem.spike.r5b85fe53468964e1": {
-        "rowsMs": 58,
-        "probeRowsMs": 38
+        "rowsMs": 60,
+        "probeRowsMs": 40
       },
       "totem.spike.r5da43ea60b66e96e": {
-        "rowsMs": 78,
-        "probeRowsMs": 39
+        "rowsMs": 80,
+        "probeRowsMs": 42
       },
       "totem.spike.r6467c35159c1504d": {
-        "rowsMs": 61,
-        "probeRowsMs": 38
+        "rowsMs": 67,
+        "probeRowsMs": 40
       },
       "totem.spike.r65ede9bfdf6995fe": {
-        "rowsMs": 58,
-        "probeRowsMs": 39
+        "rowsMs": 60,
+        "probeRowsMs": 41
       },
       "totem.spike.r6b1890e2dbda3331_javascript": {
-        "rowsMs": 62,
+        "rowsMs": 73,
         "probeRowsMs": 40
       },
       "totem.spike.r6b1890e2dbda3331_typescript": {
-        "rowsMs": 72,
-        "probeRowsMs": 39
+        "rowsMs": 64,
+        "probeRowsMs": 41
       },
       "totem.spike.r6b2b62eb1e8693fc": {
-        "rowsMs": 61,
-        "probeRowsMs": 39
+        "rowsMs": 64,
+        "probeRowsMs": 42
       },
       "totem.spike.r71935fe9a742137b_javascript": {
-        "rowsMs": 75,
-        "probeRowsMs": 38
+        "rowsMs": 61,
+        "probeRowsMs": 40
       },
       "totem.spike.r71935fe9a742137b_typescript": {
-        "rowsMs": 61,
-        "probeRowsMs": 38
+        "rowsMs": 67,
+        "probeRowsMs": 41
       },
       "totem.spike.r87aff037d7de47a7": {
-        "rowsMs": 62,
+        "rowsMs": 64,
         "probeRowsMs": 40
       },
       "totem.spike.r89184bb5fd960848": {
-        "rowsMs": 74,
-        "probeRowsMs": 39
+        "rowsMs": 77,
+        "probeRowsMs": 41
       },
       "totem.spike.raa7a588d48e74503": {
         "rowsMs": 66,
-        "probeRowsMs": 39
+        "probeRowsMs": 40
       },
       "totem.spike.rb237bcf3b52381b1": {
-        "rowsMs": 57,
-        "probeRowsMs": 38
+        "rowsMs": 68,
+        "probeRowsMs": 39
       },
       "totem.spike.rb973609688ec2888": {
         "rowsMs": 59,
-        "probeRowsMs": 39
-      },
-      "totem.spike.rbe74c55caa9fd60c": {
-        "rowsMs": 76,
         "probeRowsMs": 40
       },
+      "totem.spike.rbe74c55caa9fd60c": {
+        "rowsMs": 67,
+        "probeRowsMs": 39
+      },
       "totem.spike.rd5faa14cbb8b50fb": {
-        "rowsMs": 70,
-        "probeRowsMs": 38
+        "rowsMs": 71,
+        "probeRowsMs": 40
       },
       "totem.spike.rd940b2c9ffe92e99": {
-        "rowsMs": 61,
+        "rowsMs": 67,
         "probeRowsMs": 39
       }
     }
@@ -21022,6 +21022,6 @@
       "detail": "{\"rows\":20,\"probeRows\":20}"
     }
   ],
-  "runManifestSha256": "90450073219abb547b3064edc2c9016910da53f8baa0feae1ed5b3aa1a0e7424",
+  "runManifestSha256": "32662d3693976a2c52d2f8839a473917a001696fb43e20cdfcfb36833714c76d",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }

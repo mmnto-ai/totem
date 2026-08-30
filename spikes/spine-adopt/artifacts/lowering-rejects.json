@@ -6,26 +6,27 @@
     {
       "id": "N1",
       "clause": "§ Lowering 1 — \"One package per record … `totem.spike.r<ruleId>`\"",
-      "finding": "`r<ruleId>` is NOT unique across the 7 records: d-line, d-file and e all carry the pinned exemplar id 0123456789abcdef. \"One package per record\" and \"r<ruleId>\" cannot both hold.",
-      "resolution": "The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives: a colliding id takes a `_<specimen>` suffix; a unique id stays exactly on-contract. FLAGGED for the dispatching seat — this is a naming decision, reversible in one place (`packageSuffix`).",
+      "finding": "`r<ruleId>` is NOT unique across the 22 seed records: `6b1890e2` and `71935fe9` each carry TWO records (a `language: typescript` original and a `language: javascript` twin) under ONE `curation.sourceLesson`, so both records of each twinned rule compile under the same lessonHash. \"One package per record\" and \"r<ruleId>\" cannot both hold.",
+      "resolution": "The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives. The CHARTER fixes the seed form: `totem.spike.r<lessonHash>_<language>` for BOTH records of a twinned rule, `totem.spike.r<lessonHash>` for a single-record rule. The discriminator is the record`s declared `target.language`, and the twinned ids are DECLARED by the record set (`src/lib/record-sets.mts` DECLARED_TWINNED_IDS) rather than inferred from which records happened to lower — a twin that failed to lower must not silently un-suffix its surviving sibling.",
       "affected": [
-        "d-line",
-        "d-file",
-        "e"
+        "6b1890e2-empty-string-in-whitelist-js",
+        "6b1890e2-empty-string-in-whitelist",
+        "71935fe9-string-cast-on-input-js",
+        "71935fe9-string-cast-on-input"
       ]
     },
     {
       "id": "N2",
       "clause": "§ Lowering 6 vs § Lowering 7",
       "finding": "The contract does not order the suppression check against the requires check. A match that is BOTH suppressed and requires-satisfied could emit `suppress` or emit nothing.",
-      "resolution": "MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. Unreachable on all 24 fact bundles (none carries a suppression marker), so it changes no differential row.",
+      "resolution": "MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. Unreachable on all 47 fact bundles (none carries a suppression marker), so it changes no differential row.",
       "affected": []
     },
     {
       "id": "N4",
       "clause": "§ Lowering 7 — \"or preceding-line `totem-ignore-next-line`/`totem-context:`\"",
       "finding": "The contract's PRECEDING-line marker set is one marker short of the shipped runtime. `isSuppressed` (rule-engine.ts:384-388) routes the preceding line through `hasContextDirective` (:349-356), which accepts `shield-context:` as well as `totem-context:`. The same-line set in the contract is exact (rule-engine.ts:377-381); only the preceding anchor diverges.",
-      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 24 fact bundles (none carries a suppression marker). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
+      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 47 fact bundles (none carries a suppression marker). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
       "affected": []
     },
     {
@@ -70,60 +71,220 @@
       },
       "policyEmitted": false,
       "policyPath": null
+    },
+    {
+      "recordId": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "ruleId": "0e01112d5f18ffde",
+      "stage": "target-lowering",
+      "reason": "target REJECTED (lookaround) — RE2 rejects lookaround AT COMPILE (\"invalid or unsupported Perl syntax: `(?!`\" / \"invalid named capture\"); § Lowering 4 forbids an approximation.",
+      "class": "lookaround"
+    },
+    {
+      "recordId": "1a7080eb-inline-secrets-agent-config",
+      "seedEntry": "1a7080eb",
+      "control": false,
+      "ruleId": "1a7080ebf6162de3",
+      "stage": "shipped-compile",
+      "reason": "specimen 1a7080eb-inline-secrets-agent-config (D:\\Dev\\worktrees\\totem-totem-claude-ror\\spikes\\spine-adopt\\seed\\records\\r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
     }
   ],
   "lowered": [
     {
-      "specimen": "a",
-      "seedEntry": null,
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
       "control": false,
-      "ruleId": "61dcb058bd1df15d",
-      "package": "totem.spike.r61dcb058bd1df15d",
-      "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
-      "engine": "regex",
-      "dir": "rego/build/r61dcb058bd1df15d",
-      "published": "artifacts/lowered/r61dcb058bd1df15d",
-      "patterns": [
-        {
-          "role": "target",
-          "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
-          "class": "word-boundary",
-          "lowered": true,
-          "literal": "\"\\\\b(?:git\\\\s+rm|rm)\\\\s+[^\\\\n]{0,40}\\\\.totem/lessons\\\\.md\\\\b\"",
-          "reason": null
-        }
-      ],
-      "globCount": 14
-    },
-    {
-      "specimen": "b",
-      "seedEntry": null,
-      "control": false,
-      "ruleId": "2d962603591aa928",
-      "package": "totem.spike.r2d962603591aa928",
-      "entrypoint": "totem/spike/r2d962603591aa928/result",
+      "ruleId": "0167a783f75b5ecd",
+      "package": "totem.spike.r0167a783f75b5ecd",
+      "entrypoint": "totem/spike/r0167a783f75b5ecd/result",
       "engine": "ast-grep",
-      "dir": "rego/build/r2d962603591aa928",
-      "published": "artifacts/lowered/r2d962603591aa928",
-      "patterns": [],
-      "globCount": 1
-    },
-    {
-      "specimen": "c",
-      "seedEntry": null,
-      "control": false,
-      "ruleId": "d0815b6769304e26",
-      "package": "totem.spike.rd0815b6769304e26",
-      "entrypoint": "totem/spike/rd0815b6769304e26/result",
-      "engine": "ast-grep",
-      "dir": "rego/build/rd0815b6769304e26",
-      "published": "artifacts/lowered/rd0815b6769304e26",
+      "dir": "rego/build/r0167a783f75b5ecd",
+      "published": "artifacts/lowered/r0167a783f75b5ecd",
       "patterns": [],
       "globCount": 4
     },
     {
-      "specimen": "c-supp",
-      "seedEntry": null,
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
+      "control": false,
+      "ruleId": "49dd9e4fd02d692b",
+      "package": "totem.spike.r49dd9e4fd02d692b",
+      "entrypoint": "totem/spike/r49dd9e4fd02d692b/result",
+      "engine": "regex",
+      "dir": "rego/build/r49dd9e4fd02d692b",
+      "published": "artifacts/lowered/r49dd9e4fd02d692b",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "\\b\\d+\\s*(?:characters?|chars?|words?)\\b",
+          "class": "word-boundary",
+          "lowered": true,
+          "literal": "\"\\\\b\\\\d+\\\\s*(?:characters?|chars?|words?)\\\\b\"",
+          "reason": null
+        }
+      ],
+      "globCount": 7
+    },
+    {
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
+      "control": false,
+      "ruleId": "54140f59be3e6e44",
+      "package": "totem.spike.r54140f59be3e6e44",
+      "entrypoint": "totem/spike/r54140f59be3e6e44/result",
+      "engine": "regex",
+      "dir": "rego/build/r54140f59be3e6e44",
+      "published": "artifacts/lowered/r54140f59be3e6e44",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
+          "class": "re2-clean",
+          "lowered": true,
+          "literal": "\"(^|[^a-zA-Z0-9-_./])#\\\\d+\"",
+          "reason": null
+        }
+      ],
+      "globCount": 3
+    },
+    {
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "control": false,
+      "ruleId": "5b85fe53468964e1",
+      "package": "totem.spike.r5b85fe53468964e1",
+      "entrypoint": "totem/spike/r5b85fe53468964e1/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r5b85fe53468964e1",
+      "published": "artifacts/lowered/r5b85fe53468964e1",
+      "patterns": [],
+      "globCount": 3
+    },
+    {
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "control": false,
+      "ruleId": "5da43ea60b66e96e",
+      "package": "totem.spike.r5da43ea60b66e96e",
+      "entrypoint": "totem/spike/r5da43ea60b66e96e/result",
+      "engine": "regex",
+      "dir": "rego/build/r5da43ea60b66e96e",
+      "published": "artifacts/lowered/r5da43ea60b66e96e",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "git\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\s+(?:['\"`]?\\$[{(]?\\w|['\"`]?\\$\\w)",
+          "class": "re2-clean",
+          "lowered": true,
+          "literal": "\"git\\\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\\\s+(?:['\\\"`]?\\\\$[{(]?\\\\w|['\\\"`]?\\\\$\\\\w)\"",
+          "reason": null
+        },
+        {
+          "role": "requires",
+          "pattern": "\\s--\\s",
+          "class": "re2-clean",
+          "lowered": true,
+          "literal": "\"\\\\s--\\\\s\"",
+          "reason": null
+        }
+      ],
+      "globCount": 6
+    },
+    {
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "control": false,
+      "ruleId": "6467c35159c1504d",
+      "package": "totem.spike.r6467c35159c1504d",
+      "entrypoint": "totem/spike/r6467c35159c1504d/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r6467c35159c1504d",
+      "published": "artifacts/lowered/r6467c35159c1504d",
+      "patterns": [],
+      "globCount": 4
+    },
+    {
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "control": false,
+      "ruleId": "65ede9bfdf6995fe",
+      "package": "totem.spike.r65ede9bfdf6995fe",
+      "entrypoint": "totem/spike/r65ede9bfdf6995fe/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r65ede9bfdf6995fe",
+      "published": "artifacts/lowered/r65ede9bfdf6995fe",
+      "patterns": [],
+      "globCount": 4
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "ruleId": "6b1890e2dbda3331",
+      "package": "totem.spike.r6b1890e2dbda3331_javascript",
+      "entrypoint": "totem/spike/r6b1890e2dbda3331_javascript/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r6b1890e2dbda3331_javascript",
+      "published": "artifacts/lowered/r6b1890e2dbda3331_javascript",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "ruleId": "6b1890e2dbda3331",
+      "package": "totem.spike.r6b1890e2dbda3331_typescript",
+      "entrypoint": "totem/spike/r6b1890e2dbda3331_typescript/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r6b1890e2dbda3331_typescript",
+      "published": "artifacts/lowered/r6b1890e2dbda3331_typescript",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "control": false,
+      "ruleId": "6b2b62eb1e8693fc",
+      "package": "totem.spike.r6b2b62eb1e8693fc",
+      "entrypoint": "totem/spike/r6b2b62eb1e8693fc/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r6b2b62eb1e8693fc",
+      "published": "artifacts/lowered/r6b2b62eb1e8693fc",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "ruleId": "71935fe9a742137b",
+      "package": "totem.spike.r71935fe9a742137b_javascript",
+      "entrypoint": "totem/spike/r71935fe9a742137b_javascript/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r71935fe9a742137b_javascript",
+      "published": "artifacts/lowered/r71935fe9a742137b_javascript",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "ruleId": "71935fe9a742137b",
+      "package": "totem.spike.r71935fe9a742137b_typescript",
+      "entrypoint": "totem/spike/r71935fe9a742137b_typescript/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/r71935fe9a742137b_typescript",
+      "published": "artifacts/lowered/r71935fe9a742137b_typescript",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
       "control": false,
       "ruleId": "87aff037d7de47a7",
       "package": "totem.spike.r87aff037d7de47a7",
@@ -135,45 +296,133 @@
       "globCount": 3
     },
     {
-      "specimen": "d-line",
-      "seedEntry": null,
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
       "control": false,
-      "ruleId": "0123456789abcdef",
-      "package": "totem.spike.r0123456789abcdef_d_line",
-      "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
+      "ruleId": "89184bb5fd960848",
+      "package": "totem.spike.r89184bb5fd960848",
+      "entrypoint": "totem/spike/r89184bb5fd960848/result",
       "engine": "regex",
-      "dir": "rego/build/r0123456789abcdef_d_line",
-      "published": "artifacts/lowered/r0123456789abcdef_d_line",
+      "dir": "rego/build/r89184bb5fd960848",
+      "published": "artifacts/lowered/r89184bb5fd960848",
       "patterns": [
         {
           "role": "target",
-          "pattern": "\\bgit\\s+(log|diff|status)\\b",
-          "class": "word-boundary",
-          "lowered": true,
-          "literal": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\"",
-          "reason": null
-        },
-        {
-          "role": "requires",
-          "pattern": "LC_ALL=C",
+          "pattern": "sed\\s+.*\\\\x1b",
           "class": "re2-clean",
           "lowered": true,
-          "literal": "\"LC_ALL=C\"",
+          "literal": "\"sed\\\\s+.*\\\\\\\\x1b\"",
+          "reason": null
+        }
+      ],
+      "globCount": 4
+    },
+    {
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
+      "control": false,
+      "ruleId": "aa7a588d48e74503",
+      "package": "totem.spike.raa7a588d48e74503",
+      "entrypoint": "totem/spike/raa7a588d48e74503/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/raa7a588d48e74503",
+      "published": "artifacts/lowered/raa7a588d48e74503",
+      "patterns": [],
+      "globCount": 2
+    },
+    {
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "control": false,
+      "ruleId": "b237bcf3b52381b1",
+      "package": "totem.spike.rb237bcf3b52381b1",
+      "entrypoint": "totem/spike/rb237bcf3b52381b1/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/rb237bcf3b52381b1",
+      "published": "artifacts/lowered/rb237bcf3b52381b1",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "control": false,
+      "ruleId": "b973609688ec2888",
+      "package": "totem.spike.rb973609688ec2888",
+      "entrypoint": "totem/spike/rb973609688ec2888/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/rb973609688ec2888",
+      "published": "artifacts/lowered/rb973609688ec2888",
+      "patterns": [],
+      "globCount": 1
+    },
+    {
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "control": false,
+      "ruleId": "be74c55caa9fd60c",
+      "package": "totem.spike.rbe74c55caa9fd60c",
+      "entrypoint": "totem/spike/rbe74c55caa9fd60c/result",
+      "engine": "regex",
+      "dir": "rego/build/rbe74c55caa9fd60c",
+      "published": "artifacts/lowered/rbe74c55caa9fd60c",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "\\$\\{\\{\\s*inputs\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\}\\}",
+          "class": "re2-clean",
+          "lowered": true,
+          "literal": "\"\\\\$\\\\{\\\\{\\\\s*inputs\\\\.[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\}\\\\}\"",
           "reason": null
         }
       ],
       "globCount": 2
+    },
+    {
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "control": false,
+      "ruleId": "d5faa14cbb8b50fb",
+      "package": "totem.spike.rd5faa14cbb8b50fb",
+      "entrypoint": "totem/spike/rd5faa14cbb8b50fb/result",
+      "engine": "regex",
+      "dir": "rego/build/rd5faa14cbb8b50fb",
+      "published": "artifacts/lowered/rd5faa14cbb8b50fb",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\s+(?:accurate|reliable|secure|safe))\\b",
+          "class": "word-boundary",
+          "lowered": true,
+          "literal": "\"\\\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\\\s+(?:accurate|reliable|secure|safe))\\\\b\"",
+          "reason": null
+        }
+      ],
+      "globCount": 4
+    },
+    {
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "control": false,
+      "ruleId": "d940b2c9ffe92e99",
+      "package": "totem.spike.rd940b2c9ffe92e99",
+      "entrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/rd940b2c9ffe92e99",
+      "published": "artifacts/lowered/rd940b2c9ffe92e99",
+      "patterns": [],
+      "globCount": 1
     },
     {
       "specimen": "d-file",
       "seedEntry": null,
-      "control": false,
+      "control": true,
       "ruleId": "0123456789abcdef",
-      "package": "totem.spike.r0123456789abcdef_d_file",
-      "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
+      "package": "totem.spike.r0123456789abcdef",
+      "entrypoint": "totem/spike/r0123456789abcdef/result",
       "engine": "regex",
-      "dir": "rego/build/r0123456789abcdef_d_file",
-      "published": "artifacts/lowered/r0123456789abcdef_d_file",
+      "dir": "rego/build/r0123456789abcdef",
+      "published": "artifacts/lowered/r0123456789abcdef",
       "patterns": [
         {
           "role": "target",
@@ -192,19 +441,6 @@
           "reason": null
         }
       ],
-      "globCount": 2
-    },
-    {
-      "specimen": "e",
-      "seedEntry": null,
-      "control": false,
-      "ruleId": "0123456789abcdef",
-      "package": "totem.spike.r0123456789abcdef_e",
-      "entrypoint": "totem/spike/r0123456789abcdef_e/result",
-      "engine": "ast-grep",
-      "dir": "rego/build/r0123456789abcdef_e",
-      "published": "artifacts/lowered/r0123456789abcdef_e",
-      "patterns": [],
       "globCount": 2
     }
   ],
@@ -215,9 +451,19 @@
       "detail": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }"
     },
     {
-      "name": "CONTRACT NOTE (N1) — `r<ruleId>` is not unique: the pinned exemplar id is shared",
+      "name": "CONTRACT NOTE (N1) — `r<ruleId>` is not unique: each twinned rule shares one lessonHash across its per-language records",
       "ok": true,
-      "detail": "[\"0123456789abcdef\"]"
+      "detail": "[\"6b1890e2dbda3331\",\"71935fe9a742137b\"]"
+    },
+    {
+      "name": "(§ S3) the 1 K5 control record(s) carry a lessonHash NO scored seed record carries, so the control's package `totem.spike.r<ruleId>` cannot collide",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "(§ S1) all 33 generated probe pairs discriminate under the LOWERED regex: the probe is accepted and the twin is rejected by its own glob",
+      "ok": true,
+      "detail": "[]"
     },
     {
       "name": "CONTROL (§ Lowering 3) — the backtick assert tests raw-string SYNTAX: a genuine RAW literal is flagged, a backtick INSIDE a double-quoted literal is not, and `\\\"` does not end the literal early",
@@ -225,154 +471,709 @@
       "detail": "raw=\"x := `raw`\" quoted=\"x := \" escaped=\"x := \""
     },
     {
-      "name": "a — every pattern lowers (§ Lowering 4 gate)",
+      "name": "0167a783-dynamic-import-utility-layer — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0167a783f75b5ecd/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "440 (glob × path) probes agree"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0167a783f75b5ecd/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (7 in scope)"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "7 in / 103 out"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "packages/cli/src/**/*.ts:10/100, packages/cli/src/commands/**/*.ts:2/108, **/*.test.ts:4/106, **/*.spec.ts:2/108"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "119 code lines / 5322 bytes"
+    },
+    {
+      "name": "0e01112d-bare-new-error — REJECT ROW (target-lowering): a pattern is RE2-inexpressible, so no policy is emitted (§ Lowering 4)",
+      "ok": true,
+      "detail": "target REJECTED (lookaround)"
+    },
+    {
+      "name": "49dd9e4f-llm-character-counting — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
       "detail": "target:word-boundary"
     },
     {
-      "name": "a — per-glob agreement with `matchesRecordGlob` over 23 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r61dcb058bd1df15d/globs.json`.perGlobProbes)",
+      "name": "49dd9e4f-llm-character-counting — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r49dd9e4fd02d692b/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "322 (glob × path) probes agree"
+      "detail": "770 (glob × path) probes agree"
     },
     {
-      "name": "a — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r61dcb058bd1df15d/globs.json`.scopeProbes)",
+      "name": "49dd9e4f-llm-character-counting — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r49dd9e4fd02d692b/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "23 paths agree (16 in scope)"
+      "detail": "110 paths agree (49 in scope)"
     },
     {
-      "name": "a — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "name": "49dd9e4f-llm-character-counting — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "16 in / 7 out"
+      "detail": "49 in / 61 out"
     },
     {
-      "name": "a — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "name": "49dd9e4f-llm-character-counting — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
       "ok": true,
-      "detail": "134 code lines / 5850 bytes"
+      "detail": "**/*.ts:34/76, **/*.tsx:1/109, **/*.js:3/107, **/*.jsx:1/109, **/*.py:1/109, **/*.md:8/102, **/*.txt:1/109"
     },
     {
-      "name": "a — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "name": "49dd9e4f-llm-character-counting — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
       "ok": true,
-      "detail": "\"\\\\b(?:git\\\\s+rm|rm)\\\\s+[^\\\\n]{0,40}\\\\.totem/lessons\\\\.md\\\\b…"
+      "detail": "119 code lines / 5230 bytes"
     },
     {
-      "name": "b — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "name": "49dd9e4f-llm-character-counting — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"\\\\b\\\\d+\\\\s*(?:characters?|chars?|words?)\\\\b\"…"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "target:re2-clean"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r54140f59be3e6e44/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "330 (glob × path) probes agree"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r54140f59be3e6e44/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (11 in scope)"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "11 in / 99 out"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "packages/cli/**/*.ts:12/98, apps/cli/**/*.ts:1/109, **/*.test.ts:4/106"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4909 bytes"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"(^|[^a-zA-Z0-9-_./])#\\\\d+\"…"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
       "ok": true,
       "detail": "\"\""
     },
     {
-      "name": "b — every pattern lowers (§ Lowering 4 gate)",
+      "name": "5b85fe53-suppress-event-runtime-failure — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
       "detail": "(no regex patterns)"
     },
     {
-      "name": "b — per-glob agreement with `matchesRecordGlob` over 23 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r2d962603591aa928/globs.json`.perGlobProbes)",
+      "name": "5b85fe53-suppress-event-runtime-failure — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r5b85fe53468964e1/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "23 (glob × path) probes agree"
+      "detail": "330 (glob × path) probes agree"
     },
     {
-      "name": "b — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r2d962603591aa928/globs.json`.scopeProbes)",
+      "name": "5b85fe53-suppress-event-runtime-failure — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r5b85fe53468964e1/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "23 paths agree (9 in scope)"
+      "detail": "110 paths agree (10 in scope)"
     },
     {
-      "name": "b — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "name": "5b85fe53-suppress-event-runtime-failure — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "9 in / 14 out"
+      "detail": "10 in / 100 out"
     },
     {
-      "name": "b — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "name": "5b85fe53-suppress-event-runtime-failure — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
       "ok": true,
-      "detail": "112 code lines / 4904 bytes"
+      "detail": "packages/core/**/*.ts:12/98, **/*.test.*:7/103, **/*.spec.*:4/106"
     },
     {
-      "name": "c — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "name": "5b85fe53-suppress-event-runtime-failure — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "117 code lines / 5196 bytes"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "target:re2-clean, requires:re2-clean"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r5da43ea60b66e96e/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "660 (glob × path) probes agree"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r5da43ea60b66e96e/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (49 in scope)"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "49 in / 61 out"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76, **/*.js:3/107, **/*.sh:8/102, **/*.bash:1/109, **/*.mjs:1/109, **/*.cjs:2/108"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "125 code lines / 5723 bytes"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"git\\\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-pa…"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
       "ok": true,
       "detail": "\"\""
     },
     {
-      "name": "c — every pattern lowers (§ Lowering 4 gate)",
+      "name": "6467c351-dynamic-import-cli-entry — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
       "detail": "(no regex patterns)"
     },
     {
-      "name": "c — per-glob agreement with `matchesRecordGlob` over 24 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rd0815b6769304e26/globs.json`.perGlobProbes)",
+      "name": "6467c351-dynamic-import-cli-entry — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r6467c35159c1504d/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "96 (glob × path) probes agree"
+      "detail": "440 (glob × path) probes agree"
     },
     {
-      "name": "c — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rd0815b6769304e26/globs.json`.scopeProbes)",
+      "name": "6467c351-dynamic-import-cli-entry — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r6467c35159c1504d/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "24 paths agree (4 in scope)"
+      "detail": "110 paths agree (7 in scope)"
     },
     {
-      "name": "c — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "name": "6467c351-dynamic-import-cli-entry — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "4 in / 20 out"
+      "detail": "7 in / 103 out"
     },
     {
-      "name": "c — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "name": "6467c351-dynamic-import-cli-entry — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
       "ok": true,
-      "detail": "119 code lines / 5271 bytes"
+      "detail": "packages/cli/src/**/*.ts:10/100, packages/cli/src/commands/**/*.ts:2/108, **/*.test.ts:4/106, **/*.spec.ts:2/108"
     },
     {
-      "name": "c-supp — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "name": "6467c351-dynamic-import-cli-entry — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "119 code lines / 5314 bytes"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
       "ok": true,
       "detail": "\"\""
     },
     {
-      "name": "c-supp — every pattern lowers (§ Lowering 4 gate)",
+      "name": "65ede9bf-dynamic-import-command-handlers — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
       "detail": "(no regex patterns)"
     },
     {
-      "name": "c-supp — per-glob agreement with `matchesRecordGlob` over 24 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r87aff037d7de47a7/globs.json`.perGlobProbes)",
+      "name": "65ede9bf-dynamic-import-command-handlers — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r65ede9bfdf6995fe/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "72 (glob × path) probes agree"
+      "detail": "440 (glob × path) probes agree"
     },
     {
-      "name": "c-supp — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r87aff037d7de47a7/globs.json`.scopeProbes)",
+      "name": "65ede9bf-dynamic-import-command-handlers — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r65ede9bfdf6995fe/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "24 paths agree (5 in scope)"
+      "detail": "110 paths agree (7 in scope)"
     },
     {
-      "name": "c-supp — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "name": "65ede9bf-dynamic-import-command-handlers — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "5 in / 19 out"
+      "detail": "7 in / 103 out"
     },
     {
-      "name": "c-supp — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "name": "65ede9bf-dynamic-import-command-handlers — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
       "ok": true,
-      "detail": "117 code lines / 5134 bytes"
+      "detail": "packages/cli/src/**/*.ts:10/100, packages/cli/src/commands/**/*.ts:2/108, **/*.test.ts:4/106, **/*.spec.ts:2/108"
     },
     {
-      "name": "d-line — every pattern lowers (§ Lowering 4 gate)",
+      "name": "65ede9bf-dynamic-import-command-handlers — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
       "ok": true,
-      "detail": "target:word-boundary, requires:re2-clean"
+      "detail": "119 code lines / 5328 bytes"
     },
     {
-      "name": "d-line — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_d_line/globs.json`.perGlobProbes)",
+      "name": "6b1890e2-empty-string-in-whitelist-js — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
       "ok": true,
-      "detail": "44 (glob × path) probes agree"
+      "detail": "\"\""
     },
     {
-      "name": "d-line — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_d_line/globs.json`.scopeProbes)",
+      "name": "6b1890e2-empty-string-in-whitelist-js — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
-      "detail": "22 paths agree (6 in scope)"
+      "detail": "(no regex patterns)"
     },
     {
-      "name": "d-line — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "name": "6b1890e2-empty-string-in-whitelist-js — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r6b1890e2dbda3331_javascript/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "6 in / 16 out"
+      "detail": "110 (glob × path) probes agree"
     },
     {
-      "name": "d-line — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "name": "6b1890e2-empty-string-in-whitelist-js — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r6b1890e2dbda3331_javascript/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "117 code lines / 5161 bytes"
+      "detail": "110 paths agree (3 in scope)"
     },
     {
-      "name": "d-line — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "name": "6b1890e2-empty-string-in-whitelist-js — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\"…"
+      "detail": "3 in / 107 out"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.js:3/107"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4966 bytes"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r6b1890e2dbda3331_typescript/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r6b1890e2dbda3331_typescript/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (34 in scope)"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "34 in / 76 out"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4960 bytes"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r6b2b62eb1e8693fc/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r6b2b62eb1e8693fc/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (34 in scope)"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "34 in / 76 out"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4937 bytes"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r71935fe9a742137b_javascript/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r71935fe9a742137b_javascript/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (3 in scope)"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "3 in / 107 out"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.js:3/107"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4956 bytes"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r71935fe9a742137b_typescript/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r71935fe9a742137b_typescript/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (34 in scope)"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "34 in / 76 out"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4950 bytes"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r87aff037d7de47a7/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "330 (glob × path) probes agree"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r87aff037d7de47a7/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (22 in scope)"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "22 in / 88 out"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "packages/**/*.ts:26/84, **/*.test.ts:4/106, **/*.spec.ts:2/108"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "117 code lines / 5150 bytes"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "target:re2-clean"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r89184bb5fd960848/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "440 (glob × path) probes agree"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r89184bb5fd960848/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (11 in scope)"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "11 in / 99 out"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.sh:8/102, **/*.bash:1/109, **/*.zsh:1/109, **/*.ksh:1/109"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "113 code lines / 4918 bytes"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"sed\\\\s+.*\\\\\\\\x1b\"…"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/raa7a588d48e74503/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "220 (glob × path) probes agree"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/raa7a588d48e74503/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (6 in scope)"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "6 in / 104 out"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.test.ts:4/106, **/*.spec.ts:2/108"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "114 code lines / 5051 bytes"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rb237bcf3b52381b1/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rb237bcf3b52381b1/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (2 in scope)"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "2 in / 108 out"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "packages/cli/src/assets/**/*.ts:2/108"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4993 bytes"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rb973609688ec2888/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rb973609688ec2888/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (2 in scope)"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "2 in / 108 out"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "packages/cli/**/*.test.ts:2/108"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4989 bytes"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "target:re2-clean"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rbe74c55caa9fd60c/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "220 (glob × path) probes agree"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rbe74c55caa9fd60c/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (3 in scope)"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "3 in / 107 out"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.yml:2/108, **/*.yaml:1/109"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "109 code lines / 4834 bytes"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"\\\\$\\\\{\\\\{\\\\s*inputs\\\\.[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\}\\\\}\"…"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "target:word-boundary"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rd5faa14cbb8b50fb/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "440 (glob × path) probes agree"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rd5faa14cbb8b50fb/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (11 in scope)"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "11 in / 99 out"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.md:8/102, **/*.mdx:1/109, **/*.rst:1/109, **/*.txt:1/109"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "113 code lines / 5182 bytes"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"\\\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(…"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rd940b2c9ffe92e99/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "110 (glob × path) probes agree"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rd940b2c9ffe92e99/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (34 in scope)"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "34 in / 76 out"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "112 code lines / 4941 bytes"
     },
     {
       "name": "d-file — every pattern lowers (§ Lowering 4 gate)",
@@ -380,24 +1181,29 @@
       "detail": "target:word-boundary, requires:re2-clean"
     },
     {
-      "name": "d-file — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_d_file/globs.json`.perGlobProbes)",
+      "name": "d-file — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef/globs.json`.perGlobProbes)",
       "ok": true,
-      "detail": "44 (glob × path) probes agree"
+      "detail": "220 (glob × path) probes agree"
     },
     {
-      "name": "d-file — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_d_file/globs.json`.scopeProbes)",
+      "name": "d-file — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef/globs.json`.scopeProbes)",
       "ok": true,
-      "detail": "22 paths agree (6 in scope)"
+      "detail": "110 paths agree (10 in scope)"
     },
     {
       "name": "d-file — the probe set is DISCRIMINATING (at least one path in scope and one out)",
       "ok": true,
-      "detail": "6 in / 16 out"
+      "detail": "10 in / 100 out"
+    },
+    {
+      "name": "d-file — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.sh:8/102, **/*.cjs:2/108"
     },
     {
       "name": "d-file — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
       "ok": true,
-      "detail": "118 code lines / 5500 bytes"
+      "detail": "118 code lines / 5493 bytes"
     },
     {
       "name": "d-file — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
@@ -405,44 +1211,19 @@
       "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\"…"
     },
     {
-      "name": "e — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "name": "21 records lowered, one policy package each (§ Lowering 1)",
       "ok": true,
-      "detail": "\"\""
-    },
-    {
-      "name": "e — every pattern lowers (§ Lowering 4 gate)",
-      "ok": true,
-      "detail": "(no regex patterns)"
-    },
-    {
-      "name": "e — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_e/globs.json`.perGlobProbes)",
-      "ok": true,
-      "detail": "44 (glob × path) probes agree"
-    },
-    {
-      "name": "e — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_e/globs.json`.scopeProbes)",
-      "ok": true,
-      "detail": "22 paths agree (5 in scope)"
-    },
-    {
-      "name": "e — the probe set is DISCRIMINATING (at least one path in scope and one out)",
-      "ok": true,
-      "detail": "5 in / 17 out"
-    },
-    {
-      "name": "e — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
-      "ok": true,
-      "detail": "115 code lines / 5019 bytes"
-    },
-    {
-      "name": "7 records lowered, one policy package each (§ Lowering 1)",
-      "ok": true,
-      "detail": "7"
+      "detail": "21"
     },
     {
       "name": "package names are UNIQUE (the N1 collision is resolved, not papered over)",
       "ok": true,
-      "detail": "7"
+      "detail": "21"
+    },
+    {
+      "name": "REJECT ROWS — 2 record(s) did not lower; the run continued and emitted no bundle or chain for them",
+      "ok": true,
+      "detail": "0e01112d-bare-new-error [target-lowering/lookaround]; 1a7080eb-inline-secrets-agent-config [shipped-compile]"
     },
     {
       "name": "REJECT ROW — bddfbd2ec1c75eaf (lookaround) is REJECTED by the lowerer, never approximated",
@@ -475,14 +1256,14 @@
       "detail": "[]"
     },
     {
-      "name": "the build tree holds EXACTLY the 7 lowered packages",
+      "name": "the build tree holds EXACTLY the 21 lowered packages",
       "ok": true,
-      "detail": "[\"r0123456789abcdef_d_file\",\"r0123456789abcdef_d_line\",\"r0123456789abcdef_e\",\"r2d962603591aa928\",\"r61dcb058bd1df15d\",\"r87aff037d7de47a7\",\"rd0815b6769304e26\"]"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
     },
     {
-      "name": "the published tree `artifacts/lowered/` holds EXACTLY the same 7 packages",
+      "name": "the published tree `artifacts/lowered/` holds EXACTLY the same 21 packages",
       "ok": true,
-      "detail": "[\"r0123456789abcdef_d_file\",\"r0123456789abcdef_d_line\",\"r0123456789abcdef_e\",\"r2d962603591aa928\",\"r61dcb058bd1df15d\",\"r87aff037d7de47a7\",\"rd0815b6769304e26\"]"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
     },
     {
       "name": "(G7) every published policy.rego is BYTE-IDENTICAL to the one whose sha256 the chain binds",
@@ -490,41 +1271,111 @@
       "detail": "[]"
     },
     {
-      "name": "a — policy.rego + globs.json both written",
+      "name": "0167a783-dynamic-import-utility-layer — policy.rego + globs.json both written",
       "ok": true,
-      "detail": "rego/build/r61dcb058bd1df15d"
+      "detail": "rego/build/r0167a783f75b5ecd"
     },
     {
-      "name": "b — policy.rego + globs.json both written",
+      "name": "49dd9e4f-llm-character-counting — policy.rego + globs.json both written",
       "ok": true,
-      "detail": "rego/build/r2d962603591aa928"
+      "detail": "rego/build/r49dd9e4fd02d692b"
     },
     {
-      "name": "c — policy.rego + globs.json both written",
+      "name": "54140f59-bare-issue-number-refs — policy.rego + globs.json both written",
       "ok": true,
-      "detail": "rego/build/rd0815b6769304e26"
+      "detail": "rego/build/r54140f59be3e6e44"
     },
     {
-      "name": "c-supp — policy.rego + globs.json both written",
+      "name": "5b85fe53-suppress-event-runtime-failure — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r5b85fe53468964e1"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r5da43ea60b66e96e"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r6467c35159c1504d"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r65ede9bfdf6995fe"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r6b1890e2dbda3331_javascript"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r6b1890e2dbda3331_typescript"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r6b2b62eb1e8693fc"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r71935fe9a742137b_javascript"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/r71935fe9a742137b_typescript"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban — policy.rego + globs.json both written",
       "ok": true,
       "detail": "rego/build/r87aff037d7de47a7"
     },
     {
-      "name": "d-line — policy.rego + globs.json both written",
+      "name": "89184bb5-bsd-sed-hex-escape — policy.rego + globs.json both written",
       "ok": true,
-      "detail": "rego/build/r0123456789abcdef_d_line"
+      "detail": "rego/build/r89184bb5fd960848"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/raa7a588d48e74503"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/rb237bcf3b52381b1"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/rb973609688ec2888"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/rbe74c55caa9fd60c"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/rd5faa14cbb8b50fb"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/rd940b2c9ffe92e99"
     },
     {
       "name": "d-file — policy.rego + globs.json both written",
       "ok": true,
-      "detail": "rego/build/r0123456789abcdef_d_file"
-    },
-    {
-      "name": "e — policy.rego + globs.json both written",
-      "ok": true,
-      "detail": "rego/build/r0123456789abcdef_e"
+      "detail": "rego/build/r0123456789abcdef"
     }
   ],
-  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
-  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
+  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
+  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

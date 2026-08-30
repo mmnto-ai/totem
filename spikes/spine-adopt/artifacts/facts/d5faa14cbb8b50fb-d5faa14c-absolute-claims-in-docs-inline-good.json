@@ -1,0 +1,22 @@
+{
+  "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+  "specimen": "d5faa14c-absolute-claims-in-docs",
+  "ruleId": "d5faa14cbb8b50fb",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-d5faa14c-absolute-claims-in-docs.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "45520807c7321b85d3a81074af3f26731f54d48d23699e94b5972e078c670be8"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "docs/overview.md",
+    "fileText": "The compiler covers the 14 edge cases listed in the test matrix.",
+    "lines": [
+      "The compiler covers the 14 edge cases listed in the test matrix."
+    ],
+    "astMatches": []
+  }
+}

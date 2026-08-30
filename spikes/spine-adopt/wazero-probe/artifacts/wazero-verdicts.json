@@ -1,9 +1,9 @@
 {
   "abi": [
     {
-      "specimen": "a",
-      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
-      "wasmBytes": 347397,
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "wasmSha256": "e58c5cd7bbb1001ebe5cc6e465ffd827e84ee1ca10c2da1986ddf0be5f8b304b",
+      "wasmBytes": 346216,
       "importedFunctions": [
         "env.opa_abort:(i32)-\u003e()",
         "env.opa_builtin0:(i32,i32)-\u003e(i32)",
@@ -42,17 +42,417 @@
         "opa_value_remove_path:(i32,i32)-\u003e(i32)"
       ],
       "entrypoints": {
-        "totem/spike/r61dcb058bd1df15d/result": 0
+        "totem/spike/r0167a783f75b5ecd/result": 0
       },
       "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/r61dcb058bd1df15d/result",
+      "entrypointUsed": "totem/spike/r0167a783f75b5ecd/result",
       "entrypointId": 0,
       "shimMemoryMinPages": 2,
-      "memoryPagesAfterEval": 4
+      "memoryPagesAfterEval": 3
     },
     {
-      "specimen": "b",
-      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "wasmSha256": "4729fee4d639a6973d5a0e96df81c2e2d76244d3ff4413a5e7496f02683a4026",
+      "wasmBytes": 346764,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r49dd9e4fd02d692b/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r49dd9e4fd02d692b/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "54140f59-bare-issue-number-refs",
+      "wasmSha256": "55d5aa55249b89a56d6d8df8532db790e7f9867c2c79beae330fdc3f9e22652f",
+      "wasmBytes": 346428,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r54140f59be3e6e44/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r54140f59be3e6e44/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "wasmSha256": "9e520179e090321824c50f6a990a41264e7cb6ae05df403cdd8adf49792bc266",
+      "wasmBytes": 346107,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r5b85fe53468964e1/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r5b85fe53468964e1/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "wasmSha256": "38ea90b333c1af14f71c4db06cbf3c8e37a7e234e25d99920b9aac7fa25ceac4",
+      "wasmBytes": 347189,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r5da43ea60b66e96e/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r5da43ea60b66e96e/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "wasmSha256": "68e209be972f9c70b6d749c547976d6de69f142eee338d4e3b69b77370d03518",
+      "wasmBytes": 346216,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r6467c35159c1504d/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r6467c35159c1504d/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "wasmSha256": "7a6658492c99035c0b4d85b5240ce9230172663a911e273abf99775113f03edd",
+      "wasmBytes": 346216,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r65ede9bfdf6995fe/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r65ede9bfdf6995fe/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "wasmSha256": "283b2ec0fd70d8892d9008982f3f8168642dd6ad4bb0aa832e84559c710e515b",
+      "wasmBytes": 346101,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r6b1890e2dbda3331_javascript/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r6b1890e2dbda3331_javascript/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "wasmSha256": "e56d5deebd775f1ed86ad4ebef99d34cc58fb9843244f4e1eeba1e9c26e09264",
+      "wasmBytes": 346101,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r6b1890e2dbda3331_typescript/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r6b1890e2dbda3331_typescript/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "wasmSha256": "013e80447bdcab65050388e4c50f9cdcf35fe411a37902c0807fa426d4643644",
       "wasmBytes": 345903,
       "importedFunctions": [
         "env.opa_abort:(i32)-\u003e()",
@@ -92,18 +492,18 @@
         "opa_value_remove_path:(i32,i32)-\u003e(i32)"
       ],
       "entrypoints": {
-        "totem/spike/r2d962603591aa928/result": 0
+        "totem/spike/r6b2b62eb1e8693fc/result": 0
       },
       "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/r2d962603591aa928/result",
+      "entrypointUsed": "totem/spike/r6b2b62eb1e8693fc/result",
       "entrypointId": 0,
       "shimMemoryMinPages": 2,
       "memoryPagesAfterEval": 3
     },
     {
-      "specimen": "c",
-      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
-      "wasmBytes": 346215,
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "wasmSha256": "29bda9cca997a239e3fb75885e3d9891ec8c2786468d1118d7ec30c68b21453b",
+      "wasmBytes": 346101,
       "importedFunctions": [
         "env.opa_abort:(i32)-\u003e()",
         "env.opa_builtin0:(i32,i32)-\u003e(i32)",
@@ -142,16 +542,66 @@
         "opa_value_remove_path:(i32,i32)-\u003e(i32)"
       ],
       "entrypoints": {
-        "totem/spike/rd0815b6769304e26/result": 0
+        "totem/spike/r71935fe9a742137b_javascript/result": 0
       },
       "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/rd0815b6769304e26/result",
+      "entrypointUsed": "totem/spike/r71935fe9a742137b_javascript/result",
       "entrypointId": 0,
       "shimMemoryMinPages": 2,
       "memoryPagesAfterEval": 3
     },
     {
-      "specimen": "c-supp",
+      "specimen": "71935fe9-string-cast-on-input",
+      "wasmSha256": "dd780efa717ef4a07749a067ad44fb0e2b59f42f5e4ea1b672834331f45ff2de",
+      "wasmBytes": 346101,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/r71935fe9a742137b_typescript/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/r71935fe9a742137b_typescript/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "87aff037-fail-open-catch-ban",
       "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
       "wasmBytes": 346096,
       "importedFunctions": [
@@ -201,9 +651,9 @@
       "memoryPagesAfterEval": 3
     },
     {
-      "specimen": "d-line",
-      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
-      "wasmBytes": 346899,
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "wasmSha256": "a7c751d4cb3848ae761d892ca70c6e6e9bbe07b54c002ca8cdd4aa10c8d29556",
+      "wasmBytes": 346479,
       "importedFunctions": [
         "env.opa_abort:(i32)-\u003e()",
         "env.opa_builtin0:(i32,i32)-\u003e(i32)",
@@ -242,18 +692,318 @@
         "opa_value_remove_path:(i32,i32)-\u003e(i32)"
       ],
       "entrypoints": {
-        "totem/spike/r0123456789abcdef_d_line/result": 0
+        "totem/spike/r89184bb5fd960848/result": 0
       },
       "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/r0123456789abcdef_d_line/result",
+      "entrypointUsed": "totem/spike/r89184bb5fd960848/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "aa7a588d-async-test-callbacks",
+      "wasmSha256": "622b00e9dde0db427414e6944aa299724a322be8f6acae09ebece64b2991472b",
+      "wasmBytes": 346001,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/raa7a588d48e74503/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/raa7a588d48e74503/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "wasmSha256": "a46775263f7b30786f3cff76634d7b23aeefb1362d569f53d76b55e07cca108e",
+      "wasmBytes": 345927,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rb237bcf3b52381b1/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rb237bcf3b52381b1/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "wasmSha256": "b50725bf51ccce7377bce37ab48184aa9d2abdf86c045ff9717b04812a68ec86",
+      "wasmBytes": 345922,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rb973609688ec2888/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rb973609688ec2888/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "be74c55c-actions-input-expansion",
+      "wasmSha256": "aa37c437ab54b6606fc8e126ac4dd1e789e359142873ce854759117d50c760ad",
+      "wasmBytes": 346339,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rbe74c55caa9fd60c/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rbe74c55caa9fd60c/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "wasmSha256": "0566d5a716df98c5b810ee9afcc4dfe0534f0eb85d0a7a9969b197a43c32c70c",
+      "wasmBytes": 346606,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rd5faa14cbb8b50fb/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rd5faa14cbb8b50fb/result",
+      "entrypointId": 0,
+      "shimMemoryMinPages": 2,
+      "memoryPagesAfterEval": 3
+    },
+    {
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "wasmSha256": "2a792c0ece5e81fc609bd2cebcd667e5b4a2cf8110789219341cb7fa93d08fce",
+      "wasmBytes": 345903,
+      "importedFunctions": [
+        "env.opa_abort:(i32)-\u003e()",
+        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
+        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
+        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
+      ],
+      "importedMemories": [
+        "env.memory:memory{min=2,max=65536,hasMax=false}"
+      ],
+      "exports": [
+        "builtins:()-\u003e(i32)",
+        "entrypoints:()-\u003e(i32)",
+        "eval:(i32)-\u003e(i32)",
+        "memory:memory{memory}",
+        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
+        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
+        "opa_eval_ctx_new:()-\u003e(i32)",
+        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
+        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
+        "opa_free:(i32)-\u003e()",
+        "opa_heap_blocks_restore:()-\u003e()",
+        "opa_heap_blocks_stash:()-\u003e()",
+        "opa_heap_ptr_get:()-\u003e(i32)",
+        "opa_heap_ptr_set:(i32)-\u003e()",
+        "opa_heap_stash_clear:()-\u003e()",
+        "opa_json_dump:(i32)-\u003e(i32)",
+        "opa_json_parse:(i32,i32)-\u003e(i32)",
+        "opa_malloc:(i32)-\u003e(i32)",
+        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
+        "opa_value_dump:(i32)-\u003e(i32)",
+        "opa_value_free:(i32)-\u003e()",
+        "opa_value_parse:(i32,i32)-\u003e(i32)",
+        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
+      ],
+      "entrypoints": {
+        "totem/spike/rd940b2c9ffe92e99/result": 0
+      },
+      "requiredBuiltinsPerModuleBuiltinsExport": {},
+      "entrypointUsed": "totem/spike/rd940b2c9ffe92e99/result",
       "entrypointId": 0,
       "shimMemoryMinPages": 2,
       "memoryPagesAfterEval": 3
     },
     {
       "specimen": "d-file",
-      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
-      "wasmBytes": 346985,
+      "wasmSha256": "6feda7a2c0c593f077b40f4a5f1d5b32f3a02900d5ee0d12f0a106653f46b890",
+      "wasmBytes": 346845,
       "importedFunctions": [
         "env.opa_abort:(i32)-\u003e()",
         "env.opa_builtin0:(i32,i32)-\u003e(i32)",
@@ -292,60 +1042,10 @@
         "opa_value_remove_path:(i32,i32)-\u003e(i32)"
       ],
       "entrypoints": {
-        "totem/spike/r0123456789abcdef_d_file/result": 0
+        "totem/spike/r0123456789abcdef/result": 0
       },
       "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/r0123456789abcdef_d_file/result",
-      "entrypointId": 0,
-      "shimMemoryMinPages": 2,
-      "memoryPagesAfterEval": 3
-    },
-    {
-      "specimen": "e",
-      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
-      "wasmBytes": 346040,
-      "importedFunctions": [
-        "env.opa_abort:(i32)-\u003e()",
-        "env.opa_builtin0:(i32,i32)-\u003e(i32)",
-        "env.opa_builtin1:(i32,i32,i32)-\u003e(i32)",
-        "env.opa_builtin2:(i32,i32,i32,i32)-\u003e(i32)",
-        "env.opa_builtin3:(i32,i32,i32,i32,i32)-\u003e(i32)",
-        "env.opa_builtin4:(i32,i32,i32,i32,i32,i32)-\u003e(i32)"
-      ],
-      "importedMemories": [
-        "env.memory:memory{min=2,max=65536,hasMax=false}"
-      ],
-      "exports": [
-        "builtins:()-\u003e(i32)",
-        "entrypoints:()-\u003e(i32)",
-        "eval:(i32)-\u003e(i32)",
-        "memory:memory{memory}",
-        "opa_eval:(i32,i32,i32,i32,i32,i32,i32)-\u003e(i32)",
-        "opa_eval_ctx_get_result:(i32)-\u003e(i32)",
-        "opa_eval_ctx_new:()-\u003e(i32)",
-        "opa_eval_ctx_set_data:(i32,i32)-\u003e()",
-        "opa_eval_ctx_set_entrypoint:(i32,i32)-\u003e()",
-        "opa_eval_ctx_set_input:(i32,i32)-\u003e()",
-        "opa_free:(i32)-\u003e()",
-        "opa_heap_blocks_restore:()-\u003e()",
-        "opa_heap_blocks_stash:()-\u003e()",
-        "opa_heap_ptr_get:()-\u003e(i32)",
-        "opa_heap_ptr_set:(i32)-\u003e()",
-        "opa_heap_stash_clear:()-\u003e()",
-        "opa_json_dump:(i32)-\u003e(i32)",
-        "opa_json_parse:(i32,i32)-\u003e(i32)",
-        "opa_malloc:(i32)-\u003e(i32)",
-        "opa_value_add_path:(i32,i32,i32)-\u003e(i32)",
-        "opa_value_dump:(i32)-\u003e(i32)",
-        "opa_value_free:(i32)-\u003e()",
-        "opa_value_parse:(i32,i32)-\u003e(i32)",
-        "opa_value_remove_path:(i32,i32)-\u003e(i32)"
-      ],
-      "entrypoints": {
-        "totem/spike/r0123456789abcdef_e/result": 0
-      },
-      "requiredBuiltinsPerModuleBuiltinsExport": {},
-      "entrypointUsed": "totem/spike/r0123456789abcdef_e/result",
+      "entrypointUsed": "totem/spike/r0123456789abcdef/result",
       "entrypointId": 0,
       "shimMemoryMinPages": 2,
       "memoryPagesAfterEval": 3
@@ -359,267 +1059,520 @@
   "strictness": "An evaluation error, a non-object result, a missing `violations`/`events` key, or an EMPTY RESULT SET is an ERROR ROW. An empty result set means the entrypoint's `result` rule was UNDEFINED, which for these policies means `patterns_compile` or `facts_wellformed` failed — never a zero-violation verdict.",
   "timings": [
     {
-      "specimen": "a",
-      "fixtureId": "a-corpus-fail",
-      "compileMicros": 63135,
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
+      "compileMicros": 62475,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 660.94,
+      "coldEvalMicrosMean": 200.396,
       "coldReps": 25,
-      "warmEvalMicrosMean": 510.8485,
-      "warmOneShotEvalMicrosMean": 525.9455,
+      "warmEvalMicrosMean": 116.714,
+      "warmOneShotEvalMicrosMean": 117.016,
       "warmReps": 200
     },
     {
-      "specimen": "a",
-      "fixtureId": "a-corpus-pass",
-      "compileMicros": 63135,
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
+      "compileMicros": 62475,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 615.916,
+      "coldEvalMicrosMean": 140.164,
       "coldReps": 25,
-      "warmEvalMicrosMean": 537.4655,
-      "warmOneShotEvalMicrosMean": 548.317,
+      "warmEvalMicrosMean": 108.414,
+      "warmOneShotEvalMicrosMean": 110.7945,
       "warmReps": 200
     },
     {
-      "specimen": "a",
-      "fixtureId": "a-inline-bad",
-      "compileMicros": 63135,
+      "specimen": "49dd9e4f-llm-character-counting",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+      "compileMicros": 60117,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 543.788,
+      "coldEvalMicrosMean": 250.32,
       "coldReps": 25,
-      "warmEvalMicrosMean": 522.747,
-      "warmOneShotEvalMicrosMean": 524.3355,
+      "warmEvalMicrosMean": 229.0915,
+      "warmOneShotEvalMicrosMean": 233.062,
       "warmReps": 200
     },
     {
-      "specimen": "a",
-      "fixtureId": "a-inline-good",
-      "compileMicros": 63135,
+      "specimen": "49dd9e4f-llm-character-counting",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
+      "compileMicros": 60117,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 596.58,
+      "coldEvalMicrosMean": 302.056,
       "coldReps": 25,
-      "warmEvalMicrosMean": 518.307,
-      "warmOneShotEvalMicrosMean": 525.896,
+      "warmEvalMicrosMean": 217.4285,
+      "warmOneShotEvalMicrosMean": 225.0115,
       "warmReps": 200
     },
     {
-      "specimen": "b",
-      "fixtureId": "b-corpus-fail",
-      "compileMicros": 60155,
+      "specimen": "54140f59-bare-issue-number-refs",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
+      "compileMicros": 61055,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 100.572,
+      "coldEvalMicrosMean": 120.532,
       "coldReps": 25,
-      "warmEvalMicrosMean": 36.133,
-      "warmOneShotEvalMicrosMean": 37.841,
+      "warmEvalMicrosMean": 108.8385,
+      "warmOneShotEvalMicrosMean": 108.804,
       "warmReps": 200
     },
     {
-      "specimen": "b",
-      "fixtureId": "b-corpus-pass",
-      "compileMicros": 60155,
+      "specimen": "54140f59-bare-issue-number-refs",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
+      "compileMicros": 61055,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 0,
+      "coldEvalMicrosMean": 193.636,
       "coldReps": 25,
-      "warmEvalMicrosMean": 31.37,
-      "warmOneShotEvalMicrosMean": 32.8205,
+      "warmEvalMicrosMean": 108.2135,
+      "warmOneShotEvalMicrosMean": 105.227,
       "warmReps": 200
     },
     {
-      "specimen": "b",
-      "fixtureId": "b-inline-bad",
-      "compileMicros": 60155,
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
+      "compileMicros": 61901,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 80.412,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 103.805,
+      "warmOneShotEvalMicrosMean": 102.725,
+      "warmReps": 200
+    },
+    {
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+      "compileMicros": 61901,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 101.488,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 100.2515,
+      "warmOneShotEvalMicrosMean": 92.7395,
+      "warmReps": 200
+    },
+    {
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
+      "compileMicros": 62523,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 280.804,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 231.856,
+      "warmOneShotEvalMicrosMean": 253.1055,
+      "warmReps": 200
+    },
+    {
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "compileMicros": 62523,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 244.848,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 245.257,
+      "warmOneShotEvalMicrosMean": 236.6205,
+      "warmReps": 200
+    },
+    {
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
+      "compileMicros": 60755,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 161.236,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 115.2995,
+      "warmOneShotEvalMicrosMean": 110.9315,
+      "warmReps": 200
+    },
+    {
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+      "compileMicros": 60755,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 142.088,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 103.829,
+      "warmOneShotEvalMicrosMean": 106.4495,
+      "warmReps": 200
+    },
+    {
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "compileMicros": 59840,
+      "instantiateMicros": 1503,
+      "coldEvalMicrosMean": 160.088,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 115.0725,
+      "warmOneShotEvalMicrosMean": 116.8005,
+      "warmReps": 200
+    },
+    {
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "compileMicros": 59840,
+      "instantiateMicros": 1503,
+      "coldEvalMicrosMean": 100.804,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 105.7175,
+      "warmOneShotEvalMicrosMean": 110.307,
+      "warmReps": 200
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "compileMicros": 63726,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 80.084,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 40.1785,
+      "warmOneShotEvalMicrosMean": 43.341,
+      "warmReps": 200
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "compileMicros": 63726,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 40.328,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 32.525,
+      "warmOneShotEvalMicrosMean": 27.532,
+      "warmReps": 200
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "compileMicros": 62251,
       "instantiateMicros": 0,
       "coldEvalMicrosMean": 40.128,
       "coldReps": 25,
-      "warmEvalMicrosMean": 45.162,
-      "warmOneShotEvalMicrosMean": 40.486,
+      "warmEvalMicrosMean": 35.0315,
+      "warmOneShotEvalMicrosMean": 37.7925,
       "warmReps": 200
     },
     {
-      "specimen": "b",
-      "fixtureId": "b-inline-good",
-      "compileMicros": 60155,
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "compileMicros": 62251,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 39.94,
+      "coldEvalMicrosMean": 80.044,
       "coldReps": 25,
-      "warmEvalMicrosMean": 27.5105,
-      "warmOneShotEvalMicrosMean": 39.547,
+      "warmEvalMicrosMean": 37.8155,
+      "warmOneShotEvalMicrosMean": 25.523,
       "warmReps": 200
     },
     {
-      "specimen": "c",
-      "fixtureId": "c-corpus-fail",
-      "compileMicros": 58691,
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "compileMicros": 64588,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 160.116,
+      "coldEvalMicrosMean": 40.464,
       "coldReps": 25,
-      "warmEvalMicrosMean": 111.9885,
-      "warmOneShotEvalMicrosMean": 118.6845,
+      "warmEvalMicrosMean": 52.74,
+      "warmOneShotEvalMicrosMean": 51.6395,
       "warmReps": 200
     },
     {
-      "specimen": "c",
-      "fixtureId": "c-corpus-pass",
-      "compileMicros": 58691,
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "compileMicros": 64588,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 175.444,
+      "coldEvalMicrosMean": 60.556,
       "coldReps": 25,
-      "warmEvalMicrosMean": 94.951,
-      "warmOneShotEvalMicrosMean": 93.9005,
+      "warmEvalMicrosMean": 37.721,
+      "warmOneShotEvalMicrosMean": 37.627,
       "warmReps": 200
     },
     {
-      "specimen": "c",
-      "fixtureId": "c-inline-bad",
-      "compileMicros": 58691,
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "compileMicros": 67424,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 120.044,
+      "coldEvalMicrosMean": 83.096,
       "coldReps": 25,
-      "warmEvalMicrosMean": 98.133,
-      "warmOneShotEvalMicrosMean": 102.445,
+      "warmEvalMicrosMean": 50.4185,
+      "warmOneShotEvalMicrosMean": 50.6305,
       "warmReps": 200
     },
     {
-      "specimen": "c",
-      "fixtureId": "c-inline-good",
-      "compileMicros": 58691,
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "compileMicros": 67424,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 129.788,
+      "coldEvalMicrosMean": 75,
       "coldReps": 25,
-      "warmEvalMicrosMean": 92.915,
-      "warmOneShotEvalMicrosMean": 89.5395,
+      "warmEvalMicrosMean": 40.7095,
+      "warmOneShotEvalMicrosMean": 39.627,
       "warmReps": 200
     },
     {
-      "specimen": "c-supp",
-      "fixtureId": "c-supp-corpus-fail",
-      "compileMicros": 57779,
+      "specimen": "71935fe9-string-cast-on-input",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "compileMicros": 68427,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 137.404,
+      "coldEvalMicrosMean": 60.26,
       "coldReps": 25,
-      "warmEvalMicrosMean": 96.701,
-      "warmOneShotEvalMicrosMean": 103.472,
+      "warmEvalMicrosMean": 37.757,
+      "warmOneShotEvalMicrosMean": 50.6235,
       "warmReps": 200
     },
     {
-      "specimen": "c-supp",
-      "fixtureId": "c-supp-corpus-pass",
-      "compileMicros": 57779,
+      "specimen": "71935fe9-string-cast-on-input",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "compileMicros": 68427,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 100.336,
+      "coldEvalMicrosMean": 80.092,
       "coldReps": 25,
-      "warmEvalMicrosMean": 92.014,
-      "warmOneShotEvalMicrosMean": 91.875,
+      "warmEvalMicrosMean": 25.1905,
+      "warmOneShotEvalMicrosMean": 32.7275,
       "warmReps": 200
     },
     {
-      "specimen": "c-supp",
-      "fixtureId": "c-supp-inline-bad",
-      "compileMicros": 57779,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "compileMicros": 64481,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 160.104,
+      "coldEvalMicrosMean": 147.676,
       "coldReps": 25,
-      "warmEvalMicrosMean": 94.0085,
-      "warmOneShotEvalMicrosMean": 87.626,
+      "warmEvalMicrosMean": 105.2815,
+      "warmOneShotEvalMicrosMean": 98.4215,
       "warmReps": 200
     },
     {
-      "specimen": "c-supp",
-      "fixtureId": "c-supp-inline-good",
-      "compileMicros": 57779,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "compileMicros": 64481,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 100.392,
+      "coldEvalMicrosMean": 119.956,
       "coldReps": 25,
-      "warmEvalMicrosMean": 88.113,
-      "warmOneShotEvalMicrosMean": 86.812,
+      "warmEvalMicrosMean": 92.673,
+      "warmOneShotEvalMicrosMean": 97.819,
       "warmReps": 200
     },
     {
-      "specimen": "d-line",
-      "fixtureId": "d-line-inline-bad",
-      "compileMicros": 63043,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+      "compileMicros": 64481,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 164.92,
+      "coldEvalMicrosMean": 142.068,
       "coldReps": 25,
-      "warmEvalMicrosMean": 99.6355,
-      "warmOneShotEvalMicrosMean": 101.8745,
+      "warmEvalMicrosMean": 98.8665,
+      "warmOneShotEvalMicrosMean": 95.932,
       "warmReps": 200
     },
     {
-      "specimen": "d-line",
-      "fixtureId": "d-line-inline-good",
-      "compileMicros": 63043,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+      "compileMicros": 64481,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 122.264,
+      "coldEvalMicrosMean": 262.416,
       "coldReps": 25,
-      "warmEvalMicrosMean": 99.152,
-      "warmOneShotEvalMicrosMean": 104.176,
+      "warmEvalMicrosMean": 87.591,
+      "warmOneShotEvalMicrosMean": 90.969,
+      "warmReps": 200
+    },
+    {
+      "specimen": "87aff037-fail-open-catch-ban",
+      "fixtureId": "m3-malformed-lines",
+      "compileMicros": 64481,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 0,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 0,
+      "warmOneShotEvalMicrosMean": 0,
+      "warmReps": 200
+    },
+    {
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
+      "compileMicros": 60968,
+      "instantiateMicros": 1016,
+      "coldEvalMicrosMean": 141.172,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 143.216,
+      "warmOneShotEvalMicrosMean": 130.8245,
+      "warmReps": 200
+    },
+    {
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
+      "compileMicros": 60968,
+      "instantiateMicros": 1016,
+      "coldEvalMicrosMean": 140.996,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 123.864,
+      "warmOneShotEvalMicrosMean": 118.111,
+      "warmReps": 200
+    },
+    {
+      "specimen": "aa7a588d-async-test-callbacks",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+      "compileMicros": 60273,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 100.352,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 72.5885,
+      "warmOneShotEvalMicrosMean": 72.2405,
+      "warmReps": 200
+    },
+    {
+      "specimen": "aa7a588d-async-test-callbacks",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
+      "compileMicros": 60273,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 80.02,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 66.2195,
+      "warmOneShotEvalMicrosMean": 69.3475,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
+      "compileMicros": 66726,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 80.104,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 42.5405,
+      "warmOneShotEvalMicrosMean": 57.862,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "compileMicros": 66726,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 80.076,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 45.674,
+      "warmOneShotEvalMicrosMean": 37.5845,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
+      "compileMicros": 64679,
+      "instantiateMicros": 523,
+      "coldEvalMicrosMean": 80.24,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 47.615,
+      "warmOneShotEvalMicrosMean": 50.423,
+      "warmReps": 200
+    },
+    {
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+      "compileMicros": 64679,
+      "instantiateMicros": 523,
+      "coldEvalMicrosMean": 80.644,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 43.011,
+      "warmOneShotEvalMicrosMean": 37.581,
+      "warmReps": 200
+    },
+    {
+      "specimen": "be74c55c-actions-input-expansion",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
+      "compileMicros": 63585,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 180.868,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 131.349,
+      "warmOneShotEvalMicrosMean": 105.5025,
+      "warmReps": 200
+    },
+    {
+      "specimen": "be74c55c-actions-input-expansion",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+      "compileMicros": 63585,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 230.016,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 112.485,
+      "warmOneShotEvalMicrosMean": 111.316,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
+      "compileMicros": 62524,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 240.24,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 190.962,
+      "warmOneShotEvalMicrosMean": 207.4195,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+      "compileMicros": 62524,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 220.804,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 181.3475,
+      "warmOneShotEvalMicrosMean": 204.2185,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
+      "compileMicros": 60452,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 152.132,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 30.567,
+      "warmOneShotEvalMicrosMean": 42.545,
+      "warmReps": 200
+    },
+    {
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+      "compileMicros": 60452,
+      "instantiateMicros": 0,
+      "coldEvalMicrosMean": 126.008,
+      "coldReps": 25,
+      "warmEvalMicrosMean": 27.545,
+      "warmOneShotEvalMicrosMean": 33.496,
       "warmReps": 200
     },
     {
       "specimen": "d-file",
       "fixtureId": "d-file-control-empty",
-      "compileMicros": 60651,
+      "compileMicros": 65719,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 120.144,
+      "coldEvalMicrosMean": 160.16,
       "coldReps": 25,
-      "warmEvalMicrosMean": 98.8625,
-      "warmOneShotEvalMicrosMean": 98.306,
+      "warmEvalMicrosMean": 109.827,
+      "warmOneShotEvalMicrosMean": 116.258,
       "warmReps": 200
     },
     {
       "specimen": "d-file",
       "fixtureId": "d-file-control-unreadable",
-      "compileMicros": 60651,
+      "compileMicros": 65719,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 120.048,
+      "coldEvalMicrosMean": 140.24,
       "coldReps": 25,
-      "warmEvalMicrosMean": 99.4875,
-      "warmOneShotEvalMicrosMean": 100.357,
+      "warmEvalMicrosMean": 106.444,
+      "warmOneShotEvalMicrosMean": 124.518,
       "warmReps": 200
     },
     {
       "specimen": "d-file",
       "fixtureId": "d-file-inline-bad",
-      "compileMicros": 60651,
+      "compileMicros": 65719,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 122.66,
+      "coldEvalMicrosMean": 144.644,
       "coldReps": 25,
-      "warmEvalMicrosMean": 101.9165,
-      "warmOneShotEvalMicrosMean": 89.7035,
+      "warmEvalMicrosMean": 97.656,
+      "warmOneShotEvalMicrosMean": 97.9945,
       "warmReps": 200
     },
     {
       "specimen": "d-file",
       "fixtureId": "d-file-inline-good",
-      "compileMicros": 60651,
+      "compileMicros": 65719,
       "instantiateMicros": 0,
-      "coldEvalMicrosMean": 100.788,
+      "coldEvalMicrosMean": 140.656,
       "coldReps": 25,
-      "warmEvalMicrosMean": 96.485,
-      "warmOneShotEvalMicrosMean": 96.154,
-      "warmReps": 200
-    },
-    {
-      "specimen": "e",
-      "fixtureId": "e-inline-bad",
-      "compileMicros": 61792,
-      "instantiateMicros": 0,
-      "coldEvalMicrosMean": 101.068,
-      "coldReps": 25,
-      "warmEvalMicrosMean": 63.7665,
-      "warmOneShotEvalMicrosMean": 62.833,
-      "warmReps": 200
-    },
-    {
-      "specimen": "e",
-      "fixtureId": "e-inline-good",
-      "compileMicros": 61792,
-      "instantiateMicros": 0,
-      "coldEvalMicrosMean": 103.608,
-      "coldReps": 25,
-      "warmEvalMicrosMean": 58.1445,
-      "warmOneShotEvalMicrosMean": 52.4875,
+      "warmEvalMicrosMean": 100.598,
+      "warmOneShotEvalMicrosMean": 102.906,
       "warmReps": 200
     }
   ],
@@ -709,8 +1662,8 @@
       "error": null
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "d-line-inline-bad",
+      "ruleId": "0167a783f75b5ecd",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -718,7 +1671,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "0123456789abcdef"
+          "rule_id": "0167a783f75b5ecd"
         }
       ],
       "events": [
@@ -728,25 +1681,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "d-line",
-      "engine": "regex",
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "d-line-inline-good",
+      "ruleId": "0167a783f75b5ecd",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "d-line",
-      "engine": "regex",
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "e-inline-bad",
+      "ruleId": "49dd9e4fd02d692b",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -754,7 +1707,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "0123456789abcdef"
+          "rule_id": "49dd9e4fd02d692b"
         }
       ],
       "events": [
@@ -764,25 +1717,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "e",
-      "engine": "ast-grep",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "0123456789abcdef",
-      "fixtureId": "e-inline-good",
+      "ruleId": "49dd9e4fd02d692b",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "e",
-      "engine": "ast-grep",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-corpus-fail",
+      "ruleId": "54140f59be3e6e44",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -790,7 +1743,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "2d962603591aa928"
+          "rule_id": "54140f59be3e6e44"
         }
       ],
       "events": [
@@ -800,25 +1753,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "b",
-      "engine": "ast-grep",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-corpus-pass",
+      "ruleId": "54140f59be3e6e44",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "b",
-      "engine": "ast-grep",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-inline-bad",
+      "ruleId": "5b85fe53468964e1",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -826,7 +1779,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "2d962603591aa928"
+          "rule_id": "5b85fe53468964e1"
         }
       ],
       "events": [
@@ -836,25 +1789,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "b",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
       "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "2d962603591aa928",
-      "fixtureId": "b-inline-good",
+      "ruleId": "5b85fe53468964e1",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "b",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
       "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-corpus-fail",
+      "ruleId": "5da43ea60b66e96e",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -862,7 +1815,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "61dcb058bd1df15d"
+          "rule_id": "5da43ea60b66e96e"
         }
       ],
       "events": [
@@ -872,25 +1825,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "a",
+      "specimen": "5da43ea6-git-double-dash-separator",
       "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-corpus-pass",
+      "ruleId": "5da43ea60b66e96e",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "a",
+      "specimen": "5da43ea6-git-double-dash-separator",
       "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-inline-bad",
+      "ruleId": "6467c35159c1504d",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -898,7 +1851,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "61dcb058bd1df15d"
+          "rule_id": "6467c35159c1504d"
         }
       ],
       "events": [
@@ -908,25 +1861,253 @@
           "ordinal": 0
         }
       ],
-      "specimen": "a",
-      "engine": "regex",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "61dcb058bd1df15d",
-      "fixtureId": "a-inline-good",
+      "ruleId": "6467c35159c1504d",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "a",
-      "engine": "regex",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "65ede9bfdf6995fe",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "65ede9bfdf6995fe"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "65ede9bfdf6995fe",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "6b1890e2dbda3331"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "6b1890e2dbda3331"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b1890e2dbda3331",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b2b62eb1e8693fc",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "6b2b62eb1e8693fc"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "6b2b62eb1e8693fc",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "6b2b62eb1e8693fc"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "71935fe9a742137b"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "71935fe9-string-cast-on-input",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "71935fe9-string-cast-on-input",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "71935fe9a742137b"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "71935fe9a742137b",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "engine": "ast-grep",
       "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-corpus-fail",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -944,25 +2125,25 @@
           "ordinal": 0
         }
       ],
-      "specimen": "c-supp",
+      "specimen": "87aff037-fail-open-catch-ban",
       "engine": "ast-grep",
       "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-corpus-pass",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "c-supp",
+      "specimen": "87aff037-fail-open-catch-ban",
       "engine": "ast-grep",
       "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-inline-bad",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -980,71 +2161,37 @@
           "ordinal": 0
         }
       ],
-      "specimen": "c-supp",
+      "specimen": "87aff037-fail-open-catch-ban",
       "engine": "ast-grep",
       "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
-      "fixtureId": "c-supp-inline-good",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "c-supp",
+      "specimen": "87aff037-fail-open-catch-ban",
       "engine": "ast-grep",
       "error": null
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-corpus-fail",
+      "ruleId": "87aff037d7de47a7",
+      "fixtureId": "m3-malformed-lines",
       "arm": "wazero",
-      "fired": true,
-      "matchCount": 2,
-      "violations": [
-        {
-          "line_number": 2,
-          "ordinal": 0,
-          "rule_id": "d0815b6769304e26"
-        },
-        {
-          "line_number": 3,
-          "ordinal": 1,
-          "rule_id": "d0815b6769304e26"
-        }
-      ],
-      "events": [
-        {
-          "kind": "trigger",
-          "line_number": 2,
-          "ordinal": 0
-        },
-        {
-          "kind": "trigger",
-          "line_number": 3,
-          "ordinal": 1
-        }
-      ],
-      "specimen": "c",
+      "fired": null,
+      "matchCount": null,
+      "violations": null,
+      "events": null,
+      "specimen": "87aff037-fail-open-catch-ban",
       "engine": "ast-grep",
-      "error": null
+      "error": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-corpus-pass",
-      "arm": "wazero",
-      "fired": false,
-      "matchCount": 0,
-      "violations": [],
-      "events": [],
-      "specimen": "c",
-      "engine": "ast-grep",
-      "error": null
-    },
-    {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-inline-bad",
+      "ruleId": "89184bb5fd960848",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
       "arm": "wazero",
       "fired": true,
       "matchCount": 1,
@@ -1052,7 +2199,7 @@
         {
           "line_number": 1,
           "ordinal": 0,
-          "rule_id": "d0815b6769304e26"
+          "rule_id": "89184bb5fd960848"
         }
       ],
       "events": [
@@ -1062,19 +2209,247 @@
           "ordinal": 0
         }
       ],
-      "specimen": "c",
-      "engine": "ast-grep",
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "engine": "regex",
       "error": null
     },
     {
-      "ruleId": "d0815b6769304e26",
-      "fixtureId": "c-inline-good",
+      "ruleId": "89184bb5fd960848",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
       "arm": "wazero",
       "fired": false,
       "matchCount": 0,
       "violations": [],
       "events": [],
-      "specimen": "c",
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "aa7a588d48e74503",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "aa7a588d48e74503"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "aa7a588d-async-test-callbacks",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "aa7a588d48e74503",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "aa7a588d-async-test-callbacks",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "b237bcf3b52381b1",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "b237bcf3b52381b1"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "b237bcf3b52381b1",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "b237bcf3b52381b1"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "b973609688ec2888",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "b973609688ec2888"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "b973609688ec2888",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "be74c55caa9fd60c",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 2,
+          "ordinal": 0,
+          "rule_id": "be74c55caa9fd60c"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 2,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "be74c55c-actions-input-expansion",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "be74c55caa9fd60c",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 3,
+          "ordinal": 0,
+          "rule_id": "be74c55caa9fd60c"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 3,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "be74c55c-actions-input-expansion",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "d5faa14cbb8b50fb",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
+      "arm": "wazero",
+      "fired": true,
+      "matchCount": 1,
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "d5faa14cbb8b50fb"
+        }
+      ],
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "d5faa14cbb8b50fb",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "engine": "regex",
+      "error": null
+    },
+    {
+      "ruleId": "d940b2c9ffe92e99",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "engine": "ast-grep",
+      "error": null
+    },
+    {
+      "ruleId": "d940b2c9ffe92e99",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+      "arm": "wazero",
+      "fired": false,
+      "matchCount": 0,
+      "violations": [],
+      "events": [],
+      "specimen": "d940b2c9-stdio-in-exec-options",
       "engine": "ast-grep",
       "error": null
     }

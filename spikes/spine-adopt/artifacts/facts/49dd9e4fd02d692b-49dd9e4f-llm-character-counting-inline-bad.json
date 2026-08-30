@@ -1,0 +1,22 @@
+{
+  "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+  "specimen": "49dd9e4f-llm-character-counting",
+  "ruleId": "49dd9e4fd02d692b",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-49dd9e4f-llm-character-counting.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "928d562482fae061aab11de56f471d8bed989991e2ec949c8b99011cbc9d9881"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "packages/core/src/prompt.ts",
+    "fileText": "const PROMPT = 'Summarize the diff in 200 characters or less.';",
+    "lines": [
+      "const PROMPT = 'Summarize the diff in 200 characters or less.';"
+    ],
+    "astMatches": []
+  }
+}

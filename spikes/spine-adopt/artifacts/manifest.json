@@ -1,105 +1,479 @@
 {
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
-  "recordSet": "specimens",
-  "runCommit": "1d6b0a9aead9e803f3afc3a819ac438ab40ebb78",
+  "recordSet": "seed20",
+  "runCommit": "69b8554431c7e8e7eba461026405cc268fc0bff4",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
-  "artifactTreeEntries": [],
+  "artifactTreeEntries": [
+    "M spikes/spine-adopt/artifacts/k3-control/certification-invariants.json",
+    " M spikes/spine-adopt/artifacts/k3-control/certification-report.json",
+    " M spikes/spine-adopt/artifacts/k3-control/chain-inputs.json",
+    " M spikes/spine-adopt/artifacts/k3-control/lowering-rejects.json",
+    " M spikes/spine-adopt/artifacts/k3-control/manifest-checks.json",
+    " M spikes/spine-adopt/artifacts/k3-control/manifest.json",
+    " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json",
+    " M spikes/spine-adopt/artifacts/k3-control/tracked-paths.txt"
+  ],
   "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
-  "recordPinApplies": "the specimens set is authored in spikes/spine-adopt/records/; the pin names the seed set only",
+  "recordPinApplies": "the records below are the byte-identical copies under seed/records/ (seed/PIN.md)",
   "records": [
     {
-      "file": "spikes/spine-adopt/records/a-regex-lessons-rm-guard.rule.yaml",
-      "sha256": "24be123733cda7a3a5a345d2fedb0633607344fdc375af587a8a7e31f2f345ad",
-      "seedEntry": null,
-      "ruleId": "61dcb058bd1df15d"
+      "file": "spikes/spine-adopt/seed/records/r14-0167a783-dynamic-import-utility-layer.rule.yaml",
+      "sha256": "07516f5d50e45afd7d9de0151cfb8b81c562121e5f517e8d2e69cfe3b88a2301",
+      "seedEntry": "0167a783",
+      "ruleId": "0167a783f75b5ecd"
     },
     {
-      "file": "spikes/spine-adopt/records/b-astgrep-flat-empty-catch.rule.yaml",
-      "sha256": "40bd79d7c970e21edced9b9ef90bedbec66e1fbf6d98d8c10e3dd6f6f19dbd19",
-      "seedEntry": null,
-      "ruleId": "2d962603591aa928"
+      "file": "spikes/spine-adopt/seed/records/r14-0e01112d-bare-new-error.rule.yaml",
+      "sha256": "a289e29fffdea60d6d330f1a62cd7a8363ab61418fa2724a7275e84d1d6ba8e5",
+      "seedEntry": "0e01112d",
+      "ruleId": "0e01112d5f18ffde"
     },
     {
-      "file": "spikes/spine-adopt/records/c-astgrep-compound-spawn-shell.rule.yaml",
-      "sha256": "99c2deb2827c2f85785cd79d2322fa5a013af67a37d5cdecc4f49ded284aad44",
-      "seedEntry": null,
-      "ruleId": "d0815b6769304e26"
+      "file": "spikes/spine-adopt/seed/records/r14-1a7080eb-inline-secrets-agent-config.rule.yaml",
+      "sha256": "02f84fb59f1181a07ee2d54d450efbfc36e787a6213a7baf9b78fd785e05e33d",
+      "seedEntry": "1a7080eb",
+      "ruleId": "1a7080ebf6162de3"
     },
     {
-      "file": "spikes/spine-adopt/records/c-supp-astgrep-compound-failopen-catch.rule.yaml",
-      "sha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
-      "seedEntry": null,
+      "file": "spikes/spine-adopt/seed/records/r14-49dd9e4f-llm-character-counting.rule.yaml",
+      "sha256": "16464d624f16481377718b409413bd96c0c3bf4e692c6f1161ec1d905c6e5912",
+      "seedEntry": "49dd9e4f",
+      "ruleId": "49dd9e4fd02d692b"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-54140f59-bare-issue-number-refs.rule.yaml",
+      "sha256": "b382417d9f84c7f2da7c30ac1e8ee6c05849f319b01e2794fa78f0a75a04618c",
+      "seedEntry": "54140f59",
+      "ruleId": "54140f59be3e6e44"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml",
+      "sha256": "e9900ef40ae018e94d76d0e7871820cd9f1017c96d2113cb9b85ee54d0b9a2c8",
+      "seedEntry": "5b85fe53",
+      "ruleId": "5b85fe53468964e1"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-5da43ea6-git-double-dash-separator.rule.yaml",
+      "sha256": "c6ab098109f458116ea25806da392563dad5fce4cfad58890dee6c969b975586",
+      "seedEntry": "5da43ea6",
+      "ruleId": "5da43ea60b66e96e"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-6467c351-dynamic-import-cli-entry.rule.yaml",
+      "sha256": "b9adcd666dfff8fc19c4e4995a80ba9daca5b11286ba15ce0f8a92d2691e6c7e",
+      "seedEntry": "6467c351",
+      "ruleId": "6467c35159c1504d"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml",
+      "sha256": "23f41519099160f9eb6a2c2f5236c95064d83b0bc7b4ff9c828b17ef1a5bb82f",
+      "seedEntry": "65ede9bf",
+      "ruleId": "65ede9bfdf6995fe"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml",
+      "sha256": "3edf179716d184a49098f35ce60b4d924ae33e2264bca11227cfd0eb1434ff58",
+      "seedEntry": "6b1890e2",
+      "ruleId": "6b1890e2dbda3331"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist.rule.yaml",
+      "sha256": "afaa3cd5b576b44c9a9d7a881e79bd1a361b00cc0f345130b18d41828ac19f48",
+      "seedEntry": "6b1890e2",
+      "ruleId": "6b1890e2dbda3331"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-6b2b62eb-totem-error-log-tag.rule.yaml",
+      "sha256": "b820153dc52b553c3140d79baf148687193701358559580a8cbde7cf012d1c71",
+      "seedEntry": "6b2b62eb",
+      "ruleId": "6b2b62eb1e8693fc"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input-js.rule.yaml",
+      "sha256": "ba6817913c4e08ada6eafb0c7eb711f27db3363f4602c1450394d299901dc012",
+      "seedEntry": "71935fe9",
+      "ruleId": "71935fe9a742137b"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input.rule.yaml",
+      "sha256": "e80c66f7827222aa7f6b99c6ef2272635a5ac95a02bcc7ec50c8181f936d21f7",
+      "seedEntry": "71935fe9",
+      "ruleId": "71935fe9a742137b"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml",
+      "sha256": "de1079ea3d8a8b13e877780c90ccbaf6e6c41d6011ca4e91063c2a7a432330ca",
+      "seedEntry": "87aff037",
       "ruleId": "87aff037d7de47a7"
     },
     {
-      "file": "spikes/spine-adopt/records/d-requires-line.rule.yaml",
-      "sha256": "76e5e1725e0c0fa0c4baee22304351bd2f05119018f53887068f2b47c67d4449",
-      "seedEntry": null,
-      "ruleId": "0123456789abcdef"
+      "file": "spikes/spine-adopt/seed/records/r14-89184bb5-bsd-sed-hex-escape.rule.yaml",
+      "sha256": "eeb6bc8530761ee58ad48524c5833b0391b12308f1edcc0fda8393fdeda293b1",
+      "seedEntry": "89184bb5",
+      "ruleId": "89184bb5fd960848"
     },
     {
-      "file": "spikes/spine-adopt/records/d-requires-file.rule.yaml",
-      "sha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
-      "seedEntry": null,
-      "ruleId": "0123456789abcdef"
+      "file": "spikes/spine-adopt/seed/records/r14-aa7a588d-async-test-callbacks.rule.yaml",
+      "sha256": "9694c5dcc31f344835f2af2c00b0b2cd663c1b82b66edcb7b56245047eea89ac",
+      "seedEntry": "aa7a588d",
+      "ruleId": "aa7a588d48e74503"
     },
     {
-      "file": "spikes/spine-adopt/records/e-exception-excludeglobs.rule.yaml",
-      "sha256": "d42a48e025863d320a214ee5c1c577e437b8cf4b068f2d5572ac8f8bbcf12ee8",
-      "seedEntry": null,
-      "ruleId": "0123456789abcdef"
+      "file": "spikes/spine-adopt/seed/records/r14-b237bcf3-pwd-in-credential-regex.rule.yaml",
+      "sha256": "97c58bcc4cbc5b6c979c06b69e0ee32de4c15fbba8fac0a5593d2346320f2060",
+      "seedEntry": "b237bcf3",
+      "ruleId": "b237bcf3b52381b1"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-b9736096-orchestrator-test-timeout.rule.yaml",
+      "sha256": "3e6dc4a73d0320b86aa68f0b0f7b62a4c338e1f469b49ffbba49a7dacbbb1633",
+      "seedEntry": "b9736096",
+      "ruleId": "b973609688ec2888"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-be74c55c-actions-input-expansion.rule.yaml",
+      "sha256": "38325d68a691330c00e1d2bf6db261646ac648ec420957e75beab8fbcbbe2719",
+      "seedEntry": "be74c55c",
+      "ruleId": "be74c55caa9fd60c"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-d5faa14c-absolute-claims-in-docs.rule.yaml",
+      "sha256": "7a1c81aba9f0356c51dce2fe8d596107b9790bc7a1d92e7d6fcc261689bb4307",
+      "seedEntry": "d5faa14c",
+      "ruleId": "d5faa14cbb8b50fb"
+    },
+    {
+      "file": "spikes/spine-adopt/seed/records/r14-d940b2c9-stdio-in-exec-options.rule.yaml",
+      "sha256": "85d3276e47fd7eec605cc38025b5f80f7b2ab55987656d227291455ebebe10ea",
+      "seedEntry": "d940b2c9",
+      "ruleId": "d940b2c9ffe92e99"
     }
   ],
   "fixtures": [
     {
-      "file": ".totem/tests/test-61dcb058bd1df15d.md",
-      "sha256": "7b368a8b70ff12ff0b30e5c608ab667b6bd43596f5df308700c49516fe7623f8"
-    },
-    {
       "file": ".totem/tests/test-87aff037d7de47a7.md",
       "sha256": "5245d599f50e6ff4e3ba573e656561ecef2a9d5c6d066d9cb8e8ebd9e1a33a86"
-    },
-    {
-      "file": ".totem/tests/test-ast-empty-catch.md",
-      "sha256": "4b9ce4c268c7cc3b28fa3c6898a28fc146eed64dca2a5df9c362a9d0a513e8b3"
-    },
-    {
-      "file": ".totem/tests/test-d0815b6769304e26.md",
-      "sha256": "53061686710c6afe534dd7704bf794090c65ad2061adb573de07849eff00ce09"
     }
   ],
   "probePaths": [
     ".claude/agents/foo.md",
     ".claude/x",
+    ".github/workflows/ci.yml",
+    ".mcp.json",
     ".totem/lessons.md",
     ".totem/lessons/lesson-cd27a5b0.md",
+    ".totem/tests/test-87aff037d7de47a7.md",
     ".totem/tests/test-x.md",
     "README",
     "a/b/c/deploy.sh",
+    "apps/cli/k3b/probe.t_",
+    "apps/cli/k3b/probe.ts",
     "audit.ts",
     "deep/nest/x.cjs",
     "deploy.sh",
+    "docs/overview.md",
+    "k3b/.cursor/mcp.jso_",
+    "k3b/.cursor/mcp.json",
+    "k3b/.gemini/settings.jso_",
+    "k3b/.gemini/settings.json",
+    "k3b/.mcp.jso_",
+    "k3b/.mcp.json",
+    "k3b/mcpprobe.jso_",
+    "k3b/mcpprobe.json",
+    "k3b/probe.bas_",
+    "k3b/probe.bash",
+    "k3b/probe.cj_",
+    "k3b/probe.cjs",
+    "k3b/probe.j_",
+    "k3b/probe.js",
+    "k3b/probe.js_",
+    "k3b/probe.jsx",
+    "k3b/probe.ks_",
+    "k3b/probe.ksh",
+    "k3b/probe.m_",
+    "k3b/probe.md",
+    "k3b/probe.md_",
+    "k3b/probe.mdx",
+    "k3b/probe.mj_",
+    "k3b/probe.mjs",
+    "k3b/probe.p_",
+    "k3b/probe.py",
+    "k3b/probe.rs_",
+    "k3b/probe.rst",
+    "k3b/probe.s_",
+    "k3b/probe.sh",
+    "k3b/probe.spec.probe",
+    "k3b/probe.spec.t_",
+    "k3b/probe.spec.ts",
+    "k3b/probe.spec_probe",
+    "k3b/probe.t_",
+    "k3b/probe.test.probe",
+    "k3b/probe.test.t_",
+    "k3b/probe.test.ts",
+    "k3b/probe.test_probe",
+    "k3b/probe.ts",
+    "k3b/probe.ts_",
+    "k3b/probe.tsx",
+    "k3b/probe.tx_",
+    "k3b/probe.txt",
+    "k3b/probe.yam_",
+    "k3b/probe.yaml",
+    "k3b/probe.ym_",
+    "k3b/probe.yml",
+    "k3b/probe.zs_",
+    "k3b/probe.zsh",
     "notes.md",
+    "packages/cli/k3b/probe.t_",
+    "packages/cli/k3b/probe.test.t_",
+    "packages/cli/k3b/probe.test.ts",
+    "packages/cli/k3b/probe.ts",
+    "packages/cli/src/adapters/loader.ts",
+    "packages/cli/src/assets/k3b/probe.t_",
+    "packages/cli/src/assets/k3b/probe.ts",
+    "packages/cli/src/assets/patterns.ts",
+    "packages/cli/src/commands/issue.ts",
+    "packages/cli/src/commands/k3b/probe.t_",
+    "packages/cli/src/commands/k3b/probe.ts",
+    "packages/cli/src/handlers/run.ts",
+    "packages/cli/src/index.ts",
+    "packages/cli/src/k3b/probe.t_",
+    "packages/cli/src/k3b/probe.ts",
+    "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
     "packages/cli/src/orchestrators/shell-orchestrator.ts",
+    "packages/core/k3b/probe.t_",
+    "packages/core/k3b/probe.ts",
     "packages/core/src/a.spec.ts",
     "packages/core/src/a.test.ts",
     "packages/core/src/a.ts",
+    "packages/core/src/branches.ts",
+    "packages/core/src/cast.ts",
+    "packages/core/src/catch-site.ts",
+    "packages/core/src/emit-site.ts",
+    "packages/core/src/exec-site.ts",
+    "packages/core/src/log-site.ts",
+    "packages/core/src/prompt.ts",
+    "packages/k3b/probe.t_",
+    "packages/k3b/probe.ts",
     "packages/src/example.ts",
     "packages\\core\\src\\a.ts",
     "scripts/audit.ts",
+    "scripts/branches.js",
+    "scripts/cast.js",
+    "scripts/color.sh",
     "scripts/deploy.sh",
+    "scripts/release.sh",
     "scripts/x.sh",
     "scripts/x.ts",
+    "src/errors.ts",
     "src/example.sh"
   ],
   "digestRule": "governs `probePathsSha256`, `trackedPathsAtRecordPin.sha256` and `t5-sweep.json.header.treeSha256`: sha256 over the sorted list, newline-joined, NO trailing newline — equal to `sha256sum` of the published list file (`tracked-paths-at-record-pin.txt` is written without a final newline). NOT `trackedPaths.sha256` (T17, slice 1): that is the bytes of `tracked-paths.txt` as written, trailing newline included, unchanged.",
-  "probePathsSha256": "fb171cbe9c0160770cd09882eda0ba8bf4fac4666e6cec751e8f52067121792e",
+  "probePathsSha256": "b6984bd28a561c706bea8e7a866ca157e0ee1009339101dab1405465f48c3da4",
   "probeGeneration": {
     "rule": "matching probe = every `**/` -> `k3b/` then every `*` -> `probe`; twin = that probe with the glob's LAST LITERAL character (right-to-left; `*` and `/` are not literals) replaced by `_`, or by `-` when it is already `_`.",
-    "globCount": 0,
-    "pairs": [],
+    "globCount": 33,
+    "pairs": [
+      {
+        "glob": "packages/cli/src/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/cli/src/k3b/probe.ts",
+        "twin": "packages/cli/src/k3b/probe.t_"
+      },
+      {
+        "glob": "packages/cli/src/commands/**/*.ts",
+        "kind": "excludeGlobs",
+        "probe": "packages/cli/src/commands/k3b/probe.ts",
+        "twin": "packages/cli/src/commands/k3b/probe.t_"
+      },
+      {
+        "glob": "**/*.test.ts",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.test.ts",
+        "twin": "k3b/probe.test.t_"
+      },
+      {
+        "glob": "**/*.spec.ts",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.spec.ts",
+        "twin": "k3b/probe.spec.t_"
+      },
+      {
+        "glob": "**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.ts",
+        "twin": "k3b/probe.t_"
+      },
+      {
+        "glob": "**/*.tsx",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.tsx",
+        "twin": "k3b/probe.ts_"
+      },
+      {
+        "glob": "**/*.js",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.js",
+        "twin": "k3b/probe.j_"
+      },
+      {
+        "glob": "**/*.jsx",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.jsx",
+        "twin": "k3b/probe.js_"
+      },
+      {
+        "glob": "**/.mcp.json",
+        "kind": "fileGlobs",
+        "probe": "k3b/.mcp.json",
+        "twin": "k3b/.mcp.jso_"
+      },
+      {
+        "glob": "**/.gemini/settings.json",
+        "kind": "fileGlobs",
+        "probe": "k3b/.gemini/settings.json",
+        "twin": "k3b/.gemini/settings.jso_"
+      },
+      {
+        "glob": "**/mcp*.json",
+        "kind": "fileGlobs",
+        "probe": "k3b/mcpprobe.json",
+        "twin": "k3b/mcpprobe.jso_"
+      },
+      {
+        "glob": "**/.cursor/mcp.json",
+        "kind": "fileGlobs",
+        "probe": "k3b/.cursor/mcp.json",
+        "twin": "k3b/.cursor/mcp.jso_"
+      },
+      {
+        "glob": "**/*.py",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.py",
+        "twin": "k3b/probe.p_"
+      },
+      {
+        "glob": "**/*.md",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.md",
+        "twin": "k3b/probe.m_"
+      },
+      {
+        "glob": "**/*.txt",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.txt",
+        "twin": "k3b/probe.tx_"
+      },
+      {
+        "glob": "packages/cli/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/cli/k3b/probe.ts",
+        "twin": "packages/cli/k3b/probe.t_"
+      },
+      {
+        "glob": "apps/cli/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "apps/cli/k3b/probe.ts",
+        "twin": "apps/cli/k3b/probe.t_"
+      },
+      {
+        "glob": "packages/core/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/core/k3b/probe.ts",
+        "twin": "packages/core/k3b/probe.t_"
+      },
+      {
+        "glob": "**/*.test.*",
+        "kind": "excludeGlobs",
+        "probe": "k3b/probe.test.probe",
+        "twin": "k3b/probe.test_probe"
+      },
+      {
+        "glob": "**/*.spec.*",
+        "kind": "excludeGlobs",
+        "probe": "k3b/probe.spec.probe",
+        "twin": "k3b/probe.spec_probe"
+      },
+      {
+        "glob": "**/*.sh",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.sh",
+        "twin": "k3b/probe.s_"
+      },
+      {
+        "glob": "**/*.bash",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.bash",
+        "twin": "k3b/probe.bas_"
+      },
+      {
+        "glob": "**/*.mjs",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.mjs",
+        "twin": "k3b/probe.mj_"
+      },
+      {
+        "glob": "**/*.cjs",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.cjs",
+        "twin": "k3b/probe.cj_"
+      },
+      {
+        "glob": "packages/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/k3b/probe.ts",
+        "twin": "packages/k3b/probe.t_"
+      },
+      {
+        "glob": "**/*.zsh",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.zsh",
+        "twin": "k3b/probe.zs_"
+      },
+      {
+        "glob": "**/*.ksh",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.ksh",
+        "twin": "k3b/probe.ks_"
+      },
+      {
+        "glob": "packages/cli/src/assets/**/*.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/cli/src/assets/k3b/probe.ts",
+        "twin": "packages/cli/src/assets/k3b/probe.t_"
+      },
+      {
+        "glob": "packages/cli/**/*.test.ts",
+        "kind": "fileGlobs",
+        "probe": "packages/cli/k3b/probe.test.ts",
+        "twin": "packages/cli/k3b/probe.test.t_"
+      },
+      {
+        "glob": "**/*.yml",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.yml",
+        "twin": "k3b/probe.ym_"
+      },
+      {
+        "glob": "**/*.yaml",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.yaml",
+        "twin": "k3b/probe.yam_"
+      },
+      {
+        "glob": "**/*.mdx",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.mdx",
+        "twin": "k3b/probe.md_"
+      },
+      {
+        "glob": "**/*.rst",
+        "kind": "fileGlobs",
+        "probe": "k3b/probe.rst",
+        "twin": "k3b/probe.rs_"
+      }
+    ],
     "frozen": [
       "scripts/deploy.sh",
       "deploy.sh",
@@ -125,7 +499,24 @@
       "README"
     ]
   },
-  "controlRecords": [],
+  "controlRecords": [
+    {
+      "file": "spikes/spine-adopt/seed/controls/k5/d-requires-file.rule.yaml",
+      "sha256": "048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239",
+      "control": true,
+      "id": "d-file",
+      "seedEntry": null,
+      "ruleId": "0123456789abcdef",
+      "package": "totem.spike.r0123456789abcdef",
+      "role": "K5",
+      "bundleFixtureIds": [
+        "d-file-inline-bad",
+        "d-file-inline-good",
+        "d-file-control-unreadable",
+        "d-file-control-empty"
+      ]
+    }
+  ],
   "controlFixtures": [
     {
       "id": "K8-unknown-key",
@@ -144,8 +535,8 @@
     "policyRegoSha256": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
     "policyRegoCodeSha256": "0f8223c74c1cc5560cfbfcb7c86590490eef3f6e269677c136ca0bcc0ce08e7b",
     "chainSha256": "2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881",
-    "repinned": null,
-    "repinnedFrom": null,
+    "repinned": false,
+    "repinnedFrom": "artifacts/k3-control",
     "files": {
       "policyRego": "seed/controls/k3/k3-target.policy.rego",
       "chain": "seed/controls/k3/k3-target.chain.json"
@@ -247,8 +638,8 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3082,
-    "sha256": "ce35f1e1e49da8360bbf5dec44999af83155fa21d286692eea4b74af5a68b6b9"
+    "count": 3243,
+    "sha256": "b551dbe1b8e53c8622da3e83c9df81b12ef9f07bc25ed4b6ae84b0e49ddc6c82"
   },
   "trackedPathsAtRecordPin": {
     "pin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
@@ -261,103 +652,195 @@
   "controlRecord": null,
   "bundles": [
     {
-      "fixtureId": "a-corpus-fail",
-      "sha256": "79d634f655dbf7b5fbc084470020ad9142bcc66482a86812ad1ef602581d67ec"
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "sha256": "3bd9ec0d966a1469e273d4e97a552e81907b211c537fb1176d55d22eebe393b5"
     },
     {
-      "fixtureId": "a-corpus-pass",
-      "sha256": "b99feb80aa09fa55bcbcc81e13f0c785e28baa75c99a1b48a56c006128d0ee13"
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "sha256": "97ae50c52b03643aadf1faf7ccf959b7126c10fd0cf366297702b51a165d4a24"
     },
     {
-      "fixtureId": "b-corpus-fail",
-      "sha256": "2f20b60033f04f69542bcab389e732cce9d422b2e6e428080475267b3d529686"
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
+      "sha256": "e1bbc0afbce31d5e1c02dabccd6ac9a8b9f9ab27dfe27e4f356b4314603b9b1c"
     },
     {
-      "fixtureId": "b-corpus-pass",
-      "sha256": "b5ef5d265b588736a2e266f70fe668f5407406d37fa1d50780f96b3496ea98fd"
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
+      "sha256": "dab6cf8907011bae2323fe794126caad732b26bde7a459261224a086ecd00394"
     },
     {
-      "fixtureId": "c-corpus-fail",
-      "sha256": "1f4993e9efd55a32accdc8382aeb0296274aa22c67576e640f3458338a7633bc"
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+      "sha256": "fad6f482747b3406685ba4a9d190eb3a335de4cb290952a8f0ab419735c1d9b2"
     },
     {
-      "fixtureId": "c-corpus-pass",
-      "sha256": "72f7dd85b840c8ee1007dda5cd3982e8c3c1a5a9ad20c406e92cfdcd9bf41eef"
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
+      "sha256": "cebc49949361abfb486005b2fa8205e11921abb8a00dd683e93e8da49cf64613"
     },
     {
-      "fixtureId": "c-supp-corpus-fail",
-      "sha256": "59dd27636b4beab157478ba23970bf9d49a3b2e058f926cbc1f01f174b42731b"
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
+      "sha256": "02af7421ab20aabc4e9f0bd08f37045b42d6c63d2bd55a2de85dbd80c9b9dd0c"
     },
     {
-      "fixtureId": "c-supp-corpus-pass",
-      "sha256": "d6aa8b0e0ea9e4c6942e7a1d19e363d99bb2f3e74dde068f307181c3ee3ddbb6"
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
+      "sha256": "13ade70dc0721cc8fa280b1650a612d897dd9e50379fbf601cf85dbb7c572225"
     },
     {
-      "fixtureId": "a-inline-bad",
-      "sha256": "d373fb76dcf6791e0c787e1c64d0b430d54f941a90556cf117974d63517d4623"
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
+      "sha256": "9a695c84a2952691c4ea19821f31baa52754b68db1ac32b946cd97fd4b138a2a"
     },
     {
-      "fixtureId": "a-inline-good",
-      "sha256": "0ceff8bc5f48a85740d3087d00f5fa5c555e990b4470dc0d79da934a80f455af"
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+      "sha256": "d6980e42a1e03cdce9438aedc216a3082e78cb9bc5f655033326db98f2ef801d"
     },
     {
-      "fixtureId": "b-inline-bad",
-      "sha256": "8ac60f1f63b33654c9c90a55145dfbdff6979cfa7967a38c2e4150fb88ec24dd"
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
+      "sha256": "fd0a9707a17d721081a8f469ca8e343e85c04b145d54478c38b1d6c57f1c3473"
     },
     {
-      "fixtureId": "b-inline-good",
-      "sha256": "74df16e6e6bb839a4b46bddfad22532bb788f2f158b741c1aef1641136d9a03c"
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "sha256": "5848b92767656fbfd2655dfeaf64fc5355695a302b8963bb6b0d8d2e3c848179"
     },
     {
-      "fixtureId": "c-inline-bad",
-      "sha256": "5f79d076d3a623e11b7b6f01e8cde8e82783696737f310982184ea7dfdacea43"
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
+      "sha256": "db540d2d91e582fe09c6e76609528e3415e391a14de255e4923e22447c4e1e9d"
     },
     {
-      "fixtureId": "c-inline-good",
-      "sha256": "e6d02c01e8071f422ddf830932105cfa8eecac093a6f6b25a6190a39233114bb"
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+      "sha256": "44b0322f289cda69e724af3becc52ef24668951888bd091c26fa34c38579644f"
     },
     {
-      "fixtureId": "c-supp-inline-bad",
-      "sha256": "691ccd467b8b520c3f859e90c36670f21dd925e7755f54741eec6c4afbf3cb6e"
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "sha256": "e7641bb1fd6a1f78d5a9046caff170ee097bad8f7be5d8ef4cdb79dbb5280c34"
     },
     {
-      "fixtureId": "c-supp-inline-good",
-      "sha256": "f411976860fc6ec17bbea77248416ed7c7b6a3f8d0f132a16c997c4146c93985"
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "sha256": "818930a961226726d0be99687b6687912150f1c8abe3212aad67fcec033ed389"
     },
     {
-      "fixtureId": "d-line-inline-bad",
-      "sha256": "f41745ee9d6a00f657aefee519d07ef315220d98d308dc50fc2932e2622408a5"
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "sha256": "4648adf45d2a41ec43522855b206c2d4dd20e951ebc28ae8af26f50c16a81019"
     },
     {
-      "fixtureId": "d-line-inline-good",
-      "sha256": "192749542df2c010e63d3dd8a1277c6dd0cc0c3d2da1f784a7bde96748e9fe32"
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "sha256": "4753f4636ef43cf1e2cff2bb476ad0f4be46b4eeed692fc3729ca3a2765488b0"
+    },
+    {
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "sha256": "8e961faa17e9cd93d5f662bd1c3cbce10e1ee2ddfca4801e9fb007b840b3747a"
+    },
+    {
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "sha256": "af1202963c7071da2d1df22a37e6db323a713a83e5e27e4caf60006686913db7"
+    },
+    {
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "sha256": "5e5a17148755d5e34d0126ffc8df28560c697f36a4ab45fa31bce3585888360e"
+    },
+    {
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "sha256": "098fb6c454bb4c075c1571d6af9f5d2fbef8f66e6e43ef48c538f35d09e8fce8"
+    },
+    {
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "sha256": "92952f8847fee6de768b74328021d1046d81ffcb2af905eacdd0b9139b40699e"
+    },
+    {
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "sha256": "92a838b33abe206344dc2b1964eaa2863cfebf31c43d37e2065969c377cda68b"
+    },
+    {
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "sha256": "25d3e0119cb0672cb62fbcbf03f3f14ea297cbce6f9a94eaa77c99aaef8c8120"
+    },
+    {
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "sha256": "d6e92128704ef7f51253d01a9f49c8ac314683f4ee71a5ed0693e1a9f3c5720a"
+    },
+    {
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+      "sha256": "4cb719558b3744b3c30786784f6b9c97c693a39742ba16f1f9416b66dce8be78"
+    },
+    {
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+      "sha256": "dd76886beab3c6d621af5f1b9c5b54a042a2bcb64c385745a162921c7ff0f93a"
+    },
+    {
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
+      "sha256": "ad28263e5ae83b630f762622b28835a01e0610253031858f26b368d72db64455"
+    },
+    {
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
+      "sha256": "0180b4d6bac7231b33b719363610b2db400bcd65a0ec3fef613fa5eb564b2bec"
+    },
+    {
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+      "sha256": "0faf8c4d07066d26083a80ed8eed96ec3b274e7b9a89545ae30f65aa2bf2f5b0"
+    },
+    {
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
+      "sha256": "3c9b19f2530d9c0aa4213f852839b9ff8e1791ae0375b1d8b36fe1e065c59fbd"
+    },
+    {
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
+      "sha256": "ee750e32ad567010c50537465ca39e8338b1c407b9f5fc463ebaba20d6678525"
+    },
+    {
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "sha256": "6ead13da4d36e091aac96e1cf3df0224b7936e49ad42908814bf12c84f159db1"
+    },
+    {
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
+      "sha256": "98bf7725fb6fe07bd3acf03926d4277ec40653263c73da42e0322c59f7467057"
+    },
+    {
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+      "sha256": "2aaa757fcbdbf21c89a6934680201139751ee7aa59fde31cbf9d76fbe9f9bdbf"
+    },
+    {
+      "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
+      "sha256": "746665c9ef50e4485980d9a3b4868ec378ecd79ccc6d3daddad5e711be09a6dd"
+    },
+    {
+      "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+      "sha256": "0f3fff3d4d483fefc37ecf9bd1d8e5dfee70313e26de0bd5a776c89351228f41"
+    },
+    {
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
+      "sha256": "26f3fc97443beaa7ce930b03832ccaa70002432ff00b16572deb00ab2e478d08"
+    },
+    {
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+      "sha256": "2e3ebbfb3f32d1d63a9b689b67fc1478dae23874cee43a89ef4228ac2efda1e7"
+    },
+    {
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
+      "sha256": "12f40a55d9b5a0e94690c75e568c0e3e71d9c87f90c2617c6be791d0c89ebdf5"
+    },
+    {
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+      "sha256": "528af8cbfb709f589470476ba31dc05773feeb2a2189e6074876ce24898d07d0"
     },
     {
       "fixtureId": "d-file-inline-bad",
-      "sha256": "ce3cf5aee170c0434d7dfdb0cfda827537658929ef756daf547f352b71854541"
+      "sha256": "58cb6e107e7085b80755781a69cac38d42e5cfdbfdd03b41f5ec045fc2b3137a"
     },
     {
       "fixtureId": "d-file-inline-good",
-      "sha256": "f79c932a1b2c734a0fbc62081ef7192a191c55264a1a5d7803ea7f9e6dc17b3f"
-    },
-    {
-      "fixtureId": "e-inline-bad",
-      "sha256": "b8405dc3148dc8b61de52f42bdbb270703d588da95c748ba37b56ece39d988c6"
-    },
-    {
-      "fixtureId": "e-inline-good",
-      "sha256": "76ed0c6f8fe82f46b1b71eedb3770e9d0b5e213a9bc2484e613b5f419c2f2817"
+      "sha256": "2e701a857e2bfdc2482c43a8a9dd8de6aa58a09b155e6c98d210a3d52d325e9f"
     },
     {
       "fixtureId": "d-file-control-unreadable",
-      "sha256": "c3335610ad8afdb3b61526eea47715466a215ae88f55fcefecd607204a5beac2"
+      "sha256": "f5d8d8a8d213bfb624fccda3eb3900956d1e484c7bae67568be631c463a52d44"
     },
     {
       "fixtureId": "d-file-control-empty",
-      "sha256": "ef6c89ce75e397bd3dae21eafe791ca807dac197d550fb4dfc42abde33322abc"
+      "sha256": "da7b7d0765c12eb1885d8d4d206b829228d30e79aea11171f5acab20c55d93e2"
+    },
+    {
+      "fixtureId": "m3-malformed-lines",
+      "sha256": "43bbcc2799234dfd9226052f48014cc64009b48fa67d1f7aa90023ccd7e5699b"
     }
   ],
-  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1",
+  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8",
   "toolchain": {
     "opa": {
       "version": "1.20.0",
@@ -403,6 +886,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-29T23:02:08.072Z",
-  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599"
+  "generatedAt": "2026-08-30T17:51:25.770Z",
+  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201"
 }

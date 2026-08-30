@@ -21,7 +21,7 @@
     {
       "name": "the tracked-path sweep set is non-empty and published beside the manifest",
       "ok": true,
-      "detail": "3085 paths -> artifacts/tracked-paths.txt"
+      "detail": "3243 paths -> artifacts/tracked-paths.txt"
     },
     {
       "name": "`probePaths` is published in CODEPOINT order (22 paths; `probePathsSha256` attests that order — the SHARED list on `control` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)",
@@ -116,7 +116,7 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): NOT MEASURED (null)",
       "ok": true,
-      "detail": "no control-only build present: `artifacts/k3-control/manifest.json` is absent or unparseable — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
+      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5\"; arm B requires recordSet 'control' at THIS run's HEAD 69b8554431c7e8e7eba461026405cc268fc0bff4 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -141,7 +141,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"e193ec3013bf57cb9977239a071b1fe77dc908194bb6e3f9bcb0fbd57c431f53\""
+      "detail": "\"935c1c2ac25b7f6a9e7e31ec97cf7b48c903791302c6583de4aee3f3c462ad5b\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -149,5 +149,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "e193ec3013bf57cb9977239a071b1fe77dc908194bb6e3f9bcb0fbd57c431f53"
+  "runManifestSha256": "935c1c2ac25b7f6a9e7e31ec97cf7b48c903791302c6583de4aee3f3c462ad5b"
 }

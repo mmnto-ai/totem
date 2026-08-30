@@ -1,0 +1,29 @@
+{
+  "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+  "specimen": "6b2b62eb-totem-error-log-tag",
+  "ruleId": "6b2b62eb1e8693fc",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-6b2b62eb-totem-error-log-tag.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "195a45fb1cb22db949eb8493e629674b5973bbaaf0018c75a0a36476bd5631ca"
+  },
+  "astQuery": "log.error($$$ARGS)",
+  "factBundle": {
+    "file": "packages/core/src/log-site.ts",
+    "fileText": "log.error('Totem Error', 'compile failed: ' + msg);",
+    "lines": [
+      "log.error('Totem Error', 'compile failed: ' + msg);"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "log.error('Totem Error', 'compile failed: ' + msg);",
+        "startLineText": "log.error('Totem Error', 'compile failed: ' + msg);",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+  "specimen": "5b85fe53-suppress-event-runtime-failure",
+  "ruleId": "5b85fe53468964e1",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "425e221ee8b88de306bb5d78903fc68b70771ff0f4dbd9244037b502638718cd"
+  },
+  "astQuery": "emit('suppress', $$$ARGS)",
+  "factBundle": {
+    "file": "packages/core/src/emit-site.ts",
+    "fileText": "onRuleEvent('error', { ruleId, reason: 'ast-grep scan threw' });",
+    "lines": [
+      "onRuleEvent('error', { ruleId, reason: 'ast-grep scan threw' });"
+    ],
+    "astMatches": []
+  }
+}

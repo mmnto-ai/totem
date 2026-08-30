@@ -1,0 +1,22 @@
+{
+  "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+  "specimen": "6467c351-dynamic-import-cli-entry",
+  "ruleId": "6467c35159c1504d",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-6467c351-dynamic-import-cli-entry.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "d7dafc40137091e5260c25e502e97879b41e0cba7637dbfab3135bd8e3f646d4"
+  },
+  "astQuery": "import($MODULE)",
+  "factBundle": {
+    "file": "packages/cli/src/index.ts",
+    "fileText": "import { renderBanner } from './banner.js';",
+    "lines": [
+      "import { renderBanner } from './banner.js';"
+    ],
+    "astMatches": []
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+  "specimen": "aa7a588d-async-test-callbacks",
+  "ruleId": "aa7a588d48e74503",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-aa7a588d-async-test-callbacks.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "b1d624cbc94c30e1142f1ffb72202b8ce502b314ff8cc924e5da483ca57c0a1f"
+  },
+  "astQuery": "it($DESC, async () => { $$$BODY })",
+  "factBundle": {
+    "file": "packages/core/src/a.test.ts",
+    "fileText": "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });",
+    "lines": [
+      "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });",
+        "startLineText": "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}
