@@ -341,6 +341,78 @@ describe('checkGitHooks', () => {
       }
     });
 
+    // Pass-2 F3: the tier is read from the TOTEM-OWNED block, not the whole file —
+    // a user's own line carrying `TOTEM_HOOK_TIER="strict"` above an appended
+    // standard block must not turn a matching hook into "totemDir drift".
+    it('reads the tier from the totem block, not from a user line above it', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const { buildPrePushHook, getFallbackCommand } = await import('./install-hooks.js');
+        await installCanonical(tmpDir, 'knowledge');
+        const block = buildPrePushHook({
+          tier: 'standard',
+          totemDir: 'knowledge',
+          fallbackCmd: getFallbackCommand(tmpDir),
+        })
+          .replace(/^#!\/bin\/sh\n/, '')
+          .trimStart();
+        fs.writeFileSync(
+          path.join(tmpDir, '.git', 'hooks', 'pre-push'),
+          `#!/bin/sh\nTOTEM_HOOK_TIER="strict" # a line of the user's own\necho mine\n\n${block}`,
+        );
+        expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // Pass-2 F4: a user line that merely QUOTES an end marker above a genuinely
+    // unbounded (legacy) totem block must not make the sensor call it "appended"
+    // and prescribe the unfollowable delete-through-its-end-marker remedy.
+    it('classifies a legacy block as legacy even when a user line quotes the end marker', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const { buildPreCommitHook } = await import('./install-hooks.js');
+        await installCanonical(tmpDir, 'knowledge');
+        const legacyBlock = buildPreCommitHook({ tier: 'standard', totemDir: '.totem' })
+          .split('\n')
+          .filter((line) => !line.includes('[totem] end pre-commit'))
+          .join('\n')
+          .replace(/^#!\/bin\/sh\n/, '')
+          .trimStart();
+        fs.writeFileSync(
+          path.join(tmpDir, '.git', 'hooks', 'pre-commit'),
+          `#!/bin/sh\n# see the "# [totem] end pre-commit" line below\necho mine\n\n${legacyBlock}`,
+        );
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('warn');
+        expect(result.remediation).toMatch(/^totem hook install --force/);
+        expect(result.remediation).toContain('legacy hook with no end marker');
+        expect(result.remediation).not.toContain('delete the totem block');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // Pass-2 N5: a configured value the installer REFUSES never produced hooks —
+    // the row stays marker-only rather than crashing or comparing against a
+    // canonical that cannot exist (the same policy as `doctor --parity`).
+    it('stays marker-only when the configured totemDir is one the installer refuses', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installCanonical(tmpDir, '.totem');
+        expect((await checkGitHooks(tmpDir, { totemDir: '.' })).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
     it('still reports totemDir drift on a strict-tier hook (the tier is read from the hook, not assumed)', async () => {
       const tmpDir = makeTmpDir();
       try {

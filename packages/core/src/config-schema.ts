@@ -460,7 +460,11 @@ export function hasUnrenderableHookChar(value: string): boolean {
   for (const ch of value) {
     if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) return true;
+    // Control characters, DEL, and everything non-ASCII: git C-quotes any path
+    // byte above 0x7e in the `diff --name-only` output the hooks' `grep -q`
+    // filters read (`core.quotePath`, on by default), so a directory name
+    // carrying one could never match — the silent-skip class this closes.
+    if (code < 0x20 || code > 0x7e) return true;
   }
   return false;
 }
@@ -500,13 +504,15 @@ export const TotemConfigSchema = z.object({
    * name it — so re-run `totem hook install --force` after changing it, or the
    * installed hooks keep reading the previous directory.
    *
-   * Because it is rendered into shell and into a JS string literal inside the
-   * hook, a value carrying a quote, a backslash, a dollar sign, a backtick, a
-   * newline or a control character cannot be quoted safely and is refused here
-   * as well as by the installer. The value is normalised first (backslashes,
-   * a leading `./`, trailing slashes — see {@link normalizeTotemDir}) and an
-   * empty result is refused; the installer additionally refuses `.`, a `..`
-   * segment and a leading `-`, shapes whose hook diff filters could never match.
+   * The value is normalised first — a backslash becomes `/`, a leading `./` is
+   * dropped, trailing slashes are stripped (see {@link normalizeTotemDir}) — and
+   * an empty result is refused. Because it is rendered into shell and into a JS
+   * string literal inside the hook, and because git C-quotes non-ASCII bytes in
+   * the paths the hooks' diff filters read, a value carrying a quote, a dollar
+   * sign, a backtick, a non-ASCII character, a newline or a control character
+   * is refused here as well as by the installer. The installer additionally
+   * refuses `.`, a `..` segment and a leading `-`, shapes whose hook diff
+   * filters could never match.
    */
   totemDir: z
     .string()
@@ -514,12 +520,12 @@ export const TotemConfigSchema = z.object({
     .transform(normalizeTotemDir)
     .refine(
       (p) => p.length > 0,
-      'totemDir must not be empty — `.` names the config directory itself',
+      'totemDir must not be empty — leave it unset for the default `.totem`, or name a directory inside the repo',
     )
     .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path')
     .refine(
       (p) => !hasUnrenderableHookChar(p),
-      'totemDir must not contain a quote (\'), a double quote ("), a backslash, a dollar sign, a backtick, a newline or a control character — it is rendered into the managed git hooks',
+      'totemDir must not contain a quote (\'), a double quote ("), a dollar sign, a backtick, a non-ASCII character, a newline or a control character — it is rendered into the managed git hooks, whose diff filters read paths git C-quotes',
     ),
 
   /** Optional: override the .lancedb/ directory path */

@@ -84,6 +84,18 @@ describe('default render is byte-identical to the shipped tools/ hooks (C3)', ()
     expect(standard).toContain('TOTEM_HOOK_TIER="standard"');
     expect(strict.replace('TOTEM_HOOK_TIER="strict"', 'TOTEM_HOOK_TIER="standard"')).toBe(standard);
   });
+
+  it('post-merge and post-checkout render identically for both tiers (the A10 sensor premise)', () => {
+    // `doctor`'s totemDir sensor renders each canonical at the tier the installed
+    // hook's block declares; the two tier-less hooks carry no tier line, so their
+    // render must not depend on it — pinned here rather than assumed.
+    for (const totemDir of [DEFAULT_TOTEM_DIR, 'knowledge']) {
+      const standard = { ...DEFAULT_RENDER, totemDir, tier: 'standard' as const };
+      const strict = { ...DEFAULT_RENDER, totemDir, tier: 'strict' as const };
+      expect(buildHookContent(strict)).toBe(buildHookContent(standard));
+      expect(buildPostCheckoutHookContent(strict)).toBe(buildPostCheckoutHookContent(standard));
+    }
+  });
 });
 
 // ─── C1/C4: a custom totemDir reaches every site ─────────
@@ -161,6 +173,7 @@ describe('an unrenderable totemDir is refused loudly (C4)', () => {
     ['a backtick', 'a`b'],
     ['a newline', 'a\nb'],
     ['a control character', `a${String.fromCharCode(7)}b`],
+    ['a non-ASCII character (git C-quotes it in the paths the diff filters read)', 'ünïcode'],
   ])('refuses %s, naming the value', (_label, totemDir) => {
     let message = '';
     try {

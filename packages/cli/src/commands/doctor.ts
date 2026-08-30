@@ -325,6 +325,10 @@ async function hooksRenderedForWrongTotemDir(
 
   try {
     const hooks = await import('./install-hooks.js');
+    // A value the installer refuses (`.`, a `..` segment, …) never produced
+    // installed hooks, so there is no render to compare against: the row stays
+    // the marker-only sense — the same policy `doctor --parity` applies.
+    if (hooks.hookTotemDirProblem(totemDir) !== null) return [];
     type Render = { tier: 'strict' | 'standard'; totemDir: string; fallbackCmd: string };
     const base: Render = {
       tier: config?.hooks?.tier ?? 'standard',
@@ -365,19 +369,24 @@ async function hooksRenderedForWrongTotemDir(
     const stale: StaleHookRow[] = [];
     for (const { file, build, marker, endMarker } of canonical) {
       const existing = fs.readFileSync(path.join(hooksDir, file), 'utf-8');
-      const installedTier = /TOTEM_HOOK_TIER="(strict|standard)"/.exec(existing)?.[1] as
+      // Everything below reads the TOTEM-OWNED block, never the user's own lines:
+      // a user line that happens to carry `TOTEM_HOOK_TIER="…"` or to quote an end
+      // marker must not steer the compare or the remedy (pass-2 F3/F4).
+      const existingBlock = totemOwnedBlock(existing, marker, endMarker);
+      const installedTier = /TOTEM_HOOK_TIER="(strict|standard)"/.exec(existingBlock)?.[1] as
         | 'strict'
         | 'standard'
         | undefined;
       const content = build({ ...base, tier: installedTier ?? base.tier });
-      if (
-        totemOwnedBlock(existing, marker, endMarker) === totemOwnedBlock(content, marker, endMarker)
-      ) {
+      if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
         continue;
       }
+      const startIdx = existing.indexOf(marker);
+      const boundedAfterStart =
+        startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
       const kind: StaleHookRow['kind'] = hooks.isTotemOwnedWholeFile(existing, marker, endMarker)
         ? 'owned-whole'
-        : existing.includes(endMarker)
+        : boundedAfterStart
           ? 'appended'
           : 'legacy';
       stale.push({ file, kind });

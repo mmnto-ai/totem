@@ -182,7 +182,11 @@ export function hasUnrenderableTotemDirChar(value: string): boolean {
   for (const ch of value) {
     if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) return true;
+    // Control characters, DEL, and everything non-ASCII: git C-quotes any path
+    // byte above 0x7e in the `diff --name-only` output the two `grep -q` diff
+    // filters read (`core.quotePath`, on by default), so a directory name
+    // carrying one could never match — the silent-skip class this closes.
+    if (code < 0x20 || code > 0x7e) return true;
   }
   return false;
 }
@@ -206,7 +210,7 @@ export function hasUnrenderableTotemDirChar(value: string): boolean {
  */
 export function hookTotemDirProblem(totemDir: string): string | null {
   if (hasUnrenderableTotemDirChar(totemDir)) {
-    return 'a single quote, double quote, backslash, dollar sign, backtick, newline or control character cannot be safely rendered into the managed hooks';
+    return 'a single quote, double quote, backslash, dollar sign, backtick, non-ASCII character, newline or control character cannot be safely rendered into the managed hooks (git C-quotes non-ASCII paths, so a diff filter naming one could never match)';
   }
   if (totemDir.length === 0) {
     return "an empty totemDir renders an ABSOLUTE run-store path ('/artifacts/runs') into the strict pre-commit reader and a diff filter that matches every path";
