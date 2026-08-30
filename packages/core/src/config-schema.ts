@@ -442,6 +442,27 @@ export const ReviewConfigSchema = z
  */
 export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
 
+/**
+ * Whether `value` carries a character that cannot be rendered SAFELY into the
+ * managed git hooks (mmnto-ai/totem#2692 C4): a single quote (breaks the `sh`
+ * single-quoted word AND the single-quoted `node -e '…'` spec-evidence reader),
+ * a double quote or backslash (breaks the JS string literal inside that reader),
+ * or a control character / newline (breaks both, and can forge hook lines).
+ *
+ * The CLI installer carries the same clause as a render-path backstop; this
+ * refine is the primary gate, so a validated config never reaches it. Written as
+ * a code-point walk rather than a regex so the predicate carries no escape
+ * sequence of its own to mis-author.
+ */
+function hasUnrenderableHookChar(value: string): boolean {
+  for (const ch of value) {
+    if (ch === "'" || ch === '"' || ch === '\\') return true;
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export const TotemConfigSchema = z.object({
   /** Glob patterns and chunking strategies for each ingest target */
   targets: z.array(IngestTargetSchema).min(1),
@@ -452,11 +473,28 @@ export const TotemConfigSchema = z.object({
   /** Optional: LLM orchestrator for spec/triage/shield commands */
   orchestrator: z.preprocess(autoMigrateOrchestrator, OrchestratorSchema).optional(),
 
-  /** Optional: override the .totem/ directory path */
+  /**
+   * Optional: override the .totem/ directory path.
+   *
+   * The value is RENDERED INTO the managed git hooks at install
+   * (mmnto-ai/totem#2692) — the strict pre-commit spec-evidence reader, the
+   * pre-push gate guards, and the post-merge / post-checkout diff filters all
+   * name it — so re-run `totem hook install --force` after changing it, or the
+   * installed hooks keep reading the previous directory.
+   *
+   * Because it is rendered into shell and into a JS string literal inside the
+   * hook, a value carrying a quote, a backslash, a newline or a control
+   * character cannot be quoted safely and is refused here as well as by the
+   * installer.
+   */
   totemDir: z
     .string()
     .default('.totem')
-    .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path'),
+    .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path')
+    .refine(
+      (p) => !hasUnrenderableHookChar(p),
+      'totemDir must not contain a quote (\'), a double quote ("), a backslash, a newline or a control character — it is rendered into the managed git hooks',
+    ),
 
   /** Optional: override the .lancedb/ directory path */
   lanceDir: z
@@ -590,10 +628,12 @@ export const TotemConfigSchema = z.object({
   hooks: z
     .object({
       /** Enforcement tier: 'strict' adds the spec-evidence check before commit — a
-       *  `totem spec` run artifact under `.totem/artifacts/runs/` (top-level
+       *  `totem spec` run artifact under `<totemDir>/artifacts/runs/` (`.totem/artifacts/runs/`
+       *  unless {@link TotemConfigSchema.shape.totemDir} overrides it; top-level
        *  `admission.runMetadata.caller === 'spec'`, mmnto-ai/totem#2690) — and shield
        *  gates. Agents are auto-detected and enforced at strict level regardless of
-       *  this setting. */
+       *  this setting. The tier is rendered into the hook at install, so re-run
+       *  `totem hook install --force` after changing it (mmnto-ai/totem#2692). */
       tier: z.enum(['strict', 'standard']).default('standard'),
     })
     .optional(),

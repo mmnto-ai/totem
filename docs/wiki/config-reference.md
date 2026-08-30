@@ -7,7 +7,14 @@ The `totem.config.ts` file is the heart of your project's governance.
 ```typescript
 export default {
   // Core Paths
-  totemDir: '.totem', // Directory for local storage, lessons, and cache
+  // Directory for local storage, lessons, and cache. Rendered INTO the managed
+  // git hooks at install (mmnto-ai/totem#2692) — the strict pre-commit
+  // spec-evidence reader, the pre-push gate guards, and the post-merge /
+  // post-checkout diff filters all name it — so re-run `totem hook install
+  // --force` after changing it, or the installed hooks keep reading the previous
+  // directory. Must be relative, and must not contain a quote, a backslash, a
+  // newline or a control character (it cannot be quoted safely into a hook).
+  totemDir: '.totem',
 
   // Vector Database Settings
   embedding: {
