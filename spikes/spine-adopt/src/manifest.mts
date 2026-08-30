@@ -256,11 +256,13 @@ function main(): void {
     // an absent key. The first execution's probePaths ×1 refusal traced here: the
     // field lived only in apparatus source (`src/lib/record-sets.mts`), so the
     // scorer's E2 R1 inline category was silently EMPTY. Every current row carries
-    // one — `Specimen.inlineFilePath` is typed `string`, required, so today the
-    // `?? null` cannot fire; a future record WITHOUT one must change that type to
-    // `string | null` (the explicit-null shape), and emptiness is gated by this
-    // stage's own check below (F5 fold), never tolerated.
-    inlineFilePath: r.inlineFilePath ?? null,
+    // one — `Specimen.inlineFilePath` is typed `string`, required — so it is
+    // published verbatim, with no defensive fallback (a `?? null` here would be
+    // dead code masking the type — F5 + the bot round on mmnto-ai/totem#2710); a
+    // future record WITHOUT one changes that type to `string | null` and publishes
+    // the explicit `null` from the type, and emptiness is gated by this stage's
+    // own check below, never tolerated.
+    inlineFilePath: r.inlineFilePath,
   });
   const records = rows.filter((r) => !r.control).map(rowDigest);
   const controlRecords = rows
@@ -768,7 +770,14 @@ function main(): void {
     checks.eq(
       `every seed record's \`inlineFilePath\` and \`fixture.file\` is in the published probe set (${seedScoped.length} scored record(s))`,
       [
-        ...seedScoped.map((r) => r.inlineFilePath),
+        // (bot round on mmnto-ai/totem#2710) The published contract admits an
+        // explicit `null` for a record with no inline path (the scorer's (b)
+        // ruling); the coverage claim is over the PATHS, so a `null` — impossible
+        // by today's `string` type, legal by contract — must not enter the
+        // membership test and fail publication.
+        ...seedScoped
+          .map((r) => r.inlineFilePath as string | null)
+          .filter((p): p is string => typeof p === 'string'),
         ...seedScoped.flatMap((r) => (r.fixture ? [r.fixture.file] : [])),
       ].filter((p) => !probePaths.includes(p)),
       [],

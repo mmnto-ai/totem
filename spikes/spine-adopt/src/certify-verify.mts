@@ -315,16 +315,23 @@ function main(): void {
   //     charter-sanctioned K3 re-pin re-captures its targets first, § 5 K3); a
   //     `specimens` run reads the re-homed baseline under `artifacts/specimens/`
   //     (below), and only SKIPS, by name, where that home is not committed.
-  //   - absent/unreadable committed manifest: treated as the specimens-baseline
-  //     era, so a broken referent fails loudly below rather than skipping silently.
+  //   - ABSENT committed manifest (pre-manifest history): treated as the
+  //     specimens-baseline era. A committed manifest that exists but does not PARSE
+  //     is a different thing — the authoritative artifact is malformed — and it
+  //     THROWS with the cause (bot round on mmnto-ai/totem#2710: a swallowed parse
+  //     error would select a referent instead of naming the broken artifact, and
+  //     with the re-homed baseline below a `specimens` run would then pass over it).
   const committedManifestText = gitShow('spikes/spine-adopt/artifacts/manifest.json');
   let committedRecordSet: string | null = null;
   if (committedManifestText !== null) {
     try {
       const parsed = JSON.parse(committedManifestText) as { recordSet?: unknown };
       committedRecordSet = typeof parsed.recordSet === 'string' ? parsed.recordSet : null;
-    } catch {
-      committedRecordSet = null;
+    } catch (err) {
+      throw new Error(
+        '[Totem Error] the committed `spikes/spine-adopt/artifacts/manifest.json` at HEAD is not valid JSON — INV 2 cannot select its committed referent from a malformed authoritative artifact',
+        { cause: err },
+      );
     }
   }
   const committedIsRunOfRecord = committedRecordSet === 'seed20';
@@ -335,29 +342,36 @@ function main(): void {
   // FULL drift-detection at every commit — including run pins — instead of
   // skipping.
   const SPECIMENS_HOME = 'spikes/spine-adopt/artifacts/specimens/chains';
-  const specimensHomeList = spawnSync(
-    'git',
-    ['ls-tree', '-r', '--name-only', 'HEAD', '--', SPECIMENS_HOME],
-    { cwd: REPO_ROOT, encoding: 'utf-8' },
-  );
-  const specimensHomeCommitted = (specimensHomeList.stdout ?? '').trim().length > 0;
+  // (bot round on mmnto-ai/totem#2710) Both `ls-tree` listings check git's exit
+  // status: a pathspec that matches nothing exits 0 with empty stdout (the honest
+  // "not committed"), so a NON-ZERO status is a real git fault — and reading empty
+  // stdout as "not committed" there would turn a broken referent lookup into a named
+  // skip. `gitShow` above already refuses on status; these two do the same.
+  const lsTreeAtHead = (repoRelDir: string): string[] => {
+    const r = spawnSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', repoRelDir], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+    });
+    if (r.status !== 0) {
+      throw new Error(
+        `[Totem Error] \`git ls-tree -r --name-only HEAD -- ${repoRelDir}\` exited ${String(r.status)} in ${REPO_ROOT}: ${(r.stderr ?? '').trim()} — the committed referent cannot be established, so INV 2 must not skip`,
+      );
+    }
+    return (r.stdout ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => path.posix.basename(l))
+      .sort();
+  };
+  const specimensHomeCommitted = lsTreeAtHead(SPECIMENS_HOME).length > 0;
   const committedChainsDir =
     manifest.recordSet === 'control' && committedIsRunOfRecord
       ? 'spikes/spine-adopt/artifacts/k3-control/chains'
       : manifest.recordSet === 'specimens' && specimensHomeCommitted
         ? SPECIMENS_HOME
         : 'spikes/spine-adopt/artifacts/chains';
-  const committedList = spawnSync(
-    'git',
-    ['ls-tree', '-r', '--name-only', 'HEAD', '--', committedChainsDir],
-    { cwd: REPO_ROOT, encoding: 'utf-8' },
-  );
-  const committedNames = (committedList.stdout ?? '')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .map((l) => path.posix.basename(l))
-    .sort();
+  const committedNames = lsTreeAtHead(committedChainsDir);
   // The committed referent is chosen above (A12): the re-homed specimens baseline
   // for a `specimens` run, the committed control build for a `control` run over a
   // committed run of record, the top-level chains otherwise. Where no referent
