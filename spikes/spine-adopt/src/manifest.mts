@@ -256,8 +256,10 @@ function main(): void {
     // an absent key. The first execution's probePaths ×1 refusal traced here: the
     // field lived only in apparatus source (`src/lib/record-sets.mts`), so the
     // scorer's E2 R1 inline category was silently EMPTY. Every current row carries
-    // one (`Specimen.inlineFilePath: string`); the `?? null` is the declared shape
-    // for a future record without one, not a tolerated absence.
+    // one — `Specimen.inlineFilePath` is typed `string`, required, so today the
+    // `?? null` cannot fire; a future record WITHOUT one must change that type to
+    // `string | null` (the explicit-null shape), and emptiness is gated by this
+    // stage's own check below (F5 fold), never tolerated.
     inlineFilePath: r.inlineFilePath ?? null,
   });
   const records = rows.filter((r) => !r.control).map(rowDigest);
@@ -705,6 +707,20 @@ function main(): void {
     records.every((r) => /^[0-9a-f]{16}$/.test(r.ruleId)) &&
       (recordSet !== 'seed20' || records.every((r) => /^[0-9a-f]{8}$/.test(r.seedEntry ?? ''))),
     `${records.length} record(s)`,
+  );
+  // (the E24 slice, F5 fold) The (b) ruling's OTHER half, gated at the PUBLISHER:
+  // an empty or whitespace-only `inlineFilePath` would pass the type, publish, and
+  // refuse days later at score time (the scorer discards `''` from the E2 R1
+  // union, which would silently re-empty the inline category through the gate
+  // itself). Failing here moves that failure to the run that authored it.
+  checks.check(
+    "every scored record's `inlineFilePath` is a NON-EMPTY string or an explicit null (the scorer's (b) ruling, both halves)",
+    records.every(
+      (r) =>
+        r.inlineFilePath === null ||
+        (typeof r.inlineFilePath === 'string' && r.inlineFilePath.trim().length > 0),
+    ),
+    `${records.length} record(s); ${records.filter((r) => r.inlineFilePath !== null).length} with an inline path`,
   );
   checks.check(
     'the tracked-path sweep set is non-empty and published beside the manifest',

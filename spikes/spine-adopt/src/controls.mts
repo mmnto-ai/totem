@@ -629,15 +629,22 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
       rows.push({
         pkg: l.package,
         glob,
-        // § 7 E6's reconciled fields — present-as-null for a glob outside the
-        // generator's distinct-glob table (a state the `ok` conjunct would already
-        // report as blind, since such a glob can have no generated probe).
+        // § 7 E6's reconciled fields. A glob OUTSIDE the generator's distinct-glob
+        // table gets `null` — and `ok: false` below, asserted rather than assumed:
+        // the sweep counts alone cannot catch it (frozen/inline probes can satisfy
+        // >=1/>=1 for such a glob), and the premise that every reachable glob is in
+        // the table holds today only because every loaded record's globs — the K5
+        // control record included, a byte copy of a specimen record — happen to lie
+        // in the seed census the generator derives from. The scorer joins K3b rows
+        // by `glob` and reads these two fields as verdict fields, so a silent null
+        // here would re-open the exact refusal class this slice cures (F4, the
+        // slice's falsification leg).
         matchingProbe: pair ? pair.probe : null,
         nonMatchingProbe: pair ? pair.twin : null,
         matching: acc.matching,
         nonMatching: acc.nonMatching,
         scopeDivergences: acc.disagree,
-        ok: acc.matching >= 1 && acc.nonMatching >= 1,
+        ok: acc.matching >= 1 && acc.nonMatching >= 1 && pair !== undefined,
       });
     }
   }
@@ -651,7 +658,7 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
         ? 'NOT MEASURED — no lowered package published a globs.json'
         : blind.length === 0
           ? `${rows.length} reachable glob(s), each with >=1 matching AND >=1 non-matching probe`
-          : `BLIND globs: ${blind.map((r) => `${r.pkg}/${r.glob} (${r.matching}/${r.nonMatching})`).join('; ')}`,
+          : `BLIND globs: ${blind.map((r) => `${r.pkg}/${r.glob} (${r.matching}/${r.nonMatching}${r.matchingProbe === null ? '; NO GENERATED PAIR' : ''})`).join('; ')}`,
     rows,
     evidence,
   };

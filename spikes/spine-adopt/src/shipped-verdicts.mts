@@ -83,8 +83,10 @@ interface VerdictRow {
    * missing row (the wazero probe holds every arm to the same row count).
    *
    * (the E24 slice) EXPLICIT `null` on every other row, never an absent key:
-   * § 5 K5's letter is `error: null`, the scorer reads absent-as-undefined ≠ null
-   * and fails toward flagging — the first execution's K5 ×2 refusal class.
+   * § 5 K5's letter is `error: null`, and the scorer REFUSES on the K5 control
+   * rows when the key is absent (its `K5_EXPECTED` is `{fired: true, matchCount:
+   * 1, error: null}`, read as absent-as-undefined ≠ null) — the first execution's
+   * K5 ×2 refusal class.
    */
   error: string | null;
 }

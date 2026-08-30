@@ -428,7 +428,7 @@ async function main(): Promise<void> {
     // (fold 1 F7 + the E24 slice) A K-CONTROL package is not swept — and not
     // LISTED. T5 is a per-record conjunct over the SCORED records; the K5 control
     // is not one of them and is exercised by K5, in its own row. Sweeping it would
-    // put a 23rd `rows[]` entry in a deposit the scorer reads as the corpus — and
+    // put a control's entry in a deposit the scorer reads as the scored corpus — and
     // § 7 E5 fixes the HEADER at the scored set too ("the records that reach target
     // lowering — 20 on this seed"): the first execution's T5 ×2 refusal class was
     // this package listed in `packages[]`/`policies` beside its own skip entry.
