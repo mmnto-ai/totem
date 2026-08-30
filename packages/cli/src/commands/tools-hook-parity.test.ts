@@ -26,7 +26,11 @@ const TOOLS_DIR = path.join(REPO_ROOT, 'tools');
 // is the default 'standard'. The fallback command derives from the repo's lockfile
 // exactly as the installer and doctor do (getFallbackCommand).
 const TIER = 'standard' as const;
+// This repo pins no `totemDir` either, so the installer's effective directory is the
+// schema default `.totem` — the value mmnto-ai/totem#2692 C3 pins these bytes at.
+const TOTEM_DIR = '.totem';
 const FALLBACK_CMD = getFallbackCommand(REPO_ROOT);
+const RENDER = { tier: TIER, totemDir: TOTEM_DIR, fallbackCmd: FALLBACK_CMD };
 
 function readTool(hook: string): string {
   return fs.readFileSync(path.join(TOOLS_DIR, hook), 'utf-8');
@@ -38,14 +42,14 @@ describe('tools/ hook scripts match the CLI template builders (mmnto-ai/totem#24
   });
 
   it('tools/pre-commit is byte-identical to buildPreCommitHook output', () => {
-    expect(readTool('pre-commit')).toBe(buildPreCommitHook(TIER));
+    expect(readTool('pre-commit')).toBe(buildPreCommitHook(RENDER));
   });
 
   it('tools/pre-push is byte-identical to buildPrePushHook output', () => {
-    expect(readTool('pre-push')).toBe(buildPrePushHook(FALLBACK_CMD, TIER));
+    expect(readTool('pre-push')).toBe(buildPrePushHook(RENDER));
   });
 
   it('tools/post-merge is byte-identical to buildHookContent output', () => {
-    expect(readTool('post-merge')).toBe(buildHookContent(FALLBACK_CMD));
+    expect(readTool('post-merge')).toBe(buildHookContent(RENDER));
   });
 });

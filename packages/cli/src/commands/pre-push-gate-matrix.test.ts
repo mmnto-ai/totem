@@ -24,8 +24,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanTmpDir } from '../test-utils.js';
 import { buildPrePushHook } from './install-hooks.js';
 
+// The default render options the builder takes since mmnto-ai/totem#2692
+// (required options object, no defaulted parameter).
+const RENDER = {
+  tier: 'standard' as const,
+  totemDir: '.totem',
+  fallbackCmd: 'pnpm dlx @mmnto/cli',
+};
+
 describe('buildPrePushHook — gate-mapped strict arm (structural, all platforms)', () => {
-  const hook = buildPrePushHook('pnpm dlx @mmnto/cli', 'standard');
+  const hook = buildPrePushHook(RENDER);
 
   it('probes review --help for --gate before invoking it', () => {
     expect(hook).toContain(`if $TOTEM_CMD review --help 2>/dev/null | grep -q -- '--gate'; then`);
@@ -59,7 +67,7 @@ describe.skipIf(process.platform === 'win32')('pre-push gate matrix (POSIX behav
     fs.mkdirSync(repoDir, { recursive: true });
     fs.mkdirSync(binDir);
     logPath = path.join(tmpDir, 'totem-invocations.log');
-    fs.writeFileSync(path.join(repoDir, 'pre-push'), buildPrePushHook('pnpm dlx @mmnto/cli'), {
+    fs.writeFileSync(path.join(repoDir, 'pre-push'), buildPrePushHook(RENDER), {
       mode: 0o755,
     });
   });

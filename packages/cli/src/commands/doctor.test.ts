@@ -116,10 +116,10 @@ describe('checkCompiledRules', () => {
 // ─── Git hooks check ────────────────────────────────────
 
 describe('checkGitHooks', () => {
-  it('returns skip when not a git repo', () => {
+  it('returns skip when not a git repo', async () => {
     const tmpDir = makeTmpDir();
     try {
-      const result = checkGitHooks(tmpDir);
+      const result = await checkGitHooks(tmpDir);
       expect(result.status).toBe('skip');
       expect(result.message).toBe('Not a git repository');
     } finally {
@@ -127,12 +127,12 @@ describe('checkGitHooks', () => {
     }
   });
 
-  it('returns warn when hooks are missing in a git repo', () => {
+  it('returns warn when hooks are missing in a git repo', async () => {
     const tmpDir = makeTmpDir();
     try {
       const { execSync } = require('node:child_process');
       execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
-      const result = checkGitHooks(tmpDir);
+      const result = await checkGitHooks(tmpDir);
       expect(result.status).toBe('warn');
       expect(result.message).toContain('missing');
       expect(result.remediation).toBe('totem hooks');
@@ -141,7 +141,7 @@ describe('checkGitHooks', () => {
     }
   });
 
-  it('returns pass when all hooks contain totem markers', () => {
+  it('returns pass when all hooks contain totem markers', async () => {
     const tmpDir = makeTmpDir();
     try {
       const { execSync } = require('node:child_process');
@@ -157,12 +157,89 @@ describe('checkGitHooks', () => {
       for (const { file, marker } of hooks) {
         fs.writeFileSync(path.join(hooksDir, file), `#!/bin/sh\n# ${marker}\necho ok`);
       }
-      const result = checkGitHooks(tmpDir);
+      const result = await checkGitHooks(tmpDir);
       expect(result.status).toBe('pass');
       expect(result.message).toContain('All 4 hooks');
     } finally {
       cleanTmpDir(tmpDir);
     }
+  });
+
+  // mmnto-ai/totem#2692 C6. `doctor --parity` regenerates the canonical at the
+  // configured `totemDir` and would catch this — but it is pin-gated behind
+  // `orient.parityManifest`, so the always-on row gains ONE conditional
+  // whole-file compare, and ONLY when the repo configures a non-default dir.
+  describe('custom totemDir (mmnto-ai/totem#2692 C6)', () => {
+    async function installCanonical(dir: string, totemDir: string): Promise<void> {
+      const {
+        buildPreCommitHook,
+        buildPrePushHook,
+        buildHookContent,
+        buildPostCheckoutHookContent,
+        getFallbackCommand,
+      } = await import('./install-hooks.js');
+      const render = { tier: 'standard' as const, totemDir, fallbackCmd: getFallbackCommand(dir) };
+      const hooksDir = path.join(dir, '.git', 'hooks');
+      fs.mkdirSync(hooksDir, { recursive: true });
+      fs.writeFileSync(path.join(hooksDir, 'pre-commit'), buildPreCommitHook(render));
+      fs.writeFileSync(path.join(hooksDir, 'pre-push'), buildPrePushHook(render));
+      fs.writeFileSync(path.join(hooksDir, 'post-merge'), buildHookContent(render));
+      fs.writeFileSync(path.join(hooksDir, 'post-checkout'), buildPostCheckoutHookContent(render));
+    }
+
+    it('WARNs when the installed hooks were rendered for a different totemDir', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        // Hooks on disk still name `.totem/`; the repo configures `knowledge/`.
+        await installCanonical(tmpDir, '.totem');
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('warn');
+        expect(result.message).toContain("totemDir 'knowledge'");
+        expect(result.message).toContain('pre-commit');
+        expect(result.remediation).toBe('totem hook install --force');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    it('PASSES when the installed hooks match the configured totemDir', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installCanonical(tmpDir, 'knowledge');
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    it('does NOT compare content on the default totemDir (marker-only, zero cost)', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const hooksDir = path.join(tmpDir, '.git', 'hooks');
+        fs.mkdirSync(hooksDir, { recursive: true });
+        // Marker-headed but nowhere near canonical — still a pass on the default,
+        // exactly as before this slice.
+        for (const [file, marker] of [
+          ['pre-commit', '[totem] pre-commit hook'],
+          ['pre-push', '[totem] pre-push hook'],
+          ['post-merge', '[totem] post-merge hook'],
+          ['post-checkout', '[totem] post-checkout hook'],
+        ]) {
+          fs.writeFileSync(path.join(hooksDir, file), `#!/bin/sh\n# ${marker}\necho ok`);
+        }
+        expect((await checkGitHooks(tmpDir, { totemDir: '.totem' })).status).toBe('pass');
+        expect((await checkGitHooks(tmpDir)).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
   });
 });
 
