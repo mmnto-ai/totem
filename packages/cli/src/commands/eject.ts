@@ -73,6 +73,12 @@ export function totemScaffoldedFiles(totemDir: string): string[] {
     '.claude/hooks/SessionStart.cjs',
     // PR-C action-gate wrapper (mmnto-ai/totem#2048, eject parity).
     '.claude/hooks/gate-wrapper.cjs',
+    // The init-distributed prepare wrapper (mmnto-ai/totem#2410) — scaffolded at
+    // `.totem/prepare.cjs` REGARDLESS of `totemDir` (`PREPARE_SCRIPT_REL` in
+    // init-templates.ts, a sibling hardcode this slice leaves in place), so it is
+    // named literally: under a custom `totemDir` the directory sweep no longer
+    // reaches it (mmnto-ai/totem#2692 amendment A9).
+    '.totem/prepare.cjs',
   ];
 }
 

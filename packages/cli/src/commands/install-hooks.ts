@@ -159,6 +159,9 @@ export interface HookRenderOptions {
 export interface ResolvedHookRenderOptions extends HookRenderOptions {
   /** The config that supplied the values; undefined when none resolved. */
   configPath?: string;
+  /** Set when a config RESOLVED but would not load: the values are the defaults
+   *  and the failure was printed (mmnto-ai/totem#2692 amendment A8). */
+  configError?: string;
 }
 
 /**
@@ -175,7 +178,7 @@ export interface ResolvedHookRenderOptions extends HookRenderOptions {
  * Written as a code-point walk rather than a regex with escape literals so the
  * predicate carries no escape sequence of its own to mis-author.
  */
-function hasUnrenderableChar(value: string): boolean {
+export function hasUnrenderableTotemDirChar(value: string): boolean {
   for (const ch of value) {
     if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
@@ -185,22 +188,64 @@ function hasUnrenderableChar(value: string): boolean {
 }
 
 /**
- * Refuse — loudly, naming the value — a `totemDir` the hook templates cannot
- * render safely (mmnto-ai/totem#2692 C4). The config schema carries the same
- * clause as a zod refine, so a validated config never reaches here; this is the
- * render-path backstop for the direct-API and hand-threaded call sites.
+ * Why `totemDir` cannot be rendered into the managed hooks, or `null` when it
+ * can (mmnto-ai/totem#2692 C4 + amendment A7). Two classes:
+ *
+ *  - CHARACTERS the quoting regimes cannot carry (see
+ *    {@link hasUnrenderableTotemDirChar}) — the `@mmnto/totem` schema refuses
+ *    the same set, so a validated config never reaches this arm.
+ *  - SHAPES the hooks could never govern, which the schema deliberately still
+ *    accepts because other verbs can use them (`.` is the global profile's own
+ *    spelling): empty, a trailing slash, `.`, a `.` or empty segment, a `..`
+ *    segment, a leading `-`. Each of these renders a hook whose post-merge /
+ *    post-checkout diff filter (`grep -q '<dir>/…'` over the repo-relative
+ *    paths git prints) can never match, or — for the empty value — an ABSOLUTE
+ *    run-store path in the strict pre-commit reader. The schema normalises a
+ *    trailing slash away; a raw value reaching a builder directly is refused,
+ *    never normalised here (a builder is a pure function of its options).
+ */
+export function hookTotemDirProblem(totemDir: string): string | null {
+  if (hasUnrenderableTotemDirChar(totemDir)) {
+    return 'a single quote, double quote, backslash, dollar sign, backtick, newline or control character cannot be safely rendered into the managed hooks';
+  }
+  if (totemDir.length === 0) {
+    return "an empty totemDir renders an ABSOLUTE run-store path ('/artifacts/runs') into the strict pre-commit reader and a diff filter that matches every path";
+  }
+  if (totemDir.endsWith('/')) {
+    return "a trailing slash renders 'dir//…' into the post-merge / post-checkout diff filters, which then never match — spell it without the slash";
+  }
+  if (totemDir === '.') {
+    return "'.' names the config directory itself; the hooks' diff filters ('grep -q <dir>/…') could never match the repo-relative paths git prints";
+  }
+  const segments = totemDir.split('/');
+  if (segments.includes('.') || segments.includes('')) {
+    return "a '.' segment (or '//') never appears in the repo-relative paths git prints, so the diff filters would never match";
+  }
+  if (segments.includes('..')) {
+    return "a '..' segment points outside the worktree the hooks run in; git prints repo-relative paths, so the diff filters could never match";
+  }
+  if (totemDir.startsWith('-')) {
+    return "a leading '-' is read as an option by grep in the diff filters";
+  }
+  return null;
+}
+
+/**
+ * Refuse — loudly, naming the value and the reason — a `totemDir` the hook
+ * templates cannot render (mmnto-ai/totem#2692 C4/A7). Called by the resolver
+ * on the configured value and by every builder as the render-path backstop for
+ * direct-API and hand-threaded call sites.
  *
  * Throws rather than degrades: a hook rendered from a value we could not quote
  * is a shell-injection surface, and silently falling back to `.totem` would
  * re-create the very writer/reader split this slice closes (Tenet 4).
  */
 export function assertRenderableTotemDir(totemDir: string): void {
-  if (!hasUnrenderableChar(totemDir)) return;
+  const problem = hookTotemDirProblem(totemDir);
+  if (problem === null) return;
   throw new Error(
-    `[Totem] Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ` +
-      'a single quote, double quote, backslash, dollar sign, backtick, newline or control character cannot be ' +
-      'safely rendered into the managed hooks. Set `totemDir` to a plain relative path ' +
-      'and re-run `totem hook install --force`.',
+    `[Totem] Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ${problem}. ` +
+      'Set `totemDir` to a plain relative directory inside the repo and re-run `totem hook install --force`.',
   );
 }
 
@@ -237,36 +282,58 @@ function escapeBre(value: string): string {
  * anchor the installer has always used, so a hook installed from a subdirectory
  * still names the repo's package manager.
  *
- * No config (or a config that will not load) → the defaults, with the failure
- * disclosed only under `TOTEM_DEBUG`: a config-less repo installing hooks is a
- * supported path, not an error.
+ * No config at all → the defaults, silently: a config-less repo installing hooks
+ * is a supported path, not an error. A config that RESOLVES but will not LOAD
+ * (a syntax error, a `totemDir` the schema refines out) → the defaults, LOUDLY:
+ * one line names the file and the failure, so a repo whose config says
+ * `knowledge/` never gets `.totem/` hooks without a word (mmnto-ai/totem#2692
+ * amendment A8 — the silent→loud shape of mmnto-ai/totem#2685). A config that
+ * loads but names a `totemDir` the hooks cannot govern (`.`, a `..` segment, a
+ * leading `-`) REFUSES — {@link assertRenderableTotemDir}.
  */
 export async function resolveHookRenderOptions(
   cwd: string,
   flags?: { tier?: 'strict' | 'standard' },
 ): Promise<ResolvedHookRenderOptions> {
   const fallbackCmd = getFallbackCommand(cwd);
+  const defaults: ResolvedHookRenderOptions = {
+    tier: flags?.tier ?? 'standard',
+    totemDir: DEFAULT_TOTEM_DIR,
+    fallbackCmd,
+  };
+  const { loadConfig, loadEnv, resolveConfigPath, isGlobalConfigPath } =
+    await import('../utils.js');
+  loadEnv(cwd);
+
+  let configPath: string;
   try {
-    const { loadConfig, loadEnv, resolveConfigPath, isGlobalConfigPath } =
-      await import('../utils.js');
-    loadEnv(cwd);
-    const configPath = resolveConfigPath(cwd);
-    const config = await loadConfig(configPath);
-    return {
-      tier: flags?.tier ?? config.hooks?.tier ?? 'standard',
-      totemDir: isGlobalConfigPath(configPath)
-        ? DEFAULT_TOTEM_DIR
-        : (config.totemDir ?? DEFAULT_TOTEM_DIR),
-      fallbackCmd,
-      configPath,
-    };
-    // totem-context: a missing or unloadable config is the honest-default path — hooks install in config-less repos by design; the failure is disclosed under TOTEM_DEBUG rather than swallowed.
-  } catch (err) {
-    if (process.env.TOTEM_DEBUG) {
-      console.error('[Totem] Could not load config for hook render options:', err);
-    }
-    return { tier: flags?.tier ?? 'standard', totemDir: DEFAULT_TOTEM_DIR, fallbackCmd };
+    configPath = resolveConfigPath(cwd);
+    // totem-context: no config anywhere (resolveConfigPath throws CONFIG_MISSING) is the honest-default path — hooks install in config-less repos by design.
+  } catch {
+    return defaults;
   }
+
+  let config: Awaited<ReturnType<typeof loadConfig>>;
+  try {
+    config = await loadConfig(configPath);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Totem] Could not load ${configPath} (${reason.split('\n')[0]}) — the git hooks are rendered at the defaults (totemDir '${DEFAULT_TOTEM_DIR}', tier '${defaults.tier}'); fix the config and re-run \`totem hook install --force\`.`,
+    );
+    return { ...defaults, configError: reason };
+  }
+
+  const totemDir = isGlobalConfigPath(configPath)
+    ? DEFAULT_TOTEM_DIR
+    : (config.totemDir ?? DEFAULT_TOTEM_DIR);
+  assertRenderableTotemDir(totemDir);
+  return {
+    tier: flags?.tier ?? config.hooks?.tier ?? 'standard',
+    totemDir,
+    fallbackCmd,
+    configPath,
+  };
 }
 
 /**
@@ -424,6 +491,10 @@ fi
  * (mmnto-ai/totem#2692 C1/C2).
  */
 export function generateHookHelpers(gitRoot: string, render: HookRenderOptions): void {
+  // Refuse BEFORE the mkdir: the helper dir is joined from the value, and a
+  // `..` segment would create a directory outside the checkout before any
+  // builder got the chance to refuse it (mmnto-ai/totem#2692 amendment A7).
+  assertRenderableTotemDir(render.totemDir);
   const hooksDir = path.join(gitRoot, render.totemDir, 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
 
@@ -1037,9 +1108,12 @@ export async function installEnforcementHooks(
     console.error(HOOKS_DIR_UNRESOLVED_MSG);
     return skip;
   }
-  // `totem init` writes the config BEFORE this runs, so the resolved options are
-  // the ones the repo just declared — init and `totem hook install` render
-  // identically by construction (mmnto-ai/totem#2692 C1/C7).
+  // `totem init` writes the config BEFORE this runs, so — when init runs at the
+  // git root, the supported layout — the resolved options are the ones the repo
+  // just declared, and init and `totem hook install` render identically
+  // (mmnto-ai/totem#2692 C1/C7). Off the root, init writes its config at cwd
+  // while every hook writer resolves at the git root: a pre-existing split this
+  // slice names and does not close.
   const render = await resolveHookRenderOptions(gitRoot, { tier: options?.tier });
 
   const preCommit = installGitHook(

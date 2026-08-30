@@ -456,13 +456,29 @@ export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
  * a code-point walk rather than a regex so the predicate carries no escape
  * sequence of its own to mis-author.
  */
-function hasUnrenderableHookChar(value: string): boolean {
+export function hasUnrenderableHookChar(value: string): boolean {
   for (const ch of value) {
     if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
     if (code < 0x20 || code === 0x7f) return true;
   }
   return false;
+}
+
+/**
+ * Normalise a configured `totemDir` to the ONE spelling every consumer joins and
+ * every managed hook renders (mmnto-ai/totem#2692 amendment A7): backslashes →
+ * `/`, a leading `./` dropped, trailing slashes stripped. `.totem/` and `.totem`
+ * name the same directory, but rendered into the hooks' `grep -q '<dir>/…'`
+ * diff filters the slash produced `dir//…`, which never matched — silently.
+ * `'.'` is left alone (the global profile's own spelling for "this directory");
+ * an empty result is refused by the schema.
+ */
+export function normalizeTotemDir(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .replace(/^(\.\/)+/, '')
+    .replace(/\/+$/, '');
 }
 
 export const TotemConfigSchema = z.object({
@@ -487,11 +503,19 @@ export const TotemConfigSchema = z.object({
    * Because it is rendered into shell and into a JS string literal inside the
    * hook, a value carrying a quote, a backslash, a dollar sign, a backtick, a
    * newline or a control character cannot be quoted safely and is refused here
-   * as well as by the installer.
+   * as well as by the installer. The value is normalised first (backslashes,
+   * a leading `./`, trailing slashes — see {@link normalizeTotemDir}) and an
+   * empty result is refused; the installer additionally refuses `.`, a `..`
+   * segment and a leading `-`, shapes whose hook diff filters could never match.
    */
   totemDir: z
     .string()
     .default('.totem')
+    .transform(normalizeTotemDir)
+    .refine(
+      (p) => p.length > 0,
+      'totemDir must not be empty — `.` names the config directory itself',
+    )
     .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path')
     .refine(
       (p) => !hasUnrenderableHookChar(p),
@@ -631,7 +655,7 @@ export const TotemConfigSchema = z.object({
     .object({
       /** Enforcement tier: 'strict' adds the spec-evidence check before commit — a
        *  `totem spec` run artifact under `<totemDir>/artifacts/runs/` (`.totem/artifacts/runs/`
-       *  unless {@link TotemConfigSchema.shape.totemDir} overrides it; top-level
+       *  unless `totemDir` overrides it; top-level
        *  `admission.runMetadata.caller === 'spec'`, mmnto-ai/totem#2690) — and shield
        *  gates. Agents are auto-detected and enforced at strict level regardless of
        *  this setting. The tier is rendered into the hook at install, so re-run

@@ -69,6 +69,23 @@ describe('totem link — the target repo names its own totemDir (mmnto-ai/totem#
     );
   });
 
+  it('refuses a target totemDir that names the target itself or escapes it (A7)', async () => {
+    const target = path.join(root, 'target');
+    fs.mkdirSync(path.join(target, 'outside'), { recursive: true });
+    for (const bad of ['../outside', '.']) {
+      fs.writeFileSync(
+        path.join(target, 'totem.yaml'),
+        `${TARGET_YAML_BASE}totemDir: ${JSON.stringify(bad)}\n`,
+        'utf-8',
+      );
+      await expect(linkCommand('target', { yes: true })).rejects.toThrow(
+        /names the target itself or escapes it/,
+      );
+    }
+    // Nothing was written into this repo's config.
+    expect(fs.readFileSync(path.join(root, 'totem.config.ts'), 'utf-8')).toBe(ROOT_CONFIG);
+  });
+
   it('names the directory it probed when the target lacks it', async () => {
     const target = path.join(root, 'target');
     fs.mkdirSync(target, { recursive: true });

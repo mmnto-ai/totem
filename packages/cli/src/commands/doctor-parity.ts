@@ -681,7 +681,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
       hookTier = config.hooks?.tier ?? 'standard';
-      hookTotemDir = config.totemDir ?? '.totem';
+      // A value the hooks cannot be rendered for (`.`, a `..` segment, …) never
+      // produced installed hooks — the installer refuses it — so the canonical is
+      // regenerated at the default rather than letting a builder throw mid-row
+      // (mmnto-ai/totem#2692 amendment A7).
+      const configuredTotemDir = config.totemDir ?? '.totem';
+      const { hookTotemDirProblem } = await import('./install-hooks.js');
+      hookTotemDir =
+        hookTotemDirProblem(configuredTotemDir) === null ? configuredTotemDir : '.totem';
       probeRepos = config.orient?.parityProbeRepos;
     }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.

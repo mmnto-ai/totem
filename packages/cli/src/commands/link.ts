@@ -43,17 +43,30 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   // config (`resolveConfigPath` throws) or an unloadable one is probed at the
   // default; the existence check below names the exact path probed either way.
   let totemDirName = '.totem';
+  let targetConfiguredDir: string | undefined;
   try {
     const targetConfigPath = resolveConfigPath(resolved);
     if (!isGlobalConfigPath(targetConfigPath)) {
       const targetConfig = await loadConfig(targetConfigPath);
-      if (typeof targetConfig.totemDir === 'string' && targetConfig.totemDir.length > 0) {
-        totemDirName = targetConfig.totemDir.replace(/\\/g, '/').replace(/\/+$/, '');
-      }
+      if (typeof targetConfig.totemDir === 'string') targetConfiguredDir = targetConfig.totemDir;
     }
     // totem-context: intentional cleanup — a target with no config or an unloadable one degrades to the default directory name; the existence check below reports the exact path probed, so nothing is guessed silently.
   } catch {
-    totemDirName = '.totem';
+    targetConfiguredDir = undefined;
+  }
+  if (targetConfiguredDir !== undefined) {
+    // The name is written VERBATIM into this repo's config as a glob, so a value
+    // that names the target itself or escapes it (`.`, `..`) would ingest a tree
+    // the consent prompt below never named (mmnto-ai/totem#2692 amendment A7).
+    const name = targetConfiguredDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    if (name === '' || name === '.' || name.split('/').includes('..')) {
+      throw new TotemConfigError(
+        `The target's totemDir (${JSON.stringify(targetConfiguredDir)}) names the target itself or escapes it; a link ingests a directory INSIDE the target.`,
+        'Set a repo-local `totemDir` inside the target project, or link the directory you mean directly.',
+        'CONFIG_INVALID',
+      );
+    }
+    totemDirName = name;
   }
 
   // Validate target has a Totem directory

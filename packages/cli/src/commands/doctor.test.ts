@@ -170,7 +170,11 @@ describe('checkGitHooks', () => {
   // `orient.parityManifest`, so the always-on row gains ONE conditional
   // whole-file compare, and ONLY when the repo configures a non-default dir.
   describe('custom totemDir (mmnto-ai/totem#2692 C6)', () => {
-    async function installCanonical(dir: string, totemDir: string): Promise<void> {
+    async function installCanonical(
+      dir: string,
+      totemDir: string,
+      tier: 'strict' | 'standard' = 'standard',
+    ): Promise<void> {
       const {
         buildPreCommitHook,
         buildPrePushHook,
@@ -178,7 +182,7 @@ describe('checkGitHooks', () => {
         buildPostCheckoutHookContent,
         getFallbackCommand,
       } = await import('./install-hooks.js');
-      const render = { tier: 'standard' as const, totemDir, fallbackCmd: getFallbackCommand(dir) };
+      const render = { tier, totemDir, fallbackCmd: getFallbackCommand(dir) };
       const hooksDir = path.join(dir, '.git', 'hooks');
       fs.mkdirSync(hooksDir, { recursive: true });
       fs.writeFileSync(path.join(hooksDir, 'pre-commit'), buildPreCommitHook(render));
@@ -289,6 +293,64 @@ describe('checkGitHooks', () => {
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installWithAppendedPreCommit(tmpDir, 'knowledge', 'knowledge');
         expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // Amendment A10 (falsification F5c): a LEGACY hook — start marker, NO end
+    // marker — cannot be bounded, so it is compared whole and takes the one
+    // `--force` install-hooks.ts prescribes for it; the appended-hook remedy
+    // ("delete the block through its end marker") would be unfollowable.
+    it('names --force (not the delete-and-re-append line) for a legacy hook with no end marker', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const { buildPreCommitHook } = await import('./install-hooks.js');
+        await installCanonical(tmpDir, 'knowledge');
+        const legacy = buildPreCommitHook({ tier: 'standard', totemDir: '.totem' })
+          .split('\n')
+          .filter((line) => !line.includes('[totem] end pre-commit'))
+          .join('\n');
+        fs.writeFileSync(path.join(tmpDir, '.git', 'hooks', 'pre-commit'), legacy);
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('warn');
+        expect(result.message).toContain('pre-commit');
+        expect(result.remediation).toMatch(/^totem hook install --force/);
+        expect(result.remediation).toContain('legacy hook with no end marker');
+        expect(result.remediation).not.toContain('delete the totem block');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // Amendment A10 (falsification F5d): the compare is on the totemDir axis ONLY.
+    // A hook installed with --strict on a repo whose config pins no tier must not
+    // read as totemDir drift — the prescribed `--force` would re-render it at
+    // standard, a silent enforcement downgrade.
+    it('does NOT report a tier-only difference as totemDir drift', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installCanonical(tmpDir, 'knowledge', 'strict');
+        expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    it('still reports totemDir drift on a strict-tier hook (the tier is read from the hook, not assumed)', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installCanonical(tmpDir, '.totem', 'strict');
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('warn');
+        expect(result.message).toContain('pre-commit');
+        expect(result.message).toContain('pre-push');
       } finally {
         cleanTmpDir(tmpDir);
       }

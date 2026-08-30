@@ -25,7 +25,9 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { hasUnrenderableHookChar } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -36,7 +38,9 @@ import {
   buildPrePushHook,
   DEFAULT_TOTEM_DIR,
   getFallbackCommand,
+  hasUnrenderableTotemDirChar,
   type HookRenderOptions,
+  hookTotemDirProblem,
   resolveHookRenderOptions,
 } from './install-hooks.js';
 
@@ -187,6 +191,34 @@ describe('an unrenderable totemDir is refused loudly (C4)', () => {
       expect(() => assertRenderableTotemDir(ok)).not.toThrow();
     }
   });
+
+  // Amendment A7 (falsification F2.2–F2.5): shapes the schema still accepts
+  // (other verbs can use them) but no hook could ever govern — each renders a
+  // diff filter that never matches, or an absolute reader path.
+  it.each([
+    ['an empty value', '', /empty totemDir/],
+    ['the config directory itself', '.', /names the config directory itself/],
+    ['a trailing slash', 'knowledge/', /trailing slash/],
+    ["a '.' segment", './knowledge', /'\.' segment/],
+    ["a '..' segment", '../shared', /'\.\.' segment/],
+    ['a leading dash', '-x', /leading '-'/],
+  ])('refuses %s — a shape the diff filters could never match (A7)', (_label, totemDir, reason) => {
+    expect(hookTotemDirProblem(totemDir)).toMatch(reason);
+    expect(() => assertRenderableTotemDir(totemDir)).toThrow(/Refusing to render git hooks/);
+  });
+
+  it('the installer backstop and the @mmnto/totem schema refuse the SAME characters', () => {
+    // The two predicates are declared in two packages; pin them equal over every
+    // ASCII code point plus a few beyond so they cannot drift apart.
+    const samples: string[] = [];
+    for (let code = 0; code < 0x80; code++) samples.push(`a${String.fromCharCode(code)}b`);
+    samples.push('ünïcode', `a${String.fromCharCode(0xa0)}b`, `a${String.fromCharCode(0x2028)}b`);
+    for (const sample of samples) {
+      expect(hasUnrenderableTotemDirChar(sample), JSON.stringify(sample)).toBe(
+        hasUnrenderableHookChar(sample),
+      );
+    }
+  });
 });
 
 // ─── C1: the resolver ────────────────────────────────────
@@ -234,12 +266,55 @@ describe('resolveHookRenderOptions — the one config→render seam (C1)', () =>
     expect(render.tier).toBe('standard');
   });
 
-  it('an unloadable config degrades to the defaults rather than throwing', async () => {
+  it('a config that resolves but will not load degrades to the defaults LOUDLY (A8)', async () => {
     writeConfig('targets: [oh no: {');
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const render = await resolveHookRenderOptions(tmpDir);
+      expect(render.totemDir).toBe(DEFAULT_TOTEM_DIR);
+      expect(render.tier).toBe('standard');
+      expect(render.configPath).toBeUndefined();
+      expect(render.configError).toBeDefined();
+      // ONE line names the file and says the defaults were rendered — the
+      // silent→loud shape: a repo whose config says otherwise never gets `.totem`
+      // hooks without a word.
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const line = String(errorSpy.mock.calls[0]?.[0]);
+      expect(line).toContain('totem.yaml');
+      expect(line).toContain("totemDir '.totem'");
+      expect(line).toContain('totem hook install --force');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('a totemDir the schema refines out is a LOUD default, never a silent `.totem` (A8)', async () => {
+    writeConfig(`${BASE_TARGETS}totemDir: a$b\n`);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const render = await resolveHookRenderOptions(tmpDir);
+      expect(render.totemDir).toBe(DEFAULT_TOTEM_DIR);
+      expect(render.configError).toMatch(/totemDir/);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('a trailing slash in the config is normalised away before rendering (A7)', async () => {
+    writeConfig(`${BASE_TARGETS}totemDir: knowledge/\n`);
     const render = await resolveHookRenderOptions(tmpDir);
-    expect(render.totemDir).toBe(DEFAULT_TOTEM_DIR);
-    expect(render.tier).toBe('standard');
-    expect(render.configPath).toBeUndefined();
+    expect(render.totemDir).toBe('knowledge');
+    expect(buildHookContent(render)).toContain(`grep -q 'knowledge/lessons/'`);
+  });
+
+  it('a repo-local totemDir the hooks cannot govern REFUSES at resolve time (A7)', async () => {
+    for (const bad of ['.', '../shared', '-x']) {
+      writeConfig(`${BASE_TARGETS}totemDir: ${JSON.stringify(bad)}\n`);
+      await expect(resolveHookRenderOptions(tmpDir)).rejects.toThrow(
+        /Refusing to render git hooks/,
+      );
+    }
   });
 
   it('the resolved options render the hook the WRITER agrees with (init-after-write)', async () => {

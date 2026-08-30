@@ -12,9 +12,10 @@ export default {
   // spec-evidence reader, the pre-push gate guards, and the post-merge /
   // post-checkout diff filters all name it — so re-run `totem hook install
   // --force` after changing it, or the installed hooks keep reading the previous
-  // directory. Must be relative, and must not contain a quote, a backslash, a
-  // dollar sign, a backtick, a newline or a control character (it cannot be
-  // quoted safely into a hook).
+  // directory. Must be relative and non-empty, and must not contain a quote, a
+  // backslash, a dollar sign, a backtick, a newline or a control character (it
+  // cannot be quoted safely into a hook); a trailing slash is normalised away.
+  // The hooks additionally refuse `.`, a `..` segment and a leading `-`.
   totemDir: '.totem',
 
   // Vector Database Settings
