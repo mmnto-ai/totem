@@ -320,6 +320,7 @@ export async function resolveHookRenderOptions(
   let config: Awaited<ReturnType<typeof loadConfig>>;
   try {
     config = await loadConfig(configPath);
+    // totem-context: LOUD default, not a swallow — the failure is printed on the line below and surfaced as `configError`; a repo whose config will not load still gets default hooks rather than an aborted install (mmnto-ai/totem#2692 A8, the silent→loud shape of mmnto-ai/totem#2685).
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(
