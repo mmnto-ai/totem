@@ -4,7 +4,7 @@
   "chainPreservation": {
     "method": "BIDIRECTIONAL, chosen per chain from the COMMITTED file's own shape, so the invariant survives its own commit. `pre-commit` (the committed chain carries no `manifestSha256`): two independent claims — (a) a BYTE claim, the published file starts with the committed file's bytes up to its closing brace, so the extension is appended and nothing was re-serialised; (b) a STRUCTURAL claim, every pre-slice key holds an identical value and the added key set is exactly the extension's. `drift-detection` (the committed chain already carries `manifestSha256`): the published chain must be BYTE-EQUAL to it, and no key may be added, changed or removed — certification is deterministic, so any difference is drift. In both modes the named hashes are checked unchanged and the manifest hash is RE-DERIVED from the module.",
     "modeMarker": "the presence of `manifestSha256` in the committed chain",
-    "preSliceSource": "git show HEAD:spikes/spine-adopt/artifacts/chains/<name>.json",
+    "preSliceSource": "git show HEAD:spikes/spine-adopt/artifacts/k3-control/chains/<name>.json",
     "expectedAddedKeys": [
       "certification",
       "certified",
@@ -180,7 +180,7 @@
       "detail": "manifest.recordSet=\"control\", activeRecordSet()=\"control\""
     },
     {
-      "name": "INV 2 (K3 arm B) — the control-only run published exactly the 1 chain(s) its record set names, and each has a committed counterpart at HEAD",
+      "name": "INV 2 (K3 arm B) — the control-only run published exactly the 1 chain(s) its record set names, and each has a committed counterpart at HEAD (referent: `spikes/spine-adopt/artifacts/k3-control/chains`)",
       "ok": true,
       "detail": "{\"published\":[\"r87aff037d7de47a7.json\"],\"missingFromCommitted\":[]}"
     },
@@ -435,6 +435,6 @@
       "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
     }
   ],
-  "runManifestSha256": "935c1c2ac25b7f6a9e7e31ec97cf7b48c903791302c6583de4aee3f3c462ad5b",
+  "runManifestSha256": "93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0",
   "bundlesSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
 }

@@ -19,9 +19,14 @@
       "detail": "0 record(s)"
     },
     {
+      "name": "every scored record's `inlineFilePath` is a NON-EMPTY string or an explicit null (the scorer's (b) ruling, both halves)",
+      "ok": true,
+      "detail": "0 record(s); 0 with an inline path"
+    },
+    {
       "name": "the tracked-path sweep set is non-empty and published beside the manifest",
       "ok": true,
-      "detail": "3243 paths -> artifacts/tracked-paths.txt"
+      "detail": "3336 paths -> artifacts/tracked-paths.txt"
     },
     {
       "name": "`probePaths` is published in CODEPOINT order (22 paths; `probePathsSha256` attests that order — the SHARED list on `control` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)",
@@ -116,7 +121,7 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): NOT MEASURED (null)",
       "ok": true,
-      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5\"; arm B requires recordSet 'control' at THIS run's HEAD 69b8554431c7e8e7eba461026405cc268fc0bff4 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
+      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"69b8554431c7e8e7eba461026405cc268fc0bff4\"; arm B requires recordSet 'control' at THIS run's HEAD 8f64e4b985b345da4cf5ee4028edb1f22e117988 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -141,7 +146,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"935c1c2ac25b7f6a9e7e31ec97cf7b48c903791302c6583de4aee3f3c462ad5b\""
+      "detail": "\"93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -149,5 +154,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "935c1c2ac25b7f6a9e7e31ec97cf7b48c903791302c6583de4aee3f3c462ad5b"
+  "runManifestSha256": "93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0"
 }

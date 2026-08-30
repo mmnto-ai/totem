@@ -19,9 +19,14 @@
       "detail": "22 record(s)"
     },
     {
+      "name": "every scored record's `inlineFilePath` is a NON-EMPTY string or an explicit null (the scorer's (b) ruling, both halves)",
+      "ok": true,
+      "detail": "22 record(s); 22 with an inline path"
+    },
+    {
       "name": "the tracked-path sweep set is non-empty and published beside the manifest",
       "ok": true,
-      "detail": "3243 paths -> artifacts/tracked-paths.txt"
+      "detail": "3336 paths -> artifacts/tracked-paths.txt"
     },
     {
       "name": "`sharedProbePaths('seed20')` returns its 110 paths ALREADY in codepoint order, before the manifest re-sorts them (§ S1; `probePathsSha256` attests the published order)",
@@ -121,12 +126,12 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): FALSE — the pinned target STANDS",
       "ok": true,
-      "detail": "the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4"
+      "detail": "the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988"
     },
     {
       "name": "K3 arm B PRESENT and bound to this run (§ 6: the control-only build runs FIRST)",
       "ok": true,
-      "detail": "bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4; repinned=false"
+      "detail": "bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988; repinned=false"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -151,7 +156,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201\""
+      "detail": "\"947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -159,5 +164,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201"
+  "runManifestSha256": "947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12"
 }

@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "69b8554431c7e8e7eba461026405cc268fc0bff4",
-  "runCommit": "69b8554431c7e8e7eba461026405cc268fc0bff4",
+  "apparatusPin": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
+  "runCommit": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
   "recordSet": "seed20",
   "artifactsSubdir": null,
   "controls": [
@@ -96,7 +96,7 @@
       "id": "K3",
       "refusing": true,
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
@@ -158,8 +158,8 @@
           "arm": "B",
           "ok": true,
           "armB": "stands",
-          "binding": "bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4",
-          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
+          "binding": "bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988",
+          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
           "rows": [
             {
               "file": "k3-control/chains/r87aff037d7de47a7.json",
@@ -208,6 +208,8 @@
         {
           "pkg": "totem.spike.r0167a783f75b5ecd",
           "glob": "packages/cli/src/**/*.ts",
+          "matchingProbe": "packages/cli/src/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/k3b/probe.t_",
           "matching": 10,
           "nonMatching": 100,
           "scopeDivergences": 0,
@@ -216,6 +218,8 @@
         {
           "pkg": "totem.spike.r0167a783f75b5ecd",
           "glob": "packages/cli/src/commands/**/*.ts",
+          "matchingProbe": "packages/cli/src/commands/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/commands/k3b/probe.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -224,6 +228,8 @@
         {
           "pkg": "totem.spike.r0167a783f75b5ecd",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -232,6 +238,8 @@
         {
           "pkg": "totem.spike.r0167a783f75b5ecd",
           "glob": "**/*.spec.ts",
+          "matchingProbe": "k3b/probe.spec.ts",
+          "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -240,6 +248,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -248,6 +258,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.tsx",
+          "matchingProbe": "k3b/probe.tsx",
+          "nonMatchingProbe": "k3b/probe.ts_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -256,6 +268,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.js",
+          "matchingProbe": "k3b/probe.js",
+          "nonMatchingProbe": "k3b/probe.j_",
           "matching": 3,
           "nonMatching": 107,
           "scopeDivergences": 0,
@@ -264,6 +278,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.jsx",
+          "matchingProbe": "k3b/probe.jsx",
+          "nonMatchingProbe": "k3b/probe.js_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -272,6 +288,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.py",
+          "matchingProbe": "k3b/probe.py",
+          "nonMatchingProbe": "k3b/probe.p_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -280,6 +298,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.md",
+          "matchingProbe": "k3b/probe.md",
+          "nonMatchingProbe": "k3b/probe.m_",
           "matching": 8,
           "nonMatching": 102,
           "scopeDivergences": 0,
@@ -288,6 +308,8 @@
         {
           "pkg": "totem.spike.r49dd9e4fd02d692b",
           "glob": "**/*.txt",
+          "matchingProbe": "k3b/probe.txt",
+          "nonMatchingProbe": "k3b/probe.tx_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -296,6 +318,8 @@
         {
           "pkg": "totem.spike.r54140f59be3e6e44",
           "glob": "packages/cli/**/*.ts",
+          "matchingProbe": "packages/cli/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/k3b/probe.t_",
           "matching": 12,
           "nonMatching": 98,
           "scopeDivergences": 0,
@@ -304,6 +328,8 @@
         {
           "pkg": "totem.spike.r54140f59be3e6e44",
           "glob": "apps/cli/**/*.ts",
+          "matchingProbe": "apps/cli/k3b/probe.ts",
+          "nonMatchingProbe": "apps/cli/k3b/probe.t_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -312,6 +338,8 @@
         {
           "pkg": "totem.spike.r54140f59be3e6e44",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -320,6 +348,8 @@
         {
           "pkg": "totem.spike.r5b85fe53468964e1",
           "glob": "packages/core/**/*.ts",
+          "matchingProbe": "packages/core/k3b/probe.ts",
+          "nonMatchingProbe": "packages/core/k3b/probe.t_",
           "matching": 12,
           "nonMatching": 98,
           "scopeDivergences": 0,
@@ -328,6 +358,8 @@
         {
           "pkg": "totem.spike.r5b85fe53468964e1",
           "glob": "**/*.test.*",
+          "matchingProbe": "k3b/probe.test.probe",
+          "nonMatchingProbe": "k3b/probe.test_probe",
           "matching": 7,
           "nonMatching": 103,
           "scopeDivergences": 0,
@@ -336,6 +368,8 @@
         {
           "pkg": "totem.spike.r5b85fe53468964e1",
           "glob": "**/*.spec.*",
+          "matchingProbe": "k3b/probe.spec.probe",
+          "nonMatchingProbe": "k3b/probe.spec_probe",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -344,6 +378,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -352,6 +388,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.js",
+          "matchingProbe": "k3b/probe.js",
+          "nonMatchingProbe": "k3b/probe.j_",
           "matching": 3,
           "nonMatching": 107,
           "scopeDivergences": 0,
@@ -360,6 +398,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.sh",
+          "matchingProbe": "k3b/probe.sh",
+          "nonMatchingProbe": "k3b/probe.s_",
           "matching": 8,
           "nonMatching": 102,
           "scopeDivergences": 0,
@@ -368,6 +408,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.bash",
+          "matchingProbe": "k3b/probe.bash",
+          "nonMatchingProbe": "k3b/probe.bas_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -376,6 +418,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.mjs",
+          "matchingProbe": "k3b/probe.mjs",
+          "nonMatchingProbe": "k3b/probe.mj_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -384,6 +428,8 @@
         {
           "pkg": "totem.spike.r5da43ea60b66e96e",
           "glob": "**/*.cjs",
+          "matchingProbe": "k3b/probe.cjs",
+          "nonMatchingProbe": "k3b/probe.cj_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -392,6 +438,8 @@
         {
           "pkg": "totem.spike.r6467c35159c1504d",
           "glob": "packages/cli/src/**/*.ts",
+          "matchingProbe": "packages/cli/src/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/k3b/probe.t_",
           "matching": 10,
           "nonMatching": 100,
           "scopeDivergences": 0,
@@ -400,6 +448,8 @@
         {
           "pkg": "totem.spike.r6467c35159c1504d",
           "glob": "packages/cli/src/commands/**/*.ts",
+          "matchingProbe": "packages/cli/src/commands/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/commands/k3b/probe.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -408,6 +458,8 @@
         {
           "pkg": "totem.spike.r6467c35159c1504d",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -416,6 +468,8 @@
         {
           "pkg": "totem.spike.r6467c35159c1504d",
           "glob": "**/*.spec.ts",
+          "matchingProbe": "k3b/probe.spec.ts",
+          "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -424,6 +478,8 @@
         {
           "pkg": "totem.spike.r65ede9bfdf6995fe",
           "glob": "packages/cli/src/**/*.ts",
+          "matchingProbe": "packages/cli/src/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/k3b/probe.t_",
           "matching": 10,
           "nonMatching": 100,
           "scopeDivergences": 0,
@@ -432,6 +488,8 @@
         {
           "pkg": "totem.spike.r65ede9bfdf6995fe",
           "glob": "packages/cli/src/commands/**/*.ts",
+          "matchingProbe": "packages/cli/src/commands/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/commands/k3b/probe.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -440,6 +498,8 @@
         {
           "pkg": "totem.spike.r65ede9bfdf6995fe",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -448,6 +508,8 @@
         {
           "pkg": "totem.spike.r65ede9bfdf6995fe",
           "glob": "**/*.spec.ts",
+          "matchingProbe": "k3b/probe.spec.ts",
+          "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -456,6 +518,8 @@
         {
           "pkg": "totem.spike.r6b1890e2dbda3331_javascript",
           "glob": "**/*.js",
+          "matchingProbe": "k3b/probe.js",
+          "nonMatchingProbe": "k3b/probe.j_",
           "matching": 3,
           "nonMatching": 107,
           "scopeDivergences": 0,
@@ -464,6 +528,8 @@
         {
           "pkg": "totem.spike.r6b1890e2dbda3331_typescript",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -472,6 +538,8 @@
         {
           "pkg": "totem.spike.r6b2b62eb1e8693fc",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -480,6 +548,8 @@
         {
           "pkg": "totem.spike.r71935fe9a742137b_javascript",
           "glob": "**/*.js",
+          "matchingProbe": "k3b/probe.js",
+          "nonMatchingProbe": "k3b/probe.j_",
           "matching": 3,
           "nonMatching": 107,
           "scopeDivergences": 0,
@@ -488,6 +558,8 @@
         {
           "pkg": "totem.spike.r71935fe9a742137b_typescript",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -496,6 +568,8 @@
         {
           "pkg": "totem.spike.r87aff037d7de47a7",
           "glob": "packages/**/*.ts",
+          "matchingProbe": "packages/k3b/probe.ts",
+          "nonMatchingProbe": "packages/k3b/probe.t_",
           "matching": 26,
           "nonMatching": 84,
           "scopeDivergences": 0,
@@ -504,6 +578,8 @@
         {
           "pkg": "totem.spike.r87aff037d7de47a7",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -512,6 +588,8 @@
         {
           "pkg": "totem.spike.r87aff037d7de47a7",
           "glob": "**/*.spec.ts",
+          "matchingProbe": "k3b/probe.spec.ts",
+          "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -520,6 +598,8 @@
         {
           "pkg": "totem.spike.r89184bb5fd960848",
           "glob": "**/*.sh",
+          "matchingProbe": "k3b/probe.sh",
+          "nonMatchingProbe": "k3b/probe.s_",
           "matching": 8,
           "nonMatching": 102,
           "scopeDivergences": 0,
@@ -528,6 +608,8 @@
         {
           "pkg": "totem.spike.r89184bb5fd960848",
           "glob": "**/*.bash",
+          "matchingProbe": "k3b/probe.bash",
+          "nonMatchingProbe": "k3b/probe.bas_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -536,6 +618,8 @@
         {
           "pkg": "totem.spike.r89184bb5fd960848",
           "glob": "**/*.zsh",
+          "matchingProbe": "k3b/probe.zsh",
+          "nonMatchingProbe": "k3b/probe.zs_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -544,6 +628,8 @@
         {
           "pkg": "totem.spike.r89184bb5fd960848",
           "glob": "**/*.ksh",
+          "matchingProbe": "k3b/probe.ksh",
+          "nonMatchingProbe": "k3b/probe.ks_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -552,6 +638,8 @@
         {
           "pkg": "totem.spike.raa7a588d48e74503",
           "glob": "**/*.test.ts",
+          "matchingProbe": "k3b/probe.test.ts",
+          "nonMatchingProbe": "k3b/probe.test.t_",
           "matching": 4,
           "nonMatching": 106,
           "scopeDivergences": 0,
@@ -560,6 +648,8 @@
         {
           "pkg": "totem.spike.raa7a588d48e74503",
           "glob": "**/*.spec.ts",
+          "matchingProbe": "k3b/probe.spec.ts",
+          "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -568,6 +658,8 @@
         {
           "pkg": "totem.spike.rb237bcf3b52381b1",
           "glob": "packages/cli/src/assets/**/*.ts",
+          "matchingProbe": "packages/cli/src/assets/k3b/probe.ts",
+          "nonMatchingProbe": "packages/cli/src/assets/k3b/probe.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -576,6 +668,8 @@
         {
           "pkg": "totem.spike.rb973609688ec2888",
           "glob": "packages/cli/**/*.test.ts",
+          "matchingProbe": "packages/cli/k3b/probe.test.ts",
+          "nonMatchingProbe": "packages/cli/k3b/probe.test.t_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -584,6 +678,8 @@
         {
           "pkg": "totem.spike.rbe74c55caa9fd60c",
           "glob": "**/*.yml",
+          "matchingProbe": "k3b/probe.yml",
+          "nonMatchingProbe": "k3b/probe.ym_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -592,6 +688,8 @@
         {
           "pkg": "totem.spike.rbe74c55caa9fd60c",
           "glob": "**/*.yaml",
+          "matchingProbe": "k3b/probe.yaml",
+          "nonMatchingProbe": "k3b/probe.yam_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -600,6 +698,8 @@
         {
           "pkg": "totem.spike.rd5faa14cbb8b50fb",
           "glob": "**/*.md",
+          "matchingProbe": "k3b/probe.md",
+          "nonMatchingProbe": "k3b/probe.m_",
           "matching": 8,
           "nonMatching": 102,
           "scopeDivergences": 0,
@@ -608,6 +708,8 @@
         {
           "pkg": "totem.spike.rd5faa14cbb8b50fb",
           "glob": "**/*.mdx",
+          "matchingProbe": "k3b/probe.mdx",
+          "nonMatchingProbe": "k3b/probe.md_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -616,6 +718,8 @@
         {
           "pkg": "totem.spike.rd5faa14cbb8b50fb",
           "glob": "**/*.rst",
+          "matchingProbe": "k3b/probe.rst",
+          "nonMatchingProbe": "k3b/probe.rs_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -624,6 +728,8 @@
         {
           "pkg": "totem.spike.rd5faa14cbb8b50fb",
           "glob": "**/*.txt",
+          "matchingProbe": "k3b/probe.txt",
+          "nonMatchingProbe": "k3b/probe.tx_",
           "matching": 1,
           "nonMatching": 109,
           "scopeDivergences": 0,
@@ -632,6 +738,8 @@
         {
           "pkg": "totem.spike.rd940b2c9ffe92e99",
           "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
           "matching": 34,
           "nonMatching": 76,
           "scopeDivergences": 0,
@@ -640,6 +748,8 @@
         {
           "pkg": "totem.spike.r0123456789abcdef",
           "glob": "**/*.sh",
+          "matchingProbe": "k3b/probe.sh",
+          "nonMatchingProbe": "k3b/probe.s_",
           "matching": 8,
           "nonMatching": 102,
           "scopeDivergences": 0,
@@ -648,6 +758,8 @@
         {
           "pkg": "totem.spike.r0123456789abcdef",
           "glob": "**/*.cjs",
+          "matchingProbe": "k3b/probe.cjs",
+          "nonMatchingProbe": "k3b/probe.cj_",
           "matching": 2,
           "nonMatching": 108,
           "scopeDivergences": 0,
@@ -1139,7 +1251,7 @@
     {
       "name": "K3 — PASS",
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
       "name": "K3b — PASS",
@@ -1177,6 +1289,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
+  "runManifestSha256": "947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12",
   "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }
