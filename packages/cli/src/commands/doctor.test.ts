@@ -240,6 +240,59 @@ describe('checkGitHooks', () => {
         cleanTmpDir(tmpDir);
       }
     });
+
+    // Amendment A4: the compare is BLOCK-scoped and the remedy is ownership-aware.
+    // `installGitHook --force` rewrites the whole file, so a user hook carrying
+    // an APPENDED totem block must be judged on the block and steered away from
+    // `--force`.
+    async function installWithAppendedPreCommit(
+      dir: string,
+      othersTotemDir: string,
+      preCommitTotemDir: string,
+    ): Promise<void> {
+      const { buildPreCommitHook } = await import('./install-hooks.js');
+      await installCanonical(dir, othersTotemDir);
+      const block = buildPreCommitHook({ tier: 'standard', totemDir: preCommitTotemDir })
+        .replace(/^#!\/bin\/sh\n/, '')
+        .trimStart();
+      fs.writeFileSync(
+        path.join(dir, '.git', 'hooks', 'pre-commit'),
+        `#!/bin/sh\necho "user pre-commit"\n\n${block}`,
+      );
+    }
+
+    it('judges an APPENDED totem block on the block alone, and never prescribes --force for it', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        // The three others are canonical for `knowledge`; pre-commit is a USER
+        // hook whose appended totem block was rendered for `.totem`.
+        await installWithAppendedPreCommit(tmpDir, 'knowledge', '.totem');
+        const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
+        expect(result.status).toBe('warn');
+        expect(result.message).toContain('pre-commit');
+        expect(result.message).not.toContain('pre-push');
+        expect(result.remediation).not.toBe('totem hook install --force');
+        expect(result.remediation).toContain('delete the totem block');
+        expect(result.remediation).toContain('pre-commit');
+        expect(result.remediation).toContain('would overwrite your own hook content');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    it('PASSES a user hook whose appended block matches the configured totemDir', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        const { execSync } = require('node:child_process');
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installWithAppendedPreCommit(tmpDir, 'knowledge', 'knowledge');
+        expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
   });
 });
 

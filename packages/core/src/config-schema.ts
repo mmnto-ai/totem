@@ -447,7 +447,9 @@ export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
  * managed git hooks (mmnto-ai/totem#2692 C4): a single quote (breaks the `sh`
  * single-quoted word AND the single-quoted `node -e '…'` spec-evidence reader),
  * a double quote or backslash (breaks the JS string literal inside that reader),
- * or a control character / newline (breaks both, and can forge hook lines).
+ * a dollar sign or a backtick (the only characters still active inside the
+ * double-quoted `sh` words the hook guards use), or a control character /
+ * newline (breaks both, and can forge hook lines).
  *
  * The CLI installer carries the same clause as a render-path backstop; this
  * refine is the primary gate, so a validated config never reaches it. Written as
@@ -456,7 +458,7 @@ export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
  */
 function hasUnrenderableHookChar(value: string): boolean {
   for (const ch of value) {
-    if (ch === "'" || ch === '"' || ch === '\\') return true;
+    if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
     if (code < 0x20 || code === 0x7f) return true;
   }
@@ -483,9 +485,9 @@ export const TotemConfigSchema = z.object({
    * installed hooks keep reading the previous directory.
    *
    * Because it is rendered into shell and into a JS string literal inside the
-   * hook, a value carrying a quote, a backslash, a newline or a control
-   * character cannot be quoted safely and is refused here as well as by the
-   * installer.
+   * hook, a value carrying a quote, a backslash, a dollar sign, a backtick, a
+   * newline or a control character cannot be quoted safely and is refused here
+   * as well as by the installer.
    */
   totemDir: z
     .string()
@@ -493,7 +495,7 @@ export const TotemConfigSchema = z.object({
     .refine((p) => !/^(\/|\\|[A-Za-z]:)/.test(p), 'totemDir must be a relative path')
     .refine(
       (p) => !hasUnrenderableHookChar(p),
-      'totemDir must not contain a quote (\'), a double quote ("), a backslash, a newline or a control character — it is rendered into the managed git hooks',
+      'totemDir must not contain a quote (\'), a double quote ("), a backslash, a dollar sign, a backtick, a newline or a control character — it is rendered into the managed git hooks',
     ),
 
   /** Optional: override the .lancedb/ directory path */

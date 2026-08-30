@@ -15,7 +15,7 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');
-  const { loadConfig, resolveConfigPath } = await import('../utils.js');
+  const { isGlobalConfigPath, loadConfig, resolveConfigPath } = await import('../utils.js');
 
   const TAG = 'Link';
   const cwd = process.cwd();
@@ -35,19 +35,23 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   }
 
   // The Totem directory to look for in the TARGET, and to name in the ingest
-  // globs written below — the configured value, not a hardcoded `.totem`
-  // (mmnto-ai/totem#2692 C5). Read from THIS repo's config: the two sides of a
-  // cohort link share a convention, and a target with a different layout is the
-  // separate cross-repo-config question the slice leaves open. Falls back to the
-  // default when the config will not load — the existence check below then says
-  // exactly which path was probed.
+  // globs written below — the TARGET repo's OWN configured value, not a
+  // hardcoded `.totem` and not this repo's setting (mmnto-ai/totem#2692 C5,
+  // amendment A3): the two sides of a link may configure differently, and only
+  // the target's config knows where its lessons live. Repo-local only — a global
+  // `~/.totem/` profile describes itself, never a linked repo. A target with no
+  // config (`resolveConfigPath` throws) or an unloadable one is probed at the
+  // default; the existence check below names the exact path probed either way.
   let totemDirName = '.totem';
   try {
-    const linkConfig = await loadConfig(configPath);
-    if (typeof linkConfig.totemDir === 'string' && linkConfig.totemDir.length > 0) {
-      totemDirName = linkConfig.totemDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    const targetConfigPath = resolveConfigPath(resolved);
+    if (!isGlobalConfigPath(targetConfigPath)) {
+      const targetConfig = await loadConfig(targetConfigPath);
+      if (typeof targetConfig.totemDir === 'string' && targetConfig.totemDir.length > 0) {
+        totemDirName = targetConfig.totemDir.replace(/\\/g, '/').replace(/\/+$/, '');
+      }
     }
-    // totem-context: intentional cleanup — an unloadable config degrades to the default directory name; the existence check below reports the exact path probed, so nothing is guessed silently.
+    // totem-context: intentional cleanup — a target with no config or an unloadable one degrades to the default directory name; the existence check below reports the exact path probed, so nothing is guessed silently.
   } catch {
     totemDirName = '.totem';
   }

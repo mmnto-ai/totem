@@ -230,13 +230,24 @@ export async function checkGitHooks(
   if (missing.length === 0) {
     const staleForTotemDir = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
     if (staleForTotemDir.length > 0) {
+      const files = staleForTotemDir.map((row) => row.file);
+      // `--force` rewrites the WHOLE file (`installGitHook`), so it is the right
+      // remedy only for a totem-owned whole file; a user hook with an APPENDED
+      // block would lose its own lines to it (mmnto-ai/totem#2692 amendment A4).
+      const appended = staleForTotemDir.filter((row) => !row.ownedWhole).map((row) => row.file);
+      const remediation =
+        appended.length === 0
+          ? 'totem hook install --force'
+          : `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it${
+              appended.length === files.length ? '' : '; `totem hook install --force` for the rest'
+            } — \`--force\` rewrites the whole file and would overwrite your own hook content`;
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but ${staleForTotemDir.join(', ')} ${
-          staleForTotemDir.length === 1 ? 'does' : 'do'
+        message: `All ${markers.length} hooks installed, but ${files.join(', ')} ${
+          files.length === 1 ? 'does' : 'do'
         } not match the canonical rendered for totemDir '${config?.totemDir}' — the hook reads a tree Totem does not write`,
-        remediation: 'totem hook install --force',
+        remediation,
       };
     }
     return {
@@ -254,49 +265,91 @@ export async function checkGitHooks(
   };
 }
 
+/** One managed hook whose totem-owned block does not match the configured canonical. */
+interface StaleHookRow {
+  file: string;
+  /** Whether the on-disk file is totem-owned WHOLE (safe to `--force`) or a user
+   *  hook carrying an APPENDED totem block (where `--force` would clobber it). */
+  ownedWhole: boolean;
+}
+
 /**
- * The managed hooks whose on-disk bytes differ from the canonical regenerated at
- * this repo's CONFIGURED `totemDir` (mmnto-ai/totem#2692 C6).
+ * The text from the hook's start marker through its end marker, inclusive — the
+ * bounded region `installGitHook` owns. When the region cannot be bounded (a
+ * legacy hook with no end marker) the WHOLE text is returned, so such a file is
+ * compared whole: the conservative reading, and the one `--force` prescribes.
+ */
+function totemOwnedBlock(text: string, marker: string, endMarker: string): string {
+  const start = text.indexOf(marker);
+  if (start === -1) return text;
+  const end = text.indexOf(endMarker, start + marker.length);
+  if (end === -1) return text;
+  return text.slice(start, end + endMarker.length);
+}
+
+/**
+ * The managed hooks whose totem-owned BLOCK differs from the canonical regenerated
+ * at this repo's CONFIGURED `totemDir` (mmnto-ai/totem#2692 C6, amendment A4).
  *
  * Runs ONLY when the repo configures a non-default `totemDir` — on the default
  * the row stays the marker-only, zero-IO sense it has always been. Compares the
- * same way `installGitHook`'s drift-repair does (whole file, `existing !==
- * hookContent`), so a user hook with an APPENDED totem block reads as a
- * difference too; that is the honest signal here, and the remediation
- * (`--force`) is correct for both classes.
+ * region between the hook's start and end markers, the same bounded region
+ * `installGitHook`'s drift-repair owns, so a user hook with an APPENDED totem
+ * block is judged on the block alone and never on the user's own lines. Each row
+ * says whether the file is totem-owned whole, because the remedy differs.
  */
 async function hooksRenderedForWrongTotemDir(
   gitRoot: string,
   hooksDir: string,
   config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
-): Promise<string[]> {
+): Promise<StaleHookRow[]> {
   const totemDir = config?.totemDir;
   if (totemDir === undefined || totemDir === '.totem') return [];
 
   try {
-    const {
-      buildPreCommitHook,
-      buildPrePushHook,
-      buildHookContent,
-      buildPostCheckoutHookContent,
-      getFallbackCommand,
-    } = await import('./install-hooks.js');
+    const hooks = await import('./install-hooks.js');
     const render = {
       tier: config?.hooks?.tier ?? ('standard' as const),
       totemDir,
-      fallbackCmd: getFallbackCommand(gitRoot),
+      fallbackCmd: hooks.getFallbackCommand(gitRoot),
     };
-    const canonical: { file: string; content: string }[] = [
-      { file: 'pre-commit', content: buildPreCommitHook(render) },
-      { file: 'pre-push', content: buildPrePushHook(render) },
-      { file: 'post-merge', content: buildHookContent(render) },
-      { file: 'post-checkout', content: buildPostCheckoutHookContent(render) },
+    const canonical: { file: string; content: string; marker: string; endMarker: string }[] = [
+      {
+        file: 'pre-commit',
+        content: hooks.buildPreCommitHook(render),
+        marker: hooks.TOTEM_PRECOMMIT_MARKER,
+        endMarker: hooks.TOTEM_PRECOMMIT_END,
+      },
+      {
+        file: 'pre-push',
+        content: hooks.buildPrePushHook(render),
+        marker: hooks.TOTEM_PREPUSH_MARKER,
+        endMarker: hooks.TOTEM_PREPUSH_END,
+      },
+      {
+        file: 'post-merge',
+        content: hooks.buildHookContent(render),
+        marker: hooks.TOTEM_HOOK_MARKER,
+        endMarker: hooks.TOTEM_HOOK_END,
+      },
+      {
+        file: 'post-checkout',
+        content: hooks.buildPostCheckoutHookContent(render),
+        marker: hooks.TOTEM_CHECKOUT_MARKER,
+        endMarker: hooks.TOTEM_CHECKOUT_END,
+      },
     ];
-    return canonical
-      .filter(
-        ({ file, content }) => fs.readFileSync(path.join(hooksDir, file), 'utf-8') !== content,
-      )
-      .map(({ file }) => file);
+    const stale: StaleHookRow[] = [];
+    for (const { file, content, marker, endMarker } of canonical) {
+      const existing = fs.readFileSync(path.join(hooksDir, file), 'utf-8');
+      if (
+        totemOwnedBlock(existing, marker, endMarker) === totemOwnedBlock(content, marker, endMarker)
+      ) {
+        continue;
+      }
+      stale.push({ file, ownedWhole: hooks.isTotemOwnedWholeFile(existing, marker, endMarker) });
+    }
+    return stale;
     // totem-context: intentional cleanup — a sensor that cannot regenerate or read the canonical reports NOTHING rather than crashing the diagnostic pipeline (Tenet 13, the checkGitHooks posture above); the parity row carries the same drift under --parity.
   } catch {
     return [];

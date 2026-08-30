@@ -165,15 +165,19 @@ export interface ResolvedHookRenderOptions extends HookRenderOptions {
  * Whether `value` carries a character that cannot be rendered SAFELY into the
  * managed hooks: a single quote (breaks the `sh` single-quoted word AND the
  * single-quoted `node -e '…'` reader), a double quote or a backslash (breaks the
- * JS string literal inside that reader), or a control character / newline
- * (breaks both, and can forge lines in the hook body).
+ * JS string literal inside that reader), a dollar sign or a backtick (the only
+ * characters that stay ACTIVE inside the double-quoted `sh` words every guard
+ * uses — refusing them is what lets those sites keep the one plain
+ * double-quoted form `tools/*` ships; mmnto-ai/totem#2692 amendment A2), or a
+ * control character / newline (breaks both, and can forge lines in the hook
+ * body).
  *
  * Written as a code-point walk rather than a regex with escape literals so the
  * predicate carries no escape sequence of its own to mis-author.
  */
 function hasUnrenderableChar(value: string): boolean {
   for (const ch of value) {
-    if (ch === "'" || ch === '"' || ch === '\\') return true;
+    if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
     if (code < 0x20 || code === 0x7f) return true;
   }
@@ -194,34 +198,10 @@ export function assertRenderableTotemDir(totemDir: string): void {
   if (!hasUnrenderableChar(totemDir)) return;
   throw new Error(
     `[Totem] Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ` +
-      'a single quote, double quote, backslash, newline or control character cannot be ' +
+      'a single quote, double quote, backslash, dollar sign, backtick, newline or control character cannot be ' +
       'safely rendered into the managed hooks. Set `totemDir` to a plain relative path ' +
       'and re-run `totem hook install --force`.',
   );
-}
-
-/**
- * Render an already-validated `totemDir`-derived path as ONE `sh` word.
- *
- * `assertRenderableTotemDir` has already refused `'`, `"`, `\`, newlines and
- * control characters, so the only characters that remain ACTIVE inside double
- * quotes are `$` and a backtick. A value carrying either takes single quotes
- * (total, since `'` is refused); every other value keeps the historical
- * double-quoted form, which mmnto-ai/totem#2692 C3 pins byte-for-byte against
- * `tools/{pre-commit,pre-push,post-merge}`.
- */
-function shellQuote(value: string): string {
-  return /[$`]/.test(value) ? `'${value}'` : `"${value}"`;
-}
-
-/**
- * Escape a validated `totemDir`-derived path for interpolation INSIDE an
- * existing double-quoted `sh` string (the two BLOCKED messages). Same reasoning
- * as {@link shellQuote}: only `$` and a backtick survive the refusal set, and a
- * backslash before either is literal inside double quotes.
- */
-function shellDoubleQuoteInner(value: string): string {
-  return value.replace(/[$`]/g, '\\$&');
 }
 
 /**
@@ -418,7 +398,7 @@ GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
 
 # Handle initial checkout (null SHA) — sync if ${totemDir}/ exists
 if [ "$1" = "0000000000000000000000000000000000000000" ]; then
-  if [ -n "$TOTEM_CMD" ] && [ -d ${shellQuote(totemDir)} ]; then
+  if [ -n "$TOTEM_CMD" ] && [ -d "${totemDir}" ]; then
     ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
   fi
   exit 0
@@ -706,10 +686,10 @@ process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (da
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" != "2" ]; then
-    echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${shellDoubleQuoteInner(runsDir)}/ unreadable); fix the runtime and retry (strict mode)"
+    echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${runsDir}/ unreadable); fix the runtime and retry (strict mode)"
     exit 1
   else
-    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under ${shellDoubleQuoteInner(runsDir)}/ in this checkout"
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under ${runsDir}/ in this checkout"
     exit 1
   fi
 fi`;
@@ -776,7 +756,7 @@ ${buildResolveBlock(fallbackCmd)}
 
 if [ -n "$TOTEM_CMD" ]; then
   # Verify compile manifest is current
-  if [ -f ${shellQuote(`${totemDir}/compile-manifest.json`)} ]; then
+  if [ -f "${totemDir}/compile-manifest.json" ]; then
     if ! $TOTEM_CMD verify-manifest > /dev/null 2>&1; then
       echo "[totem] Push blocked: compile manifest is stale. Run 'totem lesson compile'." >&2
       exit 1
@@ -784,14 +764,14 @@ if [ -n "$TOTEM_CMD" ]; then
   fi
 
   # Run deterministic lint
-  if [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ]; then
+  if [ -f "${totemDir}/compiled-rules.json" ]; then
     if ! $TOTEM_CMD lint; then
       exit 1
     fi
   fi
 
   # Verify shields.io badges in README.md (mmnto-ai/totem#1926 — deterministic claim-discipline)
-  if [ -f "README.md" ] && [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ]; then
+  if [ -f "README.md" ] && [ -f "${totemDir}/compiled-rules.json" ]; then
     if ! $TOTEM_CMD verify-badges; then
       exit 1
     fi
@@ -814,7 +794,7 @@ if [ -n "$TOTEM_CMD" ]; then
   # missing-Goal-prefix, covenant-without-backing). Fires only when at
   # least one in-scope surface exists. Bypass with mandatory justification:
   #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
-  if [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
+  if [ -f "${totemDir}/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
     # --scope-to-diff (mmnto-ai/totem#2002): narrow the WWND scan to files
     # touched in the current push diff. Eliminates the standing-gate
     # false-positive class where pre-existing warnings on in-scope surfaces
@@ -911,7 +891,7 @@ function writeExecutableHook(hookPath: string, content: string): void {
  *     overwrite would clobber it, so such a file is NOT owned (only trailing
  *     whitespace may follow the end marker).
  */
-function isTotemOwnedWholeFile(content: string, marker: string, endMarker: string): boolean {
+export function isTotemOwnedWholeFile(content: string, marker: string, endMarker: string): boolean {
   const idx = content.indexOf(marker);
   if (idx === -1) return false;
   const before = content.slice(0, idx);

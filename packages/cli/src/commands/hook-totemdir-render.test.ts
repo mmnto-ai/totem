@@ -126,15 +126,23 @@ describe('a custom totemDir is rendered into every hook site (C1/C4)', () => {
     expect(buildPostCheckoutHookContent(render)).toContain(`[ -d "${CUSTOM}" ]`);
   });
 
-  it('a shell-active character takes single quotes instead of double', () => {
-    // `$` and a backtick are the only characters that survive the refusal set
-    // AND expand inside double quotes, so those values switch quoting regime.
-    const dollar = { ...DEFAULT_RENDER, totemDir: 'a$b' };
-    expect(buildPrePushHook(dollar)).toContain(`[ -f 'a$b/compile-manifest.json' ]`);
-    expect(buildPostCheckoutHookContent(dollar)).toContain(`[ -d 'a$b' ]`);
-    // Inside the pre-commit BLOCKED echo — already a double-quoted string — the
-    // same characters are backslash-escaped rather than requoted.
-    expect(buildPreCommitHook(dollar)).toContain(String.raw`a\$b/artifacts/runs/ unreadable`);
+  it('a dollar sign or a backtick is refused rather than re-quoted (amendment A2)', () => {
+    // `$` and a backtick are the only characters that would stay ACTIVE inside the
+    // double-quoted `sh` words the guards use. Refusing them (instead of switching
+    // those values to single quotes) keeps ONE quoting regime for every `sh` site —
+    // the plain double-quoted form `tools/*` ships — so there is no second form to
+    // get wrong.
+    for (const bad of ['a$b', 'a`b']) {
+      expect(() => buildPrePushHook({ ...DEFAULT_RENDER, totemDir: bad })).toThrow(
+        /Refusing to render git hooks/,
+      );
+      expect(() => buildPostCheckoutHookContent({ ...DEFAULT_RENDER, totemDir: bad })).toThrow(
+        /Refusing to render git hooks/,
+      );
+    }
+    // ...and an accepted value never renders a single-quoted guard word.
+    expect(buildPrePushHook(render)).not.toContain(`[ -f '${CUSTOM}/`);
+    expect(buildPostCheckoutHookContent(render)).not.toContain(`[ -d '${CUSTOM}'`);
   });
 });
 
@@ -145,6 +153,8 @@ describe('an unrenderable totemDir is refused loudly (C4)', () => {
     ['a single quote', "it's"],
     ['a double quote', 'a"b'],
     ['a backslash', 'a\\b'],
+    ['a dollar sign', 'a$b'],
+    ['a backtick', 'a`b'],
     ['a newline', 'a\nb'],
     ['a control character', `a${String.fromCharCode(7)}b`],
   ])('refuses %s, naming the value', (_label, totemDir) => {
