@@ -17,7 +17,7 @@
       {
         "chain": "r0123456789abcdef.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5401,
@@ -32,7 +32,7 @@
       {
         "chain": "r0167a783f75b5ecd.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5481,
@@ -47,7 +47,7 @@
       {
         "chain": "r49dd9e4fd02d692b.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5469,
@@ -62,7 +62,7 @@
       {
         "chain": "r54140f59be3e6e44.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5469,
@@ -77,7 +77,7 @@
       {
         "chain": "r5b85fe53468964e1.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5485,
@@ -92,7 +92,7 @@
       {
         "chain": "r5da43ea60b66e96e.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5475,
@@ -107,7 +107,7 @@
       {
         "chain": "r6467c35159c1504d.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5473,
@@ -122,7 +122,7 @@
       {
         "chain": "r65ede9bfdf6995fe.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5487,
@@ -137,7 +137,7 @@
       {
         "chain": "r6b1890e2dbda3331_javascript.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5569,
@@ -152,7 +152,7 @@
       {
         "chain": "r6b1890e2dbda3331_typescript.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5563,
@@ -167,7 +167,7 @@
       {
         "chain": "r6b2b62eb1e8693fc.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5463,
@@ -182,7 +182,7 @@
       {
         "chain": "r71935fe9a742137b_javascript.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5559,
@@ -197,7 +197,7 @@
       {
         "chain": "r71935fe9a742137b_typescript.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5553,
@@ -212,7 +212,7 @@
       {
         "chain": "r87aff037d7de47a7.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5463,
@@ -227,7 +227,7 @@
       {
         "chain": "r89184bb5fd960848.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5461,
@@ -242,7 +242,7 @@
       {
         "chain": "raa7a588d48e74503.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5465,
@@ -257,7 +257,7 @@
       {
         "chain": "rb237bcf3b52381b1.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5471,
@@ -272,7 +272,7 @@
       {
         "chain": "rb973609688ec2888.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5475,
@@ -287,7 +287,7 @@
       {
         "chain": "rbe74c55caa9fd60c.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5471,
@@ -302,7 +302,7 @@
       {
         "chain": "rd5faa14cbb8b50fb.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5471,
@@ -317,7 +317,7 @@
       {
         "chain": "rd940b2c9ffe92e99.json",
         "mode": null,
-        "modeReason": "no committed referent — the manifest's record set is `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
         "allModeChecksPassed": null,
         "preservedBytes": null,
         "publishedBytes": 5467,
@@ -478,9 +478,9 @@
       "detail": "manifest.recordSet=\"seed20\", activeRecordSet()=\"seed20\""
     },
     {
-      "name": "INV 2 — SKIPPED with the named reason `committed-chains-are-the-specimens-baseline`: the 21 published chain(s) belong to record set `seed20` (the manifest's), and `artifacts/chains/` at HEAD holds the 7 seven-specimen certificates",
+      "name": "INV 2 — SKIPPED with the named reason `committed-half-not-run-on-seed20`: the 21 published chain(s) belong to record set `seed20` (the manifest's); the committed-vs-published half is not run on this arm — `spikes/spine-adopt/artifacts/chains` at HEAD holds 21 chain(s) from the committed `seed20` baseline, a live byte-equality referent when that baseline is itself a seed run (deposited as a candidate extension, not built here: A13 on mmnto-ai/totem#2704)",
       "ok": true,
-      "detail": "published: 21; committed at HEAD: 7"
+      "detail": "published: 21; committed at HEAD: 21"
     },
     {
       "name": "INV 2 — r0123456789abcdef.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
@@ -1103,6 +1103,6 @@
       "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
     }
   ],
-  "runManifestSha256": "32662d3693976a2c52d2f8839a473917a001696fb43e20cdfcfb36833714c76d",
+  "runManifestSha256": "c26031db02790684b37992386d3ccd85d517e152a9a2351117e25a2e124e5c10",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }

@@ -184,14 +184,6 @@
         "control": false,
         "policyRegoSha256": "5e791971d8142dbf6c6babc3b9d06de686edeba0dc78507a136453432ec4ce3d",
         "wrapperSha256": "27fe0dc8ee8b4e3f26c91be23a8bf5fd228554cd69a024fb91f1feb4bd8ce954"
-      },
-      {
-        "pkg": "totem.spike.r0123456789abcdef",
-        "recordId": "d-file",
-        "seedEntry": null,
-        "control": true,
-        "policyRegoSha256": "e04a3e77e9191ea4fb482727d0b67107b53f9b95f28392f47d4ed20b8fda6def",
-        "wrapperSha256": "5d0345bfa5fc773cf1f5d0b72da467373b789951fa16e61fada3cee2b6ae0e1a"
       }
     ],
     "policies": {
@@ -334,13 +326,6 @@
         "recordId": "d940b2c9-stdio-in-exec-options",
         "seedEntry": "d940b2c9",
         "control": false
-      },
-      "totem.spike.r0123456789abcdef": {
-        "policyRegoSha256": "e04a3e77e9191ea4fb482727d0b67107b53f9b95f28392f47d4ed20b8fda6def",
-        "wrapperSha256": "5d0345bfa5fc773cf1f5d0b72da467373b789951fa16e61fada3cee2b6ae0e1a",
-        "recordId": "d-file",
-        "seedEntry": null,
-        "control": true
       }
     },
     "controlPackagesSkipped": [
@@ -348,89 +333,89 @@
     ]
   },
   "recordSet": "seed20",
-  "elapsedMs": 14347,
+  "elapsedMs": 15435,
   "timings": {
-    "totalMs": 14347,
+    "totalMs": 15435,
     "perPackage": {
       "totem.spike.r0167a783f75b5ecd": {
-        "rowsMs": 71,
-        "probeRowsMs": 45
+        "rowsMs": 73,
+        "probeRowsMs": 43
       },
       "totem.spike.r49dd9e4fd02d692b": {
-        "rowsMs": 84,
-        "probeRowsMs": 41
+        "rowsMs": 97,
+        "probeRowsMs": 44
       },
       "totem.spike.r54140f59be3e6e44": {
-        "rowsMs": 62,
-        "probeRowsMs": 41
+        "rowsMs": 65,
+        "probeRowsMs": 43
       },
       "totem.spike.r5b85fe53468964e1": {
-        "rowsMs": 60,
-        "probeRowsMs": 40
+        "rowsMs": 63,
+        "probeRowsMs": 44
       },
       "totem.spike.r5da43ea60b66e96e": {
-        "rowsMs": 80,
-        "probeRowsMs": 42
+        "rowsMs": 82,
+        "probeRowsMs": 44
       },
       "totem.spike.r6467c35159c1504d": {
-        "rowsMs": 67,
-        "probeRowsMs": 40
+        "rowsMs": 63,
+        "probeRowsMs": 44
       },
       "totem.spike.r65ede9bfdf6995fe": {
-        "rowsMs": 60,
-        "probeRowsMs": 41
-      },
-      "totem.spike.r6b1890e2dbda3331_javascript": {
-        "rowsMs": 73,
-        "probeRowsMs": 40
-      },
-      "totem.spike.r6b1890e2dbda3331_typescript": {
-        "rowsMs": 64,
-        "probeRowsMs": 41
-      },
-      "totem.spike.r6b2b62eb1e8693fc": {
-        "rowsMs": 64,
+        "rowsMs": 68,
         "probeRowsMs": 42
       },
+      "totem.spike.r6b1890e2dbda3331_javascript": {
+        "rowsMs": 65,
+        "probeRowsMs": 43
+      },
+      "totem.spike.r6b1890e2dbda3331_typescript": {
+        "rowsMs": 65,
+        "probeRowsMs": 43
+      },
+      "totem.spike.r6b2b62eb1e8693fc": {
+        "rowsMs": 68,
+        "probeRowsMs": 44
+      },
       "totem.spike.r71935fe9a742137b_javascript": {
-        "rowsMs": 61,
-        "probeRowsMs": 40
+        "rowsMs": 66,
+        "probeRowsMs": 45
       },
       "totem.spike.r71935fe9a742137b_typescript": {
-        "rowsMs": 67,
-        "probeRowsMs": 41
+        "rowsMs": 65,
+        "probeRowsMs": 43
       },
       "totem.spike.r87aff037d7de47a7": {
-        "rowsMs": 64,
-        "probeRowsMs": 40
+        "rowsMs": 67,
+        "probeRowsMs": 46
       },
       "totem.spike.r89184bb5fd960848": {
-        "rowsMs": 77,
-        "probeRowsMs": 41
+        "rowsMs": 92,
+        "probeRowsMs": 45
       },
       "totem.spike.raa7a588d48e74503": {
-        "rowsMs": 66,
-        "probeRowsMs": 40
+        "rowsMs": 69,
+        "probeRowsMs": 43
       },
       "totem.spike.rb237bcf3b52381b1": {
-        "rowsMs": 68,
-        "probeRowsMs": 39
+        "rowsMs": 62,
+        "probeRowsMs": 45
       },
       "totem.spike.rb973609688ec2888": {
-        "rowsMs": 59,
-        "probeRowsMs": 40
+        "rowsMs": 68,
+        "probeRowsMs": 43
       },
       "totem.spike.rbe74c55caa9fd60c": {
-        "rowsMs": 67,
-        "probeRowsMs": 39
+        "rowsMs": 72,
+        "probeRowsMs": 43
       },
       "totem.spike.rd5faa14cbb8b50fb": {
-        "rowsMs": 71,
-        "probeRowsMs": 40
+        "rowsMs": 74,
+        "probeRowsMs": 43
       },
       "totem.spike.rd940b2c9ffe92e99": {
-        "rowsMs": 67,
-        "probeRowsMs": 39
+        "rowsMs": 65,
+        "probeRowsMs": 42
       }
     }
   },
@@ -21022,6 +21007,6 @@
       "detail": "{\"rows\":20,\"probeRows\":20}"
     }
   ],
-  "runManifestSha256": "32662d3693976a2c52d2f8839a473917a001696fb43e20cdfcfb36833714c76d",
+  "runManifestSha256": "c26031db02790684b37992386d3ccd85d517e152a9a2351117e25a2e124e5c10",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }
