@@ -132,6 +132,163 @@ export function detectTotemPrefix(cwd: string): string {
   return 'npx totem';
 }
 
+// ─── Hook render options (mmnto-ai/totem#2692) ────────────────
+
+/** The `totemDir` every hook renders when the repo configures none. */
+export const DEFAULT_TOTEM_DIR = '.totem';
+
+/**
+ * Everything the four hook templates render FROM.
+ *
+ * Every field is REQUIRED on purpose. A defaulted parameter is exactly how a
+ * writer keeps rendering `.totem` under a repo that configured something else —
+ * the mmnto-ai/totem#2692 class, where the strict pre-commit reader and `totem
+ * spec`'s writer named different trees and the gate failed closed forever. With
+ * no default, the compiler forces every call site to thread the resolved value.
+ */
+export interface HookRenderOptions {
+  /** Enforcement tier the hook is generated at. */
+  tier: 'strict' | 'standard';
+  /** Repo-relative Totem directory the hook must name (config `totemDir`). */
+  totemDir: string;
+  /** Package-manager fallback invocation for the runtime resolve block. */
+  fallbackCmd: string;
+}
+
+/** {@link HookRenderOptions} plus the config file they were derived from. */
+export interface ResolvedHookRenderOptions extends HookRenderOptions {
+  /** The config that supplied the values; undefined when none resolved. */
+  configPath?: string;
+}
+
+/**
+ * Whether `value` carries a character that cannot be rendered SAFELY into the
+ * managed hooks: a single quote (breaks the `sh` single-quoted word AND the
+ * single-quoted `node -e '…'` reader), a double quote or a backslash (breaks the
+ * JS string literal inside that reader), or a control character / newline
+ * (breaks both, and can forge lines in the hook body).
+ *
+ * Written as a code-point walk rather than a regex with escape literals so the
+ * predicate carries no escape sequence of its own to mis-author.
+ */
+function hasUnrenderableChar(value: string): boolean {
+  for (const ch of value) {
+    if (ch === "'" || ch === '"' || ch === '\\') return true;
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
+/**
+ * Refuse — loudly, naming the value — a `totemDir` the hook templates cannot
+ * render safely (mmnto-ai/totem#2692 C4). The config schema carries the same
+ * clause as a zod refine, so a validated config never reaches here; this is the
+ * render-path backstop for the direct-API and hand-threaded call sites.
+ *
+ * Throws rather than degrades: a hook rendered from a value we could not quote
+ * is a shell-injection surface, and silently falling back to `.totem` would
+ * re-create the very writer/reader split this slice closes (Tenet 4).
+ */
+export function assertRenderableTotemDir(totemDir: string): void {
+  if (!hasUnrenderableChar(totemDir)) return;
+  throw new Error(
+    `[Totem] Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ` +
+      'a single quote, double quote, backslash, newline or control character cannot be ' +
+      'safely rendered into the managed hooks. Set `totemDir` to a plain relative path ' +
+      'and re-run `totem hook install --force`.',
+  );
+}
+
+/**
+ * Render an already-validated `totemDir`-derived path as ONE `sh` word.
+ *
+ * `assertRenderableTotemDir` has already refused `'`, `"`, `\`, newlines and
+ * control characters, so the only characters that remain ACTIVE inside double
+ * quotes are `$` and a backtick. A value carrying either takes single quotes
+ * (total, since `'` is refused); every other value keeps the historical
+ * double-quoted form, which mmnto-ai/totem#2692 C3 pins byte-for-byte against
+ * `tools/{pre-commit,pre-push,post-merge}`.
+ */
+function shellQuote(value: string): string {
+  return /[$`]/.test(value) ? `'${value}'` : `"${value}"`;
+}
+
+/**
+ * Escape a validated `totemDir`-derived path for interpolation INSIDE an
+ * existing double-quoted `sh` string (the two BLOCKED messages). Same reasoning
+ * as {@link shellQuote}: only `$` and a backtick survive the refusal set, and a
+ * backslash before either is literal inside double quotes.
+ */
+function shellDoubleQuoteInner(value: string): string {
+  return value.replace(/[$`]/g, '\\$&');
+}
+
+/**
+ * Escape a validated `totemDir` for a POSIX Basic Regular Expression — the two
+ * `grep -q '…'` diff filters. BRE specials are `\ ^ $ . * [ ]`; `^` and `$` are
+ * only special positionally, but escaping them unconditionally is still a
+ * literal match and keeps the rule one line.
+ */
+function escapeBre(value: string): string {
+  return value.replace(/[\\^$.*[\]]/g, '\\$&');
+}
+
+/**
+ * THE resolver: config → the options every hook writer renders from
+ * (mmnto-ai/totem#2692 C1).
+ *
+ * `tier` = explicit flag > `hooks.tier` from config > `'standard'` (the
+ * precedence `hooksCommand` already implemented, moved here so `totem init`,
+ * `installHooksNonInteractive` and the silent pre-push upgrade honor it too) —
+ * from whichever config resolves, global profile included, exactly as before.
+ *
+ * `totemDir` = the REPO-LOCAL config's `totemDir` > `.totem`. Repo-local only,
+ * and deliberately asymmetric with `tier`: the value is a path rendered into a
+ * hook that runs at the worktree top, so only this project's config can name it.
+ * The global `~/.totem/` profile `totem init --global` writes declares
+ * `totemDir: '.'` — describing that profile directory itself — and honoring it
+ * here would silently re-render every config-less repo's hooks against the
+ * checkout root on any machine that has a profile (the mmnto-ai/totem#2692 C3
+ * "no consumer's hooks drift on upgrade" invariant, and the same
+ * machine-dependence `doctor --parity` guards with `isGlobalConfigPath`).
+ *
+ * `fallbackCmd` = the lockfile probe anchored at `cwd` — pass the GIT ROOT, the
+ * anchor the installer has always used, so a hook installed from a subdirectory
+ * still names the repo's package manager.
+ *
+ * No config (or a config that will not load) → the defaults, with the failure
+ * disclosed only under `TOTEM_DEBUG`: a config-less repo installing hooks is a
+ * supported path, not an error.
+ */
+export async function resolveHookRenderOptions(
+  cwd: string,
+  flags?: { tier?: 'strict' | 'standard' },
+): Promise<ResolvedHookRenderOptions> {
+  const fallbackCmd = getFallbackCommand(cwd);
+  try {
+    const { loadConfig, loadEnv, resolveConfigPath, isGlobalConfigPath } =
+      await import('../utils.js');
+    loadEnv(cwd);
+    const configPath = resolveConfigPath(cwd);
+    const config = await loadConfig(configPath);
+    return {
+      tier: flags?.tier ?? config.hooks?.tier ?? 'standard',
+      totemDir: isGlobalConfigPath(configPath)
+        ? DEFAULT_TOTEM_DIR
+        : (config.totemDir ?? DEFAULT_TOTEM_DIR),
+      fallbackCmd,
+      configPath,
+    };
+    // totem-context: a missing or unloadable config is the honest-default path — hooks install in config-less repos by design; the failure is disclosed under TOTEM_DEBUG rather than swallowed.
+  } catch (err) {
+    if (process.env.TOTEM_DEBUG) {
+      console.error('[Totem] Could not load config for hook render options:', err);
+    }
+    return { tier: flags?.tier ?? 'standard', totemDir: DEFAULT_TOTEM_DIR, fallbackCmd };
+  }
+}
+
 /**
  * Build a POSIX shell block that resolves the totem command at runtime.
  *
@@ -163,7 +320,9 @@ else
 fi`;
 }
 
-export function buildHookContent(fallbackCmd: string): string {
+export function buildHookContent(options: { fallbackCmd: string; totemDir: string }): string {
+  const { fallbackCmd, totemDir } = options;
+  assertRenderableTotemDir(totemDir);
   return `#!/bin/sh
 # ${TOTEM_HOOK_MARKER} — background re-index after pull/merge.
 
@@ -226,7 +385,7 @@ fi
 # Only sync when lessons changed (suppress errors if ORIG_HEAD is missing).
 # The trailing -- terminates the revision list so a ref/path ambiguity can never
 # reinterpret ORIG_HEAD/HEAD as pathspecs.
-if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD -- 2>/dev/null | grep -q '\\.totem/lessons/'; then
+if [ -n "$TOTEM_CMD" ] && git diff-tree -r --name-only ORIG_HEAD HEAD -- 2>/dev/null | grep -q '${escapeBre(totemDir)}/lessons/'; then
   # Resolve the real git dir so the sync-log redirect works in a linked worktree,
   # where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
   GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
@@ -236,7 +395,12 @@ fi
 `;
 }
 
-export function buildPostCheckoutHookContent(fallbackCmd: string): string {
+export function buildPostCheckoutHookContent(options: {
+  fallbackCmd: string;
+  totemDir: string;
+}): string {
+  const { fallbackCmd, totemDir } = options;
+  assertRenderableTotemDir(totemDir);
   return `#!/bin/sh
 # ${TOTEM_CHECKOUT_MARKER} — background re-index on branch switch.
 
@@ -252,17 +416,17 @@ ${buildResolveBlock(fallbackCmd)}
 # where .git is a FILE (gitdir: pointer), not a directory (mmnto-ai/totem#2376).
 GIT_DIR_RESOLVED=$(git rev-parse --git-dir 2>/dev/null || echo .git)
 
-# Handle initial checkout (null SHA) — sync if .totem/ exists
+# Handle initial checkout (null SHA) — sync if ${totemDir}/ exists
 if [ "$1" = "0000000000000000000000000000000000000000" ]; then
-  if [ -n "$TOTEM_CMD" ] && [ -d ".totem" ]; then
+  if [ -n "$TOTEM_CMD" ] && [ -d ${shellQuote(totemDir)} ]; then
     ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
   fi
   exit 0
 fi
 
-# Only sync when .totem/ files differ between branches. The trailing -- terminates
+# Only sync when ${totemDir}/ files differ between branches. The trailing -- terminates
 # the revision list so the "$1"/"$2" SHAs can never be reinterpreted as pathspecs.
-if [ -n "$TOTEM_CMD" ] && git diff --name-only "$1" "$2" -- 2>/dev/null | grep -q '\\.totem/'; then
+if [ -n "$TOTEM_CMD" ] && git diff --name-only "$1" "$2" -- 2>/dev/null | grep -q '${escapeBre(totemDir)}/'; then
   ($TOTEM_CMD sync --incremental --quiet > "$GIT_DIR_RESOLVED/totem-sync.log" 2>&1) &
 fi
 # ${TOTEM_CHECKOUT_END}
@@ -270,22 +434,23 @@ fi
 }
 
 /**
- * Generate helper shell scripts under `.totem/hooks/` for hook manager integration.
- * These scripts contain the full guard logic (diff checks, null-SHA guards) that
- * bare inline commands would skip.
+ * Generate helper shell scripts under `<totemDir>/hooks/` for hook manager
+ * integration. These scripts contain the full guard logic (diff checks, null-SHA
+ * guards) that bare inline commands would skip.
+ *
+ * Takes the RESOLVED {@link HookRenderOptions} rather than resolving config
+ * itself: both callers already hold the one resolution for this invocation, and
+ * a required parameter is the same compiler-enforced thread the builders use
+ * (mmnto-ai/totem#2692 C1/C2).
  */
-export function generateHookHelpers(
-  gitRoot: string,
-  fallbackCmd: string,
-  options?: { tier?: 'strict' | 'standard' },
-): void {
-  const hooksDir = path.join(gitRoot, '.totem', 'hooks');
+export function generateHookHelpers(gitRoot: string, render: HookRenderOptions): void {
+  const hooksDir = path.join(gitRoot, render.totemDir, 'hooks');
   fs.mkdirSync(hooksDir, { recursive: true });
 
-  const postMerge = buildHookContent(fallbackCmd);
-  const postCheckout = buildPostCheckoutHookContent(fallbackCmd);
-  const preCommit = buildPreCommitHook(options?.tier);
-  const prePush = buildPrePushHook(fallbackCmd, options?.tier);
+  const postMerge = buildHookContent(render);
+  const postCheckout = buildPostCheckoutHookContent(render);
+  const preCommit = buildPreCommitHook(render);
+  const prePush = buildPrePushHook(render);
 
   fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
   fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
@@ -319,49 +484,55 @@ function detectHookManager(cwd: string): HookManager | null {
   return null;
 }
 
-function printHookManagerGuidance(manager: HookManager): void {
+/**
+ * Print the manual wiring a detected hook manager needs. `totemDir` is the
+ * RESOLVED value the helper scripts were just written under — guidance that
+ * names `.totem/` in a repo that configured something else points the consumer
+ * at files that do not exist (mmnto-ai/totem#2692 C5).
+ */
+function printHookManagerGuidance(manager: HookManager, totemDir: string): void {
   switch (manager) {
     case 'husky':
       console.error('[Totem] Detected husky. Add the following to your hook files:');
       console.error('');
       console.error('  # .husky/pre-commit');
-      console.error('  sh .totem/hooks/pre-commit.sh');
+      console.error(`  sh ${totemDir}/hooks/pre-commit.sh`);
       console.error('');
       console.error('  # .husky/pre-push');
-      console.error('  sh .totem/hooks/pre-push.sh');
+      console.error(`  sh ${totemDir}/hooks/pre-push.sh`);
       console.error('');
       console.error('  # .husky/post-merge');
-      console.error('  sh .totem/hooks/post-merge.sh');
+      console.error(`  sh ${totemDir}/hooks/post-merge.sh`);
       console.error('');
       console.error('  # .husky/post-checkout');
-      console.error('  sh .totem/hooks/post-checkout.sh');
+      console.error(`  sh ${totemDir}/hooks/post-checkout.sh`);
       break;
     case 'lefthook':
       console.error('[Totem] Detected lefthook. Add to your lefthook.yml:');
       console.error('  pre-commit:');
       console.error('    commands:');
       console.error('      totem-block-main:');
-      console.error('        run: sh .totem/hooks/pre-commit.sh');
+      console.error(`        run: sh ${totemDir}/hooks/pre-commit.sh`);
       console.error('  pre-push:');
       console.error('    commands:');
       console.error('      totem-review:');
-      console.error('        run: sh .totem/hooks/pre-push.sh');
+      console.error(`        run: sh ${totemDir}/hooks/pre-push.sh`);
       console.error('  post-merge:');
       console.error('    commands:');
       console.error('      totem-sync:');
-      console.error('        run: sh .totem/hooks/post-merge.sh');
+      console.error(`        run: sh ${totemDir}/hooks/post-merge.sh`);
       console.error('  post-checkout:');
       console.error('    commands:');
       console.error('      totem-sync-checkout:');
-      console.error('        run: sh .totem/hooks/post-checkout.sh');
+      console.error(`        run: sh ${totemDir}/hooks/post-checkout.sh`);
       break;
     case 'simple-git-hooks':
       console.error('[Totem] Detected simple-git-hooks. Add to your package.json:');
       console.error('  "simple-git-hooks": {');
-      console.error('    "pre-commit": "sh .totem/hooks/pre-commit.sh",');
-      console.error('    "pre-push": "sh .totem/hooks/pre-push.sh",');
-      console.error('    "post-merge": "sh .totem/hooks/post-merge.sh",');
-      console.error('    "post-checkout": "sh .totem/hooks/post-checkout.sh"');
+      console.error(`    "pre-commit": "sh ${totemDir}/hooks/pre-commit.sh",`);
+      console.error(`    "pre-push": "sh ${totemDir}/hooks/pre-push.sh",`);
+      console.error(`    "post-merge": "sh ${totemDir}/hooks/post-merge.sh",`);
+      console.error(`    "post-checkout": "sh ${totemDir}/hooks/post-checkout.sh"`);
       console.error('  }');
       break;
   }
@@ -392,12 +563,14 @@ export async function installPostMergeHook(
     return;
   }
 
-  const fallbackCmd = getFallbackCommand(gitRoot);
+  // One config read per invocation, anchored at the git root — the same anchor
+  // getFallbackCommand has always used (mmnto-ai/totem#2692 C1).
+  const render = await resolveHookRenderOptions(gitRoot, { tier: options?.tier });
   const manager = detectHookManager(gitRoot);
 
   if (manager) {
-    generateHookHelpers(gitRoot, fallbackCmd, options);
-    printHookManagerGuidance(manager);
+    generateHookHelpers(gitRoot, render);
+    printHookManagerGuidance(manager, render.totemDir);
     return;
   }
 
@@ -437,7 +610,7 @@ export async function installPostMergeHook(
 
     // Append to existing hook — reuse buildHookContent, strip shebang
     const separator = existing.endsWith('\n') ? '' : '\n';
-    const appendBlock = buildHookContent(fallbackCmd)
+    const appendBlock = buildHookContent(render)
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
     fs.appendFileSync(hookPath, separator + '\n' + appendBlock);
@@ -447,7 +620,7 @@ export async function installPostMergeHook(
 
   // Create new hook
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.writeFileSync(hookPath, buildHookContent(fallbackCmd));
+  fs.writeFileSync(hookPath, buildHookContent(render));
 
   // Make executable (no-op on Windows, git bash handles it)
   try {
@@ -471,8 +644,16 @@ fi`;
 
 // ─── Enforcement hooks (pre-commit + pre-push) ──────────
 
-export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
-  const effectiveTier = tier ?? 'standard';
+export function buildPreCommitHook(options: {
+  tier: 'strict' | 'standard';
+  totemDir: string;
+}): string {
+  const effectiveTier = options.tier;
+  const totemDir = options.totemDir;
+  assertRenderableTotemDir(totemDir);
+  // The run store the strict arm reads, rendered from the CONFIGURED totemDir so
+  // the reader names the tree `totem spec` actually writes (mmnto-ai/totem#2692).
+  const runsDir = `${totemDir}/artifacts/runs`;
   // Strict-tier evidence (mmnto-ai/totem#2690): the gate names `totem spec`,
   // so it must pass on what `totem spec` actually writes — the grounded run
   // artifact under .totem/artifacts/runs/ (mmnto-ai/totem#2100; written on
@@ -493,14 +674,14 @@ export function buildPreCommitHook(tier?: 'strict' | 'standard'): string {
   // deleted with the marker rather than kept in step.
   const strictBlock = `
 # Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690).
-# Evidence = a totem spec run artifact (.totem/artifacts/runs/*.json with a
+# Evidence = a totem spec run artifact (${runsDir}/*.json with a
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
 # substring match would accept a review artifact that merely quotes the key.
-# The former .totem/cache/.spec-completed marker is not honored (no CLI wrote it).
+# The former ${totemDir}/cache/.spec-completed marker is not honored (no CLI wrote it).
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   spec_evidence=$(node -e '
 const fs = require("fs");
-const dir = ".totem/artifacts/runs";
+const dir = ${JSON.stringify(runsDir)};
 let names = [];
 try { names = fs.readdirSync(dir); } catch (err) { names = []; }
 let best = null;
@@ -525,10 +706,10 @@ process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (da
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" != "2" ]; then
-    echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"
+    echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${shellDoubleQuoteInner(runsDir)}/ unreadable); fix the runtime and retry (strict mode)"
     exit 1
   else
-    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under .totem/artifacts/runs/ in this checkout"
+    echo "[Totem] BLOCKED: Run 'totem spec <issue>' before committing (strict mode) — no totem spec run artifact under ${shellDoubleQuoteInner(runsDir)}/ in this checkout"
     exit 1
   fi
 fi`;
@@ -552,8 +733,14 @@ ${strictBlock}
 `;
 }
 
-export function buildPrePushHook(fallbackCmd: string, tier?: 'strict' | 'standard'): string {
-  const effectiveTier = tier ?? 'standard';
+export function buildPrePushHook(options: {
+  fallbackCmd: string;
+  tier: 'strict' | 'standard';
+  totemDir: string;
+}): string {
+  const { fallbackCmd, totemDir } = options;
+  const effectiveTier = options.tier;
+  assertRenderableTotemDir(totemDir);
   // Strict-tier gate per Proposal 273 § 6 Q2 (mmnto-ai/totem#1908): operator-invoked
   // is the default for new checks while behavior calibrates. Doctor's `--strict`
   // mode gates on repo-state `fail` results; unconditional firing would break
@@ -589,7 +776,7 @@ ${buildResolveBlock(fallbackCmd)}
 
 if [ -n "$TOTEM_CMD" ]; then
   # Verify compile manifest is current
-  if [ -f ".totem/compile-manifest.json" ]; then
+  if [ -f ${shellQuote(`${totemDir}/compile-manifest.json`)} ]; then
     if ! $TOTEM_CMD verify-manifest > /dev/null 2>&1; then
       echo "[totem] Push blocked: compile manifest is stale. Run 'totem lesson compile'." >&2
       exit 1
@@ -597,14 +784,14 @@ if [ -n "$TOTEM_CMD" ]; then
   fi
 
   # Run deterministic lint
-  if [ -f ".totem/compiled-rules.json" ]; then
+  if [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ]; then
     if ! $TOTEM_CMD lint; then
       exit 1
     fi
   fi
 
   # Verify shields.io badges in README.md (mmnto-ai/totem#1926 — deterministic claim-discipline)
-  if [ -f "README.md" ] && [ -f ".totem/compiled-rules.json" ]; then
+  if [ -f "README.md" ] && [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ]; then
     if ! $TOTEM_CMD verify-badges; then
       exit 1
     fi
@@ -627,7 +814,7 @@ if [ -n "$TOTEM_CMD" ]; then
   # missing-Goal-prefix, covenant-without-backing). Fires only when at
   # least one in-scope surface exists. Bypass with mandatory justification:
   #   TOTEM_GATE_BYPASS_JUSTIFICATION="<reason>" git push
-  if [ -f ".totem/compiled-rules.json" ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
+  if [ -f ${shellQuote(`${totemDir}/compiled-rules.json`)} ] && { [ -f "README.md" ] || [ -f "AGENTS.md" ] || [ -f "design-tenets.md" ] || [ -d "docs/wiki" ]; }; then
     # --scope-to-diff (mmnto-ai/totem#2002): narrow the WWND scan to files
     # touched in the current push diff. Eliminates the standing-gate
     # false-positive class where pre-existing warnings on in-scope surfaces
@@ -870,12 +1057,15 @@ export async function installEnforcementHooks(
     console.error(HOOKS_DIR_UNRESOLVED_MSG);
     return skip;
   }
-  const fallbackCmd = getFallbackCommand(gitRoot);
+  // `totem init` writes the config BEFORE this runs, so the resolved options are
+  // the ones the repo just declared — init and `totem hook install` render
+  // identically by construction (mmnto-ai/totem#2692 C1/C7).
+  const render = await resolveHookRenderOptions(gitRoot, { tier: options?.tier });
 
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(options?.tier),
+    buildPreCommitHook(render),
     TOTEM_PRECOMMIT_MARKER,
     undefined,
     TOTEM_PRECOMMIT_END,
@@ -884,7 +1074,7 @@ export async function installEnforcementHooks(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(fallbackCmd, options?.tier),
+    buildPrePushHook(render),
     TOTEM_PREPUSH_MARKER,
     undefined,
     TOTEM_PREPUSH_END,
@@ -923,11 +1113,11 @@ export async function installHooksCommand(): Promise<void> {
       const hasPostMerge =
         fs.existsSync(postMerge) && fs.readFileSync(postMerge, 'utf-8').includes(TOTEM_HOOK_MARKER);
       if (hasPostMerge) {
-        const fallbackCmd = getFallbackCommand(gitRoot);
+        const render = await resolveHookRenderOptions(gitRoot);
         installGitHook(
           hooksDir,
           'post-checkout',
-          buildPostCheckoutHookContent(fallbackCmd),
+          buildPostCheckoutHookContent(render),
           TOTEM_CHECKOUT_MARKER,
           undefined,
           TOTEM_CHECKOUT_END,
@@ -951,12 +1141,16 @@ export interface HooksCommandResult {
 /**
  * Non-interactive hook installer for `totem hooks` and `prepare` scripts.
  * Installs pre-commit, pre-push, and post-merge hooks without prompting.
+ *
+ * Async since mmnto-ai/totem#2692: the hook text is rendered from the repo's
+ * CONFIGURED `totemDir` (and `hooks.tier`), which means one config read —
+ * {@link resolveHookRenderOptions} — before anything is written.
  */
-export function installHooksNonInteractive(
+export async function installHooksNonInteractive(
   cwd: string,
   force?: boolean,
   options?: { tier?: 'strict' | 'standard' },
-): HooksCommandResult | null {
+): Promise<HooksCommandResult | null> {
   // Guard: must be a git repo — resolve root from any subdirectory. Not-a-repo
   // stays a silent null (the documented contract — callers print); the malformed
   // pointer prints its declared-skip line here so a direct API caller honors the
@@ -967,13 +1161,13 @@ export function installHooksNonInteractive(
     return null;
   }
 
-  const fallbackCmd = getFallbackCommand(gitRoot);
+  const render = await resolveHookRenderOptions(gitRoot, { tier: options?.tier });
 
   // Hook managers handle their own installation — generate helper scripts + print guidance
   const manager = detectHookManager(gitRoot);
   if (manager) {
-    generateHookHelpers(gitRoot, fallbackCmd, options);
-    printHookManagerGuidance(manager);
+    generateHookHelpers(gitRoot, render);
+    printHookManagerGuidance(manager, render.totemDir);
     return null;
   }
 
@@ -989,7 +1183,7 @@ export function installHooksNonInteractive(
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(options?.tier),
+    buildPreCommitHook(render),
     TOTEM_PRECOMMIT_MARKER,
     force,
     TOTEM_PRECOMMIT_END,
@@ -998,13 +1192,13 @@ export function installHooksNonInteractive(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(fallbackCmd, options?.tier),
+    buildPrePushHook(render),
     TOTEM_PREPUSH_MARKER,
     force,
     TOTEM_PREPUSH_END,
   );
 
-  const postMergeContent = buildHookContent(fallbackCmd);
+  const postMergeContent = buildHookContent(render);
   const postMerge = installGitHook(
     hooksDir,
     'post-merge',
@@ -1014,7 +1208,7 @@ export function installHooksNonInteractive(
     TOTEM_HOOK_END,
   );
 
-  const postCheckoutContent = buildPostCheckoutHookContent(fallbackCmd);
+  const postCheckoutContent = buildPostCheckoutHookContent(render);
   const postCheckout = installGitHook(
     hooksDir,
     'post-checkout',
@@ -1105,32 +1299,18 @@ export async function hooksCommand(opts: {
     return;
   }
 
-  // Resolve tier + pilot: CLI flag > config file > default ('standard')
-  let tier: 'strict' | 'standard' | undefined;
-  // Resolve tier: CLI flag > config file > default ('standard')
-  try {
-    const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
-    loadEnv(cwd);
-    const configPath = resolveConfigPath(cwd);
-    if (configPath) {
-      const config = await loadConfig(configPath);
-      if (!opts.strict && !opts.standard) {
-        tier = config.hooks?.tier;
-      }
-    }
-  } catch (err) {
-    if (process.env.TOTEM_DEBUG) {
-      console.error('[Totem] Could not load config for tier resolution:', err);
-    }
-  }
+  // Tier precedence (CLI flag > config `hooks.tier` > 'standard') now lives in
+  // `resolveHookRenderOptions`, the ONE config→hook-render seam
+  // (mmnto-ai/totem#2692 C1) — which `installHooksNonInteractive` calls with the
+  // flag below, so the config is read exactly once per invocation and at the
+  // git-root anchor the installer writes from.
+  const tier: 'strict' | 'standard' | undefined = opts.strict
+    ? 'strict'
+    : opts.standard
+      ? 'standard'
+      : undefined;
 
-  if (opts.strict) {
-    tier = 'strict';
-  } else if (opts.standard) {
-    tier = 'standard';
-  }
-
-  const result = installHooksNonInteractive(cwd, opts.force, { tier });
+  const result = await installHooksNonInteractive(cwd, opts.force, { tier });
 
   // The git-hook summary prints ONLY when git hooks were actually written. A null
   // result means a hook manager (husky/lefthook) was detected and
@@ -1599,8 +1779,12 @@ async function printGeminiHookMigrationSummary(cwd: string, force?: boolean): Pr
  * stateless format that runs verify-manifest + lint directly.
  *
  * Returns true if the hook was upgraded, false otherwise.
+ *
+ * Async since mmnto-ai/totem#2692: the spliced block is rendered from the repo's
+ * configured `totemDir` and `hooks.tier` like every other writer, so it no
+ * longer silently downgrades a strict hook to standard on the upgrade path.
  */
-export function upgradePrePushHookIfNeeded(cwd: string): boolean {
+export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> {
   try {
     const gitRoot = resolveGitRoot(cwd);
     if (!gitRoot) return false;
@@ -1661,10 +1845,10 @@ export function upgradePrePushHookIfNeeded(cwd: string): boolean {
 
     const blockEnd = markerIdx + endOffset;
 
-    const fallbackCmd = getFallbackCommand(gitRoot);
+    const render = await resolveHookRenderOptions(gitRoot);
 
     // Build the replacement block (strip shebang — we're splicing into existing file)
-    const newBlock = buildPrePushHook(fallbackCmd)
+    const newBlock = buildPrePushHook(render)
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
 

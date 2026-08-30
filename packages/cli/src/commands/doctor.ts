@@ -160,7 +160,25 @@ export function checkCompiledRules(cwd: string, totemDir = '.totem'): Diagnostic
   }
 }
 
-export function checkGitHooks(cwd: string): DiagnosticResult {
+/**
+ * Sense the four managed git hooks.
+ *
+ * Marker-presence only on the default `totemDir` — the always-on, zero-cost
+ * shape this row has always had. When the repo CONFIGURES a different
+ * `totemDir` (mmnto-ai/totem#2692 C6), the row additionally regenerates the
+ * canonical four and compares whole-file: a hook still naming `.totem/` there
+ * reads its evidence and its gate flags out of a tree nothing writes, and
+ * `doctor --parity` — which would otherwise catch it — is pin-gated behind
+ * `orient.parityManifest`. Sensor, never a gate: the non-pass state stays
+ * `warn`, with the same remediation the parity row emits.
+ *
+ * `config` is threaded from `doctorCommand`'s single config load — this check
+ * never opens the config itself.
+ */
+export async function checkGitHooks(
+  cwd: string,
+  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+): Promise<DiagnosticResult> {
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
     return {
@@ -210,6 +228,17 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
   }
 
   if (missing.length === 0) {
+    const staleForTotemDir = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
+    if (staleForTotemDir.length > 0) {
+      return {
+        name: 'Git Hooks',
+        status: 'warn',
+        message: `All ${markers.length} hooks installed, but ${staleForTotemDir.join(', ')} ${
+          staleForTotemDir.length === 1 ? 'does' : 'do'
+        } not match the canonical rendered for totemDir '${config?.totemDir}' — the hook reads a tree Totem does not write`,
+        remediation: 'totem hook install --force',
+      };
+    }
     return {
       name: 'Git Hooks',
       status: 'pass',
@@ -223,6 +252,55 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
     message: `${installed}/${markers.length} hooks installed (missing: ${missing.join(', ')})`,
     remediation: 'totem hooks',
   };
+}
+
+/**
+ * The managed hooks whose on-disk bytes differ from the canonical regenerated at
+ * this repo's CONFIGURED `totemDir` (mmnto-ai/totem#2692 C6).
+ *
+ * Runs ONLY when the repo configures a non-default `totemDir` — on the default
+ * the row stays the marker-only, zero-IO sense it has always been. Compares the
+ * same way `installGitHook`'s drift-repair does (whole file, `existing !==
+ * hookContent`), so a user hook with an APPENDED totem block reads as a
+ * difference too; that is the honest signal here, and the remediation
+ * (`--force`) is correct for both classes.
+ */
+async function hooksRenderedForWrongTotemDir(
+  gitRoot: string,
+  hooksDir: string,
+  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+): Promise<string[]> {
+  const totemDir = config?.totemDir;
+  if (totemDir === undefined || totemDir === '.totem') return [];
+
+  try {
+    const {
+      buildPreCommitHook,
+      buildPrePushHook,
+      buildHookContent,
+      buildPostCheckoutHookContent,
+      getFallbackCommand,
+    } = await import('./install-hooks.js');
+    const render = {
+      tier: config?.hooks?.tier ?? ('standard' as const),
+      totemDir,
+      fallbackCmd: getFallbackCommand(gitRoot),
+    };
+    const canonical: { file: string; content: string }[] = [
+      { file: 'pre-commit', content: buildPreCommitHook(render) },
+      { file: 'pre-push', content: buildPrePushHook(render) },
+      { file: 'post-merge', content: buildHookContent(render) },
+      { file: 'post-checkout', content: buildPostCheckoutHookContent(render) },
+    ];
+    return canonical
+      .filter(
+        ({ file, content }) => fs.readFileSync(path.join(hooksDir, file), 'utf-8') !== content,
+      )
+      .map(({ file }) => file);
+    // totem-context: intentional cleanup — a sensor that cannot regenerate or read the canonical reports NOTHING rather than crashing the diagnostic pipeline (Tenet 13, the checkGitHooks posture above); the parity row carries the same drift under --parity.
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -2194,7 +2272,14 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
   // strategyRoot across every repo on disk.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
   let loadedConfig:
-    | { strategyRoot?: string; embedding?: { provider?: string; baseUrl?: string } }
+    | {
+        strategyRoot?: string;
+        embedding?: { provider?: string; baseUrl?: string };
+        /** mmnto-ai/totem#2692: threaded into checkGitHooks + checkStaleRules so
+         *  neither re-opens the config to learn where `.totem/` actually is. */
+        totemDir?: string;
+        hooks?: { tier?: 'strict' | 'standard' };
+      }
     | undefined;
   try {
     const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
@@ -2221,7 +2306,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
   const results: DiagnosticResult[] = [
     checkConfig(cwd),
     checkCompiledRules(cwd),
-    checkGitHooks(cwd),
+    await checkGitHooks(cwd, loadedConfig),
     await checkPrepareWrapper(cwd),
     checkEmbeddingConfig(cwd),
     await checkOllama(loadedConfig),
@@ -2232,7 +2317,9 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkSecretsFileTracked(cwd),
     checkAgentsMdCanonical(cwd),
     await checkUpgradeCandidates(cwd),
-    await checkStaleRules(cwd, '.totem', doctorThresholds),
+    // mmnto-ai/totem#2692 C5: the stale-rule walk reads the repo's CONFIGURED
+    // totem directory, not the hardcoded default.
+    await checkStaleRules(cwd, loadedConfig?.totemDir ?? '.totem', doctorThresholds),
     await checkGrandfatheredRules(cwd),
     await checkFreezes(cwd),
     await checkEstate(options.estateSeamsForTest ?? {}),

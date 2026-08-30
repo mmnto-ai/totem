@@ -2096,7 +2096,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // Skipped under --covariate: that verb is read-only by contract (rev-5 item 4).
   if (!options.covariate) {
     const { upgradePrePushHookIfNeeded } = await import('./install-hooks.js');
-    if (upgradePrePushHookIfNeeded(cwd)) {
+    if (await upgradePrePushHookIfNeeded(cwd)) {
       log.dim(DISPLAY_TAG, 'Upgraded pre-push hook with review auto-refresh');
     }
   }

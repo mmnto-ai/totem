@@ -17,33 +17,73 @@ const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 // skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
 const TOTEM_FILE_MARKER = '[totem] auto-generated';
 
-/** Files scaffolded by `totem init` that are fully owned by Totem.
+/** The Totem directory when the repo configures none. */
+export const DEFAULT_TOTEM_DIR = '.totem';
+
+/**
+ * Resolve the REPO-LOCAL `totemDir` for eject's removal roster
+ * (mmnto-ai/totem#2692 C5) — a repo that keeps its Totem state somewhere else
+ * must have that directory removed, not a `.totem/` that was never there.
+ *
+ * Repo-local ONLY: the global `~/.totem/` profile declares `totemDir: '.'`, and
+ * eject DELETES what this returns — a leaked global value would aim a recursive
+ * remove at the project root. The same reason the empty / dot / parent-escaping
+ * cases fall back to the default rather than being honored.
+ */
+export async function resolveEjectTotemDir(cwd: string): Promise<string> {
+  try {
+    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
+    const configPath = resolveConfigPath(cwd);
+    if (isGlobalConfigPath(configPath)) return DEFAULT_TOTEM_DIR;
+    const config = await loadConfig(configPath);
+    const candidate = config.totemDir;
+    if (typeof candidate !== 'string') return DEFAULT_TOTEM_DIR;
+    const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '').trim();
+    // A value that names the project root itself (or escapes it) is never a
+    // deletion target — eject removes Totem's directory, never the checkout.
+    if (normalized === '' || normalized === '.' || normalized.split('/').includes('..')) {
+      return DEFAULT_TOTEM_DIR;
+    }
+    return normalized;
+    // totem-context: intentional cleanup — a missing/unloadable config is the honest-default path (eject runs against half-installed and config-less projects by design); the roster falls back to `.totem`, never to a guess.
+  } catch {
+    return DEFAULT_TOTEM_DIR;
+  }
+}
+
+/** Files scaffolded by `totem init` that are fully owned by Totem, rendered for
+ *  the repo's configured `totemDir` (mmnto-ai/totem#2692).
  *  Exported for the sense-roster set-equality test (mmnto-ai/totem#2620) —
  *  a sampled roster assertion cannot detect a dropped member. */
-export const TOTEM_SCAFFOLDED_FILES = [
-  // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
-  // the pre-migration `.js` each one renamed — eject removes both shapes so an
-  // upgraded-then-ejected consumer leaves no fail-open artifact behind.
-  '.gemini/hooks/SessionStart.cjs',
-  '.gemini/hooks/SessionStart.js',
-  '.gemini/hooks/BeforeTool.cjs',
-  '.gemini/hooks/BeforeTool.js',
-  '.gemini/skills/totem.md',
-  '.totem/hooks/shield-gate.cjs',
-  // Phase B PreWriteShield (mmnto-ai/totem#1853, eject parity closing
-  // mmnto-ai/totem#1852).
-  '.claude/hooks/PreWriteShield.cjs',
-  // Phase C slice 1 SessionStart (mmnto-ai/totem#1845).
-  '.claude/hooks/SessionStart.cjs',
-  // PR-C action-gate wrapper (mmnto-ai/totem#2048, eject parity).
-  '.claude/hooks/gate-wrapper.cjs',
-];
+export function totemScaffoldedFiles(totemDir: string): string[] {
+  return [
+    // Current (BeforeTool: mmnto-ai/totem#2481; SessionStart: mmnto-ai/totem#2488) +
+    // the pre-migration `.js` each one renamed — eject removes both shapes so an
+    // upgraded-then-ejected consumer leaves no fail-open artifact behind.
+    '.gemini/hooks/SessionStart.cjs',
+    '.gemini/hooks/SessionStart.js',
+    '.gemini/hooks/BeforeTool.cjs',
+    '.gemini/hooks/BeforeTool.js',
+    '.gemini/skills/totem.md',
+    `${totemDir}/hooks/shield-gate.cjs`,
+    // Phase B PreWriteShield (mmnto-ai/totem#1853, eject parity closing
+    // mmnto-ai/totem#1852).
+    '.claude/hooks/PreWriteShield.cjs',
+    // Phase C slice 1 SessionStart (mmnto-ai/totem#1845).
+    '.claude/hooks/SessionStart.cjs',
+    // PR-C action-gate wrapper (mmnto-ai/totem#2048, eject parity).
+    '.claude/hooks/gate-wrapper.cjs',
+  ];
+}
 
 /** Deletion/scrub targets shared by the mutation steps AND the rule-2 sense
  *  roster — one source, read by both sides and by the parity test (Tenet 20;
  *  round 2, F5: a literal re-declared in the sense was a mirror that could
- *  drift when `deleteArtifacts` gained a member). */
-export const EJECT_ARTIFACT_DIRS = ['.lancedb', '.totem'];
+ *  drift when `deleteArtifacts` gained a member). `.lancedb` stays literal:
+ *  `lanceDir` is a separate override this slice does not thread. */
+export function ejectArtifactDirs(totemDir: string): string[] {
+  return ['.lancedb', totemDir];
+}
 export const EJECT_CONFIG_FILE = 'totem.config.ts';
 export const CLAUDE_SETTINGS_LOCAL_FILE = '.claude/settings.local.json';
 export const CLAUDE_SETTINGS_FILE = '.claude/settings.json';
@@ -251,8 +291,8 @@ export function scrubPostCheckoutHook(hooksDir: string, summary: EjectSummary): 
  * user-authored hook citing the managed version it replaced) — is not
  * totem-owned and must survive eject (mmnto-ai/totem#2488 review, rounds 1–2).
  */
-function removeScaffoldedFiles(cwd: string, summary: EjectSummary): void {
-  for (const rel of TOTEM_SCAFFOLDED_FILES) {
+function removeScaffoldedFiles(cwd: string, totemDir: string, summary: EjectSummary): void {
+  for (const rel of totemScaffoldedFiles(totemDir)) {
     const filePath = path.join(cwd, rel);
     if (!fs.existsSync(filePath)) continue;
 
@@ -724,8 +764,8 @@ export async function scrubReflexFiles(cwd: string, summary: EjectSummary): Prom
 /**
  * Delete Totem directories and config file.
  */
-function deleteArtifacts(cwd: string, summary: EjectSummary): void {
-  for (const dir of EJECT_ARTIFACT_DIRS) {
+function deleteArtifacts(cwd: string, totemDir: string, summary: EjectSummary): void {
+  for (const dir of ejectArtifactDirs(totemDir)) {
     const dirPath = path.join(cwd, dir);
     if (fs.existsSync(dirPath)) {
       try {
@@ -803,7 +843,10 @@ export interface DirtyTreeSense {
  *
  * Exported for the sense-contract tests.
  */
-export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense> {
+export async function deriveDirtyTreeSense(
+  cwd: string,
+  totemDir: string = DEFAULT_TOTEM_DIR,
+): Promise<DirtyTreeSense> {
   let porcelain: string;
   let ignoredVisible = true;
   try {
@@ -814,13 +857,13 @@ export async function deriveDirtyTreeSense(cwd: string): Promise<DirtyTreeSense>
     const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
     const roster = [
       ...new Set([
-        ...TOTEM_SCAFFOLDED_FILES,
+        ...totemScaffoldedFiles(totemDir),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
         ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
-        ...EJECT_ARTIFACT_DIRS,
+        ...ejectArtifactDirs(totemDir),
         EJECT_CONFIG_FILE,
       ]),
     ];
@@ -904,9 +947,15 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
 
   const cwd = process.cwd();
 
+  // Resolve the repo's Totem directory ONCE, before anything is deleted — the
+  // sense roster and the removal steps must name the same tree
+  // (mmnto-ai/totem#2692 C5); the config file that declares it is itself a
+  // deletion target below.
+  const totemDir = await resolveEjectTotemDir(cwd);
+
   // Rule-2 sense line(s) ride ahead of the consent prompt — and under
   // --force too: the flag skips the prompt, never the sense (mmnto-ai/totem#2620).
-  const sense = await deriveDirtyTreeSense(cwd);
+  const sense = await deriveDirtyTreeSense(cwd, totemDir);
   for (const line of sense.lines) {
     log.warn(TAG, line);
   }
@@ -965,7 +1014,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   }
 
   // 2. Remove scaffolded Gemini/Claude hook files
-  removeScaffoldedFiles(cwd, summary);
+  removeScaffoldedFiles(cwd, totemDir, summary);
 
   // 3. Scrub Claude settings.local.json (per-developer shield-gate)
   scrubClaudeSettings(cwd, summary);
@@ -997,7 +1046,7 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
   }
 
   // 7. Delete artifacts
-  deleteArtifacts(cwd, summary);
+  deleteArtifacts(cwd, totemDir, summary);
 
   // Print summary
   if (summary.removed.length > 0) {

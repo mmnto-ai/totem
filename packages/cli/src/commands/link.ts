@@ -15,7 +15,7 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { log } = await import('../ui.js');
-  const { resolveConfigPath } = await import('../utils.js');
+  const { loadConfig, resolveConfigPath } = await import('../utils.js');
 
   const TAG = 'Link';
   const cwd = process.cwd();
@@ -23,16 +23,6 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
   // Resolve the target path relative to cwd
   const resolved = path.resolve(cwd, targetPath);
   const relative = path.relative(cwd, resolved).replace(/\\/g, '/');
-
-  // Validate target has a .totem directory
-  const targetTotemDir = path.join(resolved, '.totem');
-  if (!fs.existsSync(targetTotemDir)) {
-    throw new TotemConfigError(
-      `Target directory does not contain a .totem/ folder. Checked: ${targetTotemDir}`,
-      'Run `totem init` in the target project first.',
-      'CONFIG_MISSING',
-    );
-  }
 
   // Read current config
   const configPath = resolveConfigPath(cwd);
@@ -44,11 +34,39 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
     );
   }
 
+  // The Totem directory to look for in the TARGET, and to name in the ingest
+  // globs written below — the configured value, not a hardcoded `.totem`
+  // (mmnto-ai/totem#2692 C5). Read from THIS repo's config: the two sides of a
+  // cohort link share a convention, and a target with a different layout is the
+  // separate cross-repo-config question the slice leaves open. Falls back to the
+  // default when the config will not load — the existence check below then says
+  // exactly which path was probed.
+  let totemDirName = '.totem';
+  try {
+    const linkConfig = await loadConfig(configPath);
+    if (typeof linkConfig.totemDir === 'string' && linkConfig.totemDir.length > 0) {
+      totemDirName = linkConfig.totemDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    }
+    // totem-context: intentional cleanup — an unloadable config degrades to the default directory name; the existence check below reports the exact path probed, so nothing is guessed silently.
+  } catch {
+    totemDirName = '.totem';
+  }
+
+  // Validate target has a Totem directory
+  const targetTotemDir = path.join(resolved, totemDirName);
+  if (!fs.existsSync(targetTotemDir)) {
+    throw new TotemConfigError(
+      `Target directory does not contain a ${totemDirName}/ folder. Checked: ${targetTotemDir}`,
+      'Run `totem init` in the target project first.',
+      'CONFIG_MISSING',
+    );
+  }
+
   const configContent = fs.readFileSync(configPath, 'utf-8');
 
   // Build the glob patterns for the linked repo's lessons
-  const lessonGlob = relative + '/.totem/lessons/*.md';
-  const legacyGlob = relative + '/.totem/lessons.md';
+  const lessonGlob = `${relative}/${totemDirName}/lessons/*.md`;
+  const legacyGlob = `${relative}/${totemDirName}/lessons.md`;
 
   if (options.unlink) {
     // Remove linked targets
@@ -139,6 +157,6 @@ export async function linkCommand(targetPath: string, options: LinkOptions): Pro
 
   fs.writeFileSync(configPath, updated, 'utf-8');
   log.success(TAG, `Linked ${relative}`);
-  log.info(TAG, `Added targets from ${relative}/.totem/`);
+  log.info(TAG, `Added targets from ${relative}/${totemDirName}/`);
   log.dim(TAG, 'Run `totem sync` to rebuild the index.');
 }
