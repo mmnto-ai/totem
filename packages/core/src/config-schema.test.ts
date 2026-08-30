@@ -6,6 +6,8 @@ import {
   DoctorConfigSchema,
   GarbageCollectionSchema,
   getConfigTier,
+  hasUnrenderableHookChar,
+  normalizeTotemDir,
   OrchestratorSchema,
   requireEmbedding,
   TotemConfigSchema,
@@ -1104,5 +1106,103 @@ describe('DoctorConfigSchema', () => {
     if (result.success) {
       expect(result.data.doctor?.staleRuleWindow).toBe(50);
     }
+  });
+});
+
+describe('totemDir — normalised, then refused where the managed hooks could not govern it (mmnto-ai/totem#2692 A7)', () => {
+  const TARGET = { glob: 'docs/*.md', type: 'lesson', strategy: 'markdown-heading' } as const;
+  // A literal backslash, built rather than escaped so no transport layer can
+  // collapse it (a `'\\'` literal arrived as a control character once already).
+  const BS = String.fromCharCode(0x5c);
+  const parseTotemDir = (totemDir: unknown) =>
+    TotemConfigSchema.safeParse(
+      totemDir === undefined ? { targets: [TARGET] } : { targets: [TARGET], totemDir },
+    );
+
+  it('defaults to .totem when unset (the default runs before the transform)', () => {
+    const result = parseTotemDir(undefined);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.totemDir).toBe('.totem');
+  });
+
+  it.each([
+    ['a trailing slash', 'knowledge/', 'knowledge'],
+    ['repeated trailing slashes', 'x//', 'x'],
+    ['a leading ./', './x', 'x'],
+    ['repeated leading ./', '././x', 'x'],
+    ['a backslash (Windows spelling)', `a${BS}b`, 'a/b'],
+    ['a dot-backslash prefix', `.${BS}totem`, 'totem'],
+    ['the config directory itself (the global profile spelling)', '.', '.'],
+  ])('normalises %s', (_label, input, expected) => {
+    expect(normalizeTotemDir(input)).toBe(expected);
+    const result = parseTotemDir(input);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.totemDir).toBe(expected);
+  });
+
+  it.each([
+    ['an empty value', '', /must not be empty/],
+    ['a value that normalises to empty', './', /must not be empty/],
+    ['a bare slash', '/', /must not be empty/],
+    ['an absolute path', '/abs/x', /relative path/],
+    ['a drive-letter path', 'C:/x', /relative path/],
+    ['a single quote', "it's", /must not contain/],
+    ['a dollar sign', 'a$b', /must not contain/],
+    ['a backtick', 'a`b', /must not contain/],
+    [
+      'a non-ASCII character (git C-quotes it in the paths the hooks grep)',
+      'ünïcode',
+      /must not contain/,
+    ],
+    ['a control character', `a${String.fromCharCode(7)}b`, /must not contain/],
+  ])('refuses %s', (_label, input, message) => {
+    const result = parseTotemDir(input);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message).join('\n')).toMatch(message);
+    }
+  });
+
+  it('hasUnrenderableHookChar — the character set, pinned as a set', () => {
+    const refused = [
+      "'",
+      '"',
+      String.fromCharCode(0x5c), // backslash
+      '$',
+      '`',
+      String.fromCharCode(0x0a), // newline
+      String.fromCharCode(0x09), // tab
+      String.fromCharCode(0x7f),
+      'ü',
+      String.fromCharCode(0x2028),
+    ];
+    const accepted = [
+      '.',
+      '-',
+      '_',
+      ' ',
+      '/',
+      '~',
+      '!',
+      '*',
+      '?',
+      '[',
+      ']',
+      '{',
+      '}',
+      '(',
+      ')',
+      '#',
+      '%',
+      '&',
+      ';',
+      '|',
+      '<',
+      '>',
+    ];
+    for (const ch of refused)
+      expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(true);
+    for (const ch of accepted)
+      expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(false);
   });
 });

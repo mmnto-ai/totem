@@ -160,7 +160,25 @@ export function checkCompiledRules(cwd: string, totemDir = '.totem'): Diagnostic
   }
 }
 
-export function checkGitHooks(cwd: string): DiagnosticResult {
+/**
+ * Sense the four managed git hooks.
+ *
+ * Marker-presence only on the default `totemDir` — the always-on, zero-cost
+ * shape this row has always had. When the repo CONFIGURES a different
+ * `totemDir` (mmnto-ai/totem#2692 C6), the row additionally regenerates the
+ * canonical four and compares whole-file: a hook still naming `.totem/` there
+ * reads its evidence and its gate flags out of a tree nothing writes, and
+ * `doctor --parity` — which would otherwise catch it — is pin-gated behind
+ * `orient.parityManifest`. Sensor, never a gate: the non-pass state stays
+ * `warn`, with the same remediation the parity row emits.
+ *
+ * `config` is threaded from `doctorCommand`'s single config load — this check
+ * never opens the config itself.
+ */
+export async function checkGitHooks(
+  cwd: string,
+  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+): Promise<DiagnosticResult> {
   const gitRoot = resolveGitRoot(cwd);
   if (!gitRoot) {
     return {
@@ -210,6 +228,49 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
   }
 
   if (missing.length === 0) {
+    const sensed = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
+    if (!Array.isArray(sensed)) {
+      // The sensor could not run (a builder threw, a hook file was unreadable):
+      // say so, never pass on an unexamined tree (Greptile P1 on mmnto-ai/totem#2701).
+      return {
+        name: 'Git Hooks',
+        status: 'warn',
+        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${config?.totemDir}': ${sensed.failure}`,
+        remediation:
+          'totem hook install --force (re-renders the four hooks from the current config)',
+      };
+    }
+    const staleForTotemDir = sensed;
+    if (staleForTotemDir.length > 0) {
+      const files = staleForTotemDir.map((row) => row.file);
+      // `--force` rewrites the WHOLE file (`installGitHook`): the right remedy for
+      // a totem-owned whole file, and the ONE remedy install-hooks.ts prescribes
+      // for a LEGACY hook (no end marker — drift-repair cannot bound it); the
+      // wrong remedy for a user hook with an APPENDED block, which would lose its
+      // own lines to it (mmnto-ai/totem#2692 amendments A4 / A10).
+      const appended = staleForTotemDir.filter((row) => row.kind === 'appended').map((r) => r.file);
+      const legacy = staleForTotemDir.filter((row) => row.kind === 'legacy').map((r) => r.file);
+      const legacyNote =
+        legacy.length === 0
+          ? ''
+          : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
+      const remediation =
+        appended.length === 0
+          ? `totem hook install --force${legacyNote}`
+          : `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it${
+              appended.length === files.length
+                ? ''
+                : `; \`totem hook install --force\` for the rest${legacyNote}`
+            } — \`--force\` rewrites the whole file and would overwrite your own hook content`;
+      return {
+        name: 'Git Hooks',
+        status: 'warn',
+        message: `All ${markers.length} hooks installed, but ${files.join(', ')} ${
+          files.length === 1 ? 'does' : 'do'
+        } not match the canonical rendered for totemDir '${config?.totemDir}' — the hook reads a tree Totem does not write`,
+        remediation,
+      };
+    }
     return {
       name: 'Git Hooks',
       status: 'pass',
@@ -223,6 +284,130 @@ export function checkGitHooks(cwd: string): DiagnosticResult {
     message: `${installed}/${markers.length} hooks installed (missing: ${missing.join(', ')})`,
     remediation: 'totem hooks',
   };
+}
+
+/** One managed hook whose totem-owned block does not match the configured canonical. */
+interface StaleHookRow {
+  file: string;
+  /** `owned-whole`: a totem-owned whole file (safe to `--force`) · `appended`: a
+   *  user hook carrying a bounded totem block (`--force` would clobber it) ·
+   *  `legacy`: a start marker with NO end marker — unbounded, so it was compared
+   *  whole and takes the one `--force` install-hooks.ts prescribes for it. */
+  kind: 'owned-whole' | 'appended' | 'legacy';
+}
+
+/**
+ * The text from the hook's start marker through its end marker, inclusive — the
+ * bounded region `installGitHook` owns. When the region cannot be bounded (a
+ * legacy hook with no end marker) the WHOLE text is returned, so such a file is
+ * compared whole: the conservative reading, and the one `--force` prescribes.
+ */
+function totemOwnedBlock(text: string, marker: string, endMarker: string): string {
+  const start = text.indexOf(marker);
+  if (start === -1) return text;
+  const end = text.indexOf(endMarker, start + marker.length);
+  if (end === -1) return text;
+  return text.slice(start, end + endMarker.length);
+}
+
+/**
+ * The managed hooks whose totem-owned BLOCK differs from the canonical regenerated
+ * at this repo's CONFIGURED `totemDir` (mmnto-ai/totem#2692 C6, amendment A4).
+ *
+ * Runs ONLY when the repo configures a non-default `totemDir` — on the default
+ * the row stays the marker-only, zero-IO sense it has always been. Compares the
+ * region between the hook's start and end markers, the same bounded region
+ * `installGitHook`'s drift-repair owns, so a user hook with an APPENDED totem
+ * block is judged on the block alone and never on the user's own lines. Each row
+ * says what kind of file it is, because the remedy differs.
+ *
+ * The compare is on the `totemDir` axis ONLY (amendment A10): the canonical for
+ * pre-commit / pre-push is rendered at the tier the INSTALLED hook itself
+ * declares (`TOTEM_HOOK_TIER="…"`), so a hook installed with `--strict` on a
+ * repo whose config says nothing is never reported as `totemDir` drift — and
+ * never handed a `--force` that would silently downgrade it to standard.
+ */
+async function hooksRenderedForWrongTotemDir(
+  gitRoot: string,
+  hooksDir: string,
+  config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
+): Promise<StaleHookRow[] | { failure: string }> {
+  const totemDir = config?.totemDir;
+  if (totemDir === undefined || totemDir === '.totem') return [];
+
+  try {
+    const hooks = await import('./install-hooks.js');
+    // A value the installer refuses (`.`, a `..` segment, …) never produced
+    // installed hooks, so there is no render to compare against: the row stays
+    // the marker-only sense — the same policy `doctor --parity` applies.
+    if (hooks.hookTotemDirProblem(totemDir) !== null) return [];
+    type Render = { tier: 'strict' | 'standard'; totemDir: string; fallbackCmd: string };
+    const base: Render = {
+      tier: config?.hooks?.tier ?? 'standard',
+      totemDir,
+      fallbackCmd: hooks.getFallbackCommand(gitRoot),
+    };
+    const canonical: {
+      file: string;
+      build: (render: Render) => string;
+      marker: string;
+      endMarker: string;
+    }[] = [
+      {
+        file: 'pre-commit',
+        build: (r) => hooks.buildPreCommitHook(r),
+        marker: hooks.TOTEM_PRECOMMIT_MARKER,
+        endMarker: hooks.TOTEM_PRECOMMIT_END,
+      },
+      {
+        file: 'pre-push',
+        build: (r) => hooks.buildPrePushHook(r),
+        marker: hooks.TOTEM_PREPUSH_MARKER,
+        endMarker: hooks.TOTEM_PREPUSH_END,
+      },
+      {
+        file: 'post-merge',
+        build: (r) => hooks.buildHookContent(r),
+        marker: hooks.TOTEM_HOOK_MARKER,
+        endMarker: hooks.TOTEM_HOOK_END,
+      },
+      {
+        file: 'post-checkout',
+        build: (r) => hooks.buildPostCheckoutHookContent(r),
+        marker: hooks.TOTEM_CHECKOUT_MARKER,
+        endMarker: hooks.TOTEM_CHECKOUT_END,
+      },
+    ];
+    const stale: StaleHookRow[] = [];
+    for (const { file, build, marker, endMarker } of canonical) {
+      const existing = fs.readFileSync(path.join(hooksDir, file), 'utf-8');
+      // Everything below reads the TOTEM-OWNED block, never the user's own lines:
+      // a user line that happens to carry `TOTEM_HOOK_TIER="…"` or to quote an end
+      // marker must not steer the compare or the remedy (pass-2 F3/F4).
+      const existingBlock = totemOwnedBlock(existing, marker, endMarker);
+      const installedTier = /TOTEM_HOOK_TIER="(strict|standard)"/.exec(existingBlock)?.[1] as
+        | 'strict'
+        | 'standard'
+        | undefined;
+      const content = build({ ...base, tier: installedTier ?? base.tier });
+      if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
+        continue;
+      }
+      const startIdx = existing.indexOf(marker);
+      const boundedAfterStart =
+        startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
+      const kind: StaleHookRow['kind'] = hooks.isTotemOwnedWholeFile(existing, marker, endMarker)
+        ? 'owned-whole'
+        : boundedAfterStart
+          ? 'appended'
+          : 'legacy';
+      stale.push({ file, kind });
+    }
+    return stale;
+    // totem-context: a sensor that cannot regenerate or read the canonical REPORTS that it could not — the caller renders a warn row — never a silent pass and never a crash of the diagnostic pipeline (Tenet 13; Greptile P1 on mmnto-ai/totem#2701).
+  } catch (err) {
+    return { failure: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /**
@@ -2194,7 +2379,14 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
   // strategyRoot across every repo on disk.
   let doctorThresholds: { staleRuleWindow: number } | undefined;
   let loadedConfig:
-    | { strategyRoot?: string; embedding?: { provider?: string; baseUrl?: string } }
+    | {
+        strategyRoot?: string;
+        embedding?: { provider?: string; baseUrl?: string };
+        /** mmnto-ai/totem#2692: threaded into checkGitHooks + checkStaleRules so
+         *  neither re-opens the config to learn where `.totem/` actually is. */
+        totemDir?: string;
+        hooks?: { tier?: 'strict' | 'standard' };
+      }
     | undefined;
   try {
     const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
@@ -2218,23 +2410,29 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     }
   }
 
+  // mmnto-ai/totem#2692 C5: every totemDir-aware row reads the repo's CONFIGURED
+  // directory. A row left on the default reports pass/skip for a tree it never
+  // opened — the two secret rows would attest a clean scan of nothing
+  // (CodeRabbit on mmnto-ai/totem#2701). `checkIndex` is `lanceDir`, not threaded.
+  const totemDir = loadedConfig?.totemDir ?? '.totem';
+
   const results: DiagnosticResult[] = [
     checkConfig(cwd),
-    checkCompiledRules(cwd),
-    checkGitHooks(cwd),
+    checkCompiledRules(cwd, totemDir),
+    await checkGitHooks(cwd, loadedConfig),
     await checkPrepareWrapper(cwd),
     checkEmbeddingConfig(cwd),
     await checkOllama(loadedConfig),
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
     await checkStrategyRoot(cwd, loadedConfig),
-    await checkSecretLeaks(cwd),
-    checkSecretsFileTracked(cwd),
+    await checkSecretLeaks(cwd, totemDir),
+    checkSecretsFileTracked(cwd, totemDir),
     checkAgentsMdCanonical(cwd),
-    await checkUpgradeCandidates(cwd),
-    await checkStaleRules(cwd, '.totem', doctorThresholds),
-    await checkGrandfatheredRules(cwd),
-    await checkFreezes(cwd),
+    await checkUpgradeCandidates(cwd, totemDir),
+    await checkStaleRules(cwd, totemDir, doctorThresholds),
+    await checkGrandfatheredRules(cwd, totemDir),
+    await checkFreezes(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.

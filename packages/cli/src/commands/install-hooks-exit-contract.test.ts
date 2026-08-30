@@ -461,8 +461,8 @@ describe('installHooksNonInteractive (contract sanity)', () => {
     cleanTmpDir(tmpDir);
   });
 
-  it('returns null outside a git repo (declared skip, exit 0 at the command edge)', () => {
-    expect(installHooksNonInteractive(tmpDir)).toBeNull();
+  it('returns null outside a git repo (declared skip, exit 0 at the command edge)', async () => {
+    expect(await installHooksNonInteractive(tmpDir)).toBeNull();
   });
 });
 
@@ -554,8 +554,8 @@ describe('hooksCommand in a linked worktree (mmnto-ai/totem#2418)', () => {
     expect(errorOutput()).toContain('All hooks installed');
   });
 
-  it('installHooksNonInteractive from the worktree classifies all four hooks', () => {
-    const result = installHooksNonInteractive(wtDir);
+  it('installHooksNonInteractive from the worktree classifies all four hooks', async () => {
+    const result = await installHooksNonInteractive(wtDir);
     expect(result).not.toBeNull();
     expect(result!.preCommit).toBe('installed');
     expect(result!.prePush).toBe('installed');
@@ -614,8 +614,8 @@ describe('hooksCommand with an unparseable .git pointer file (declared skip)', (
     expect(out).toContain('not a directory or a resolvable gitdir pointer');
   });
 
-  it('installHooksNonInteractive maps the bad pointer to the declared-skip null (direct API path)', () => {
-    expect(installHooksNonInteractive(tmpDir)).toBeNull();
+  it('installHooksNonInteractive maps the bad pointer to the declared-skip null (direct API path)', async () => {
+    expect(await installHooksNonInteractive(tmpDir)).toBeNull();
   });
 });
 

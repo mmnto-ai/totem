@@ -12,15 +12,15 @@ import {
   CLAUDE_SETTINGS_FILE,
   CLAUDE_SETTINGS_LOCAL_FILE,
   deriveDirtyTreeSense,
-  EJECT_ARTIFACT_DIRS,
   EJECT_CONFIG_FILE,
+  ejectArtifactDirs,
   ejectCommand,
   LEGACY_REFLEX_FILES,
   resolveEjectHooksContext,
   scrubPostCheckoutHook,
   scrubPostMergeHook,
   scrubReflexFiles,
-  TOTEM_SCAFFOLDED_FILES,
+  totemScaffoldedFiles,
 } from './eject.js';
 import { AI_TOOLS } from './init-detect.js';
 import {
@@ -1426,13 +1426,13 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
     // path.join construction.
     const expected = [
       ...new Set([
-        ...TOTEM_SCAFFOLDED_FILES,
+        ...totemScaffoldedFiles('.totem'),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
         ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
-        ...EJECT_ARTIFACT_DIRS,
+        ...ejectArtifactDirs('.totem'),
         EJECT_CONFIG_FILE,
       ]),
     ];

@@ -23,6 +23,15 @@ import { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT } from './spec-templates.js';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
+// The default render options the hook builders take since mmnto-ai/totem#2692
+// (required options object, no defaulted parameter) — this repo pins no
+// `totemDir`, so `tools/` renders at the schema default.
+const RENDER = {
+  tier: 'standard' as const,
+  totemDir: '.totem',
+  fallbackCmd: 'pnpm dlx @mmnto/cli',
+};
+
 function readRoot(file: string): string {
   return fs.readFileSync(path.join(ROOT, file), 'utf-8');
 }
@@ -43,7 +52,7 @@ describe('dev hooks match consumer templates', () => {
   });
 
   it('dev pre-commit blocks the same branches as consumer template', () => {
-    const consumerHook = buildPreCommitHook();
+    const consumerHook = buildPreCommitHook(RENDER);
     // Both must block main and master
     expect(devPreCommit).toContain('"main"');
     expect(devPreCommit).toContain('"master"');
@@ -52,7 +61,7 @@ describe('dev hooks match consumer templates', () => {
   });
 
   it('dev pre-push runs totem lint and consumer template runs lint stateless', () => {
-    const consumerHook = buildPrePushHook('pnpm dlx @mmnto/cli');
+    const consumerHook = buildPrePushHook(RENDER);
     // tools/ is now byte-identical to the builder output (mmnto-ai/totem#2404), so the
     // dev hook runs lint via the resolved $TOTEM_CMD, exactly like the consumer template.
     expect(devPrePush).toContain('$TOTEM_CMD lint');

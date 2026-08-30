@@ -359,11 +359,21 @@ function lockContentPackageDirFor(contractId: string, gitRoot: string): string |
  * string, so an npm consumer's `npx`-flavored hook does not read as drift against a
  * pnpm canonical (the parameterization-aware contract, mmnto-ai/totem#2053).
  */
+interface HookRenderOptionsShape {
+  tier: 'strict' | 'standard';
+  totemDir: string;
+  fallbackCmd: string;
+}
+
 interface HookBuilderSource {
-  buildPreCommitHook: (tier?: 'strict' | 'standard') => string;
-  buildPrePushHook: (fallbackCmd: string, tier?: 'strict' | 'standard') => string;
-  buildHookContent: (fallbackCmd: string) => string;
-  buildPostCheckoutHookContent: (fallbackCmd: string) => string;
+  buildPreCommitHook: (options: { tier: 'strict' | 'standard'; totemDir: string }) => string;
+  buildPrePushHook: (options: {
+    fallbackCmd: string;
+    tier: 'strict' | 'standard';
+    totemDir: string;
+  }) => string;
+  buildHookContent: (options: { fallbackCmd: string; totemDir: string }) => string;
+  buildPostCheckoutHookContent: (options: { fallbackCmd: string; totemDir: string }) => string;
   markers: {
     preCommit: string;
     prePush: string;
@@ -396,34 +406,33 @@ interface GeneratedArtifact {
  */
 function gitHookArtifactsFor(
   hooksDir: string,
-  tier: 'strict' | 'standard',
-  fallbackCmd: string,
+  render: HookRenderOptionsShape,
   builders: HookBuilderSource,
 ): GeneratedArtifact[] {
   const m = builders.markers;
   return [
     {
       consumerPath: path.join(hooksDir, 'pre-commit'),
-      canonicalContent: builders.buildPreCommitHook(tier),
+      canonicalContent: builders.buildPreCommitHook(render),
       ownershipMarker: m.preCommit,
       lineName: 'Parity: git-hooks (pre-commit)',
     },
     {
       consumerPath: path.join(hooksDir, 'pre-push'),
-      canonicalContent: builders.buildPrePushHook(fallbackCmd, tier),
+      canonicalContent: builders.buildPrePushHook(render),
       ownershipMarker: m.prePush,
       lineName: 'Parity: git-hooks (pre-push)',
     },
     {
       consumerPath: path.join(hooksDir, 'post-merge'),
-      canonicalContent: builders.buildHookContent(fallbackCmd),
+      canonicalContent: builders.buildHookContent(render),
       ownershipMarker: m.postMerge.start,
       endMarker: m.postMerge.end,
       lineName: 'Parity: git-hooks (post-merge)',
     },
     {
       consumerPath: path.join(hooksDir, 'post-checkout'),
-      canonicalContent: builders.buildPostCheckoutHookContent(fallbackCmd),
+      canonicalContent: builders.buildPostCheckoutHookContent(render),
       ownershipMarker: m.postCheckout.start,
       endMarker: m.postCheckout.end,
       lineName: 'Parity: git-hooks (post-checkout)',
@@ -647,6 +656,13 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   // at the CONFIGURED tier — a hook on disk that does not match its repo's configured
   // tier is genuine drift, which the content compare correctly surfaces.
   let hookTier: 'strict' | 'standard' = 'standard';
+  // Totem directory the git hooks were rendered at, resolved from the SAME
+  // repo-local config load as the tier (mmnto-ai/totem#2692 C6): a hook naming
+  // `.totem/` in a repo that configured something else is genuine drift, and the
+  // content compare below surfaces it with the `--force` remediation. Derived
+  // here rather than through `resolveHookRenderOptions` so this branch keeps its
+  // single config read and its `isGlobalConfigPath` guard.
+  let hookTotemDir = '.totem';
   // Opt-in cross-repo read set for the §14 network-read-only probes (current repo
   // is always probed; this only widens the roster). Captured from the SAME
   // repo-local config load — never leaked from the global profile.
@@ -665,6 +681,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       const config = await loadConfig(configPath);
       configValue = config.orient?.parityManifest;
       hookTier = config.hooks?.tier ?? 'standard';
+      // A value the hooks cannot be rendered for (`.`, a `..` segment, …) never
+      // produced installed hooks — the installer refuses it — so the canonical is
+      // regenerated at the default rather than letting a builder throw mid-row
+      // (mmnto-ai/totem#2692 amendment A7).
+      const configuredTotemDir = config.totemDir ?? '.totem';
+      const { hookTotemDirProblem } = await import('./install-hooks.js');
+      hookTotemDir =
+        hookTotemDirProblem(configuredTotemDir) === null ? configuredTotemDir : '.totem';
       probeRepos = config.orient?.parityProbeRepos;
     }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.
@@ -1138,8 +1162,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             const parityHooksDir = resolveHooksDir(gitRoot) ?? path.join(gitRoot, '.git', 'hooks');
             generatedArtifacts = gitHookArtifactsFor(
               parityHooksDir,
-              hookTier,
-              fallbackCmd,
+              { tier: hookTier, totemDir: hookTotemDir, fallbackCmd },
               hookBuilders,
             );
             artifactLabel = 'git hook';

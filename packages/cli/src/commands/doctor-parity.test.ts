@@ -898,12 +898,15 @@ function writeGitHook(name: string, content: string): void {
 }
 
 /** Install every git hook VERBATIM from the running generator (the clean PASS case). */
-function installCurrentHooks(): void {
-  const fallbackCmd = getFallbackCommand(tmpDir);
-  writeGitHook('pre-commit', buildPreCommitHook('standard'));
-  writeGitHook('pre-push', buildPrePushHook(fallbackCmd, 'standard'));
-  writeGitHook('post-merge', buildHookContent(fallbackCmd));
-  writeGitHook('post-checkout', buildPostCheckoutHookContent(fallbackCmd));
+function installCurrentHooks(totemDir = '.totem'): void {
+  // mmnto-ai/totem#2692: the builders take a REQUIRED options object, so the
+  // fixture states the tier/totemDir/fallbackCmd the canonical is rendered at —
+  // the same three fields `checkParity` resolves from config.
+  const render = { tier: 'standard' as const, totemDir, fallbackCmd: getFallbackCommand(tmpDir) };
+  writeGitHook('pre-commit', buildPreCommitHook(render));
+  writeGitHook('pre-push', buildPrePushHook(render));
+  writeGitHook('post-merge', buildHookContent(render));
+  writeGitHook('post-checkout', buildPostCheckoutHookContent(render));
 }
 
 describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
@@ -957,7 +960,14 @@ describe('checkParity — mechanical git-hooks wiring (#2073)', () => {
     writeConfig(`${BASE_CONFIG}orient:\n  parityManifest: m.yaml\nhooks:\n  tier: strict\n`);
     writeManifest('m.yaml', HOOKS_MANIFEST_YAML);
     // Install the STANDARD pre-push, but the repo is configured strict → drift.
-    writeGitHook('pre-push', buildPrePushHook(getFallbackCommand(tmpDir), 'standard'));
+    writeGitHook(
+      'pre-push',
+      buildPrePushHook({
+        tier: 'standard',
+        totemDir: '.totem',
+        fallbackCmd: getFallbackCommand(tmpDir),
+      }),
+    );
 
     const { results } = await checkParity(tmpDir);
     const prePush = results.find((r) => r.name === 'Parity: git-hooks (pre-push)')!;
