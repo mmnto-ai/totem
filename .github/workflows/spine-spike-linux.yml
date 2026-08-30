@@ -8,7 +8,24 @@
 # seed-20 apparatus lands on `r14/seed20-target-apparatus` — so the trigger follows
 # the SPIKE DIRECTORY on any branch instead of one branch name. A push that touches
 # nothing under `spikes/spine-adopt/**` still does not run it, so `main` and the
-# repo's CI are perturbed no more than before.
+# repo's CI are perturbed no more than before. (This file is in its own path filter
+# too, so an edit to the workflow exercises itself.)
+#
+# TWO LEGS, one matrix (mmnto-ai/totem-strategy#1154 § 5 K7, ruled 2026-08-30):
+#   - `specimens` — the original arm, unchanged: shipped runtime re-derived on
+#     Linux, the OPA differential, the SMT floor + binding probe, the wazero probe,
+#     the K-controls; uploads `spine-spike-linux-artifacts`.
+#   - `seed20` — the R14 seed-20 seam on Linux, in the apparatus's own order
+#     (control-only build FIRST so the seed manifest measures `repinned` from arm B,
+#     then `all` → `differential` → the Go arm → `controls`); uploads
+#     `spine-spike-linux-seed20-artifacts`. Its `artifacts/chains/**` are what the
+#     owner copies to `artifacts/k7-rebuild/chains/` at the run of record, so K7
+#     (`src/controls.mts`) corroborates T6 on the SAME chains across hosts — the
+#     specimens leg's chains overlap a seed run on one package only. K7 compares
+#     `regoSha256` / `wasmSha256` per chain, which are content digests independent
+#     of the commit, so any Linux run of the identical apparatus source + frozen
+#     seed qualifies; the run of record cites the run id it copied from. No
+#     apparatus code moves; the apparatus pin (`57f9af5a`) is unchanged.
 #
 # Tool provisioning reads the URL + sha256 straight out of
 # `spikes/spine-adopt/toolchain.lock` so the lock stays the single source of
@@ -17,7 +34,9 @@ name: Spine Spike (Linux)
 
 on:
   push:
-    paths: [spikes/spine-adopt/**]
+    paths:
+      - spikes/spine-adopt/**
+      - .github/workflows/spine-spike-linux.yml
   workflow_dispatch:
 
 concurrency:
@@ -29,8 +48,12 @@ permissions:
 
 jobs:
   linux:
-    name: spine-adopt harnesses on ubuntu-latest
+    name: spine-adopt harnesses on ubuntu-latest (${{ matrix.record_set }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        record_set: [specimens, seed20]
     env:
       TOOLS_DIR: ${{ github.workspace }}/spikes/spine-adopt/tools
     steps:
@@ -113,6 +136,10 @@ jobs:
           ./z3-5.1.0-x64-glibc-2.39/bin/z3 --version
           ./cvc5-Linux-x86_64-static/bin/cvc5 --version | head -1
 
+      # ═══════════════════════════════════════════════════════════════════════
+      # specimens leg — the original arm, step for step
+      # ═══════════════════════════════════════════════════════════════════════
+
       # ── (a) OPA Rego→Wasm verdict differential ─────────────────────────────
       # `all` FIRST (census → verify-records → facts → shipped-verdicts) so the
       # shipped runtime, fact bundles, and reference verdicts are all re-derived
@@ -131,11 +158,13 @@ jobs:
       # all three hosts, including the Go/wazero arm, which is why setup-go above
       # must stay ahead of this step.
       - name: Spike 1 — shipped runtime re-derived on Linux
+        if: matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt
         env:
           SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
         run: npm run all
       - name: Spike 1 — OPA differential
+        if: matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt
         env:
           SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
@@ -145,6 +174,7 @@ jobs:
       # This is the deliverable floor and MUST pass; the native binding is a
       # separate, explicitly non-fatal step below.
       - name: Spike 2 — SMT obligations (pinned CLI arm)
+        if: matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt/smt
         env:
           SPIKE_Z3_BIN: ${{ env.TOOLS_DIR }}/z3-5.1.0-x64-glibc-2.39/bin/z3
@@ -156,6 +186,7 @@ jobs:
       # (spec § Failure modes, "z3-sys/cvc5 build fails" => recorded build-matrix
       # row, not a spike failure). The CLI floor above already passed.
       - name: Spike 2 — z3 binding arm (non-fatal build-matrix probe)
+        if: matrix.record_set == 'specimens'
         id: binding
         continue-on-error: true
         working-directory: spikes/spine-adopt/smt
@@ -171,7 +202,7 @@ jobs:
           cargo run --features binding-z3 2>&1 | tee artifacts/binding-z3-linux.log
 
       - name: Record the binding arm's outcome as an artifact row
-        if: always()
+        if: always() && matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt/smt
         run: |
           mkdir -p artifacts
@@ -187,6 +218,7 @@ jobs:
       # Runs AFTER the differential: it reads that run's lowering-rejects.json,
       # opa-verdicts.json and the rego/*/policy.wasm artifacts.
       - name: Enrichment — wazero probe
+        if: matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt/wazero-probe
         run: |
           go test ./...
@@ -200,16 +232,74 @@ jobs:
       # Linux arm means `controls.json` is deposited on BOTH platforms from one
       # edit, the way `certify` already is.
       - name: Enrichment — K-controls
+        if: matrix.record_set == 'specimens'
         working-directory: spikes/spine-adopt
         env:
           SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
         run: npm run controls
 
+      # ═══════════════════════════════════════════════════════════════════════
+      # seed20 leg — the R14 seed-20 seam, in the apparatus's own order (spec
+      # `.totem/specs/seed20-apparatus-slice2.md` § S5 / § Verification; the
+      # controls-at-the-pin sequence of mmnto-ai/totem#2702). Its chains are
+      # K7's input at the run of record.
+      # ═══════════════════════════════════════════════════════════════════════
+
+      # Control-only build FIRST (K3 arm B): one specimen record under
+      # `SPIKE_CONTROL_RECORD`, output under `artifacts/k3-control/` (the default
+      # subdir for the control set), so the seed manifest below measures
+      # `k3Capture.repinned` FROM this build rather than reporting it unmeasured.
+      # `SPIKE_RECORD_SET` is deliberately unset here: the control set is selected
+      # by the control-record flag alone.
+      - name: Seed-20 — control-only build FIRST (K3 arm B)
+        if: matrix.record_set == 'seed20'
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+          SPIKE_CONTROL_RECORD: records/c-supp-astgrep-compound-failopen-catch.rule.yaml
+        run: npm run manifest && npm run lower && npm run build-wasm && npm run certify
+
+      - name: Seed-20 — shipped runtime re-derived on Linux
+        if: matrix.record_set == 'seed20'
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+          SPIKE_RECORD_SET: seed20
+        run: npm run all
+
+      - name: Seed-20 — OPA differential
+        if: matrix.record_set == 'seed20'
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+          SPIKE_RECORD_SET: seed20
+        run: npm run differential
+
+      - name: Seed-20 — wazero probe
+        if: matrix.record_set == 'seed20'
+        working-directory: spikes/spine-adopt/wazero-probe
+        env:
+          SPIKE_RECORD_SET: seed20
+        run: |
+          go test ./...
+          go run .
+
+      - name: Seed-20 — K-controls
+        if: matrix.record_set == 'seed20'
+        working-directory: spikes/spine-adopt
+        env:
+          SPIKE_OPA_BIN: ${{ env.TOOLS_DIR }}/opa_linux_amd64_static
+          SPIKE_RECORD_SET: seed20
+        run: npm run controls
+
+      # One upload per leg, under distinct names: `spine-spike-linux-artifacts`
+      # (specimens, the name every prior run used) and
+      # `spine-spike-linux-seed20-artifacts` (the K7 source).
       - name: Upload spike artifacts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: spine-spike-linux-artifacts
+          name: ${{ matrix.record_set == 'seed20' && 'spine-spike-linux-seed20-artifacts' || 'spine-spike-linux-artifacts' }}
           if-no-files-found: error
           path: |
             spikes/spine-adopt/artifacts/**
