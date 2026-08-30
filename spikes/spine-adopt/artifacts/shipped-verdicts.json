@@ -87,7 +87,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "0123456789abcdef",
@@ -159,7 +160,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "0123456789abcdef",
@@ -231,7 +233,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "0123456789abcdef",
@@ -265,7 +268,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "0167a783f75b5ecd",
@@ -314,7 +318,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "0167a783f75b5ecd",
@@ -340,7 +345,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "49dd9e4fd02d692b",
@@ -412,7 +418,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "49dd9e4fd02d692b",
@@ -446,7 +453,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "54140f59be3e6e44",
@@ -518,7 +526,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "54140f59be3e6e44",
@@ -552,7 +561,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "5b85fe53468964e1",
@@ -601,7 +611,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "5b85fe53468964e1",
@@ -627,7 +638,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "5da43ea60b66e96e",
@@ -699,7 +711,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "5da43ea60b66e96e",
@@ -733,7 +746,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6467c35159c1504d",
@@ -782,7 +796,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6467c35159c1504d",
@@ -808,7 +823,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "65ede9bfdf6995fe",
@@ -857,7 +873,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "65ede9bfdf6995fe",
@@ -883,7 +900,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b1890e2dbda3331",
@@ -932,7 +950,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b1890e2dbda3331",
@@ -958,7 +977,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b1890e2dbda3331",
@@ -1007,7 +1027,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b1890e2dbda3331",
@@ -1033,7 +1054,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b2b62eb1e8693fc",
@@ -1082,7 +1104,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "6b2b62eb1e8693fc",
@@ -1131,7 +1154,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "71935fe9a742137b",
@@ -1180,7 +1204,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "71935fe9a742137b",
@@ -1206,7 +1231,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "71935fe9a742137b",
@@ -1255,7 +1281,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "71935fe9a742137b",
@@ -1281,7 +1308,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
@@ -1330,7 +1358,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
@@ -1356,7 +1385,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
@@ -1405,7 +1435,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
@@ -1431,7 +1462,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "87aff037d7de47a7",
@@ -1521,7 +1553,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "89184bb5fd960848",
@@ -1555,7 +1588,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "aa7a588d48e74503",
@@ -1604,7 +1638,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "aa7a588d48e74503",
@@ -1630,7 +1665,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "b237bcf3b52381b1",
@@ -1679,7 +1715,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "b237bcf3b52381b1",
@@ -1728,7 +1765,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "b973609688ec2888",
@@ -1777,7 +1815,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "b973609688ec2888",
@@ -1803,7 +1842,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "be74c55caa9fd60c",
@@ -1875,7 +1915,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "be74c55caa9fd60c",
@@ -1947,7 +1988,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "d5faa14cbb8b50fb",
@@ -2019,7 +2061,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "d5faa14cbb8b50fb",
@@ -2053,7 +2096,8 @@
         }
       ],
       "armsCoincide": false,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "d940b2c9ffe92e99",
@@ -2079,7 +2123,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     },
     {
       "ruleId": "d940b2c9ffe92e99",
@@ -2105,7 +2150,8 @@
         }
       ],
       "armsCoincide": true,
-      "armsAgree": true
+      "armsAgree": true,
+      "error": null
     }
   ],
   "pinReproduction": [],
@@ -2602,6 +2648,6 @@
       "detail": "record set seed20; exemplar transcriptions in the loaded set: 1"
     }
   ],
-  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
+  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1",
   "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

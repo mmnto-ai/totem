@@ -46,7 +46,7 @@
     {
       "name": "the working tree at `runCommit` is CLEAN — REQUIRED on `seed20` (§ S4 / fold 1 F13; set SPIKE_ALLOW_DIRTY_TREE=1 for a dev run)",
       "ok": true,
-      "detail": "clean — scope: `git status --porcelain -- . :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build`; the 3 excluded output tree(s) carry 8 recorded entries (`artifactTreeEntries`, never gated)"
+      "detail": "clean — scope: `git status --porcelain -- . :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build`; the 3 excluded output tree(s) carry 7 recorded entries (`artifactTreeEntries`, never gated)"
     },
     {
       "name": "every toolchain version RESOLVED from a binary or a lockfile — REQUIRED on `seed20` (§ S4)",
@@ -126,12 +126,12 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): FALSE — the pinned target STANDS",
       "ok": true,
-      "detail": "the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988"
+      "detail": "the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268"
     },
     {
       "name": "K3 arm B PRESENT and bound to this run (§ 6: the control-only build runs FIRST)",
       "ok": true,
-      "detail": "bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988; repinned=false"
+      "detail": "bound to this run: `artifacts/k3-control/manifest.json` carries recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268; repinned=false"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -156,7 +156,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12\""
+      "detail": "\"bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -164,5 +164,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12"
+  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1"
 }

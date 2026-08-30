@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
-  "runCommit": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
+  "apparatusPin": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
+  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
   "recordSet": "seed20",
   "artifactsSubdir": null,
   "controls": [
@@ -96,7 +96,7 @@
       "id": "K3",
       "refusing": true,
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
@@ -158,8 +158,8 @@
           "arm": "B",
           "ok": true,
           "armB": "stands",
-          "binding": "bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988",
-          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
+          "binding": "bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
+          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
           "rows": [
             {
               "file": "k3-control/chains/r87aff037d7de47a7.json",
@@ -1251,7 +1251,7 @@
     {
       "name": "K3 — PASS",
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=8f64e4b985b345da4cf5ee4028edb1f22e117988 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
       "name": "K3b — PASS",
@@ -1289,6 +1289,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "947f4f37fefe7b0c0914446e3287804b40bb8b2e4ec00f345cc33e49c44e5c12",
+  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1",
   "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

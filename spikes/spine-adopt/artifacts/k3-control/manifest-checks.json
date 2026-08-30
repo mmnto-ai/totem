@@ -121,7 +121,7 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): NOT MEASURED (null)",
       "ok": true,
-      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"69b8554431c7e8e7eba461026405cc268fc0bff4\"; arm B requires recordSet 'control' at THIS run's HEAD 8f64e4b985b345da4cf5ee4028edb1f22e117988 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
+      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"8f64e4b985b345da4cf5ee4028edb1f22e117988\"; arm B requires recordSet 'control' at THIS run's HEAD 1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -146,7 +146,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0\""
+      "detail": "\"1a0eccf990412d23463975547d80360dca04466aac76e16e2ad5d30433f8acaf\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -154,5 +154,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0"
+  "runManifestSha256": "1a0eccf990412d23463975547d80360dca04466aac76e16e2ad5d30433f8acaf"
 }
