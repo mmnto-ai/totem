@@ -1,0 +1,22 @@
+{
+  "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+  "specimen": "d940b2c9-stdio-in-exec-options",
+  "ruleId": "d940b2c9ffe92e99",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-d940b2c9-stdio-in-exec-options.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "58331c1a2092cf4fff4b9c09fc13704c052c34022436de3c01f53b653ec683dc"
+  },
+  "astQuery": "{ $$$BEFORE, stdio: $VAL, $$$AFTER }",
+  "factBundle": {
+    "file": "packages/core/src/exec-site.ts",
+    "fileText": "const out = execSync(cmd, { cwd: repoRoot, encoding: 'utf8' });",
+    "lines": [
+      "const out = execSync(cmd, { cwd: repoRoot, encoding: 'utf8' });"
+    ],
+    "astMatches": []
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lower.mts",
+  "contract": "spikes/spine-adopt/rego/LOWERING.md",
+  "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+  "contractNotes": [
+    {
+      "id": "N1",
+      "clause": "§ Lowering 1 — \"One package per record … `totem.spike.r<ruleId>`\"",
+      "finding": "`r<ruleId>` is NOT unique across the 7 records: d-line, d-file and e all carry the pinned exemplar id 0123456789abcdef. \"One package per record\" and \"r<ruleId>\" cannot both hold.",
+      "resolution": "The SEMANTIC half (one policy per record) is unambiguous in both the spec and LOWERING.md, so the naming gives: a colliding id takes a `_<specimen>` suffix; a unique id stays exactly on-contract. FLAGGED for the dispatching seat — this is a naming decision, reversible in one place (`packageSuffix`).",
+      "affected": []
+    },
+    {
+      "id": "N2",
+      "clause": "§ Lowering 6 vs § Lowering 7",
+      "finding": "The contract does not order the suppression check against the requires check. A match that is BOTH suppressed and requires-satisfied could emit `suppress` or emit nothing.",
+      "resolution": "MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. NOT MEASURED — no fact bundles on disk (`npm run facts` has not run for this record set; run it before reading this note as a reachability claim) — and with nothing measured, this note makes NO claim about differential rows.",
+      "affected": []
+    },
+    {
+      "id": "N4",
+      "clause": "§ Lowering 7 — \"or preceding-line `totem-ignore-next-line`/`totem-context:`\"",
+      "finding": "The contract's PRECEDING-line marker set is one marker short of the shipped runtime. `isSuppressed` (rule-engine.ts:384-388) routes the preceding line through `hasContextDirective` (:349-356), which accepts `shield-context:` as well as `totem-context:`. The same-line set in the contract is exact (rule-engine.ts:377-381); only the preceding anchor diverges.",
+      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. NOT MEASURED — no fact bundles on disk (`npm run facts` has not run for this record set; run it before reading this note as a reachability claim). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
+      "affected": []
+    },
+    {
+      "id": "N3",
+      "clause": "§ Lowering 2 — \"Strict always … the host must surface builtin errors as errors\"",
+      "finding": "MEASURED: an OPA WASM module has no `--strict-builtin-errors` equivalent. `opa build -t wasm` accepts a lookahead pattern (exit 0, a 328 KB module); the failure surfaces only at EVAL, as an UNDEFINED rule — the entrypoint returns `[]` with no trap and no `opa_abort`.",
+      "resolution": "Strictness is made STRUCTURAL in the lowering instead: every emitted pattern is exercised by `patterns_compile` inside the COMPLETE `result` rule, so a compile failure leaves `result` undefined and the host reads an empty result SET as an ERROR ROW. Recorded as a first-order ABI finding, not worked around silently.",
+      "affected": []
+    }
+  ],
+  "rejects": [
+    {
+      "ruleHash": "bddfbd2ec1c75eaf",
+      "corpus": "pack-agent-workflow",
+      "censusClass": "lookaround",
+      "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "control": false,
+      "verdict": {
+        "role": "evidence-row:bddfbd2ec1c75eaf",
+        "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+        "class": "lookaround",
+        "lowered": false,
+        "literal": null,
+        "reason": "RE2 rejects lookaround AT COMPILE (\"invalid or unsupported Perl syntax: `(?!`\" / \"invalid named capture\"); § Lowering 4 forbids an approximation."
+      },
+      "policyEmitted": false,
+      "policyPath": null
+    },
+    {
+      "ruleHash": "80192e6ac2a1dd3c",
+      "corpus": "root",
+      "censusClass": "backreference",
+      "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+      "control": false,
+      "verdict": {
+        "role": "evidence-row:80192e6ac2a1dd3c",
+        "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+        "class": "backreference",
+        "lowered": false,
+        "literal": null,
+        "reason": "RE2 rejects backreferences AT COMPILE (\"invalid escape sequence: `\\1`\"); § Lowering 4 forbids an approximation."
+      },
+      "policyEmitted": false,
+      "policyPath": null
+    }
+  ],
+  "lowered": [
+    {
+      "specimen": "c-supp",
+      "seedEntry": null,
+      "control": true,
+      "ruleId": "87aff037d7de47a7",
+      "package": "totem.spike.r87aff037d7de47a7",
+      "entrypoint": "totem/spike/r87aff037d7de47a7/result",
+      "engine": "ast-grep",
+      "dir": "rego/build/k3-control/r87aff037d7de47a7",
+      "published": "artifacts/k3-control/lowered/r87aff037d7de47a7",
+      "patterns": [],
+      "globCount": 3
+    }
+  ],
+  "checks": [
+    {
+      "name": "FactBundle schema line lifted VERBATIM from LOWERING.md § Input contract (never retyped)",
+      "ok": true,
+      "detail": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }"
+    },
+    {
+      "name": "CONTRACT NOTE (N1) — the `control` set is ONE record, so no lessonHash collides and the package name is exactly `r<ruleId>`",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "CONTROL (§ Lowering 3) — the backtick assert tests raw-string SYNTAX: a genuine RAW literal is flagged, a backtick INSIDE a double-quoted literal is not, and `\\\"` does not end the literal early",
+      "ok": true,
+      "detail": "raw=\"x := `raw`\" quoted=\"x := \" escaped=\"x := \""
+    },
+    {
+      "name": "c-supp — ast-grep record carries an EMPTY `pattern` (tree matching is a FACT, not a regex)",
+      "ok": true,
+      "detail": "\"\""
+    },
+    {
+      "name": "c-supp — every pattern lowers (§ Lowering 4 gate)",
+      "ok": true,
+      "detail": "(no regex patterns)"
+    },
+    {
+      "name": "c-supp — per-glob agreement with `matchesRecordGlob` over 24 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r87aff037d7de47a7/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "72 (glob × path) probes agree"
+    },
+    {
+      "name": "c-supp — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r87aff037d7de47a7/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "24 paths agree (5 in scope)"
+    },
+    {
+      "name": "c-supp — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "5 in / 19 out"
+    },
+    {
+      "name": "c-supp — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "117 code lines / 5134 bytes"
+    },
+    {
+      "name": "1 records lowered, one policy package each (§ Lowering 1)",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "package names are UNIQUE (the N1 collision is resolved, not papered over)",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "REJECT ROW — bddfbd2ec1c75eaf (lookaround) is REJECTED by the lowerer, never approximated",
+      "ok": true,
+      "detail": "RE2 rejects lookaround AT COMPILE (\"invalid or unsupported Perl syntax: `(?!`\" / \"invalid named capture\"); § Lowering 4 forbids an approximation."
+    },
+    {
+      "name": "REJECT ROW — bddfbd2ec1c75eaf: the lowerer's class agrees with the census",
+      "ok": true,
+      "detail": "\"lookaround\""
+    },
+    {
+      "name": "REJECT ROW — 80192e6ac2a1dd3c (backreference) is REJECTED by the lowerer, never approximated",
+      "ok": true,
+      "detail": "RE2 rejects backreferences AT COMPILE (\"invalid escape sequence: `\\1`\"); § Lowering 4 forbids an approximation."
+    },
+    {
+      "name": "REJECT ROW — 80192e6ac2a1dd3c: the lowerer's class agrees with the census",
+      "ok": true,
+      "detail": "\"backreference\""
+    },
+    {
+      "name": "REJECT ROW — the lookbehind row is classed `lookaround` and the backreference row `backreference`",
+      "ok": true,
+      "detail": "lookaround / backreference"
+    },
+    {
+      "name": "REJECT ROW — no policy directory was written for either rejected pattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "the build tree holds EXACTLY the 1 lowered packages",
+      "ok": true,
+      "detail": "[\"r87aff037d7de47a7\"]"
+    },
+    {
+      "name": "the published tree `artifacts/k3-control/lowered/` holds EXACTLY the same 1 packages",
+      "ok": true,
+      "detail": "[\"r87aff037d7de47a7\"]"
+    },
+    {
+      "name": "(G7) every published policy.rego is BYTE-IDENTICAL to the one whose sha256 the chain binds",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "c-supp — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/k3-control/r87aff037d7de47a7"
+    }
+  ],
+  "runManifestSha256": "e193ec3013bf57cb9977239a071b1fe77dc908194bb6e3f9bcb0fbd57c431f53",
+  "bundlesSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+}

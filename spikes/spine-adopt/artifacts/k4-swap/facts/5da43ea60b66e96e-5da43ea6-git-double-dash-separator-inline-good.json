@@ -1,0 +1,22 @@
+{
+  "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+  "specimen": "5da43ea6-git-double-dash-separator",
+  "ruleId": "5da43ea60b66e96e",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-5da43ea6-git-double-dash-separator.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "c89c14f8d17e4a89e59c124e35343c3fb7601da67abf0b729a31f4d51bdfa0ab"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/release.sh",
+    "fileText": "git log \"$UNTRUSTED_REF\" -- .",
+    "lines": [
+      "git log \"$UNTRUSTED_REF\" -- ."
+    ],
+    "astMatches": []
+  }
+}

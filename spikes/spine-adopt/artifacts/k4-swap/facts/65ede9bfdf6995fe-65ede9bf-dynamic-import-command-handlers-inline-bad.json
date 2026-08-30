@@ -1,0 +1,29 @@
+{
+  "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+  "specimen": "65ede9bf-dynamic-import-command-handlers",
+  "ruleId": "65ede9bfdf6995fe",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "6f7afad57b7bfb9f09c6c6e5d6a7d179aba4655d422dfb2666d3e5c890bce9b0"
+  },
+  "astQuery": "import($MODULE)",
+  "factBundle": {
+    "file": "packages/cli/src/handlers/run.ts",
+    "fileText": "const { runOrient } = await import('../commands/orient.js');",
+    "lines": [
+      "const { runOrient } = await import('../commands/orient.js');"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "const { runOrient } = await import('../commands/orient.js');",
+        "startLineText": "const { runOrient } = await import('../commands/orient.js');",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

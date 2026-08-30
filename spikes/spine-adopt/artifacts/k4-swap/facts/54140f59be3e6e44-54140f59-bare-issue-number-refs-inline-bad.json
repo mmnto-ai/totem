@@ -1,0 +1,22 @@
+{
+  "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
+  "specimen": "54140f59-bare-issue-number-refs",
+  "ruleId": "54140f59be3e6e44",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-54140f59-bare-issue-number-refs.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "377b632e80044b4e849aa4ba33d75d5eb8ea4f6d572afe6df4ed63dd5224cbd6"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "packages/cli/src/commands/issue.ts",
+    "fileText": "const helpText = 'Tracked in #2655 — see the changelog.';",
+    "lines": [
+      "const helpText = 'Tracked in #2655 — see the changelog.';"
+    ],
+    "astMatches": []
+  }
+}

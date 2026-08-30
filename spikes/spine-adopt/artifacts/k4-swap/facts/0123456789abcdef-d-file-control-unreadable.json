@@ -1,0 +1,24 @@
+{
+  "fixtureId": "d-file-control-unreadable",
+  "specimen": "d-file",
+  "ruleId": "0123456789abcdef",
+  "engine": "regex",
+  "source": "synthetic-control",
+  "arm": "unreadable",
+  "provenance": {
+    "control": true,
+    "controlRecord": true,
+    "mirrors": "record-runtime.test.ts:385-394 — \"fires when the file cannot be read at all\"",
+    "note": "fileText: null beside a NON-EMPTY lines[]. A diff addition exists whether or not the file can be read, so lines[] here comes from the DIFF, not from fileText — the one bundle where the two sources are not the same source.",
+    "expectation": "context absent => fail TOWARD flagging => FIRES"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/absent.sh",
+    "fileText": null,
+    "lines": [
+      "git log --oneline"
+    ],
+    "astMatches": []
+  }
+}

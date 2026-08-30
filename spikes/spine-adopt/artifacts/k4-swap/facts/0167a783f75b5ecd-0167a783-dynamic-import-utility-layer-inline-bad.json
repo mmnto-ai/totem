@@ -1,0 +1,29 @@
+{
+  "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
+  "specimen": "0167a783-dynamic-import-utility-layer",
+  "ruleId": "0167a783f75b5ecd",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-0167a783-dynamic-import-utility-layer.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "ce06ac1183654d8312f2b2697e0d35f08e3d43bda126425fe7dec871f1e5ee2e"
+  },
+  "astQuery": "import($MODULE)",
+  "factBundle": {
+    "file": "packages/cli/src/adapters/loader.ts",
+    "fileText": "const { chalk } = await import('chalk');",
+    "lines": [
+      "const { chalk } = await import('chalk');"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "const { chalk } = await import('chalk');",
+        "startLineText": "const { chalk } = await import('chalk');",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

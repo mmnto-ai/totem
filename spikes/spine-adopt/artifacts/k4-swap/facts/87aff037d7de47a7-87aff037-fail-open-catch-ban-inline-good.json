@@ -1,0 +1,44 @@
+{
+  "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+  "specimen": "87aff037-fail-open-catch-ban",
+  "ruleId": "87aff037d7de47a7",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "5e15c9817320158b4a8275dbb358ba74af1b203da33abb1dd520c3c241d64f04",
+    "swapped": true,
+    "swapFlag": "SPIKE_SWAP_EXAMPLES=87aff037-fail-open-catch-ban",
+    "servedArm": "bad",
+    "note": "K4 CONTROL — this bundle carries the OTHER arm's source. The run is not a clean one; the label is the only thing that says so."
+  },
+  "astQuery": {
+    "rule": {
+      "kind": "catch_clause",
+      "not": {
+        "has": {
+          "kind": "throw_statement",
+          "stopBy": "end"
+        }
+      }
+    },
+    "language": "TypeScript"
+  },
+  "factBundle": {
+    "file": "packages/core/src/catch-site.ts",
+    "fileText": "try { risky() } catch (e) { log(e) }",
+    "lines": [
+      "try { risky() } catch (e) { log(e) }"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "try { risky() } catch (e) { log(e) }",
+        "startLineText": "try { risky() } catch (e) { log(e) }",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

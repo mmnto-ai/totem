@@ -1,0 +1,1229 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/lower.mts",
+  "contract": "spikes/spine-adopt/rego/LOWERING.md § Lowering 5",
+  "profile": "§ Design 7 record dialect — packages/core/src/sys/glob.ts RECORD_DIALECT_PROFILE (barePatternMatchesBasename:false, starActivation:all, optionalSyntax:{}, crossSegmentWildcard:\".*\", normalizePatternSeparators:false, case-SENSITIVE)",
+  "ruleId": "b973609688ec2888",
+  "specimen": "b9736096-orchestrator-test-timeout",
+  "package": "totem.spike.rb973609688ec2888",
+  "table": [
+    {
+      "kind": "fileGlobs",
+      "glob": "packages/cli/**/*.test.ts",
+      "regex": "^packages/cli/(?:[^/]+/)*[^/]*\\.test\\.ts$"
+    }
+  ],
+  "scopeProbes": [
+    {
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-87aff037d7de47a7.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "apps/cli/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "apps/cli/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "docs/overview.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.cursor/mcp.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.cursor/mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.gemini/settings.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.gemini/settings.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.mcp.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/.mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/mcpprobe.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/mcpprobe.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.bas_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.bash",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.cj_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.j_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.js_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.jsx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.ks_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.ksh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.m_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.md_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.mdx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.mj_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.mjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.p_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.py",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.rs_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.rst",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.s_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.spec.probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.spec.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.spec_probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.test.probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.test.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.test_probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.ts_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.tsx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.tx_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.txt",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.yam_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.yaml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.ym_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.yml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.zs_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "k3b/probe.zsh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/k3b/probe.test.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/k3b/probe.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "path": "packages/cli/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/adapters/loader.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/assets/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/assets/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/assets/patterns.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/commands/issue.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/commands/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/commands/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/handlers/run.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/index.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/branches.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/cast.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/catch-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/emit-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/exec-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/log-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/core/src/prompt.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/branches.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/cast.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/color.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/release.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "src/errors.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    }
+  ],
+  "perGlobProbes": [
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".claude/agents/foo.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".claude/x",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".github/workflows/ci.yml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".totem/lessons.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".totem/lessons/lesson-cd27a5b0.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".totem/tests/test-87aff037d7de47a7.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": ".totem/tests/test-x.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "README",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "a/b/c/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "apps/cli/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "apps/cli/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "deep/nest/x.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "docs/overview.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.cursor/mcp.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.cursor/mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.gemini/settings.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.gemini/settings.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.mcp.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/.mcp.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/mcpprobe.jso_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/mcpprobe.json",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.bas_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.bash",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.cj_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.cjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.j_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.js_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.jsx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.ks_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.ksh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.m_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.md_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.mdx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.mj_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.mjs",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.p_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.py",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.rs_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.rst",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.s_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.spec.probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.spec.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.spec_probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.test.probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.test.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.test_probe",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.ts_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.tsx",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.tx_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.txt",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.yam_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.yaml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.ym_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.yml",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.zs_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "k3b/probe.zsh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "notes.md",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/k3b/probe.test.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/k3b/probe.test.ts",
+      "mine": true,
+      "shipped": true
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/adapters/loader.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/assets/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/assets/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/assets/patterns.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/commands/issue.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/commands/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/commands/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/handlers/run.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/index.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/cli/src/orchestrators/shell-orchestrator.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/a.spec.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/a.test.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/branches.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/cast.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/catch-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/emit-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/exec-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/log-site.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/core/src/prompt.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/k3b/probe.t_",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/k3b/probe.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages/src/example.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "packages\\core\\src\\a.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/audit.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/branches.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/cast.js",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/color.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/deploy.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/release.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/x.sh",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "scripts/x.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "src/errors.ts",
+      "mine": false,
+      "shipped": false
+    },
+    {
+      "glob": "packages/cli/**/*.test.ts",
+      "path": "src/example.sh",
+      "mine": false,
+      "shipped": false
+    }
+  ]
+}

@@ -1,0 +1,1642 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/certify.mts",
+  "contract": "spec `.totem/specs/spine-spike.md` § \"Actuator slice (slice 1 — BINDING condition 1 of the 2026-08-28 conditional adoption word)\"",
+  "ruledText": "certification evaluates EVERY emitted entrypoint against a schema-valid sentinel FactBundle BEFORE artifact publication; empty / undefined / error / non-object / missing result keys BLOCK the artifact and its certificate; the guard lives in the only exported result path; every host retains the failure rule; negative conformance fixtures exercise unsupported patterns on all hosts; the certificate chain binds source · IR · guarded policy · entrypoint/import manifest · final Wasm hash.",
+  "sentinel": {
+    "bundle": {
+      "file": "certify/sentinel.ts",
+      "fileText": "",
+      "lines": [],
+      "astMatches": []
+    },
+    "sha256": "bb5b7fff8ba0d974fd8a977280340b13cb9321e9dc59f749f88706899945a6f0",
+    "rationale": "Schema-valid and neutral (spec § Actuator slice 1): with no lines and no ast matches, no policy can produce a violation of its own, so the only thing that varies across bundles is whether the guarded `result` rule is DEFINED.",
+    "schemaContract": "rego/LOWERING.md § Input contract — input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+    "validatorAcceptsAllMeasuredBundles": 0,
+    "malformedControl": {
+      "bundle": {
+        "file": 42,
+        "fileText": [],
+        "lines": [
+          "ok",
+          7,
+          null
+        ],
+        "astMatches": "not-an-array",
+        "surprise": true
+      },
+      "schemaErrors": [
+        "unknown key(s) `surprise` — the schema line is exact",
+        "`file` must be a string (got number)",
+        "`fileText` must be a string or null (got array)",
+        "`lines[1]` must be a string (got number)",
+        "`lines[2]` must be a string (got null)",
+        "`astMatches` must be an array (got string)"
+      ],
+      "refusedBeforeAnyEval": true,
+      "hostInvocationsDuringRefusal": 0,
+      "appliedToBundle": "totem.spike.r87aff037d7de47a7",
+      "note": "Fed to a bundle that certifies PASS on the valid sentinel, so the refusal is attributable to the SENTINEL and not to the bundle. It publishes nothing — neither a chain nor a blocked artifact.",
+      "row": {
+        "id": "control:malformed-sentinel",
+        "kind": "classifier-control",
+        "package": "totem.spike.r87aff037d7de47a7",
+        "expectedEntrypoint": "totem/spike/r87aff037d7de47a7/result",
+        "wasmSha256": "",
+        "evaluated": false,
+        "sentinelValid": false,
+        "sentinelSchemaErrors": [
+          "unknown key(s) `surprise` — the schema line is exact",
+          "`file` must be a string (got number)",
+          "`fileText` must be a string or null (got array)",
+          "`lines[1]` must be a string (got number)",
+          "`lines[2]` must be a string (got null)",
+          "`astMatches` must be an array (got string)"
+        ],
+        "manifest": null,
+        "manifestSha256": null,
+        "entrypointAssertion": null,
+        "classifications": [],
+        "status": "BLOCKED",
+        "reason": "schema-invalid-sentinel",
+        "detail": "REFUSED before any evaluation: the sentinel FactBundle is schema-invalid (6 violation(s)). The module was never loaded.",
+        "chainWritten": null,
+        "blockedArtifact": null
+      }
+    }
+  },
+  "blockedClasses": {
+    "contract": "spec § Actuator slice 1 — \"The discriminator is well-formed-object vs {empty result set, eval error/trap, non-object, missing keys} — five blocked classes, each a typed reason.\"",
+    "resultClasses": [
+      "empty-result-set",
+      "eval-error-or-trap",
+      "non-object",
+      "missing-keys",
+      "extra-or-malformed-keys"
+    ],
+    "preEvalGates": [
+      {
+        "reason": "entrypoint-set-not-single-result",
+        "clause": "§ Actuator slice 4 — the only-exported-result-path assertion",
+        "note": "A gate on the BUNDLE, not a class of result — typed separately rather than squeezed into the five."
+      },
+      {
+        "reason": "schema-invalid-sentinel",
+        "clause": "§ Actuator slice 5 — \"must be refused by the certifier itself before any eval\"",
+        "note": "Refused before the module is opened; the host is never invoked."
+      }
+    ],
+    "observedThisRun": [
+      "empty-result-set",
+      "eval-error-or-trap",
+      "extra-or-malformed-keys",
+      "missing-keys",
+      "non-object"
+    ]
+  },
+  "publication": {
+    "contract": "spec § Actuator slice 2 — \"the chain artifact IS the certificate. `certify` gates chain emission — `artifacts/chains/*.json` is written ONLY on certification PASS; a blocked bundle produces `artifacts/blocked/<pkg>.json` (typed reason, no chain, wasm retained for forensics but never chained).\"",
+    "chainWriter": "spikes/spine-adopt/src/certify.mts — the ONLY writer; src/build-wasm.mts now hands its computed chains over as artifacts/chain-inputs.json",
+    "chainExtension": "{recordSha256, regoSha256 (the GUARDED policy), manifestSha256 (sha256 of the canonical JSON of {entrypoints[], imports[], builtins{}}), wasmSha256, certified: true} — ADDITIVE: the pre-slice keys are carried through untouched and the new keys are appended.",
+    "chainsWritten": [
+      "r87aff037d7de47a7.json"
+    ],
+    "blockedWritten": [
+      "certctl_eval_error.json",
+      "certctl_extra_keys.json",
+      "certctl_malformed_keys.json",
+      "certctl_missing_keys.json",
+      "certctl_non_object.json",
+      "certfix_backreference.json",
+      "certfix_neg_lookahead.json",
+      "certfix_two_entrypoints.json"
+    ]
+  },
+  "certifications": [
+    {
+      "id": "specimen:c-supp",
+      "kind": "specimen",
+      "package": "totem.spike.r87aff037d7de47a7",
+      "expectedEntrypoint": "totem/spike/r87aff037d7de47a7/result",
+      "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r87aff037d7de47a7/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r87aff037d7de47a7/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r87aff037d7de47a7/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/k3-control/chains/r87aff037d7de47a7.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "fixture:neg-lookahead",
+      "kind": "negative-fixture",
+      "package": "totem.spike.certfix_neg_lookahead",
+      "expectedEntrypoint": "totem/spike/certfix_neg_lookahead/result",
+      "wasmSha256": "71981750a4139ae18daa4ae3649b212e5b40a31d996055478486b93ab2ef82ce",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certfix_neg_lookahead/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "91bb69dce13c853f8ec0d48c9d920ccfba7684f8348fc1a4c1490a12cd77f0c9",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certfix_neg_lookahead/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certfix_neg_lookahead/result",
+          "status": "BLOCKED",
+          "reason": "empty-result-set",
+          "detail": "the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "empty-result-set",
+      "detail": "`totem/spike/certfix_neg_lookahead/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict.",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certfix_neg_lookahead.json"
+    },
+    {
+      "id": "fixture:backreference",
+      "kind": "negative-fixture",
+      "package": "totem.spike.certfix_backreference",
+      "expectedEntrypoint": "totem/spike/certfix_backreference/result",
+      "wasmSha256": "568a1afe904213bfd7266106f96f6a955face4dc419b19eac6f367a622118257",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certfix_backreference/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "1eb1040ecc62e04a936c40af7f445005e9afa961c57b5ac375e08987de6020af",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certfix_backreference/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certfix_backreference/result",
+          "status": "BLOCKED",
+          "reason": "empty-result-set",
+          "detail": "the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "empty-result-set",
+      "detail": "`totem/spike/certfix_backreference/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict.",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certfix_backreference.json"
+    },
+    {
+      "id": "fixture:two-entrypoints",
+      "kind": "entrypoint-control",
+      "package": "totem.spike.certfix_two_entrypoints",
+      "expectedEntrypoint": "totem/spike/certfix_two_entrypoints/result",
+      "wasmSha256": "c3470fcaefd0a278cacfdfc23567f22ce3f24795d46c61a79843ed39b18e60c1",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certfix_two_entrypoints/result",
+          "totem/spike/certfix_two_entrypoints/side_result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "651ebf05fa8be5fd26e98c58d445b65702f04323565e4dbdf59714baa683def6",
+      "entrypointAssertion": {
+        "ok": false,
+        "detail": "entrypoint set is [\"totem/spike/certfix_two_entrypoints/result\",\"totem/spike/certfix_two_entrypoints/side_result\"]; § Actuator slice 4 requires EXACTLY one `totem/spike/certfix_two_entrypoints/result` (the canonical `<pkg>/result` for package `totem.spike.certfix_two_entrypoints`; the caller expected `totem/spike/certfix_two_entrypoints/result`) — no ungated side entrypoints"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certfix_two_entrypoints/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        },
+        {
+          "entrypoint": "totem/spike/certfix_two_entrypoints/side_result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "entrypoint-set-not-single-result",
+      "detail": "entrypoint set is [\"totem/spike/certfix_two_entrypoints/result\",\"totem/spike/certfix_two_entrypoints/side_result\"]; § Actuator slice 4 requires EXACTLY one `totem/spike/certfix_two_entrypoints/result` (the canonical `<pkg>/result` for package `totem.spike.certfix_two_entrypoints`; the caller expected `totem/spike/certfix_two_entrypoints/result`) — no ungated side entrypoints",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certfix_two_entrypoints.json"
+    },
+    {
+      "id": "fixture:ctl-eval-error",
+      "kind": "classifier-control",
+      "package": "totem.spike.certctl_eval_error",
+      "expectedEntrypoint": "totem/spike/certctl_eval_error/result",
+      "wasmSha256": "62456a5b0f44501a9cbcca7d5c1918a9ce4fc1f9bf84541f3542eabc6ec5e868",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certctl_eval_error/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {
+          "regex.find_n": 2
+        }
+      },
+      "manifestSha256": "05e8dc7e003e6e965e6035b26f0bb6aadc41730a69f4452d212e7078ff3265aa",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_eval_error/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certctl_eval_error/result",
+          "status": "BLOCKED",
+          "reason": "eval-error-or-trap",
+          "detail": "error while executing at wasm backtrace:"
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "eval-error-or-trap",
+      "detail": "`totem/spike/certctl_eval_error/result`: error while executing at wasm backtrace:",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certctl_eval_error.json"
+    },
+    {
+      "id": "fixture:ctl-non-object",
+      "kind": "classifier-control",
+      "package": "totem.spike.certctl_non_object",
+      "expectedEntrypoint": "totem/spike/certctl_non_object/result",
+      "wasmSha256": "a88a9f2beea56b7353cc0e7423cb3cc2454f6125947aa27ebd7dc69065a6dbbf",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certctl_non_object/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "8aaf97f8b4d511b09f10f00c8d2797b60e76be5daacebc58a59539e6a1f8d96a",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_non_object/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certctl_non_object/result",
+          "status": "BLOCKED",
+          "reason": "non-object",
+          "detail": "the result is string, not an object: \"certification must refuse a non-object result\""
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "non-object",
+      "detail": "`totem/spike/certctl_non_object/result`: the result is string, not an object: \"certification must refuse a non-object result\"",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certctl_non_object.json"
+    },
+    {
+      "id": "fixture:ctl-missing-keys",
+      "kind": "classifier-control",
+      "package": "totem.spike.certctl_missing_keys",
+      "expectedEntrypoint": "totem/spike/certctl_missing_keys/result",
+      "wasmSha256": "c2e26575431f91a5d02f6cc717f8e6f59b3ffe4e5090ba8a920005e9214507bb",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certctl_missing_keys/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "7253c1e664e1b08b84aee7647c20b3e5b2b3b21621a4d1d1ab07221fe2aea84e",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_missing_keys/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certctl_missing_keys/result",
+          "status": "BLOCKED",
+          "reason": "missing-keys",
+          "detail": "the result is missing `events` (has `violations`)"
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "missing-keys",
+      "detail": "`totem/spike/certctl_missing_keys/result`: the result is missing `events` (has `violations`)",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certctl_missing_keys.json"
+    },
+    {
+      "id": "fixture:ctl-extra-keys",
+      "kind": "classifier-control",
+      "package": "totem.spike.certctl_extra_keys",
+      "expectedEntrypoint": "totem/spike/certctl_extra_keys/result",
+      "wasmSha256": "922fc09954cbbddf8305e8bcd1e87228b72587b7ac493ba6a175a908f1c97815",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certctl_extra_keys/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "3c0b21e57ecf8ec5c311035b479d6da1f0453139b87d5223a8f3f6ee27cead20",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_extra_keys/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certctl_extra_keys/result",
+          "status": "BLOCKED",
+          "reason": "extra-or-malformed-keys",
+          "detail": "the result carries surplus key(s) `verdict` — PASS is EXACTLY `violations` + `events`"
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "extra-or-malformed-keys",
+      "detail": "`totem/spike/certctl_extra_keys/result`: the result carries surplus key(s) `verdict` — PASS is EXACTLY `violations` + `events`",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certctl_extra_keys.json"
+    },
+    {
+      "id": "fixture:ctl-malformed-keys",
+      "kind": "classifier-control",
+      "package": "totem.spike.certctl_malformed_keys",
+      "expectedEntrypoint": "totem/spike/certctl_malformed_keys/result",
+      "wasmSha256": "a12a138bbbbc9b565c553b3c11b380a4359a4e3c20da898cb168a4ad95a8160f",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/certctl_malformed_keys/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "3b3d8bac4ac95d55163131ee6ae0b049e6014b6946f6e42a07f35c1caaf3391e",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_malformed_keys/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/certctl_malformed_keys/result",
+          "status": "BLOCKED",
+          "reason": "extra-or-malformed-keys",
+          "detail": "`violations` is not an array (string)"
+        }
+      ],
+      "status": "BLOCKED",
+      "reason": "extra-or-malformed-keys",
+      "detail": "`totem/spike/certctl_malformed_keys/result`: `violations` is not an array (string)",
+      "chainWritten": null,
+      "blockedArtifact": "artifacts/k3-control/blocked/certctl_malformed_keys.json"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "neg-lookahead",
+      "kind": "negative-fixture",
+      "source": "rego/certify-fixtures/neg-lookahead/policy.rego",
+      "package": "totem.spike.certfix_neg_lookahead",
+      "corpusRule": "e64911592b774cc6",
+      "entrypointsBuilt": [
+        "totem/spike/certfix_neg_lookahead/result"
+      ],
+      "expectedReason": "empty-result-set",
+      "why": "negative lookahead — RE2 rejects `(?!` at compile, `opa build` accepts the policy (the measured fail-open)",
+      "wasmSha256": "71981750a4139ae18daa4ae3649b212e5b40a31d996055478486b93ab2ef82ce",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "backreference",
+      "kind": "negative-fixture",
+      "source": "rego/certify-fixtures/backreference/policy.rego",
+      "package": "totem.spike.certfix_backreference",
+      "corpusRule": "80192e6ac2a1dd3c",
+      "entrypointsBuilt": [
+        "totem/spike/certfix_backreference/result"
+      ],
+      "expectedReason": "empty-result-set",
+      "why": "backreference — RE2 rejects `\\1` at compile; the corpus's only backreference pattern",
+      "wasmSha256": "568a1afe904213bfd7266106f96f6a955face4dc419b19eac6f367a622118257",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "two-entrypoints",
+      "kind": "entrypoint-control",
+      "source": "rego/certify-fixtures/two-entrypoints/policy.rego",
+      "package": "totem.spike.certfix_two_entrypoints",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certfix_two_entrypoints/result",
+        "totem/spike/certfix_two_entrypoints/side_result"
+      ],
+      "expectedReason": "entrypoint-set-not-single-result",
+      "why": "BOTH entrypoints classify PASS, so the block is attributable to the § Actuator slice 4 assertion alone — the proof it has teeth",
+      "wasmSha256": "c3470fcaefd0a278cacfdfc23567f22ce3f24795d46c61a79843ed39b18e60c1",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "ctl-eval-error",
+      "kind": "classifier-control",
+      "source": "rego/certify-fixtures/classifier-controls/eval-error/policy.rego",
+      "package": "totem.spike.certctl_eval_error",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certctl_eval_error/result"
+      ],
+      "expectedReason": "eval-error-or-trap",
+      "why": "`regex.find_n` is host-delegated and `rust-opa-wasm` resolves it to `bail!(\"not implemented\")` — the module loads and fails at CALL time",
+      "wasmSha256": "62456a5b0f44501a9cbcca7d5c1918a9ce4fc1f9bf84541f3542eabc6ec5e868",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "ctl-non-object",
+      "kind": "classifier-control",
+      "source": "rego/certify-fixtures/classifier-controls/non-object/policy.rego",
+      "package": "totem.spike.certctl_non_object",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certctl_non_object/result"
+      ],
+      "expectedReason": "non-object",
+      "why": "a DEFINED result that is a string",
+      "wasmSha256": "a88a9f2beea56b7353cc0e7423cb3cc2454f6125947aa27ebd7dc69065a6dbbf",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "ctl-missing-keys",
+      "kind": "classifier-control",
+      "source": "rego/certify-fixtures/classifier-controls/missing-keys/policy.rego",
+      "package": "totem.spike.certctl_missing_keys",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certctl_missing_keys/result"
+      ],
+      "expectedReason": "missing-keys",
+      "why": "an object with `violations` and no `events` — absent = absent",
+      "wasmSha256": "c2e26575431f91a5d02f6cc717f8e6f59b3ffe4e5090ba8a920005e9214507bb",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "ctl-extra-keys",
+      "kind": "classifier-control",
+      "source": "rego/certify-fixtures/classifier-controls/extra-keys/policy.rego",
+      "package": "totem.spike.certctl_extra_keys",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certctl_extra_keys/result"
+      ],
+      "expectedReason": "extra-or-malformed-keys",
+      "why": "both required keys plus a surplus one — PASS is EXACTLY the two",
+      "wasmSha256": "922fc09954cbbddf8305e8bcd1e87228b72587b7ac493ba6a175a908f1c97815",
+      "opaBuildAccepted": true
+    },
+    {
+      "id": "ctl-malformed-keys",
+      "kind": "classifier-control",
+      "source": "rego/certify-fixtures/classifier-controls/malformed-keys/policy.rego",
+      "package": "totem.spike.certctl_malformed_keys",
+      "corpusRule": null,
+      "entrypointsBuilt": [
+        "totem/spike/certctl_malformed_keys/result"
+      ],
+      "expectedReason": "extra-or-malformed-keys",
+      "why": "exactly the two keys, but `violations` is a string — the per-key type check",
+      "wasmSha256": "a12a138bbbbc9b565c553b3c11b380a4359a4e3c20da898cb168a4ad95a8160f",
+      "opaBuildAccepted": true
+    }
+  ],
+  "allHostsFailureRule": {
+    "contract": "spec § Actuator slice 5 — \"must be (a) BLOCKED by certification, and (b) produce error rows — never clean zeros — on all three hosts (wasmtime host, regorus, wazero).\"",
+    "requiredFixtures": [
+      "neg-lookahead",
+      "backreference"
+    ],
+    "evidenceRule": "Each host RUNS its own failure rule and reports the verdict; this file reads that verdict. `errored` is never derived from the certifier's classifications, and every required row additionally carries `hostError` — the host's own error string, verbatim — plus `hostErrorSource`, the function that produced it.",
+    "hostFailureRules": {
+      "wasmtime (rust-opa-wasm)": "host/src/main.rs `entrypoint_value` then `read_result`, executed inside `run_certify_arm` (the SAME two functions `run_opa_arm` uses) and reported per evaluation as `failureRuleVerdict`. An empty result SET, a non-array set, a set of length ≠ 1, a non-object result, a missing violations/events key, or a non-array value for either key is an ERROR, never a zero-violation verdict.",
+      "regorus": "host/src/main.rs `run_certify_arm`'s regorus block, reported as `failureRuleVerdict`: `set_strict_builtin_errors(true)`; an Err from `eval_rule`, a null/`<undefined>`/non-object value (the `run_regorus_arm` rejection, main.rs:440-443), then `read_result` — the same chain the normal regorus arm applies.",
+      "wazero": "wazero-probe/main.go `entrypointValue` + `readResult`, called by conformance.go `runConformanceCase` — an empty result set is an ERROR raised in Go, a result whose SHAPE is not `{violations[], events[]}` is rejected by the same `readResult` the differential run uses, and the `opa_builtin*` stubs panic rather than fabricate a return value (the conformance mode recovers the panic into an error ROW so the failure is data, not a dead process)."
+    },
+    "rows": [
+      {
+        "fixture": "neg-lookahead",
+        "required": true,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "empty-result-set",
+            "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2).",
+            "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2).",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result):",
+            "hostError": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result): \n--> spikes/spine-adopt/rego/certify-fixtures/neg-lookahead/policy.rego:59:29\n   |\n59 | \tis_boolean(regex.match(\"(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\\\|\\\\|).)*\\\\|\\\\|\\\\s*true\", \"\"))\n   |                             ^\nerror: invalid regex",
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "empty-result-set",
+            "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+            "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "backreference",
+        "required": true,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "empty-result-set",
+            "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2).",
+            "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2).",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "regorus eval_rule(data.totem.spike.certfix_backreference.result):",
+            "hostError": "regorus eval_rule(data.totem.spike.certfix_backreference.result): \n--> spikes/spine-adopt/rego/certify-fixtures/backreference/policy.rego:57:29\n   |\n57 | \tis_boolean(regex.match(\"\\\\bmodel\\\\w*\\\\b.*(['\\\"\\\\/])\\\\^?\\\\[[a-zA-Z0-9\\\\-_]+\\\\][*+]\\\\$?\\\\1\", \"\"))\n   |                             ^\nerror: invalid regex",
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "empty-result-set",
+            "detail": "result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+            "hostError": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "two-entrypoints",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": false,
+            "cleanZero": true,
+            "kind": "well-formed",
+            "detail": "result: ok; side_result: ok",
+            "hostError": null,
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": false,
+            "cleanZero": true,
+            "kind": "value",
+            "detail": "{\"events\":[],\"violations\":[]}",
+            "hostError": null,
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": false,
+            "cleanZero": true,
+            "kind": "value",
+            "detail": "result: len=1; side_result: len=1",
+            "hostError": null,
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "ctl-eval-error",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error-or-trap",
+            "detail": "result: error while executing at wasm backtrace:",
+            "hostError": "error while executing at wasm backtrace:\n    0:  0x12b2e - opa.wasm!g0.data.totem.spike.certctl_eval_error.hits\n    1:  0x12bb9 - opa.wasm!g0.data.totem.spike.certctl_eval_error.result\n    2:    0x975 - opa.wasm!eval\n    3:    0x900 - opa.wasm!opa_eval: not implemented",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": false,
+            "cleanZero": true,
+            "kind": "value",
+            "detail": "{\"events\":[],\"violations\":[]}",
+            "hostError": null,
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "result: eval: opa_builtin3 was CALLED with builtin id 2 — the ABI census says these policies delegate NO builtin to the host, so this is either a stale census or a policy outside the surveyed set. Refusing to fabricate a return value. (recovered by wazero)",
+            "hostError": "eval: opa_builtin3 was CALLED with builtin id 2 — the ABI census says these policies delegate NO builtin to the host, so this is either a stale census or a policy outside the surveyed set. Refusing to fabricate a return value. (recovered by wazero)\nwasm stack trace:\n\topa_host.opa_builtin3(i32,i32,i32,i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.hits(i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.result(i32,i32) i32\n\topa.wasm.eval(i32) i32",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "ctl-non-object",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "non-object",
+            "detail": "result: entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostError": "entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "value",
+            "detail": "regorus returned an UNDEFINED/non-object result for data.totem.spike.certctl_non_object.result: \"certification must refuse a non-object result\"",
+            "hostError": "regorus returned an UNDEFINED/non-object result for data.totem.spike.certctl_non_object.result: \"certification must refuse a non-object result\"",
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "result: entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostError": "entrypoint result is not an object: \"certification must refuse a non-object result\"",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "ctl-missing-keys",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "missing-keys",
+            "detail": "result: entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostError": "entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "value",
+            "detail": "entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostError": "entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "result: entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostError": "entrypoint result is missing `events`: {\"violations\":[]}",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "ctl-extra-keys",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": false,
+            "cleanZero": false,
+            "kind": "extra-or-malformed-keys",
+            "detail": "result: ok",
+            "hostError": null,
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": false,
+            "cleanZero": false,
+            "kind": "value",
+            "detail": "{\"events\":[],\"verdict\":\"clean\",\"violations\":[]}",
+            "hostError": null,
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": false,
+            "cleanZero": false,
+            "kind": "value",
+            "detail": "result: len=1",
+            "hostError": null,
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      },
+      {
+        "fixture": "ctl-malformed-keys",
+        "required": false,
+        "hosts": [
+          {
+            "host": "wasmtime (rust-opa-wasm)",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "extra-or-malformed-keys",
+            "detail": "result: entrypoint result `violations` is not an array: {\"events\":[],\"violations\":\"none\"}",
+            "hostError": "entrypoint result `violations` is not an array: {\"events\":[],\"violations\":\"none\"}",
+            "hostErrorSource": "host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "regorus",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "value",
+            "detail": "entrypoint result `violations` is not an array: {\"events\":[],\"violations\":\"none\"}",
+            "hostError": "entrypoint result `violations` is not an array: {\"events\":[],\"violations\":\"none\"}",
+            "hostErrorSource": "host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`"
+          },
+          {
+            "host": "wazero",
+            "errored": true,
+            "cleanZero": false,
+            "kind": "eval-error",
+            "detail": "result: entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
+            "hostError": "entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
+            "hostErrorSource": "wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`"
+          }
+        ]
+      }
+    ]
+  },
+  "classifierUnitControls": {
+    "contract": "NOTE 6/7 fold — every branch of `classifyEvaluation` must be exercised. Three are unreachable from any buildable wasm fixture (non-array result set, a set of length ≠ {0,1}, an absent `result` key) and are driven directly on constructed `HostEvaluation` rows.",
+    "controls": [
+      {
+        "id": "unit:result-set-length-2",
+        "why": "a result set of length 2 — an ABI protocol violation. `result` is well-formed, so ONLY the cardinality branch can block it.",
+        "input": {
+          "entrypoint": "unit/control/result",
+          "ok": true,
+          "error": null,
+          "resultSet": [
+            {
+              "result": {
+                "violations": [],
+                "events": []
+              }
+            },
+            {
+              "result": {
+                "violations": [],
+                "events": []
+              }
+            }
+          ],
+          "resultSetIsArray": true,
+          "resultSetLength": 2,
+          "result": {
+            "violations": [],
+            "events": []
+          }
+        },
+        "classification": {
+          "entrypoint": "unit/control/result",
+          "status": "BLOCKED",
+          "reason": "eval-error-or-trap",
+          "detail": "the result set carried 2 entries; the protocol emits exactly one"
+        }
+      },
+      {
+        "id": "unit:result-set-not-an-array",
+        "why": "a result set that is not an array at all — the ABI-level protocol failure. `result` is well-formed, so ONLY the array branch can block it.",
+        "input": {
+          "entrypoint": "unit/control/result",
+          "ok": true,
+          "error": null,
+          "resultSet": {
+            "result": {
+              "violations": [],
+              "events": []
+            }
+          },
+          "resultSetIsArray": false,
+          "resultSetLength": null,
+          "result": {
+            "violations": [],
+            "events": []
+          }
+        },
+        "classification": {
+          "entrypoint": "unit/control/result",
+          "status": "BLOCKED",
+          "reason": "eval-error-or-trap",
+          "detail": "the entrypoint returned a NON-ARRAY result set (object) — an ABI-level protocol failure"
+        }
+      },
+      {
+        "id": "unit:absent-result-key",
+        "why": "a single-entry result set whose `result` key is absent — which the wasmtime arm encodes as JSON `null`. The branch the `undefined`-only test left dead.",
+        "input": {
+          "entrypoint": "unit/control/result",
+          "ok": true,
+          "error": null,
+          "resultSet": [
+            {}
+          ],
+          "resultSetIsArray": true,
+          "resultSetLength": 1,
+          "result": null
+        },
+        "classification": {
+          "entrypoint": "unit/control/result",
+          "status": "BLOCKED",
+          "reason": "eval-error-or-trap",
+          "detail": "the result-set entry carries no usable `result` (the host encodes an absent `result` key as JSON `null` — serde `Option<Value>` → null)"
+        }
+      }
+    ]
+  },
+  "wazeroConformance": [
+    {
+      "id": "neg-lookahead",
+      "wasm": "../rego/certify-fixtures/build/neg-lookahead/policy.wasm",
+      "wasmSha256": "71981750a4139ae18daa4ae3649b212e5b40a31d996055478486b93ab2ef82ce",
+      "wasmBytes": 346437,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certfix_neg_lookahead/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certfix_neg_lookahead/result",
+          "ok": false,
+          "error": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+          "resultSet": [],
+          "resultSetLength": 0,
+          "result": null
+        }
+      ]
+    },
+    {
+      "id": "backreference",
+      "wasm": "../rego/certify-fixtures/build/backreference/policy.wasm",
+      "wasmSha256": "568a1afe904213bfd7266106f96f6a955face4dc419b19eac6f367a622118257",
+      "wasmBytes": 346417,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certfix_backreference/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certfix_backreference/result",
+          "ok": false,
+          "error": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict",
+          "resultSet": [],
+          "resultSetLength": 0,
+          "result": null
+        }
+      ]
+    },
+    {
+      "id": "two-entrypoints",
+      "wasm": "../rego/certify-fixtures/build/two-entrypoints/policy.wasm",
+      "wasmSha256": "c3470fcaefd0a278cacfdfc23567f22ce3f24795d46c61a79843ed39b18e60c1",
+      "wasmBytes": 340830,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certfix_two_entrypoints/result",
+        "totem/spike/certfix_two_entrypoints/side_result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certfix_two_entrypoints/result",
+          "ok": true,
+          "error": null,
+          "resultSet": [
+            {
+              "result": {
+                "violations": [],
+                "events": []
+              }
+            }
+          ],
+          "resultSetLength": 1,
+          "result": {
+            "violations": [],
+            "events": []
+          }
+        },
+        {
+          "entrypoint": "totem/spike/certfix_two_entrypoints/side_result",
+          "ok": true,
+          "error": null,
+          "resultSet": [
+            {
+              "result": {
+                "violations": [],
+                "events": []
+              }
+            }
+          ],
+          "resultSetLength": 1,
+          "result": {
+            "violations": [],
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "ctl-eval-error",
+      "wasm": "../rego/certify-fixtures/build/classifier-controls/eval-error/policy.wasm",
+      "wasmSha256": "62456a5b0f44501a9cbcca7d5c1918a9ce4fc1f9bf84541f3542eabc6ec5e868",
+      "wasmBytes": 135323,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certctl_eval_error/result"
+      ],
+      "requiredBuiltins": {
+        "regex.find_n": 2
+      },
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certctl_eval_error/result",
+          "ok": false,
+          "error": "eval: opa_builtin3 was CALLED with builtin id 2 — the ABI census says these policies delegate NO builtin to the host, so this is either a stale census or a policy outside the surveyed set. Refusing to fabricate a return value. (recovered by wazero)\nwasm stack trace:\n\topa_host.opa_builtin3(i32,i32,i32,i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.hits(i32,i32) i32\n\topa.wasm.g0.data.totem.spike.certctl_eval_error.result(i32,i32) i32\n\topa.wasm.eval(i32) i32",
+          "resultSet": null,
+          "resultSetLength": null,
+          "result": null
+        }
+      ]
+    },
+    {
+      "id": "ctl-non-object",
+      "wasm": "../rego/certify-fixtures/build/classifier-controls/non-object/policy.wasm",
+      "wasmSha256": "a88a9f2beea56b7353cc0e7423cb3cc2454f6125947aa27ebd7dc69065a6dbbf",
+      "wasmBytes": 134170,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certctl_non_object/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certctl_non_object/result",
+          "ok": false,
+          "error": "entrypoint result is not an object: \"certification must refuse a non-object result\"",
+          "resultSet": [
+            {
+              "result": "certification must refuse a non-object result"
+            }
+          ],
+          "resultSetLength": 1,
+          "result": null
+        }
+      ]
+    },
+    {
+      "id": "ctl-missing-keys",
+      "wasm": "../rego/certify-fixtures/build/classifier-controls/missing-keys/policy.wasm",
+      "wasmSha256": "c2e26575431f91a5d02f6cc717f8e6f59b3ffe4e5090ba8a920005e9214507bb",
+      "wasmBytes": 134337,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certctl_missing_keys/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certctl_missing_keys/result",
+          "ok": false,
+          "error": "entrypoint result is missing `events`: {\"violations\":[]}",
+          "resultSet": [
+            {
+              "result": {
+                "violations": []
+              }
+            }
+          ],
+          "resultSetLength": 1,
+          "result": null
+        }
+      ]
+    },
+    {
+      "id": "ctl-extra-keys",
+      "wasm": "../rego/certify-fixtures/build/classifier-controls/extra-keys/policy.wasm",
+      "wasmSha256": "922fc09954cbbddf8305e8bcd1e87228b72587b7ac493ba6a175a908f1c97815",
+      "wasmBytes": 134419,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certctl_extra_keys/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certctl_extra_keys/result",
+          "ok": true,
+          "error": null,
+          "resultSet": [
+            {
+              "result": {
+                "verdict": "clean",
+                "violations": [],
+                "events": []
+              }
+            }
+          ],
+          "resultSetLength": 1,
+          "result": {
+            "verdict": "clean",
+            "violations": [],
+            "events": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "ctl-malformed-keys",
+      "wasm": "../rego/certify-fixtures/build/classifier-controls/malformed-keys/policy.wasm",
+      "wasmSha256": "a12a138bbbbc9b565c553b3c11b380a4359a4e3c20da898cb168a4ad95a8160f",
+      "wasmBytes": 134392,
+      "loaded": true,
+      "loadError": null,
+      "declaredEntrypoints": [
+        "totem/spike/certctl_malformed_keys/result"
+      ],
+      "requiredBuiltins": {},
+      "evaluations": [
+        {
+          "entrypoint": "totem/spike/certctl_malformed_keys/result",
+          "ok": false,
+          "error": "entrypoint result `violations` is not an array: {\"violations\":\"none\",\"events\":[]}",
+          "resultSet": [
+            {
+              "result": {
+                "violations": "none",
+                "events": []
+              }
+            }
+          ],
+          "resultSetLength": 1,
+          "result": null
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "SENTINEL — the certification sentinel is schema-VALID",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "SENTINEL — the malformed control is schema-INVALID, on every field independently",
+      "ok": true,
+      "detail": "6 violations: unknown key(s) `surprise` — the schema line is exact | `file` must be a string (got number) | `fileText` must be a string or null (got array) | `lines[1]` must be a string (got number) | `lines[2]` must be a string (got null) | `astMatches` must be an array (got string)"
+    },
+    {
+      "name": "SENTINEL — the validator is NOT vacuously strict: all 0 measured FactBundles validate",
+      "ok": true,
+      "detail": "0/0 accepted"
+    },
+    {
+      "name": "the bundles on disk under `rego/build/` are exactly the 1 the lowering declared",
+      "ok": true,
+      "detail": "[\"r87aff037d7de47a7\"]"
+    },
+    {
+      "name": "the build hand-off carries a computed chain for each of the 1",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "specimen:c-supp — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "f1c2c73119b1f5e6… on both sides"
+    },
+    {
+      "name": "specimen:c-supp — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:c-supp — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "FIXTURE neg-lookahead — the target literal is the corpus pattern of e64911592b774cc6 (lookaround), byte-exact and JSON-escaped",
+      "ok": true,
+      "detail": "found in both `patterns_compile` and `target_hit`"
+    },
+    {
+      "name": "FIXTURE neg-lookahead — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm 71981750a4139ae1…"
+    },
+    {
+      "name": "FIXTURE backreference — the target literal is the corpus pattern of 80192e6ac2a1dd3c (backreference), byte-exact and JSON-escaped",
+      "ok": true,
+      "detail": "found in both `patterns_compile` and `target_hit`"
+    },
+    {
+      "name": "FIXTURE backreference — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm 568a1afe904213bf…"
+    },
+    {
+      "name": "FIXTURE two-entrypoints — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "2 entrypoint(s), wasm c3470fcaefd0a278…"
+    },
+    {
+      "name": "FIXTURE ctl-eval-error — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm 62456a5b0f44501a…"
+    },
+    {
+      "name": "FIXTURE ctl-non-object — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm a88a9f2beea56b73…"
+    },
+    {
+      "name": "FIXTURE ctl-missing-keys — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm c2e26575431f91a5…"
+    },
+    {
+      "name": "FIXTURE ctl-extra-keys — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm 922fc09954cbbddf…"
+    },
+    {
+      "name": "FIXTURE ctl-malformed-keys — pinned `opa build -t wasm` ACCEPTS it (the measured fail-open the certifier exists to close)",
+      "ok": true,
+      "detail": "1 entrypoint(s), wasm a12a138bbbbc9b56…"
+    },
+    {
+      "name": "FIXTURE neg-lookahead — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE neg-lookahead — with the typed reason `empty-result-set`",
+      "ok": true,
+      "detail": "\"empty-result-set\""
+    },
+    {
+      "name": "FIXTURE neg-lookahead — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE backreference — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE backreference — with the typed reason `empty-result-set`",
+      "ok": true,
+      "detail": "\"empty-result-set\""
+    },
+    {
+      "name": "FIXTURE backreference — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE two-entrypoints — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE two-entrypoints — with the typed reason `entrypoint-set-not-single-result`",
+      "ok": true,
+      "detail": "\"entrypoint-set-not-single-result\""
+    },
+    {
+      "name": "FIXTURE two-entrypoints — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE ctl-eval-error — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE ctl-eval-error — with the typed reason `eval-error-or-trap`",
+      "ok": true,
+      "detail": "\"eval-error-or-trap\""
+    },
+    {
+      "name": "FIXTURE ctl-eval-error — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE ctl-non-object — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE ctl-non-object — with the typed reason `non-object`",
+      "ok": true,
+      "detail": "\"non-object\""
+    },
+    {
+      "name": "FIXTURE ctl-non-object — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE ctl-missing-keys — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE ctl-missing-keys — with the typed reason `missing-keys`",
+      "ok": true,
+      "detail": "\"missing-keys\""
+    },
+    {
+      "name": "FIXTURE ctl-missing-keys — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE ctl-extra-keys — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE ctl-extra-keys — with the typed reason `extra-or-malformed-keys`",
+      "ok": true,
+      "detail": "\"extra-or-malformed-keys\""
+    },
+    {
+      "name": "FIXTURE ctl-extra-keys — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "FIXTURE ctl-malformed-keys — certification BLOCKS it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "FIXTURE ctl-malformed-keys — with the typed reason `extra-or-malformed-keys`",
+      "ok": true,
+      "detail": "\"extra-or-malformed-keys\""
+    },
+    {
+      "name": "FIXTURE ctl-malformed-keys — and NO chain is written",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "COVERAGE CEILING — the `builtins` assertion is not vacuous: the eval-error control DOES delegate a builtin to the host (and is blocked, never certified)",
+      "ok": true,
+      "detail": "builtins={\"regex.find_n\":2}, status=BLOCKED"
+    },
+    {
+      "name": "ENTRYPOINT ASSERTION — the control declares TWO entrypoints, and BOTH classify PASS on their own",
+      "ok": true,
+      "detail": "result=PASS, side_result=PASS"
+    },
+    {
+      "name": "ENTRYPOINT ASSERTION — so the block is attributable to the § Actuator slice 4 assertion ALONE",
+      "ok": true,
+      "detail": "\"entrypoint-set-not-single-result\""
+    },
+    {
+      "name": "MALFORMED SENTINEL — the certifier REFUSES it",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "MALFORMED SENTINEL — with the pre-eval typed reason `schema-invalid-sentinel`",
+      "ok": true,
+      "detail": "\"schema-invalid-sentinel\""
+    },
+    {
+      "name": "MALFORMED SENTINEL — refused BEFORE any eval: the host was not invoked once (a counter, not an assertion about intent)",
+      "ok": true,
+      "detail": "host invocations 9 -> 9; evaluated=false"
+    },
+    {
+      "name": "MALFORMED SENTINEL — and the SAME bundle certifies PASS on the valid sentinel (the refusal is about the sentinel, not the bundle)",
+      "ok": true,
+      "detail": "totem.spike.r87aff037d7de47a7"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:result-set-length-2 is BLOCKED with the typed reason `eval-error-or-trap`",
+      "ok": true,
+      "detail": "[\"BLOCKED\",\"eval-error-or-trap\"]"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:result-set-length-2 names the defect: \"the result set carried 2 entries; the protocol emits exactly one\"",
+      "ok": true,
+      "detail": "the result set carried 2 entries; the protocol emits exactly one"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:result-set-not-an-array is BLOCKED with the typed reason `eval-error-or-trap`",
+      "ok": true,
+      "detail": "[\"BLOCKED\",\"eval-error-or-trap\"]"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:result-set-not-an-array names the defect: \"NON-ARRAY result set\"",
+      "ok": true,
+      "detail": "the entrypoint returned a NON-ARRAY result set (object) — an ABI-level protocol failure"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:absent-result-key is BLOCKED with the typed reason `eval-error-or-trap`",
+      "ok": true,
+      "detail": "[\"BLOCKED\",\"eval-error-or-trap\"]"
+    },
+    {
+      "name": "CLASSIFIER UNIT — unit:absent-result-key names the defect: \"serde `Option<Value>` → null\"",
+      "ok": true,
+      "detail": "the result-set entry carries no usable `result` (the host encodes an absent `result` key as JSON `null` — serde `Option<Value>` → null)"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wasmtime (rust-opa-wasm): an ERROR row",
+      "ok": true,
+      "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2)."
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wasmtime (rust-opa-wasm): the error row is HOST-ORIGINATED — a non-empty error string from host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`",
+      "ok": true,
+      "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2)."
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wasmtime (rust-opa-wasm): NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on regorus: an ERROR row",
+      "ok": true,
+      "detail": "eval-error — regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result):"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on regorus: the error row is HOST-ORIGINATED — a non-empty error string from host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`",
+      "ok": true,
+      "detail": "regorus eval_rule(data.totem.spike.certfix_neg_lookahead.result):"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on regorus: NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wazero: an ERROR row",
+      "ok": true,
+      "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`",
+      "ok": true,
+      "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — neg-lookahead on wazero: NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wasmtime (rust-opa-wasm): an ERROR row",
+      "ok": true,
+      "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2)."
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wasmtime (rust-opa-wasm): the error row is HOST-ORIGINATED — a non-empty error string from host/src/main.rs `entrypoint_value` + `read_result`, executed inside `run_certify_arm` and reported as `failureRuleVerdict`",
+      "ok": true,
+      "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` (an uncompilable emitted regex) or `facts_wellformed` (a malformed FactBundle) failed. Surfaced as an error, never as a zero-violation verdict (LOWERING.md § Lowering 2)."
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wasmtime (rust-opa-wasm): NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on regorus: an ERROR row",
+      "ok": true,
+      "detail": "eval-error — regorus eval_rule(data.totem.spike.certfix_backreference.result):"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on regorus: the error row is HOST-ORIGINATED — a non-empty error string from host/src/main.rs `run_certify_arm` regorus block — `run_regorus_arm`'s undefined/null/non-object rejection + `read_result`, reported as `failureRuleVerdict`",
+      "ok": true,
+      "detail": "regorus eval_rule(data.totem.spike.certfix_backreference.result):"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on regorus: NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: an ERROR row",
+      "ok": true,
+      "detail": "empty-result-set — result: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: the error row is HOST-ORIGINATED — a non-empty error string from wazero-probe/main.go `entrypointValue` + `readResult`, executed by conformance.go `runConformanceCase`",
+      "ok": true,
+      "detail": "EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFINED. For these policies that means `patterns_compile` or `facts_wellformed` failed; it is NEVER a zero-violation verdict"
+    },
+    {
+      "name": "ALL-HOSTS FAILURE RULE — backreference on wazero: NEVER a clean zero",
+      "ok": true,
+      "detail": "no clean-zero verdict"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — the positive fixture reached the all-hosts table",
+      "ok": true,
+      "detail": "3 host(s)"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on wasmtime (rust-opa-wasm): a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — result: ok; side_result: ok"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on regorus: a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — {\"events\":[],\"violations\":[]}"
+    },
+    {
+      "name": "CLEAN-ZERO CONTROL — two-entrypoints on wazero: a valid zero-violation result IS recognised as a clean zero (so the `NEVER a clean zero` rows above are not vacuous)",
+      "ok": true,
+      "detail": "cleanZero=true errored=false — result: len=1; side_result: len=1"
+    },
+    {
+      "name": "CLASSIFIER — all FIVE typed blocked reasons are REACHABLE and observed in this run",
+      "ok": true,
+      "detail": "[\"empty-result-set\",\"eval-error-or-trap\",\"extra-or-malformed-keys\",\"missing-keys\",\"non-object\"]"
+    },
+    {
+      "name": "PUBLICATION — `artifacts/chains/` holds EXACTLY the certified bundles, one file each",
+      "ok": true,
+      "detail": "[\"r87aff037d7de47a7.json\"]"
+    },
+    {
+      "name": "PUBLICATION — every blocked bundle has an `artifacts/blocked/<pkg>.json` and no chain",
+      "ok": true,
+      "detail": "8"
+    },
+    {
+      "name": "PUBLICATION — no bundle is both chained and blocked",
+      "ok": true,
+      "detail": "[]"
+    }
+  ],
+  "runManifestSha256": "e193ec3013bf57cb9977239a071b1fe77dc908194bb6e3f9bcb0fbd57c431f53",
+  "bundlesSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+}

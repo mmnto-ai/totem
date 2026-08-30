@@ -1,0 +1,1509 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/facts.mts",
+  "spec": ".totem/specs/spine-spike.md § Data model deltas (FactBundle) + § Differential units",
+  "recordSet": "seed20",
+  "factsDir": "spikes/spine-adopt/artifacts/k4-swap/facts",
+  "bundleCount": 47,
+  "bundles": [
+    {
+      "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-corpus-fail.json",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "control": false,
+      "swapped": false,
+      "ruleId": "87aff037d7de47a7",
+      "engine": "ast-grep",
+      "source": "corpus-fixture",
+      "arm": "fail",
+      "fileTextState": "content",
+      "lineCount": 8,
+      "astMatchCount": 1
+    },
+    {
+      "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-corpus-pass.json",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "control": false,
+      "swapped": false,
+      "ruleId": "87aff037d7de47a7",
+      "engine": "ast-grep",
+      "source": "corpus-fixture",
+      "arm": "pass",
+      "fileTextState": "content",
+      "lineCount": 20,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0167a783f75b5ecd-0167a783-dynamic-import-utility-layer-inline-bad.json",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
+      "control": false,
+      "swapped": false,
+      "ruleId": "0167a783f75b5ecd",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "0167a783f75b5ecd-0167a783-dynamic-import-utility-layer-inline-good.json",
+      "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
+      "control": false,
+      "swapped": false,
+      "ruleId": "0167a783f75b5ecd",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "49dd9e4fd02d692b-49dd9e4f-llm-character-counting-inline-bad.json",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
+      "control": false,
+      "swapped": false,
+      "ruleId": "49dd9e4fd02d692b",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "49dd9e4fd02d692b-49dd9e4f-llm-character-counting-inline-good.json",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
+      "control": false,
+      "swapped": false,
+      "ruleId": "49dd9e4fd02d692b",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "54140f59be3e6e44-54140f59-bare-issue-number-refs-inline-bad.json",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
+      "control": false,
+      "swapped": false,
+      "ruleId": "54140f59be3e6e44",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "54140f59be3e6e44-54140f59-bare-issue-number-refs-inline-good.json",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
+      "control": false,
+      "swapped": false,
+      "ruleId": "54140f59be3e6e44",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "5b85fe53468964e1-5b85fe53-suppress-event-runtime-failure-inline-bad.json",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "control": false,
+      "swapped": false,
+      "ruleId": "5b85fe53468964e1",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "5b85fe53468964e1-5b85fe53-suppress-event-runtime-failure-inline-good.json",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "control": false,
+      "swapped": false,
+      "ruleId": "5b85fe53468964e1",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "5da43ea60b66e96e-5da43ea6-git-double-dash-separator-inline-bad.json",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "control": false,
+      "swapped": false,
+      "ruleId": "5da43ea60b66e96e",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "5da43ea60b66e96e-5da43ea6-git-double-dash-separator-inline-good.json",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "control": false,
+      "swapped": false,
+      "ruleId": "5da43ea60b66e96e",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "6467c35159c1504d-6467c351-dynamic-import-cli-entry-inline-bad.json",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6467c35159c1504d",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "6467c35159c1504d-6467c351-dynamic-import-cli-entry-inline-good.json",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6467c35159c1504d",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "65ede9bfdf6995fe-65ede9bf-dynamic-import-command-handlers-inline-bad.json",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "control": false,
+      "swapped": false,
+      "ruleId": "65ede9bfdf6995fe",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "65ede9bfdf6995fe-65ede9bf-dynamic-import-command-handlers-inline-good.json",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "control": false,
+      "swapped": false,
+      "ruleId": "65ede9bfdf6995fe",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "6b1890e2dbda3331-6b1890e2-empty-string-in-whitelist-js-inline-bad.json",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b1890e2dbda3331",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "6b1890e2dbda3331-6b1890e2-empty-string-in-whitelist-js-inline-good.json",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b1890e2dbda3331",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "6b1890e2dbda3331-6b1890e2-empty-string-in-whitelist-inline-bad.json",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b1890e2dbda3331",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "6b1890e2dbda3331-6b1890e2-empty-string-in-whitelist-inline-good.json",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b1890e2dbda3331",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "6b2b62eb1e8693fc-6b2b62eb-totem-error-log-tag-inline-bad.json",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b2b62eb1e8693fc",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "6b2b62eb1e8693fc-6b2b62eb-totem-error-log-tag-inline-good.json",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "control": false,
+      "swapped": false,
+      "ruleId": "6b2b62eb1e8693fc",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "71935fe9a742137b-71935fe9-string-cast-on-input-js-inline-bad.json",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "71935fe9a742137b",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "71935fe9a742137b-71935fe9-string-cast-on-input-js-inline-good.json",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "71935fe9a742137b",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "71935fe9a742137b-71935fe9-string-cast-on-input-inline-bad.json",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "71935fe9a742137b",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "71935fe9a742137b-71935fe9-string-cast-on-input-inline-good.json",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "71935fe9a742137b",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-inline-bad.json",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "control": false,
+      "swapped": true,
+      "ruleId": "87aff037d7de47a7",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-inline-good.json",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "control": false,
+      "swapped": true,
+      "ruleId": "87aff037d7de47a7",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "89184bb5fd960848-89184bb5-bsd-sed-hex-escape-inline-bad.json",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
+      "control": false,
+      "swapped": false,
+      "ruleId": "89184bb5fd960848",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "89184bb5fd960848-89184bb5-bsd-sed-hex-escape-inline-good.json",
+      "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
+      "control": false,
+      "swapped": false,
+      "ruleId": "89184bb5fd960848",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "aa7a588d48e74503-aa7a588d-async-test-callbacks-inline-bad.json",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
+      "control": false,
+      "swapped": false,
+      "ruleId": "aa7a588d48e74503",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "aa7a588d48e74503-aa7a588d-async-test-callbacks-inline-good.json",
+      "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
+      "control": false,
+      "swapped": false,
+      "ruleId": "aa7a588d48e74503",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "b237bcf3b52381b1-b237bcf3-pwd-in-credential-regex-inline-bad.json",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "control": false,
+      "swapped": false,
+      "ruleId": "b237bcf3b52381b1",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "b237bcf3b52381b1-b237bcf3-pwd-in-credential-regex-inline-good.json",
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "control": false,
+      "swapped": false,
+      "ruleId": "b237bcf3b52381b1",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "b973609688ec2888-b9736096-orchestrator-test-timeout-inline-bad.json",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "control": false,
+      "swapped": false,
+      "ruleId": "b973609688ec2888",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 1
+    },
+    {
+      "file": "b973609688ec2888-b9736096-orchestrator-test-timeout-inline-good.json",
+      "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "control": false,
+      "swapped": false,
+      "ruleId": "b973609688ec2888",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "be74c55caa9fd60c-be74c55c-actions-input-expansion-inline-bad.json",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "control": false,
+      "swapped": false,
+      "ruleId": "be74c55caa9fd60c",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 2,
+      "astMatchCount": 0
+    },
+    {
+      "file": "be74c55caa9fd60c-be74c55c-actions-input-expansion-inline-good.json",
+      "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "control": false,
+      "swapped": false,
+      "ruleId": "be74c55caa9fd60c",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 4,
+      "astMatchCount": 0
+    },
+    {
+      "file": "d5faa14cbb8b50fb-d5faa14c-absolute-claims-in-docs-inline-bad.json",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "control": false,
+      "swapped": false,
+      "ruleId": "d5faa14cbb8b50fb",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "d5faa14cbb8b50fb-d5faa14c-absolute-claims-in-docs-inline-good.json",
+      "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "control": false,
+      "swapped": false,
+      "ruleId": "d5faa14cbb8b50fb",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "d940b2c9ffe92e99-d940b2c9-stdio-in-exec-options-inline-bad.json",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "d940b2c9ffe92e99",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "d940b2c9ffe92e99-d940b2c9-stdio-in-exec-options-inline-good.json",
+      "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "control": false,
+      "swapped": false,
+      "ruleId": "d940b2c9ffe92e99",
+      "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0123456789abcdef-d-file-inline-bad.json",
+      "fixtureId": "d-file-inline-bad",
+      "specimen": "d-file",
+      "seedEntry": null,
+      "control": true,
+      "swapped": false,
+      "ruleId": "0123456789abcdef",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0123456789abcdef-d-file-inline-good.json",
+      "fixtureId": "d-file-inline-good",
+      "specimen": "d-file",
+      "seedEntry": null,
+      "control": true,
+      "swapped": false,
+      "ruleId": "0123456789abcdef",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0123456789abcdef-d-file-control-unreadable.json",
+      "fixtureId": "d-file-control-unreadable",
+      "specimen": "d-file",
+      "seedEntry": null,
+      "control": true,
+      "swapped": false,
+      "ruleId": "0123456789abcdef",
+      "engine": "regex",
+      "source": "synthetic-control",
+      "arm": "unreadable",
+      "fileTextState": "null",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0123456789abcdef-d-file-control-empty.json",
+      "fixtureId": "d-file-control-empty",
+      "specimen": "d-file",
+      "seedEntry": null,
+      "control": true,
+      "swapped": false,
+      "ruleId": "0123456789abcdef",
+      "engine": "regex",
+      "source": "synthetic-control",
+      "arm": "empty",
+      "fileTextState": "empty",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-m3-malformed-lines.json",
+      "fixtureId": "m3-malformed-lines",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "control": false,
+      "swapped": false,
+      "ruleId": "87aff037d7de47a7",
+      "engine": "ast-grep",
+      "source": "synthetic-control",
+      "arm": "malformed",
+      "fileTextState": "content",
+      "lineCount": 2,
+      "astMatchCount": 0,
+      "malformedFactsControl": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — fixture exists: .totem/tests/test-87aff037d7de47a7.md",
+      "ok": true,
+      "detail": ".totem/tests/test-87aff037d7de47a7.md"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — parseFixture returned a fixture",
+      "ok": true,
+      "detail": ".totem/tests/test-87aff037d7de47a7.md"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — fixture fail-line count matches the spec table (a corpus description, NOT a verdict)",
+      "ok": true,
+      "detail": "8"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — fixture pass-line count matches the spec table (a corpus description, NOT a verdict)",
+      "ok": true,
+      "detail": "20"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — the fixture's declared file is IN SCOPE for the record (dispatcher predicate)",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/src/example.ts')"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-fail — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-fail — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":4,\"lineText\":\"  } catch (err) {\",\"startLineText\":\"  } catch (err) {\",\"startPrecedingLineText\":\"    doWork();\"}]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-fail — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"function swallowErr() {\",\"  try {\",\"    doWork();\",\"  } catch (err) {\",\"    // no throw anywhere in this block — fail-open\",\"    return null;\",\"  }\",\"}\"]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-pass — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-pass — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-corpus-pass — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"function rethrowWithCause() {\",\"  try {\",\"    doWork();\",\"  } catch (err) {\",\"    throw new Error('doWork failed', { cause: err });\",\"  }\",\"}\",\"// Tenet-4 shape 1 (rethrow-unexpected): the type-discriminated rethrow is the\",\"// rule WORKING — a genuine bug still fails loud, the expected class softens.\",\"// The subtree walk (stopBy: end) sees `throw err` nested in the `if`, so the\",\"// rule does not fire. Locked here so the shape-1 carve-out never regresses\",\"// to firing (mmnto-ai/totem#2214, lockstep with strategy Tenet-4 #702/#708).\",\"function rethrowUnexpected() {\",\"  try {\",\"    doWork();\",\"  } catch (err) {\",\"    if (!(err instanceof SyntaxError)) throw err;\",\"    return null;\",\"  }\",\"}\"]"
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/adapters/loader.ts')"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const { chalk } = await import('chalk');\",\"startLineText\":\"const { chalk } = await import('chalk');\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const { chalk } = await import('chalk');\"]"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "0167a783-dynamic-import-utility-layer-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"import chalk from 'chalk';\"]"
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/prompt.ts')"
+    },
+    {
+      "name": "49dd9e4f-llm-character-counting-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROMPT = 'Summarize the diff in 200 characters or less.';\"]"
+    },
+    {
+      "name": "49dd9e4f-llm-character-counting-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROMPT = 'Summarize the diff in one sentence; the caller truncates.';\"]"
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/commands/issue.ts')"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const helpText = 'Tracked in #2655 — see the changelog.';\"]"
+    },
+    {
+      "name": "54140f59-bare-issue-number-refs-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const helpText = 'Tracked in mmnto-ai/totem#2655 — see the changelog.';\"]"
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/emit-site.ts')"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"emit('suppress', { ruleId, reason: 'ast-grep scan threw' });\",\"startLineText\":\"emit('suppress', { ruleId, reason: 'ast-grep scan threw' });\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"emit('suppress', { ruleId, reason: 'ast-grep scan threw' });\"]"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "5b85fe53-suppress-event-runtime-failure-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"onRuleEvent('error', { ruleId, reason: 'ast-grep scan threw' });\"]"
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/release.sh')"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"git log $UNTRUSTED_REF\"]"
+    },
+    {
+      "name": "5da43ea6-git-double-dash-separator-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"git log \\\"$UNTRUSTED_REF\\\" -- .\"]"
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/index.ts')"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const { renderBanner } = await import('./banner.js');\",\"startLineText\":\"const { renderBanner } = await import('./banner.js');\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const { renderBanner } = await import('./banner.js');\"]"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "6467c351-dynamic-import-cli-entry-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"import { renderBanner } from './banner.js';\"]"
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/handlers/run.ts')"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const { runOrient } = await import('../commands/orient.js');\",\"startLineText\":\"const { runOrient } = await import('../commands/orient.js');\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const { runOrient } = await import('../commands/orient.js');\"]"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "65ede9bf-dynamic-import-command-handlers-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"import { runOrient } from '../commands/orient.js';\"]"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/branches.js')"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\",\"startLineText\":\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\"]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-js-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"release\\\"];\"]"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/branches.ts')"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\",\"startLineText\":\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"\\\", \\\"release\\\"];\"]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "6b1890e2-empty-string-in-whitelist-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const PROTECTED_BRANCHES = [\\\"main\\\", \\\"release\\\"];\"]"
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/log-site.ts')"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"log.error('compile failed: ' + msg);\",\"startLineText\":\"log.error('compile failed: ' + msg);\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"log.error('compile failed: ' + msg);\"]"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"log.error('Totem Error', 'compile failed: ' + msg);\",\"startLineText\":\"log.error('Totem Error', 'compile failed: ' + msg);\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "6b2b62eb-totem-error-log-tag-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"log.error('Totem Error', 'compile failed: ' + msg);\"]"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/cast.js')"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const pattern = String(input.pattern);\",\"startLineText\":\"const pattern = String(input.pattern);\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const pattern = String(input.pattern);\"]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-js-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;\"]"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/cast.ts')"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const pattern = String(input.pattern);\",\"startLineText\":\"const pattern = String(input.pattern);\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const pattern = String(input.pattern);\"]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "71935fe9-string-cast-on-input-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;\"]"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/catch-site.ts')"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"try { risky() } catch (e) { log(e); throw e }\"]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"try { risky() } catch (e) { log(e) }\",\"startLineText\":\"try { risky() } catch (e) { log(e) }\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "87aff037-fail-open-catch-ban-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"try { risky() } catch (e) { log(e) }\"]"
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/color.sh')"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"sed 's/\\\\x1b\\\\[[0-9;]*m//g' totem-lint.log\"]"
+    },
+    {
+      "name": "89184bb5-bsd-sed-hex-escape-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"perl -pe 's/\\\\e\\\\[[0-9;]*m//g' totem-lint.log\"]"
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/a.test.ts')"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });\",\"startLineText\":\"it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });\"]"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "aa7a588d-async-test-callbacks-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"it('returns the parsed record', () => { expect(parse(src)).toEqual(expected); });\"]"
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/assets/patterns.ts')"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const CREDENTIAL_RE = new RegExp('(password|passwd|pwd|secret)\\\\\\\\s*[:=]', 'i');\",\"startLineText\":\"const CREDENTIAL_RE = new RegExp('(password|passwd|pwd|secret)\\\\\\\\s*[:=]', 'i');\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const CREDENTIAL_RE = new RegExp('(password|passwd|pwd|secret)\\\\\\\\s*[:=]', 'i');\"]"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"const CREDENTIAL_RE = new RegExp('(password|passwd|secret)\\\\\\\\s*[:=]', 'i');\",\"startLineText\":\"const CREDENTIAL_RE = new RegExp('(password|passwd|secret)\\\\\\\\s*[:=]', 'i');\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "b237bcf3-pwd-in-credential-regex-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const CREDENTIAL_RE = new RegExp('(password|passwd|secret)\\\\\\\\s*[:=]', 'i');\"]"
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/cli/src/orchestrators/shell-orchestrator.test.ts')"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[{\"lineNumber\":1,\"lineText\":\"describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });\",\"startLineText\":\"describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });\",\"startPrecedingLineText\":null}]"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });\"]"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "b9736096-orchestrator-test-timeout-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"describe('orchestrator dispatch', { timeout: 15000 }, () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });\"]"
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, '.github/workflows/ci.yml')"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"- name: Check out the requested ref\",\"  run: git checkout ${{ inputs.ref }}\"]"
+    },
+    {
+      "name": "be74c55c-actions-input-expansion-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"- name: Check out the requested ref\",\"  env:\",\"    REQUESTED_REF: ${{ inputs.ref }}\",\"  run: git checkout \\\"$REQUESTED_REF\\\"\"]"
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'docs/overview.md')"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"The compiler guarantees complete coverage of every edge case.\"]"
+    },
+    {
+      "name": "d5faa14c-absolute-claims-in-docs-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"The compiler covers the 14 edge cases listed in the test matrix.\"]"
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'packages/core/src/exec-site.ts')"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-bad — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-bad — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const out = execSync(cmd, { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' });\"]"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-good — batch ast extraction raised no per-rule failure",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-good — matchAstGrepPatternsBatch agrees with matchAstGrepPattern",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "d940b2c9-stdio-in-exec-options-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"const out = execSync(cmd, { cwd: repoRoot, encoding: 'utf8' });\"]"
+    },
+    {
+      "name": "specimen d-file — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen d-file — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'scripts/x.sh')"
+    },
+    {
+      "name": "d-file-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"git log --oneline\"]"
+    },
+    {
+      "name": "d-file-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"LC_ALL=C git log --oneline\"]"
+    },
+    {
+      "name": "FACT BOUNDARY — every ast fact came from the extractor; no bundle for a regex specimen carries an ast match",
+      "ok": true,
+      "detail": "17 regex bundles, 30 ast bundles"
+    },
+    {
+      "name": "FACT BOUNDARY — at least one ast bundle actually carries matches (the extractor is not vacuously clean)",
+      "ok": true,
+      "detail": "16 of 30 ast bundles have ≥1 match"
+    },
+    {
+      "name": "M3 FOLD — the three fileText states are all present: null, empty, and content",
+      "ok": true,
+      "detail": "null=1, empty=1, content=45"
+    },
+    {
+      "name": "bundle filenames are unique",
+      "ok": true,
+      "detail": "47"
+    },
+    {
+      "name": "every bundle filename carries the `<ruleId>-<specimen>-` join prefix the hosts check",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "K5 CONTROL — the fact bundles minted for `d-file` (rule `r0123456789abcdef`) are exactly the ones the manifest declared",
+      "ok": true,
+      "detail": "[\"d-file-control-empty\",\"d-file-control-unreadable\",\"d-file-inline-bad\",\"d-file-inline-good\"]"
+    },
+    {
+      "name": "K4 CONTROL — SPIKE_SWAP_EXAMPLES=87aff037-fail-open-catch-ban swapped this record's inline arms; the run is NOT a clean one",
+      "ok": true,
+      "detail": "87aff037-fail-open-catch-ban-inline-bad, 87aff037-fail-open-catch-ban-inline-good"
+    }
+  ],
+  "runManifestSha256": "90450073219abb547b3064edc2c9016910da53f8baa0feae1ed5b3aa1a0e7424",
+  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+}

@@ -1,0 +1,25 @@
+{
+  "fixtureId": "be74c55c-actions-input-expansion-inline-good",
+  "specimen": "be74c55c-actions-input-expansion",
+  "ruleId": "be74c55caa9fd60c",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-be74c55c-actions-input-expansion.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "833d1765f222e947e723700e118d2da218653000ba8f0e9cce5cf64bf797edba"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": ".github/workflows/ci.yml",
+    "fileText": "- name: Check out the requested ref\n  env:\n    REQUESTED_REF: ${{ inputs.ref }}\n  run: git checkout \"$REQUESTED_REF\"",
+    "lines": [
+      "- name: Check out the requested ref",
+      "  env:",
+      "    REQUESTED_REF: ${{ inputs.ref }}",
+      "  run: git checkout \"$REQUESTED_REF\""
+    ],
+    "astMatches": []
+  }
+}

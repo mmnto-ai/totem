@@ -2,16 +2,16 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "1d6b0a9aead9e803f3afc3a819ac438ab40ebb78",
-  "runCommit": "1d6b0a9aead9e803f3afc3a819ac438ab40ebb78",
-  "recordSet": "specimens",
+  "apparatusPin": "638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
+  "runCommit": "638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
+  "recordSet": "seed20",
   "artifactsSubdir": null,
   "controls": [
     {
       "id": "K1",
       "refusing": true,
       "ok": true,
-      "detail": "2 classifier reject row(s) present with the class named (the seed`s own `0e01112d` row is seed-only and is not part of this set)",
+      "detail": "3 classifier reject row(s) present with the class named",
       "rows": [
         {
           "id": "bddfbd2ec1c75eaf",
@@ -27,6 +27,15 @@
           "present": true,
           "class": "backreference",
           "expectedClass": "backreference",
+          "ok": true
+        },
+        {
+          "id": "0e01112d",
+          "source": "record reject row",
+          "present": true,
+          "stage": "target-lowering",
+          "class": "lookaround",
+          "expectedClass": "lookaround",
           "ok": true
         }
       ],
@@ -86,23 +95,85 @@
     {
       "id": "K3",
       "refusing": true,
-      "ok": null,
-      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "ok": true,
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
-          "ok": null,
-          "detail": "NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens`",
+          "ok": true,
+          "detail": "8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture)",
           "target": "seed/controls/k3/k3-target.chain.json (the byte-pinned capture)",
-          "rows": []
+          "rows": [
+            {
+              "path": "recordFile",
+              "tag": "expected-to-differ",
+              "current": "\"seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml\"",
+              "target": "\"records/c-supp-astgrep-compound-failopen-catch.rule.yaml\""
+            },
+            {
+              "path": "recordSha256",
+              "tag": "expected-to-differ",
+              "current": "\"de1079ea3d8a8b13e877780c90ccbaf6e6c41d6011ca4e91063c2a7a432330ca\"",
+              "target": "\"27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d\""
+            },
+            {
+              "path": "regoComposition.components[\"globs.json\"]",
+              "tag": "expected-to-differ",
+              "current": "\"0d52ae6b16c5e45cc36c81ce39dc222734ae0c0afd89e7d01f2d6a5b008fbfc6\"",
+              "target": "\"3288f10c51e1163046fec34c952242ec14cc6e64a2a58497ae2d80f4b66937a7\""
+            },
+            {
+              "path": "regoComposition.components[\"policy.rego\"]",
+              "tag": "expected-to-differ",
+              "current": "\"13a5cf29e932894b8afaf2c8c73f3f466405716f5c225bf0625e3bc2b05d6bcd\"",
+              "target": "\"528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\""
+            },
+            {
+              "path": "regoComposition.preimage",
+              "tag": "expected-to-differ",
+              "current": "\"policy.rego:13a5cf29e932894b8afaf2c8c73f3f466405716f5c225bf0625e3bc2b05d6bcd\\nglobs.json:0d52ae6b16c5e45cc36c81ce39dc222734ae0c0afd89e7d01f2d6a5b008fbfc6\\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9c",
+              "target": "\"policy.rego:528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\\nglobs.json:3288f10c51e1163046fec34c952242ec14cc6e64a2a58497ae2d80f4b66937a7\\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9c"
+            },
+            {
+              "path": "regoSha256",
+              "tag": "expected-to-differ",
+              "current": "\"972da764de42ffb5ec71115a99251c53366c3633dc6ccf024e565fa13afaf347\"",
+              "target": "\"e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8\""
+            },
+            {
+              "path": "seedEntry",
+              "tag": "expected-to-differ",
+              "current": "\"87aff037\"",
+              "target": null
+            },
+            {
+              "path": "specimen",
+              "tag": "expected-to-differ",
+              "current": "\"87aff037-fail-open-catch-ban\"",
+              "target": "\"c-supp\""
+            }
+          ]
         },
         {
           "arm": "B",
-          "ok": null,
-          "armB": "not-measured",
-          "binding": "no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set)",
-          "detail": "NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm",
-          "rows": []
+          "ok": true,
+          "armB": "stands",
+          "binding": "bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
+          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
+          "rows": [
+            {
+              "file": "k3-control/chains/r87aff037d7de47a7.json",
+              "sha256": "2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881",
+              "expected": "2a4d56caf0b4d18157ecf823374f3bf784b3c857f92faf148aa159f431fe3881",
+              "eq": true
+            },
+            {
+              "file": "k3-control/lowered/r87aff037d7de47a7/policy.rego",
+              "sha256": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
+              "expected": "528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db",
+              "eq": true
+            }
+          ]
         }
       ],
       "evidence": [
@@ -131,9 +202,458 @@
     {
       "id": "K3b",
       "refusing": true,
-      "ok": null,
-      "detail": "NOT MEASURED — K3b is a claim about the SEED's generated probe set (§ S1); this run's record set is `specimens`, whose probe list is the frozen SPECIMEN_PROBE_PATHS (a chain-digest input) and does not cover every glob by construction",
-      "rows": [],
+      "ok": true,
+      "detail": "56 reachable glob(s), each with >=1 matching AND >=1 non-matching probe",
+      "rows": [
+        {
+          "pkg": "totem.spike.r0167a783f75b5ecd",
+          "glob": "packages/cli/src/**/*.ts",
+          "matching": 10,
+          "nonMatching": 100,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0167a783f75b5ecd",
+          "glob": "packages/cli/src/commands/**/*.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0167a783f75b5ecd",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0167a783f75b5ecd",
+          "glob": "**/*.spec.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.tsx",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.js",
+          "matching": 3,
+          "nonMatching": 107,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.jsx",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.py",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.md",
+          "matching": 8,
+          "nonMatching": 102,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r49dd9e4fd02d692b",
+          "glob": "**/*.txt",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r54140f59be3e6e44",
+          "glob": "packages/cli/**/*.ts",
+          "matching": 12,
+          "nonMatching": 98,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r54140f59be3e6e44",
+          "glob": "apps/cli/**/*.ts",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r54140f59be3e6e44",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5b85fe53468964e1",
+          "glob": "packages/core/**/*.ts",
+          "matching": 12,
+          "nonMatching": 98,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5b85fe53468964e1",
+          "glob": "**/*.test.*",
+          "matching": 7,
+          "nonMatching": 103,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5b85fe53468964e1",
+          "glob": "**/*.spec.*",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.js",
+          "matching": 3,
+          "nonMatching": 107,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.sh",
+          "matching": 8,
+          "nonMatching": 102,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.bash",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.mjs",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r5da43ea60b66e96e",
+          "glob": "**/*.cjs",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6467c35159c1504d",
+          "glob": "packages/cli/src/**/*.ts",
+          "matching": 10,
+          "nonMatching": 100,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6467c35159c1504d",
+          "glob": "packages/cli/src/commands/**/*.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6467c35159c1504d",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6467c35159c1504d",
+          "glob": "**/*.spec.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r65ede9bfdf6995fe",
+          "glob": "packages/cli/src/**/*.ts",
+          "matching": 10,
+          "nonMatching": 100,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r65ede9bfdf6995fe",
+          "glob": "packages/cli/src/commands/**/*.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r65ede9bfdf6995fe",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r65ede9bfdf6995fe",
+          "glob": "**/*.spec.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6b1890e2dbda3331_javascript",
+          "glob": "**/*.js",
+          "matching": 3,
+          "nonMatching": 107,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6b1890e2dbda3331_typescript",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r6b2b62eb1e8693fc",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r71935fe9a742137b_javascript",
+          "glob": "**/*.js",
+          "matching": 3,
+          "nonMatching": 107,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r71935fe9a742137b_typescript",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r87aff037d7de47a7",
+          "glob": "packages/**/*.ts",
+          "matching": 26,
+          "nonMatching": 84,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r87aff037d7de47a7",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r87aff037d7de47a7",
+          "glob": "**/*.spec.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r89184bb5fd960848",
+          "glob": "**/*.sh",
+          "matching": 8,
+          "nonMatching": 102,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r89184bb5fd960848",
+          "glob": "**/*.bash",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r89184bb5fd960848",
+          "glob": "**/*.zsh",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r89184bb5fd960848",
+          "glob": "**/*.ksh",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.raa7a588d48e74503",
+          "glob": "**/*.test.ts",
+          "matching": 4,
+          "nonMatching": 106,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.raa7a588d48e74503",
+          "glob": "**/*.spec.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rb237bcf3b52381b1",
+          "glob": "packages/cli/src/assets/**/*.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rb973609688ec2888",
+          "glob": "packages/cli/**/*.test.ts",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rbe74c55caa9fd60c",
+          "glob": "**/*.yml",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rbe74c55caa9fd60c",
+          "glob": "**/*.yaml",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rd5faa14cbb8b50fb",
+          "glob": "**/*.md",
+          "matching": 8,
+          "nonMatching": 102,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rd5faa14cbb8b50fb",
+          "glob": "**/*.mdx",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rd5faa14cbb8b50fb",
+          "glob": "**/*.rst",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rd5faa14cbb8b50fb",
+          "glob": "**/*.txt",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.rd940b2c9ffe92e99",
+          "glob": "**/*.ts",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0123456789abcdef",
+          "glob": "**/*.sh",
+          "matching": 8,
+          "nonMatching": 102,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0123456789abcdef",
+          "glob": "**/*.cjs",
+          "matching": 2,
+          "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        }
+      ],
       "evidence": [
         {
           "artifact": "lowered/<pkg>/globs.json",
@@ -144,8 +664,30 @@
     {
       "id": "K4",
       "refusing": true,
-      "ok": null,
-      "detail": "NOT MEASURED — `artifacts/k4-swap/` does not exist (run the § S8 K4 seam with SPIKE_SWAP_EXAMPLES + SPIKE_ARTIFACTS_SUBDIR=k4-swap)",
+      "ok": true,
+      "detail": "2 bundle(s) served swapped; T7 FAILS on the swapped record (bad/good inverted on the opa-wasm arm) while the differential still reports 0 unexplained divergences — T7 discriminates independently of parity",
+      "rows": [
+        {
+          "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+          "swapped": true
+        },
+        {
+          "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+          "swapped": true
+        },
+        {
+          "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+          "arm": "bad",
+          "violations": 0,
+          "error": null
+        },
+        {
+          "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
+          "arm": "good",
+          "violations": 1,
+          "error": null
+        }
+      ],
       "evidence": [
         {
           "artifact": "k4-swap/facts-index.json",
@@ -212,9 +754,38 @@
     {
       "id": "K5b",
       "refusing": true,
-      "ok": null,
-      "detail": "NOT MEASURED — this run minted no malformed-facts control bundle (record set `specimens`; the G8 control is seed-set only)",
-      "rows": [],
+      "ok": true,
+      "detail": "every arm (shipped, opa, regorus, wazero) reports outsideK5b=0 with exactly one control error row",
+      "rows": [
+        {
+          "arm": "shipped",
+          "total": 1,
+          "fromK5bControl": 1,
+          "outsideK5b": 0,
+          "ok": true
+        },
+        {
+          "arm": "opa",
+          "total": 1,
+          "fromK5bControl": 1,
+          "outsideK5b": 0,
+          "ok": true
+        },
+        {
+          "arm": "regorus",
+          "total": 1,
+          "fromK5bControl": 1,
+          "outsideK5b": 0,
+          "ok": true
+        },
+        {
+          "arm": "wazero",
+          "total": 1,
+          "fromK5bControl": 1,
+          "outsideK5b": 0,
+          "ok": true
+        }
+      ],
       "evidence": [
         {
           "artifact": "differential-report.json",
@@ -409,7 +980,7 @@
     {
       "name": "K1 — PASS",
       "ok": true,
-      "detail": "2 classifier reject row(s) present with the class named (the seed`s own `0e01112d` row is seed-only and is not part of this set)"
+      "detail": "3 classifier reject row(s) present with the class named"
     },
     {
       "name": "K2 — PASS",
@@ -417,19 +988,19 @@
       "detail": "certfix_neg_lookahead is BLOCKED `empty-result-set` by the certifier, and all three hosts produced an ERROR (host-level kinds: wasmtime empty-result-set, regorus eval-error, wazero empty-result-set — read from `allHostsFailureRule`, NOT from the certifier`s five-class vocabulary); the blocked artifact carries `chain: null`"
     },
     {
-      "name": "K3 — NOT MEASURED",
+      "name": "K3 — PASS",
       "ok": true,
-      "detail": "arm A: NOT MEASURED — arm A compares the SEED run's `chains/r87aff037d7de47a7.json` against the pinned target, and this run's record set is `specimens` | arm B: NOT MEASURED — no control-only build present: `artifacts/k3-control/` does not exist (run the § S5 seam with SPIKE_CONTROL_RECORD set) | manifest.k3Capture.repinned=null (from=null) — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
-      "name": "K3b — NOT MEASURED",
+      "name": "K3b — PASS",
       "ok": true,
-      "detail": "NOT MEASURED — K3b is a claim about the SEED's generated probe set (§ S1); this run's record set is `specimens`, whose probe list is the frozen SPECIMEN_PROBE_PATHS (a chain-digest input) and does not cover every glob by construction"
+      "detail": "56 reachable glob(s), each with >=1 matching AND >=1 non-matching probe"
     },
     {
-      "name": "K4 — NOT MEASURED",
+      "name": "K4 — PASS",
       "ok": true,
-      "detail": "NOT MEASURED — `artifacts/k4-swap/` does not exist (run the § S8 K4 seam with SPIKE_SWAP_EXAMPLES + SPIKE_ARTIFACTS_SUBDIR=k4-swap)"
+      "detail": "2 bundle(s) served swapped; T7 FAILS on the swapped record (bad/good inverted on the opa-wasm arm) while the differential still reports 0 unexplained divergences — T7 discriminates independently of parity"
     },
     {
       "name": "K5 — PASS",
@@ -437,9 +1008,9 @@
       "detail": "2 M3 bundle(s) fired with matchCount 1, no error, MATCH on shipped-opa AND opa-wazero"
     },
     {
-      "name": "K5b — NOT MEASURED",
+      "name": "K5b — PASS",
       "ok": true,
-      "detail": "NOT MEASURED — this run minted no malformed-facts control bundle (record set `specimens`; the G8 control is seed-set only)"
+      "detail": "every arm (shipped, opa, regorus, wazero) reports outsideK5b=0 with exactly one control error row"
     },
     {
       "name": "K6 — PASS",
@@ -457,6 +1028,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
-  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
+  "runManifestSha256": "0bc8a1b2cfe81d2f5d6013357f918dd7a59b90cfa16678f7e28c4f97c9e310dd",
+  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

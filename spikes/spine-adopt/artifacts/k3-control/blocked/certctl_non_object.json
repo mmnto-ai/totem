@@ -1,0 +1,48 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/certify.mts",
+  "contract": "spec § Actuator slice 2 — \"a blocked bundle produces `artifacts/blocked/<pkg>.json` (typed reason, no chain, wasm retained for forensics but never chained)\"",
+  "id": "fixture:ctl-non-object",
+  "kind": "classifier-control",
+  "package": "totem.spike.certctl_non_object",
+  "blocked": true,
+  "certified": false,
+  "chain": null,
+  "chainNote": "NO CHAIN. The chain artifact IS the certificate; a blocked bundle has none.",
+  "reason": "non-object",
+  "detail": "`totem/spike/certctl_non_object/result`: the result is string, not an object: \"certification must refuse a non-object result\"",
+  "wasmSha256": "a88a9f2beea56b7353cc0e7423cb3cc2454f6125947aa27ebd7dc69065a6dbbf",
+  "wasmRetainedFor": "forensics only — present on disk, never chained",
+  "entrypointAssertion": {
+    "ok": true,
+    "detail": "exactly one entrypoint, and it is the canonical `totem/spike/certctl_non_object/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+  },
+  "classifications": [
+    {
+      "entrypoint": "totem/spike/certctl_non_object/result",
+      "status": "BLOCKED",
+      "reason": "non-object",
+      "detail": "the result is string, not an object: \"certification must refuse a non-object result\""
+    }
+  ],
+  "sentinel": {
+    "file": "certify/sentinel.ts",
+    "fileText": "",
+    "lines": [],
+    "astMatches": []
+  },
+  "sentinelSchemaErrors": [],
+  "regorus": {
+    "error": null,
+    "failureRuleVerdict": {
+      "error": "regorus returned an UNDEFINED/non-object result for data.totem.spike.certctl_non_object.result: \"certification must refuse a non-object result\"",
+      "events": null,
+      "ok": false,
+      "violations": null
+    },
+    "ok": true,
+    "ran": true,
+    "rule": "data.totem.spike.certctl_non_object.result",
+    "undefined": false,
+    "value": "certification must refuse a non-object result"
+  }
+}
