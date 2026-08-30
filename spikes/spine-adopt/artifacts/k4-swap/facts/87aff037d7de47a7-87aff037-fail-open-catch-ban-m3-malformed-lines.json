@@ -1,0 +1,24 @@
+{
+  "fixtureId": "m3-malformed-lines",
+  "specimen": "87aff037-fail-open-catch-ban",
+  "ruleId": "87aff037d7de47a7",
+  "engine": "ast-grep",
+  "source": "synthetic-control",
+  "arm": "malformed",
+  "provenance": {
+    "malformedFactsControl": true,
+    "contract": "spec `.totem/specs/seed20-apparatus.md` § G8 (K5b)",
+    "note": "lines[] carries a NON-STRING member, so `facts_wellformed` is false and the entrypoint`s `result` is UNDEFINED. Every arm — wasmtime, regorus, wazero AND the shipped harness — must produce an ERROR ROW for this bundle, never a clean zero and never a missing row.",
+    "expectation": "error row on every arm; carved out by `src/compare.mts` under the explanation class MALFORMED-FACTS-CONTROL; counted as the ONE expected error row per arm in the run-level errorRows accounting."
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "packages/core/src/catch-site.ts",
+    "fileText": "try { risky() } catch (e) { log(e) }",
+    "lines": [
+      "try { risky() } catch (e) { log(e) }",
+      42
+    ],
+    "astMatches": []
+  }
+}

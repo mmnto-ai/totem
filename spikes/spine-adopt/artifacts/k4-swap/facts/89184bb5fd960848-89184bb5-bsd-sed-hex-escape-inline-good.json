@@ -1,0 +1,22 @@
+{
+  "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
+  "specimen": "89184bb5-bsd-sed-hex-escape",
+  "ruleId": "89184bb5fd960848",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-89184bb5-bsd-sed-hex-escape.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "52cff65b6c384bbccd4ce569b5a544d6165fffb73dd1c7c0f909d8fea6f5bd9d"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "scripts/color.sh",
+    "fileText": "perl -pe 's/\\e\\[[0-9;]*m//g' totem-lint.log",
+    "lines": [
+      "perl -pe 's/\\e\\[[0-9;]*m//g' totem-lint.log"
+    ],
+    "astMatches": []
+  }
+}

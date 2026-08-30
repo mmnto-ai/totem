@@ -1,0 +1,22 @@
+{
+  "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
+  "specimen": "b9736096-orchestrator-test-timeout",
+  "ruleId": "b973609688ec2888",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-b9736096-orchestrator-test-timeout.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "d491ba680059906265039d21dd8910936b1ba1209da49f40b2dee31dafe8b16a"
+  },
+  "astQuery": "describe($TITLE, $FN)",
+  "factBundle": {
+    "file": "packages/cli/src/orchestrators/shell-orchestrator.test.ts",
+    "fileText": "describe('orchestrator dispatch', { timeout: 15000 }, () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });",
+    "lines": [
+      "describe('orchestrator dispatch', { timeout: 15000 }, () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });"
+    ],
+    "astMatches": []
+  }
+}

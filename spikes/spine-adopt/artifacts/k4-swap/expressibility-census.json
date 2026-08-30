@@ -1,0 +1,4111 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/census.mts",
+  "spec": ".totem/specs/spine-spike.md § \"Census corrections the design binds to\" (DISPUTED row) + § Invariants (\"classes partition all 226\")",
+  "repoRoot": "<worktree>",
+  "corpora": [
+    {
+      "id": "root",
+      "file": ".totem\\compiled-rules.json",
+      "rules": 485,
+      "withPattern": 217
+    },
+    {
+      "id": "pack-agent-security",
+      "file": "packages\\pack-agent-security\\compiled-rules.json",
+      "rules": 5,
+      "withPattern": 1
+    },
+    {
+      "id": "pack-agent-workflow",
+      "file": "packages\\pack-agent-workflow\\compiled-rules.json",
+      "rules": 9,
+      "withPattern": 8
+    },
+    {
+      "id": "pack-rust-architecture",
+      "file": "packages\\pack-rust-architecture\\compiled-rules.json",
+      "rules": 1,
+      "withPattern": 0
+    }
+  ],
+  "totals": {
+    "rules": 500,
+    "patternsCensused": 226
+  },
+  "classCounts": {
+    "re2-clean": 107,
+    "word-boundary": 70,
+    "lookaround": 48,
+    "backreference": 1
+  },
+  "classPartitionSum": 226,
+  "bearingCounts": {
+    "wordBoundaryBearing": 99,
+    "lookaroundBearing": 48,
+    "negativeLookaheadBearing": 47,
+    "positiveLookaheadBearing": 3,
+    "positiveLookbehindBearing": 0,
+    "negativeLookbehindBearing": 1,
+    "lookbehindAnyBearing": 1,
+    "backreferenceBearing": 1,
+    "wordBoundaryBearingNaive": 101
+  },
+  "occurrences": {
+    "wordBoundary": 174,
+    "lookaround": 53,
+    "backreference": 1
+  },
+  "specClaims": [
+    {
+      "claim": "word-boundary-bearing patterns",
+      "spec": 101,
+      "measured": 99,
+      "note": "naive substring scan gives 101; the escape-aware scan drops 2 pattern(s) whose `\\\\b` is an ESCAPED BACKSLASH followed by a literal `b` (a rule matching the TEXT \"\\b\" in source), not a word boundary.",
+      "delta": -2,
+      "agrees": false
+    },
+    {
+      "claim": "negative-lookahead-bearing patterns",
+      "spec": 47,
+      "measured": 47,
+      "note": "",
+      "delta": 0,
+      "agrees": true
+    },
+    {
+      "claim": "lookbehind-bearing patterns (EITHER form)",
+      "spec": 1,
+      "measured": 1,
+      "note": "the single corpus lookbehind is a NEGATIVE lookbehind `(?<!`; positive-lookbehind count is 0.",
+      "delta": 0,
+      "agrees": true
+    },
+    {
+      "claim": "backreference-bearing patterns",
+      "spec": 1,
+      "measured": 1,
+      "note": "",
+      "delta": 0,
+      "agrees": true
+    },
+    {
+      "claim": "lookaround-bearing patterns (§ falsification fold N1: 48)",
+      "spec": 48,
+      "measured": 48,
+      "note": "47 negative-lookahead ∪ 1 negative-lookbehind = 48 distinct patterns; the 3 positive-lookahead-bearing patterns all also carry a negative lookahead, so they add no new members.",
+      "delta": 0,
+      "agrees": true
+    },
+    {
+      "claim": "lookaround OCCURRENCES (§ expressibility evidence rows: 53)",
+      "spec": 53,
+      "measured": 53,
+      "note": "",
+      "delta": 0,
+      "agrees": true
+    }
+  ],
+  "classificationMethod": {
+    "primary": "escape-aware scan (character-class and backslash aware)",
+    "differential": "naive substring scan",
+    "rowsWhereTheyDiffer": [
+      {
+        "ruleHash": "76762d7d0ad98113",
+        "escapeAware": "re2-clean",
+        "naive": "word-boundary",
+        "pattern": "\\\\b[A-Za-z_$][\\w$]*\\\\b"
+      },
+      {
+        "ruleHash": "730cd62cae1930d7",
+        "escapeAware": "re2-clean",
+        "naive": "word-boundary",
+        "pattern": "\"(hook|PreToolUse|command|scripts?)\":\\s*\\\"[^\\\"]*(\\\\||\\\\b(grep|awk|sed|xargs)\\\\b|&&)[^\\\"]*\\\""
+      }
+    ]
+  },
+  "opa": {
+    "binary": "spikes\\spine-adopt\\tools\\opa_windows_amd64.exe",
+    "version": "1.20.0",
+    "pin": "toolchain.lock [opa] v1.20.0",
+    "note": "Patterns are handed to OPA as Rego RAW strings (backticks). In a Rego DOUBLE-QUOTED string `\\b` is the JSON backspace escape — the double-quoted form measures U+0008, not a word boundary. `--strict-builtin-errors` is required: without it a regex COMPILE failure degrades to an undefined expression with exit 0.",
+    "wordBoundaryProbes": [
+      {
+        "label": "corpus \\b pattern (61dcb058bd1df15d) vs MATCHING input",
+        "regoQuery": "regex.match(`\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b`, \"git rm .totem/lessons.md\")",
+        "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+        "stringForm": "raw-backtick",
+        "input": "git rm .totem/lessons.md",
+        "exitCode": 0,
+        "value": true,
+        "error": null,
+        "verdict": "supported-match"
+      },
+      {
+        "label": "corpus \\b pattern (61dcb058bd1df15d) vs NON-MATCHING input",
+        "regoQuery": "regex.match(`\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b`, \"rm .totem/lessons/lesson-cd27a5b0.md\")",
+        "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+        "stringForm": "raw-backtick",
+        "input": "rm .totem/lessons/lesson-cd27a5b0.md",
+        "exitCode": 0,
+        "value": false,
+        "error": null,
+        "verdict": "supported-nonmatch"
+      },
+      {
+        "label": "minimal \\b control — `\\bfoo\\b` vs \"a foo b\"",
+        "regoQuery": "regex.match(`\\bfoo\\b`, \"a foo b\")",
+        "pattern": "\\bfoo\\b",
+        "stringForm": "raw-backtick",
+        "input": "a foo b",
+        "exitCode": 0,
+        "value": true,
+        "error": null,
+        "verdict": "supported-match"
+      },
+      {
+        "label": "minimal \\b control — `\\bfoo\\b` vs \"afoob\"",
+        "regoQuery": "regex.match(`\\bfoo\\b`, \"afoob\")",
+        "pattern": "\\bfoo\\b",
+        "stringForm": "raw-backtick",
+        "input": "afoob",
+        "exitCode": 0,
+        "value": false,
+        "error": null,
+        "verdict": "supported-nonmatch"
+      }
+    ],
+    "inexpressibleProbes": [
+      {
+        "label": "corpus negative-lookahead pattern (09ee37252a814a09)",
+        "regoQuery": "regex.match(`\\bgit\\s+(log|diff|status|show|branch|tag|rev-parse|ls-files|for-each-ref|cat-file|blame|shortlog|stash|remote|config)\\b(?![^'\"\\n]*LC_ALL=C)`, \"git log --oneline\")",
+        "pattern": "\\bgit\\s+(log|diff|status|show|branch|tag|rev-parse|ls-files|for-each-ref|cat-file|blame|shortlog|stash|remote|config)\\b(?![^'\"\\n]*LC_ALL=C)",
+        "stringForm": "raw-backtick",
+        "input": "git log --oneline",
+        "exitCode": 2,
+        "error": "regex.match: error parsing regexp: invalid or unsupported Perl syntax: `(?!`",
+        "verdict": "rejected-by-re2"
+      },
+      {
+        "label": "minimal lookahead control — `foo(?!bar)` vs \"foobaz\"",
+        "regoQuery": "regex.match(`foo(?!bar)`, \"foobaz\")",
+        "pattern": "foo(?!bar)",
+        "stringForm": "raw-backtick",
+        "input": "foobaz",
+        "exitCode": 2,
+        "error": "regex.match: error parsing regexp: invalid or unsupported Perl syntax: `(?!`",
+        "verdict": "rejected-by-re2"
+      },
+      {
+        "label": "corpus lookbehind pattern (bddfbd2ec1c75eaf)",
+        "regoQuery": "regex.match(\"(?<!`)\\\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\\\s+#\\\\d+\", \"x\")",
+        "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+        "stringForm": "double-quoted-json-escaped",
+        "input": "x",
+        "exitCode": 2,
+        "error": "regex.match: error parsing regexp: invalid named capture: `(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+`",
+        "verdict": "rejected-by-re2"
+      },
+      {
+        "label": "corpus backreference pattern (80192e6ac2a1dd3c)",
+        "regoQuery": "regex.match(`\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1`, \"x\")",
+        "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+        "stringForm": "raw-backtick",
+        "input": "x",
+        "exitCode": 2,
+        "error": "regex.match: error parsing regexp: invalid escape sequence: `\\1`",
+        "verdict": "rejected-by-re2"
+      }
+    ],
+    "failOpenProbe": {
+      "label": "lookahead WITHOUT --strict-builtin-errors",
+      "exitCode": 0,
+      "stdout": "{}",
+      "finding": "OPA exits 0 with an empty result set. A lowerer that shells out without --strict-builtin-errors converts an inexpressible pattern into a silent NO-VIOLATION — a fail-open rule drop."
+    },
+    "doubleQuotedStringProbe": {
+      "label": "regex.match(\"\\bfoo\\b\", \"a foo b\") — DOUBLE-QUOTED form, pattern text emitted VERBATIM",
+      "value": false,
+      "finding": "false. `\\b` in a Rego double-quoted string is BACKSPACE (U+0008). A lowerer that emits pattern text verbatim into a double-quoted Rego string silently breaks all 99 word-boundary-bearing patterns. Either use the raw-string form or re-escape every backslash (JSON.stringify semantics)."
+    },
+    "regoStringLiteralConstraint": {
+      "finding": "A Rego RAW string (backticks) has NO escape mechanism, so a regex containing a backtick cannot be carried in that form at all. This is an expressibility axis SEPARATE from RE2 syntax and it is not visible in the class partition.",
+      "affectedPatterns": [
+        {
+          "ruleHash": "5a4b3fd8e71882e8",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "bun\\.lockb(?!|['\"`]\\s*\\|\\|[^\\n]*bun\\.lock[^b])"
+        },
+        {
+          "ruleHash": "7056157a6bf72fa8",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "[\\/'\"`]?\\.git[\\/]hooks"
+        },
+        {
+          "ruleHash": "3507e492f0f5a192",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "\\.replace\\(['\"`]\\\\?'['\"`]"
+        },
+        {
+          "ruleHash": "a190836df4daa24d",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "(?:execFileSync|safeExec)\\(\\s*['\"`]git['\"`]"
+        },
+        {
+          "ruleHash": "5da43ea60b66e96e",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "git\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\s+(?!.*\\s--\\s)(?:['\"`]?\\$[{(]?\\w|['\"`]?\\$\\w)"
+        },
+        {
+          "ruleHash": "4ae0a01d912f8742",
+          "corpus": "root",
+          "class": "word-boundary",
+          "pattern": "`totem\\s+extract\\b"
+        },
+        {
+          "ruleHash": "f00e5b09602bb159",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "totem\\s+(?!lesson\\s+|memory\\s+|config\\s+|help\\b|version\\b)[a-z]+(\\s|['\"`]|$)"
+        },
+        {
+          "ruleHash": "de0eee8d0fa0b4db",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "(?:writeFile|writeFileSync|createWriteStream)\\s*\\(\\s*['\"`][^'\"` ]*\\.tmp['\"`]"
+        },
+        {
+          "ruleHash": "8973448e74af33d6",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "\\.(?:warn|error|log)\\(\\s*[`'].*(?:security|malicious|violation|illegal|invalid|attack).*\\$\\{(?!sanitize|escape|encode|strip)[^}]+\\}"
+        },
+        {
+          "ruleHash": "f2f7921921ea5f11",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "\\.(includes|match|indexOf|search)\\(\\s*['\"`].*-o\\s+json.*['\"`]\\s*\\)"
+        },
+        {
+          "ruleHash": "f42b4b19c3f1550e",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])"
+        },
+        {
+          "ruleHash": "24f112fe3a6679bd",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])"
+        },
+        {
+          "ruleHash": "8d1dac1c425ef60d",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "throw\\s+.*['\"`](?!\\s*\\[Totem Error\\])"
+        },
+        {
+          "ruleHash": "44c3aad7ac60e8ba",
+          "corpus": "root",
+          "class": "re2-clean",
+          "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)"
+        },
+        {
+          "ruleHash": "2f79cfc7e0e9be4d",
+          "corpus": "root",
+          "class": "lookaround",
+          "pattern": "(['\"`])\\[[^\\]]+\\].*?\\b(err|error)\\.message\\b(?!.*\\.replace)"
+        },
+        {
+          "ruleHash": "6fa15756b8a004ef",
+          "corpus": "pack-agent-security",
+          "class": "word-boundary",
+          "pattern": "\\b(?:curl|wget)\\b[^\\n'\"`]*(?:(?:\\d{1,3}\\.){3}\\d{1,3}|(?:^|[^\\w.-])pastebin\\.com/api|(?:^|[^\\w.-])(?:ngrok\\.io|transfer\\.sh|gofile\\.io|anonfiles\\.com)(?:$|[^\\w.-])|\\.trycloudflare\\.com(?:$|[^\\w.-])|\\.onion(?:$|[^\\w.-]))"
+        },
+        {
+          "ruleHash": "bddfbd2ec1c75eaf",
+          "corpus": "pack-agent-workflow",
+          "class": "lookaround",
+          "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+"
+        }
+      ],
+      "workaround": "double-quoted literal with every backslash re-escaped; measured working on the affected pattern (see inexpressibleProbes[].stringForm)."
+    }
+  },
+  "expressibilityEvidenceRows": [
+    {
+      "row": "corpus lookbehind rule",
+      "ruleHash": "bddfbd2ec1c75eaf",
+      "corpus": "pack-agent-workflow",
+      "heading": "GitHub auto-close keyword adjacent to an issue reference",
+      "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "form": "NEGATIVE lookbehind `(?<!` — not a positive `(?<=`",
+      "validateRegex": {
+        "valid": false,
+        "reason": "ReDoS vulnerability detected"
+      },
+      "re2": "rejected at compile: \"invalid named capture\"",
+      "finding": "The spec's \"validateRegex rejection EXECUTED and confirmed: ReDoS vulnerability detected\" REPRODUCES exactly. Beyond the spec: this pattern is nevertheless live in a SHIPPED pack corpus, so a pattern the record path's safe-regex2 gate would refuse is currently enforceable on the legacy path."
+    },
+    {
+      "row": "backreference rule",
+      "ruleHash": "80192e6ac2a1dd3c",
+      "corpus": "root",
+      "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+      "validateRegex": {
+        "valid": true
+      },
+      "re2": "rejected at compile: \"invalid escape sequence: `\\1`\"",
+      "finding": "Record-authorable and RE2-inexpressible, exactly as the spec states — the cleanest single instance of the builtin gap."
+    },
+    {
+      "row": "lookaround-bearing patterns",
+      "distinctPatterns": 48,
+      "negativeLookahead": 47,
+      "lookbehindAnyForm": 1,
+      "occurrences": 53,
+      "finding": "The § falsification-fold N1 counts 48/47/1 and the 53-occurrence figure all reproduce exactly."
+    }
+  ],
+  "disputedRowVerdict": {
+    "row": "`\\b` (101/226 patterns) marked unsupported by the leg's RE2 table",
+    "settled": "FALSIFIED — `\\b` IS supported by the pinned OPA (RE2/Go regexp) as an ASCII word boundary.",
+    "evidence": "regex.match(`\\bfoo\\b`, \"a foo b\") = true; regex.match(`\\bfoo\\b`, \"afoob\") = false; the corpus pattern 61dcb058bd1df15d matches its fixture fail line and not its pass line.",
+    "confirmedInexpressible": "lookarounds and backreferences — RE2 rejects them AT COMPILE (\"invalid or unsupported Perl syntax: `(?!`\", \"invalid named capture: `(?<=...`\", \"invalid escape sequence: `\\1`\"), never as a silent non-match."
+  },
+  "rules": [
+    {
+      "ruleHash": "637e8994d7866e10",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "echo\\s+\\$[A-Z_]*TOOL_INPUT",
+      "heading": "2026-03-06T10:00:40.352Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4d63af6631a6ddf7",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "<\\/[a-zA-Z][^>]*>",
+      "heading": "2026-03-07T06:05:56.069Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "be74c55caa9fd60c",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\$\\{\\{\\s*inputs\\.[a-zA-Z_][a-zA-Z0-9_]*\\s*\\}\\}",
+      "heading": "2026-03-07T21:45:57.754Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5f3a95295db82291",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "git\\s+\\S+\\s+.*--\\s+.*\\.{2,3}[A-Za-z0-9/_-]",
+      "heading": "The Git -- separator treats all subsequent arguments",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a6f2d3a89d9ebae8",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "open-pull-requests-limit:\\s*0",
+      "heading": "Setting open-pull-requests-limit to 0 in dependabot.yml",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a8ade9d9b017f7b3",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(?:execSync|exec|spawnSync|spawn)\\([^)]*(?:git\\s+(?:branch|status|diff|log|show|describe))[^)]*\\)",
+      "heading": "Sanitize git-sourced metadata like branch names, status,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "40fdd031e2db1230",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bexit\\s+0\\b",
+      "heading": "Avoid using exit 0 inside git hooks intended for chaining",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5a4b3fd8e71882e8",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "bun\\.lockb(?!|['\"`]\\s*\\|\\|[^\\n]*bun\\.lock[^b])",
+      "heading": "When detecting Bun environments, check for both bun.lockb",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e1046c772a6bb6f9",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "pnpm\\s+bin\\b",
+      "heading": "Use pnpm exec for workspace binaries in monorepos",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d245b21395563e6f",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\.git(?:/|\\b)",
+      "heading": "Resolve git root via rev-parse for monorepo compatibility",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "86fe2def3463b256",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bgit\\s+ls-files\\b(?!.*--recurse-submodules)",
+      "heading": "Use the --recurse-submodules flag with git ls-files",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e40e3d7e3c5f415e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\$\\{\\{\\s*(inputs\\.|github\\.event\\.)\\S*\\s*\\}\\}",
+      "heading": "GitHub Actions shell injection via template expressions",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2d3ac4b9516ed9b6",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.gemini/gemini\\.md",
+      "heading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "21cb428b15711741",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "fail-fast:\\s*true",
+      "heading": "Setting fail-fast: false in matrix workflows ensures",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ece07b64a3df6e2a",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+      "heading": "Pin Bun versions in CI",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7a4037dd8ffc4c37",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\btr\\b[^|]*'?\\\\n'?[^|]*'? '",
+      "heading": "Use xargs instead of 'tr' for joining multi-line outputs",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3d6802ffb3a85fb8",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\|\\s*grep\\b",
+      "heading": "Prefer [[ \"$VAR\" == \"pattern\"* ]] over piping to grep",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "89184bb5fd960848",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "sed\\s+.*\\\\x1b",
+      "heading": "BSD sed on macOS does not support the \\x1b hex escape; use",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "6ad0d4d5c760a5d6",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+      "heading": "Technical documentation must avoid marketing-centric terms",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3706efb77448d53d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "bun-version:\\s*['\"]?latest['\"]?",
+      "heading": "Pin Bun versions in CI",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "271765fe97bafafb",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "git add -A|git add --all",
+      "heading": "Always stage specific files instead of using 'git add -A'",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7bca4ac148aec25d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "echo\\s+.*\\|\\s*grep",
+      "heading": "Use bash [[ =~ ]] not echo | grep",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "55c903bd228e0b5c",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\[Totem Error\\]",
+      "heading": "When wrapping external errors or providing fallbacks,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "9255d609df5aef76",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "^\\+?\\s*mktemp\\b",
+      "heading": "Implementing a trap for EXIT, INT, and TERM signals ensures",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b93bd44e6c1d2d59",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.startsWith\\(['\"]http://localhost['\"]\\)|\\.startsWith\\(['\"]http://127\\.|\\.startsWith\\(['\"]http://\\[::1\\]",
+      "heading": "Use strict boundaries (like (\\/|$)) or the URL class",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1961a27872269f47",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\\\[_*]",
+      "heading": "Auto-formatters like Prettier can mangle technical metadata",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a5c181bb3715b4c8",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\.(lance|lancedb|idx|ivf|hnsw|faiss|annoy|nmslib)(\\b|/)",
+      "heading": "Treat vector indexes as local-only caches that are excluded",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "09ee37252a814a09",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bgit\\s+(log|diff|status|show|branch|tag|rev-parse|ls-files|for-each-ref|cat-file|blame|shortlog|stash|remote|config)\\b(?![^'\"\\n]*LC_ALL=C)",
+      "heading": "Git commands used for programmatic parsing should be",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3c7773706e5b3b2d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\*\\.\\{[^}]+\\}",
+      "heading": "Brace expansion (e.g., \\*.{ts,js}) is not universally",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2ec0129125482904",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "git\\s+ls-files(?!.*-C\\s)",
+      "heading": "git ls-files with relative paths fails from subdirs",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "884becd45e6380bd",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bpnpm\\s+version\\b",
+      "heading": "Using 'pnpm run version' instead of the bare 'pnpm version'",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "94ad9eb3fe20bdb0",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "git\\s+(diff|checkout|restore|reset|add|ls-files|show)\\s+[^|&;]*\\$[a-zA-Z_][a-zA-Z0-9_]*",
+      "heading": "Use 'set -f' (noglob) when passing cached glob patterns",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "c2613efa86f914a0",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^[^\\S\\r\\n]+---",
+      "heading": "Frontmatter delimiters must be anchored to the start",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "55797450514d4c3b",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "git add\\s+(-A|\\.)\\b",
+      "heading": "Never use git add -A or git add .",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "80bd76a4c4651b81",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "#515",
+      "heading": "The LLM documentation generator consistently hallucinates",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "cb854652a786c5d7",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^#{1,6} .{61,}",
+      "heading": "Lesson headings must not exceed 60 characters",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "9f266a455f97fe37",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "(?:^\\s*-?\\s*run\\b|^(?!\\s*[\\w-]+:\\s)\\s+).*\\$\\{\\{\\s*(github\\.event|inputs)\\..*\\}\\}",
+      "heading": "GitHub Actions shell injection via template expressions",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d34c5054f0dd908a",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "fs\\.(readFile|readFileSync)\\s*\\(",
+      "heading": "Static analysis tools should read file content using git",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7056157a6bf72fa8",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "[\\/'\"`]?\\.git[\\/]hooks",
+      "heading": "Instead of hardcoding .git/hooks, use 'git rev-parse",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3507e492f0f5a192",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.replace\\(['\"`]\\\\?'['\"`]",
+      "heading": "Escape backticks in SQL predicates",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d5faa14cbb8b50fb",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\s+(?:accurate|reliable|secure|safe))\\b",
+      "heading": "Technical documentation must replace absolute claims",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2b570f4ebf0982cd",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "totem\\s+shield\\s+--deterministic",
+      "heading": "Prefer totem lint over the deprecated totem shield",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "6a08238fdff2f808",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "glob\\s*=\\s*[\"']{2}",
+      "heading": "When a hook is intended to run unconditionally, use",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b3e3e2b380a0b1be",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bgit\\s+(?!.*LC_ALL=C)",
+      "heading": "Git output can vary by system locale, causing parsing logic",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "eb2a68f4d69bb95f",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\*?\"git\"\\*?\\s*&&\\s*\\*?\"commit\"\\*?",
+      "heading": "Using simple substring matching like \"git\" && \"commit\"",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "75266f8811d238d4",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(grep|sed)\\s+.*\\.(json)",
+      "heading": "Utilize jq instead of standard string manipulation tools",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b51b2f87ca829d6e",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\$\\(\\s*du\\s+.*-m\\b",
+      "heading": "Use byte-level binary size checks",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "22286088db9261b7",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "active_work\\.md",
+      "heading": "Hardcoding specific filenames like active_work.md",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "76762d7d0ad98113",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\\\b[A-Za-z_$][\\w$]*\\\\b",
+      "heading": "Handle dollar signs in identifier boundaries",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d2f88c8528441069",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.git[\\/]hooks",
+      "heading": "Avoid hardcoding .git/hooks paths as repositories may use",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "18722912049af6f2",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bcat\\s+\\S+\\s*\\|",
+      "heading": "Prefer shell redirection over cat pipe",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "60c2e674222dc4e5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\[\\[.*==\\s*['\"]?(commit|push|pull|merge|rebase|checkout|fetch)['\"]?\\s*\\]\\]",
+      "heading": "Shell hooks should use word-boundary regex instead",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "56c801dfda484c75",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "text-embedding-004",
+      "heading": "The text-embedding-004 identifier is frequently unavailable",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ac705e7d033cd1d5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "&\\s*$",
+      "heading": "Background processes spawned by Git hooks should redirect",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "82dcda4cbce649bd",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "Deferred to #(?!\\d+\\b)",
+      "heading": "Ensure issue numbers are non-empty digit strings",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "fb05f895862808e6",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(?:from|require\\()\\s*['\"](?:node:)?child_process['\"]",
+      "heading": "Forbid direct child_process — use safeExec",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "cf65e2b445329be2",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "JSON\\.parse\\(\\s*\\S*readFileSync",
+      "heading": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a190836df4daa24d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(?:execFileSync|safeExec)\\(\\s*['\"`]git['\"`]",
+      "heading": "Use git adapter instead of raw git execution",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5afaf8d03f059a41",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "[☀-➿\ud83c-􏰀-\udfff⌀-⏿⭐-⭕⌚-⌛▪-◾☔-☕♈-♓⚪-⚫✅✔✖❌❎❓-❕❗➡⤴-⤵©®‼⁉⃣〰〽㊗㊙]",
+      "heading": "Emojis are excluded from all documentation files to adhere",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a3781912cf607817",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\$\\(.*github\\.event\\.|grep\\s+.*\\$\\{?GITHUB_|\\bgrep\\b.*\\bPR_TITLE\\b|\\bgrep\\b.*\\bPR_BODY\\b",
+      "heading": "Implementing bypass logic via GitHub Actions contains()",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 8,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ff5e30cff913a43d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\d*>\\s*/dev/null",
+      "heading": "Redirecting hook command output to /dev/null prevents users",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5da43ea60b66e96e",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "git\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\s+(?!.*\\s--\\s)(?:['\"`]?\\$[{(]?\\w|['\"`]?\\$\\w)",
+      "heading": "2026-03-08T02:39:04.901Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ec594c0f3c8ad660",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"(token|api[_-]?key|secret|password|auth[_-]?token|access[_-]?token|private[_-]?key)\"\\s*:\\s*\"[A-Za-z0-9+/=_\\-]{8,}\"",
+      "heading": "Avoid inlining tokens or API keys in configuration files",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8213cd4e21b375ba",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\\s+#\\d+\\s*,\\s*#\\d+",
+      "heading": "GitHub Closes keyword only applies to the first issue",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "61dcb058bd1df15d",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+      "heading": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a6902a95ca7ee1d6",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\[\\[?\\s*\"?\\$[A-Z_]*MB[A-Z_]*\"?\\s+-(?:gt|ge|lt|le|eq|ne)\\s+\\d+",
+      "heading": "Use byte-level binary size checks",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4ac94d6f9c387e1e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "/\\^[^\\s\\\\]",
+      "heading": "Account for leading whitespace in line-start parsers",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1abb90c2493fa2b5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "/[^)]*\\\\n\\+[^/]*/",
+      "heading": "Handle single-line inputs in regex terminators",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7e3eefeaa85403d0",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^## Lesson(?! [—–-] .+)",
+      "heading": "Manual lessons must use the '## Lesson <separator> <Heading>' structure",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4ae0a01d912f8742",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "`totem\\s+extract\\b",
+      "heading": "Use canonical CLI command forms",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f00e5b09602bb159",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "totem\\s+(?!lesson\\s+|memory\\s+|config\\s+|help\\b|version\\b)[a-z]+(\\s|['\"`]|$)",
+      "heading": "Use canonical noun-verb CLI command forms",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "92c5de19ec77d768",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"\\.\\.[\\/]",
+      "heading": "Reference root dependencies with $TURBO_ROOT",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4657d1c0f9995046",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\$\\(date[^)]*\\)[^$\\n]*\\.tmp[\"'\\s]|mktemp\\b(?![^\\n]*\\$\\$)",
+      "heading": "Include PID in temporary artifacts",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "202ceddda99eae5d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "adaptive_thinking",
+      "heading": "Use canonical API terms in documentation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "28cc46c09bd5820f",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "currentBranch:\\s*['\"][^'\"]+['\"]",
+      "heading": "Allow null branches for detached HEADs",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a24ec7272f1f670e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "currentBranch:\\s*[\"'][^\"']+[\"']",
+      "heading": "Handle detached HEAD states in tests",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5a746a435d763ca6",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"![*][*]/test/",
+      "heading": "Use explicit monorepo test globs",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "de7ee11b427d201e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "currentBranch:\\s*'[^']*'",
+      "heading": "Allow null branches for detached HEADs",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "25312171472f5391",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\(\\?:\\^\\|\\\\\\.\\)",
+      "heading": "Use boundary-guard anchors for domain blocklists",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2e3f46085651004e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "catch\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
+      "heading": "Include path context in walkDir errors",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "361cdd4dc54079d2",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bhas\\s*:\\s*\\{",
+      "heading": "Use field scoping for argument validation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "501000ab9c41230b",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "stdio\\s*:\\s*['\"]pipe['\"]",
+      "heading": "Inherit stdio for startup hooks",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a8d925e6306435bf",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "severity:\\s*['\"]low['\"]",
+      "heading": "Map minor bot findings to nit severity",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "de0eee8d0fa0b4db",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(?:writeFile|writeFileSync|createWriteStream)\\s*\\(\\s*['\"`][^'\"` ]*\\.tmp['\"`]",
+      "heading": "Use unique temp files for atomic writes",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b0377a666dbc9a53",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\banchors?\\b",
+      "heading": "Avoid metaphorical terms in documentation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "064c968b8855dfa0",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^#{1,6}\\s+.{61,}$",
+      "heading": "Limit doc headings to 60 characters",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "eb52c63f78561d92",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\btotem compile\\b(?!\\s+--help)",
+      "heading": "Use canonical totem lesson compile command",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "13d87036696a5ea5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "//\\s*SAFETY INVARIANT",
+      "heading": "Preserve totem-context prefix for lint suppression",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "c3c6ccd3ef0fe86e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^['\"]?[\\w@/-]+['\"]?:\\s*(patch|minor)\\s*$",
+      "heading": "Bump major version for discriminated unions",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d836e66183ab561d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^'[^']+': (minor|patch)$",
+      "heading": "Bump major version for schema changes",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "027b32b8ea3c8c51",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\[Totem Error\\]",
+      "heading": "Prefix hook diagnostics with script identifiers",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ee482ceb7e8aa32a",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "z\\.array\\((?!.*\\.nonempty\\(\\))",
+      "heading": "Align tool contracts with runtime validation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1b2a0c1adc42be39",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "hooks\\s*[=:].*\\.js[\"']",
+      "heading": "Use .cjs for Claude Code hooks",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "57cb1ef1d84f6a97",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bapiKey:\\s*process\\.env\\.[A-Z0-9_]+(?!\\s*(\\|\\||\\?\\?))",
+      "heading": "Provide a dummy fallback API key (e.g., 'local-only')",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "81f72c855eba4229",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "Promise\\.allSettled",
+      "heading": "2026-03-06T05:32:34.074Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3c28f6dd8d7b5057",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bexecSync\\s*\\(",
+      "heading": "Synchronous execSync with piped stdio can cause the parent",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8944562b6cb4a869",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug)\\(",
+      "heading": "Swallowing errors in core modules hides silent failures,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "626503cb7d4d4204",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(?:(?:includes|startsWith)\\s*\\(\\s*['\"]\\*\\*['\"]|indexOf\\s*\\(\\s*['\"]\\*\\*['\"]\\s*\\)\\s*(?:>=\\s*0|>\\s*-1|!==?\\s*-1|===?\\s*0))",
+      "heading": "When implementing custom glob matching for dir/\\*/.ext,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4c018069ec7b86cf",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^(?=.*\\bbun\\.lockb?\\b)(?!.*\\bbun\\.lockb\\b.*\\bbun\\.lock\\b|.*\\bbun\\.lock\\b.*\\bbun\\.lockb\\b).*$",
+      "heading": "When detecting Bun environments, check for both bun.lockb",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 10,
+        "lookahead": 1,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "593f4de2739deb3c",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(category|ruleCategory)\\s*:\\s*['\"][^'\"]+['\"]",
+      "heading": "Hardcoded default values for properties like rule",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "618b403fd53ed144",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(\\.status\\s*===?\\s*429|['\"]rate\\s+limit['\"])",
+      "heading": "Centralize error signature detection (such as 429 status",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4e8ea61ef00a549a",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^(?!.*(numCtx|context|VRAM|exhaustion))(?=.*500)(?=.*Internal\\s+Server\\s+Error).*$",
+      "heading": "For local LLM providers, 500 Internal Server Errors often",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 2,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "40818ee61e0aa6eb",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(echo|run_shell_command|exec|sh|bash)\\b.*\\$TOOL_INPUT",
+      "heading": "2026-03-06T10:00:40.352Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "9dc95e0e9c8db922",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bconsole\\.(log|error)\\(",
+      "heading": "Standard console.log or console.error calls in MCP tools",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "967992e8d7dced78",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "11434/v1",
+      "heading": "Ollama num_ctx and VRAM: The OpenAI-compatible API adapter",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4adc2cf7552d56de",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.toMatch(Inline)?Snapshot\\s*\\(",
+      "heading": "Use granular assertions rather than snapshots when testing",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "c1f5ff4ea7db1ef9",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.\\.\\.\\s*await\\s+vi\\.importActual\\(",
+      "heading": "ESM intra-module mock requires re-binding",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "79003ba8c4625cfe",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\.catch\\(\\s*[^)]*\\)\\s*=>\\s*(?!.*ENOENT)[^\\{\\s]+|\\bcatch\\s*\\{",
+      "heading": "When reading cache or config files, specifically check",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5a543647be4afeee",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^# Lesson: .{61,}",
+      "heading": "Lesson: Lesson headings are strictly limited to 60",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "64eec6fc776d323f",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^(?!.*\\b(await|return)\\b).*?\\.(index|upsert|persist|addDocument|deleteDocument)\\s*\\(",
+      "heading": "2026-03-07T00:44:37.037Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "367a1810d56305e2",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b\\d+\\s*([Cc]har(acter)?s?|[Ww]ords?)\\b",
+      "heading": "Use semantic constraints like \"one to two short sentences\"",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d4d16d3f84cb5546",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b[\\w.-]+\\/[\\w.-]+\\.[a-z0-9]{2,}\\b",
+      "heading": "Drift detector flags lesson file path mentions",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "c50c864f581bf664",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(toBeGreaterThan|toBeGreaterThanOrEqual)\\(",
+      "heading": "2026-03-08T02:39:04.901Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "09b9ade20584279f",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "['\"](?![^'\"]*Totem Error)(?:\\[[^\\]]*Error\\]|[\\w-]+\\s+Error:)",
+      "heading": "Using a unified \"Totem Error\" tag in error logs instead",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8973448e74af33d6",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\.(?:warn|error|log)\\(\\s*[`'].*(?:security|malicious|violation|illegal|invalid|attack).*\\$\\{(?!sanitize|escape|encode|strip)[^}]+\\}",
+      "heading": "Warning messages triggered by security violations",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "de45e36fe60b1a67",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\basync\\b.*\\bimport\\s*\\(",
+      "heading": "Avoid refactoring synchronous factory functions to async",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 3,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "fe55021637d003d4",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bpnpm\\s+bin\\b",
+      "heading": "Use pnpm exec for workspace binaries in monorepos",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d9d647256e88af40",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bexit\\s+0\\b",
+      "heading": "Avoid using exit 0 inside git hooks intended for chaining",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "37a2ad412bd8ce20",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "new\\s+GoogleGenerativeAI\\s*\\(\\s*[^\\s\\{]",
+      "heading": "When using the @google/genai SDK (v1+), the constructor",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7369a979bdf91b83",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(includes|startsWith)\\(['\"]\\\\\\[Totem Error\\\\\\]['\"]\\)",
+      "heading": "2026-03-05T04:05:16.794Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d6aa5540d3ec0914",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(cacheKey|telemetryId|modelId)\\s*[:=]\\s*['\"][^'\"\\s:]+['\"]",
+      "heading": "Always use fully qualified identifiers for caching",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7db606acf65ad10d",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(import|require).+['\"]micromatch['\"]",
+      "heading": "In core packages, a small, tested custom implementation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "104b68eea2aeb61f",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(exec|spawn|execFile)\\s*\\(",
+      "heading": "Hooks designed to block agent actions, such as shield gates",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a25539fba7a6165d",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.kill\\(",
+      "heading": "Using child.kill() on Windows when shell: true is enabled",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "416abe85c2dbb918",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.split\\(['\"/](?:\\\\n|\\\\r\\\\n)['\"/]\\)\\s*\\[\\s*0\\s*\\]",
+      "heading": "Prefer Explicit Metadata Tokens from LLMs Over Heuristics",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "74d568ba0307dd43",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bsetTimeout\\s*\\(.*?\\breject\\b",
+      "heading": "When timing out a child process, do not reject the promise",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 3,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e33b1a12582e6f3f",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\$\\{\\s*err\\s*\\}",
+      "heading": "2026-03-06T06:25:26.036Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b0efed256c09e58a",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bgit\\s+ls-files\\b(?!.*\\b--recurse-submodules\\b)",
+      "heading": "Use the --recurse-submodules flag with git ls-files",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 4,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "0615c43eb5a9d0e8",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(-d\\s+['\"]?\\.git['\"]?|existsSync\\([^)]*['\"]\\.git['\"]\\))",
+      "heading": "Resolve git root via rev-parse for monorepo compatibility",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "acafedf51e69f512",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "(\\.(match|test|includes)\\s*\\(|pattern:\\s*)[/\"']\\^?\\b(git|npm|docker|aws|kubectl|gh|sh|bash)\\b\\$?[/\"']",
+      "heading": "When intercepting agent tool inputs via hooks, use specific",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "37644dd6c8baeafd",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(import\\s+.*from\\s+['\"]inquirer['\"]|require\\(['\"]inquirer['\"]\\)|\\\"inquirer\\\"\\s*:)",
+      "heading": "2026-03-06T05:41:19.122Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "64bb807f4e10ea4f",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&)",
+      "heading": "2026-03-07T06:05:56.069Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1dbced3489ed8d45",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^[ \\t]*(?!(?:if|command|type|hash|\\[|&&|\\|\\|)\\b)\\s*(npx|pnpm|npm|yarn|eslint|prettier|lint-staged|tsc|vitest|jest|oxlint|biome|stylelint)\\b",
+      "heading": "Verify CLI availability in shared git hooks before execution",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "9eacc9755e90cb8f",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(?:fs\\.)?read(?:File|FileSync)\\s*\\(",
+      "heading": "Static analysis tools should read file content using git",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "95853f31ce75d3ed",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(\\$\\{[^}]+\\}\\$\\{[^}]+\\}|\\.join\\(['\"]{2}\\))",
+      "heading": "Include a space or delimiter when concatenating disjoint",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1e9417ca76e7a183",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bif\\s*\\(.*?\\b(budget|limit|max|capacity|length|chars)\\b.*?\\)\\s*break\\b",
+      "heading": "When injecting vectordb lessons into orchestrator prompts",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 4,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "0e01112d5f18ffde",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bnew\\s+(?!Totem)Error\\(",
+      "heading": "When wrapping external errors or providing fallbacks,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "41297533f38f559a",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(kafka|kubernetes|firestore)\\b",
+      "heading": "2026-03-06T03:34:53.287Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "487a0a23bd24569d",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
+      "heading": "Static top-level imports from heavy internal packages delay",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 2,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1a815a89a8bc708d",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bruleIndex\\b.*(\\?\\?|\\|\\|)\\s*0",
+      "heading": "When mapping violations to rules in SARIF generation,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a7194ce792503d3a",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(includes|indexOf|match)\\(\\s*['\"]marker['\"]",
+      "heading": "When detecting markers in user-authored files, use",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8905721082c4574a",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(?:is)?[iI]nitialized\\s*(?::\\s*boolean|=\\s*(?:true|false))\\b",
+      "heading": "Using a boolean flag to track lazy initialization causes",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "17f273d09af38f0c",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\s*\\(",
+      "heading": "Core library code should avoid direct calls to console",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "519f78bddf405bdc",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bprocess\\.env\\[[^\\]]+\\]\\s*=\\s*(?![^;\\n]*(\\?\\?|\\|\\||process\\.env))",
+      "heading": "Custom .env parsers must strip CRLF and quotes",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "7cdfa1069477b69a",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bimport\\s*\\(",
+      "heading": "Dynamic imports should be limited to CLI command entry",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "26276baa0163ec5d",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "import\\s+(?!type\\s).*\\s+from\\s+['\"]@mmnto/totem['\"]",
+      "heading": "GCA may suggest reverting dynamic imports back to static",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "719a577b17874645",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "text-embedding-004",
+      "heading": "Specific LLM models, such as Gemini's text-embedding-004,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f2f7921921ea5f11",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(includes|match|indexOf|search)\\(\\s*['\"`].*-o\\s+json.*['\"`]\\s*\\)",
+      "heading": "2026-03-03T01:51:33.783Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "917b35060bef307a",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\.(includes\\(['\"]/['\"]\\)(?!\\s*,\\s*1)|indexOf\\(['\"]/['\"]\\)\\s*(?:>=?\\s*0|!==\\s*-1))",
+      "heading": "When identifying directory-based glob patterns (like",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "80192e6ac2a1dd3c",
+      "corpus": "root",
+      "class": "backreference",
+      "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+      "heading": "Ensure model name validation regexes explicitly allow",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 1
+      }
+    },
+    {
+      "ruleHash": "49dd9e4fd02d692b",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b\\d+\\s*(?:characters?|chars?|words?)\\b",
+      "heading": "LLMs are notoriously poor at character counting; use",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3d09188d0fa85674",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bgit\\s+.*\\s--\\s+.*(\\.\\.\\.?|[\\^~])",
+      "heading": "The Git -- separator treats all subsequent arguments",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "4fe39839b3e16366",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "new\\s+RegExp\\s*\\(\\s*[^,]+\\s*,\\s*[^,]*\\.flags\\s*\\+\\s*['\"][^'\"]*g",
+      "heading": "Check for the presence of the global ('g') flag",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "46b25d29a079d44e",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\b(?:write|append)File(?:Sync)?\\s*\\(\\s*['\"][^'\"]*\\.(?:md|log)['\"]\\s*,\\s*(?![^,]*\\b(?:stripAnsi|sanitize|replace)\\b)[^,)\\s]+",
+      "heading": "Sanitize user-provided text before persisting to files",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 3,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "730cd62cae1930d7",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"(hook|PreToolUse|command|scripts?)\":\\s*\\\"[^\\\"]*(\\\\||\\\\b(grep|awk|sed|xargs)\\\\b|&&)[^\\\"]*\\\"",
+      "heading": "2026-03-06T09:08:26.567Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "9bd872a86c2111bc",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "^\\+?\\s*export\\b(?!.*eslint-disable)",
+      "heading": "Manually suppress \"unused export\" errors in styleguide",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f42b4b19c3f1550e",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "throw\\s+new\\s+Error\\(\\s*['\"\\`](?![^'\"\\`]*\\[Totem Error\\])",
+      "heading": "When re-throwing errors in a CLI orchestrator, always",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "638d6fcc8a601da0",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
+      "heading": "Windows requires shell:true for git binary resolution",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "cae08ccccd834eb3",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "JSON\\.parse\\(.*(exec|spawn|stdout|stderr)",
+      "heading": "2026-03-05T04:05:14.473Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "425a7833b925c873",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "open-pull-requests-limit\\s*:\\s*['\"]?[1-9]\\d*['\"]?",
+      "heading": "Setting open-pull-requests-limit to 0 in dependabot.yml",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f63fb71078ad33f5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.split\\(['\"]\\\\n['\"]\\)\\s*\\[",
+      "heading": "Performing content.split('\\n') inside a loop over line",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e118e1e349e8439e",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\?\\?\\s*(['\"][^'\"]*['\"]|\\d+|true|false)\\s+as\\s+",
+      "heading": "Explicit type assertions are often unnecessary when using",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "24f112fe3a6679bd",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])",
+      "heading": "Standardize exception messages with a consistent prefix",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "46dff393ac3b12e9",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(match|exec)\\s*\\(",
+      "heading": "Always iterate through all regex matches (e.g.,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "6499d3701712771f",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\b--body\\b(?!-file)",
+      "heading": "Use --body-file for LLM text in CLI",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "83b86cd73d637a6c",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bmcp[a-zA-Z0-9_]*(?!\\?)\\s*:",
+      "heading": "AI tool metadata must treat MCP-related fields as optional",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "09381ca14ca4fefb",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bgit\\s+(?:branch|status|diff|log|describe|show)\\b(?!.*(?:stripAnsi|replace|sed|tr|\\|))",
+      "heading": "Sanitize git-sourced metadata like branch names, status,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "58a6bb25a38e97f8",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bthrow\\s+",
+      "heading": "CLI entrypoints print clean errors, libraries throw",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "47f1e19c5ae54a8c",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bnode\\s+[^\"'\\s]+\\.js\\b",
+      "heading": "2026-03-06T18:48:00.895Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a1fa6304472863be",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bmax_?[tT]okens\\b\\s*:\\s*\\d+",
+      "heading": "Orchestrators must dynamically adjust max_tokens based",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5763ada90f821028",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "(?:\\brun:|^\\s*[^:\\s]+\\s+).*\\$\\{\\{\\s*inputs\\..*\\}\\}",
+      "heading": "2026-03-07T21:45:57.754Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "6f1ffc8fb332d76f",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(latency|tokens?|duration|ms|count)\\b\\s\\*\\|\\|",
+      "heading": "2026-03-03T03:20:15.923Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8435c024569ffa51",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bgemini\\.md\\b",
+      "heading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1fabab6c62da10f3",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bthrow\\s+new\\s+(?!Totem)\\w*Error\\(",
+      "heading": "CLI command entrypoints should catch validation errors",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2537673df67677f1",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.url\\(\\)",
+      "heading": "Avoid using Zod's .url() validator for configurations where",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "8d1dac1c425ef60d",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "throw\\s+.*['\"`](?!\\s*\\[Totem Error\\])",
+      "heading": "Ensure all thrown errors, including those for missing",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "54140f59be3e6e44",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
+      "heading": "Issue numbers are only unique within a single repository;",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "82afe0a93ba9c250",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\btext-embedding-004\\b",
+      "heading": "The text-embedding-004 identifier is frequently unavailable",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "3da0f60891174989",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"(?:api[_-]?key|token|secret|password)\"\\s*:\\s*\".+\"",
+      "heading": "Avoid inlining tokens or API keys in configuration files",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d6f2b8a2f3884537",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bos\\.tmpdir\\(\\)",
+      "heading": "2026-03-02T09:18:21.092Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b09d772ba3876976",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b#515\\b",
+      "heading": "The LLM documentation generator consistently hallucinates",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b63eb4992616cf41",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bconsole\\.(log|warn|error|info|debug|trace)\\b",
+      "heading": "Avoid using console methods directly in core library",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "434c51ff64ec74b6",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.split\\(\\s*(?:\\/\\^?#+|['\"]\\^?#+)",
+      "heading": "Using split() on markdown headings often misclassifies",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "16104b4e57be1a86",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\[['\"][a-zA-Z_]\\w*['\"]\\]\\s*\\(",
+      "heading": "Avoid bypassing visibility checks with bracket notation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "44c3aad7ac60e8ba",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.(where|delete)\\s*\\(\\s*(?:'[^']*\"[^\"]+\"[^']*'|\"[^\"]*\\\\\"[^\"]+\\\\\"[^\"]*\"|`[^`]*\"[^\"]+\"[^`]*`)\\s*\\)",
+      "heading": "2026-03-06T03:36:17.521Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "727d38db984ede54",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "^.+$",
+      "heading": "Do not manually edit machine-generated artifacts",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "bcc20bfdf6a476c2",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bshield\\b(?!.*--deterministic)",
+      "heading": "Automated gates like pre-commit or pre-push hooks",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ef234a2995c76963",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\.gemini/gemini\\.md|\\.mcp\\.json|\\bgemini\\.md",
+      "heading": "AI agent memory config architectures differ significantly",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "637955cc0245d63a",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "const\\s+\\w+\\s*=\\s*/(?![\\^])https\\?:",
+      "heading": "2026-03-05T04:05:19.420Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "64079aa0b45eaa03",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(totem\\s+learn|learn\\()",
+      "heading": "2026-03-06T04:31:54.888Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "cacae20693e001cd",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bid\\s*[:=]\\s*.*\\b(Date\\.now|Math\\.random|uuid|randomUUID)",
+      "heading": "Generating IDs from violation properties like file, line,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "282e9e8692be3edb",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\\.git\\/hooks",
+      "heading": "Detect existing hook managers and provide manual guidance",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2f79cfc7e0e9be4d",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "(['\"`])\\[[^\\]]+\\].*?\\b(err|error)\\.message\\b(?!.*\\.replace)",
+      "heading": "When catching and re-logging errors that originate",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d4f3025035100a27",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "(?=.*\\$\\{.*(?:description|comment|body|user_?input|userInput).*\\})(?!.*untrusted[ _-]content)",
+      "heading": "Wrap user-controlled fields like PR descriptions",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 1,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "87e2437431c17ec5",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
+      "heading": "Git diff headers wrap file paths containing spaces",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "84128177f762bfd3",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "expect\\(.*\\.length\\)\\.(toBeGreaterThan|toBeLessThan)(OrEqual)?\\(\\d+\\)",
+      "heading": "2026-03-08T00:56:41.780Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "173334b199f58fb2",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bfs\\.(promises|readFile|writeFile|readdir|mkdir|rm|stat|access|appendFile|copyFile|rename|unlink)\\b|['\"]fs/promises['\"]",
+      "heading": "Synchronous file operations are often preferable in CLI",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "5bc302726128eceb",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "\"(?:[Aa]pi[Kk]ey|[Aa]pi_?[Kk]ey|[Tt]oken|[Ss]ecret|[Pp]assword|[Aa]ccess_?[Tt]oken|[Pp]at)\"\\s*:\\s*\"[^\"]+\"",
+      "heading": "NEVER inline secrets, tokens, or API keys into agent config",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "0c67b5166f6d09a4",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(escapeXml|escapeHtml|encodeXml|formatXmlResponse)\\s*\\(",
+      "heading": "Omit defensive XML escaping for prompt injection",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2a36ca0f0b8e2868",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "process\\.env\\.[A-Z0-9_]+\\s*(?:!==|!=)\\s*(?:undefined|null|['\"]['\"])",
+      "heading": "2026-03-08T00:11:33.219Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "97b01d51852fdc0e",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\busage\\s*\\.\\s*(prompt_tokens|completion_tokens|total_tokens)\\b",
+      "heading": "Treat usage and token statistics as optional fields",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f43d903f03e37dbb",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "throw\\s+new\\s+\\w*Error\\s*\\(\\s*.*\\b(e|err|error)\\b",
+      "heading": "When normalizing diverse SDK errors for internal retry",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "1f775889ec17795b",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bstdio\\s*:\\s*.*\\.\\bfd\\b",
+      "heading": "2026-03-03T02:16:24.772Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 3,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a7c82b63f5f549aa",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\btext:\\s*['\"]['\"]",
+      "heading": "Always generate sentinel markers even when the internal",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "d5b7c8b5391ffb9f",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "throw\\s+new\\s+\\w*Error\\([^)]*\\+\\s*(?:err|e|error)\\.message",
+      "heading": "Re-thrown errors must preserve the original cause",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "a225a8d7cd2b7643",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bstripAnsi\\s*\\(|\\.replace\\(\\s*\\/\\\\(x1[bB]|u001[bB])",
+      "heading": "2026-03-06T01:32:23.369Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "b34d95158d37f5a9",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\.junie\\/(?!mcp\\/mcp\\.json|guidelines\\.md)[^'\"\\s>]+\\.(json|md)",
+      "heading": "Junie requires specific file locations for auto-detection,",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "71afc4b8f4c930a1",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\}\\s*as\\s+Error\\b",
+      "heading": "Casting an object literal to an Error type does not satisfy",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "f36ef6d87ba44a00",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\bimport\\s*\\(",
+      "heading": "Avoid using dynamic imports in shared utility modules",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "2e12f0258507a6a9",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "^(npx|node|npm|pnpm|yarn|bun)\\b",
+      "heading": "Perform shell-level existence checks before invoking CLI",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "391de7088c633579",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(main|master)\\.\\.\\.HEAD\\b",
+      "heading": "2026-03-03T01:52:20.000Z",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "50a7841162ca2aca",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "session\\.(start|end)|beforeDisconnect",
+      "heading": "MCP session lifecycle limitation",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "acbeef5413eac6f7",
+      "corpus": "root",
+      "class": "lookaround",
+      "pattern": "\\bpnpm\\s+changeset\\b(?!\\s+(version|publish|status|pre|tag|init))",
+      "heading": "Changesets interactive CLI (pnpm changeset) crashes when",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ef18015c7c3d78ae",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(?:[Ww]ill\\s+(?:stay|remain|always\\s+be|never\\s+(?:change|move))|[Ww]on['']t\\s+(?:change|ever)|[Gg]uarantees|[Pp]romises\\s+to)\\b",
+      "heading": "WWND Rule 1: Absolute-promise detection on public surfaces",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "42559b2f75734104",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "process\\.stderr\\.write\\([^)]*\\[Totem Error\\]",
+      "heading": "Hook stderr diagnostics use script-identifier prefix, not",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "c2d9e854231b78f1",
+      "corpus": "root",
+      "class": "word-boundary",
+      "pattern": "\\b(coming soon|planned (feature|for)|future release|roadmap|under development|slated for|later development phases)\\b",
+      "heading": "Proactively remove references to planned features from user",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "839aceddfb699160",
+      "corpus": "root",
+      "class": "re2-clean",
+      "pattern": "minimumReleaseAge\\s*:\\s*['\"]?\\d+[a-zA-Z]+['\"]?",
+      "heading": "a config line CI never executes is unverified, no matter",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "6fa15756b8a004ef",
+      "corpus": "pack-agent-security",
+      "class": "word-boundary",
+      "pattern": "\\b(?:curl|wget)\\b[^\\n'\"`]*(?:(?:\\d{1,3}\\.){3}\\d{1,3}|(?:^|[^\\w.-])pastebin\\.com/api|(?:^|[^\\w.-])(?:ngrok\\.io|transfer\\.sh|gofile\\.io|anonfiles\\.com)(?:$|[^\\w.-])|\\.trycloudflare\\.com(?:$|[^\\w.-])|\\.onion(?:$|[^\\w.-]))",
+      "heading": "Shell-string curl or wget invocations to hardcoded IPs or suspicious domains",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "bddfbd2ec1c75eaf",
+      "corpus": "pack-agent-workflow",
+      "class": "lookaround",
+      "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "heading": "GitHub auto-close keyword adjacent to an issue reference",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 1,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 1,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e64911592b774cc6",
+      "corpus": "pack-agent-workflow",
+      "class": "lookaround",
+      "pattern": "(?:lint|test|typecheck|audit|verify|gate|check)(?:(?!\\|\\|).)*\\|\\|\\s*true",
+      "heading": "Declared CI gate masked with || true in a workflow step",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "49fc9ce5b1e35362",
+      "corpus": "pack-agent-workflow",
+      "class": "re2-clean",
+      "pattern": "(?:api[_-]?[Kk]ey|apiKey|[Tt]oken|[Ss]ecret|[Pp]assword)[\"']?\\s*[:=]\\s*[\"'][^\"'$]{16,}[\"']",
+      "heading": "Inlined credential in an agent configuration surface",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "ef5c7099fef91bd3",
+      "corpus": "pack-agent-workflow",
+      "class": "lookaround",
+      "pattern": "^(?!.*AGENTS\\.md).*(?:canonical agent instructions|[Ss]ource of truth)",
+      "heading": "Competing agent-instruction authority without AGENTS.md link",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "372539b90e1e6e87",
+      "corpus": "pack-agent-workflow",
+      "class": "re2-clean",
+      "pattern": "\"(?:defaultMode|permissionMode)\"\\s*:\\s*\"(?:bypassPermissions|yolo|acceptEdits)\"|\"Bash\\(\\*\\)\"",
+      "heading": "Committed universal agent permission bypass",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "bede17a0c5940393",
+      "corpus": "pack-agent-workflow",
+      "class": "lookaround",
+      "pattern": "^(?!.*(?:#\\d+|ADR-\\d+)).*\\b(?:MUST|NEVER|ALWAYS)\\b",
+      "heading": "Governance directive in governed file lacks provenance ref",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 2,
+        "lookahead": 0,
+        "negativeLookahead": 1,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "67ec1598a0a8ef6a",
+      "corpus": "pack-agent-workflow",
+      "class": "re2-clean",
+      "pattern": "^\\s*\"[@a-z0-9][^\"]*\"\\s*:\\s*\"[\\^~]\\d+\\.\\d+",
+      "heading": "New dependency introduced without disclosure",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    },
+    {
+      "ruleHash": "e12c9c71f8e0aa5b",
+      "corpus": "pack-agent-workflow",
+      "class": "re2-clean",
+      "pattern": "\"optionalDependencies\"\\s*:",
+      "heading": "Optional dependency without a fail-loud consumer check",
+      "engine": "regex",
+      "markers": {
+        "wordBoundary": 0,
+        "lookahead": 0,
+        "negativeLookahead": 0,
+        "lookbehind": 0,
+        "negativeLookbehind": 0,
+        "backreference": 0
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "corpus intake — 500 rules across the four corpora",
+      "ok": true,
+      "detail": "500"
+    },
+    {
+      "name": "corpus intake — 226 rules carry a non-empty regex `pattern`",
+      "ok": true,
+      "detail": "226"
+    },
+    {
+      "name": "classes PARTITION all 226 patterns (sum check, no silent drops)",
+      "ok": true,
+      "detail": "226"
+    },
+    {
+      "name": "classes are DISJOINT (every row carries exactly one class label)",
+      "ok": true,
+      "detail": "226 rows labelled"
+    },
+    {
+      "name": "most-inexpressible-wins: no `word-boundary` row also bears a lookaround or backreference",
+      "ok": true,
+      "detail": "70 word-boundary rows checked"
+    },
+    {
+      "name": "most-inexpressible-wins: no `lookaround` row also bears a backreference",
+      "ok": true,
+      "detail": "48 lookaround rows checked"
+    },
+    {
+      "name": "most-inexpressible-wins: `re2-clean` rows bear NONE of the three markers",
+      "ok": true,
+      "detail": "107 re2-clean rows checked"
+    },
+    {
+      "name": "pinned OPA binary reports toolchain.lock [opa] version",
+      "ok": true,
+      "detail": "\"1.20.0\""
+    },
+    {
+      "name": "EMPIRICAL: `\\b` is SUPPORTED by the pinned OPA/RE2 — corpus pattern matches its fixture fail line",
+      "ok": true,
+      "detail": "supported-match (error=none)"
+    },
+    {
+      "name": "EMPIRICAL: the same pattern does NOT match its fixture pass line (the boundary is doing work)",
+      "ok": true,
+      "detail": "supported-nonmatch"
+    },
+    {
+      "name": "EMPIRICAL: minimal control — `\\bfoo\\b` matches \"a foo b\" and NOT \"afoob\"",
+      "ok": true,
+      "detail": "supported-match / supported-nonmatch"
+    },
+    {
+      "name": "EMPIRICAL: a negative-lookahead pattern is REJECTED AT COMPILE by RE2 (an error, not a non-match)",
+      "ok": true,
+      "detail": "regex.match: error parsing regexp: invalid or unsupported Perl syntax: `(?!`"
+    },
+    {
+      "name": "EMPIRICAL: the minimal lookahead control is rejected the same way",
+      "ok": true,
+      "detail": "regex.match: error parsing regexp: invalid or unsupported Perl syntax: `(?!`"
+    },
+    {
+      "name": "EMPIRICAL: corpus lookbehind pattern (bddfbd2ec1c75eaf) is REJECTED by RE2",
+      "ok": true,
+      "detail": "regex.match: error parsing regexp: invalid named capture: `(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+`"
+    },
+    {
+      "name": "EMPIRICAL: corpus backreference pattern (80192e6ac2a1dd3c) is REJECTED by RE2",
+      "ok": true,
+      "detail": "regex.match: error parsing regexp: invalid escape sequence: `\\1`"
+    },
+    {
+      "name": "ENUMERATED: patterns containing a backtick cannot use the Rego RAW-string form (no escape mechanism)",
+      "ok": true,
+      "detail": "17 pattern(s): 5a4b3fd8e71882e8, 7056157a6bf72fa8, 3507e492f0f5a192, a190836df4daa24d, 5da43ea60b66e96e, 4ae0a01d912f8742, f00e5b09602bb159, de0eee8d0fa0b4db, 8973448e74af33d6, f2f7921921ea5f11, f42b4b19c3f1550e, 24f112fe3a6679bd, 8d1dac1c425ef60d, 44c3aad7ac60e8ba, 2f79cfc7e0e9be4d, 6fa15756b8a004ef, bddfbd2ec1c75eaf"
+    },
+    {
+      "name": "EMPIRICAL (lowering hazard): WITHOUT --strict-builtin-errors OPA exits 0 and prints `{}` for an uncompilable regex",
+      "ok": true,
+      "detail": "exit=0 stdout={}"
+    },
+    {
+      "name": "EMPIRICAL (lowering hazard): a DOUBLE-QUOTED Rego `\"\\bfoo\\b\"` silently means BACKSPACE and does not match",
+      "ok": true,
+      "detail": "value=false (raw-string form gives true)"
+    },
+    {
+      "name": "EVIDENCE ROW — the corpus lookbehind rule bddfbd2ec1c75eaf is REJECTED by the shipped `validateRegex` gate",
+      "ok": true,
+      "detail": "{\"valid\":false,\"reason\":\"ReDoS vulnerability detected\"}"
+    },
+    {
+      "name": "EVIDENCE ROW — …and is nevertheless SHIPPED with a live pattern in pack-agent-workflow",
+      "ok": true,
+      "detail": "corpus=pack-agent-workflow, heading=GitHub auto-close keyword adjacent to an issue reference"
+    },
+    {
+      "name": "EVIDENCE ROW — the backreference rule 80192e6ac2a1dd3c is RECORD-AUTHORABLE (the shipped gate accepts it) yet RE2-INEXPRESSIBLE",
+      "ok": true,
+      "detail": "validateRegex={\"valid\":true}; RE2 rejects at compile"
+    },
+    {
+      "name": "EVIDENCE ROW — 48 lookaround-bearing patterns (47 negative-lookahead + 1 lookbehind), 53 occurrences",
+      "ok": true,
+      "detail": "[48,47,1,53]"
+    }
+  ],
+  "runManifestSha256": "90450073219abb547b3064edc2c9016910da53f8baa0feae1ed5b3aa1a0e7424"
+}

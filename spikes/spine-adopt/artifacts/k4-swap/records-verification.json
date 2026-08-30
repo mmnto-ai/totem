@@ -1,0 +1,1587 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/verify-records.mts",
+  "spec": ".totem/specs/spine-spike.md § Data model deltas (SpikeRecord) + § Invariants",
+  "exemplarReferent": "packages/core/dist/spine/record-exemplars.fixture.js",
+  "pinnedRuleId": "0123456789abcdef",
+  "pinnedNow": "2026-08-21T00:00:00.000Z",
+  "specimens": [
+    {
+      "specimen": "0167a783-dynamic-import-utility-layer",
+      "seedEntry": "0167a783",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-0167a783-dynamic-import-utility-layer.rule.yaml",
+      "ruleId": "0167a783f75b5ecd",
+      "legacySource": "0167a783",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const { chalk } = await import('chalk');",
+          "good": "import chalk from 'chalk';"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-0e01112d-bare-new-error.rule.yaml",
+      "ruleId": "0e01112d5f18ffde",
+      "legacySource": "0e01112d",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "throw new Error('lesson compile failed');",
+          "good": "throw new TotemParseError('lesson compile failed', 'Fix the lesson pattern and re-run totem compile.');"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "49dd9e4f-llm-character-counting",
+      "seedEntry": "49dd9e4f",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-49dd9e4f-llm-character-counting.rule.yaml",
+      "ruleId": "49dd9e4fd02d692b",
+      "legacySource": "49dd9e4f",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.md",
+        "**/*.txt"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.py",
+        "**/*.md",
+        "**/*.txt"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const PROMPT = 'Summarize the diff in 200 characters or less.';",
+          "good": "const PROMPT = 'Summarize the diff in one sentence; the caller truncates.';"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "54140f59-bare-issue-number-refs",
+      "seedEntry": "54140f59",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-54140f59-bare-issue-number-refs.rule.yaml",
+      "ruleId": "54140f59be3e6e44",
+      "legacySource": "54140f59",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "packages/cli/**/*.ts",
+        "apps/cli/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/**/*.ts",
+        "apps/cli/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const helpText = 'Tracked in #2655 — see the changelog.';",
+          "good": "const helpText = 'Tracked in mmnto-ai/totem#2655 — see the changelog.';"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "seedEntry": "5b85fe53",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml",
+      "ruleId": "5b85fe53468964e1",
+      "legacySource": "5b85fe53",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/core/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/core/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.*",
+        "**/*.spec.*"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "emit('suppress', { ruleId, reason: 'ast-grep scan threw' });",
+          "good": "onRuleEvent('error', { ruleId, reason: 'ast-grep scan threw' });"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "seedEntry": "5da43ea6",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-5da43ea6-git-double-dash-separator.rule.yaml",
+      "ruleId": "5da43ea60b66e96e",
+      "legacySource": "5da43ea6",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.mjs",
+        "**/*.cjs"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts",
+        "**/*.js",
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.mjs",
+        "**/*.cjs"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": {
+        "pattern": "\\s--\\s",
+        "scope": "line"
+      },
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "git log $UNTRUSTED_REF",
+          "good": "git log \"$UNTRUSTED_REF\" -- ."
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "requires",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "seedEntry": "6467c351",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-6467c351-dynamic-import-cli-entry.rule.yaml",
+      "ruleId": "6467c35159c1504d",
+      "legacySource": "6467c351",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const { renderBanner } = await import('./banner.js');",
+          "good": "import { renderBanner } from './banner.js';"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "seedEntry": "65ede9bf",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml",
+      "ruleId": "65ede9bfdf6995fe",
+      "legacySource": "65ede9bf",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "packages/cli/src/commands/**/*.ts",
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const { runOrient } = await import('../commands/orient.js');",
+          "good": "import { runOrient } from '../commands/orient.js';"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "seedEntry": "6b1890e2",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml",
+      "ruleId": "6b1890e2dbda3331",
+      "legacySource": "6b1890e2",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.js"
+      ],
+      "recordFileGlobs": [
+        "**/*.js"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];",
+          "good": "const PROTECTED_BRANCHES = [\"main\", \"release\"];"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "seedEntry": "6b1890e2",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist.rule.yaml",
+      "ruleId": "6b1890e2dbda3331",
+      "legacySource": "6b1890e2",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];",
+          "good": "const PROTECTED_BRANCHES = [\"main\", \"release\"];"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "seedEntry": "6b2b62eb",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-6b2b62eb-totem-error-log-tag.rule.yaml",
+      "ruleId": "6b2b62eb1e8693fc",
+      "legacySource": "6b2b62eb",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "log.error('compile failed: ' + msg);",
+          "good": "log.error('Totem Error', 'compile failed: ' + msg);"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "seedEntry": "71935fe9",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input-js.rule.yaml",
+      "ruleId": "71935fe9a742137b",
+      "legacySource": "71935fe9",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.js"
+      ],
+      "recordFileGlobs": [
+        "**/*.js"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const pattern = String(input.pattern);",
+          "good": "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "71935fe9-string-cast-on-input",
+      "seedEntry": "71935fe9",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input.rule.yaml",
+      "ruleId": "71935fe9a742137b",
+      "legacySource": "71935fe9",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const pattern = String(input.pattern);",
+          "good": "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "87aff037-fail-open-catch-ban",
+      "seedEntry": "87aff037",
+      "class": "compound ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml",
+      "ruleId": "87aff037d7de47a7",
+      "legacySource": "87aff037",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "recordExcludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "try { risky() } catch (e) { log(e) }",
+          "good": "try { risky() } catch (e) { log(e); throw e }"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "excludeGlobs",
+        "fileGlobs",
+        "good",
+        "has",
+        "kind",
+        "language",
+        "message",
+        "not",
+        "rule",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "stopBy",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "89184bb5-bsd-sed-hex-escape",
+      "seedEntry": "89184bb5",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-89184bb5-bsd-sed-hex-escape.rule.yaml",
+      "ruleId": "89184bb5fd960848",
+      "legacySource": "89184bb5",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.zsh",
+        "**/*.ksh"
+      ],
+      "recordFileGlobs": [
+        "**/*.sh",
+        "**/*.bash",
+        "**/*.zsh",
+        "**/*.ksh"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "sed 's/\\x1b\\[[0-9;]*m//g' totem-lint.log",
+          "good": "perl -pe 's/\\e\\[[0-9;]*m//g' totem-lint.log"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "aa7a588d-async-test-callbacks",
+      "seedEntry": "aa7a588d",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-aa7a588d-async-test-callbacks.rule.yaml",
+      "ruleId": "aa7a588d48e74503",
+      "legacySource": "aa7a588d",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "it('returns the parsed record', async () => { expect(parse(src)).toEqual(expected); });",
+          "good": "it('returns the parsed record', () => { expect(parse(src)).toEqual(expected); });"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "seedEntry": "b237bcf3",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-b237bcf3-pwd-in-credential-regex.rule.yaml",
+      "ruleId": "b237bcf3b52381b1",
+      "legacySource": "b237bcf3",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/cli/src/assets/**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/src/assets/**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const CREDENTIAL_RE = new RegExp('(password|passwd|pwd|secret)\\\\s*[:=]', 'i');",
+          "good": "const CREDENTIAL_RE = new RegExp('(password|passwd|secret)\\\\s*[:=]', 'i');"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "b9736096-orchestrator-test-timeout",
+      "seedEntry": "b9736096",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-b9736096-orchestrator-test-timeout.rule.yaml",
+      "ruleId": "b973609688ec2888",
+      "legacySource": "b9736096",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "packages/cli/**/*.test.ts"
+      ],
+      "recordFileGlobs": [
+        "packages/cli/**/*.test.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "describe('orchestrator dispatch', () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });",
+          "good": "describe('orchestrator dispatch', { timeout: 15000 }, () => { it('routes a leg', () => { expect(route()).toBe('ok'); }); });"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "be74c55c-actions-input-expansion",
+      "seedEntry": "be74c55c",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-be74c55c-actions-input-expansion.rule.yaml",
+      "ruleId": "be74c55caa9fd60c",
+      "legacySource": "be74c55c",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.yml",
+        "**/*.yaml"
+      ],
+      "recordFileGlobs": [
+        "**/*.yml",
+        "**/*.yaml"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "- name: Check out the requested ref\n  run: git checkout ${{ inputs.ref }}",
+          "good": "- name: Check out the requested ref\n  env:\n    REQUESTED_REF: ${{ inputs.ref }}\n  run: git checkout \"$REQUESTED_REF\""
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "d5faa14c-absolute-claims-in-docs",
+      "seedEntry": "d5faa14c",
+      "class": "regex",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-d5faa14c-absolute-claims-in-docs.rule.yaml",
+      "ruleId": "d5faa14cbb8b50fb",
+      "legacySource": "d5faa14c",
+      "exemplarFactory": null,
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "**/*.rst",
+        "**/*.txt"
+      ],
+      "recordFileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "**/*.rst",
+        "**/*.txt"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "The compiler guarantees complete coverage of every edge case.",
+          "good": "The compiler covers the 14 edge cases listed in the test matrix."
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "d940b2c9-stdio-in-exec-options",
+      "seedEntry": "d940b2c9",
+      "class": "flat ast-grep",
+      "recordFile": "spikes/spine-adopt/seed/records/r14-d940b2c9-stdio-in-exec-options.rule.yaml",
+      "ruleId": "d940b2c9ffe92e99",
+      "legacySource": "d940b2c9",
+      "exemplarFactory": null,
+      "loweredEngine": "ast-grep",
+      "loweredFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordFileGlobs": [
+        "**/*.ts"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": null,
+      "hasVerificationShadow": false,
+      "hasCuration": true,
+      "examples": [
+        {
+          "bad": "const out = execSync(cmd, { cwd: repoRoot, stdio: 'pipe', encoding: 'utf8' });",
+          "good": "const out = execSync(cmd, { cwd: repoRoot, encoding: 'utf8' });"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "curation",
+        "examples",
+        "fileGlobs",
+        "good",
+        "language",
+        "message",
+        "pattern",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "sourceLesson",
+        "target",
+        "type"
+      ]
+    },
+    {
+      "specimen": "d-file",
+      "seedEntry": null,
+      "class": "requires (§ D8)",
+      "recordFile": "spikes/spine-adopt/seed/controls/k5/d-requires-file.rule.yaml",
+      "ruleId": "0123456789abcdef",
+      "legacySource": null,
+      "exemplarFactory": "design8ExemplarRecord",
+      "loweredEngine": "regex",
+      "loweredFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordFileGlobs": [
+        "**/*.sh",
+        "**/*.cjs"
+      ],
+      "recordExcludeGlobs": null,
+      "requires": {
+        "pattern": "LC_ALL=C",
+        "scope": "file"
+      },
+      "hasVerificationShadow": false,
+      "hasCuration": false,
+      "examples": [
+        {
+          "bad": "git log --oneline",
+          "good": "LC_ALL=C git log --oneline"
+        }
+      ],
+      "distinctKeysAtEveryDepth": [
+        "bad",
+        "examples",
+        "fileGlobs",
+        "good",
+        "message",
+        "pattern",
+        "requires",
+        "schemaVersion",
+        "scope",
+        "severity",
+        "target",
+        "type"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "the two exemplar factories are reachable at their non-barrel dist path",
+      "ok": true,
+      "detail": "packages/core/dist/spine/record-exemplars.fixture.js"
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "15 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0167a783f75b5ecd\""
+    },
+    {
+      "name": "specimen 0167a783-dynamic-import-utility-layer — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "13 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0e01112d5f18ffde\""
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\bnew\\\\s+(?!Totem)Error\\\\(\""
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen 1a7080eb-inline-secrets-agent-config — REJECT ROW (shipped-compile): the shipped compiler refused this record, so it is a scored row rather than an apparatus failure (§ G3)",
+      "ok": true,
+      "detail": "specimen 1a7080eb-inline-secrets-agent-config (D:\\Dev\\worktrees\\totem-totem-claude-controls-at-pin\\spikes\\spine-adopt\\seed\\records\\r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "13 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"49dd9e4fd02d692b\""
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\b\\\\d+\\\\s*(?:characters?|chars?|words?)\\\\b\""
+    },
+    {
+      "name": "specimen 49dd9e4f-llm-character-counting — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"54140f59be3e6e44\""
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"(^|[^a-zA-Z0-9-_./])#\\\\d+\""
+    },
+    {
+      "name": "specimen 54140f59-bare-issue-number-refs — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "15 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"5b85fe53468964e1\""
+    },
+    {
+      "name": "specimen 5b85fe53-suppress-event-runtime-failure — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"5da43ea60b66e96e\""
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"git\\\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\\\s+(?:['\\\"`]?\\\\$[{(]?\\\\w|['\\\"`]?\\\\$\\\\w)\""
+    },
+    {
+      "name": "specimen 5da43ea6-git-double-dash-separator — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "15 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"6467c35159c1504d\""
+    },
+    {
+      "name": "specimen 6467c351-dynamic-import-cli-entry — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "15 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"65ede9bfdf6995fe\""
+    },
+    {
+      "name": "specimen 65ede9bf-dynamic-import-command-handlers — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"6b1890e2dbda3331\""
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist-js — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"6b1890e2dbda3331\""
+    },
+    {
+      "name": "specimen 6b1890e2-empty-string-in-whitelist — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"6b2b62eb1e8693fc\""
+    },
+    {
+      "name": "specimen 6b2b62eb-totem-error-log-tag — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"71935fe9a742137b\""
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input-js — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"71935fe9a742137b\""
+    },
+    {
+      "name": "specimen 71935fe9-string-cast-on-input — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "compound ast-grep"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "19 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"87aff037d7de47a7\""
+    },
+    {
+      "name": "specimen 87aff037-fail-open-catch-ban — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "13 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"89184bb5fd960848\""
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"sed\\\\s+.*\\\\\\\\x1b\""
+    },
+    {
+      "name": "specimen 89184bb5-bsd-sed-hex-escape — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"aa7a588d48e74503\""
+    },
+    {
+      "name": "specimen aa7a588d-async-test-callbacks — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"b237bcf3b52381b1\""
+    },
+    {
+      "name": "specimen b237bcf3-pwd-in-credential-regex — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"b973609688ec2888\""
+    },
+    {
+      "name": "specimen b9736096-orchestrator-test-timeout — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "13 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"be74c55caa9fd60c\""
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\$\\\\{\\\\{\\\\s*inputs\\\\.[a-zA-Z_][a-zA-Z0-9_]*\\\\s*\\\\}\\\\}\""
+    },
+    {
+      "name": "specimen be74c55c-actions-input-expansion — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "regex"
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "13 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"d5faa14cbb8b50fb\""
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\b(guarantee[sd]?|comprehensive(ly)?|always|never|perfect(ly)?|complete(ly)?|foolproof|infallible|100%\\\\s+(?:accurate|reliable|secure|safe))\\\\b\""
+    },
+    {
+      "name": "specimen d5faa14c-absolute-claims-in-docs — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "flat ast-grep"
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "14 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"d940b2c9ffe92e99\""
+    },
+    {
+      "name": "specimen d940b2c9-stdio-in-exec-options — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen d-file — parseRuleRecord + compileRuleRecord succeed",
+      "ok": true,
+      "detail": "requires (§ D8)"
+    },
+    {
+      "name": "specimen d-file — carries NO § Design 4 inexpressible key (no ruleId, no positiveFixtures, …)",
+      "ok": true,
+      "detail": "12 distinct keys, all expressible"
+    },
+    {
+      "name": "specimen d-file — lowered lessonHash === threaded ruleId",
+      "ok": true,
+      "detail": "\"0123456789abcdef\""
+    },
+    {
+      "name": "specimen d-file — lowered compiledAt === injected now",
+      "ok": true,
+      "detail": "\"2026-08-21T00:00:00.000Z\""
+    },
+    {
+      "name": "specimen d-file — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
+      "ok": true,
+      "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\""
+    },
+    {
+      "name": "specimen d-file — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
+      "ok": true,
+      "detail": "no `pattern: \"` occurrence in the source"
+    },
+    {
+      "name": "specimen d-file — transcription is FIELD-IDENTICAL to design8ExemplarRecord() with the pinned {scope: file} spread (record-runtime.test.ts:358-361)",
+      "ok": true,
+      "detail": "exact"
+    },
+    {
+      "name": "all 22 record sources compiled",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "SEED PIN — the 22 `.rule.yaml` files at `2a7135762b6aedc9cd3099ab3f42e029ee34092e:.totem/rules/` and the 22 under seed/records/ are the SAME SET, each pair byte-identical",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "(§ S1) the G2 probe generator reproduces `seed/probe-pairs.json` exactly (33 pairs)",
+      "ok": true,
+      "detail": "[{\"glob\":\"packages/cli/src/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/cli/src/k3b/probe.ts\",\"twin\":\"packages/cli/src/k3b/probe.t_\"},{\"glob\":\"packages/cli/src/commands/**/*.ts\",\"kind\":\"excludeGlobs\",\"probe\":\"packages/cli/src/commands/k3b/probe.ts\",\"twin\":\"packages/cli/src/commands/k3b/probe.t_\"},{\"glob\":\"**/*.test.ts\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.test.ts\",\"twin\":\"k3b/probe.test.t_\"},{\"glob\":\"**/*.spec.ts\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.spec.ts\",\"twin\":\"k3b/probe.spec.t_\"},{\"glob\":\"**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.ts\",\"twin\":\"k3b/probe.t_\"},{\"glob\":\"**/*.tsx\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.tsx\",\"twin\":\"k3b/probe.ts_\"},{\"glob\":\"**/*.js\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.js\",\"twin\":\"k3b/probe.j_\"},{\"glob\":\"**/*.jsx\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.jsx\",\"twin\":\"k3b/probe.js_\"},{\"glob\":\"**/.mcp.json\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/.mcp.json\",\"twin\":\"k3b/.mcp.jso_\"},{\"glob\":\"**/.gemini/settings.json\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/.gemini/settings.json\",\"twin\":\"k3b/.gemini/settings.jso_\"},{\"glob\":\"**/mcp*.json\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/mcpprobe.json\",\"twin\":\"k3b/mcpprobe.jso_\"},{\"glob\":\"**/.cursor/mcp.json\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/.cursor/mcp.json\",\"twin\":\"k3b/.cursor/mcp.jso_\"},{\"glob\":\"**/*.py\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.py\",\"twin\":\"k3b/probe.p_\"},{\"glob\":\"**/*.md\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.md\",\"twin\":\"k3b/probe.m_\"},{\"glob\":\"**/*.txt\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.txt\",\"twin\":\"k3b/probe.tx_\"},{\"glob\":\"packages/cli/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/cli/k3b/probe.ts\",\"twin\":\"packages/cli/k3b/probe.t_\"},{\"glob\":\"apps/cli/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"apps/cli/k3b/probe.ts\",\"twin\":\"apps/cli/k3b/probe.t_\"},{\"glob\":\"packages/core/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/core/k3b/probe.ts\",\"twin\":\"packages/core/k3b/probe.t_\"},{\"glob\":\"**/*.test.*\",\"kind\":\"excludeGlobs\",\"probe\":\"k3b/probe.test.probe\",\"twin\":\"k3b/probe.test_probe\"},{\"glob\":\"**/*.spec.*\",\"kind\":\"excludeGlobs\",\"probe\":\"k3b/probe.spec.probe\",\"twin\":\"k3b/probe.spec_probe\"},{\"glob\":\"**/*.sh\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.sh\",\"twin\":\"k3b/probe.s_\"},{\"glob\":\"**/*.bash\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.bash\",\"twin\":\"k3b/probe.bas_\"},{\"glob\":\"**/*.mjs\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.mjs\",\"twin\":\"k3b/probe.mj_\"},{\"glob\":\"**/*.cjs\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.cjs\",\"twin\":\"k3b/probe.cj_\"},{\"glob\":\"packages/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/k3b/probe.ts\",\"twin\":\"packages/k3b/probe.t_\"},{\"glob\":\"**/*.zsh\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.zsh\",\"twin\":\"k3b/probe.zs_\"},{\"glob\":\"**/*.ksh\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.ksh\",\"twin\":\"k3b/probe.ks_\"},{\"glob\":\"packages/cli/src/assets/**/*.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/cli/src/assets/k3b/probe.ts\",\"twin\":\"packages/cli/src/assets/k3b/probe.t_\"},{\"glob\":\"packages/cli/**/*.test.ts\",\"kind\":\"fileGlobs\",\"probe\":\"packages/cli/k3b/probe.test.ts\",\"twin\":\"packages/cli/k3b/probe.test.t_\"},{\"glob\":\"**/*.yml\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.yml\",\"twin\":\"k3b/probe.ym_\"},{\"glob\":\"**/*.yaml\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.yaml\",\"twin\":\"k3b/probe.yam_\"},{\"glob\":\"**/*.mdx\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.mdx\",\"twin\":\"k3b/probe.md_\"},{\"glob\":\"**/*.rst\",\"kind\":\"fileGlobs\",\"probe\":\"k3b/probe.rst\",\"twin\":\"k3b/probe.rs_\"}]"
+    },
+    {
+      "name": "K5 CONTROL — `seed/controls/k5/d-requires-file.rule.yaml` is byte-identical to `records/d-requires-file.rule.yaml` (both present)",
+      "ok": true,
+      "detail": "control=048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239, sibling=048f8da56316438929144ad60e5650ece885f44bf26172d1727a1f4ab14ed239"
+    },
+    {
+      "name": "CONTROL — an empty `fileGlobs` is UNREACHABLE from a parsed record (min-1 at parse)",
+      "ok": true,
+      "detail": "[Totem Error] spikes/spine-adopt/records/CONTROL-empty-positives.rule.yaml: target.scope.fileGlobs — target.scope.fileGlobs: target.scope.fileGlobs must declare ≥1 glob (Prop 310 §"
+    },
+    {
+      "name": "CONTROL — hand-constructed empty-positives RECORD scope matches NOTHING",
+      "ok": true,
+      "detail": "a.ts=false, packages/core/src/a.ts=false, scripts/x.sh=false"
+    },
+    {
+      "name": "CONTROL — the LEGACY profile on the same empty list matches EVERYTHING (the documented inversion)",
+      "ok": true,
+      "detail": "a.ts=true, packages/core/src/a.ts=true, scripts/x.sh=true"
+    },
+    {
+      "name": "CONTROL — the two profiles are opposites on every probe path",
+      "ok": true,
+      "detail": "3 paths"
+    }
+  ],
+  "runManifestSha256": "90450073219abb547b3064edc2c9016910da53f8baa0feae1ed5b3aa1a0e7424"
+}

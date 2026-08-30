@@ -1,0 +1,440 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/certify-verify.mts",
+  "contract": "spec `.totem/specs/spine-spike.md` § Actuator slice, \"Invariants to lock\" — asserted against what src/certify.mts left on disk, with the pre-slice chains read from `git show HEAD:`.",
+  "chainPreservation": {
+    "method": "BIDIRECTIONAL, chosen per chain from the COMMITTED file's own shape, so the invariant survives its own commit. `pre-commit` (the committed chain carries no `manifestSha256`): two independent claims — (a) a BYTE claim, the published file starts with the committed file's bytes up to its closing brace, so the extension is appended and nothing was re-serialised; (b) a STRUCTURAL claim, every pre-slice key holds an identical value and the added key set is exactly the extension's. `drift-detection` (the committed chain already carries `manifestSha256`): the published chain must be BYTE-EQUAL to it, and no key may be added, changed or removed — certification is deterministic, so any difference is drift. In both modes the named hashes are checked unchanged and the manifest hash is RE-DERIVED from the module.",
+    "modeMarker": "the presence of `manifestSha256` in the committed chain",
+    "preSliceSource": "git show HEAD:spikes/spine-adopt/artifacts/chains/<name>.json",
+    "expectedAddedKeys": [
+      "certification",
+      "certified",
+      "entrypointManifest",
+      "manifestSha256",
+      "publishedBy"
+    ],
+    "modesRun": {
+      "r87aff037d7de47a7.json": "drift-detection"
+    },
+    "rows": [
+      {
+        "chain": "r87aff037d7de47a7.json",
+        "mode": "drift-detection",
+        "modeReason": "the committed chain carries `manifestSha256` — the slice is committed, so the claim is byte-EQUALITY",
+        "allModeChecksPassed": true,
+        "preservedBytes": 5415,
+        "publishedBytes": 5415,
+        "changedKeys": [],
+        "addedKeys": [],
+        "recordSha256": "27ba70dd4820e67fc528c9c660f632f78586bc85608b4d783dc62897a8e7171d",
+        "regoSha256": "e3d32564de9c7463a8ce70033a9b7378cbd306ebc68a4de19b05172000c42ca8",
+        "wasmSha256": "f1c2c73119b1f5e6dd2098b0662844a4c79e7eaafdcdb4fee68921b5c83418ec",
+        "manifestSha256": "d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8",
+        "manifestSha256RederivedFromModule": "d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8"
+      }
+    ],
+    "selfTest": {
+      "why": "Only one mode can be live in a given repository state. The other is exercised here on constructed inputs — including a falsifier for the equality claim — so neither branch can rot unobserved while the repository sits on one side of the commit.",
+      "cases": [
+        {
+          "case": "post-commit simulation (current file as the committed input)",
+          "chain": "r87aff037d7de47a7.json",
+          "mode": "drift-detection",
+          "passed": true,
+          "rows": [
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+              "ok": true,
+              "detail": "5415 bytes identical"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+              "ok": true,
+              "detail": "changed=[] added=[] removed=[]"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "27ba70dd4820e67f"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "e3d32564de9c7463"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "f1c2c73119b1f5e6"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        },
+        {
+          "case": "equality-mode falsifier (a whitespace-only difference)",
+          "chain": "r87aff037d7de47a7.json",
+          "mode": "drift-detection",
+          "expected": "the BYTE claim fails, every structural claim still passes",
+          "behavedAsExpected": true,
+          "rows": [
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+              "ok": false,
+              "detail": "DRIFT at byte 5414 — committed \"/src/certify.mts (certification PASS)\\\"\\n} \\n\" vs published \"/src/certify.mts (certification PASS)\\\"\\n}\\n\""
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+              "ok": true,
+              "detail": "changed=[] added=[] removed=[]"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "27ba70dd4820e67f"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "e3d32564de9c7463"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "f1c2c73119b1f5e6"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        },
+        {
+          "case": "pre-commit mode against a synthetic pre-slice baseline (the five added keys removed)",
+          "chain": "r87aff037d7de47a7.json",
+          "mode": "pre-commit",
+          "passed": true,
+          "rows": [
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] the published chain is BYTE-IDENTICAL to the committed one for its first 2508 bytes (the extension is appended, never interleaved)",
+              "ok": true,
+              "detail": "2508/5415 bytes carried through verbatim"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] no pre-slice key CHANGED value",
+              "ok": true,
+              "detail": "[]"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: [pre-commit] the added keys are EXACTLY the extension's",
+              "ok": true,
+              "detail": "[\"certification\",\"certified\",\"entrypointManifest\",\"manifestSha256\",\"publishedBy\"]"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
+              "ok": true,
+              "detail": "27ba70dd4820e67f"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `regoSha256` is unchanged",
+              "ok": true,
+              "detail": "e3d32564de9c7463"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `wasmSha256` is unchanged",
+              "ok": true,
+              "detail": "f1c2c73119b1f5e6"
+            },
+            {
+              "name": "INV 2 — r87aff037d7de47a7.json: `certified` is true",
+              "ok": true,
+              "detail": "true"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "name": "INV 1 — the report carries all 1 specimen bundles",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "INV 1 — every specimen bundle certifies PASS",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 1 — and every specimen was actually EVALUATED (a PASS that skipped the eval would be vacuous)",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 2 — the manifest's record set and `SPIKE_RECORD_SET` AGREE (the artifacts on disk and this process are the same run)",
+      "ok": true,
+      "detail": "manifest.recordSet=\"control\", activeRecordSet()=\"control\""
+    },
+    {
+      "name": "INV 2 (K3 arm B) — the control-only run published exactly the 1 chain(s) its record set names, and each has a committed counterpart at HEAD",
+      "ok": true,
+      "detail": "{\"published\":[\"r87aff037d7de47a7.json\"],\"missingFromCommitted\":[]}"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] the committed chain already carries `manifestSha256`, so the published chain must be BYTE-EQUAL to it",
+      "ok": true,
+      "detail": "5415 bytes identical"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: [drift-detection] no key CHANGED, none was ADDED, none was REMOVED",
+      "ok": true,
+      "detail": "changed=[] added=[] removed=[]"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `recordSha256` is unchanged",
+      "ok": true,
+      "detail": "27ba70dd4820e67f"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `regoSha256` is unchanged",
+      "ok": true,
+      "detail": "e3d32564de9c7463"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `wasmSha256` is unchanged",
+      "ok": true,
+      "detail": "f1c2c73119b1f5e6"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `certified` is true",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"d3fcc0b58295aeb494b75769283efe7eb4c4a165308913b23111e19e8c7b37c8\""
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"27ba70dd4820\",\"ir\":\"e3d32564de9c\",\"guardedPolicy\":\"528c8d80ce14\",\"entrypointManifest\":\"d3fcc0b58295\",\"finalWasm\":\"f1c2c73119b1\"}"
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"528c8d80ce148a404c2a6ff97fcb6df5b889eeeab83228618b5c455932ee48db\""
+    },
+    {
+      "name": "INV 2 — r87aff037d7de47a7.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 self-test — a committed chain that ALREADY carries the extension selects `drift-detection`",
+      "ok": true,
+      "detail": "\"drift-detection\""
+    },
+    {
+      "name": "INV 2 self-test — and the published chain PASSES equality mode against it (so the invariant survives its own commit)",
+      "ok": true,
+      "detail": "6/6 checks pass; none failing"
+    },
+    {
+      "name": "INV 2 self-test — equality mode has TEETH: a one-byte whitespace difference FAILS it while every structural key still matches",
+      "ok": true,
+      "detail": "byteClaim=FAILED (correct), structuralClaims=all passed"
+    },
+    {
+      "name": "INV 2 self-test — a committed chain WITHOUT the extension selects `pre-commit`",
+      "ok": true,
+      "detail": "\"pre-commit\""
+    },
+    {
+      "name": "INV 2 self-test — and the additive-extension proof PASSES against it (byte prefix + exactly the five added keys)",
+      "ok": true,
+      "detail": "7/7 checks pass; none failing"
+    },
+    {
+      "name": "INV 3 — both negative conformance fixtures are present",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead is BLOCKED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead carries one of the five TYPED reasons",
+      "ok": true,
+      "detail": "empty-result-set — `totem/spike/certfix_neg_lookahead/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+    },
+    {
+      "name": "INV 3 — fixture:neg-lookahead has NO chain and DOES have a blocked artifact",
+      "ok": true,
+      "detail": "[null,true]"
+    },
+    {
+      "name": "INV 3 — fixture:backreference is BLOCKED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 3 — fixture:backreference carries one of the five TYPED reasons",
+      "ok": true,
+      "detail": "empty-result-set — `totem/spike/certfix_backreference/result`: the entrypoint returned an EMPTY RESULT SET — the guarded `result` rule was UNDEFINED (`patterns_compile` or `facts_wellformed` failed). Never a zero-violation verdict."
+    },
+    {
+      "name": "INV 3 — fixture:backreference has NO chain and DOES have a blocked artifact",
+      "ok": true,
+      "detail": "[null,true]"
+    },
+    {
+      "name": "INV 3 — each negative fixture is traceable to the corpus rule it transcribes",
+      "ok": true,
+      "detail": "[\"80192e6ac2a1dd3c\",\"e64911592b774cc6\"]"
+    },
+    {
+      "name": "INV 4 — the schema-invalid sentinel is REFUSED",
+      "ok": true,
+      "detail": "\"BLOCKED\""
+    },
+    {
+      "name": "INV 4 — with the pre-eval reason `schema-invalid-sentinel`",
+      "ok": true,
+      "detail": "\"schema-invalid-sentinel\""
+    },
+    {
+      "name": "INV 4 — refused BEFORE any eval: zero host invocations, and the bundle was never evaluated",
+      "ok": true,
+      "detail": "hostInvocations=0, evaluated=false"
+    },
+    {
+      "name": "INV 4 — the refusal names MULTIPLE independent schema violations (not one lucky check)",
+      "ok": true,
+      "detail": "6: unknown key(s) `surprise` — the schema line is exact | `file` must be a string (got number) | `fileText` must be a string or null (got array) | `lines[1]` must be a string (got number) | `lines[2]` must be a string (got null) | `astMatches` must be an array (got string)"
+    },
+    {
+      "name": "INV 5 — the two-entrypoint control is present",
+      "ok": true,
+      "detail": "fixture:two-entrypoints"
+    },
+    {
+      "name": "INV 5 — it is BLOCKED by the entrypoint-set assertion",
+      "ok": true,
+      "detail": "\"entrypoint-set-not-single-result\""
+    },
+    {
+      "name": "INV 5 — the assertion itself reports NOT-ok",
+      "ok": true,
+      "detail": "false"
+    },
+    {
+      "name": "INV 5 — it declares TWO entrypoints, both EVALUATED",
+      "ok": true,
+      "detail": "2"
+    },
+    {
+      "name": "INV 5 — and BOTH classify PASS, so the assertion has TEETH: nothing else blocked this bundle",
+      "ok": true,
+      "detail": "result=PASS, side_result=PASS"
+    },
+    {
+      "name": "INV 5 — and it earned NO chain",
+      "ok": true,
+      "detail": "null"
+    },
+    {
+      "name": "INV 5 — every CERTIFIED bundle passed the same assertion",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead was asked of all THREE hosts",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: every host produced an ERROR row",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: every error row is HOST-ORIGINATED — a non-empty error string from the host's own failure rule",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: each host names the function that raised it",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: the three error strings are DISTINCT texts, so no two hosts are being reported from one reading",
+      "ok": true,
+      "detail": "wasmtime (rust-opa-wasm): EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI | regorus: regorus eval_rule(data.totem.spike.certfix_neg_lookahead.res | wazero: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI"
+    },
+    {
+      "name": "INV 6 — neg-lookahead: no host returned a clean zero",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference was asked of all THREE hosts",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "INV 6 — backreference: every host produced an ERROR row",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: every error row is HOST-ORIGINATED — a non-empty error string from the host's own failure rule",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: each host names the function that raised it",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — backreference: the three error strings are DISTINCT texts, so no two hosts are being reported from one reading",
+      "ok": true,
+      "detail": "wasmtime (rust-opa-wasm): EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI | regorus: regorus eval_rule(data.totem.spike.certfix_backreference.res | wazero: EMPTY RESULT SET — the entrypoint's `result` rule was UNDEFI"
+    },
+    {
+      "name": "INV 6 — backreference: no host returned a clean zero",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 6 — the hosts asked are exactly wasmtime, regorus and wazero",
+      "ok": true,
+      "detail": "[\"regorus\",\"wasmtime (rust-opa-wasm)\",\"wazero\"]"
+    },
+    {
+      "name": "INV 7 — all five typed blocked classes were OBSERVED, so the classifier is not single-valued",
+      "ok": true,
+      "detail": "[\"empty-result-set\",\"eval-error-or-trap\",\"extra-or-malformed-keys\",\"missing-keys\",\"non-object\"]"
+    },
+    {
+      "name": "INV 8 — `src/certify.mts` is the ONLY TypeScript module that writes `artifacts/chains/` (publication is genuinely gated). 19 sibling module(s) scanned: src/build-wasm.mts, src/census.mts, src/compare.mts, src/controls.mts, src/facts.mts, src/lower.mts, src/manifest.mts, src/shipped-verdicts.mts, src/t5-sweep.mts, src/verify-records.mts, src/lib/baseline-pins.mts, src/lib/expressibility.mts, src/lib/lowering-gate.mts, src/lib/opa.mts, src/lib/record-sets.mts, src/lib/records.mts, src/lib/specimens.mts, src/lib/spike-env.mts, src/lib/wasm-census.mts — TypeScript sources only; the Rust host, the Go probe and CI are outside this scan",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "INV 8 — the scan is not vacuous: the same patterns DO fire on a constructed writer",
+      "ok": true,
+      "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
+    }
+  ],
+  "runManifestSha256": "e193ec3013bf57cb9977239a071b1fe77dc908194bb6e3f9bcb0fbd57c431f53",
+  "bundlesSha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+}
