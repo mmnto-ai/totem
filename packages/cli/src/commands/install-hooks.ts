@@ -247,8 +247,13 @@ export function hookTotemDirProblem(totemDir: string): string | null {
 export function assertRenderableTotemDir(totemDir: string): void {
   const problem = hookTotemDirProblem(totemDir);
   if (problem === null) return;
+  // A plain Error, unprefixed: this backstop sits on the SYNC render path (the
+  // builders), where `@mmnto/totem`'s TotemError cannot be lazy-imported; the
+  // resolver — the CLI's actual entry — raises the TotemError form of the same
+  // refusal. `handleError` adds the `[Totem Error]` tag, so the message carries
+  // none of its own (Gemini on mmnto-ai/totem#2701).
   throw new Error(
-    `[Totem] Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ${problem}. ` +
+    `Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ${problem}. ` +
       'Set `totemDir` to a plain relative directory inside the repo and re-run `totem hook install --force`.',
   );
 }
@@ -332,7 +337,17 @@ export async function resolveHookRenderOptions(
   const totemDir = isGlobalConfigPath(configPath)
     ? DEFAULT_TOTEM_DIR
     : (config.totemDir ?? DEFAULT_TOTEM_DIR);
-  assertRenderableTotemDir(totemDir);
+  // The CLI-layer form of the refusal: a TotemError with a recovery hint (the
+  // sync builders keep the plain-Error backstop, `assertRenderableTotemDir`).
+  const problem = hookTotemDirProblem(totemDir);
+  if (problem !== null) {
+    const { TotemError } = await import('@mmnto/totem');
+    throw new TotemError(
+      'CONFIG_INVALID',
+      `Refusing to render git hooks for totemDir ${JSON.stringify(totemDir)}: ${problem}`,
+      'Set `totemDir` to a plain relative directory inside the repo and re-run `totem hook install --force`.',
+    );
+  }
   return {
     tier: flags?.tier ?? config.hooks?.tier ?? 'standard',
     totemDir,
@@ -547,48 +562,56 @@ function detectHookManager(cwd: string): HookManager | null {
  * at files that do not exist (mmnto-ai/totem#2692 C5).
  */
 function printHookManagerGuidance(manager: HookManager, totemDir: string): void {
+  // The validator accepts whitespace in a totemDir; an unquoted word would split
+  // into two arguments in every consumer's shell (CodeRabbit on
+  // mmnto-ai/totem#2701). Quote only when needed so the default guidance stays
+  // the familiar `sh .totem/hooks/…`. `$` and a backtick are refused upstream, so
+  // double quotes are inert; the JSON form escapes them for package.json.
+  const needsQuotes = /\s/.test(totemDir);
+  const sh = needsQuotes ? `"${totemDir}"` : totemDir;
+  const json = needsQuotes ? `\\"${totemDir}\\"` : totemDir;
   switch (manager) {
     case 'husky':
       console.error('[Totem] Detected husky. Add the following to your hook files:');
       console.error('');
       console.error('  # .husky/pre-commit');
-      console.error(`  sh ${totemDir}/hooks/pre-commit.sh`);
+      console.error(`  sh ${sh}/hooks/pre-commit.sh`);
       console.error('');
       console.error('  # .husky/pre-push');
-      console.error(`  sh ${totemDir}/hooks/pre-push.sh`);
+      console.error(`  sh ${sh}/hooks/pre-push.sh`);
       console.error('');
       console.error('  # .husky/post-merge');
-      console.error(`  sh ${totemDir}/hooks/post-merge.sh`);
+      console.error(`  sh ${sh}/hooks/post-merge.sh`);
       console.error('');
       console.error('  # .husky/post-checkout');
-      console.error(`  sh ${totemDir}/hooks/post-checkout.sh`);
+      console.error(`  sh ${sh}/hooks/post-checkout.sh`);
       break;
     case 'lefthook':
       console.error('[Totem] Detected lefthook. Add to your lefthook.yml:');
       console.error('  pre-commit:');
       console.error('    commands:');
       console.error('      totem-block-main:');
-      console.error(`        run: sh ${totemDir}/hooks/pre-commit.sh`);
+      console.error(`        run: sh ${sh}/hooks/pre-commit.sh`);
       console.error('  pre-push:');
       console.error('    commands:');
       console.error('      totem-review:');
-      console.error(`        run: sh ${totemDir}/hooks/pre-push.sh`);
+      console.error(`        run: sh ${sh}/hooks/pre-push.sh`);
       console.error('  post-merge:');
       console.error('    commands:');
       console.error('      totem-sync:');
-      console.error(`        run: sh ${totemDir}/hooks/post-merge.sh`);
+      console.error(`        run: sh ${sh}/hooks/post-merge.sh`);
       console.error('  post-checkout:');
       console.error('    commands:');
       console.error('      totem-sync-checkout:');
-      console.error(`        run: sh ${totemDir}/hooks/post-checkout.sh`);
+      console.error(`        run: sh ${sh}/hooks/post-checkout.sh`);
       break;
     case 'simple-git-hooks':
       console.error('[Totem] Detected simple-git-hooks. Add to your package.json:');
       console.error('  "simple-git-hooks": {');
-      console.error(`    "pre-commit": "sh ${totemDir}/hooks/pre-commit.sh",`);
-      console.error(`    "pre-push": "sh ${totemDir}/hooks/pre-push.sh",`);
-      console.error(`    "post-merge": "sh ${totemDir}/hooks/post-merge.sh",`);
-      console.error(`    "post-checkout": "sh ${totemDir}/hooks/post-checkout.sh"`);
+      console.error(`    "pre-commit": "sh ${json}/hooks/pre-commit.sh",`);
+      console.error(`    "pre-push": "sh ${json}/hooks/pre-push.sh",`);
+      console.error(`    "post-merge": "sh ${json}/hooks/post-merge.sh",`);
+      console.error(`    "post-checkout": "sh ${json}/hooks/post-checkout.sh"`);
       console.error('  }');
       break;
   }
@@ -681,6 +704,7 @@ export async function installPostMergeHook(
   // Make executable (no-op on Windows, git bash handles it)
   try {
     fs.chmodSync(hookPath, 0o755);
+    // totem-context: intentional cleanup — chmod may fail on Windows; the hook still runs via git bash, so a failed mode bit is not a failed install.
   } catch {
     // chmod may fail on Windows — hooks still work via git bash
   }

@@ -1363,6 +1363,16 @@ describe('upgradePrePushHookIfNeeded', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hooks-upgrade-'));
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
+    // Pin the repo-local render options: since mmnto-ai/totem#2692 the upgrade
+    // path resolves `hooks.tier` from config, and a config-less temp repo would
+    // fall through to the developer's global `~/.totem/` profile — a global
+    // `hooks.tier: strict` would then break the standard-tier expectation below
+    // (CodeRabbit on mmnto-ai/totem#2701).
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      'targets:\n  - glob: "docs/*.md"\n    type: lesson\n    strategy: markdown-heading\nhooks:\n  tier: standard\n',
+      'utf-8',
+    );
   });
 
   afterEach(() => {

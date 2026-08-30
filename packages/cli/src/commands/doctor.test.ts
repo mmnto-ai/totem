@@ -194,7 +194,6 @@ describe('checkGitHooks', () => {
     it('WARNs when the installed hooks were rendered for a different totemDir', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         // Hooks on disk still name `.totem/`; the repo configures `knowledge/`.
         await installCanonical(tmpDir, '.totem');
@@ -211,7 +210,6 @@ describe('checkGitHooks', () => {
     it('PASSES when the installed hooks match the configured totemDir', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installCanonical(tmpDir, 'knowledge');
         const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });
@@ -224,7 +222,6 @@ describe('checkGitHooks', () => {
     it('does NOT compare content on the default totemDir (marker-only, zero cost)', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const hooksDir = path.join(tmpDir, '.git', 'hooks');
         fs.mkdirSync(hooksDir, { recursive: true });
@@ -268,7 +265,6 @@ describe('checkGitHooks', () => {
     it('judges an APPENDED totem block on the block alone, and never prescribes --force for it', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         // The three others are canonical for `knowledge`; pre-commit is a USER
         // hook whose appended totem block was rendered for `.totem`.
@@ -289,7 +285,6 @@ describe('checkGitHooks', () => {
     it('PASSES a user hook whose appended block matches the configured totemDir', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installWithAppendedPreCommit(tmpDir, 'knowledge', 'knowledge');
         expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
@@ -305,7 +300,6 @@ describe('checkGitHooks', () => {
     it('names --force (not the delete-and-re-append line) for a legacy hook with no end marker', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const { buildPreCommitHook } = await import('./install-hooks.js');
         await installCanonical(tmpDir, 'knowledge');
@@ -332,7 +326,6 @@ describe('checkGitHooks', () => {
     it('does NOT report a tier-only difference as totemDir drift', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installCanonical(tmpDir, 'knowledge', 'strict');
         expect((await checkGitHooks(tmpDir, { totemDir: 'knowledge' })).status).toBe('pass');
@@ -347,7 +340,6 @@ describe('checkGitHooks', () => {
     it('reads the tier from the totem block, not from a user line above it', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const { buildPrePushHook, getFallbackCommand } = await import('./install-hooks.js');
         await installCanonical(tmpDir, 'knowledge');
@@ -374,7 +366,6 @@ describe('checkGitHooks', () => {
     it('classifies a legacy block as legacy even when a user line quotes the end marker', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         const { buildPreCommitHook } = await import('./install-hooks.js');
         await installCanonical(tmpDir, 'knowledge');
@@ -404,7 +395,6 @@ describe('checkGitHooks', () => {
     it('stays marker-only when the configured totemDir is one the installer refuses', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installCanonical(tmpDir, '.totem');
         expect((await checkGitHooks(tmpDir, { totemDir: '.' })).status).toBe('pass');
@@ -416,7 +406,6 @@ describe('checkGitHooks', () => {
     it('still reports totemDir drift on a strict-tier hook (the tier is read from the hook, not assumed)', async () => {
       const tmpDir = makeTmpDir();
       try {
-        const { execSync } = require('node:child_process');
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
         await installCanonical(tmpDir, '.totem', 'strict');
         const result = await checkGitHooks(tmpDir, { totemDir: 'knowledge' });

@@ -86,6 +86,46 @@ describe('totem link — the target repo names its own totemDir (mmnto-ai/totem#
     expect(fs.readFileSync(path.join(root, 'totem.config.ts'), 'utf-8')).toBe(ROOT_CONFIG);
   });
 
+  it('refuses a target totemDir carrying glob metacharacters (it is written into an ingest glob)', async () => {
+    const target = path.join(root, 'target');
+    fs.mkdirSync(target, { recursive: true });
+    // No directory is created for these names (Windows forbids `*` in a filename);
+    // the refusal fires BEFORE the existence probe, which is the point.
+    for (const bad of ['knowledge*', 'x[1]', 'a{b,c}']) {
+      fs.writeFileSync(
+        path.join(target, 'totem.yaml'),
+        `${TARGET_YAML_BASE}totemDir: ${JSON.stringify(bad)}\n`,
+        'utf-8',
+      );
+      await expect(linkCommand('target', { yes: true })).rejects.toThrow(
+        /contains glob metacharacters/,
+      );
+    }
+    expect(fs.readFileSync(path.join(root, 'totem.config.ts'), 'utf-8')).toBe(ROOT_CONFIG);
+  });
+
+  it('still unlinks after the target changed its totemDir (the link is keyed by the target path)', async () => {
+    const target = path.join(root, 'target');
+    fs.mkdirSync(path.join(target, '.totem'), { recursive: true });
+    await linkCommand('target', { yes: true });
+    expect(fs.readFileSync(path.join(root, 'totem.config.ts'), 'utf-8')).toContain(
+      "glob: 'target/.totem/lessons/*.md'",
+    );
+
+    // The target moves its Totem state; the link made under `.totem` must still unlink.
+    fs.mkdirSync(path.join(target, 'knowledge'), { recursive: true });
+    fs.writeFileSync(
+      path.join(target, 'totem.yaml'),
+      `${TARGET_YAML_BASE}totemDir: knowledge\n`,
+      'utf-8',
+    );
+    await linkCommand('target', { unlink: true });
+    const after = fs.readFileSync(path.join(root, 'totem.config.ts'), 'utf-8');
+    expect(after).not.toContain('// Linked: target');
+    expect(after).not.toContain('target/');
+    expect(after).toContain("glob: 'docs/*.md'");
+  });
+
   it('names the directory it probed when the target lacks it', async () => {
     const target = path.join(root, 'target');
     fs.mkdirSync(target, { recursive: true });

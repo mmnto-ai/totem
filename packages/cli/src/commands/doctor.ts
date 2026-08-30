@@ -228,7 +228,19 @@ export async function checkGitHooks(
   }
 
   if (missing.length === 0) {
-    const staleForTotemDir = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
+    const sensed = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
+    if (!Array.isArray(sensed)) {
+      // The sensor could not run (a builder threw, a hook file was unreadable):
+      // say so, never pass on an unexamined tree (Greptile P1 on mmnto-ai/totem#2701).
+      return {
+        name: 'Git Hooks',
+        status: 'warn',
+        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${config?.totemDir}': ${sensed.failure}`,
+        remediation:
+          'totem hook install --force (re-renders the four hooks from the current config)',
+      };
+    }
+    const staleForTotemDir = sensed;
     if (staleForTotemDir.length > 0) {
       const files = staleForTotemDir.map((row) => row.file);
       // `--force` rewrites the WHOLE file (`installGitHook`): the right remedy for
@@ -319,7 +331,7 @@ async function hooksRenderedForWrongTotemDir(
   gitRoot: string,
   hooksDir: string,
   config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
-): Promise<StaleHookRow[]> {
+): Promise<StaleHookRow[] | { failure: string }> {
   const totemDir = config?.totemDir;
   if (totemDir === undefined || totemDir === '.totem') return [];
 
@@ -392,9 +404,9 @@ async function hooksRenderedForWrongTotemDir(
       stale.push({ file, kind });
     }
     return stale;
-    // totem-context: intentional cleanup — a sensor that cannot regenerate or read the canonical reports NOTHING rather than crashing the diagnostic pipeline (Tenet 13, the checkGitHooks posture above); the parity row carries the same drift under --parity.
-  } catch {
-    return [];
+    // totem-context: a sensor that cannot regenerate or read the canonical REPORTS that it could not — the caller renders a warn row — never a silent pass and never a crash of the diagnostic pipeline (Tenet 13; Greptile P1 on mmnto-ai/totem#2701).
+  } catch (err) {
+    return { failure: err instanceof Error ? err.message : String(err) };
   }
 }
 
@@ -2398,9 +2410,15 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     }
   }
 
+  // mmnto-ai/totem#2692 C5: every totemDir-aware row reads the repo's CONFIGURED
+  // directory. A row left on the default reports pass/skip for a tree it never
+  // opened — the two secret rows would attest a clean scan of nothing
+  // (CodeRabbit on mmnto-ai/totem#2701). `checkIndex` is `lanceDir`, not threaded.
+  const totemDir = loadedConfig?.totemDir ?? '.totem';
+
   const results: DiagnosticResult[] = [
     checkConfig(cwd),
-    checkCompiledRules(cwd),
+    checkCompiledRules(cwd, totemDir),
     await checkGitHooks(cwd, loadedConfig),
     await checkPrepareWrapper(cwd),
     checkEmbeddingConfig(cwd),
@@ -2408,15 +2426,13 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     checkIndex(cwd),
     checkLinkedIndexes(cwd),
     await checkStrategyRoot(cwd, loadedConfig),
-    await checkSecretLeaks(cwd),
-    checkSecretsFileTracked(cwd),
+    await checkSecretLeaks(cwd, totemDir),
+    checkSecretsFileTracked(cwd, totemDir),
     checkAgentsMdCanonical(cwd),
-    await checkUpgradeCandidates(cwd),
-    // mmnto-ai/totem#2692 C5: the stale-rule walk reads the repo's CONFIGURED
-    // totem directory, not the hardcoded default.
-    await checkStaleRules(cwd, loadedConfig?.totemDir ?? '.totem', doctorThresholds),
-    await checkGrandfatheredRules(cwd),
-    await checkFreezes(cwd),
+    await checkUpgradeCandidates(cwd, totemDir),
+    await checkStaleRules(cwd, totemDir, doctorThresholds),
+    await checkGrandfatheredRules(cwd, totemDir),
+    await checkFreezes(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.

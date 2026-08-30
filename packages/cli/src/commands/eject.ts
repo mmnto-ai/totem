@@ -31,23 +31,79 @@ export const DEFAULT_TOTEM_DIR = '.totem';
  * cases fall back to the default rather than being honored.
  */
 export async function resolveEjectTotemDir(cwd: string): Promise<string> {
+  const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
+  let configPath: string;
   try {
-    const { loadConfig, resolveConfigPath, isGlobalConfigPath } = await import('../utils.js');
-    const configPath = resolveConfigPath(cwd);
-    if (isGlobalConfigPath(configPath)) return DEFAULT_TOTEM_DIR;
-    const config = await loadConfig(configPath);
-    const candidate = config.totemDir;
-    if (typeof candidate !== 'string') return DEFAULT_TOTEM_DIR;
-    const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '').trim();
-    // A value that names the project root itself (or escapes it) is never a
-    // deletion target — eject removes Totem's directory, never the checkout.
-    if (normalized === '' || normalized === '.' || normalized.split('/').includes('..')) {
-      return DEFAULT_TOTEM_DIR;
-    }
-    return normalized;
-    // totem-context: intentional cleanup — a missing/unloadable config is the honest-default path (eject runs against half-installed and config-less projects by design); the roster falls back to `.totem`, never to a guess.
+    configPath = resolveConfigPath(cwd);
+    // totem-context: no config anywhere (resolveConfigPath throws CONFIG_MISSING) is the honest-default path — eject runs against half-installed and config-less projects by design.
   } catch {
     return DEFAULT_TOTEM_DIR;
+  }
+  if (isGlobalConfigPath(configPath)) return DEFAULT_TOTEM_DIR;
+
+  let candidate: unknown;
+  try {
+    candidate = (await loadConfig(configPath)).totemDir;
+    // totem-context: a repo-local config that exists but will not load is a LOUD default — the line below names the file and the failure, and eject proceeds on `.totem` rather than guessing (Greptile P1 on mmnto-ai/totem#2701).
+  } catch (err) {
+    const { log } = await import('../ui.js');
+    const reason = err instanceof Error ? err.message.split('\n')[0] : String(err);
+    log.warn(
+      'Eject',
+      `Could not load ${configPath} (${reason}) — ejecting the default \`${DEFAULT_TOTEM_DIR}/\`. If this repo keeps its Totem state elsewhere, fix the config and re-run, or remove that directory by hand.`,
+    );
+    return DEFAULT_TOTEM_DIR;
+  }
+  if (typeof candidate !== 'string') return DEFAULT_TOTEM_DIR;
+
+  const normalized = candidate.replace(/\\/g, '/').replace(/\/+$/, '').trim();
+  // A value that names the project root itself (or escapes it) is never a
+  // deletion target — eject removes Totem's directory, never the checkout. The
+  // segment test is backed by resolved-path containment (path.resolve +
+  // path.relative), the repo's stated guideline for configured paths.
+  if (normalized === '' || normalized === '.' || normalized.split('/').includes('..')) {
+    return DEFAULT_TOTEM_DIR;
+  }
+  const relative = path.relative(cwd, path.resolve(cwd, normalized)).replace(/\\/g, '/');
+  if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return DEFAULT_TOTEM_DIR;
+  }
+  return normalized;
+}
+
+/**
+ * Entries `totem init` / the CLI write into the Totem directory. `deleteArtifacts`
+ * recursively removes the CONFIGURED directory, so before it does it asks whether
+ * the directory holds any of these — a configured `totemDir` that names an
+ * ordinary project directory (`src`, `docs`, or `.git`) must never be swept
+ * (Greptile on mmnto-ai/totem#2701, "unverified recursive deletion target").
+ */
+export const TOTEM_DIR_ENTRIES = [
+  'lessons',
+  'lessons.md',
+  'cache',
+  'artifacts',
+  'specs',
+  'compiled-rules.json',
+  'compile-manifest.json',
+  'registry.json',
+  'ledger',
+  'hooks',
+  'prepare.cjs',
+  'orchestration',
+  'rulesets',
+  'prompts',
+  'verdicts',
+] as const;
+
+/** Whether `dirPath` holds at least one Totem-written entry (see {@link TOTEM_DIR_ENTRIES}). */
+export function looksLikeTotemDir(dirPath: string): boolean {
+  try {
+    const entries = new Set(fs.readdirSync(dirPath));
+    return TOTEM_DIR_ENTRIES.some((entry) => entries.has(entry));
+    // totem-context: intentional cleanup — an unreadable directory is "not Totem-owned" for deletion purposes; the caller reports the skip.
+  } catch {
+    return false;
   }
 }
 
@@ -774,6 +830,21 @@ function deleteArtifacts(cwd: string, totemDir: string, summary: EjectSummary): 
   for (const dir of ejectArtifactDirs(totemDir)) {
     const dirPath = path.join(cwd, dir);
     if (fs.existsSync(dirPath)) {
+      // A CUSTOM Totem directory is swept only when it LOOKS like one: a
+      // `totemDir` pointing at `.git`, `src` or `docs` is a config mistake, not a
+      // licence to recursively delete it (Greptile on mmnto-ai/totem#2701). The
+      // default `.totem/` is Totem's by name and is swept as it always was, even
+      // when empty.
+      if (
+        dir === totemDir &&
+        dir !== DEFAULT_TOTEM_DIR &&
+        (dir === '.git' || !looksLikeTotemDir(dirPath))
+      ) {
+        summary.skipped.push(
+          `${dir}/ (not deleted: it is the configured totemDir but holds none of Totem's entries — remove it by hand if that is intended)`,
+        );
+        continue;
+      }
       try {
         fs.rmSync(dirPath, { recursive: true, force: true });
         summary.removed.push(`${dir}/`);
