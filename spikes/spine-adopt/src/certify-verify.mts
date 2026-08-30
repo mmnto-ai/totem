@@ -316,12 +316,45 @@ function main(): void {
   //     `specimens` run reads the re-homed baseline under `artifacts/specimens/`
   //     (below), and only SKIPS, by name, where that home is not committed.
   //   - ABSENT committed manifest (pre-manifest history): treated as the
-  //     specimens-baseline era. A committed manifest that exists but does not PARSE
-  //     is a different thing — the authoritative artifact is malformed — and it
-  //     THROWS with the cause (bot round on mmnto-ai/totem#2710: a swallowed parse
-  //     error would select a referent instead of naming the broken artifact, and
-  //     with the re-homed baseline below a `specimens` run would then pass over it).
-  const committedManifestText = gitShow('spikes/spine-adopt/artifacts/manifest.json');
+  //     specimens-baseline era. Absence is established by `ls-tree` — a no-match
+  //     pathspec exits 0 with empty stdout — NEVER by a failed `git show`: `gitShow`
+  //     returns `null` on every non-zero status, which cannot tell "path absent"
+  //     from "repository/HEAD broken", and a git fault collapsed into the absence
+  //     fallback would select a referent or publish a named skip (bot round on
+  //     mmnto-ai/totem#2710, Greptile's residual). A committed manifest that exists
+  //     but does not PARSE is a third thing — the authoritative artifact is
+  //     malformed — and THROWS with the cause.
+  //
+  // (bot round on mmnto-ai/totem#2710) Every HEAD listing this block relies on checks
+  // git's exit status: a pathspec that matches nothing exits 0 with empty stdout
+  // (the honest "not committed"), so a NON-ZERO status is a real git fault, and
+  // reading empty stdout as "not committed" there would turn a broken lookup into a
+  // named skip with `ok: true`.
+  const lsTreeAtHead = (repoRelPath: string): string[] => {
+    const r = spawnSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', repoRelPath], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+    });
+    if (r.status !== 0) {
+      throw new Error(
+        `[Totem Error] \`git ls-tree -r --name-only HEAD -- ${repoRelPath}\` exited ${String(r.status)} in ${REPO_ROOT}: ${(r.stderr ?? '').trim()} — the committed referent cannot be established, so INV 2 must not skip`,
+      );
+    }
+    return (r.stdout ?? '')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => path.posix.basename(l))
+      .sort();
+  };
+  const COMMITTED_MANIFEST = 'spikes/spine-adopt/artifacts/manifest.json';
+  const committedManifestPresent = lsTreeAtHead(COMMITTED_MANIFEST).length > 0;
+  const committedManifestText = committedManifestPresent ? gitShow(COMMITTED_MANIFEST) : null;
+  if (committedManifestPresent && committedManifestText === null) {
+    throw new Error(
+      `[Totem Error] \`git show HEAD:${COMMITTED_MANIFEST}\` failed although \`ls-tree\` lists the path at HEAD — a repository fault, not an absent manifest; INV 2 cannot select its committed referent`,
+    );
+  }
   let committedRecordSet: string | null = null;
   if (committedManifestText !== null) {
     try {
@@ -342,28 +375,6 @@ function main(): void {
   // FULL drift-detection at every commit — including run pins — instead of
   // skipping.
   const SPECIMENS_HOME = 'spikes/spine-adopt/artifacts/specimens/chains';
-  // (bot round on mmnto-ai/totem#2710) Both `ls-tree` listings check git's exit
-  // status: a pathspec that matches nothing exits 0 with empty stdout (the honest
-  // "not committed"), so a NON-ZERO status is a real git fault — and reading empty
-  // stdout as "not committed" there would turn a broken referent lookup into a named
-  // skip. `gitShow` above already refuses on status; these two do the same.
-  const lsTreeAtHead = (repoRelDir: string): string[] => {
-    const r = spawnSync('git', ['ls-tree', '-r', '--name-only', 'HEAD', '--', repoRelDir], {
-      cwd: REPO_ROOT,
-      encoding: 'utf-8',
-    });
-    if (r.status !== 0) {
-      throw new Error(
-        `[Totem Error] \`git ls-tree -r --name-only HEAD -- ${repoRelDir}\` exited ${String(r.status)} in ${REPO_ROOT}: ${(r.stderr ?? '').trim()} — the committed referent cannot be established, so INV 2 must not skip`,
-      );
-    }
-    return (r.stdout ?? '')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .map((l) => path.posix.basename(l))
-      .sort();
-  };
   const specimensHomeCommitted = lsTreeAtHead(SPECIMENS_HOME).length > 0;
   const committedChainsDir =
     manifest.recordSet === 'control' && committedIsRunOfRecord
