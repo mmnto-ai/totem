@@ -2,7 +2,7 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "control",
-  "runCommit": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
+  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
   "scorerSha256": "43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
@@ -267,6 +267,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-30T22:07:36.649Z",
-  "runManifestSha256": "93c07de6bf6520d2d720873218dab09fbdf42af2daa767783e625071ca63edb0"
+  "generatedAt": "2026-08-30T22:36:34.865Z",
+  "runManifestSha256": "1a0eccf990412d23463975547d80360dca04466aac76e16e2ad5d30433f8acaf"
 }

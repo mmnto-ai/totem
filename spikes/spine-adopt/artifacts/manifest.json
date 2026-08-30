@@ -2,7 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "seed20",
-  "runCommit": "69b8554431c7e8e7eba461026405cc268fc0bff4",
+  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
+  "scorerSha256": "43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
   "artifactTreeEntries": [
@@ -12,8 +13,7 @@
     " M spikes/spine-adopt/artifacts/k3-control/lowering-rejects.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest.json",
-    " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json",
-    " M spikes/spine-adopt/artifacts/k3-control/tracked-paths.txt"
+    " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json"
   ],
   "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
   "recordPinApplies": "the records below are the byte-identical copies under seed/records/ (seed/PIN.md)",
@@ -22,133 +22,155 @@
       "file": "spikes/spine-adopt/seed/records/r14-0167a783-dynamic-import-utility-layer.rule.yaml",
       "sha256": "07516f5d50e45afd7d9de0151cfb8b81c562121e5f517e8d2e69cfe3b88a2301",
       "seedEntry": "0167a783",
-      "ruleId": "0167a783f75b5ecd"
+      "ruleId": "0167a783f75b5ecd",
+      "inlineFilePath": "packages/cli/src/adapters/loader.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-0e01112d-bare-new-error.rule.yaml",
       "sha256": "a289e29fffdea60d6d330f1a62cd7a8363ab61418fa2724a7275e84d1d6ba8e5",
       "seedEntry": "0e01112d",
-      "ruleId": "0e01112d5f18ffde"
+      "ruleId": "0e01112d5f18ffde",
+      "inlineFilePath": "src/errors.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-1a7080eb-inline-secrets-agent-config.rule.yaml",
       "sha256": "02f84fb59f1181a07ee2d54d450efbfc36e787a6213a7baf9b78fd785e05e33d",
       "seedEntry": "1a7080eb",
-      "ruleId": "1a7080ebf6162de3"
+      "ruleId": "1a7080ebf6162de3",
+      "inlineFilePath": ".mcp.json"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-49dd9e4f-llm-character-counting.rule.yaml",
       "sha256": "16464d624f16481377718b409413bd96c0c3bf4e692c6f1161ec1d905c6e5912",
       "seedEntry": "49dd9e4f",
-      "ruleId": "49dd9e4fd02d692b"
+      "ruleId": "49dd9e4fd02d692b",
+      "inlineFilePath": "packages/core/src/prompt.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-54140f59-bare-issue-number-refs.rule.yaml",
       "sha256": "b382417d9f84c7f2da7c30ac1e8ee6c05849f319b01e2794fa78f0a75a04618c",
       "seedEntry": "54140f59",
-      "ruleId": "54140f59be3e6e44"
+      "ruleId": "54140f59be3e6e44",
+      "inlineFilePath": "packages/cli/src/commands/issue.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-5b85fe53-suppress-event-runtime-failure.rule.yaml",
       "sha256": "e9900ef40ae018e94d76d0e7871820cd9f1017c96d2113cb9b85ee54d0b9a2c8",
       "seedEntry": "5b85fe53",
-      "ruleId": "5b85fe53468964e1"
+      "ruleId": "5b85fe53468964e1",
+      "inlineFilePath": "packages/core/src/emit-site.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-5da43ea6-git-double-dash-separator.rule.yaml",
       "sha256": "c6ab098109f458116ea25806da392563dad5fce4cfad58890dee6c969b975586",
       "seedEntry": "5da43ea6",
-      "ruleId": "5da43ea60b66e96e"
+      "ruleId": "5da43ea60b66e96e",
+      "inlineFilePath": "scripts/release.sh"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-6467c351-dynamic-import-cli-entry.rule.yaml",
       "sha256": "b9adcd666dfff8fc19c4e4995a80ba9daca5b11286ba15ce0f8a92d2691e6c7e",
       "seedEntry": "6467c351",
-      "ruleId": "6467c35159c1504d"
+      "ruleId": "6467c35159c1504d",
+      "inlineFilePath": "packages/cli/src/index.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-65ede9bf-dynamic-import-command-handlers.rule.yaml",
       "sha256": "23f41519099160f9eb6a2c2f5236c95064d83b0bc7b4ff9c828b17ef1a5bb82f",
       "seedEntry": "65ede9bf",
-      "ruleId": "65ede9bfdf6995fe"
+      "ruleId": "65ede9bfdf6995fe",
+      "inlineFilePath": "packages/cli/src/handlers/run.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml",
       "sha256": "3edf179716d184a49098f35ce60b4d924ae33e2264bca11227cfd0eb1434ff58",
       "seedEntry": "6b1890e2",
-      "ruleId": "6b1890e2dbda3331"
+      "ruleId": "6b1890e2dbda3331",
+      "inlineFilePath": "scripts/branches.js"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist.rule.yaml",
       "sha256": "afaa3cd5b576b44c9a9d7a881e79bd1a361b00cc0f345130b18d41828ac19f48",
       "seedEntry": "6b1890e2",
-      "ruleId": "6b1890e2dbda3331"
+      "ruleId": "6b1890e2dbda3331",
+      "inlineFilePath": "packages/core/src/branches.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-6b2b62eb-totem-error-log-tag.rule.yaml",
       "sha256": "b820153dc52b553c3140d79baf148687193701358559580a8cbde7cf012d1c71",
       "seedEntry": "6b2b62eb",
-      "ruleId": "6b2b62eb1e8693fc"
+      "ruleId": "6b2b62eb1e8693fc",
+      "inlineFilePath": "packages/core/src/log-site.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input-js.rule.yaml",
       "sha256": "ba6817913c4e08ada6eafb0c7eb711f27db3363f4602c1450394d299901dc012",
       "seedEntry": "71935fe9",
-      "ruleId": "71935fe9a742137b"
+      "ruleId": "71935fe9a742137b",
+      "inlineFilePath": "scripts/cast.js"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input.rule.yaml",
       "sha256": "e80c66f7827222aa7f6b99c6ef2272635a5ac95a02bcc7ec50c8181f936d21f7",
       "seedEntry": "71935fe9",
-      "ruleId": "71935fe9a742137b"
+      "ruleId": "71935fe9a742137b",
+      "inlineFilePath": "packages/core/src/cast.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-87aff037-fail-open-catch-ban.rule.yaml",
       "sha256": "de1079ea3d8a8b13e877780c90ccbaf6e6c41d6011ca4e91063c2a7a432330ca",
       "seedEntry": "87aff037",
-      "ruleId": "87aff037d7de47a7"
+      "ruleId": "87aff037d7de47a7",
+      "inlineFilePath": "packages/core/src/catch-site.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-89184bb5-bsd-sed-hex-escape.rule.yaml",
       "sha256": "eeb6bc8530761ee58ad48524c5833b0391b12308f1edcc0fda8393fdeda293b1",
       "seedEntry": "89184bb5",
-      "ruleId": "89184bb5fd960848"
+      "ruleId": "89184bb5fd960848",
+      "inlineFilePath": "scripts/color.sh"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-aa7a588d-async-test-callbacks.rule.yaml",
       "sha256": "9694c5dcc31f344835f2af2c00b0b2cd663c1b82b66edcb7b56245047eea89ac",
       "seedEntry": "aa7a588d",
-      "ruleId": "aa7a588d48e74503"
+      "ruleId": "aa7a588d48e74503",
+      "inlineFilePath": "packages/core/src/a.test.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-b237bcf3-pwd-in-credential-regex.rule.yaml",
       "sha256": "97c58bcc4cbc5b6c979c06b69e0ee32de4c15fbba8fac0a5593d2346320f2060",
       "seedEntry": "b237bcf3",
-      "ruleId": "b237bcf3b52381b1"
+      "ruleId": "b237bcf3b52381b1",
+      "inlineFilePath": "packages/cli/src/assets/patterns.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-b9736096-orchestrator-test-timeout.rule.yaml",
       "sha256": "3e6dc4a73d0320b86aa68f0b0f7b62a4c338e1f469b49ffbba49a7dacbbb1633",
       "seedEntry": "b9736096",
-      "ruleId": "b973609688ec2888"
+      "ruleId": "b973609688ec2888",
+      "inlineFilePath": "packages/cli/src/orchestrators/shell-orchestrator.test.ts"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-be74c55c-actions-input-expansion.rule.yaml",
       "sha256": "38325d68a691330c00e1d2bf6db261646ac648ec420957e75beab8fbcbbe2719",
       "seedEntry": "be74c55c",
-      "ruleId": "be74c55caa9fd60c"
+      "ruleId": "be74c55caa9fd60c",
+      "inlineFilePath": ".github/workflows/ci.yml"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-d5faa14c-absolute-claims-in-docs.rule.yaml",
       "sha256": "7a1c81aba9f0356c51dce2fe8d596107b9790bc7a1d92e7d6fcc261689bb4307",
       "seedEntry": "d5faa14c",
-      "ruleId": "d5faa14cbb8b50fb"
+      "ruleId": "d5faa14cbb8b50fb",
+      "inlineFilePath": "docs/overview.md"
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-d940b2c9-stdio-in-exec-options.rule.yaml",
       "sha256": "85d3276e47fd7eec605cc38025b5f80f7b2ab55987656d227291455ebebe10ea",
       "seedEntry": "d940b2c9",
-      "ruleId": "d940b2c9ffe92e99"
+      "ruleId": "d940b2c9ffe92e99",
+      "inlineFilePath": "packages/core/src/exec-site.ts"
     }
   ],
   "fixtures": [
@@ -638,8 +660,8 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3243,
-    "sha256": "b551dbe1b8e53c8622da3e83c9df81b12ef9f07bc25ed4b6ae84b0e49ddc6c82"
+    "count": 3336,
+    "sha256": "47a8710d2a61e12454047846aae139d0af97fc75dfa126f1fbe967b09d037332"
   },
   "trackedPathsAtRecordPin": {
     "pin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
@@ -886,6 +908,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-30T17:51:25.770Z",
-  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201"
+  "generatedAt": "2026-08-30T22:36:40.293Z",
+  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1"
 }

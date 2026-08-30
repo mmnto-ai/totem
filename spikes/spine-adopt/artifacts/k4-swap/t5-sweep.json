@@ -333,89 +333,89 @@
     ]
   },
   "recordSet": "seed20",
-  "elapsedMs": 15435,
+  "elapsedMs": 15541,
   "timings": {
-    "totalMs": 15435,
+    "totalMs": 15541,
     "perPackage": {
       "totem.spike.r0167a783f75b5ecd": {
-        "rowsMs": 73,
-        "probeRowsMs": 43
+        "rowsMs": 71,
+        "probeRowsMs": 42
       },
       "totem.spike.r49dd9e4fd02d692b": {
-        "rowsMs": 97,
-        "probeRowsMs": 44
+        "rowsMs": 88,
+        "probeRowsMs": 45
       },
       "totem.spike.r54140f59be3e6e44": {
-        "rowsMs": 65,
-        "probeRowsMs": 43
-      },
-      "totem.spike.r5b85fe53468964e1": {
-        "rowsMs": 63,
-        "probeRowsMs": 44
-      },
-      "totem.spike.r5da43ea60b66e96e": {
-        "rowsMs": 82,
-        "probeRowsMs": 44
-      },
-      "totem.spike.r6467c35159c1504d": {
-        "rowsMs": 63,
-        "probeRowsMs": 44
-      },
-      "totem.spike.r65ede9bfdf6995fe": {
         "rowsMs": 68,
         "probeRowsMs": 42
       },
-      "totem.spike.r6b1890e2dbda3331_javascript": {
-        "rowsMs": 65,
+      "totem.spike.r5b85fe53468964e1": {
+        "rowsMs": 66,
         "probeRowsMs": 43
       },
+      "totem.spike.r5da43ea60b66e96e": {
+        "rowsMs": 83,
+        "probeRowsMs": 43
+      },
+      "totem.spike.r6467c35159c1504d": {
+        "rowsMs": 69,
+        "probeRowsMs": 44
+      },
+      "totem.spike.r65ede9bfdf6995fe": {
+        "rowsMs": 71,
+        "probeRowsMs": 42
+      },
+      "totem.spike.r6b1890e2dbda3331_javascript": {
+        "rowsMs": 64,
+        "probeRowsMs": 44
+      },
       "totem.spike.r6b1890e2dbda3331_typescript": {
-        "rowsMs": 65,
+        "rowsMs": 67,
         "probeRowsMs": 43
       },
       "totem.spike.r6b2b62eb1e8693fc": {
-        "rowsMs": 68,
-        "probeRowsMs": 44
-      },
-      "totem.spike.r71935fe9a742137b_javascript": {
-        "rowsMs": 66,
-        "probeRowsMs": 45
-      },
-      "totem.spike.r71935fe9a742137b_typescript": {
         "rowsMs": 65,
         "probeRowsMs": 43
       },
+      "totem.spike.r71935fe9a742137b_javascript": {
+        "rowsMs": 63,
+        "probeRowsMs": 45
+      },
+      "totem.spike.r71935fe9a742137b_typescript": {
+        "rowsMs": 66,
+        "probeRowsMs": 41
+      },
       "totem.spike.r87aff037d7de47a7": {
-        "rowsMs": 67,
-        "probeRowsMs": 46
+        "rowsMs": 65,
+        "probeRowsMs": 44
       },
       "totem.spike.r89184bb5fd960848": {
-        "rowsMs": 92,
-        "probeRowsMs": 45
+        "rowsMs": 78,
+        "probeRowsMs": 43
       },
       "totem.spike.raa7a588d48e74503": {
         "rowsMs": 69,
         "probeRowsMs": 43
       },
       "totem.spike.rb237bcf3b52381b1": {
-        "rowsMs": 62,
-        "probeRowsMs": 45
+        "rowsMs": 69,
+        "probeRowsMs": 46
       },
       "totem.spike.rb973609688ec2888": {
+        "rowsMs": 69,
+        "probeRowsMs": 46
+      },
+      "totem.spike.rbe74c55caa9fd60c": {
         "rowsMs": 68,
         "probeRowsMs": 43
       },
-      "totem.spike.rbe74c55caa9fd60c": {
-        "rowsMs": 72,
-        "probeRowsMs": 43
-      },
       "totem.spike.rd5faa14cbb8b50fb": {
-        "rowsMs": 74,
-        "probeRowsMs": 43
+        "rowsMs": 75,
+        "probeRowsMs": 44
       },
       "totem.spike.rd940b2c9ffe92e99": {
-        "rowsMs": 65,
-        "probeRowsMs": 42
+        "rowsMs": 66,
+        "probeRowsMs": 43
       }
     }
   },
@@ -21007,6 +21007,6 @@
       "detail": "{\"rows\":20,\"probeRows\":20}"
     }
   ],
-  "runManifestSha256": "c26031db02790684b37992386d3ccd85d517e152a9a2351117e25a2e124e5c10",
+  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }

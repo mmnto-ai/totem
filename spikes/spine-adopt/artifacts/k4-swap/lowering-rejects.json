@@ -1376,6 +1376,6 @@
       "detail": "rego/build/k4-swap/r0123456789abcdef"
     }
   ],
-  "runManifestSha256": "c26031db02790684b37992386d3ccd85d517e152a9a2351117e25a2e124e5c10",
+  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
   "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
 }

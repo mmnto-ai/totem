@@ -2,7 +2,7 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "seed20",
-  "runCommit": "8f64e4b985b345da4cf5ee4028edb1f22e117988",
+  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
   "scorerSha256": "43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
@@ -21,7 +21,6 @@
     " M spikes/spine-adopt/artifacts/k3-control/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest.json",
     " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json",
-    " M spikes/spine-adopt/artifacts/k3-control/tracked-paths.txt",
     " M spikes/spine-adopt/artifacts/lowering-rejects.json",
     " M spikes/spine-adopt/artifacts/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/manifest.json",
@@ -929,6 +928,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-30T22:08:22.399Z",
-  "runManifestSha256": "c26031db02790684b37992386d3ccd85d517e152a9a2351117e25a2e124e5c10"
+  "generatedAt": "2026-08-30T22:37:20.107Z",
+  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3"
 }
