@@ -42,6 +42,7 @@
       "corpus": "pack-agent-workflow",
       "censusClass": "lookaround",
       "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
+      "control": false,
       "verdict": {
         "role": "evidence-row:bddfbd2ec1c75eaf",
         "pattern": "(?<!`)\\b(?:[Cc]lose[sd]?|[Ff]ix(?:e[sd])?|[Rr]esolve[sd]?)\\s+#\\d+",
@@ -58,6 +59,7 @@
       "corpus": "root",
       "censusClass": "backreference",
       "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
+      "control": false,
       "verdict": {
         "role": "evidence-row:80192e6ac2a1dd3c",
         "pattern": "\\bmodel\\w*\\b.*(['\"\\/])\\^?\\[[a-zA-Z0-9\\-_]+\\][*+]\\$?\\1",
@@ -74,6 +76,7 @@
     {
       "specimen": "a",
       "seedEntry": null,
+      "control": false,
       "ruleId": "61dcb058bd1df15d",
       "package": "totem.spike.r61dcb058bd1df15d",
       "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
@@ -95,6 +98,7 @@
     {
       "specimen": "b",
       "seedEntry": null,
+      "control": false,
       "ruleId": "2d962603591aa928",
       "package": "totem.spike.r2d962603591aa928",
       "entrypoint": "totem/spike/r2d962603591aa928/result",
@@ -107,6 +111,7 @@
     {
       "specimen": "c",
       "seedEntry": null,
+      "control": false,
       "ruleId": "d0815b6769304e26",
       "package": "totem.spike.rd0815b6769304e26",
       "entrypoint": "totem/spike/rd0815b6769304e26/result",
@@ -119,6 +124,7 @@
     {
       "specimen": "c-supp",
       "seedEntry": null,
+      "control": false,
       "ruleId": "87aff037d7de47a7",
       "package": "totem.spike.r87aff037d7de47a7",
       "entrypoint": "totem/spike/r87aff037d7de47a7/result",
@@ -131,6 +137,7 @@
     {
       "specimen": "d-line",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_line",
       "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
@@ -160,6 +167,7 @@
     {
       "specimen": "d-file",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_d_file",
       "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
@@ -189,6 +197,7 @@
     {
       "specimen": "e",
       "seedEntry": null,
+      "control": false,
       "ruleId": "0123456789abcdef",
       "package": "totem.spike.r0123456789abcdef_e",
       "entrypoint": "totem/spike/r0123456789abcdef_e/result",
@@ -221,12 +230,12 @@
       "detail": "target:word-boundary"
     },
     {
-      "name": "a — per-glob parity with `matchesRecordGlob` over 23 probe paths",
+      "name": "a — per-glob agreement with `matchesRecordGlob` over 23 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r61dcb058bd1df15d/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "322 (glob × path) probes agree"
     },
     {
-      "name": "a — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "a — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r61dcb058bd1df15d/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "23 paths agree (16 in scope)"
     },
@@ -256,12 +265,12 @@
       "detail": "(no regex patterns)"
     },
     {
-      "name": "b — per-glob parity with `matchesRecordGlob` over 23 probe paths",
+      "name": "b — per-glob agreement with `matchesRecordGlob` over 23 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r2d962603591aa928/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "23 (glob × path) probes agree"
     },
     {
-      "name": "b — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "b — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r2d962603591aa928/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "23 paths agree (9 in scope)"
     },
@@ -286,12 +295,12 @@
       "detail": "(no regex patterns)"
     },
     {
-      "name": "c — per-glob parity with `matchesRecordGlob` over 24 probe paths",
+      "name": "c — per-glob agreement with `matchesRecordGlob` over 24 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/rd0815b6769304e26/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "96 (glob × path) probes agree"
     },
     {
-      "name": "c — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "c — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/rd0815b6769304e26/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "24 paths agree (4 in scope)"
     },
@@ -316,12 +325,12 @@
       "detail": "(no regex patterns)"
     },
     {
-      "name": "c-supp — per-glob parity with `matchesRecordGlob` over 24 probe paths",
+      "name": "c-supp — per-glob agreement with `matchesRecordGlob` over 24 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r87aff037d7de47a7/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "72 (glob × path) probes agree"
     },
     {
-      "name": "c-supp — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "c-supp — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r87aff037d7de47a7/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "24 paths agree (5 in scope)"
     },
@@ -341,12 +350,12 @@
       "detail": "target:word-boundary, requires:re2-clean"
     },
     {
-      "name": "d-line — per-glob parity with `matchesRecordGlob` over 22 probe paths",
+      "name": "d-line — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_d_line/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "44 (glob × path) probes agree"
     },
     {
-      "name": "d-line — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "d-line — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_d_line/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "22 paths agree (6 in scope)"
     },
@@ -371,12 +380,12 @@
       "detail": "target:word-boundary, requires:re2-clean"
     },
     {
-      "name": "d-file — per-glob parity with `matchesRecordGlob` over 22 probe paths",
+      "name": "d-file — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_d_file/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "44 (glob × path) probes agree"
     },
     {
-      "name": "d-file — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "d-file — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_d_file/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "22 paths agree (6 in scope)"
     },
@@ -406,12 +415,12 @@
       "detail": "(no regex patterns)"
     },
     {
-      "name": "e — per-glob parity with `matchesRecordGlob` over 22 probe paths",
+      "name": "e — per-glob agreement with `matchesRecordGlob` over 22 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0123456789abcdef_e/globs.json`.perGlobProbes)",
       "ok": true,
       "detail": "44 (glob × path) probes agree"
     },
     {
-      "name": "e — two-array scope parity with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch)",
+      "name": "e — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0123456789abcdef_e/globs.json`.scopeProbes)",
       "ok": true,
       "detail": "22 paths agree (5 in scope)"
     },
@@ -516,6 +525,6 @@
       "detail": "rego/build/r0123456789abcdef_e"
     }
   ],
-  "runManifestSha256": "628a24ff12092fd5c868fa963f259c50fadd16bf5c2a0a39a998460d7c0cd340",
+  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
   "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
 }

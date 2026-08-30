@@ -2,7 +2,7 @@
 
 > **Ritual note.** `totem spec seed20-apparatus` ran (run artifact `.totem/artifacts/runs/f7fb3f89….json`, `caller = spec`) and drafted an unrelated "20 mock context stores" fixture — the same hallucination class as mmnto-ai/totem#2687 and the slice-(2) spec of this session. Replaced by hand; nothing below is LLM-authored.
 
-**Charter:** mmnto-ai/totem-strategy#1154 — `operations/310-seed20-target-preregistration.md`, DRAFT v0.3 @ `40ee2a5` (registers as v1 at merge). Rulings of record: the bus's 2026-08-29T05:09Z fold + 05:25Z v0.3 corrections (both consumed and verified at source by this seat), under the operator's standing word; the operator's direct go on the apparatus slice 2026-08-29 (this session). **Lane:** totem-claude = apparatus-runner. **This slice is APPARATUS, never scoring: it emits rows and artifacts; it decides no verdict.**
+**Charter:** mmnto-ai/totem-strategy#1154 — `operations/310-seed20-target-preregistration.md`, DRAFT v0.3 @ `40ee2a5` at the time this record was written (registered as v1 at merge, `1c079e2a`, 2026-08-29T08:31Z; **now v1.1 on strategy main @ `7f3449d8`** with mmnto-ai/totem-strategy#1159's `score.mjs` — the binding text for slice 2, `seed20-apparatus-slice2.md`). Rulings of record: the bus's 2026-08-29T05:09Z fold + 05:25Z v0.3 corrections (both consumed and verified at source by this seat), under the operator's standing word; the operator's direct go on the apparatus slice 2026-08-29 (this session). **Lane:** totem-claude = apparatus-runner. **This slice is APPARATUS, never scoring: it emits rows and artifacts; it decides no verdict.**
 
 ## Hard constraints (each one a refusal condition on the PR)
 

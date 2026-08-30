@@ -14,7 +14,20 @@ package main
 
 import "sort"
 
-func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, error) {
+// firedCount is how many rows of this artifact carry the given explanation class.
+// Counted from the rows being written, never tallied separately, so the published
+// list cannot claim a class the artifact does not contain.
+func firedCount(rows []pairResult, class string) int {
+	n := 0
+	for _, r := range rows {
+		if r.ExplanationClass != nil && *r.ExplanationClass == class {
+			n++
+		}
+	}
+	return n
+}
+
+func writePairsArtifact(outDir, recordSet string, runManifestSha256 *string, pairs []pairResult) (string, error) {
 	// Never nil: `null` would read as "not computed" where the summary claims a
 	// count, and this artifact exists to be counted.
 	rows := []pairResult{}
@@ -33,6 +46,11 @@ func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, e
 			"artifacts/differential-report.json's shape. rego/LOWERING.md § Comparator + spec § Differential units " +
 			"(\"a VERDICT is the violation MULTISET\", \"`fired` derives from violations\") supply the semantics, ported in compare.go.",
 		"recordSet": recordSet,
+		// Fold 2 H4: the run identity, present-as-null when the manifest carries
+		// none — `controls.mts` K5/K5b refuse a pairs artifact whose identity is not
+		// this run's (a leftover from an earlier run of the SAME set passed the
+		// record-set guard alone).
+		"runManifestSha256": runManifestSha256,
 		"armProvenance": map[string]any{
 			"opa":    "artifacts/opa-verdicts.json — spikes/spine-adopt/host/src/main.rs --arm opa (wasmtime), the SAME policy.wasm bytes",
 			"wazero": "wazero-probe/artifacts/wazero-verdicts.json — this probe, driving the OPA wasm ABI by hand under wazero",
@@ -48,14 +66,30 @@ func writePairsArtifact(outDir, recordSet string, pairs []pairResult) (string, e
 				"ruleId alone — records sharing a lessonHash (the pinned exemplar id on `specimens`, the language twins on `seed20`) " +
 				"would otherwise fan one fixture across siblings.",
 		},
+		// The SAME class vocabulary the TS comparator publishes in
+		// `differential-report.json.explanationClasses[]`
+		// (`src/compare.mts:1016-1036`): same ids, so a scorer reading
+		// `pairs[].explanationClass` across the two artifacts resolves every value
+		// against one list (mmnto-ai/totem#2694 C9). `timesFired` is carried per
+		// class so the list cannot claim a class the rows never produced.
 		"explanationClasses": []map[string]any{{
-			"id": "MALFORMED-FACTS-CONTROL",
+			"id": ordinalDerivationOnlyClass,
+			// `fires` is the TS entry's sentence verbatim (`src/compare.mts:1019-1020`),
+			// so the two artifacts describe the shared class identically.
+			"fires": "the (rule_id, line_number) multisets and the event streams are identical and only the ordinal differs",
+			"declines": "any difference in the (rule_id, line_number) multiset or in the event stream — a wider rule would " +
+				"launder a real semantic divergence as \"explained\", which is the failure a differential exists to prevent",
+			"rationale":  ordinalExplanation,
+			"timesFired": firedCount(rows, ordinalDerivationOnlyClass),
+		}, {
+			"id": malformedFactsControlClass,
 			"fires": "fixtureId == " + malformedFactsControlFixture + " AND both arms returned an error row AND each arm's error is " +
 				"ITS OWN designed error for this control (shipped: begins `" + shippedDesignedControlError + "`; opa/wazero: contains `" +
 				wasmDesignedControlError + "`)",
 			"declines": "either arm returned a clean verdict, or either arm produced no row at all, or either arm's error is not its " +
 				"designed one (a trap, a decode failure, the other arm's text) — reported UNEXPLAINED with both messages",
-			"rationale": malformedFactsControlExplanation,
+			"rationale":  malformedFactsControlExplanation,
+			"timesFired": firedCount(rows, malformedFactsControlClass),
 		}},
 		"summary": map[string]any{
 			"MATCH":                  t.Match,

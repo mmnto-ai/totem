@@ -30,13 +30,12 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 
+import { opa } from './lib/opa.mts';
 import { activeRecordSet, loadRecordSet, type RecordRow } from './lib/record-sets.mts';
 import {
   ARTIFACTS_DIR,
   Checks,
-  OPA_BIN,
   readRunManifest,
   SPIKE_ROOT,
   writeArtifact,
@@ -97,13 +96,8 @@ const EMITTED_BUILTINS = [
   'is_number',
 ] as const;
 
-function opa(
-  args: string[],
-  cwd: string,
-): { status: number | null; stdout: string; stderr: string } {
-  const r = spawnSync(OPA_BIN, args, { cwd, encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
-  return { status: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
-}
+// `opa(args, cwd)` now lives in `src/lib/opa.mts` (§ S6): `src/certify.mts` carried
+// a byte-identical copy and `src/t5-sweep.mts` is a third caller.
 
 // The bundle reader and the module census now live in `src/lib/wasm-census.mts`,
 // shared with `src/certify.mts` so the certificate's entrypoint/import manifest
@@ -177,7 +171,12 @@ async function main(): Promise<void> {
       )}) — the run manifest is invalid; re-run \`npm run manifest\`.`,
     );
   }
-  const declaredRecords = (manifest.records as unknown[]).length;
+  // (C5) The loaded set is `records[]` PLUS `controlRecords[]`: the manifest splits
+  // the scored corpus from the K-controls, but a control record lowers, builds,
+  // certifies and produces bundles exactly like a scored one, so every CARDINALITY
+  // assert counts both. On `seed20` that is 23.
+  const declaredRecords =
+    (manifest.records as unknown[]).length + ((manifest.controlRecords as unknown[]) ?? []).length;
   const stagedRejects = (lowering.rejects ?? []).filter((r) => typeof r.stage === 'string').length;
   const expectedLowered = declaredRecords - stagedRejects;
   checks.eq(

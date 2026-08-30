@@ -1,0 +1,18 @@
+schemaVersion: 1
+
+severity: error
+recoveryHint: "Re-throw after logging, or route to the error channel."
+
+target:
+  type: ast-grep
+  language: typescript
+  rule:
+    kind: catch_clause
+    not: { has: { kind: throw_statement, stopBy: end } }
+  scope:
+    fileGlobs: ["packages/**/*.ts"]
+    excludeGlobs: ["**/*.test.ts"]
+
+examples:
+  - bad: "try { risky() } catch (e) { log(e) }"
+    good: "try { risky() } catch (e) { log(e); throw e }"

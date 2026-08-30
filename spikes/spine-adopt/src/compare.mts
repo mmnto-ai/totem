@@ -56,6 +56,8 @@ interface NormalRow {
   specimen: string;
   /** G4 — the seed entry beside the specimen, so a rule's N records group. */
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row, `false` for every scored record. */
+  control: boolean;
   engine: string;
   /** null when the arm produced an ERROR ROW rather than a verdict. */
   violations: RegoViolation[] | null;
@@ -200,6 +202,7 @@ function normaliseShipped(
   rows: any[],
   bundles: Map<string, any>,
   seedEntryByFixture: Map<string, string | null>,
+  controlByFixture: Map<string, boolean>,
 ): NormalRow[] {
   return rows.map((r) => {
     const bundle = bundles.get(r.fixtureId);
@@ -216,6 +219,7 @@ function normaliseShipped(
         fixtureId: r.fixtureId,
         specimen: r.specimen,
         seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+        control: controlByFixture.get(r.fixtureId) ?? false,
         engine: r.engine,
         violations: null,
         events: null,
@@ -255,6 +259,7 @@ function normaliseShipped(
       fixtureId: r.fixtureId,
       specimen: r.specimen,
       seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+      control: controlByFixture.get(r.fixtureId) ?? false,
       engine: r.engine,
       violations: d.violations,
       // The shipped event context's `line` is the line NUMBER; the Violation's
@@ -281,6 +286,7 @@ function normaliseRego(
   arm: 'opa' | 'regorus',
   rows: any[],
   seedEntryByFixture: Map<string, string | null>,
+  controlByFixture: Map<string, boolean>,
 ): NormalRow[] {
   return rows.map((r) => {
     // (C3) The SAME non-empty-string rule as the shipped arm above: an `error: ""`
@@ -292,6 +298,7 @@ function normaliseRego(
       fixtureId: r.fixtureId,
       specimen: r.specimen,
       seedEntry: r.seedEntry ?? seedEntryByFixture.get(r.fixtureId) ?? null,
+      control: controlByFixture.get(r.fixtureId) ?? false,
       engine: r.engine,
       violations: errorText === null ? (r.violations as RegoViolation[]) : null,
       events:
@@ -354,12 +361,24 @@ interface PairResult {
   specimen: string;
   /** G4 — the seed entry beside the specimen, so a rule's N pairs group. */
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row, `false` for every scored record. */
+  control: boolean;
   engine: string;
   left: Arm;
   right: Arm;
   status: Status;
   explanation: string | null;
-  explanationClass?: string;
+  /**
+   * (fold 1 F12) PRESENT-AS-NULL on every pair, never omitted — the same rule
+   * `seedEntry` (C4) and `control` (C5) already follow, and the Go comparator's C9
+   * `explanationClass` follows on its side of the seam.
+   *
+   * An OPTIONAL key means a reader counting classes has to distinguish "this pair
+   * has no class" from "this producer does not emit the key", and the two are
+   * indistinguishable from the artifact. A MATCH row genuinely has no class; it says
+   * so.
+   */
+  explanationClass: string | null;
   detail: Record<string, unknown> | null;
 }
 
@@ -414,6 +433,7 @@ function comparePair(
     fixtureId: left.fixtureId,
     specimen: left.specimen,
     seedEntry: left.seedEntry ?? right.seedEntry ?? null,
+    control: left.control || right.control,
     engine: left.engine,
     left: left.arm,
     right: right.arm,
@@ -455,7 +475,10 @@ function comparePair(
       explanation: explained
         ? 'MALFORMED-FACTS CONTROL (K5b) — a synthetic bundle whose `lines[]` carries a non-string member, so `facts_wellformed` is false, the entrypoint`s `result` is UNDEFINED and every arm must raise an ERROR ROW. Both arms raised THEIR OWN designed error. This is the strictness contract being exercised, not a divergence.'
         : null,
-      explanationClass: MALFORMED_FACTS_CONTROL,
+      // A class REQUIRES an explanation (mmnto-ai/totem#2699 review round 1, CodeRabbit):
+      // when the control DECLINES (`explained` false, `explanation` null) the class is
+      // null here exactly as `wazero-probe/compare.go` leaves it — one grammar (C9).
+      explanationClass: explained ? MALFORMED_FACTS_CONTROL : null,
       detail: {
         reason: explained
           ? 'both arms produced the designed error row for their own arm'
@@ -475,6 +498,7 @@ function comparePair(
       ...base,
       status: 'UNEXPLAINED-DIVERGENCE',
       explanation: null,
+      explanationClass: null,
       detail: {
         reason: 'ERROR ROW — an arm failed to produce a verdict',
         leftError: left.error,
@@ -503,6 +527,7 @@ function comparePair(
         ...base,
         status: 'UNEXPLAINED-DIVERGENCE',
         explanation: null,
+        explanationClass: null,
         detail: {
           reason:
             '`fired`/`matchCount` do not DERIVE from the violation multiset on one of the arms (§ Differential units)',
@@ -519,7 +544,7 @@ function comparePair(
         },
       };
     }
-    return { ...base, status: 'MATCH', explanation: null, detail: null };
+    return { ...base, status: 'MATCH', explanation: null, explanationClass: null, detail: null };
   }
 
   const ex = explain(left, right);
@@ -537,6 +562,7 @@ function comparePair(
     ...base,
     status: 'UNEXPLAINED-DIVERGENCE',
     explanation: null,
+    explanationClass: null,
     detail: {
       violations: violationsEqual ? 'equal' : multisetDiff(lv, rv),
       events: eventsEqual ? 'equal' : multisetDiff(le, re),
@@ -568,6 +594,7 @@ function selfTest(checks: Checks): void {
     fixtureId: 'c-corpus-fail',
     specimen: 'c',
     seedEntry: null,
+    control: false,
     engine: 'ast-grep',
     violations: [
       { rule_id: 'd0815b6769304e26', line_number: 2, ordinal: 0 },
@@ -821,15 +848,31 @@ function main(): void {
   // (G4) the seed label, joined in from the fact index so every arm's rows carry it
   // — including the two the Rust host emits, which keep the wasmtime row shape.
   const factsIndex = readArtifact('facts-index.json') as {
-    bundles: { fixtureId: string; seedEntry?: string | null }[];
+    bundles: { fixtureId: string; seedEntry?: string | null; control?: boolean }[];
   };
   const seedEntryByFixture = new Map<string, string | null>(
     factsIndex.bundles.map((b) => [b.fixtureId, b.seedEntry ?? null]),
   );
+  // (C5) The control label, joined in from the fact index for the same reason the
+  // seed label is: the Rust host emits the wasmtime row shape unchanged, so the
+  // label is attached where the join key already is.
+  const controlByFixture = new Map<string, boolean>(
+    factsIndex.bundles.map((b) => [b.fixtureId, b.control === true]),
+  );
 
-  const shipped = normaliseShipped(shippedArt.verdictRows, bundles, seedEntryByFixture);
-  const opa = normaliseRego('opa', opaArt.verdictRows, seedEntryByFixture);
-  const regorus = normaliseRego('regorus', regorusArt.verdictRows, seedEntryByFixture);
+  const shipped = normaliseShipped(
+    shippedArt.verdictRows,
+    bundles,
+    seedEntryByFixture,
+    controlByFixture,
+  );
+  const opa = normaliseRego('opa', opaArt.verdictRows, seedEntryByFixture, controlByFixture);
+  const regorus = normaliseRego(
+    'regorus',
+    regorusArt.verdictRows,
+    seedEntryByFixture,
+    controlByFixture,
+  );
 
   // The fixture count is a DECLARED property of the arms and of the fact-bundle
   // directory, not a constant of this comparator. Deriving it means an arm that

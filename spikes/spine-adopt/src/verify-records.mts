@@ -16,20 +16,24 @@
 //
 // Run: node --experimental-strip-types src/verify-records.mts
 
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 import {
   activeRecordSet,
+  generatedSeedProbes,
+  K5_CONTROL_RECORD,
+  K5_CONTROL_SIBLING,
+  PROBE_PAIRS_FILE,
+  type RecordRow,
   SEED_RECORD_PIN,
   SEED_RECORDS_DIR,
-  type RecordRow,
 } from './lib/record-sets.mts';
-import { intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
-import { Checks, CORPORA, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
+import { type CompiledSpecimen, intakeRecordSet, loadCore } from './lib/records.mts';
 import { PINNED_NOW, recordRelPath } from './lib/specimens.mts';
+import { Checks, CORPORA, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
 
 const EXEMPLAR_DIST = path.join(
   REPO_ROOT,
@@ -485,6 +489,44 @@ async function main(): Promise<void> {
         );
       }
     }
+  }
+
+  // ── (§ S1) the G2 generator, against its PINNED expectation ──
+  //
+  // This repo's TS side has no test runner: a committed artifact the generator is
+  // re-derived against IS its test. `seed/probe-pairs.json` holds the 33 rows the
+  // two rules produced at the pin, and a change to either rule — or to the seed's
+  // glob set — shows up here as a failed check instead of as a silently different
+  // probe set flowing into every `globs.json`.
+  //
+  // Seed-set only: the specimens probe list is frozen literals (a chain-digest
+  // component), so there is no generator to check there, and adding a check row to
+  // the committed `records-verification.json` would move baseline bytes for nothing.
+  if (recordSet === 'seed20') {
+    const pinned = fs.existsSync(PROBE_PAIRS_FILE)
+      ? (JSON.parse(fs.readFileSync(PROBE_PAIRS_FILE, 'utf-8')) as { pairs?: unknown }).pairs
+      : null;
+    checks.eq(
+      `(§ S1) the G2 probe generator reproduces \`seed/probe-pairs.json\` exactly (${generatedSeedProbes().length} pairs)`,
+      generatedSeedProbes(),
+      pinned,
+    );
+    // (§ S3, constraint 4) The K5 control record IS the authored record, byte for
+    // byte — checked by equality against the sibling rather than against a constant.
+    // Both files must EXIST for the equality to mean anything: `null === null` would
+    // pass a deleted control and sibling as byte-identical and remove the K5 witness
+    // without failing this verifier (mmnto-ai/totem#2699 review round 1, CodeRabbit MAJOR).
+    const k5ControlSha = fs.existsSync(K5_CONTROL_RECORD)
+      ? sha256(fs.readFileSync(K5_CONTROL_RECORD))
+      : null;
+    const k5SiblingSha = fs.existsSync(K5_CONTROL_SIBLING)
+      ? sha256(fs.readFileSync(K5_CONTROL_SIBLING))
+      : null;
+    checks.check(
+      'K5 CONTROL — `seed/controls/k5/d-requires-file.rule.yaml` is byte-identical to `records/d-requires-file.rule.yaml` (both present)',
+      k5ControlSha !== null && k5SiblingSha !== null && k5ControlSha === k5SiblingSha,
+      `control=${k5ControlSha ?? 'MISSING'}, sibling=${k5SiblingSha ?? 'MISSING'}`,
+    );
   }
 
   // ── the hand-constructed empty-positives control (§ Invariants) ──

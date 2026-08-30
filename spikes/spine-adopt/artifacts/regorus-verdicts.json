@@ -25,95 +25,95 @@
   "recordCount": 7,
   "timings": [
     {
-      "coldEvalMicros": 2566,
+      "coldEvalMicros": 2736,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "a-corpus-fail",
       "specimen": "a",
-      "warmEvalMicrosMin": 1332,
+      "warmEvalMicrosMin": 3239,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 2256,
+      "coldEvalMicros": 4087,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "a-corpus-pass",
       "specimen": "a",
-      "warmEvalMicrosMin": 916,
+      "warmEvalMicrosMin": 913,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 1822,
+      "coldEvalMicros": 2594,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "a-inline-bad",
       "specimen": "a",
-      "warmEvalMicrosMin": 828,
+      "warmEvalMicrosMin": 1052,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 1598,
+      "coldEvalMicros": 1724,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "a-inline-good",
       "specimen": "a",
-      "warmEvalMicrosMin": 802,
+      "warmEvalMicrosMin": 803,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 633,
+      "coldEvalMicros": 664,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b-corpus-fail",
       "specimen": "b",
-      "warmEvalMicrosMin": 131,
+      "warmEvalMicrosMin": 130,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 530,
+      "coldEvalMicros": 538,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b-corpus-pass",
       "specimen": "b",
-      "warmEvalMicrosMin": 79,
+      "warmEvalMicrosMin": 80,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 565,
+      "coldEvalMicros": 558,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b-inline-bad",
       "specimen": "b",
-      "warmEvalMicrosMin": 127,
+      "warmEvalMicrosMin": 129,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 521,
+      "coldEvalMicros": 576,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b-inline-good",
       "specimen": "b",
-      "warmEvalMicrosMin": 76,
+      "warmEvalMicrosMin": 80,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 858,
+      "coldEvalMicros": 938,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-corpus-fail",
       "specimen": "c",
-      "warmEvalMicrosMin": 312,
+      "warmEvalMicrosMin": 310,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 691,
+      "coldEvalMicros": 808,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-corpus-pass",
       "specimen": "c",
-      "warmEvalMicrosMin": 188,
+      "warmEvalMicrosMin": 182,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 693,
+      "coldEvalMicros": 809,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-inline-bad",
       "specimen": "c",
-      "warmEvalMicrosMin": 231,
+      "warmEvalMicrosMin": 228,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 697,
+      "coldEvalMicros": 645,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-inline-good",
       "specimen": "c",
@@ -121,43 +121,43 @@
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 728,
+      "coldEvalMicros": 774,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-supp-corpus-fail",
       "specimen": "c-supp",
-      "warmEvalMicrosMin": 238,
+      "warmEvalMicrosMin": 233,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 620,
+      "coldEvalMicros": 773,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-supp-corpus-pass",
       "specimen": "c-supp",
-      "warmEvalMicrosMin": 172,
+      "warmEvalMicrosMin": 174,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 699,
+      "coldEvalMicros": 689,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-supp-inline-bad",
       "specimen": "c-supp",
-      "warmEvalMicrosMin": 202,
+      "warmEvalMicrosMin": 211,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 637,
+      "coldEvalMicros": 946,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "c-supp-inline-good",
       "specimen": "c-supp",
-      "warmEvalMicrosMin": 169,
+      "warmEvalMicrosMin": 161,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 863,
+      "coldEvalMicros": 802,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-line-inline-bad",
       "specimen": "d-line",
-      "warmEvalMicrosMin": 237,
+      "warmEvalMicrosMin": 251,
       "warmReps": 50
     },
     {
@@ -165,51 +165,51 @@
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-line-inline-good",
       "specimen": "d-line",
-      "warmEvalMicrosMin": 220,
+      "warmEvalMicrosMin": 234,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 775,
+      "coldEvalMicros": 772,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-control-empty",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 229,
+      "warmEvalMicrosMin": 241,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 675,
+      "coldEvalMicros": 705,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-control-unreadable",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 214,
+      "warmEvalMicrosMin": 226,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 719,
+      "coldEvalMicros": 743,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-inline-bad",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 253,
+      "warmEvalMicrosMin": 246,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 671,
+      "coldEvalMicros": 689,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-inline-good",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 215,
+      "warmEvalMicrosMin": 228,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 762,
+      "coldEvalMicros": 619,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "e-inline-bad",
       "specimen": "e",
-      "warmEvalMicrosMin": 170,
+      "warmEvalMicrosMin": 171,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 590,
+      "coldEvalMicros": 617,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "e-inline-good",
       "specimen": "e",

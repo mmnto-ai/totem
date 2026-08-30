@@ -231,11 +231,19 @@ func run(root string) error {
 	}
 	fmt.Printf("record set: %s (%s)\n", recordSet, recordSetEnvVar)
 
-	records, err := loadLowering(root)
+	// Resolved BEFORE any read, so an invalid `SPIKE_ARTIFACTS_SUBDIR` refuses the
+	// run instead of being discovered halfway through it as a missing file.
+	paths, err := resolveSpikePaths(root)
 	if err != nil {
 		return err
 	}
-	facts, err := loadFacts(root)
+	printRunHeader(paths)
+
+	records, err := loadLowering(paths)
+	if err != nil {
+		return err
+	}
+	facts, err := loadFacts(paths)
 	if err != nil {
 		return err
 	}
@@ -248,7 +256,7 @@ func run(root string) error {
 	// This is also where the corpus's OWN record-set identity is checked against
 	// the selector (C1): the count is read through loadFactsIndex, which refuses a
 	// corpus generated for another set before anything is derived from it.
-	want, err := expectedRowCount(root, recordSet, facts)
+	want, err := expectedRowCount(paths, recordSet, facts)
 	if err != nil {
 		return err
 	}
@@ -256,9 +264,16 @@ func run(root string) error {
 	// `seedEntry` is carried on the lowered record rows for the seed set and is
 	// absent on `specimens`; the pairs artifact relabels each pair with it so a
 	// rule's N records group without the scorer re-deriving the mapping.
+	//
+	// `control` (C5) rides the same way and from the same source — the lowered
+	// record row the TS half wrote. It is READ, never inferred from the fixture id
+	// or the specimen name: which records are controls is the record set's fact to
+	// state, and a Go copy of that rule would be a second source of truth.
 	seedEntryOf := map[string]string{}
+	controlOf := map[string]bool{}
 	for _, rec := range records {
 		seedEntryOf[rec.Specimen] = rec.SeedEntry
+		controlOf[rec.Specimen] = rec.Control
 	}
 
 	// ── Drive every policy under wazero ──
@@ -277,7 +292,7 @@ func run(root string) error {
 	defer func() { _ = cache.Close(ctx) }()
 
 	for _, rec := range records {
-		res, err := runSpecimen(ctx, root, cache, rec, facts)
+		res, err := runSpecimen(ctx, paths, cache, rec, facts)
 		if err != nil {
 			// A wazero incompatibility IS the finding this probe exists to catch,
 			// so it is reported at the exact point it happened rather than papered
@@ -306,7 +321,7 @@ func run(root string) error {
 	var shippedDoc struct {
 		VerdictRows []shippedRow `json:"verdictRows"`
 	}
-	if err := readJSON(filepath.Join(root, "artifacts", "shipped-verdicts.json"), &shippedDoc); err != nil {
+	if err := readJSON(paths.artifact("shipped-verdicts.json"), &shippedDoc); err != nil {
 		return err
 	}
 	var opaDoc struct {
@@ -316,7 +331,7 @@ func run(root string) error {
 			Runtime string `json:"runtime"`
 		} `json:"host"`
 	}
-	if err := readJSON(filepath.Join(root, "artifacts", "opa-verdicts.json"), &opaDoc); err != nil {
+	if err := readJSON(paths.artifact("opa-verdicts.json"), &opaDoc); err != nil {
 		return err
 	}
 
@@ -434,10 +449,13 @@ func run(root string) error {
 	}
 	// Set ONLY when the record actually carries a seed entry: an absent one stays
 	// nil and serialises as JSON `null`, never as `""` (mmnto-ai/totem#2694 C4).
+	// `control` is unconditional by contrast (C5): `false` is a value, not an
+	// absence, and the key is present on every row.
 	for i := range pairs {
 		if s := seedEntryOf[pairs[i].Specimen]; s != "" {
 			pairs[i].SeedEntry = &s
 		}
+		pairs[i].Control = controlOf[pairs[i].Specimen]
 	}
 	by := func(l, r string) []pairResult {
 		var out []pairResult
@@ -476,18 +494,52 @@ func run(root string) error {
 	}
 	ck.eq("the CLASSIC eval-context sequence and the ONE-SHOT `opa_eval` fast path agree on every fixture",
 		len(pathDisagree), 0)
+	// ── (C7) the whole-run ERROR ROW accounting ──
+	//
+	// Published in the SAME grammar the TS comparator publishes
+	// (`src/compare.mts:935-957`), so `differential-report.json.errorRows` and
+	// `wazero-report.json.errorRows` are one shape to the scorer
+	// (mmnto-ai/totem#2694 C7). It replaces the bare error-row counter this
+	// cross-check used to keep for itself: a count that cannot distinguish the
+	// designed control error from an undesigned one is not evidence for the claim
+	// "0 outside K5b", and keeping a second counter beside the accounting would be
+	// two numbers that can disagree.
+	//
+	// The control ids are the ones PRESENT in this run's corpus, never the
+	// constant asserted to be present: on `specimens` there is no control bundle
+	// and the list is empty, exactly as the TS side's set is.
+	controlFixtureIDs := []string{}
+	for _, f := range facts {
+		if f.FixtureID == malformedFactsControlFixture {
+			controlFixtureIDs = append(controlFixtureIDs, f.FixtureID)
+			break
+		}
+	}
+	errorRows := accountErrorRows(controlFixtureIDs, []armRowSet{{Arm: armWazero, Rows: waz}})
+	wazErrorRows := errorRows.PerArm[armWazero].Total
+	appendErrorRowChecks(ck, errorRows)
+
+	// The accounting counts a NON-EMPTY error string (C3), while the raw verdict
+	// rows carry `*string`. The two predicates can only disagree on a row whose
+	// error is present but empty — which this arm never emits, since `errRow` is
+	// built from a non-nil error. Asserted rather than assumed, because the ABI
+	// cross-check below now derives its expectation from the accounting.
+	emptyErrorRows := []string{}
+	for _, r := range allRows {
+		if r.Error != nil && *r.Error == "" {
+			emptyErrorRows = append(emptyErrorRows, r.FixtureID)
+		}
+	}
+	sort.Strings(emptyErrorRows)
+	ck.eq("no wazero verdict row carries a PRESENT but EMPTY error (C3 — an empty error string is a verdict row, "+
+		"so the two error-row predicates cannot disagree)", emptyErrorRows, []string{})
+
 	// The cross-check runs on every fixture that produced a VERDICT. A fixture whose
 	// classic eval errored — the malformed-facts control is the designed one — has
 	// no verdict for the one-shot path to agree with, so the expectation is the
 	// verdict rows minus the error rows, derived here rather than assumed to be the
 	// whole corpus. On a clean run there are no error rows and this is `want`.
-	errorRows := 0
-	for _, r := range allRows {
-		if r.Error != nil {
-			errorRows++
-		}
-	}
-	ck.eq("every fixture exercised BOTH ABI paths", len(allPaths), len(allRows)-errorRows)
+	ck.eq("every fixture exercised BOTH ABI paths", len(allPaths), len(allRows)-wazErrorRows)
 
 	hostBuiltins := map[string][]string{}
 	for _, a := range allABI {
@@ -549,7 +601,10 @@ func run(root string) error {
 	}
 
 	// ── Write the verdict artifact ──
-	outDir := filepath.Join(root, "wazero-probe", "artifacts")
+	outDir := paths.Out
+	// Fold 2 H4: the run identity every TS artifact embeds, echoed into this arm's
+	// artifacts (present-as-null when the manifest carries none).
+	runIdentity := manifestRunIdentity(paths)
 	sort.Slice(allRows, func(i, j int) bool {
 		if allRows[i].RuleID != allRows[j].RuleID {
 			return allRows[i].RuleID < allRows[j].RuleID
@@ -589,7 +644,7 @@ func run(root string) error {
 	}
 
 	// ── Write the opa-vs-wazero pairs artifact ──
-	pairsAt, err := writePairsArtifact(outDir, recordSet, oVsW)
+	pairsAt, err := writePairsArtifact(outDir, recordSet, runIdentity, oVsW)
 	if err != nil {
 		return err
 	}
@@ -599,6 +654,13 @@ func run(root string) error {
 		"question": "Can wazero, today, load and correctly evaluate the exact wasm artifacts this spike produced — " +
 			"i.e. is the Go-satellite lane viable on core wasm, and is anything about the component model needed at all?",
 		"answer": answer(tallyOf(sVsW), tallyOf(oVsW), len(pathDisagree)),
+		// Fold 1 G1 (`.totem/specs/seed20-apparatus-slice2-fold1.md`, M3): the report
+		// names the record set it was produced for, so `controls.mts` K5b can refuse
+		// a STALE report (one left from another set's run) instead of reading it.
+		// `wazero-pairs.json` already carries the same key.
+		"recordSet": recordSet,
+		// Fold 2 H4: the run identity (present-as-null when the manifest has none).
+		"runManifestSha256": runIdentity,
 
 		"wazeroVersion": wazeroVersion(),
 		"goVersion":     goVersion(),
@@ -619,6 +681,8 @@ func run(root string) error {
 			"opa-vs-wazero":     tallyOf(oVsW),
 			"requiredSubset":    tallyOf(requiredPairs),
 		},
+		"errorRows": errorRows,
+
 		"divergences": map[string]any{
 			"unexplained": unexplained,
 			"explained":   explained,

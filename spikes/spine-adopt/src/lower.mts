@@ -42,28 +42,34 @@ import { lowerPattern, type PatternVerdict } from './lib/lowering-gate.mts';
 import {
   activeRecordSet,
   DECLARED_TWINNED_IDS,
+  generatedSeedProbes,
   loadRecordSet,
   measuredSharedIds,
+  type RecordRow,
   sharedIdCheckName,
   sharedProbePaths,
-  type RecordRow,
 } from './lib/record-sets.mts';
-import { intakeRecordSet, loadCore, type CompiledSpecimen } from './lib/records.mts';
-import { ARTIFACTS_DIR, Checks, SPIKE_ROOT, writeArtifact } from './lib/spike-env.mts';
+import { type CompiledSpecimen, intakeRecordSet, loadCore } from './lib/records.mts';
+import {
+  ARTIFACTS_DIR,
+  Checks,
+  FACTS_DIR,
+  LOWERED_PUBLISH_DIR,
+  REGO_BUILD_DIR,
+  REGO_DIR,
+  SPIKE_ROOT,
+  writeArtifact,
+} from './lib/spike-env.mts';
 
 export { lowerPattern, type PatternVerdict };
 
-export const REGO_DIR = path.join(SPIKE_ROOT, 'rego');
-export const REGO_BUILD_DIR = path.join(REGO_DIR, 'build');
+// (C10) The three roots are IMPORTED from `src/lib/spike-env.mts` so a
+// `SPIKE_ARTIFACTS_SUBDIR` run moves the build tree and the publication surface
+// together. Re-exported because `rego/LOWERING.md`'s consumers already import them
+// from here.
+export { LOWERED_PUBLISH_DIR, REGO_BUILD_DIR, REGO_DIR };
+
 export const LOWERING_MD = path.join(REGO_DIR, 'LOWERING.md');
-/**
- * G7 — the PUBLISHED lowering. `rego/build/` stays a gitignored build tree; the
- * policy and its glob table are copied here so T3 can audit the lowering from the
- * repository at the pin without rebuilding it.
- * `<pkg>` is the package SUFFIX (`totem.spike.` stripped) — the same key the build
- * tree and `artifacts/chains/<pkg>.json` already use.
- */
-export const LOWERED_PUBLISH_DIR = path.join(ARTIFACTS_DIR, 'lowered');
 
 // ─── § Lowering 7 — the suppression marker sets, verbatim from the contract ──
 
@@ -255,6 +261,8 @@ interface LoweredRecord {
   specimen: string;
   /** G4 — the seed entry beside the specimen, so a rule's N records group. */
   seedEntry: string | null;
+  /** (C5) `true` for a K-control row (§ S3/§ S5), `false` for every scored record. */
+  control: boolean;
   ruleId: string;
   pkgSuffix: string;
   packageName: string;
@@ -599,6 +607,37 @@ async function main(): Promise<void> {
   const sharedIds = measuredSharedIds(loadedRows);
   checks.eq(sharedIdCheckName(recordSet), sharedIds, [...DECLARED_TWINNED_IDS[recordSet]]);
 
+  if (recordSet === 'seed20') {
+    // (§ S3) The K5 control record rides the seed set, so its package name has to
+    // be provably its own. MEASURED against the loaded rows rather than argued:
+    // a seed record that ever carried the pinned exemplar hash would make the
+    // control and a scored record share one policy, and the collision would show up
+    // as a chain the scorer could not attribute.
+    const controls = loadedRows.filter((r) => r.control);
+    const scoredHashes = new Set(loadedRows.filter((r) => !r.control).map((r) => r.ruleId));
+    checks.eq(
+      `(§ S3) the ${controls.length} K5 control record(s) carry a lessonHash NO scored seed record carries, so the control's package \`totem.spike.r<ruleId>\` cannot collide`,
+      controls.filter((c) => scoredHashes.has(c.ruleId)).map((c) => `${c.id}:${c.ruleId}`),
+      [],
+    );
+
+    // (§ S1) The generated probe pairs, asserted against the LOWERED regex — the
+    // same `globToRegexSource` the policies carry, not against the shipped matcher
+    // (that parity is the per-record check below). A pair whose probe the regex
+    // rejects, or whose twin it accepts, is a broken generator rule, and it must be
+    // caught before 33 useless paths are swept through every record.
+    const pairs = generatedSeedProbes();
+    const wrong = pairs.filter((p) => {
+      const re = new RegExp(globToRegexSource(p.glob));
+      return !re.test(normalizePath(p.probe)) || re.test(normalizePath(p.twin));
+    });
+    checks.eq(
+      `(§ S1) all ${pairs.length} generated probe pairs discriminate under the LOWERED regex: the probe is accepted and the twin is rejected by its own glob`,
+      wrong.map((p) => `${p.glob}: probe=${p.probe} twin=${p.twin}`),
+      [],
+    );
+  }
+
   // (G6) the § Lowering 3 assert reads raw-string SYNTAX. Proven BOTH ways on
   // synthetic lines before any policy is tested with it — an assert that could not
   // fire, or that fired on quoted data, would say nothing about the emitted code.
@@ -687,6 +726,7 @@ async function main(): Promise<void> {
     const rec: LoweredRecord = {
       specimen: s.id,
       seedEntry: s.seedEntry,
+      control: s.control,
       ruleId: rule.lessonHash,
       pkgSuffix,
       packageName,
@@ -725,23 +765,38 @@ async function main(): Promise<void> {
         shipped: core.ruleAppliesToFile(cs.rule, p) as boolean,
       });
     }
+    // (fold 1 F9) The two parity rows are DISCLOSING, on every set.
+    //
+    // A lowered-vs-shipped disagreement on a probe is that RECORD's T5
+    // `scope-divergence` — a typed miss the SCORER assigns (charter § 5 K3b: "a
+    // disagreement is a T5 scope-divergence, not a K3b fault"). An apparatus that
+    // refused here would be deciding a verdict, and would take the whole run down
+    // over a measurement the trial exists to collect. The rows therefore read true
+    // and carry the count plus the first drifts; the FULL lists are already
+    // serialised into each package's `globs.json` (`scopeProbes` / `perGlobProbes`)
+    // and are unchanged by this fold. The K3b `blind` row below stays REFUSING —
+    // that one is an apparatus fault (a glob nothing probed), not a record's miss.
     const globDrift = perGlob.filter((r) => r.mine !== r.shipped);
     checks.check(
-      `${s.id} — per-glob parity with \`matchesRecordGlob\` over ${probePaths(s).length} probe paths`,
-      globDrift.length === 0,
+      `${s.id} — per-glob agreement with \`matchesRecordGlob\` over ${probePaths(s).length} probe paths — ${globDrift.length} disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in \`lowered/${pkgSuffix}/globs.json\`.perGlobProbes)`,
+      true,
       globDrift.length === 0
         ? `${perGlob.length} (glob × path) probes agree`
-        : globDrift
+        : `${globDrift.length}/${perGlob.length} disagree: ${globDrift
+            .slice(0, 5)
             .map((d) => `${d.glob} vs ${d.path}: mine=${d.mine} shipped=${d.shipped}`)
-            .join('; '),
+            .join('; ')}${globDrift.length > 5 ? '; …' : ''}`,
     );
     const scopeDrift = scopeProbes.filter((r) => r.mine !== r.shipped);
     checks.check(
-      `${s.id} — two-array scope parity with \`ruleAppliesToFile\` (§ Design 7 positiveMatch && !excludeMatch)`,
-      scopeDrift.length === 0,
+      `${s.id} — two-array scope agreement with \`ruleAppliesToFile\` (§ Design 7 positiveMatch && !excludeMatch) — ${scopeDrift.length} disagreement(s) DISCLOSED (the full list is in \`lowered/${pkgSuffix}/globs.json\`.scopeProbes)`,
+      true,
       scopeDrift.length === 0
         ? `${scopeProbes.length} paths agree (${scopeProbes.filter((p) => p.mine).length} in scope)`
-        : scopeDrift.map((d) => `${d.path}: mine=${d.mine} shipped=${d.shipped}`).join('; '),
+        : `${scopeDrift.length}/${scopeProbes.length} disagree: ${scopeDrift
+            .slice(0, 5)
+            .map((d) => `${d.path}: mine=${d.mine} shipped=${d.shipped}`)
+            .join('; ')}${scopeDrift.length > 5 ? '; …' : ''}`,
     );
     // A vacuously-true parity check (everything out of scope) would prove nothing.
     checks.check(
@@ -866,9 +921,19 @@ async function main(): Promise<void> {
   //
   // Read from the corpora rather than retyped, so a REJECT row can never be an
   // artefact of a mistyped pattern (spec § Expressibility evidence rows).
-  const census = JSON.parse(
-    fs.readFileSync(path.join(SPIKE_ROOT, 'artifacts', 'expressibility-census.json'), 'utf-8'),
-  ) as { rules: { ruleHash: string; corpus: string; class: string; pattern: string }[] };
+  // (C10) The census is an INPUT to the lowering, not a product of it, and its
+  // content is a property of the four shipped corpora rather than of this run's
+  // record set. A named-subdir run (`SPIKE_ARTIFACTS_SUBDIR`, e.g. the § S5
+  // control seam) does not run `npm run census`, so the subdir copy is read when it
+  // exists and the base artifact root is the fallback — never a silent skip of the
+  // two evidence reject rows.
+  const censusInSubdir = path.join(ARTIFACTS_DIR, 'expressibility-census.json');
+  const censusAt = fs.existsSync(censusInSubdir)
+    ? censusInSubdir
+    : path.join(SPIKE_ROOT, 'artifacts', 'expressibility-census.json');
+  const census = JSON.parse(fs.readFileSync(censusAt, 'utf-8')) as {
+    rules: { ruleHash: string; corpus: string; class: string; pattern: string }[];
+  };
 
   const evidenceIds = ['bddfbd2ec1c75eaf', '80192e6ac2a1dd3c'] as const;
   const rejects = evidenceIds.map((id) => {
@@ -880,6 +945,9 @@ async function main(): Promise<void> {
       corpus: row.corpus,
       censusClass: row.class,
       pattern: row.pattern,
+      // (C5) A census evidence reject is a corpus PATTERN, not a K-control record;
+      // the flag is carried so every row of `rejects[]` answers the same question.
+      control: false,
       verdict,
       policyEmitted: false,
       policyPath: null,
@@ -918,8 +986,13 @@ async function main(): Promise<void> {
   );
   // (G7) and the PUBLISHED tree holds exactly the same set, so an audit reading
   // `artifacts/lowered/` is reading the run's whole lowering, not a subset of it.
+  // One spike-relative spelling of the publication root for the check name, the
+  // `published` field and the console line — `artifacts/lowered` on the base run,
+  // `artifacts/<subdir>/lowered` under C10 (mmnto-ai/totem#2699 review round 1,
+  // CodeRabbit: two literals had survived fold 1's F14).
+  const publishRel = path.relative(SPIKE_ROOT, LOWERED_PUBLISH_DIR).split(path.sep).join('/');
   checks.eq(
-    `the published tree \`artifacts/lowered/\` holds EXACTLY the same ${lowered.length} packages`,
+    `the published tree \`${publishRel}/\` holds EXACTLY the same ${lowered.length} packages`,
     fs.readdirSync(LOWERED_PUBLISH_DIR).sort(),
     lowered.map((l) => l.pkgSuffix).sort(),
   );
@@ -946,7 +1019,7 @@ async function main(): Promise<void> {
   // asserted from a remembered count. Both notes claim the ordering/marker gap is
   // unreachable; that claim is only worth the measurement behind it, and the number
   // of bundles is a property of the record set, not a constant.
-  const factsDir = path.join(SPIKE_ROOT, 'artifacts', 'facts');
+  const factsDir = FACTS_DIR;
   const factBundleFiles = fs.existsSync(factsDir)
     ? fs.readdirSync(factsDir).filter((f) => f.endsWith('.json'))
     : [];
@@ -1030,12 +1103,18 @@ async function main(): Promise<void> {
     lowered: lowered.map((l) => ({
       specimen: l.specimen,
       seedEntry: l.seedEntry,
+      control: l.control,
       ruleId: l.ruleId,
       package: l.packageName,
       entrypoint: l.entrypoint,
       engine: l.engine,
       dir: path.relative(SPIKE_ROOT, l.dir).split(path.sep).join('/'),
-      published: `artifacts/lowered/${l.pkgSuffix}`,
+      // (fold 1 F14) DERIVED from `LOWERED_PUBLISH_DIR`, never re-spelled: under
+      // `SPIKE_ARTIFACTS_SUBDIR` (C10) the publication root moves to
+      // `artifacts/<subdir>/lowered/`, and a hardcoded `artifacts/lowered/` here
+      // pointed a reader of a control run's artifact at the run of record's files.
+      // Same rule `dir` above already follows.
+      published: `${publishRel}/${l.pkgSuffix}`,
       patterns: l.patterns,
       globCount: l.globTable.length,
     })),
@@ -1043,7 +1122,7 @@ async function main(): Promise<void> {
   });
 
   console.log(`\n${lowered.length} policies -> ${path.relative(SPIKE_ROOT, REGO_BUILD_DIR)}`);
-  console.log(`${lowered.length} policies published -> artifacts/lowered/`);
+  console.log(`${lowered.length} policies published -> ${publishRel}/`);
   console.log(
     `${rejects.length + recordRejects.length} reject rows (${rejects.length} census evidence, ${recordRejects.length} record) -> ${out}`,
   );
