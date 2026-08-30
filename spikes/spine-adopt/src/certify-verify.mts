@@ -289,14 +289,49 @@ function main(): void {
     [],
   );
 
-  // ── INVARIANT 2: chain preservation vs the COMMITTED pre-slice chains ──
+  // ── INVARIANT 2: chain preservation vs the COMMITTED referent chains ──
   const chainFiles = fs
     .readdirSync(CHAINS_DIR)
     .filter((f) => f.endsWith('.json'))
     .sort();
+  // (A12, mmnto-ai/totem#2704 — the E24 slice) The committed referent is KEYED ON
+  // WHAT HEAD ACTUALLY COMMITS, not assumed to be the seven-specimen baseline
+  // forever. The first run of record committed the seed-20 run's own artifacts (the
+  // scorer's three-commit binding rewrites the top-level tree), and this check —
+  // reading `HEAD:…artifacts/chains/` as the specimens baseline unconditionally —
+  // failed every later `specimens` and `control` run AT the run pin: both Linux
+  // legs red, and a seam unable to re-execute at the commit containing its own
+  // evidence. The committed run manifest says what HEAD's artifact tree IS, and the
+  // referent follows it:
+  //   - committed `recordSet: 'specimens'` (the pre-run baseline): the original
+  //     behavior, byte for byte — `specimens` compares the whole set, `control`
+  //     its one chain, both against `HEAD:…artifacts/chains/`.
+  //   - committed `recordSet: 'seed20'` (a committed run of record): a `control`
+  //     run's referent is the run's own committed control build,
+  //     `HEAD:…artifacts/k3-control/chains/` (byte-equal by construction — chains
+  //     carry no run identity); a `specimens` run has NO committed referent and
+  //     SKIPS the committed half by name, keeping every per-chain claim that needs
+  //     none.
+  //   - absent/unreadable committed manifest: treated as the specimens-baseline
+  //     era, so a broken referent fails loudly below rather than skipping silently.
+  const committedManifestText = gitShow('spikes/spine-adopt/artifacts/manifest.json');
+  let committedRecordSet: string | null = null;
+  if (committedManifestText !== null) {
+    try {
+      const parsed = JSON.parse(committedManifestText) as { recordSet?: unknown };
+      committedRecordSet = typeof parsed.recordSet === 'string' ? parsed.recordSet : null;
+    } catch {
+      committedRecordSet = null;
+    }
+  }
+  const committedIsRunOfRecord = committedRecordSet === 'seed20';
+  const committedChainsDir =
+    manifest.recordSet === 'control' && committedIsRunOfRecord
+      ? 'spikes/spine-adopt/artifacts/k3-control/chains'
+      : 'spikes/spine-adopt/artifacts/chains';
   const committedList = spawnSync(
     'git',
-    ['ls-tree', '-r', '--name-only', 'HEAD', '--', 'spikes/spine-adopt/artifacts/chains'],
+    ['ls-tree', '-r', '--name-only', 'HEAD', '--', committedChainsDir],
     { cwd: REPO_ROOT, encoding: 'utf-8' },
   );
   const committedNames = (committedList.stdout ?? '')
@@ -332,14 +367,26 @@ function main(): void {
         ? ''
         : ' — re-run `npm run all` for this record set before certifying'),
   );
-  // (§ S5) The committed chains are the SPECIMENS baseline, so the comparison has a
-  // referent for `specimens` — where the published set is the whole committed set —
-  // and for `control`, where it is ONE of them: a control-only rebuild of a specimen
-  // record whose chain is already committed IS K3 arm B, and restricting the set
-  // comparison to the loaded packages is what lets that one chain be compared
-  // without pretending the other six went missing. Only `seed20` has no referent.
-  const committedChainsApply = manifestRecordSet !== 'seed20';
-  if (manifestRecordSet === 'specimens') {
+  // (§ S5, as re-keyed by A12 above) The comparison has a referent for `specimens`
+  // — the whole committed set, when HEAD's committed baseline IS the specimens set
+  // — and for `control`, where it is ONE chain: against the specimens baseline, the
+  // committed specimen chain (a control-only rebuild of a committed specimen record
+  // IS K3 arm B); against a committed run of record, the run's own committed
+  // `k3-control/` build. `seed20` never has a committed referent here, and a
+  // `specimens` run over a committed run of record has none either.
+  const committedChainsApply =
+    manifestRecordSet === 'control'
+      ? true
+      : manifestRecordSet === 'specimens'
+        ? !committedIsRunOfRecord
+        : false;
+  if (manifestRecordSet === 'specimens' && committedIsRunOfRecord) {
+    checks.check(
+      `INV 2 — SKIPPED with the named reason \`committed-baseline-is-a-run-of-record\`: \`artifacts/manifest.json\` at HEAD records \`recordSet: 'seed20'\`, so the ${chainFiles.length} published specimen chain(s) have no committed referent (A12, mmnto-ai/totem#2704); the per-chain claims that need none still run`,
+      true,
+      `published: ${chainFiles.length}; committed at HEAD under \`${committedChainsDir}\`: ${committedNames.length}`,
+    );
+  } else if (manifestRecordSet === 'specimens') {
     checks.eq(
       'INV 2 — the published chain set is exactly the pre-slice committed chain set',
       chainFiles,
@@ -348,7 +395,7 @@ function main(): void {
   } else if (manifestRecordSet === 'control') {
     const expected = loadRecordSet('control').map((r) => `r${r.ruleId}.json`);
     checks.eq(
-      `INV 2 (K3 arm B) — the control-only run published exactly the ${expected.length} chain(s) its record set names, and each has a committed counterpart at HEAD`,
+      `INV 2 (K3 arm B) — the control-only run published exactly the ${expected.length} chain(s) its record set names, and each has a committed counterpart at HEAD (referent: \`${committedChainsDir}\`)`,
       {
         published: chainFiles,
         missingFromCommitted: expected.filter((n) => !committedNames.includes(n)),
@@ -357,7 +404,7 @@ function main(): void {
     );
   } else {
     checks.check(
-      `INV 2 — SKIPPED with the named reason \`committed-chains-are-the-specimens-baseline\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's), and \`artifacts/chains/\` at HEAD holds the ${committedNames.length} seven-specimen certificates`,
+      `INV 2 — SKIPPED with the named reason \`committed-chains-are-not-this-run's-referent\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's), which never has a committed referent; \`${committedChainsDir}\` at HEAD holds ${committedNames.length} chain(s) from the committed \`${String(committedRecordSet)}\` baseline`,
       true,
       `published: ${chainFiles.length}; committed at HEAD: ${committedNames.length}`,
     );
@@ -368,7 +415,7 @@ function main(): void {
   for (const name of chainFiles) {
     const currentText = fs.readFileSync(path.join(CHAINS_DIR, name), 'utf-8');
     const committedText = committedChainsApply
-      ? gitShow(`spikes/spine-adopt/artifacts/chains/${name}`)
+      ? gitShow(`${committedChainsDir}/${name}`)
       : null;
     if (committedChainsApply && committedText === null) {
       checks.check(`INV 2 — ${name}: a committed chain exists at HEAD`, false, 'git show failed');

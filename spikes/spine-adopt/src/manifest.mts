@@ -250,6 +250,15 @@ function main(): void {
     sha256: sha256(fs.readFileSync(r.recordFile)),
     seedEntry: r.seedEntry,
     ruleId: r.ruleId,
+    // (the E24 slice; the scorer's (b) ruling, 2026-08-30) REQUIRED on every scored
+    // row: the in-scope virtual path the record's inline `examples[]` are served at
+    // — a NON-EMPTY string, or an EXPLICIT `null` for a record that has none, never
+    // an absent key. The first execution's probePaths ×1 refusal traced here: the
+    // field lived only in apparatus source (`src/lib/record-sets.mts`), so the
+    // scorer's E2 R1 inline category was silently EMPTY. Every current row carries
+    // one (`Specimen.inlineFilePath: string`); the `?? null` is the declared shape
+    // for a future record without one, not a tolerated absence.
+    inlineFilePath: r.inlineFilePath ?? null,
   });
   const records = rows.filter((r) => !r.control).map(rowDigest);
   const controlRecords = rows
@@ -503,6 +512,15 @@ function main(): void {
       'spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).',
     recordSet,
     runCommit: head.out,
+    // (the E24 slice) § 5's binding fact, realized apparatus-side: the sha256 of
+    // the FROZEN `score.mjs` this run binds — the scorer's freeze mail of
+    // 2026-08-30T20:40Z (strategy main `a2cb78a`, charter v1.3 § 7 E24; verified
+    // against `operations/310-seed20-target/score.mjs` at that commit before this
+    // slice was cut). The run pin at `0daf8c96` carried NO scorer key — § 5's "the
+    // binding fact is its sha256 in the run manifest" was never realized until
+    // here. A scorer re-freeze is a new value HERE and therefore a new apparatus
+    // pin — the coupling is the point.
+    scorerSha256: '43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9',
     // T17 — a FACT about the run, not a gate: `trackedPaths` below is the tree at
     // `runCommit`, and this says whether the tree the run actually read matched it.
     //

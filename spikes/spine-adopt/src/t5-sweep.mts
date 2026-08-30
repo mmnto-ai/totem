@@ -425,6 +425,20 @@ async function main(): Promise<void> {
       );
     }
 
+    // (fold 1 F7 + the E24 slice) A K-CONTROL package is not swept — and not
+    // LISTED. T5 is a per-record conjunct over the SCORED records; the K5 control
+    // is not one of them and is exercised by K5, in its own row. Sweeping it would
+    // put a 23rd `rows[]` entry in a deposit the scorer reads as the corpus — and
+    // § 7 E5 fixes the HEADER at the scored set too ("the records that reach target
+    // lowering — 20 on this seed"): the first execution's T5 ×2 refusal class was
+    // this package listed in `packages[]`/`policies` beside its own skip entry.
+    // Named in `controlPackagesSkipped` ONLY — never silently dropped, never
+    // double-listed.
+    if (row.control === true) {
+      controlPackagesSkipped.push(row.package);
+      continue;
+    }
+
     const policyRegoSha256 = sha256(fs.readFileSync(policyAt));
     const wrapperSha256 = sha256(wrapperText);
     headerPackages.push({
@@ -445,18 +459,6 @@ async function main(): Promise<void> {
       seedEntry: row.seedEntry ?? null,
       control: row.control === true,
     };
-
-    // (fold 1 F7) A K-CONTROL package is not swept.
-    //
-    // T5 is a per-record conjunct over the SCORED records; the K5 control is not one
-    // of them and is exercised by K5, in its own row. Sweeping it would put a
-    // 23rd `rows[]` entry in a deposit the scorer reads as the corpus, and the entry
-    // would be a control's scope answering a question nobody asked of it. Named in
-    // the header, never silently dropped.
-    if (row.control === true) {
-      controlPackagesSkipped.push(row.package);
-      continue;
-    }
 
     const treeSweep = sweepPackage(
       checks,

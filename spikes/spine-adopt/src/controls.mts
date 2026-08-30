@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import { K3_CAPTURE_SHA256, spikeFileDigest } from './lib/baseline-pins.mts';
 import {
   activeRecordSet,
+  generatedSeedProbes,
   K3_CAPTURE_CHAIN,
   K3_CAPTURE_PACKAGE,
   K8_FIXTURES,
@@ -596,6 +597,14 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
       evidence,
     };
   }
+  // (the E24 slice) § 7 E6 fixes the K3b row at `{ glob, ok, matchingProbe,
+  // nonMatchingProbe }` ON BOTH SIDES — the reconciled fields are the E2 generated
+  // pair for the glob, the same generator the scorer runs independently; the sweep
+  // counts below ride as extra fields (E6's own words). Joined from the ONE
+  // generator (`generatedSeedProbes`, also published as
+  // `manifest.probeGeneration.pairs[]`) so the two artifacts cannot disagree.
+  // The first execution refused 58 K3b rows on exactly these absent fields.
+  const pairByGlob = new Map(generatedSeedProbes().map((p) => [p.glob, p]));
   const rows: Artifact[] = [];
   for (const l of (lowering.lowered ?? []) as Artifact[]) {
     const suffix = String(l.package).replace(/^totem\.spike\./, '');
@@ -616,9 +625,15 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
       byGlob.set(p.glob, acc);
     }
     for (const [glob, acc] of byGlob) {
+      const pair = pairByGlob.get(glob);
       rows.push({
         pkg: l.package,
         glob,
+        // § 7 E6's reconciled fields — present-as-null for a glob outside the
+        // generator's distinct-glob table (a state the `ok` conjunct would already
+        // report as blind, since such a glob can have no generated probe).
+        matchingProbe: pair ? pair.probe : null,
+        nonMatchingProbe: pair ? pair.twin : null,
         matching: acc.matching,
         nonMatching: acc.nonMatching,
         scopeDivergences: acc.disagree,
