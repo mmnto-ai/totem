@@ -12,9 +12,12 @@
 # too, so an edit to the workflow exercises itself.)
 #
 # TWO LEGS, one matrix (mmnto-ai/totem-strategy#1154 § 5 K7, ruled 2026-08-30):
-#   - `specimens` — the original arm, unchanged: shipped runtime re-derived on
-#     Linux, the OPA differential, the SMT floor + binding probe, the wazero probe,
-#     the K-controls; uploads `spine-spike-linux-artifacts`.
+#   - `specimens` — the original arm: shipped runtime re-derived on Linux, the
+#     OPA differential, the SMT floor + binding probe, the wazero probe, the
+#     K-controls; uploads `spine-spike-linux-artifacts`. Since the run of record
+#     landed at the top-level artifact tree, its INV 2 committed referent is the
+#     re-homed baseline `spikes/spine-adopt/artifacts/specimens/chains/` (A12,
+#     mmnto-ai/totem#2704 — the E24 slice).
 #   - `seed20` — the R14 seed-20 seam on Linux, in the apparatus's own order
 #     (control-only build FIRST so the seed manifest measures `repinned` from arm B,
 #     then `all` → `differential` → the Go arm → `controls`); uploads

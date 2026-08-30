@@ -76,13 +76,19 @@ interface VerdictRow {
   armsCoincide: boolean;
   armsAgree: boolean;
   /**
-   * Present ONLY on the G8 malformed-facts control (K5b). The shipped dispatchers
-   * are fed `lines[]` verbatim; a non-string member is exactly the malformation the
-   * control exists to push through every arm, so this row carries the host-style
-   * ERROR instead of a verdict — never a clean zero, and never a missing row (the
-   * wazero probe holds every arm to the same row count).
+   * A non-null string ONLY on the G8 malformed-facts control (K5b). The shipped
+   * dispatchers are fed `lines[]` verbatim; a non-string member is exactly the
+   * malformation the control exists to push through every arm, so that row carries
+   * the host-style ERROR instead of a verdict — never a clean zero, and never a
+   * missing row (the wazero probe holds every arm to the same row count).
+   *
+   * (the E24 slice) EXPLICIT `null` on every other row, never an absent key:
+   * § 5 K5's letter is `error: null`, and the scorer REFUSES on the K5 control
+   * rows when the key is absent (its `K5_EXPECTED` is `{fired: true, matchCount:
+   * 1, error: null}`, read as absent-as-undefined ≠ null) — the first execution's
+   * K5 ×2 refusal class.
    */
-  error?: string;
+  error: string | null;
 }
 
 /**
@@ -397,6 +403,9 @@ async function main(): Promise<void> {
         arms,
         armsCoincide,
         armsAgree,
+        // (the E24 slice) § 5 K5's letter — explicit on every verdict row, never an
+        // absent key.
+        error: null,
       });
     }
 

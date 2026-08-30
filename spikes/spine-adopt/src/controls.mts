@@ -26,6 +26,7 @@ import * as path from 'node:path';
 import { K3_CAPTURE_SHA256, spikeFileDigest } from './lib/baseline-pins.mts';
 import {
   activeRecordSet,
+  generatedSeedProbes,
   K3_CAPTURE_CHAIN,
   K3_CAPTURE_PACKAGE,
   K8_FIXTURES,
@@ -596,6 +597,14 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
       evidence,
     };
   }
+  // (the E24 slice) § 7 E6 fixes the K3b row at `{ glob, ok, matchingProbe,
+  // nonMatchingProbe }` ON BOTH SIDES — the reconciled fields are the E2 generated
+  // pair for the glob, the same generator the scorer runs independently; the sweep
+  // counts below ride as extra fields (E6's own words). Joined from the ONE
+  // generator (`generatedSeedProbes`, also published as
+  // `manifest.probeGeneration.pairs[]`) so the two artifacts cannot disagree.
+  // The first execution refused 58 K3b rows on exactly these absent fields.
+  const pairByGlob = new Map(generatedSeedProbes().map((p) => [p.glob, p]));
   const rows: Artifact[] = [];
   for (const l of (lowering.lowered ?? []) as Artifact[]) {
     const suffix = String(l.package).replace(/^totem\.spike\./, '');
@@ -616,13 +625,26 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
       byGlob.set(p.glob, acc);
     }
     for (const [glob, acc] of byGlob) {
+      const pair = pairByGlob.get(glob);
       rows.push({
         pkg: l.package,
         glob,
+        // § 7 E6's reconciled fields. A glob OUTSIDE the generator's distinct-glob
+        // table gets `null` — and `ok: false` below, asserted rather than assumed:
+        // the sweep counts alone cannot catch it (frozen/inline probes can satisfy
+        // >=1/>=1 for such a glob), and the premise that every reachable glob is in
+        // the table holds today only because every loaded record's globs — the K5
+        // control record included, a byte copy of a specimen record — happen to lie
+        // in the seed census the generator derives from. The scorer joins K3b rows
+        // by `glob` and reads these two fields as verdict fields, so a silent null
+        // here would re-open the exact refusal class this slice cures (F4, the
+        // slice's falsification leg).
+        matchingProbe: pair ? pair.probe : null,
+        nonMatchingProbe: pair ? pair.twin : null,
         matching: acc.matching,
         nonMatching: acc.nonMatching,
         scopeDivergences: acc.disagree,
-        ok: acc.matching >= 1 && acc.nonMatching >= 1,
+        ok: acc.matching >= 1 && acc.nonMatching >= 1 && pair !== undefined,
       });
     }
   }
@@ -636,7 +658,7 @@ function k3b(recordSet: RecordSetId, lowering: Artifact): ControlRow {
         ? 'NOT MEASURED — no lowered package published a globs.json'
         : blind.length === 0
           ? `${rows.length} reachable glob(s), each with >=1 matching AND >=1 non-matching probe`
-          : `BLIND globs: ${blind.map((r) => `${r.pkg}/${r.glob} (${r.matching}/${r.nonMatching})`).join('; ')}`,
+          : `BLIND globs: ${blind.map((r) => `${r.pkg}/${r.glob} (${r.matching}/${r.nonMatching}${r.matchingProbe === null ? '; NO GENERATED PAIR' : ''})`).join('; ')}`,
     rows,
     evidence,
   };

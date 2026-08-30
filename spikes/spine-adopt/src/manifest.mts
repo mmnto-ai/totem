@@ -250,6 +250,19 @@ function main(): void {
     sha256: sha256(fs.readFileSync(r.recordFile)),
     seedEntry: r.seedEntry,
     ruleId: r.ruleId,
+    // (the E24 slice; the scorer's (b) ruling, 2026-08-30) REQUIRED on every scored
+    // row: the in-scope virtual path the record's inline `examples[]` are served at
+    // — a NON-EMPTY string, or an EXPLICIT `null` for a record that has none, never
+    // an absent key. The first execution's probePaths ×1 refusal traced here: the
+    // field lived only in apparatus source (`src/lib/record-sets.mts`), so the
+    // scorer's E2 R1 inline category was silently EMPTY. Every current row carries
+    // one — `Specimen.inlineFilePath` is typed `string`, required — so it is
+    // published verbatim, with no defensive fallback (a `?? null` here would be
+    // dead code masking the type — F5 + the bot round on mmnto-ai/totem#2710); a
+    // future record WITHOUT one changes that type to `string | null` and publishes
+    // the explicit `null` from the type, and emptiness is gated by this stage's
+    // own check below, never tolerated.
+    inlineFilePath: r.inlineFilePath,
   });
   const records = rows.filter((r) => !r.control).map(rowDigest);
   const controlRecords = rows
@@ -503,6 +516,15 @@ function main(): void {
       'spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).',
     recordSet,
     runCommit: head.out,
+    // (the E24 slice) § 5's binding fact, realized apparatus-side: the sha256 of
+    // the FROZEN `score.mjs` this run binds — the scorer's freeze mail of
+    // 2026-08-30T20:40Z (strategy main `a2cb78a`, charter v1.3 § 7 E24; verified
+    // against `operations/310-seed20-target/score.mjs` at that commit before this
+    // slice was cut). The run pin at `0daf8c96` carried NO scorer key — § 5's "the
+    // binding fact is its sha256 in the run manifest" was never realized until
+    // here. A scorer re-freeze is a new value HERE and therefore a new apparatus
+    // pin — the coupling is the point.
+    scorerSha256: '43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9',
     // T17 — a FACT about the run, not a gate: `trackedPaths` below is the tree at
     // `runCommit`, and this says whether the tree the run actually read matched it.
     //
@@ -688,6 +710,20 @@ function main(): void {
       (recordSet !== 'seed20' || records.every((r) => /^[0-9a-f]{8}$/.test(r.seedEntry ?? ''))),
     `${records.length} record(s)`,
   );
+  // (the E24 slice, F5 fold) The (b) ruling's OTHER half, gated at the PUBLISHER:
+  // an empty or whitespace-only `inlineFilePath` would pass the type, publish, and
+  // refuse days later at score time (the scorer discards `''` from the E2 R1
+  // union, which would silently re-empty the inline category through the gate
+  // itself). Failing here moves that failure to the run that authored it.
+  checks.check(
+    "every scored record's `inlineFilePath` is a NON-EMPTY string or an explicit null (the scorer's (b) ruling, both halves)",
+    records.every(
+      (r) =>
+        r.inlineFilePath === null ||
+        (typeof r.inlineFilePath === 'string' && r.inlineFilePath.trim().length > 0),
+    ),
+    `${records.length} record(s); ${records.filter((r) => r.inlineFilePath !== null).length} with an inline path`,
+  );
   checks.check(
     'the tracked-path sweep set is non-empty and published beside the manifest',
     trackedList.length > 0,
@@ -734,7 +770,14 @@ function main(): void {
     checks.eq(
       `every seed record's \`inlineFilePath\` and \`fixture.file\` is in the published probe set (${seedScoped.length} scored record(s))`,
       [
-        ...seedScoped.map((r) => r.inlineFilePath),
+        // (bot round on mmnto-ai/totem#2710) The published contract admits an
+        // explicit `null` for a record with no inline path (the scorer's (b)
+        // ruling); the coverage claim is over the PATHS, so a `null` — impossible
+        // by today's `string` type, legal by contract — must not enter the
+        // membership test and fail publication.
+        ...seedScoped
+          .map((r) => r.inlineFilePath as string | null)
+          .filter((p): p is string => typeof p === 'string'),
         ...seedScoped.flatMap((r) => (r.fixture ? [r.fixture.file] : [])),
       ].filter((p) => !probePaths.includes(p)),
       [],
