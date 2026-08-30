@@ -1,0 +1,29 @@
+{
+  "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+  "specimen": "71935fe9-string-cast-on-input-js",
+  "ruleId": "71935fe9a742137b",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-71935fe9-string-cast-on-input-js.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "c676ba7f8718ec75dd651fbf2c3d7cf97864af1ca9d92366c9e3dfd9e1f9a7f9"
+  },
+  "astQuery": "String($INPUT)",
+  "factBundle": {
+    "file": "scripts/cast.js",
+    "fileText": "const pattern = String(input.pattern);",
+    "lines": [
+      "const pattern = String(input.pattern);"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "const pattern = String(input.pattern);",
+        "startLineText": "const pattern = String(input.pattern);",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

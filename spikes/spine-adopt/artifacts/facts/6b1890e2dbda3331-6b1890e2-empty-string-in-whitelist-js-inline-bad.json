@@ -1,0 +1,29 @@
+{
+  "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+  "specimen": "6b1890e2-empty-string-in-whitelist-js",
+  "ruleId": "6b1890e2dbda3331",
+  "engine": "ast-grep",
+  "source": "record-examples",
+  "arm": "bad",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-6b1890e2-empty-string-in-whitelist-js.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "b385fb69dce89ea3e9f25351f49930d58243bbeeb5f4a2977f7629342f461d9c"
+  },
+  "astQuery": "[$$$BEFORE, \"\", $$$AFTER]",
+  "factBundle": {
+    "file": "scripts/branches.js",
+    "fileText": "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];",
+    "lines": [
+      "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];"
+    ],
+    "astMatches": [
+      {
+        "lineNumber": 1,
+        "lineText": "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];",
+        "startLineText": "const PROTECTED_BRANCHES = [\"main\", \"\", \"release\"];",
+        "startPrecedingLineText": null
+      }
+    ]
+  }
+}

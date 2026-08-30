@@ -1,0 +1,121 @@
+{
+  "generatedBy": "spikes/spine-adopt/src/build-wasm.mts",
+  "contract": "rego/LOWERING.md § Lowering 1 — sha256(record yaml) → sha256(lowered .rego + fact schema) → sha256(bundle.wasm); Prop 310 Amendment R2 source→IR→artifact",
+  "specimen": "d940b2c9-stdio-in-exec-options",
+  "seedEntry": "d940b2c9",
+  "ruleId": "d940b2c9ffe92e99",
+  "package": "totem.spike.rd940b2c9ffe92e99",
+  "entrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+  "recordSha256": "85d3276e47fd7eec605cc38025b5f80f7b2ab55987656d227291455ebebe10ea",
+  "recordFile": "seed/records/r14-d940b2c9-stdio-in-exec-options.rule.yaml",
+  "regoSha256": "d47c0f9d4cce68a933c1ce0833db121583a7e49b9cb4995ec6484445504ba204",
+  "regoComposition": {
+    "note": "sha256 over the three component digests, labelled and newline-joined in this exact order. Component digests are published so the composite is auditable without re-deriving it.",
+    "order": [
+      "policy.rego",
+      "globs.json",
+      "factSchemaLine"
+    ],
+    "components": {
+      "policy.rego": "5e791971d8142dbf6c6babc3b9d06de686edeba0dc78507a136453432ec4ce3d",
+      "globs.json": "756ba98840ed47c02d6be90fbdcef354ab3ef360d5ac9554e33a85f5805e1cc8",
+      "factSchemaLine": "3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f"
+    },
+    "factSchemaLine": "input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
+    "preimage": "policy.rego:5e791971d8142dbf6c6babc3b9d06de686edeba0dc78507a136453432ec4ce3d\nglobs.json:756ba98840ed47c02d6be90fbdcef354ab3ef360d5ac9554e33a85f5805e1cc8\nfactSchemaLine:3e9643cd65a2335b0b1de3c508e9cadf229ecdd3a29d7519ba33409ed1c3e58f\n"
+  },
+  "wasmSha256": "2a792c0ece5e81fc609bd2cebcd667e5b4a2cf8110789219341cb7fa93d08fce",
+  "bundleTarballSha256": "023d1002aef995b7ded422008dc9a4db467867a52b82e9acadefa769e7e6003f",
+  "manifest": {
+    "revision": "",
+    "roots": [
+      ""
+    ],
+    "wasm": [
+      {
+        "entrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+        "module": "/policy.wasm"
+      }
+    ],
+    "rego_version": 1
+  },
+  "determinism": {
+    "buildCount": 2,
+    "wasmIdentical": true,
+    "tarballIdentical": true,
+    "wasmSha256": [
+      "2a792c0ece5e81fc609bd2cebcd667e5b4a2cf8110789219341cb7fa93d08fce",
+      "2a792c0ece5e81fc609bd2cebcd667e5b4a2cf8110789219341cb7fa93d08fce"
+    ],
+    "bundleTarballSha256": [
+      "023d1002aef995b7ded422008dc9a4db467867a52b82e9acadefa769e7e6003f",
+      "023d1002aef995b7ded422008dc9a4db467867a52b82e9acadefa769e7e6003f"
+    ]
+  },
+  "manifestSha256": "c86a8602c56d79e9861e1da0fd0f926e8cce846e36f0c1665c24913ecb7cf8ee",
+  "entrypointManifest": {
+    "note": "The ENTRYPOINT/IMPORT manifest — the fourth member of the bound set (spec § Actuator slice 3). Distinct from the `manifest` key above, which is the OPA BUNDLE `.manifest` member. Read from the module itself by the same census code path as artifacts/opa-abi-census.json.",
+    "contract": "spec § Actuator slice 3 — manifestSha256 = sha256 of the canonical JSON of {entrypoints[], imports[], builtins{}}",
+    "manifest": {
+      "entrypoints": [
+        "totem/spike/rd940b2c9ffe92e99/result"
+      ],
+      "imports": [
+        "env.memory:memory",
+        "env.opa_abort:function",
+        "env.opa_builtin0:function",
+        "env.opa_builtin1:function",
+        "env.opa_builtin2:function",
+        "env.opa_builtin3:function",
+        "env.opa_builtin4:function"
+      ],
+      "builtins": {}
+    },
+    "canonicalPreimage": "{\"builtins\":{},\"entrypoints\":[\"totem/spike/rd940b2c9ffe92e99/result\"],\"imports\":[\"env.memory:memory\",\"env.opa_abort:function\",\"env.opa_builtin0:function\",\"env.opa_builtin1:function\",\"env.opa_builtin2:function\",\"env.opa_builtin3:function\",\"env.opa_builtin4:function\"]}"
+  },
+  "certified": true,
+  "certification": {
+    "contract": "spec § Actuator slice — \"certification evaluates EVERY emitted entrypoint against a schema-valid sentinel FactBundle BEFORE artifact publication\"",
+    "sentinel": {
+      "file": "certify/sentinel.ts",
+      "fileText": "",
+      "lines": [],
+      "astMatches": []
+    },
+    "sentinelSha256": "bb5b7fff8ba0d974fd8a977280340b13cb9321e9dc59f749f88706899945a6f0",
+    "onlyExportedResultPath": {
+      "ok": true,
+      "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rd940b2c9ffe92e99/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+    },
+    "evaluatedEntrypoints": [
+      "totem/spike/rd940b2c9ffe92e99/result"
+    ],
+    "classifications": [
+      {
+        "entrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+        "status": "PASS",
+        "reason": null,
+        "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+      }
+    ],
+    "hosts": {
+      "wasmtime": {
+        "abiVersion": "1.3 (1.2+ compatible)",
+        "verdict": "PASS"
+      },
+      "regorus": {
+        "role": "reference differential (LOWERING.md § Host contract) — not a certification gate",
+        "ok": true,
+        "error": null
+      }
+    },
+    "boundSet": [
+      "source: recordSha256",
+      "IR: regoSha256 (lowered .rego + globs + fact schema)",
+      "guarded policy: regoComposition.components[\"policy.rego\"]",
+      "entrypoint/import manifest: manifestSha256",
+      "final Wasm: wasmSha256"
+    ]
+  },
+  "publishedBy": "spikes/spine-adopt/src/certify.mts (certification PASS)"
+}

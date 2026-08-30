@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
-  "runCommit": "638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
+  "apparatusPin": "69b8554431c7e8e7eba461026405cc268fc0bff4",
+  "runCommit": "69b8554431c7e8e7eba461026405cc268fc0bff4",
   "recordSet": "seed20",
   "artifactsSubdir": null,
   "controls": [
@@ -96,7 +96,7 @@
       "id": "K3",
       "refusing": true,
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
@@ -158,8 +158,8 @@
           "arm": "B",
           "ok": true,
           "armB": "stands",
-          "binding": "bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5",
-          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
+          "binding": "bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4",
+          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
           "rows": [
             {
               "file": "k3-control/chains/r87aff037d7de47a7.json",
@@ -916,8 +916,157 @@
     {
       "id": "K7",
       "refusing": false,
-      "ok": null,
-      "detail": "NOT MEASURED — `artifacts/k7-rebuild/chains/` does not exist (the Linux arm`s chains are copied there by the owner at the run of record)",
+      "ok": true,
+      "detail": "21 chain(s) rebuilt with identical regoSha256 AND wasmSha256",
+      "rows": [
+        {
+          "chain": "r0123456789abcdef.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r0167a783f75b5ecd.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r49dd9e4fd02d692b.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r54140f59be3e6e44.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r5b85fe53468964e1.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r5da43ea60b66e96e.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r6467c35159c1504d.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r65ede9bfdf6995fe.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r6b1890e2dbda3331_javascript.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r6b1890e2dbda3331_typescript.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r6b2b62eb1e8693fc.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r71935fe9a742137b_javascript.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r71935fe9a742137b_typescript.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r87aff037d7de47a7.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r89184bb5fd960848.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "raa7a588d48e74503.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "rb237bcf3b52381b1.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "rb973609688ec2888.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "rbe74c55caa9fd60c.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "rd5faa14cbb8b50fb.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "rd940b2c9ffe92e99.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        }
+      ],
       "evidence": [
         {
           "artifact": "k7-rebuild/chains/*.json",
@@ -990,7 +1139,7 @@
     {
       "name": "K3 — PASS",
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=638ca5f7dcb97eb80c8e9e61878ec029c9b0dad5 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=69b8554431c7e8e7eba461026405cc268fc0bff4 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
       "name": "K3b — PASS",
@@ -1018,9 +1167,9 @@
       "detail": "10/11 pinned region(s) byte-identical to 6ca24d42 — DISCLOSED DELTA: spikes/spine-adopt/src/lower.mts (symbol:packageSuffix): the parameter rename `specimenId` -> `discriminator` (mmnto-ai/totem#2694 G1: the suffix is the row's `packageDiscriminator`, which is the specimen id on the specimens set and the declared language on the seed set). The BODY is byte-identical modulo that identifier and the emitted bytes are unchanged — proven by the seven committed chains reproducing under INV 2. | toolchain: every version resolved | workingTreeClean: true"
     },
     {
-      "name": "K7 — NOT MEASURED (non-refusing)",
+      "name": "K7 — PASS (non-refusing)",
       "ok": true,
-      "detail": "NOT MEASURED — `artifacts/k7-rebuild/chains/` does not exist (the Linux arm`s chains are copied there by the owner at the run of record)"
+      "detail": "21 chain(s) rebuilt with identical regoSha256 AND wasmSha256"
     },
     {
       "name": "K8 — PASS",
@@ -1028,6 +1177,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "0bc8a1b2cfe81d2f5d6013357f918dd7a59b90cfa16678f7e28c4f97c9e310dd",
+  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
   "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

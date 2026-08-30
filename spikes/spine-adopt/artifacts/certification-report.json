@@ -12,7 +12,7 @@
     "sha256": "bb5b7fff8ba0d974fd8a977280340b13cb9321e9dc59f749f88706899945a6f0",
     "rationale": "Schema-valid and neutral (spec § Actuator slice 1): with no lines and no ast matches, no policy can produce a violation of its own, so the only thing that varies across bundles is whether the guarded `result` rule is DEFINED.",
     "schemaContract": "rego/LOWERING.md § Input contract — input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
-    "validatorAcceptsAllMeasuredBundles": 24,
+    "validatorAcceptsAllMeasuredBundles": 46,
     "malformedControl": {
       "bundle": {
         "file": 42,
@@ -35,13 +35,13 @@
       ],
       "refusedBeforeAnyEval": true,
       "hostInvocationsDuringRefusal": 0,
-      "appliedToBundle": "totem.spike.r0123456789abcdef_d_file",
+      "appliedToBundle": "totem.spike.r0123456789abcdef",
       "note": "Fed to a bundle that certifies PASS on the valid sentinel, so the refusal is attributable to the SENTINEL and not to the bundle. It publishes nothing — neither a chain nor a blocked artifact.",
       "row": {
         "id": "control:malformed-sentinel",
         "kind": "classifier-control",
-        "package": "totem.spike.r0123456789abcdef_d_file",
-        "expectedEntrypoint": "totem/spike/r0123456789abcdef_d_file/result",
+        "package": "totem.spike.r0123456789abcdef",
+        "expectedEntrypoint": "totem/spike/r0123456789abcdef/result",
         "wasmSha256": "",
         "evaluated": false,
         "sentinelValid": false,
@@ -99,13 +99,27 @@
     "chainWriter": "spikes/spine-adopt/src/certify.mts — the ONLY writer; src/build-wasm.mts now hands its computed chains over as artifacts/chain-inputs.json",
     "chainExtension": "{recordSha256, regoSha256 (the GUARDED policy), manifestSha256 (sha256 of the canonical JSON of {entrypoints[], imports[], builtins{}}), wasmSha256, certified: true} — ADDITIVE: the pre-slice keys are carried through untouched and the new keys are appended.",
     "chainsWritten": [
-      "r0123456789abcdef_d_file.json",
-      "r0123456789abcdef_d_line.json",
-      "r0123456789abcdef_e.json",
-      "r2d962603591aa928.json",
-      "r61dcb058bd1df15d.json",
+      "r0123456789abcdef.json",
+      "r0167a783f75b5ecd.json",
+      "r49dd9e4fd02d692b.json",
+      "r54140f59be3e6e44.json",
+      "r5b85fe53468964e1.json",
+      "r5da43ea60b66e96e.json",
+      "r6467c35159c1504d.json",
+      "r65ede9bfdf6995fe.json",
+      "r6b1890e2dbda3331_javascript.json",
+      "r6b1890e2dbda3331_typescript.json",
+      "r6b2b62eb1e8693fc.json",
+      "r71935fe9a742137b_javascript.json",
+      "r71935fe9a742137b_typescript.json",
       "r87aff037d7de47a7.json",
-      "rd0815b6769304e26.json"
+      "r89184bb5fd960848.json",
+      "raa7a588d48e74503.json",
+      "rb237bcf3b52381b1.json",
+      "rb973609688ec2888.json",
+      "rbe74c55caa9fd60c.json",
+      "rd5faa14cbb8b50fb.json",
+      "rd940b2c9ffe92e99.json"
     ],
     "blockedWritten": [
       "certctl_eval_error.json",
@@ -122,15 +136,15 @@
     {
       "id": "specimen:d-file",
       "kind": "specimen",
-      "package": "totem.spike.r0123456789abcdef_d_file",
-      "expectedEntrypoint": "totem/spike/r0123456789abcdef_d_file/result",
-      "wasmSha256": "07b771da11130e61082f28d41f209e7f44335db10c370b0ff4f33acdf2692aad",
+      "package": "totem.spike.r0123456789abcdef",
+      "expectedEntrypoint": "totem/spike/r0123456789abcdef/result",
+      "wasmSha256": "6feda7a2c0c593f077b40f4a5f1d5b32f3a02900d5ee0d12f0a106653f46b890",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/r0123456789abcdef_d_file/result"
+          "totem/spike/r0123456789abcdef/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -143,14 +157,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "15b853c2fe8f9f4de2a2f9525ad671042d401846b9dacb09c2d5bb16a10705ec",
+      "manifestSha256": "2a7d795c1f671637ae5aae711176fc0412e7dcabeb17b79d7b6abae7ac72b409",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0123456789abcdef_d_file/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0123456789abcdef/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/r0123456789abcdef_d_file/result",
+          "entrypoint": "totem/spike/r0123456789abcdef/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -159,21 +173,21 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/r0123456789abcdef_d_file.json",
+      "chainWritten": "artifacts/chains/r0123456789abcdef.json",
       "blockedArtifact": null
     },
     {
-      "id": "specimen:d-line",
+      "id": "specimen:0167a783-dynamic-import-utility-layer",
       "kind": "specimen",
-      "package": "totem.spike.r0123456789abcdef_d_line",
-      "expectedEntrypoint": "totem/spike/r0123456789abcdef_d_line/result",
-      "wasmSha256": "ea46fa323435ea077774bce967c4683af46024d129d0263b5a18dc6fd4d20e10",
+      "package": "totem.spike.r0167a783f75b5ecd",
+      "expectedEntrypoint": "totem/spike/r0167a783f75b5ecd/result",
+      "wasmSha256": "e58c5cd7bbb1001ebe5cc6e465ffd827e84ee1ca10c2da1986ddf0be5f8b304b",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/r0123456789abcdef_d_line/result"
+          "totem/spike/r0167a783f75b5ecd/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -186,14 +200,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "21368409551a7f6424d5cd1512da006ba3982ae6bf118eb6de1bec25916f7ecc",
+      "manifestSha256": "d0653fb2adc367259078d77e1fc86b0490d537571bdb3024147be0192b860aa5",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0123456789abcdef_d_line/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0167a783f75b5ecd/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/r0123456789abcdef_d_line/result",
+          "entrypoint": "totem/spike/r0167a783f75b5ecd/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -202,21 +216,21 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/r0123456789abcdef_d_line.json",
+      "chainWritten": "artifacts/chains/r0167a783f75b5ecd.json",
       "blockedArtifact": null
     },
     {
-      "id": "specimen:e",
+      "id": "specimen:49dd9e4f-llm-character-counting",
       "kind": "specimen",
-      "package": "totem.spike.r0123456789abcdef_e",
-      "expectedEntrypoint": "totem/spike/r0123456789abcdef_e/result",
-      "wasmSha256": "b81f809552a233b376eabd252c94dd4db5de85e22e940206ab01a657c1144bd9",
+      "package": "totem.spike.r49dd9e4fd02d692b",
+      "expectedEntrypoint": "totem/spike/r49dd9e4fd02d692b/result",
+      "wasmSha256": "4729fee4d639a6973d5a0e96df81c2e2d76244d3ff4413a5e7496f02683a4026",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/r0123456789abcdef_e/result"
+          "totem/spike/r49dd9e4fd02d692b/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -229,14 +243,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "9d75a0488d8057d16c80be39e81cda8c9d215d86f6c48f05400fdfb92e29d0d8",
+      "manifestSha256": "85f9cb9f025918989776f7ceb8ffce12bb4d9b057ad95f50d1ed8d8b32b6ada5",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0123456789abcdef_e/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r49dd9e4fd02d692b/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/r0123456789abcdef_e/result",
+          "entrypoint": "totem/spike/r49dd9e4fd02d692b/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -245,21 +259,21 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/r0123456789abcdef_e.json",
+      "chainWritten": "artifacts/chains/r49dd9e4fd02d692b.json",
       "blockedArtifact": null
     },
     {
-      "id": "specimen:b",
+      "id": "specimen:54140f59-bare-issue-number-refs",
       "kind": "specimen",
-      "package": "totem.spike.r2d962603591aa928",
-      "expectedEntrypoint": "totem/spike/r2d962603591aa928/result",
-      "wasmSha256": "761f95f29e6e4272e0b4e51e1a8812116f0618a04d0d7b69e9c4dcacc28c0f2c",
+      "package": "totem.spike.r54140f59be3e6e44",
+      "expectedEntrypoint": "totem/spike/r54140f59be3e6e44/result",
+      "wasmSha256": "55d5aa55249b89a56d6d8df8532db790e7f9867c2c79beae330fdc3f9e22652f",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/r2d962603591aa928/result"
+          "totem/spike/r54140f59be3e6e44/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -272,14 +286,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "084b4852e2180feb456be6d45be05ba5a705cd4cf86748f5995b7d19616d83a7",
+      "manifestSha256": "a4dba93b06e5f5c39d6cbf7074956273f887fdd10b1f196333f0c78c4d32bc82",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r2d962603591aa928/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r54140f59be3e6e44/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/r2d962603591aa928/result",
+          "entrypoint": "totem/spike/r54140f59be3e6e44/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -288,21 +302,21 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/r2d962603591aa928.json",
+      "chainWritten": "artifacts/chains/r54140f59be3e6e44.json",
       "blockedArtifact": null
     },
     {
-      "id": "specimen:a",
+      "id": "specimen:5b85fe53-suppress-event-runtime-failure",
       "kind": "specimen",
-      "package": "totem.spike.r61dcb058bd1df15d",
-      "expectedEntrypoint": "totem/spike/r61dcb058bd1df15d/result",
-      "wasmSha256": "757f8118a34de759cb541c3a2cfe37b2ecb2414cdb43e2138daabc3d76539a48",
+      "package": "totem.spike.r5b85fe53468964e1",
+      "expectedEntrypoint": "totem/spike/r5b85fe53468964e1/result",
+      "wasmSha256": "9e520179e090321824c50f6a990a41264e7cb6ae05df403cdd8adf49792bc266",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/r61dcb058bd1df15d/result"
+          "totem/spike/r5b85fe53468964e1/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -315,14 +329,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "d5a3b732780f60232dde8f6f7e81e0eff5269fe1b2781a652cf5900c7c7c5616",
+      "manifestSha256": "8047f33f787ff0ff8674b62a5f323412ab737da6b691728e0502d765d25119e2",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r61dcb058bd1df15d/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r5b85fe53468964e1/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/r61dcb058bd1df15d/result",
+          "entrypoint": "totem/spike/r5b85fe53468964e1/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -331,11 +345,355 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/r61dcb058bd1df15d.json",
+      "chainWritten": "artifacts/chains/r5b85fe53468964e1.json",
       "blockedArtifact": null
     },
     {
-      "id": "specimen:c-supp",
+      "id": "specimen:5da43ea6-git-double-dash-separator",
+      "kind": "specimen",
+      "package": "totem.spike.r5da43ea60b66e96e",
+      "expectedEntrypoint": "totem/spike/r5da43ea60b66e96e/result",
+      "wasmSha256": "38ea90b333c1af14f71c4db06cbf3c8e37a7e234e25d99920b9aac7fa25ceac4",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r5da43ea60b66e96e/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "fa3adfffe938f926004cd095789ecdca26606b6167cf4dc8ba0b5d0562bc4c7a",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r5da43ea60b66e96e/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r5da43ea60b66e96e/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r5da43ea60b66e96e.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:6467c351-dynamic-import-cli-entry",
+      "kind": "specimen",
+      "package": "totem.spike.r6467c35159c1504d",
+      "expectedEntrypoint": "totem/spike/r6467c35159c1504d/result",
+      "wasmSha256": "68e209be972f9c70b6d749c547976d6de69f142eee338d4e3b69b77370d03518",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r6467c35159c1504d/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "a301e9187814d7b3afebf66078def8086fe2c1940b997ab6913c7db08ff3a10a",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r6467c35159c1504d/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r6467c35159c1504d/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r6467c35159c1504d.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:65ede9bf-dynamic-import-command-handlers",
+      "kind": "specimen",
+      "package": "totem.spike.r65ede9bfdf6995fe",
+      "expectedEntrypoint": "totem/spike/r65ede9bfdf6995fe/result",
+      "wasmSha256": "7a6658492c99035c0b4d85b5240ce9230172663a911e273abf99775113f03edd",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r65ede9bfdf6995fe/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "b684d05ec632526bcab3054529856906ac9d800bb0e2af205f5414568c42793a",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r65ede9bfdf6995fe/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r65ede9bfdf6995fe/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r65ede9bfdf6995fe.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:6b1890e2-empty-string-in-whitelist-js",
+      "kind": "specimen",
+      "package": "totem.spike.r6b1890e2dbda3331_javascript",
+      "expectedEntrypoint": "totem/spike/r6b1890e2dbda3331_javascript/result",
+      "wasmSha256": "283b2ec0fd70d8892d9008982f3f8168642dd6ad4bb0aa832e84559c710e515b",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r6b1890e2dbda3331_javascript/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "12fe16fb7bb5cfaa80520e4730d83e72e5220d5bf94aa849e12878faf2df454d",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r6b1890e2dbda3331_javascript/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r6b1890e2dbda3331_javascript/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r6b1890e2dbda3331_javascript.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:6b1890e2-empty-string-in-whitelist",
+      "kind": "specimen",
+      "package": "totem.spike.r6b1890e2dbda3331_typescript",
+      "expectedEntrypoint": "totem/spike/r6b1890e2dbda3331_typescript/result",
+      "wasmSha256": "e56d5deebd775f1ed86ad4ebef99d34cc58fb9843244f4e1eeba1e9c26e09264",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r6b1890e2dbda3331_typescript/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "8b46e44ca505f9d350249883730f64c091a5921074e260469712855c75bfcd01",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r6b1890e2dbda3331_typescript/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r6b1890e2dbda3331_typescript/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r6b1890e2dbda3331_typescript.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:6b2b62eb-totem-error-log-tag",
+      "kind": "specimen",
+      "package": "totem.spike.r6b2b62eb1e8693fc",
+      "expectedEntrypoint": "totem/spike/r6b2b62eb1e8693fc/result",
+      "wasmSha256": "013e80447bdcab65050388e4c50f9cdcf35fe411a37902c0807fa426d4643644",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r6b2b62eb1e8693fc/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "261cddca9eddc3dc8008f28e7985989a204a2ce14b566a3257ac6e3e16edfad0",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r6b2b62eb1e8693fc/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r6b2b62eb1e8693fc/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r6b2b62eb1e8693fc.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:71935fe9-string-cast-on-input-js",
+      "kind": "specimen",
+      "package": "totem.spike.r71935fe9a742137b_javascript",
+      "expectedEntrypoint": "totem/spike/r71935fe9a742137b_javascript/result",
+      "wasmSha256": "29bda9cca997a239e3fb75885e3d9891ec8c2786468d1118d7ec30c68b21453b",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r71935fe9a742137b_javascript/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "cfd6673b255f673e8b3cf08a468682f095577017d610c28dbf77facd480e02c6",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r71935fe9a742137b_javascript/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r71935fe9a742137b_javascript/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r71935fe9a742137b_javascript.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:71935fe9-string-cast-on-input",
+      "kind": "specimen",
+      "package": "totem.spike.r71935fe9a742137b_typescript",
+      "expectedEntrypoint": "totem/spike/r71935fe9a742137b_typescript/result",
+      "wasmSha256": "dd780efa717ef4a07749a067ad44fb0e2b59f42f5e4ea1b672834331f45ff2de",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r71935fe9a742137b_typescript/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "495edea315d472838b6ea2d18cf177241ae0f5edac4a130b1d98865085760495",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r71935fe9a742137b_typescript/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r71935fe9a742137b_typescript/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/r71935fe9a742137b_typescript.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:87aff037-fail-open-catch-ban",
       "kind": "specimen",
       "package": "totem.spike.r87aff037d7de47a7",
       "expectedEntrypoint": "totem/spike/r87aff037d7de47a7/result",
@@ -378,17 +736,17 @@
       "blockedArtifact": null
     },
     {
-      "id": "specimen:c",
+      "id": "specimen:89184bb5-bsd-sed-hex-escape",
       "kind": "specimen",
-      "package": "totem.spike.rd0815b6769304e26",
-      "expectedEntrypoint": "totem/spike/rd0815b6769304e26/result",
-      "wasmSha256": "5aa898a084d8214dd3e7f3efc67cec1202c3ddd4743fa8f375a4042c6bf890fc",
+      "package": "totem.spike.r89184bb5fd960848",
+      "expectedEntrypoint": "totem/spike/r89184bb5fd960848/result",
+      "wasmSha256": "a7c751d4cb3848ae761d892ca70c6e6e9bbe07b54c002ca8cdd4aa10c8d29556",
       "evaluated": true,
       "sentinelValid": true,
       "sentinelSchemaErrors": [],
       "manifest": {
         "entrypoints": [
-          "totem/spike/rd0815b6769304e26/result"
+          "totem/spike/r89184bb5fd960848/result"
         ],
         "imports": [
           "env.memory:memory",
@@ -401,14 +759,14 @@
         ],
         "builtins": {}
       },
-      "manifestSha256": "70b6c0bb0a917147af8d87a27cda02626384870f7e28869a688c2c3c6492a8f8",
+      "manifestSha256": "d1e78e83c95c0a51472c1e9e751fe059c4036f3185c5dcdb7de912888d06c415",
       "entrypointAssertion": {
         "ok": true,
-        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rd0815b6769304e26/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r89184bb5fd960848/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
       },
       "classifications": [
         {
-          "entrypoint": "totem/spike/rd0815b6769304e26/result",
+          "entrypoint": "totem/spike/r89184bb5fd960848/result",
           "status": "PASS",
           "reason": null,
           "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
@@ -417,7 +775,265 @@
       "status": "PASS",
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
-      "chainWritten": "artifacts/chains/rd0815b6769304e26.json",
+      "chainWritten": "artifacts/chains/r89184bb5fd960848.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:aa7a588d-async-test-callbacks",
+      "kind": "specimen",
+      "package": "totem.spike.raa7a588d48e74503",
+      "expectedEntrypoint": "totem/spike/raa7a588d48e74503/result",
+      "wasmSha256": "622b00e9dde0db427414e6944aa299724a322be8f6acae09ebece64b2991472b",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/raa7a588d48e74503/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "0d462ff64daf4a38790551f1b45eb2eb727c9c46bf8457eec3b00f7894a862b3",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/raa7a588d48e74503/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/raa7a588d48e74503/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/raa7a588d48e74503.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:b237bcf3-pwd-in-credential-regex",
+      "kind": "specimen",
+      "package": "totem.spike.rb237bcf3b52381b1",
+      "expectedEntrypoint": "totem/spike/rb237bcf3b52381b1/result",
+      "wasmSha256": "a46775263f7b30786f3cff76634d7b23aeefb1362d569f53d76b55e07cca108e",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/rb237bcf3b52381b1/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "a18a8ed0cd33565ea3d789e7f2198869f68338b501f14da10b8dbb4098ddb378",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rb237bcf3b52381b1/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/rb237bcf3b52381b1/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/rb237bcf3b52381b1.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:b9736096-orchestrator-test-timeout",
+      "kind": "specimen",
+      "package": "totem.spike.rb973609688ec2888",
+      "expectedEntrypoint": "totem/spike/rb973609688ec2888/result",
+      "wasmSha256": "b50725bf51ccce7377bce37ab48184aa9d2abdf86c045ff9717b04812a68ec86",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/rb973609688ec2888/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "490547382420ac7f64981d1d3afee90514a33a02e0b31d6b1517e827871cfbf0",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rb973609688ec2888/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/rb973609688ec2888/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/rb973609688ec2888.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:be74c55c-actions-input-expansion",
+      "kind": "specimen",
+      "package": "totem.spike.rbe74c55caa9fd60c",
+      "expectedEntrypoint": "totem/spike/rbe74c55caa9fd60c/result",
+      "wasmSha256": "aa37c437ab54b6606fc8e126ac4dd1e789e359142873ce854759117d50c760ad",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/rbe74c55caa9fd60c/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "ec32f1dfbce7790d012667055f34356318cc2cf7d4cd8ab75ee0dd3d2e48e8f1",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rbe74c55caa9fd60c/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/rbe74c55caa9fd60c/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/rbe74c55caa9fd60c.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:d5faa14c-absolute-claims-in-docs",
+      "kind": "specimen",
+      "package": "totem.spike.rd5faa14cbb8b50fb",
+      "expectedEntrypoint": "totem/spike/rd5faa14cbb8b50fb/result",
+      "wasmSha256": "0566d5a716df98c5b810ee9afcc4dfe0534f0eb85d0a7a9969b197a43c32c70c",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/rd5faa14cbb8b50fb/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "ccf59faaaf7a39eabfc35416df59419b13a81f9ba4bd2b55d436e55252841a0b",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rd5faa14cbb8b50fb/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/rd5faa14cbb8b50fb/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/rd5faa14cbb8b50fb.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:d940b2c9-stdio-in-exec-options",
+      "kind": "specimen",
+      "package": "totem.spike.rd940b2c9ffe92e99",
+      "expectedEntrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+      "wasmSha256": "2a792c0ece5e81fc609bd2cebcd667e5b4a2cf8110789219341cb7fa93d08fce",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/rd940b2c9ffe92e99/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "c86a8602c56d79e9861e1da0fd0f926e8cce846e36f0c1665c24913ecb7cf8ee",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/rd940b2c9ffe92e99/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/rd940b2c9ffe92e99/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/chains/rd940b2c9ffe92e99.json",
       "blockedArtifact": null
     },
     {
@@ -1506,24 +2122,29 @@
       "detail": "6 violations: unknown key(s) `surprise` — the schema line is exact | `file` must be a string (got number) | `fileText` must be a string or null (got array) | `lines[1]` must be a string (got number) | `lines[2]` must be a string (got null) | `astMatches` must be an array (got string)"
     },
     {
-      "name": "SENTINEL — the validator is NOT vacuously strict: all 24 measured FactBundles validate",
+      "name": "SENTINEL — the validator is NOT vacuously strict: all 46 measured FactBundles validate",
       "ok": true,
-      "detail": "24/24 accepted"
+      "detail": "46/46 accepted"
     },
     {
-      "name": "the bundles on disk under `rego/build/` are exactly the 7 the lowering declared",
+      "name": "SENTINEL — the G8 malformed-facts control 87aff037d7de47a7-87aff037-fail-open-catch-ban-m3-malformed-lines.json is REJECTED by the SAME validator (so the acceptance above is a measurement, not a vacuous read)",
       "ok": true,
-      "detail": "[\"r0123456789abcdef_d_file\",\"r0123456789abcdef_d_line\",\"r0123456789abcdef_e\",\"r2d962603591aa928\",\"r61dcb058bd1df15d\",\"r87aff037d7de47a7\",\"rd0815b6769304e26\"]"
+      "detail": "`lines[1]` must be a string (got number)"
     },
     {
-      "name": "the build hand-off carries a computed chain for each of the 7",
+      "name": "the bundles on disk under `rego/build/` are exactly the 21 the lowering declared",
       "ok": true,
-      "detail": "7"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
+    },
+    {
+      "name": "the build hand-off carries a computed chain for each of the 21",
+      "ok": true,
+      "detail": "21"
     },
     {
       "name": "specimen:d-file — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
-      "detail": "07b771da11130e61… on both sides"
+      "detail": "6feda7a2c0c593f0… on both sides"
     },
     {
       "name": "specimen:d-file — certification PASS",
@@ -1536,92 +2157,302 @@
       "detail": "{}"
     },
     {
-      "name": "specimen:d-line — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "name": "specimen:0167a783-dynamic-import-utility-layer — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
-      "detail": "ea46fa323435ea07… on both sides"
+      "detail": "e58c5cd7bbb1001e… on both sides"
     },
     {
-      "name": "specimen:d-line — certification PASS",
-      "ok": true,
-      "detail": "all 1 entrypoint(s) returned a well-formed result"
-    },
-    {
-      "name": "specimen:d-line — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
-      "ok": true,
-      "detail": "{}"
-    },
-    {
-      "name": "specimen:e — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
-      "ok": true,
-      "detail": "b81f809552a233b3… on both sides"
-    },
-    {
-      "name": "specimen:e — certification PASS",
+      "name": "specimen:0167a783-dynamic-import-utility-layer — certification PASS",
       "ok": true,
       "detail": "all 1 entrypoint(s) returned a well-formed result"
     },
     {
-      "name": "specimen:e — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "name": "specimen:0167a783-dynamic-import-utility-layer — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
     {
-      "name": "specimen:b — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "name": "specimen:49dd9e4f-llm-character-counting — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
-      "detail": "761f95f29e6e4272… on both sides"
+      "detail": "4729fee4d639a697… on both sides"
     },
     {
-      "name": "specimen:b — certification PASS",
+      "name": "specimen:49dd9e4f-llm-character-counting — certification PASS",
       "ok": true,
       "detail": "all 1 entrypoint(s) returned a well-formed result"
     },
     {
-      "name": "specimen:b — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "name": "specimen:49dd9e4f-llm-character-counting — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
     {
-      "name": "specimen:a — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "name": "specimen:54140f59-bare-issue-number-refs — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
-      "detail": "757f8118a34de759… on both sides"
+      "detail": "55d5aa55249b89a5… on both sides"
     },
     {
-      "name": "specimen:a — certification PASS",
+      "name": "specimen:54140f59-bare-issue-number-refs — certification PASS",
       "ok": true,
       "detail": "all 1 entrypoint(s) returned a well-formed result"
     },
     {
-      "name": "specimen:a — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "name": "specimen:54140f59-bare-issue-number-refs — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
     {
-      "name": "specimen:c-supp — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "name": "specimen:5b85fe53-suppress-event-runtime-failure — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "9e520179e0903218… on both sides"
+    },
+    {
+      "name": "specimen:5b85fe53-suppress-event-runtime-failure — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:5b85fe53-suppress-event-runtime-failure — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:5da43ea6-git-double-dash-separator — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "38ea90b333c1af14… on both sides"
+    },
+    {
+      "name": "specimen:5da43ea6-git-double-dash-separator — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:5da43ea6-git-double-dash-separator — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:6467c351-dynamic-import-cli-entry — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "68e209be972f9c70… on both sides"
+    },
+    {
+      "name": "specimen:6467c351-dynamic-import-cli-entry — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:6467c351-dynamic-import-cli-entry — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:65ede9bf-dynamic-import-command-handlers — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "7a6658492c99035c… on both sides"
+    },
+    {
+      "name": "specimen:65ede9bf-dynamic-import-command-handlers — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:65ede9bf-dynamic-import-command-handlers — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist-js — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "283b2ec0fd70d889… on both sides"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist-js — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist-js — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "e56d5deebd775f1e… on both sides"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:6b1890e2-empty-string-in-whitelist — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:6b2b62eb-totem-error-log-tag — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "013e80447bdcab65… on both sides"
+    },
+    {
+      "name": "specimen:6b2b62eb-totem-error-log-tag — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:6b2b62eb-totem-error-log-tag — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input-js — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "29bda9cca997a239… on both sides"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input-js — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input-js — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "dd780efa717ef4a0… on both sides"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:71935fe9-string-cast-on-input — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:87aff037-fail-open-catch-ban — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
       "detail": "f1c2c73119b1f5e6… on both sides"
     },
     {
-      "name": "specimen:c-supp — certification PASS",
+      "name": "specimen:87aff037-fail-open-catch-ban — certification PASS",
       "ok": true,
       "detail": "all 1 entrypoint(s) returned a well-formed result"
     },
     {
-      "name": "specimen:c-supp — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "name": "specimen:87aff037-fail-open-catch-ban — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
     {
-      "name": "specimen:c — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "name": "specimen:89184bb5-bsd-sed-hex-escape — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
       "ok": true,
-      "detail": "5aa898a084d8214d… on both sides"
+      "detail": "a7c751d4cb3848ae… on both sides"
     },
     {
-      "name": "specimen:c — certification PASS",
+      "name": "specimen:89184bb5-bsd-sed-hex-escape — certification PASS",
       "ok": true,
       "detail": "all 1 entrypoint(s) returned a well-formed result"
     },
     {
-      "name": "specimen:c — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "name": "specimen:89184bb5-bsd-sed-hex-escape — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:aa7a588d-async-test-callbacks — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "622b00e9dde0db42… on both sides"
+    },
+    {
+      "name": "specimen:aa7a588d-async-test-callbacks — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:aa7a588d-async-test-callbacks — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:b237bcf3-pwd-in-credential-regex — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "a46775263f7b3078… on both sides"
+    },
+    {
+      "name": "specimen:b237bcf3-pwd-in-credential-regex — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:b237bcf3-pwd-in-credential-regex — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:b9736096-orchestrator-test-timeout — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "b50725bf51ccce73… on both sides"
+    },
+    {
+      "name": "specimen:b9736096-orchestrator-test-timeout — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:b9736096-orchestrator-test-timeout — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:be74c55c-actions-input-expansion — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "aa37c437ab54b660… on both sides"
+    },
+    {
+      "name": "specimen:be74c55c-actions-input-expansion — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:be74c55c-actions-input-expansion — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:d5faa14c-absolute-claims-in-docs — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "0566d5a716df98c5… on both sides"
+    },
+    {
+      "name": "specimen:d5faa14c-absolute-claims-in-docs — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:d5faa14c-absolute-claims-in-docs — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:d940b2c9-stdio-in-exec-options — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "2a792c0ece5e81fc… on both sides"
+    },
+    {
+      "name": "specimen:d940b2c9-stdio-in-exec-options — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:d940b2c9-stdio-in-exec-options — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
@@ -1823,12 +2654,12 @@
     {
       "name": "MALFORMED SENTINEL — refused BEFORE any eval: the host was not invoked once (a counter, not an assertion about intent)",
       "ok": true,
-      "detail": "host invocations 15 -> 15; evaluated=false"
+      "detail": "host invocations 29 -> 29; evaluated=false"
     },
     {
       "name": "MALFORMED SENTINEL — and the SAME bundle certifies PASS on the valid sentinel (the refusal is about the sentinel, not the bundle)",
       "ok": true,
-      "detail": "totem.spike.r0123456789abcdef_d_file"
+      "detail": "totem.spike.r0123456789abcdef"
     },
     {
       "name": "CLASSIFIER UNIT — unit:result-set-length-2 is BLOCKED with the typed reason `eval-error-or-trap`",
@@ -1978,7 +2809,7 @@
     {
       "name": "PUBLICATION — `artifacts/chains/` holds EXACTLY the certified bundles, one file each",
       "ok": true,
-      "detail": "[\"r0123456789abcdef_d_file.json\",\"r0123456789abcdef_d_line.json\",\"r0123456789abcdef_e.json\",\"r2d962603591aa928.json\",\"r61dcb058bd1df15d.json\",\"r87aff037d7de47a7.json\",\"rd0815b6769304e26.json\"]"
+      "detail": "[\"r0123456789abcdef.json\",\"r0167a783f75b5ecd.json\",\"r49dd9e4fd02d692b.json\",\"r54140f59be3e6e44.json\",\"r5b85fe53468964e1.json\",\"r5da43ea60b66e96e.json\",\"r6467c35159c1504d.json\",\"r65ede9bfdf6995fe.json\",\"r6b1890e2dbda3331_javascript.json\",\"r6b1890e2dbda3331_typescript.json\",\"r6b2b62eb1e8693fc.json\",\"r71935fe9a742137b_javascript.json\",\"r71935fe9a742137b_typescript.json\",\"r87aff037d7de47a7.json\",\"r89184bb5fd960848.json\",\"raa7a588d48e74503.json\",\"rb237bcf3b52381b1.json\",\"rb973609688ec2888.json\",\"rbe74c55caa9fd60c.json\",\"rd5faa14cbb8b50fb.json\",\"rd940b2c9ffe92e99.json\"]"
     },
     {
       "name": "PUBLICATION — every blocked bundle has an `artifacts/blocked/<pkg>.json` and no chain",
@@ -1991,6 +2822,6 @@
       "detail": "[]"
     }
   ],
-  "runManifestSha256": "0ce0e49e3662b792f50e2cc9e39306b2f3406fa0348d0c40e9be5609c48ea599",
-  "bundlesSha256": "bff024facd2d0e3cb67cef2a0ae1a235aaa64c380a59b86a12f4cae6479ffed1"
+  "runManifestSha256": "df3a231af6261f420dd8506efc4c2b52d9defe0ddc0e617f3688c8ccffac6201",
+  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
 }

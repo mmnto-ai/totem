@@ -6,7 +6,9 @@
   "source": "record-examples",
   "arm": "bad",
   "provenance": {
-    "recordFile": "spikes/spine-adopt/records/d-requires-file.rule.yaml",
+    "control": true,
+    "controlRecord": true,
+    "recordFile": "spikes/spine-adopt/seed/controls/k5/d-requires-file.rule.yaml",
     "exampleOrdinal": 0,
     "examplePairHash": "72dd588d108abe25abe05ba96c069c28ddba995e29d3b4488b3837af2ba5685a"
   },
