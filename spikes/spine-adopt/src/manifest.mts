@@ -412,13 +412,25 @@ function main(): void {
   // run's `repinned`. Arm B is PRESENT only when the control build's OWN manifest
   // beside those bytes says `recordSet: 'control'` AND its `runCommit` equals this
   // run's HEAD. Anything else is arm B ABSENT, disclosed by name.
+  //
+  // (A14, mmnto-ai/totem#2704) On the CONTROL run this process IS arm B. The home it
+  // would inspect is the one it is about to write into, so anything found there is
+  // the PREVIOUS control build's — the one being replaced — and a disclosure read
+  // from it is stale and self-referential (the controls-at-the-pin commit recorded
+  // "STALE … runCommit=69b85544…" in `k3-control/manifest-checks.json` beside a
+  // `k3-control/manifest.json` that said `8f64e4b9…`; and a leftover build at the
+  // SAME HEAD would have been measured against itself and published as this run's
+  // `repinned`). Arm B is therefore NOT inspected on this set: `repinned` stays
+  // `null` with `repinnedFrom: null`, and the row says why by name. The seed run
+  // measures it — that is the § 6 order (control-only build FIRST).
+  const thisRunIsArmB = recordSet === 'control';
   const k3ControlRel = 'artifacts/k3-control';
   const k3ControlHome = path.join(SPIKE_ROOT, 'artifacts', 'k3-control');
   const armBPolicyAt = path.join(k3ControlHome, 'lowered', K3_CAPTURE_PACKAGE, 'policy.rego');
   const armBChainAt = path.join(k3ControlHome, 'chains', `${K3_CAPTURE_PACKAGE}.json`);
   const armBManifestAt = path.join(k3ControlHome, 'manifest.json');
   let armBManifest: Record<string, unknown> | null = null;
-  if (fs.existsSync(armBManifestAt)) {
+  if (!thisRunIsArmB && fs.existsSync(armBManifestAt)) {
     try {
       armBManifest = JSON.parse(fs.readFileSync(armBManifestAt, 'utf-8')) as Record<
         string,
@@ -431,20 +443,23 @@ function main(): void {
     }
   }
   const armBBound =
+    !thisRunIsArmB &&
     armBManifest !== null &&
     armBManifest.recordSet === 'control' &&
     armBManifest.runCommit === head.out;
-  const armBBindingDetail = !fs.existsSync(k3ControlHome)
-    ? `no control-only build present: \`${k3ControlRel}/\` does not exist`
-    : armBManifest === null
-      ? `no control-only build present: \`${k3ControlRel}/manifest.json\` is absent or unparseable`
-      : armBBound
-        ? `bound to this run: \`${k3ControlRel}/manifest.json\` carries recordSet=control runCommit=${head.out}`
-        : `STALE control-only build — \`${k3ControlRel}/manifest.json\` carries recordSet=${JSON.stringify(
-            armBManifest.recordSet ?? null,
-          )} runCommit=${JSON.stringify(
-            armBManifest.runCommit ?? null,
-          )}; arm B requires recordSet 'control' at THIS run's HEAD ${head.out}`;
+  const armBBindingDetail = thisRunIsArmB
+    ? 'n/a — this run IS the control-only build (arm B); the seed run measures it'
+    : !fs.existsSync(k3ControlHome)
+      ? `no control-only build present: \`${k3ControlRel}/\` does not exist`
+      : armBManifest === null
+        ? `no control-only build present: \`${k3ControlRel}/manifest.json\` is absent or unparseable`
+        : armBBound
+          ? `bound to this run: \`${k3ControlRel}/manifest.json\` carries recordSet=control runCommit=${head.out}`
+          : `STALE control-only build — \`${k3ControlRel}/manifest.json\` carries recordSet=${JSON.stringify(
+              armBManifest.recordSet ?? null,
+            )} runCommit=${JSON.stringify(
+              armBManifest.runCommit ?? null,
+            )}; arm B requires recordSet 'control' at THIS run's HEAD ${head.out}`;
   const armBRebuilt =
     armBBound && fs.existsSync(armBPolicyAt) && fs.existsSync(armBChainAt)
       ? {
@@ -889,14 +904,18 @@ function main(): void {
     }`,
     true,
     k3Repinned === null
-      ? // (fold 3 J2) The detail NAMES why arm B is absent: no build, or a build bound
-        // to another run. "Absent" and "stale" are different states and a reader must
-        // not have to guess which one produced the `null`.
-        `${armBBindingDetail}${
-          armBBound
-            ? ` — but \`${k3ControlRel}/lowered/${K3_CAPTURE_PACKAGE}/policy.rego\` and/or its chain are absent`
-            : ''
-        } — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is \`controls.json\` K3 arm B's`
+      ? thisRunIsArmB
+        ? // (A14) This run IS arm B: nothing to inspect, nothing to instruct — the
+          // seed run that follows measures this build, and the disposition is its.
+          armBBindingDetail
+        : // (fold 3 J2) The detail NAMES why arm B is absent: no build, or a build
+          // bound to another run. "Absent" and "stale" are different states and a
+          // reader must not have to guess which one produced the `null`.
+          `${armBBindingDetail}${
+            armBBound
+              ? ` — but \`${k3ControlRel}/lowered/${K3_CAPTURE_PACKAGE}/policy.rego\` and/or its chain are absent`
+              : ''
+          } — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is \`controls.json\` K3 arm B's`
       : k3Repinned
         ? `policy.rego ${armBRebuilt!.policyRegoSha256} (pin ${k3Pins.policyRegoSha256}); code ${armBRebuilt!.policyRegoCodeSha256} (pin ${k3Pins.policyRegoCodeSha256}); chain ${armBRebuilt!.chainSha256} (pin ${k3Pins.chainSha256}) — ${armBBindingDetail}`
         : `the control-only build reproduces the pinned policy.rego, its § 5 code-only digest AND the pinned chain byte-for-byte — ${armBBindingDetail}`,
