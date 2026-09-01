@@ -45,6 +45,21 @@
         "manifestSha256RederivedFromModule": "d0653fb2adc367259078d77e1fc86b0490d537571bdb3024147be0192b860aa5"
       },
       {
+        "chain": "r0e01112d5f18ffde.json",
+        "mode": null,
+        "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
+        "allModeChecksPassed": null,
+        "preservedBytes": null,
+        "publishedBytes": 5453,
+        "changedKeys": null,
+        "addedKeys": null,
+        "recordSha256": "26e997b34a3ba5a0d7dd61014d2996942b545748763f418a5bd9d8f8409362dc",
+        "regoSha256": "05b7b57a90868613051372e2a54e9695e3bf79ffcf95e9373cbdd952227ba8e9",
+        "wasmSha256": "5c433a590f05f3ccdd4ba5b32caa80cc52684bc800feba65a6fc96dcaf4e7be2",
+        "manifestSha256": "6400ccdd9080a9dd49eb3c8343265333b695079c59b2f01077144e6daf792aa3",
+        "manifestSha256RederivedFromModule": "6400ccdd9080a9dd49eb3c8343265333b695079c59b2f01077144e6daf792aa3"
+      },
+      {
         "chain": "r49dd9e4fd02d692b.json",
         "mode": null,
         "modeReason": "no committed referent for this run — `artifacts/manifest.json` at HEAD records `recordSet: \"seed20\"` and the selected referent dir `spikes/spine-adopt/artifacts/chains` does not apply on `seed20`, so the committed-vs-published half of INV 2 is skipped for this chain",
@@ -458,9 +473,9 @@
   },
   "checks": [
     {
-      "name": "INV 1 — the report carries all 21 specimen bundles",
+      "name": "INV 1 — the report carries all 22 specimen bundles",
       "ok": true,
-      "detail": "21"
+      "detail": "22"
     },
     {
       "name": "INV 1 — every specimen bundle certifies PASS",
@@ -478,9 +493,9 @@
       "detail": "manifest.recordSet=\"seed20\", activeRecordSet()=\"seed20\""
     },
     {
-      "name": "INV 2 — SKIPPED with the named reason `committed-half-not-run-on-seed20`: the 21 published chain(s) belong to record set `seed20` (the manifest's); the committed-vs-published half is not run on this arm — `spikes/spine-adopt/artifacts/chains` at HEAD holds 21 chain(s) from the committed `seed20` baseline, a live byte-equality referent when that baseline is itself a seed run (deposited as a candidate extension, not built here: A13 on mmnto-ai/totem#2704)",
+      "name": "INV 2 — SKIPPED with the named reason `committed-half-not-run-on-seed20`: the 22 published chain(s) belong to record set `seed20` (the manifest's); the committed-vs-published half is not run on this arm — `spikes/spine-adopt/artifacts/chains` at HEAD holds 21 chain(s) from the committed `seed20` baseline, a live byte-equality referent when that baseline is itself a seed run (deposited as a candidate extension, not built here: A13 on mmnto-ai/totem#2704)",
       "ok": true,
-      "detail": "published: 21; committed at HEAD: 21"
+      "detail": "published: 22; committed at HEAD: 21"
     },
     {
       "name": "INV 2 — r0123456789abcdef.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
@@ -519,6 +534,26 @@
     },
     {
       "name": "INV 2 — r0167a783f75b5ecd.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
+      "ok": true,
+      "detail": "1 `result :=` rule(s), guard block present"
+    },
+    {
+      "name": "INV 2 — r0e01112d5f18ffde.json: `manifestSha256` re-derives from the module ({entrypoints[], imports[], builtins{}}, canonical JSON)",
+      "ok": true,
+      "detail": "\"6400ccdd9080a9dd49eb3c8343265333b695079c59b2f01077144e6daf792aa3\""
+    },
+    {
+      "name": "INV 2 — r0e01112d5f18ffde.json: the chain binds all FIVE members (source · IR · guarded policy · entrypoint/import manifest · final Wasm), each a sha256",
+      "ok": true,
+      "detail": "{\"source\":\"26e997b34a3b\",\"ir\":\"05b7b57a9086\",\"guardedPolicy\":\"f0eaabc24118\",\"entrypointManifest\":\"6400ccdd9080\",\"finalWasm\":\"5c433a590f05\"}"
+    },
+    {
+      "name": "INV 2 — r0e01112d5f18ffde.json: the bound guarded-policy digest is the sha256 of the policy on disk",
+      "ok": true,
+      "detail": "\"f0eaabc24118f39a9f4d8af10a21c294557859eafd584f8b4c7082cd6c37d246\""
+    },
+    {
+      "name": "INV 2 — r0e01112d5f18ffde.json: the ONLY exported result path is the guarded one (one `result :=` rule, gated on patterns_compile + facts_wellformed)",
       "ok": true,
       "detail": "1 `result :=` rule(s), guard block present"
     },
@@ -1103,6 +1138,6 @@
       "detail": "a `join(…, 'chains', …)` write and a multi-line `CHAINS_DIR` write are both caught; an `rmSync` of the same path is not"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
-  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
+  "bundlesSha256": "1f23847bb7081f1d07f344061ba576ccab94c3f29e26f4a453981729dc90e186"
 }

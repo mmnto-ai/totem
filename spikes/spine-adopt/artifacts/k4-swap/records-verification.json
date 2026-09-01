@@ -1055,7 +1055,7 @@
     {
       "name": "specimen 0e01112d-bare-new-error — target.pattern round-trips through YAML with backslashes INTACT (no control bytes)",
       "ok": true,
-      "detail": "\"\\\\bnew\\\\s+(?!Totem)Error\\\\(\""
+      "detail": "\"\\\\bnew\\\\s+Error\\\\(\""
     },
     {
       "name": "specimen 0e01112d-bare-new-error — the authored YAML uses a single-quoted/block scalar for the pattern (never double-quoted)",
@@ -1548,7 +1548,7 @@
       "detail": "22"
     },
     {
-      "name": "SEED PIN — the 22 `.rule.yaml` files at `2a7135762b6aedc9cd3099ab3f42e029ee34092e:.totem/rules/` and the 22 under seed/records/ are the SAME SET, each pair byte-identical",
+      "name": "SEED PIN — the 22 `.rule.yaml` files at `78e7f196b93caf0df68a3baba561cce66279563c:.totem/rules/` and the 22 under seed/records/ are the SAME SET, each pair byte-identical",
       "ok": true,
       "detail": "[]"
     },
@@ -1583,5 +1583,5 @@
       "detail": "3 paths"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59"
 }

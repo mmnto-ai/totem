@@ -12,7 +12,7 @@
     "sha256": "bb5b7fff8ba0d974fd8a977280340b13cb9321e9dc59f749f88706899945a6f0",
     "rationale": "Schema-valid and neutral (spec § Actuator slice 1): with no lines and no ast matches, no policy can produce a violation of its own, so the only thing that varies across bundles is whether the guarded `result` rule is DEFINED.",
     "schemaContract": "rego/LOWERING.md § Input contract — input = { file, fileText: string|null, lines: [string], astMatches: [{lineNumber, lineText, startLineText, startPrecedingLineText}] }",
-    "validatorAcceptsAllMeasuredBundles": 46,
+    "validatorAcceptsAllMeasuredBundles": 48,
     "malformedControl": {
       "bundle": {
         "file": 42,
@@ -101,6 +101,7 @@
     "chainsWritten": [
       "r0123456789abcdef.json",
       "r0167a783f75b5ecd.json",
+      "r0e01112d5f18ffde.json",
       "r49dd9e4fd02d692b.json",
       "r54140f59be3e6e44.json",
       "r5b85fe53468964e1.json",
@@ -217,6 +218,49 @@
       "reason": null,
       "detail": "all 1 entrypoint(s) returned a well-formed result",
       "chainWritten": "artifacts/k4-swap/chains/r0167a783f75b5ecd.json",
+      "blockedArtifact": null
+    },
+    {
+      "id": "specimen:0e01112d-bare-new-error",
+      "kind": "specimen",
+      "package": "totem.spike.r0e01112d5f18ffde",
+      "expectedEntrypoint": "totem/spike/r0e01112d5f18ffde/result",
+      "wasmSha256": "5c433a590f05f3ccdd4ba5b32caa80cc52684bc800feba65a6fc96dcaf4e7be2",
+      "evaluated": true,
+      "sentinelValid": true,
+      "sentinelSchemaErrors": [],
+      "manifest": {
+        "entrypoints": [
+          "totem/spike/r0e01112d5f18ffde/result"
+        ],
+        "imports": [
+          "env.memory:memory",
+          "env.opa_abort:function",
+          "env.opa_builtin0:function",
+          "env.opa_builtin1:function",
+          "env.opa_builtin2:function",
+          "env.opa_builtin3:function",
+          "env.opa_builtin4:function"
+        ],
+        "builtins": {}
+      },
+      "manifestSha256": "6400ccdd9080a9dd49eb3c8343265333b695079c59b2f01077144e6daf792aa3",
+      "entrypointAssertion": {
+        "ok": true,
+        "detail": "exactly one entrypoint, and it is the canonical `totem/spike/r0e01112d5f18ffde/result` (`<pkg>/result` derived from the package name, and the expected entrypoint agrees)"
+      },
+      "classifications": [
+        {
+          "entrypoint": "totem/spike/r0e01112d5f18ffde/result",
+          "status": "PASS",
+          "reason": null,
+          "detail": "defined object with exactly `violations` + `events` (0 violations, 0 events)"
+        }
+      ],
+      "status": "PASS",
+      "reason": null,
+      "detail": "all 1 entrypoint(s) returned a well-formed result",
+      "chainWritten": "artifacts/k4-swap/chains/r0e01112d5f18ffde.json",
       "blockedArtifact": null
     },
     {
@@ -2122,9 +2166,9 @@
       "detail": "6 violations: unknown key(s) `surprise` — the schema line is exact | `file` must be a string (got number) | `fileText` must be a string or null (got array) | `lines[1]` must be a string (got number) | `lines[2]` must be a string (got null) | `astMatches` must be an array (got string)"
     },
     {
-      "name": "SENTINEL — the validator is NOT vacuously strict: all 46 measured FactBundles validate",
+      "name": "SENTINEL — the validator is NOT vacuously strict: all 48 measured FactBundles validate",
       "ok": true,
-      "detail": "46/46 accepted"
+      "detail": "48/48 accepted"
     },
     {
       "name": "SENTINEL — the G8 malformed-facts control 87aff037d7de47a7-87aff037-fail-open-catch-ban-m3-malformed-lines.json is REJECTED by the SAME validator (so the acceptance above is a measurement, not a vacuous read)",
@@ -2132,14 +2176,14 @@
       "detail": "`lines[1]` must be a string (got number)"
     },
     {
-      "name": "the bundles on disk under `rego/build/` are exactly the 21 the lowering declared",
+      "name": "the bundles on disk under `rego/build/` are exactly the 22 the lowering declared",
       "ok": true,
-      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r0e01112d5f18ffde\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
     },
     {
-      "name": "the build hand-off carries a computed chain for each of the 21",
+      "name": "the build hand-off carries a computed chain for each of the 22",
       "ok": true,
-      "detail": "21"
+      "detail": "22"
     },
     {
       "name": "specimen:d-file — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
@@ -2168,6 +2212,21 @@
     },
     {
       "name": "specimen:0167a783-dynamic-import-utility-layer — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
+      "ok": true,
+      "detail": "{}"
+    },
+    {
+      "name": "specimen:0e01112d-bare-new-error — the certified wasm is the wasm the build hashed (asserted BEFORE publication, as a hard throw)",
+      "ok": true,
+      "detail": "5c433a590f05f3cc… on both sides"
+    },
+    {
+      "name": "specimen:0e01112d-bare-new-error — certification PASS",
+      "ok": true,
+      "detail": "all 1 entrypoint(s) returned a well-formed result"
+    },
+    {
+      "name": "specimen:0e01112d-bare-new-error — the certified module delegates NO builtin to the host (`builtins` is `{}`), so the sentinel's coverage ceiling holds",
       "ok": true,
       "detail": "{}"
     },
@@ -2654,7 +2713,7 @@
     {
       "name": "MALFORMED SENTINEL — refused BEFORE any eval: the host was not invoked once (a counter, not an assertion about intent)",
       "ok": true,
-      "detail": "host invocations 29 -> 29; evaluated=false"
+      "detail": "host invocations 30 -> 30; evaluated=false"
     },
     {
       "name": "MALFORMED SENTINEL — and the SAME bundle certifies PASS on the valid sentinel (the refusal is about the sentinel, not the bundle)",
@@ -2809,7 +2868,7 @@
     {
       "name": "PUBLICATION — `artifacts/chains/` holds EXACTLY the certified bundles, one file each",
       "ok": true,
-      "detail": "[\"r0123456789abcdef.json\",\"r0167a783f75b5ecd.json\",\"r49dd9e4fd02d692b.json\",\"r54140f59be3e6e44.json\",\"r5b85fe53468964e1.json\",\"r5da43ea60b66e96e.json\",\"r6467c35159c1504d.json\",\"r65ede9bfdf6995fe.json\",\"r6b1890e2dbda3331_javascript.json\",\"r6b1890e2dbda3331_typescript.json\",\"r6b2b62eb1e8693fc.json\",\"r71935fe9a742137b_javascript.json\",\"r71935fe9a742137b_typescript.json\",\"r87aff037d7de47a7.json\",\"r89184bb5fd960848.json\",\"raa7a588d48e74503.json\",\"rb237bcf3b52381b1.json\",\"rb973609688ec2888.json\",\"rbe74c55caa9fd60c.json\",\"rd5faa14cbb8b50fb.json\",\"rd940b2c9ffe92e99.json\"]"
+      "detail": "[\"r0123456789abcdef.json\",\"r0167a783f75b5ecd.json\",\"r0e01112d5f18ffde.json\",\"r49dd9e4fd02d692b.json\",\"r54140f59be3e6e44.json\",\"r5b85fe53468964e1.json\",\"r5da43ea60b66e96e.json\",\"r6467c35159c1504d.json\",\"r65ede9bfdf6995fe.json\",\"r6b1890e2dbda3331_javascript.json\",\"r6b1890e2dbda3331_typescript.json\",\"r6b2b62eb1e8693fc.json\",\"r71935fe9a742137b_javascript.json\",\"r71935fe9a742137b_typescript.json\",\"r87aff037d7de47a7.json\",\"r89184bb5fd960848.json\",\"raa7a588d48e74503.json\",\"rb237bcf3b52381b1.json\",\"rb973609688ec2888.json\",\"rbe74c55caa9fd60c.json\",\"rd5faa14cbb8b50fb.json\",\"rd940b2c9ffe92e99.json\"]"
     },
     {
       "name": "PUBLICATION — every blocked bundle has an `artifacts/blocked/<pkg>.json` and no chain",
@@ -2822,6 +2881,6 @@
       "detail": "[]"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
-  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
+  "bundlesSha256": "1f23847bb7081f1d07f344061ba576ccab94c3f29e26f4a453981729dc90e186"
 }
