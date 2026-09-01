@@ -349,6 +349,114 @@
       "error": null
     },
     {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "arm": "shipped",
+      "fired": true,
+      "matchCount": 1,
+      "events": [
+        {
+          "kind": "trigger",
+          "ruleId": "0e01112d5f18ffde",
+          "file": "src/errors.ts",
+          "line": 1,
+          "justification": null
+        }
+      ],
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "engine": "regex",
+      "file": "src/errors.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [
+            {
+              "ruleId": "0e01112d5f18ffde",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "throw new Error('lesson compile failed');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "0e01112d5f18ffde",
+              "file": "src/errors.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [
+            {
+              "ruleId": "0e01112d5f18ffde",
+              "lineNumber": 1
+            }
+          ],
+          "violationLines": [
+            "throw new Error('lesson compile failed');"
+          ],
+          "events": [
+            {
+              "kind": "trigger",
+              "ruleId": "0e01112d5f18ffde",
+              "file": "src/errors.ts",
+              "line": 1,
+              "justification": null
+            }
+          ],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true,
+      "error": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "arm": "shipped",
+      "fired": false,
+      "matchCount": 0,
+      "events": [],
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "engine": "regex",
+      "file": "src/errors.ts",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "arms": [
+        {
+          "oracle": "arm1-pin",
+          "dispatcher": "applyRulesToAdditions",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": null
+        },
+        {
+          "oracle": "arm2-lint",
+          "dispatcher": "applyRulesToAdditionsBounded",
+          "violations": [],
+          "violationLines": [],
+          "events": [],
+          "timeoutOutcomes": []
+        }
+      ],
+      "armsCoincide": false,
+      "armsAgree": true,
+      "error": null
+    },
+    {
       "ruleId": "49dd9e4fd02d692b",
       "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
       "arm": "shipped",
@@ -2160,7 +2268,7 @@
     {
       "name": "fact bundles are present (run `src/facts.mts` first)",
       "ok": true,
-      "detail": "47 bundles"
+      "detail": "49 bundles"
     },
     {
       "name": "d-file-control-empty — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
@@ -2221,6 +2329,26 @@
       "name": "0167a783-dynamic-import-utility-layer-inline-good — applyRulesToAdditions filters this ast rule out entirely (not a second ast arm)",
       "ok": true,
       "detail": "0 violations, 0 events"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-bad — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[{\"ruleId\":\"0e01112d5f18ffde\",\"lineNumber\":1}] events=trigger | arm2=[{\"ruleId\":\"0e01112d5f18ffde\",\"lineNumber\":1}] events=trigger"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-good — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
+      "ok": true,
+      "detail": "0"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-good — the two dispatcher arms agree (violations AND event streams)",
+      "ok": true,
+      "detail": "arm1=[] events=- | arm2=[] events=-"
     },
     {
       "name": "49dd9e4f-llm-character-counting-inline-bad — bounded arm recorded NO timeout outcome (timeoutMs=5000)",
@@ -2630,12 +2758,12 @@
     {
       "name": "a VERDICT is the violation multiset, NOT a count of fixture lines (at least one row proves they differ)",
       "ok": true,
-      "detail": "23 of 46 verdict rows have matchCount !== lineCount (1 error row(s) excluded)"
+      "detail": "24 of 48 verdict rows have matchCount !== lineCount (1 error row(s) excluded)"
     },
     {
       "name": "ENGINE ASYMMETRY — the regex path emits AT MOST ONE violation per added line (worker.ts:53-62)",
       "ok": true,
-      "detail": "16 regex rows"
+      "detail": "18 regex rows"
     },
     {
       "name": "ENGINE ASYMMETRY — SKIPPED with a named reason: NO bundle in this record set carries more than one ast match, so the one-violation-per-MATCH asymmetry has nothing to exhibit it (a corpus property of the frozen set, not an apparatus defect)",
@@ -2648,6 +2776,6 @@
       "detail": "record set seed20; exemplar transcriptions in the loaded set: 1"
     }
   ],
-  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1",
-  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
+  "runManifestSha256": "6373969d21a5f16d5374cde9e59114d13a2642964ad3ef9c86df2301f18b1f06",
+  "bundlesSha256": "ee76a3512ee08d46636232aa1e54d38c4760a51c40fd950efc54db9446c4f0dc"
 }

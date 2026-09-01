@@ -2838,6 +2838,7 @@ spikes/spine-adopt/artifacts/k4-swap/certification-report.json
 spikes/spine-adopt/artifacts/k4-swap/chain-inputs.json
 spikes/spine-adopt/artifacts/k4-swap/chains/r0123456789abcdef.json
 spikes/spine-adopt/artifacts/k4-swap/chains/r0167a783f75b5ecd.json
+spikes/spine-adopt/artifacts/k4-swap/chains/r0e01112d5f18ffde.json
 spikes/spine-adopt/artifacts/k4-swap/chains/r49dd9e4fd02d692b.json
 spikes/spine-adopt/artifacts/k4-swap/chains/r54140f59be3e6e44.json
 spikes/spine-adopt/artifacts/k4-swap/chains/r5b85fe53468964e1.json
@@ -2866,6 +2867,8 @@ spikes/spine-adopt/artifacts/k4-swap/facts/0123456789abcdef-d-file-inline-bad.js
 spikes/spine-adopt/artifacts/k4-swap/facts/0123456789abcdef-d-file-inline-good.json
 spikes/spine-adopt/artifacts/k4-swap/facts/0167a783f75b5ecd-0167a783-dynamic-import-utility-layer-inline-bad.json
 spikes/spine-adopt/artifacts/k4-swap/facts/0167a783f75b5ecd-0167a783-dynamic-import-utility-layer-inline-good.json
+spikes/spine-adopt/artifacts/k4-swap/facts/0e01112d5f18ffde-0e01112d-bare-new-error-inline-bad.json
+spikes/spine-adopt/artifacts/k4-swap/facts/0e01112d5f18ffde-0e01112d-bare-new-error-inline-good.json
 spikes/spine-adopt/artifacts/k4-swap/facts/49dd9e4fd02d692b-49dd9e4f-llm-character-counting-inline-bad.json
 spikes/spine-adopt/artifacts/k4-swap/facts/49dd9e4fd02d692b-49dd9e4f-llm-character-counting-inline-good.json
 spikes/spine-adopt/artifacts/k4-swap/facts/54140f59be3e6e44-54140f59-bare-issue-number-refs-inline-bad.json
@@ -2911,6 +2914,8 @@ spikes/spine-adopt/artifacts/k4-swap/lowered/r0123456789abcdef/globs.json
 spikes/spine-adopt/artifacts/k4-swap/lowered/r0123456789abcdef/policy.rego
 spikes/spine-adopt/artifacts/k4-swap/lowered/r0167a783f75b5ecd/globs.json
 spikes/spine-adopt/artifacts/k4-swap/lowered/r0167a783f75b5ecd/policy.rego
+spikes/spine-adopt/artifacts/k4-swap/lowered/r0e01112d5f18ffde/globs.json
+spikes/spine-adopt/artifacts/k4-swap/lowered/r0e01112d5f18ffde/policy.rego
 spikes/spine-adopt/artifacts/k4-swap/lowered/r49dd9e4fd02d692b/globs.json
 spikes/spine-adopt/artifacts/k4-swap/lowered/r49dd9e4fd02d692b/policy.rego
 spikes/spine-adopt/artifacts/k4-swap/lowered/r54140f59be3e6e44/globs.json
@@ -2962,6 +2967,7 @@ spikes/spine-adopt/artifacts/k4-swap/tracked-paths-at-record-pin.txt
 spikes/spine-adopt/artifacts/k4-swap/tracked-paths.txt
 spikes/spine-adopt/artifacts/k7-rebuild/chains/r0123456789abcdef.json
 spikes/spine-adopt/artifacts/k7-rebuild/chains/r0167a783f75b5ecd.json
+spikes/spine-adopt/artifacts/k7-rebuild/chains/r0e01112d5f18ffde.json
 spikes/spine-adopt/artifacts/k7-rebuild/chains/r49dd9e4fd02d692b.json
 spikes/spine-adopt/artifacts/k7-rebuild/chains/r54140f59be3e6e44.json
 spikes/spine-adopt/artifacts/k7-rebuild/chains/r5b85fe53468964e1.json

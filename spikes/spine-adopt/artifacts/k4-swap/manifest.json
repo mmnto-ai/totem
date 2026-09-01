@@ -2,7 +2,7 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "seed20",
-  "runCommit": "9d74499f97555cfc3c24f760b483b86f1c6352d1",
+  "runCommit": "d33b607e040c8f493fd29c4eeee30838d64dd010",
   "scorerSha256": "0b95fc03ac34ec82611d5f191d8551e3891e80a31a434a4170d231cb1782e579",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
@@ -21,6 +21,7 @@
     " M spikes/spine-adopt/artifacts/k3-control/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest.json",
     " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json",
+    " M spikes/spine-adopt/artifacts/k3-control/tracked-paths.txt",
     " M spikes/spine-adopt/artifacts/lowering-rejects.json",
     " M spikes/spine-adopt/artifacts/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/manifest.json",
@@ -30,6 +31,7 @@
     " M spikes/spine-adopt/artifacts/regorus-verdicts.json",
     " M spikes/spine-adopt/artifacts/shipped-verdicts.json",
     " M spikes/spine-adopt/artifacts/t5-sweep.json",
+    " M spikes/spine-adopt/artifacts/tracked-paths.txt",
     " M spikes/spine-adopt/wazero-probe/artifacts/wazero-pairs.json",
     " M spikes/spine-adopt/wazero-probe/artifacts/wazero-report.json",
     " M spikes/spine-adopt/wazero-probe/artifacts/wazero-verdicts.json",
@@ -684,8 +686,8 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3336,
-    "sha256": "47a8710d2a61e12454047846aae139d0af97fc75dfa126f1fbe967b09d037332"
+    "count": 3342,
+    "sha256": "218b115495554061782c861c6867ad5a094fa2947813f7837dcac6f64b8f2866"
   },
   "trackedPathsAtRecordPin": {
     "pin": "78e7f196b93caf0df68a3baba561cce66279563c",
@@ -940,6 +942,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-09-01T16:27:07.716Z",
-  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59"
+  "generatedAt": "2026-09-01T17:25:02.855Z",
+  "runManifestSha256": "a2e5fbdbc32ccd46436ac3960b806b6f8e6b17e39f0ce5b86c902a29580e9725"
 }

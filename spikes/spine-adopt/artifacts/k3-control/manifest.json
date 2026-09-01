@@ -2,7 +2,7 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "control",
-  "runCommit": "9d74499f97555cfc3c24f760b483b86f1c6352d1",
+  "runCommit": "d33b607e040c8f493fd29c4eeee30838d64dd010",
   "scorerSha256": "0b95fc03ac34ec82611d5f191d8551e3891e80a31a434a4170d231cb1782e579",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
@@ -208,8 +208,8 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3336,
-    "sha256": "47a8710d2a61e12454047846aae139d0af97fc75dfa126f1fbe967b09d037332"
+    "count": 3342,
+    "sha256": "218b115495554061782c861c6867ad5a094fa2947813f7837dcac6f64b8f2866"
   },
   "trackedPathsAtRecordPin": {
     "pin": "78e7f196b93caf0df68a3baba561cce66279563c",
@@ -267,6 +267,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-09-01T16:26:11.617Z",
-  "runManifestSha256": "de68ab05046ff837393f2a7b4a76174772c1e030a28ec0d1d666c2288ad003e8"
+  "generatedAt": "2026-09-01T17:24:09.355Z",
+  "runManifestSha256": "6d7f7d8bdf3e7403582407c7c2cf3dcf467342cd49e7cb92ad84dc4c0624e036"
 }
