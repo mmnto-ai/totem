@@ -1,0 +1,22 @@
+{
+  "fixtureId": "0e01112d-bare-new-error-inline-good",
+  "specimen": "0e01112d-bare-new-error",
+  "ruleId": "0e01112d5f18ffde",
+  "engine": "regex",
+  "source": "record-examples",
+  "arm": "good",
+  "provenance": {
+    "recordFile": "spikes/spine-adopt/seed/records/r14-0e01112d-bare-new-error.rule.yaml",
+    "exampleOrdinal": 0,
+    "examplePairHash": "430e7071d3060828017fccff2b769f687d94891197ae33930ef799c927e6fb31"
+  },
+  "astQuery": null,
+  "factBundle": {
+    "file": "src/errors.ts",
+    "fileText": "throw new TotemParseError('lesson compile failed', 'Fix the lesson pattern and re-run totem compile.');",
+    "lines": [
+      "throw new TotemParseError('lesson compile failed', 'Fix the lesson pattern and re-run totem compile.');"
+    ],
+    "astMatches": []
+  }
+}

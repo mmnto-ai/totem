@@ -25,247 +25,247 @@
   "recordCount": 22,
   "timings": [
     {
-      "coldEvalMicros": 2059,
+      "coldEvalMicros": 2224,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
       "specimen": "0167a783-dynamic-import-utility-layer",
-      "warmEvalMicrosMin": 265,
+      "warmEvalMicrosMin": 267,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 678,
+      "coldEvalMicros": 726,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
       "specimen": "0167a783-dynamic-import-utility-layer",
-      "warmEvalMicrosMin": 208,
+      "warmEvalMicrosMin": 212,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 996,
+      "coldEvalMicros": 926,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "0e01112d-bare-new-error-inline-bad",
       "specimen": "0e01112d-bare-new-error",
-      "warmEvalMicrosMin": 236,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 681,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "0e01112d-bare-new-error-inline-good",
-      "specimen": "0e01112d-bare-new-error",
-      "warmEvalMicrosMin": 217,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 1028,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
-      "specimen": "49dd9e4f-llm-character-counting",
-      "warmEvalMicrosMin": 751,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 978,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
-      "specimen": "49dd9e4f-llm-character-counting",
-      "warmEvalMicrosMin": 455,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 1390,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
-      "specimen": "54140f59-bare-issue-number-refs",
-      "warmEvalMicrosMin": 354,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 1070,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
-      "specimen": "54140f59-bare-issue-number-refs",
-      "warmEvalMicrosMin": 392,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 756,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
-      "specimen": "5b85fe53-suppress-event-runtime-failure",
-      "warmEvalMicrosMin": 223,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 982,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
-      "specimen": "5b85fe53-suppress-event-runtime-failure",
-      "warmEvalMicrosMin": 173,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 3304,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
-      "specimen": "5da43ea6-git-double-dash-separator",
-      "warmEvalMicrosMin": 1585,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 1976,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
-      "specimen": "5da43ea6-git-double-dash-separator",
-      "warmEvalMicrosMin": 1253,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 826,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
-      "specimen": "6467c351-dynamic-import-cli-entry",
-      "warmEvalMicrosMin": 260,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 697,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
-      "specimen": "6467c351-dynamic-import-cli-entry",
-      "warmEvalMicrosMin": 204,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 800,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
-      "specimen": "65ede9bf-dynamic-import-command-handlers",
-      "warmEvalMicrosMin": 259,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 709,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
-      "specimen": "65ede9bf-dynamic-import-command-handlers",
-      "warmEvalMicrosMin": 204,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 572,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
-      "specimen": "6b1890e2-empty-string-in-whitelist-js",
-      "warmEvalMicrosMin": 126,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 410,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
-      "specimen": "6b1890e2-empty-string-in-whitelist-js",
-      "warmEvalMicrosMin": 79,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 543,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
-      "specimen": "6b1890e2-empty-string-in-whitelist",
-      "warmEvalMicrosMin": 127,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 591,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
-      "specimen": "6b1890e2-empty-string-in-whitelist",
-      "warmEvalMicrosMin": 78,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 601,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
-      "specimen": "6b2b62eb-totem-error-log-tag",
-      "warmEvalMicrosMin": 129,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 674,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
-      "specimen": "6b2b62eb-totem-error-log-tag",
-      "warmEvalMicrosMin": 127,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 606,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
-      "specimen": "71935fe9-string-cast-on-input-js",
-      "warmEvalMicrosMin": 129,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 422,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
-      "specimen": "71935fe9-string-cast-on-input-js",
-      "warmEvalMicrosMin": 79,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 570,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
-      "specimen": "71935fe9-string-cast-on-input",
-      "warmEvalMicrosMin": 128,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 588,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
-      "specimen": "71935fe9-string-cast-on-input",
-      "warmEvalMicrosMin": 75,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 699,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
-      "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 239,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 657,
-      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
-      "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 175,
+      "warmEvalMicrosMin": 241,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 720,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
-      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
-      "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 163,
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "warmEvalMicrosMin": 214,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 806,
+      "coldEvalMicros": 1332,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "warmEvalMicrosMin": 586,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1339,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
+      "specimen": "49dd9e4f-llm-character-counting",
+      "warmEvalMicrosMin": 570,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1350,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "warmEvalMicrosMin": 422,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1020,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
+      "specimen": "54140f59-bare-issue-number-refs",
+      "warmEvalMicrosMin": 303,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 1013,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "warmEvalMicrosMin": 227,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 779,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
+      "specimen": "5b85fe53-suppress-event-runtime-failure",
+      "warmEvalMicrosMin": 170,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 3047,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "warmEvalMicrosMin": 1551,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 2413,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "warmEvalMicrosMin": 1241,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 769,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "warmEvalMicrosMin": 255,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 629,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
+      "specimen": "6467c351-dynamic-import-cli-entry",
+      "warmEvalMicrosMin": 202,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 748,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "warmEvalMicrosMin": 253,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 637,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
+      "specimen": "65ede9bf-dynamic-import-command-handlers",
+      "warmEvalMicrosMin": 205,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 556,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "warmEvalMicrosMin": 125,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 472,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
+      "specimen": "6b1890e2-empty-string-in-whitelist-js",
+      "warmEvalMicrosMin": 76,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 448,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "warmEvalMicrosMin": 120,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 355,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "specimen": "6b1890e2-empty-string-in-whitelist",
+      "warmEvalMicrosMin": 73,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 551,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "warmEvalMicrosMin": 121,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 492,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "warmEvalMicrosMin": 118,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 517,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "warmEvalMicrosMin": 119,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 465,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "warmEvalMicrosMin": 72,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 544,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "specimen": "71935fe9-string-cast-on-input",
+      "warmEvalMicrosMin": 117,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 543,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "specimen": "71935fe9-string-cast-on-input",
+      "warmEvalMicrosMin": 74,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 721,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "warmEvalMicrosMin": 222,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 580,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "warmEvalMicrosMin": 162,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 537,
+      "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
+      "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
+      "specimen": "87aff037-fail-open-catch-ban",
+      "warmEvalMicrosMin": 152,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 626,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
       "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 219,
+      "warmEvalMicrosMin": 204,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 589,
+      "coldEvalMicros": 523,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "m3-malformed-lines",
       "specimen": "87aff037-fail-open-catch-ban",
@@ -273,47 +273,47 @@
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 987,
+      "coldEvalMicros": 564,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
       "specimen": "89184bb5-bsd-sed-hex-escape",
-      "warmEvalMicrosMin": 244,
+      "warmEvalMicrosMin": 232,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 978,
+      "coldEvalMicros": 698,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
       "specimen": "89184bb5-bsd-sed-hex-escape",
-      "warmEvalMicrosMin": 216,
+      "warmEvalMicrosMin": 204,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 658,
+      "coldEvalMicros": 594,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
       "specimen": "aa7a588d-async-test-callbacks",
-      "warmEvalMicrosMin": 148,
+      "warmEvalMicrosMin": 140,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 411,
+      "coldEvalMicros": 353,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
       "specimen": "aa7a588d-async-test-callbacks",
-      "warmEvalMicrosMin": 95,
+      "warmEvalMicrosMin": 92,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 595,
+      "coldEvalMicros": 539,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
       "specimen": "b237bcf3-pwd-in-credential-regex",
-      "warmEvalMicrosMin": 131,
+      "warmEvalMicrosMin": 124,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 553,
+      "coldEvalMicros": 447,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
       "specimen": "b237bcf3-pwd-in-credential-regex",
@@ -321,63 +321,63 @@
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 574,
+      "coldEvalMicros": 595,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
       "specimen": "b9736096-orchestrator-test-timeout",
-      "warmEvalMicrosMin": 152,
+      "warmEvalMicrosMin": 150,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 572,
+      "coldEvalMicros": 610,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
       "specimen": "b9736096-orchestrator-test-timeout",
-      "warmEvalMicrosMin": 84,
+      "warmEvalMicrosMin": 82,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 784,
+      "coldEvalMicros": 1015,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
       "specimen": "be74c55c-actions-input-expansion",
-      "warmEvalMicrosMin": 325,
+      "warmEvalMicrosMin": 316,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 791,
+      "coldEvalMicros": 906,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "be74c55c-actions-input-expansion-inline-good",
       "specimen": "be74c55c-actions-input-expansion",
-      "warmEvalMicrosMin": 451,
+      "warmEvalMicrosMin": 439,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 905,
+      "coldEvalMicros": 950,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
       "specimen": "d5faa14c-absolute-claims-in-docs",
-      "warmEvalMicrosMin": 382,
+      "warmEvalMicrosMin": 376,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 843,
+      "coldEvalMicros": 971,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
       "specimen": "d5faa14c-absolute-claims-in-docs",
-      "warmEvalMicrosMin": 362,
+      "warmEvalMicrosMin": 349,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 582,
+      "coldEvalMicros": 508,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
       "specimen": "d940b2c9-stdio-in-exec-options",
-      "warmEvalMicrosMin": 83,
+      "warmEvalMicrosMin": 79,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 587,
+      "coldEvalMicros": 459,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
       "specimen": "d940b2c9-stdio-in-exec-options",
@@ -385,35 +385,35 @@
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 608,
+      "coldEvalMicros": 807,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-control-empty",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 242,
+      "warmEvalMicrosMin": 247,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 690,
+      "coldEvalMicros": 663,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-control-unreadable",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 228,
+      "warmEvalMicrosMin": 234,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 589,
+      "coldEvalMicros": 592,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-inline-bad",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 253,
+      "warmEvalMicrosMin": 254,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 598,
+      "coldEvalMicros": 693,
       "coldIncludes": "fresh Engine + add_policy (parse) + set_input + eval",
       "fixtureId": "d-file-inline-good",
       "specimen": "d-file",
-      "warmEvalMicrosMin": 230,
+      "warmEvalMicrosMin": 223,
       "warmReps": 50
     }
   ],

@@ -26,7 +26,7 @@
     {
       "name": "the tracked-path sweep set is non-empty and published beside the manifest",
       "ok": true,
-      "detail": "3336 paths -> artifacts/tracked-paths.txt"
+      "detail": "3342 paths -> artifacts/tracked-paths.txt"
     },
     {
       "name": "`probePaths` is published in CODEPOINT order (22 paths; `probePathsSha256` attests that order — the SHARED list on `control` is the frozen 22 in AUTHORED order by construction, a chain-digest input, so the claim is about the published list)",
@@ -121,7 +121,7 @@
     {
       "name": "K3 CAPTURE — `repinned` MEASURED from arm B (the control-only build under `artifacts/k3-control/`): NOT MEASURED (null)",
       "ok": true,
-      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268\"; arm B requires recordSet 'control' at THIS run's HEAD 9d74499f97555cfc3c24f760b483b86f1c6352d1 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
+      "detail": "STALE control-only build — `artifacts/k3-control/manifest.json` carries recordSet=\"control\" runCommit=\"9d74499f97555cfc3c24f760b483b86f1c6352d1\"; arm B requires recordSet 'control' at THIS run's HEAD d33b607e040c8f493fd29c4eeee30838d64dd010 — run the § S5 seam with SPIKE_CONTROL_RECORD set at this HEAD; the disposition is `controls.json` K3 arm B's"
     },
     {
       "name": "K6 — every byte-identity delta measured in this run is DISCLOSED by the owner (an undisclosed delta refuses, row by row, above)",
@@ -146,7 +146,7 @@
     {
       "name": "the digest is stable under the pending `bundles` + `bundlesSha256` fill (both outside the preimage — and the ONLY two keys outside it, matching the scorer`s re-derivation)",
       "ok": true,
-      "detail": "\"de68ab05046ff837393f2a7b4a76174772c1e030a28ec0d1d666c2288ad003e8\""
+      "detail": "\"6d7f7d8bdf3e7403582407c7c2cf3dcf467342cd49e7cb92ad84dc4c0624e036\""
     },
     {
       "name": "`bundlesSha256` is order-INDEPENDENT and byte-SENSITIVE (T15 — different fact bytes cannot receive one run identity)",
@@ -154,5 +154,5 @@
       "detail": "sorted-equal=true, bytes-differ=true"
     }
   ],
-  "runManifestSha256": "de68ab05046ff837393f2a7b4a76174772c1e030a28ec0d1d666c2288ad003e8"
+  "runManifestSha256": "6d7f7d8bdf3e7403582407c7c2cf3dcf467342cd49e7cb92ad84dc4c0624e036"
 }

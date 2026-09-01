@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/manifest.mts",
   "contract": "spec `.totem/specs/seed20-apparatus.md` § G5 — the run manifest. Every later artifact embeds `runManifestSha256` (named for the OPA `manifestSha256` collision; see src/lib/spike-env.mts).",
   "recordSet": "seed20",
-  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
-  "scorerSha256": "43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9",
+  "runCommit": "d33b607e040c8f493fd29c4eeee30838d64dd010",
+  "scorerSha256": "0b95fc03ac34ec82611d5f191d8551e3891e80a31a434a4170d231cb1782e579",
   "workingTreeClean": true,
   "workingTreeCleanScope": ". :!spikes/spine-adopt/artifacts :!spikes/spine-adopt/wazero-probe/artifacts :!spikes/spine-adopt/rego/build",
   "artifactTreeEntries": [
@@ -13,9 +13,10 @@
     " M spikes/spine-adopt/artifacts/k3-control/lowering-rejects.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest-checks.json",
     " M spikes/spine-adopt/artifacts/k3-control/manifest.json",
-    " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json"
+    " M spikes/spine-adopt/artifacts/k3-control/opa-abi-census.json",
+    " M spikes/spine-adopt/artifacts/k3-control/tracked-paths.txt"
   ],
-  "recordPin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
+  "recordPin": "78e7f196b93caf0df68a3baba561cce66279563c",
   "recordPinApplies": "the records below are the byte-identical copies under seed/records/ (seed/PIN.md)",
   "records": [
     {
@@ -27,7 +28,7 @@
     },
     {
       "file": "spikes/spine-adopt/seed/records/r14-0e01112d-bare-new-error.rule.yaml",
-      "sha256": "a289e29fffdea60d6d330f1a62cd7a8363ab61418fa2724a7275e84d1d6ba8e5",
+      "sha256": "26e997b34a3ba5a0d7dd61014d2996942b545748763f418a5bd9d8f8409362dc",
       "seedEntry": "0e01112d",
       "ruleId": "0e01112d5f18ffde",
       "inlineFilePath": "src/errors.ts"
@@ -660,11 +661,11 @@
   "trackedPaths": {
     "source": "git ls-tree -r --name-only HEAD, sorted (T5 sweep set — the tree at `runCommit`, not the index)",
     "list": "artifacts/tracked-paths.txt",
-    "count": 3336,
-    "sha256": "47a8710d2a61e12454047846aae139d0af97fc75dfa126f1fbe967b09d037332"
+    "count": 3342,
+    "sha256": "218b115495554061782c861c6867ad5a094fa2947813f7837dcac6f64b8f2866"
   },
   "trackedPathsAtRecordPin": {
-    "pin": "2a7135762b6aedc9cd3099ab3f42e029ee34092e",
+    "pin": "78e7f196b93caf0df68a3baba561cce66279563c",
     "present": true,
     "count": 2742,
     "sha256": "85368266d265c73fc394fab427701b9454107d4bb4a8b815f153a866de632b0e",
@@ -688,6 +689,14 @@
     {
       "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
       "sha256": "dab6cf8907011bae2323fe794126caad732b26bde7a459261224a086ecd00394"
+    },
+    {
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "sha256": "c59ae24542bb4c9e51adeb9e73f5592437248859aa38c7f2eb6cd3a24d807d9a"
+    },
+    {
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "sha256": "d69a0200937553e7c1269fab7883f56829f06a5bb5cdaf6a64aeec948a4d3c8f"
     },
     {
       "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
@@ -862,7 +871,7 @@
       "sha256": "43bbcc2799234dfd9226052f48014cc64009b48fa67d1f7aa90023ccd7e5699b"
     }
   ],
-  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8",
+  "bundlesSha256": "ee76a3512ee08d46636232aa1e54d38c4760a51c40fd950efc54db9446c4f0dc",
   "toolchain": {
     "opa": {
       "version": "1.20.0",
@@ -908,6 +917,6 @@
   },
   "recordLowerSha256": "63a8415e7095ba06f65cee6185c84b9008e42399f5c507b9c8b86c71729a937e",
   "recordLowerSource": "packages/core/src/spine/record-lower.ts",
-  "generatedAt": "2026-08-30T22:36:40.293Z",
-  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1"
+  "generatedAt": "2026-09-01T17:24:24.092Z",
+  "runManifestSha256": "6373969d21a5f16d5374cde9e59114d13a2642964ad3ef9c86df2301f18b1f06"
 }
