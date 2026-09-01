@@ -19,14 +19,14 @@
       "id": "N2",
       "clause": "§ Lowering 6 vs § Lowering 7",
       "finding": "The contract does not order the suppression check against the requires check. A match that is BOTH suppressed and requires-satisfied could emit `suppress` or emit nothing.",
-      "resolution": "MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. Unreachable on all 47 fact bundles (none carries a suppression marker), so it changes no differential row.",
+      "resolution": "MEASURED in the shipped source: all three dispatchers check `requires` FIRST and `continue` before any `onRuleEvent` call — rule-engine.ts:689 (sync regex) before :701, apply-rules-bounded.ts:207 (bounded regex) before :233, rule-engine.ts:1081 (ast-grep) before :1109. The lowering follows the shipped order, so a requires-satisfied match is silent even when the line carries a marker. Unreachable on all 49 fact bundles (none carries a suppression marker), so it changes no differential row.",
       "affected": []
     },
     {
       "id": "N4",
       "clause": "§ Lowering 7 — \"or preceding-line `totem-ignore-next-line`/`totem-context:`\"",
       "finding": "The contract's PRECEDING-line marker set is one marker short of the shipped runtime. `isSuppressed` (rule-engine.ts:384-388) routes the preceding line through `hasContextDirective` (:349-356), which accepts `shield-context:` as well as `totem-context:`. The same-line set in the contract is exact (rule-engine.ts:377-381); only the preceding anchor diverges.",
-      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 47 fact bundles (none carries a suppression marker). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
+      "resolution": "Built to the CONTRACT verbatim — the lowered policies do NOT treat a preceding-line `shield-context:` as suppressing. Widening it to match the runtime would reproduce a semantic LOWERING.md does not state. Unreachable on all 49 fact bundles (none carries a suppression marker). FLAGGED for the dispatching seat: this is a one-word amendment to § Lowering 7 if fidelity is wanted.",
       "affected": []
     },
     {
@@ -73,15 +73,6 @@
       "policyPath": null
     },
     {
-      "recordId": "0e01112d-bare-new-error",
-      "seedEntry": "0e01112d",
-      "control": false,
-      "ruleId": "0e01112d5f18ffde",
-      "stage": "target-lowering",
-      "reason": "target REJECTED (lookaround) — RE2 rejects lookaround AT COMPILE (\"invalid or unsupported Perl syntax: `(?!`\" / \"invalid named capture\"); § Lowering 4 forbids an approximation.",
-      "class": "lookaround"
-    },
-    {
       "recordId": "1a7080eb-inline-secrets-agent-config",
       "seedEntry": "1a7080eb",
       "control": false,
@@ -102,6 +93,28 @@
       "dir": "rego/build/k4-swap/r0167a783f75b5ecd",
       "published": "artifacts/k4-swap/lowered/r0167a783f75b5ecd",
       "patterns": [],
+      "globCount": 4
+    },
+    {
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "ruleId": "0e01112d5f18ffde",
+      "package": "totem.spike.r0e01112d5f18ffde",
+      "entrypoint": "totem/spike/r0e01112d5f18ffde/result",
+      "engine": "regex",
+      "dir": "rego/build/k4-swap/r0e01112d5f18ffde",
+      "published": "artifacts/k4-swap/lowered/r0e01112d5f18ffde",
+      "patterns": [
+        {
+          "role": "target",
+          "pattern": "\\bnew\\s+Error\\(",
+          "class": "word-boundary",
+          "lowered": true,
+          "literal": "\"\\\\bnew\\\\s+Error\\\\(\"",
+          "reason": null
+        }
+      ],
       "globCount": 4
     },
     {
@@ -506,9 +519,39 @@
       "detail": "119 code lines / 5322 bytes"
     },
     {
-      "name": "0e01112d-bare-new-error — REJECT ROW (target-lowering): a pattern is RE2-inexpressible, so no policy is emitted (§ Lowering 4)",
+      "name": "0e01112d-bare-new-error — every pattern lowers (§ Lowering 4 gate)",
       "ok": true,
-      "detail": "target REJECTED (lookaround)"
+      "detail": "target:word-boundary"
+    },
+    {
+      "name": "0e01112d-bare-new-error — per-glob agreement with `matchesRecordGlob` over 110 probe paths — 0 disagreement(s) DISCLOSED (each is this record's T5 scope-divergence, typed by the scorer; the full list is in `lowered/r0e01112d5f18ffde/globs.json`.perGlobProbes)",
+      "ok": true,
+      "detail": "440 (glob × path) probes agree"
+    },
+    {
+      "name": "0e01112d-bare-new-error — two-array scope agreement with `ruleAppliesToFile` (§ Design 7 positiveMatch && !excludeMatch) — 0 disagreement(s) DISCLOSED (the full list is in `lowered/r0e01112d5f18ffde/globs.json`.scopeProbes)",
+      "ok": true,
+      "detail": "110 paths agree (39 in scope)"
+    },
+    {
+      "name": "0e01112d-bare-new-error — the probe set is DISCRIMINATING (at least one path in scope and one out)",
+      "ok": true,
+      "detail": "39 in / 71 out"
+    },
+    {
+      "name": "0e01112d-bare-new-error — every glob is DISCRIMINATING over the shared probe set (≥1 matching AND ≥1 non-matching path)",
+      "ok": true,
+      "detail": "**/*.ts:34/76, **/*.tsx:1/109, **/*.js:3/107, **/*.jsx:1/109"
+    },
+    {
+      "name": "0e01112d-bare-new-error — no RAW (backtick) string literal in the emitted policy CODE (§ Lowering 3)",
+      "ok": true,
+      "detail": "113 code lines / 4910 bytes"
+    },
+    {
+      "name": "0e01112d-bare-new-error — the target pattern is present as a JSON-ESCAPED literal, never verbatim (§ Lowering 3)",
+      "ok": true,
+      "detail": "\"\\\\bnew\\\\s+Error\\\\(\"…"
     },
     {
       "name": "49dd9e4f-llm-character-counting — every pattern lowers (§ Lowering 4 gate)",
@@ -1211,19 +1254,19 @@
       "detail": "\"\\\\bgit\\\\s+(log|diff|status)\\\\b\"…"
     },
     {
-      "name": "21 records lowered, one policy package each (§ Lowering 1)",
+      "name": "22 records lowered, one policy package each (§ Lowering 1)",
       "ok": true,
-      "detail": "21"
+      "detail": "22"
     },
     {
       "name": "package names are UNIQUE (the N1 collision is resolved, not papered over)",
       "ok": true,
-      "detail": "21"
+      "detail": "22"
     },
     {
-      "name": "REJECT ROWS — 2 record(s) did not lower; the run continued and emitted no bundle or chain for them",
+      "name": "REJECT ROWS — 1 record(s) did not lower; the run continued and emitted no bundle or chain for them",
       "ok": true,
-      "detail": "0e01112d-bare-new-error [target-lowering/lookaround]; 1a7080eb-inline-secrets-agent-config [shipped-compile]"
+      "detail": "1a7080eb-inline-secrets-agent-config [shipped-compile]"
     },
     {
       "name": "REJECT ROW — bddfbd2ec1c75eaf (lookaround) is REJECTED by the lowerer, never approximated",
@@ -1256,14 +1299,14 @@
       "detail": "[]"
     },
     {
-      "name": "the build tree holds EXACTLY the 21 lowered packages",
+      "name": "the build tree holds EXACTLY the 22 lowered packages",
       "ok": true,
-      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r0e01112d5f18ffde\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
     },
     {
-      "name": "the published tree `artifacts/k4-swap/lowered/` holds EXACTLY the same 21 packages",
+      "name": "the published tree `artifacts/k4-swap/lowered/` holds EXACTLY the same 22 packages",
       "ok": true,
-      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
+      "detail": "[\"r0123456789abcdef\",\"r0167a783f75b5ecd\",\"r0e01112d5f18ffde\",\"r49dd9e4fd02d692b\",\"r54140f59be3e6e44\",\"r5b85fe53468964e1\",\"r5da43ea60b66e96e\",\"r6467c35159c1504d\",\"r65ede9bfdf6995fe\",\"r6b1890e2dbda3331_javascript\",\"r6b1890e2dbda3331_typescript\",\"r6b2b62eb1e8693fc\",\"r71935fe9a742137b_javascript\",\"r71935fe9a742137b_typescript\",\"r87aff037d7de47a7\",\"r89184bb5fd960848\",\"raa7a588d48e74503\",\"rb237bcf3b52381b1\",\"rb973609688ec2888\",\"rbe74c55caa9fd60c\",\"rd5faa14cbb8b50fb\",\"rd940b2c9ffe92e99\"]"
     },
     {
       "name": "(G7) every published policy.rego is BYTE-IDENTICAL to the one whose sha256 the chain binds",
@@ -1274,6 +1317,11 @@
       "name": "0167a783-dynamic-import-utility-layer — policy.rego + globs.json both written",
       "ok": true,
       "detail": "rego/build/k4-swap/r0167a783f75b5ecd"
+    },
+    {
+      "name": "0e01112d-bare-new-error — policy.rego + globs.json both written",
+      "ok": true,
+      "detail": "rego/build/k4-swap/r0e01112d5f18ffde"
     },
     {
       "name": "49dd9e4f-llm-character-counting — policy.rego + globs.json both written",
@@ -1376,6 +1424,6 @@
       "detail": "rego/build/k4-swap/r0123456789abcdef"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
-  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
+  "bundlesSha256": "1f23847bb7081f1d07f344061ba576ccab94c3f29e26f4a453981729dc90e186"
 }

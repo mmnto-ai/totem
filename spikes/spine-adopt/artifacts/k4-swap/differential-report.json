@@ -54,22 +54,22 @@
   },
   "summary": {
     "shipped-vs-opa": {
-      "MATCH": 46,
+      "MATCH": 48,
       "EXPLAINED-DIVERGENCE": 1,
       "UNEXPLAINED-DIVERGENCE": 0
     },
     "shipped-vs-regorus": {
-      "MATCH": 46,
+      "MATCH": 48,
       "EXPLAINED-DIVERGENCE": 1,
       "UNEXPLAINED-DIVERGENCE": 0
     },
     "opa-vs-regorus": {
-      "MATCH": 46,
+      "MATCH": 48,
       "EXPLAINED-DIVERGENCE": 1,
       "UNEXPLAINED-DIVERGENCE": 0
     },
     "total": {
-      "MATCH": 138,
+      "MATCH": 144,
       "EXPLAINED-DIVERGENCE": 3,
       "UNEXPLAINED-DIVERGENCE": 0
     }
@@ -389,6 +389,90 @@
       "seedEntry": "0167a783",
       "control": false,
       "engine": "ast-grep",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "opa",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "shipped",
+      "right": "opa",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "shipped",
+      "right": "regorus",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
       "left": "opa",
       "right": "regorus",
       "status": "MATCH",
@@ -2222,37 +2306,37 @@
     {
       "name": "FACT BYTES — every bundle the arms read hashes to the manifest's attestation, and the attested set is exactly the set on disk (the run identity BINDS the evaluated fact bytes, not just records them)",
       "ok": true,
-      "detail": "47/47 bundles verified against manifest.bundles"
+      "detail": "49/49 bundles verified against manifest.bundles"
     },
     {
       "name": "the fact bundles and the OPA arm agree on the fixture count",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
       "name": "the fact bundles and the regorus arm agree on the fixture count",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
-      "name": "shipped arm produced 47 verdict rows",
+      "name": "shipped arm produced 49 verdict rows",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
-      "name": "opa arm produced 47 verdict rows",
+      "name": "opa arm produced 49 verdict rows",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
-      "name": "regorus arm produced 47 verdict rows",
+      "name": "regorus arm produced 49 verdict rows",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
       "name": "the join key (ruleId, fixtureId) is unique on every arm",
       "ok": true,
-      "detail": "[47,47,47]"
+      "detail": "[49,49,49]"
     },
     {
       "name": "every shipped pair has an opa row AND a regorus row (no silent skip)",
@@ -2262,12 +2346,12 @@
     {
       "name": "the corpus is DISCRIMINATING — the shipped arm both fires and stays silent",
       "ok": true,
-      "detail": "26 fired / 21 silent / max matchCount 1"
+      "detail": "27 fired / 22 silent / max matchCount 1"
     },
     {
       "name": "MULTI-VIOLATION — SKIPPED with a named reason: NO bundle in this record set carries more than one violation, so the ast ORDINAL axis (§ Lowering 1, \"the ordinal is the match index\") is UNEXERCISED here and the ORDINAL-DERIVATION-ONLY class cannot fire (a corpus property of the frozen set, not an apparatus defect)",
       "ok": true,
-      "detail": "26 fired / 21 silent / max matchCount 1"
+      "detail": "27 fired / 22 silent / max matchCount 1"
     },
     {
       "name": "ERROR ROWS — zero outside the K5b malformed-facts control, on every arm",
@@ -2295,6 +2379,6 @@
       "detail": "0"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
-  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
+  "bundlesSha256": "1f23847bb7081f1d07f344061ba576ccab94c3f29e26f4a453981729dc90e186"
 }

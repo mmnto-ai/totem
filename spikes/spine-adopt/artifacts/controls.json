@@ -2,8 +2,8 @@
   "generatedBy": "spikes/spine-adopt/src/controls.mts",
   "contract": "spec `.totem/specs/seed20-apparatus-slice2.md` § S7 + C6 (mmnto-ai/totem-strategy#1154 § Controls). APPARATUS ONLY: every row reports what it MEASURED and where it read it. `ok: null` is NOT MEASURED, with `detail` naming the absent input; it is never a pass. Whether a run of record may be scored on these rows is strategy`s.",
   "schema": "seed20-target.controls.v1",
-  "apparatusPin": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
-  "runCommit": "1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
+  "apparatusPin": "9d74499f97555cfc3c24f760b483b86f1c6352d1",
+  "runCommit": "9d74499f97555cfc3c24f760b483b86f1c6352d1",
   "recordSet": "seed20",
   "artifactsSubdir": null,
   "controls": [
@@ -11,7 +11,7 @@
       "id": "K1",
       "refusing": true,
       "ok": true,
-      "detail": "3 classifier reject row(s) present with the class named",
+      "detail": "2 classifier reject row(s) present with the class named; the seed's own `0e01112d` LOWERS as `word-boundary` with no reject row (the E26 cure's positive control)",
       "rows": [
         {
           "id": "bddfbd2ec1c75eaf",
@@ -31,11 +31,14 @@
         },
         {
           "id": "0e01112d",
-          "source": "record reject row",
+          "source": "record lowered row (E26 cure — positive control)",
           "present": true,
-          "stage": "target-lowering",
-          "class": "lookaround",
-          "expectedClass": "lookaround",
+          "rejectRow": false,
+          "rejectStage": null,
+          "rejectClass": null,
+          "class": "word-boundary",
+          "lowered": true,
+          "expectedClass": "word-boundary",
           "ok": true
         }
       ],
@@ -43,6 +46,10 @@
         {
           "artifact": "lowering-rejects.json",
           "path": "rejects[]"
+        },
+        {
+          "artifact": "lowering-rejects.json",
+          "path": "lowered[]"
         }
       ]
     },
@@ -96,7 +103,7 @@
       "id": "K3",
       "refusing": true,
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=9d74499f97555cfc3c24f760b483b86f1c6352d1 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures",
       "rows": [
         {
           "arm": "A",
@@ -158,8 +165,8 @@
           "arm": "B",
           "ok": true,
           "armB": "stands",
-          "binding": "bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268",
-          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
+          "binding": "bound to this run: recordSet=control runCommit=9d74499f97555cfc3c24f760b483b86f1c6352d1",
+          "detail": "STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=9d74499f97555cfc3c24f760b483b86f1c6352d1 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm",
           "rows": [
             {
               "file": "k3-control/chains/r87aff037d7de47a7.json",
@@ -203,7 +210,7 @@
       "id": "K3b",
       "refusing": true,
       "ok": true,
-      "detail": "56 reachable glob(s), each with >=1 matching AND >=1 non-matching probe",
+      "detail": "60 reachable glob(s), each with >=1 matching AND >=1 non-matching probe",
       "rows": [
         {
           "pkg": "totem.spike.r0167a783f75b5ecd",
@@ -242,6 +249,46 @@
           "nonMatchingProbe": "k3b/probe.spec.t_",
           "matching": 2,
           "nonMatching": 108,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0e01112d5f18ffde",
+          "glob": "**/*.ts",
+          "matchingProbe": "k3b/probe.ts",
+          "nonMatchingProbe": "k3b/probe.t_",
+          "matching": 34,
+          "nonMatching": 76,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0e01112d5f18ffde",
+          "glob": "**/*.tsx",
+          "matchingProbe": "k3b/probe.tsx",
+          "nonMatchingProbe": "k3b/probe.ts_",
+          "matching": 1,
+          "nonMatching": 109,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0e01112d5f18ffde",
+          "glob": "**/*.js",
+          "matchingProbe": "k3b/probe.js",
+          "nonMatchingProbe": "k3b/probe.j_",
+          "matching": 3,
+          "nonMatching": 107,
+          "scopeDivergences": 0,
+          "ok": true
+        },
+        {
+          "pkg": "totem.spike.r0e01112d5f18ffde",
+          "glob": "**/*.jsx",
+          "matchingProbe": "k3b/probe.jsx",
+          "nonMatchingProbe": "k3b/probe.js_",
+          "matching": 1,
+          "nonMatching": 109,
           "scopeDivergences": 0,
           "ok": true
         },
@@ -1029,7 +1076,7 @@
       "id": "K7",
       "refusing": false,
       "ok": true,
-      "detail": "21 chain(s) rebuilt with identical regoSha256 AND wasmSha256",
+      "detail": "22 chain(s) rebuilt with identical regoSha256 AND wasmSha256",
       "rows": [
         {
           "chain": "r0123456789abcdef.json",
@@ -1040,6 +1087,13 @@
         },
         {
           "chain": "r0167a783f75b5ecd.json",
+          "present": true,
+          "regoSha256Eq": true,
+          "wasmSha256Eq": true,
+          "ok": true
+        },
+        {
+          "chain": "r0e01112d5f18ffde.json",
           "present": true,
           "regoSha256Eq": true,
           "wasmSha256Eq": true,
@@ -1241,7 +1295,7 @@
     {
       "name": "K1 — PASS",
       "ok": true,
-      "detail": "3 classifier reject row(s) present with the class named"
+      "detail": "2 classifier reject row(s) present with the class named; the seed's own `0e01112d` LOWERS as `word-boundary` with no reject row (the E26 cure's positive control)"
     },
     {
       "name": "K2 — PASS",
@@ -1251,12 +1305,12 @@
     {
       "name": "K3 — PASS",
       "ok": true,
-      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=1d5f8e8ba1d3ec15f0b444fffcfa7e7823579268 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
+      "detail": "arm A: 8 differing leaf path(s), every one on the charter's expected-to-differ list | target: seed/controls/k3/k3-target.chain.json (the byte-pinned capture) | arm B: STANDS — the control-only rebuild reproduces the pinned chain AND the pinned policy.rego byte-for-byte | bound to this run: recordSet=control runCommit=9d74499f97555cfc3c24f760b483b86f1c6352d1 | manifest.k3Capture.repinned=false (from=\"artifacts/k3-control\") — the manifest's own reading of THIS arm | capture pins: both re-verified against the tree | manifest.k3Capture: matches the captures"
     },
     {
       "name": "K3b — PASS",
       "ok": true,
-      "detail": "56 reachable glob(s), each with >=1 matching AND >=1 non-matching probe"
+      "detail": "60 reachable glob(s), each with >=1 matching AND >=1 non-matching probe"
     },
     {
       "name": "K4 — PASS",
@@ -1281,7 +1335,7 @@
     {
       "name": "K7 — PASS (non-refusing)",
       "ok": true,
-      "detail": "21 chain(s) rebuilt with identical regoSha256 AND wasmSha256"
+      "detail": "22 chain(s) rebuilt with identical regoSha256 AND wasmSha256"
     },
     {
       "name": "K8 — PASS",
@@ -1289,6 +1343,6 @@
       "detail": "both § Design 5 fixtures are REFUSED, each with a message naming the offending field (`fileGlob`; `message`)"
     }
   ],
-  "runManifestSha256": "bf42e3538639e035af6c9ac1eb0a050dbaa18b48c33826898cccd9fe3b9c9ef1",
-  "bundlesSha256": "2599b986fc7252f8d2783a44e2cab685779b617b98f876f61df8f1fe40ecd0e8"
+  "runManifestSha256": "aa69d9a1019e268e797877fde9a0fbc8bd15a1838e4be717b7cbbe4924a8d4ff",
+  "bundlesSha256": "ee76a3512ee08d46636232aa1e54d38c4760a51c40fd950efc54db9446c4f0dc"
 }

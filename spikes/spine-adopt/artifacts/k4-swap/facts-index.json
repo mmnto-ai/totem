@@ -3,7 +3,7 @@
   "spec": ".totem/specs/spine-spike.md § Data model deltas (FactBundle) + § Differential units",
   "recordSet": "seed20",
   "factsDir": "spikes/spine-adopt/artifacts/k4-swap/facts",
-  "bundleCount": 47,
+  "bundleCount": 49,
   "bundles": [
     {
       "file": "87aff037d7de47a7-87aff037-fail-open-catch-ban-corpus-fail.json",
@@ -59,6 +59,36 @@
       "swapped": false,
       "ruleId": "0167a783f75b5ecd",
       "engine": "ast-grep",
+      "source": "record-examples",
+      "arm": "good",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0e01112d5f18ffde-0e01112d-bare-new-error-inline-bad.json",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "swapped": false,
+      "ruleId": "0e01112d5f18ffde",
+      "engine": "regex",
+      "source": "record-examples",
+      "arm": "bad",
+      "fileTextState": "content",
+      "lineCount": 1,
+      "astMatchCount": 0
+    },
+    {
+      "file": "0e01112d5f18ffde-0e01112d-bare-new-error-inline-good.json",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "swapped": false,
+      "ruleId": "0e01112d5f18ffde",
+      "engine": "regex",
       "source": "record-examples",
       "arm": "good",
       "fileTextState": "content",
@@ -809,6 +839,26 @@
       "detail": "[\"import chalk from 'chalk';\"]"
     },
     {
+      "name": "specimen 0e01112d-bare-new-error — record carries at least one example pair",
+      "ok": true,
+      "detail": "1 pair(s)"
+    },
+    {
+      "name": "specimen 0e01112d-bare-new-error — the inline example file path is IN SCOPE for the record",
+      "ok": true,
+      "detail": "ruleAppliesToFile(rule, 'src/errors.ts')"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-bad — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"throw new Error('lesson compile failed');\"]"
+    },
+    {
+      "name": "0e01112d-bare-new-error-inline-good — lines[] is derived from fileText, whole file in order",
+      "ok": true,
+      "detail": "[\"throw new TotemParseError('lesson compile failed', 'Fix the lesson pattern and re-run totem compile.');\"]"
+    },
+    {
       "name": "specimen 49dd9e4f-llm-character-counting — record carries at least one example pair",
       "ok": true,
       "detail": "1 pair(s)"
@@ -1471,7 +1521,7 @@
     {
       "name": "FACT BOUNDARY — every ast fact came from the extractor; no bundle for a regex specimen carries an ast match",
       "ok": true,
-      "detail": "17 regex bundles, 30 ast bundles"
+      "detail": "19 regex bundles, 30 ast bundles"
     },
     {
       "name": "FACT BOUNDARY — at least one ast bundle actually carries matches (the extractor is not vacuously clean)",
@@ -1481,12 +1531,12 @@
     {
       "name": "M3 FOLD — the three fileText states are all present: null, empty, and content",
       "ok": true,
-      "detail": "null=1, empty=1, content=45"
+      "detail": "null=1, empty=1, content=47"
     },
     {
       "name": "bundle filenames are unique",
       "ok": true,
-      "detail": "47"
+      "detail": "49"
     },
     {
       "name": "every bundle filename carries the `<ruleId>-<specimen>-` join prefix the hosts check",
@@ -1504,6 +1554,6 @@
       "detail": "87aff037-fail-open-catch-ban-inline-bad, 87aff037-fail-open-catch-ban-inline-good"
     }
   ],
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
-  "bundlesSha256": "26a508dad32db9a10f1202bf8a17b15f1ce5645f3ee95d99144dab286a455664"
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
+  "bundlesSha256": "1f23847bb7081f1d07f344061ba576ccab94c3f29e26f4a453981729dc90e186"
 }

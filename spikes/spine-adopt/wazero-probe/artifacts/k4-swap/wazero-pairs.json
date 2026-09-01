@@ -114,6 +114,34 @@
       "detail": null
     },
     {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
+      "ruleId": "0e01112d5f18ffde",
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "specimen": "0e01112d-bare-new-error",
+      "seedEntry": "0e01112d",
+      "control": false,
+      "engine": "regex",
+      "left": "opa",
+      "right": "wazero",
+      "status": "MATCH",
+      "explanation": null,
+      "explanationClass": null,
+      "detail": null
+    },
+    {
       "ruleId": "49dd9e4fd02d692b",
       "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
       "specimen": "49dd9e4f-llm-character-counting",
@@ -693,11 +721,11 @@
     }
   ],
   "recordSet": "seed20",
-  "runManifestSha256": "211ee058fc196708981c8894d6b08989ecc0d2072607cbc5d53df418267700f3",
+  "runManifestSha256": "587e3510aa438c7697f3110d98844ab56c1bb97382862a3925f5cb3f3962fc59",
   "summary": {
     "EXPLAINED-DIVERGENCE": 1,
-    "MATCH": 46,
+    "MATCH": 48,
     "UNEXPLAINED-DIVERGENCE": 0,
-    "total": 47
+    "total": 49
   }
 }

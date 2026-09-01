@@ -20,6 +20,24 @@
     },
     {
       "abiVersion": "1.3 (1.2+ compatible)",
+      "defaultEntrypoint": "totem/spike/r0e01112d5f18ffde/result",
+      "entrypoints": [
+        "totem/spike/r0e01112d5f18ffde/result"
+      ],
+      "exportCount": 26,
+      "imports": [
+        "env.opa_builtin0:function",
+        "env.opa_builtin1:function",
+        "env.opa_builtin2:function",
+        "env.opa_builtin3:function",
+        "env.opa_builtin4:function",
+        "env.opa_abort:function",
+        "env.memory:memory"
+      ],
+      "specimen": "0e01112d-bare-new-error"
+    },
+    {
+      "abiVersion": "1.3 (1.2+ compatible)",
       "defaultEntrypoint": "totem/spike/r49dd9e4fd02d692b/result",
       "entrypoints": [
         "totem/spike/r49dd9e4fd02d692b/result"
@@ -380,36 +398,54 @@
     }
   ],
   "contract": "spikes/spine-adopt/rego/LOWERING.md § Host contract",
-  "fixtureCount": 47,
+  "fixtureCount": 49,
   "generatedBy": "spikes/spine-adopt/host/src/main.rs --arm opa",
   "host": {
     "crate": "opa-wasm 0.3.2 (matrix-org/rust-opa-wasm)",
     "runtime": "wasmtime 47.x (pinned exactly in host/Cargo.lock; opa-wasm 0.3.2 requires >=42, <48)",
     "strictness": "An evaluation error, a non-object result, a missing `violations`/`events` key, or an EMPTY RESULT SET is an ERROR ROW. An empty result set means the entrypoint's `result` rule was UNDEFINED, which for these policies means `patterns_compile` or `facts_wellformed` failed — never a zero-violation verdict."
   },
-  "recordCount": 21,
+  "recordCount": 22,
   "timings": [
     {
-      "coldEvalMicros": 139,
-      "compileMicros": 27028,
+      "coldEvalMicros": 137,
+      "compileMicros": 28559,
       "fixtureId": "0167a783-dynamic-import-utility-layer-inline-bad",
-      "instantiateMicros": 295,
+      "instantiateMicros": 299,
       "specimen": "0167a783-dynamic-import-utility-layer",
-      "warmEvalMicrosMin": 59,
+      "warmEvalMicrosMin": 57,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 59,
-      "compileMicros": 27028,
+      "coldEvalMicros": 57,
+      "compileMicros": 28559,
       "fixtureId": "0167a783-dynamic-import-utility-layer-inline-good",
-      "instantiateMicros": 295,
+      "instantiateMicros": 299,
       "specimen": "0167a783-dynamic-import-utility-layer",
-      "warmEvalMicrosMin": 53,
+      "warmEvalMicrosMin": 52,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 187,
-      "compileMicros": 22677,
+      "coldEvalMicros": 139,
+      "compileMicros": 23013,
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "instantiateMicros": 194,
+      "specimen": "0e01112d-bare-new-error",
+      "warmEvalMicrosMin": 66,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 74,
+      "compileMicros": 23013,
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "instantiateMicros": 194,
+      "specimen": "0e01112d-bare-new-error",
+      "warmEvalMicrosMin": 62,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 190,
+      "compileMicros": 24468,
       "fixtureId": "49dd9e4f-llm-character-counting-inline-bad",
       "instantiateMicros": 181,
       "specimen": "49dd9e4f-llm-character-counting",
@@ -417,399 +453,399 @@
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 107,
-      "compileMicros": 22677,
+      "coldEvalMicros": 126,
+      "compileMicros": 24468,
       "fixtureId": "49dd9e4f-llm-character-counting-inline-good",
       "instantiateMicros": 181,
       "specimen": "49dd9e4f-llm-character-counting",
-      "warmEvalMicrosMin": 100,
+      "warmEvalMicrosMin": 99,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 161,
-      "compileMicros": 22944,
+      "coldEvalMicros": 128,
+      "compileMicros": 21033,
       "fixtureId": "54140f59-bare-issue-number-refs-inline-bad",
-      "instantiateMicros": 215,
+      "instantiateMicros": 187,
       "specimen": "54140f59-bare-issue-number-refs",
-      "warmEvalMicrosMin": 57,
+      "warmEvalMicrosMin": 56,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 59,
-      "compileMicros": 22944,
+      "coldEvalMicros": 61,
+      "compileMicros": 21033,
       "fixtureId": "54140f59-bare-issue-number-refs-inline-good",
-      "instantiateMicros": 215,
+      "instantiateMicros": 187,
       "specimen": "54140f59-bare-issue-number-refs",
-      "warmEvalMicrosMin": 52,
+      "warmEvalMicrosMin": 51,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 117,
-      "compileMicros": 24388,
+      "coldEvalMicros": 118,
+      "compileMicros": 25511,
       "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-bad",
-      "instantiateMicros": 182,
+      "instantiateMicros": 185,
       "specimen": "5b85fe53-suppress-event-runtime-failure",
       "warmEvalMicrosMin": 54,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 54,
-      "compileMicros": 24388,
+      "compileMicros": 25511,
       "fixtureId": "5b85fe53-suppress-event-runtime-failure-inline-good",
-      "instantiateMicros": 182,
+      "instantiateMicros": 185,
       "specimen": "5b85fe53-suppress-event-runtime-failure",
-      "warmEvalMicrosMin": 47,
+      "warmEvalMicrosMin": 48,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 197,
-      "compileMicros": 24616,
+      "coldEvalMicros": 198,
+      "compileMicros": 24132,
       "fixtureId": "5da43ea6-git-double-dash-separator-inline-bad",
-      "instantiateMicros": 192,
+      "instantiateMicros": 179,
+      "specimen": "5da43ea6-git-double-dash-separator",
+      "warmEvalMicrosMin": 112,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 122,
+      "compileMicros": 24132,
+      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
+      "instantiateMicros": 179,
       "specimen": "5da43ea6-git-double-dash-separator",
       "warmEvalMicrosMin": 111,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 125,
-      "compileMicros": 24616,
-      "fixtureId": "5da43ea6-git-double-dash-separator-inline-good",
-      "instantiateMicros": 192,
-      "specimen": "5da43ea6-git-double-dash-separator",
-      "warmEvalMicrosMin": 109,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 120,
-      "compileMicros": 24740,
+      "coldEvalMicros": 123,
+      "compileMicros": 22834,
       "fixtureId": "6467c351-dynamic-import-cli-entry-inline-bad",
-      "instantiateMicros": 179,
+      "instantiateMicros": 198,
       "specimen": "6467c351-dynamic-import-cli-entry",
-      "warmEvalMicrosMin": 56,
+      "warmEvalMicrosMin": 55,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 58,
-      "compileMicros": 24740,
+      "coldEvalMicros": 56,
+      "compileMicros": 22834,
       "fixtureId": "6467c351-dynamic-import-cli-entry-inline-good",
-      "instantiateMicros": 179,
+      "instantiateMicros": 198,
       "specimen": "6467c351-dynamic-import-cli-entry",
       "warmEvalMicrosMin": 52,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 120,
-      "compileMicros": 23786,
+      "coldEvalMicros": 151,
+      "compileMicros": 23253,
       "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-bad",
-      "instantiateMicros": 177,
+      "instantiateMicros": 186,
       "specimen": "65ede9bf-dynamic-import-command-handlers",
-      "warmEvalMicrosMin": 59,
+      "warmEvalMicrosMin": 58,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 58,
-      "compileMicros": 23786,
+      "coldEvalMicros": 54,
+      "compileMicros": 23253,
       "fixtureId": "65ede9bf-dynamic-import-command-handlers-inline-good",
-      "instantiateMicros": 177,
+      "instantiateMicros": 186,
       "specimen": "65ede9bf-dynamic-import-command-handlers",
       "warmEvalMicrosMin": 50,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 71,
-      "compileMicros": 21162,
+      "coldEvalMicros": 72,
+      "compileMicros": 22339,
       "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-bad",
-      "instantiateMicros": 179,
+      "instantiateMicros": 203,
       "specimen": "6b1890e2-empty-string-in-whitelist-js",
       "warmEvalMicrosMin": 26,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 24,
-      "compileMicros": 21162,
+      "compileMicros": 22339,
       "fixtureId": "6b1890e2-empty-string-in-whitelist-js-inline-good",
-      "instantiateMicros": 179,
+      "instantiateMicros": 203,
       "specimen": "6b1890e2-empty-string-in-whitelist-js",
-      "warmEvalMicrosMin": 21,
+      "warmEvalMicrosMin": 22,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 72,
-      "compileMicros": 20449,
+      "coldEvalMicros": 74,
+      "compileMicros": 19250,
       "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-bad",
-      "instantiateMicros": 178,
+      "instantiateMicros": 179,
       "specimen": "6b1890e2-empty-string-in-whitelist",
-      "warmEvalMicrosMin": 27,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 27,
-      "compileMicros": 20449,
-      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
-      "instantiateMicros": 178,
-      "specimen": "6b1890e2-empty-string-in-whitelist",
-      "warmEvalMicrosMin": 21,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 69,
-      "compileMicros": 20366,
-      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
-      "instantiateMicros": 173,
-      "specimen": "6b2b62eb-totem-error-log-tag",
-      "warmEvalMicrosMin": 25,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 29,
-      "compileMicros": 20366,
-      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
-      "instantiateMicros": 173,
-      "specimen": "6b2b62eb-totem-error-log-tag",
-      "warmEvalMicrosMin": 25,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 69,
-      "compileMicros": 19274,
-      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
-      "instantiateMicros": 176,
-      "specimen": "71935fe9-string-cast-on-input-js",
-      "warmEvalMicrosMin": 25,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 26,
-      "compileMicros": 19274,
-      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
-      "instantiateMicros": 176,
-      "specimen": "71935fe9-string-cast-on-input-js",
-      "warmEvalMicrosMin": 21,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 78,
-      "compileMicros": 18917,
-      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
-      "instantiateMicros": 201,
-      "specimen": "71935fe9-string-cast-on-input",
       "warmEvalMicrosMin": 26,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 26,
-      "compileMicros": 18917,
-      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
-      "instantiateMicros": 201,
-      "specimen": "71935fe9-string-cast-on-input",
+      "compileMicros": 19250,
+      "fixtureId": "6b1890e2-empty-string-in-whitelist-inline-good",
+      "instantiateMicros": 179,
+      "specimen": "6b1890e2-empty-string-in-whitelist",
       "warmEvalMicrosMin": 21,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 112,
-      "compileMicros": 18945,
-      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "coldEvalMicros": 73,
+      "compileMicros": 21011,
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-bad",
       "instantiateMicros": 189,
-      "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 50,
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "warmEvalMicrosMin": 26,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 54,
-      "compileMicros": 18945,
-      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "coldEvalMicros": 30,
+      "compileMicros": 21011,
+      "fixtureId": "6b2b62eb-totem-error-log-tag-inline-good",
       "instantiateMicros": 189,
+      "specimen": "6b2b62eb-totem-error-log-tag",
+      "warmEvalMicrosMin": 26,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 73,
+      "compileMicros": 20171,
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-bad",
+      "instantiateMicros": 191,
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "warmEvalMicrosMin": 25,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 30,
+      "compileMicros": 20171,
+      "fixtureId": "71935fe9-string-cast-on-input-js-inline-good",
+      "instantiateMicros": 191,
+      "specimen": "71935fe9-string-cast-on-input-js",
+      "warmEvalMicrosMin": 21,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 82,
+      "compileMicros": 20814,
+      "fixtureId": "71935fe9-string-cast-on-input-inline-bad",
+      "instantiateMicros": 212,
+      "specimen": "71935fe9-string-cast-on-input",
+      "warmEvalMicrosMin": 27,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 28,
+      "compileMicros": 20814,
+      "fixtureId": "71935fe9-string-cast-on-input-inline-good",
+      "instantiateMicros": 212,
+      "specimen": "71935fe9-string-cast-on-input",
+      "warmEvalMicrosMin": 22,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 127,
+      "compileMicros": 21504,
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-fail",
+      "instantiateMicros": 232,
+      "specimen": "87aff037-fail-open-catch-ban",
+      "warmEvalMicrosMin": 52,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 57,
+      "compileMicros": 21504,
+      "fixtureId": "87aff037-fail-open-catch-ban-corpus-pass",
+      "instantiateMicros": 232,
       "specimen": "87aff037-fail-open-catch-ban",
       "warmEvalMicrosMin": 46,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 50,
-      "compileMicros": 18945,
+      "coldEvalMicros": 49,
+      "compileMicros": 21504,
       "fixtureId": "87aff037-fail-open-catch-ban-inline-bad",
-      "instantiateMicros": 189,
+      "instantiateMicros": 232,
       "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 43,
+      "warmEvalMicrosMin": 44,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 58,
-      "compileMicros": 18945,
+      "coldEvalMicros": 61,
+      "compileMicros": 21504,
       "fixtureId": "87aff037-fail-open-catch-ban-inline-good",
-      "instantiateMicros": 189,
+      "instantiateMicros": 232,
       "specimen": "87aff037-fail-open-catch-ban",
-      "warmEvalMicrosMin": 51,
+      "warmEvalMicrosMin": 50,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 41,
-      "compileMicros": 18945,
+      "coldEvalMicros": 42,
+      "compileMicros": 21504,
       "fixtureId": "m3-malformed-lines",
-      "instantiateMicros": 189,
+      "instantiateMicros": 232,
       "specimen": "87aff037-fail-open-catch-ban",
       "warmEvalMicrosMin": null,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 140,
-      "compileMicros": 21555,
+      "coldEvalMicros": 136,
+      "compileMicros": 19987,
       "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-bad",
-      "instantiateMicros": 215,
+      "instantiateMicros": 180,
       "specimen": "89184bb5-bsd-sed-hex-escape",
       "warmEvalMicrosMin": 67,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 65,
-      "compileMicros": 21555,
+      "compileMicros": 19987,
       "fixtureId": "89184bb5-bsd-sed-hex-escape-inline-good",
-      "instantiateMicros": 215,
+      "instantiateMicros": 180,
       "specimen": "89184bb5-bsd-sed-hex-escape",
-      "warmEvalMicrosMin": 57,
+      "warmEvalMicrosMin": 59,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 118,
-      "compileMicros": 19583,
+      "coldEvalMicros": 100,
+      "compileMicros": 17762,
       "fixtureId": "aa7a588d-async-test-callbacks-inline-bad",
-      "instantiateMicros": 257,
+      "instantiateMicros": 195,
       "specimen": "aa7a588d-async-test-callbacks",
       "warmEvalMicrosMin": 42,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 43,
-      "compileMicros": 19583,
+      "coldEvalMicros": 42,
+      "compileMicros": 17762,
       "fixtureId": "aa7a588d-async-test-callbacks-inline-good",
-      "instantiateMicros": 257,
+      "instantiateMicros": 195,
       "specimen": "aa7a588d-async-test-callbacks",
       "warmEvalMicrosMin": 36,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 105,
-      "compileMicros": 18149,
+      "coldEvalMicros": 80,
+      "compileMicros": 18624,
       "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-bad",
-      "instantiateMicros": 288,
-      "specimen": "b237bcf3-pwd-in-credential-regex",
-      "warmEvalMicrosMin": 28,
-      "warmReps": 50
-    },
-    {
-      "coldEvalMicros": 32,
-      "compileMicros": 18149,
-      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
-      "instantiateMicros": 288,
+      "instantiateMicros": 195,
       "specimen": "b237bcf3-pwd-in-credential-regex",
       "warmEvalMicrosMin": 27,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 78,
-      "compileMicros": 17074,
+      "coldEvalMicros": 31,
+      "compileMicros": 18624,
+      "fixtureId": "b237bcf3-pwd-in-credential-regex-inline-good",
+      "instantiateMicros": 195,
+      "specimen": "b237bcf3-pwd-in-credential-regex",
+      "warmEvalMicrosMin": 27,
+      "warmReps": 50
+    },
+    {
+      "coldEvalMicros": 80,
+      "compileMicros": 19053,
       "fixtureId": "b9736096-orchestrator-test-timeout-inline-bad",
-      "instantiateMicros": 189,
+      "instantiateMicros": 184,
       "specimen": "b9736096-orchestrator-test-timeout",
       "warmEvalMicrosMin": 31,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 31,
-      "compileMicros": 17074,
+      "coldEvalMicros": 29,
+      "compileMicros": 19053,
       "fixtureId": "b9736096-orchestrator-test-timeout-inline-good",
-      "instantiateMicros": 189,
+      "instantiateMicros": 184,
       "specimen": "b9736096-orchestrator-test-timeout",
       "warmEvalMicrosMin": 24,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 155,
-      "compileMicros": 17355,
+      "coldEvalMicros": 124,
+      "compileMicros": 17905,
       "fixtureId": "be74c55c-actions-input-expansion-inline-bad",
-      "instantiateMicros": 182,
+      "instantiateMicros": 188,
       "specimen": "be74c55c-actions-input-expansion",
       "warmEvalMicrosMin": 54,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 64,
-      "compileMicros": 17355,
+      "coldEvalMicros": 75,
+      "compileMicros": 17905,
       "fixtureId": "be74c55c-actions-input-expansion-inline-good",
-      "instantiateMicros": 182,
+      "instantiateMicros": 188,
       "specimen": "be74c55c-actions-input-expansion",
       "warmEvalMicrosMin": 56,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 172,
-      "compileMicros": 18710,
+      "coldEvalMicros": 175,
+      "compileMicros": 18497,
       "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-bad",
-      "instantiateMicros": 180,
+      "instantiateMicros": 189,
       "specimen": "d5faa14c-absolute-claims-in-docs",
       "warmEvalMicrosMin": 94,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 111,
-      "compileMicros": 18710,
+      "coldEvalMicros": 97,
+      "compileMicros": 18497,
       "fixtureId": "d5faa14c-absolute-claims-in-docs-inline-good",
-      "instantiateMicros": 180,
+      "instantiateMicros": 189,
       "specimen": "d5faa14c-absolute-claims-in-docs",
       "warmEvalMicrosMin": 89,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 60,
-      "compileMicros": 17307,
+      "coldEvalMicros": 63,
+      "compileMicros": 19768,
       "fixtureId": "d940b2c9-stdio-in-exec-options-inline-bad",
-      "instantiateMicros": 195,
+      "instantiateMicros": 180,
       "specimen": "d940b2c9-stdio-in-exec-options",
-      "warmEvalMicrosMin": 21,
+      "warmEvalMicrosMin": 22,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 29,
-      "compileMicros": 17307,
+      "coldEvalMicros": 26,
+      "compileMicros": 19768,
       "fixtureId": "d940b2c9-stdio-in-exec-options-inline-good",
-      "instantiateMicros": 195,
+      "instantiateMicros": 180,
       "specimen": "d940b2c9-stdio-in-exec-options",
       "warmEvalMicrosMin": 21,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 118,
-      "compileMicros": 16990,
+      "coldEvalMicros": 122,
+      "compileMicros": 18926,
       "fixtureId": "d-file-control-empty",
-      "instantiateMicros": 202,
+      "instantiateMicros": 183,
       "specimen": "d-file",
-      "warmEvalMicrosMin": 51,
+      "warmEvalMicrosMin": 50,
       "warmReps": 50
     },
     {
       "coldEvalMicros": 55,
-      "compileMicros": 16990,
+      "compileMicros": 18926,
       "fixtureId": "d-file-control-unreadable",
-      "instantiateMicros": 202,
+      "instantiateMicros": 183,
       "specimen": "d-file",
       "warmEvalMicrosMin": 49,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 129,
-      "compileMicros": 16990,
+      "coldEvalMicros": 57,
+      "compileMicros": 18926,
       "fixtureId": "d-file-inline-bad",
-      "instantiateMicros": 202,
+      "instantiateMicros": 183,
       "specimen": "d-file",
-      "warmEvalMicrosMin": 52,
+      "warmEvalMicrosMin": 50,
       "warmReps": 50
     },
     {
-      "coldEvalMicros": 56,
-      "compileMicros": 16990,
+      "coldEvalMicros": 58,
+      "compileMicros": 18926,
       "fixtureId": "d-file-inline-good",
-      "instantiateMicros": 202,
+      "instantiateMicros": 183,
       "specimen": "d-file",
-      "warmEvalMicrosMin": 50,
+      "warmEvalMicrosMin": 49,
       "warmReps": 50
     }
   ],
@@ -848,6 +884,42 @@
       "matchCount": 0,
       "ruleId": "0167a783f75b5ecd",
       "specimen": "0167a783-dynamic-import-utility-layer",
+      "violations": []
+    },
+    {
+      "arm": "opa",
+      "engine": "regex",
+      "error": null,
+      "events": [
+        {
+          "kind": "trigger",
+          "line_number": 1,
+          "ordinal": 0
+        }
+      ],
+      "fired": true,
+      "fixtureId": "0e01112d-bare-new-error-inline-bad",
+      "matchCount": 1,
+      "ruleId": "0e01112d5f18ffde",
+      "specimen": "0e01112d-bare-new-error",
+      "violations": [
+        {
+          "line_number": 1,
+          "ordinal": 0,
+          "rule_id": "0e01112d5f18ffde"
+        }
+      ]
+    },
+    {
+      "arm": "opa",
+      "engine": "regex",
+      "error": null,
+      "events": [],
+      "fired": false,
+      "fixtureId": "0e01112d-bare-new-error-inline-good",
+      "matchCount": 0,
+      "ruleId": "0e01112d5f18ffde",
+      "specimen": "0e01112d-bare-new-error",
       "violations": []
     },
     {
@@ -1693,6 +1765,7 @@
   ],
   "wasmSha256": {
     "0167a783-dynamic-import-utility-layer": "e58c5cd7bbb1001ebe5cc6e465ffd827e84ee1ca10c2da1986ddf0be5f8b304b",
+    "0e01112d-bare-new-error": "5c433a590f05f3ccdd4ba5b32caa80cc52684bc800feba65a6fc96dcaf4e7be2",
     "49dd9e4f-llm-character-counting": "4729fee4d639a6973d5a0e96df81c2e2d76244d3ff4413a5e7496f02683a4026",
     "54140f59-bare-issue-number-refs": "55d5aa55249b89a56d6d8df8532db790e7f9867c2c79beae330fdc3f9e22652f",
     "5b85fe53-suppress-event-runtime-failure": "9e520179e090321824c50f6a990a41264e7cb6ae05df403cdd8adf49792bc266",
