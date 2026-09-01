@@ -326,7 +326,11 @@ function main(): void {
   //     a LIVE certifier-drift sensor on the arm the E23 replay itself takes:
   //     the TOP-LEVEL arm. A `seed20` run publishing under a named
   //     `SPIKE_ARTIFACTS_SUBDIR` (a § S8 K-control arm — K4's swap) is not that
-  //     arm and is SKIPPED by name; its chains are that control's to compare.
+  //     arm and is SKIPPED by name. Nothing else compares that arm's chains
+  //     either (K4 reads facts, verdicts and the differential report, never a
+  //     chain; the swap moves example bundles, not chain inputs, so at a run pin
+  //     they are byte-identical to the run of record's) — the skip is scope, not
+  //     delegation, and the sensor of record is the top-level arm's.
   //     The cost is the ruling's intended behaviour: a charter-sanctioned K3
   //     re-pin changes the run of record, so it REFUSES at this seam until the
   //     run of record is re-cut — the same class `control` already carries under
@@ -427,6 +431,18 @@ function main(): void {
         ? ''
         : ' — re-run `npm run all` for this record set before certifying'),
   );
+  // (T13's twin for the ARTIFACT SET — leg G6 on the A13.1 fold) A13.1's arm
+  // selection below reads `SPIKE_ARTIFACTS_SUBDIR` — the environment — while the
+  // manifest records the set the run was DECLARED into (`artifactsSubdir`, inside
+  // `runManifestSha256`'s preimage). The same discipline applies: the two must
+  // agree, and a disagreement is a FAILED check, never a skip.
+  const manifestArtifactsSubdir =
+    (manifest as { artifactsSubdir?: string | null }).artifactsSubdir ?? null;
+  checks.check(
+    "INV 2 — the manifest's `artifactsSubdir` and `SPIKE_ARTIFACTS_SUBDIR` AGREE (the artifact set on disk and this process are the same run)",
+    manifestArtifactsSubdir === ARTIFACTS_SUBDIR,
+    `manifest.artifactsSubdir=${JSON.stringify(manifestArtifactsSubdir)}, SPIKE_ARTIFACTS_SUBDIR=${JSON.stringify(ARTIFACTS_SUBDIR)}`,
+  );
   // (§ S5, as re-keyed by A12 above and extended by A13.1) The comparison has a
   // referent for `specimens` — the whole committed set, when HEAD's committed
   // baseline IS the specimens set — for `control`, where it is ONE chain: against
@@ -486,10 +502,14 @@ function main(): void {
     // — a re-pin or a certifier delta — never a skip, and the seam stops here
     // (`certify` = `certify.mts && certify-verify.mts`; nothing after it runs).
     // The escape is the charter's E6 loop, not a flag: `certify.mts` has already
-    // published the new chains beside this refusal, so the owner commits them as
-    // a NEW run of record (the artifacts-only commit over the pin) and re-runs
-    // the seam at that commit, where this check reads its own bytes back. Same
-    // path `control` takes under A12; there is deliberately no dev seam here.
+    // published the new chains beside this refusal, so the owner commits them
+    // over the pin (an artifacts-only commit — not yet a run of record; the
+    // reports beside them are the previous run's) and re-cuts the run at that
+    // commit, where this check reads its own bytes back. Same path `control`
+    // takes under A12. There is no dev seam on THIS arm: a run under a named
+    // `SPIKE_ARTIFACTS_SUBDIR` is a different artifact set (recorded in its own
+    // manifest as `artifactsSubdir`, and never the run of record), not this one
+    // exempted.
     checks.eq(
       `INV 2 (A13.1) — the published seed-20 chain set is exactly the committed run of record's chain set at HEAD (referent: \`${committedChainsDir}\`, the committed \`recordSet: ${JSON.stringify(committedRecordSet)}\` baseline; every chain is held byte-equal below)`,
       chainFiles,
@@ -498,10 +518,17 @@ function main(): void {
   } else if (manifestRecordSet === 'seed20' && ARTIFACTS_SUBDIR !== null) {
     // (A13.1's scope) A `seed20` run publishing under a named subdir is a § S8
     // K-control arm (K4's swap, or another named set): not the arm the E23 replay
-    // takes, and its chains are that control's to compare. The top-level committed
-    // chains are named, never compared against a sub-arm's published set.
+    // takes. The skip is SCOPE, not delegation — no control compares a sub-arm's
+    // chains (K4 reads facts, verdicts and the differential report), and at a run
+    // pin they are byte-identical to the run of record's because the swap moves
+    // example bundles, not chain inputs. The top-level committed chains are
+    // named, never compared against a sub-arm's published set.
     checks.check(
-      `INV 2 — SKIPPED with the named reason \`seed20-under-named-subdir\`: this run publishes its ${chainFiles.length} chain(s) under \`artifacts/${ARTIFACTS_SUBDIR}/\` (a § S8 K-control arm), not the top-level arm the E23 replay takes, so the committed-vs-published half (A13.1, mmnto-ai/totem#2704) is not run on this arm — \`${committedChainsDir}\` at HEAD holds ${committedNames.length} chain(s) from the committed \`${String(committedRecordSet)}\` baseline; the per-chain claims that need no referent still run`,
+      `INV 2 — SKIPPED with the named reason \`seed20-under-named-subdir\`: this run publishes its ${chainFiles.length} chain(s) under \`artifacts/${ARTIFACTS_SUBDIR}/\` (a § S8 K-control arm), not the top-level arm the E23 replay takes, so the committed-vs-published half (A13.1, mmnto-ai/totem#2704) is not run on this arm and no control compares these chains either — \`${committedChainsDir}\` at HEAD holds ${committedNames.length} chain(s) ${
+        committedManifestPresent
+          ? `from the committed \`recordSet: ${JSON.stringify(committedRecordSet)}\` baseline`
+          : '(`artifacts/manifest.json` is ABSENT at HEAD — pre-manifest history)'
+      }; the per-chain claims that need no referent still run`,
       true,
       `published: ${chainFiles.length} under \`artifacts/${ARTIFACTS_SUBDIR}/chains\`; committed at HEAD under \`${committedChainsDir}\`: ${committedNames.length}`,
     );
@@ -620,7 +647,16 @@ function main(): void {
       mode: cmp?.mode ?? null,
       modeReason:
         cmp === null
-          ? `no committed referent for this run — \`artifacts/manifest.json\` at HEAD records \`recordSet: ${JSON.stringify(committedRecordSet)}\` and the selected referent dir \`${committedChainsDir}\` does not apply on \`${String(manifestRecordSet)}\`, so the committed-vs-published half of INV 2 is skipped for this chain`
+          ? manifestRecordSet === 'seed20' && ARTIFACTS_SUBDIR !== null
+            ? // (leg G2 on the A13.1 fold) The per-chain narration must agree with
+              // the header row above: on a sub-arm the referent APPLIES to `seed20`
+              // — it is the arm, not the record set, that is out of scope.
+              `skipped with the named reason \`seed20-under-named-subdir\` — this run publishes under \`artifacts/${ARTIFACTS_SUBDIR}/\`, not the top-level arm the E23 replay takes, so the committed-vs-published half of INV 2 (A13.1) is not run for this chain; \`${committedChainsDir}\` at HEAD is the top-level arm's referent`
+            : `no committed referent for this run — \`artifacts/manifest.json\` at HEAD ${
+                committedManifestPresent
+                  ? `records \`recordSet: ${JSON.stringify(committedRecordSet)}\``
+                  : 'is ABSENT (pre-manifest history)'
+              } and the selected referent dir \`${committedChainsDir}\` does not apply on \`${String(manifestRecordSet)}\`, so the committed-vs-published half of INV 2 is skipped for this chain`
           : cmp.mode === 'drift-detection'
             ? `the committed chain carries \`${POST_SLICE_MARKER}\` — the slice is committed, so the claim is byte-EQUALITY`
             : `the committed chain has no \`${POST_SLICE_MARKER}\` — a pre-slice baseline, so the claim is the additive extension`,
@@ -936,7 +972,18 @@ function main(): void {
       method:
         "BIDIRECTIONAL, chosen per chain from the COMMITTED file's own shape, so the invariant survives its own commit. `pre-commit` (the committed chain carries no `manifestSha256`): two independent claims — (a) a BYTE claim, the published file starts with the committed file's bytes up to its closing brace, so the extension is appended and nothing was re-serialised; (b) a STRUCTURAL claim, every pre-slice key holds an identical value and the added key set is exactly the extension's. `drift-detection` (the committed chain already carries `manifestSha256`): the published chain must be BYTE-EQUAL to it, and no key may be added, changed or removed — certification is deterministic, so any difference is drift. In both modes the named hashes are checked unchanged and the manifest hash is RE-DERIVED from the module.",
       modeMarker: `the presence of \`${POST_SLICE_MARKER}\` in the committed chain`,
-      preSliceSource: `git show HEAD:${committedChainsDir}/<name>.json`,
+      // (leg G7) Named only when it was READ: on an arm whose committed-vs-published
+      // half is skipped, no referent was consulted and none is claimed here.
+      preSliceSource: committedChainsApply
+        ? `git show HEAD:${committedChainsDir}/<name>.json`
+        : null,
+      preSliceSourceSkipped: committedChainsApply
+        ? null
+        : manifestRecordSet === 'seed20' && ARTIFACTS_SUBDIR !== null
+          ? 'seed20-under-named-subdir'
+          : manifestRecordSet === 'seed20'
+            ? 'no-seed20-referent-at-HEAD'
+            : 'no-specimens-referent-at-HEAD',
       expectedAddedKeys: EXPECTED_ADDED_KEYS,
       modesRun,
       rows: preservation,
