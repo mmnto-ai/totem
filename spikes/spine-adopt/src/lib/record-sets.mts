@@ -8,8 +8,11 @@
 //                          so every committed artifact, check and Go test holds
 //                          unchanged.
 //   `seed20`               the frozen R14 seed: the 22 `.totem/rules/r14-*.rule.yaml`
-//                          at pin `2a7135762b6aedc9cd3099ab3f42e029ee34092e`, copied
-//                          byte-identically under `seed/records/` (see `seed/PIN.md`).
+//                          at the CURE record pin `78e7f196b93caf0df68a3baba561cce66279563c`
+//                          (charter v1.5 § 7 E26: `0e01112d` re-authored, one hunk on
+//                          its pattern line; a child of the run of record's pin
+//                          `2a713576`), copied byte-identically under `seed/records/`
+//                          (see `seed/PIN.md`).
 //
 // Selected by `SPIKE_RECORD_SET`. NOTHING here decides a verdict: the loader emits
 // rows, and the § Lowering 4 / shipped-compile gates emit reject ROWS
@@ -59,8 +62,17 @@ export const K3_CAPTURE_CHAIN = path.join(SEED_CONTROLS_DIR, 'k3', 'k3-target.ch
 /** The package the K3 captures belong to — the seed's `87aff037` record. */
 export const K3_CAPTURE_PACKAGE = 'r87aff037d7de47a7';
 
-/** The frozen commit the `seed/records/` copies were taken from (`seed/PIN.md`). */
-export const SEED_RECORD_PIN = '2a7135762b6aedc9cd3099ab3f42e029ee34092e';
+/**
+ * The frozen commit the `seed/records/` copies were taken from (`seed/PIN.md`).
+ *
+ * The CURE record pin (charter v1.5 § 7 E26): a child of the run of record's pin
+ * `2a7135762b6aedc9cd3099ab3f42e029ee34092e` on the `r14/seed-20-translation`
+ * lineage, also reachable by the annotated tag `seed20-cure/0e01112d`, carrying
+ * exactly one change — `0e01112d`'s `target.pattern` with its inert lookahead
+ * removed (`\bnew\s+(?!Totem)Error\(` → `\bnew\s+Error\(`). Every other record
+ * byte-identical to the run of record's.
+ */
+export const SEED_RECORD_PIN = '78e7f196b93caf0df68a3baba561cce66279563c';
 
 /**
  * A loaded record row. `Specimen` unchanged, plus the three fields the seed set

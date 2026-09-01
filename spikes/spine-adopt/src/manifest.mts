@@ -524,7 +524,18 @@ function main(): void {
     // binding fact is its sha256 in the run manifest" was never realized until
     // here. A scorer re-freeze is a new value HERE and therefore a new apparatus
     // pin — the coupling is the point.
-    scorerSha256: '43c8667c5a5ea4947b01b88b2269c816131717b54e768580361a843b664c96c9',
+    //
+    // (E26 — the cure apparatus pin) Scorer v4, the scorer of record for the
+    // `0e01112d` cure run: the bytes at strategy main `264535d`
+    // (mmnto-ai/totem-strategy#1178, merged UNFROZEN — the freeze is the scorer's
+    // mail of 2026-09-01T05:03Z, E24's rule, this value verbatim), the SIXTH site
+    // of the cure apparatus pin (ruled (A) 2026-09-01T05:36Z — E26 (iv) binds the
+    // cure run's manifest to v4's sha; (ii)'s five-site list omitted this one — the
+    // E26 erratum naming it is owed strategy-side before the cure run's score). v2
+    // `43c8667c…` stays the run of record's witness at `f6efe85d` (its committed
+    // manifests, which no byte here touches); v3 `70979e54…` stays that run's
+    // scorer of record, strategy-side.
+    scorerSha256: '0b95fc03ac34ec82611d5f191d8551e3891e80a31a434a4170d231cb1782e579',
     // T17 — a FACT about the run, not a gate: `trackedPaths` below is the tree at
     // `runCommit`, and this says whether the tree the run actually read matched it.
     //
