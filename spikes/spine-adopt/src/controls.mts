@@ -206,7 +206,13 @@ function compareChains(current: unknown, target: unknown) {
 // ─── The rows ────────────────────────────────────────────────────────────────
 
 function k1(recordSet: RecordSetId, lowering: Artifact): ControlRow {
-  const evidence = [{ artifact: 'lowering-rejects.json', path: 'rejects[]' }];
+  const evidence = [
+    { artifact: 'lowering-rejects.json', path: 'rejects[]' },
+    // (E26) The cure's positive control reads the LOWERED side too — on the seed
+    // set only; the specimens arm never opens `lowered[]` and must not claim to
+    // (leg F3: evidence is a provenance row, and it names only what was read).
+    ...(recordSet === 'seed20' ? [{ artifact: 'lowering-rejects.json', path: 'lowered[]' }] : []),
+  ];
   if (lowering === null) {
     return {
       id: 'K1',
@@ -232,21 +238,39 @@ function k1(recordSet: RecordSetId, lowering: Artifact): ControlRow {
     census('bddfbd2ec1c75eaf', 'lookaround'),
     census('80192e6ac2a1dd3c', 'backreference'),
   ];
-  // The seed's own inert-lookahead seam: the third row the charter adds, because
-  // the two census rows alone could still pass a lowerer that "provably-inert"-ed
-  // a lookahead away. Seed-set only — the specimens set has no such record.
+  // The seed's own third row (§ 5 K1). At the run of record's pin `2a713576` this
+  // was the inert-lookahead seam — `0e01112d` had to REJECT as `lookaround`, because
+  // the two census rows alone could still pass a lowerer that "provably-inert"-ed a
+  // lookahead away; that proof stands, PASS at `f6efe85d`. At THIS apparatus pin
+  // (charter v1.5 § 7 E26 — the cure record pin `78e7f196`, `SEED_RECORD_PIN`) the
+  // record's pattern carries no lookahead, and the row is declared as the cure's
+  // POSITIVE control: `0e01112d` produces NO reject row, its target literal
+  // classifies `word-boundary`, and it LOWERS — decidable from
+  // `lowering-rejects.json`'s `rejects[]` and `lowered[]` alone (the `lowered[]` row
+  // carries the class per pattern). Seed-set only — the specimens set has no such
+  // record.
   if (recordSet === 'seed20') {
-    const own = rejects.find(
+    const ownReject = rejects.find(
       (r) => typeof r.recordId === 'string' && r.recordId.startsWith('0e01112d'),
     );
+    const lowered = (lowering.lowered ?? []) as Artifact[];
+    const ownLowered = lowered.find((l) => l.seedEntry === '0e01112d');
+    const target = ((ownLowered?.patterns ?? []) as Artifact[]).find((p) => p.role === 'target');
     rows.push({
       id: '0e01112d',
-      source: 'record reject row',
-      present: own !== undefined,
-      stage: own?.stage ?? null,
-      class: own?.class ?? null,
-      expectedClass: 'lookaround',
-      ok: own !== undefined && own.stage === 'target-lowering' && own.class === 'lookaround',
+      source: 'record lowered row (E26 cure — positive control)',
+      present: ownLowered !== undefined,
+      rejectRow: ownReject !== undefined,
+      rejectStage: ownReject?.stage ?? null,
+      rejectClass: ownReject?.class ?? null,
+      class: target?.class ?? null,
+      lowered: target?.lowered ?? null,
+      expectedClass: 'word-boundary',
+      ok:
+        ownReject === undefined &&
+        ownLowered !== undefined &&
+        target?.class === 'word-boundary' &&
+        target?.lowered === true,
     });
   }
   const missing = rows.filter((r) => !r.ok);
@@ -256,8 +280,21 @@ function k1(recordSet: RecordSetId, lowering: Artifact): ControlRow {
     ok: missing.length === 0,
     detail:
       missing.length === 0
-        ? `${rows.length} classifier reject row(s) present with the class named${recordSet === 'seed20' ? '' : ' (the seed`s own `0e01112d` row is seed-only and is not part of this set)'}`
-        : `MISSING or MISCLASSED: ${missing.map((r) => `${r.id} (class=${String(r.class)}, expected ${r.expectedClass})`).join('; ')}`,
+        ? recordSet === 'seed20'
+          ? `${rows.filter((r) => r.source === 'census-evidence').length} classifier reject row(s) present with the class named; the seed's own \`0e01112d\` LOWERS as \`word-boundary\` with no reject row (the E26 cure's positive control)`
+          : `${rows.length} classifier reject row(s) present with the class named (the seed\`s own \`0e01112d\` row is seed-only and is not part of this set)`
+        : `MISSING or MISCLASSED: ${missing
+            .map(
+              (r) =>
+                `${r.id} (class=${String(r.class)}, expected ${r.expectedClass}${
+                  r.rejectRow === true
+                    ? `; a reject row is present at ${String(r.rejectStage)}/${String(r.rejectClass)} where none is expected`
+                    : r.rejectRow === false && r.present === false
+                      ? '; the record is ABSENT from both `rejects[]` and `lowered[]` — neither lowered nor refused'
+                      : ''
+                })`,
+            )
+            .join('; ')}`,
     rows,
     evidence,
   };

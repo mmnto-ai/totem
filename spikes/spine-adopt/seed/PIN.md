@@ -3,10 +3,16 @@
 Charter: mmnto-ai/totem-strategy#1154 (`operations/310-seed20-target-preregistration.md`).
 Spec: `.totem/specs/seed20-apparatus.md` § "Hard constraints" 5.
 
-**Pin:** `2a7135762b6aedc9cd3099ab3f42e029ee34092e` (branch `r14/seed-20-translation`).
+**Pin:** `78e7f196b93caf0df68a3baba561cce66279563c` — the **cure record pin** (charter v1.5
+§ 7 E26; branch `r14/seed-20-translation`, annotated tag `seed20-cure/0e01112d`, both durable).
+It is the child of the run of record's pin `2a7135762b6aedc9cd3099ab3f42e029ee34092e` (the pin
+of `f6efe85d`'s verdict, (B) 14/15, which stands) and differs from it in exactly one file:
+`r14-0e01112d-bare-new-error.rule.yaml`, whose `target.pattern` `\bnew\s+(?!Totem)Error\(`
+became `\bnew\s+Error\(` — the inert lookahead removed, every other byte identical (one hunk on
+the pattern line; semantic preservation: strategy-codex's E26 (iii) deposit, 0 findings).
 
 The 22 files below are **byte-identical copies** of `.totem/rules/r14-*.rule.yaml` at that
-commit, obtained with `git show 2a7135762b6aedc9cd3099ab3f42e029ee34092e:<path>` and verified
+commit, obtained with `git show 78e7f196b93caf0df68a3baba561cce66279563c:<path>` and verified
 by comparing `git hash-object` of each copy against `git rev-parse <pin>:<path>` (all 22 blob
 oids equal). `.totem/rules/r14-translation-notes.md` is at the pin too and is deliberately NOT
 copied — it is prose, not a record, and the apparatus loads records only.
@@ -33,7 +39,7 @@ has no `r14/seed-20-translation` history).
 | file                                                     | sha256                                                             | blob oid                                   | bytes |
 | -------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------ | ----- |
 | `r14-0167a783-dynamic-import-utility-layer.rule.yaml`    | `07516f5d50e45afd7d9de0151cfb8b81c562121e5f517e8d2e69cfe3b88a2301` | `24ff5cd9dc23f9288334f1efeaa447b30c8b8223` | 629   |
-| `r14-0e01112d-bare-new-error.rule.yaml`                  | `a289e29fffdea60d6d330f1a62cd7a8363ab61418fa2724a7275e84d1d6ba8e5` | `560f3aa3009c73f66c01e6f49db4d81e277f3138` | 493   |
+| `r14-0e01112d-bare-new-error.rule.yaml`                  | `26e997b34a3ba5a0d7dd61014d2996942b545748763f418a5bd9d8f8409362dc` | `927cf76c96a56390f7475b13b41c8da6223cbb3a` | 484   |
 | `r14-1a7080eb-inline-secrets-agent-config.rule.yaml`     | `02f84fb59f1181a07ee2d54d450efbfc36e787a6213a7baf9b78fd785e05e33d` | `6186a141e8dda259fc9ddb1099b19368a0c5953c` | 685   |
 | `r14-49dd9e4f-llm-character-counting.rule.yaml`          | `16464d624f16481377718b409413bd96c0c3bf4e692c6f1161ec1d905c6e5912` | `c1a402d3d1727686573423a70da995f47a664cf6` | 556   |
 | `r14-54140f59-bare-issue-number-refs.rule.yaml`          | `b382417d9f84c7f2da7c30ac1e8ee6c05849f319b01e2794fa78f0a75a04618c` | `04d70b358d35587880124f3ba04143dbba487818` | 508   |
@@ -62,8 +68,12 @@ readable. They score nothing.
 
 - `1a7080eb` declares `language: json`, which the shipped `compileRuleRecord` does not register
   → a `shipped-compile` reject row. No bundle, no chain.
-- `0e01112d` carries a negative lookahead (`(?!Totem)`) → a `target-lowering` reject row, class
-  `lookaround` (§ Lowering 4 forbids an approximation). No bundle, no chain.
+- `0e01112d` at this (cure) pin carries `\bnew\s+Error\(` — the negative lookahead `(?!Totem)` it
+  carried at `2a713576` is gone (E26) → it classifies `word-boundary`, produces NO reject row, and
+  lowers: a bundle and a chain (K7 21 → 22, T5 scored packages 20 → 21, both declared). At the run
+  of record's pin it was a `target-lowering` reject row, class `lookaround` — no bundle, no chain —
+  and that row stays the run of record's K1 third row, PASS at `f6efe85d`; here K1's third row is
+  the cure's positive control (`src/controls.mts`).
 - `5da43ea6` carries a literal backtick inside a character class. It lowers: the § Lowering 3
   self-assert tests raw-string SYNTAX, not the byte (`.totem/specs/seed20-apparatus.md` § G6).
 - `87aff037` is the only seed record with a corpus fixture

@@ -5,7 +5,7 @@ message: 'When wrapping external errors or providing fallbacks,'
 
 target:
   type: regex
-  pattern: '\bnew\s+(?!Totem)Error\('
+  pattern: '\bnew\s+Error\('
   scope:
     fileGlobs:
       - '**/*.ts'
