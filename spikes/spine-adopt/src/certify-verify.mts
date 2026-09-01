@@ -503,7 +503,7 @@ function main(): void {
     checks.check(
       `INV 2 — SKIPPED with the named reason \`seed20-under-named-subdir\`: this run publishes its ${chainFiles.length} chain(s) under \`artifacts/${ARTIFACTS_SUBDIR}/\` (a § S8 K-control arm), not the top-level arm the E23 replay takes, so the committed-vs-published half (A13.1, mmnto-ai/totem#2704) is not run on this arm — \`${committedChainsDir}\` at HEAD holds ${committedNames.length} chain(s) from the committed \`${String(committedRecordSet)}\` baseline; the per-chain claims that need no referent still run`,
       true,
-      `published under: ${CHAINS_DIR}; committed at HEAD under \`${committedChainsDir}\`: ${committedNames.length}`,
+      `published: ${chainFiles.length} under \`artifacts/${ARTIFACTS_SUBDIR}/chains\`; committed at HEAD under \`${committedChainsDir}\`: ${committedNames.length}`,
     );
   } else {
     // A `seed20` run whose committed baseline is NOT a seed run: the specimens
