@@ -889,13 +889,19 @@ function main(): void {
     K3_CAPTURE_POLICY_CODE_SHA256,
   );
   // (fold 2 H2) DISCLOSING, never refusing. `repinned` is now a real predicate over
-  // K3 arm B, and each of its three outcomes is a legitimate state of a run: the
+  // K3 arm B, and each of its outcomes is a legitimate state of a run: the
   // control-only build was not present (`null`), it reproduced the pinned target
-  // (`false`), or the target moved (`true`). Whether a `true` is acceptable is the
-  // DISPOSITION, and the disposition lives in `controls.json` K3 — a manifest that
-  // exited 1 on it would be deciding a question that is not the apparatus's.
+  // (`false`), the target moved (`true`) — or (A14) this run IS arm B and the home
+  // was not inspected (`null`, named as such in the detail). Whether a `true` is
+  // acceptable is the DISPOSITION, and the disposition lives in `controls.json` K3
+  // — a manifest that exited 1 on it would be deciding a question that is not the
+  // apparatus's.
   checks.check(
-    `K3 CAPTURE — \`repinned\` MEASURED from arm B (the control-only build under \`${k3ControlRel}/\`): ${
+    `K3 CAPTURE — \`repinned\` ${
+      thisRunIsArmB
+        ? 'from arm B (this run IS arm B — not inspected)'
+        : `MEASURED from arm B (the control-only build under \`${k3ControlRel}/\`)`
+    }: ${
       k3Repinned === null
         ? 'NOT MEASURED (null)'
         : k3Repinned

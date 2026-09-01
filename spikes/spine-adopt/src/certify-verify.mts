@@ -52,6 +52,7 @@ import * as path from 'node:path';
 import { activeRecordSet, loadRecordSet } from './lib/record-sets.mts';
 import {
   ARTIFACTS_DIR,
+  ARTIFACTS_SUBDIR,
   CHAINS_DIR,
   Checks,
   readRunManifest,
@@ -317,14 +318,19 @@ function main(): void {
   //     (below), and only SKIPS, by name, where that home is not committed; and
   //     (A13.1, charter v1.4 § 7 E25 — EXTEND) a `seed20` run's referent is the
   //     committed run of record itself, `HEAD:…artifacts/chains/`: the 21 chains
-  //     carry no run identity, so a re-execution at any commit whose committed
-  //     manifest records `recordSet: 'seed20'` regenerates the same bytes, and
-  //     committed-vs-published byte-equality is a LIVE certifier-drift sensor on
-  //     the arm the E23 replay itself takes. The cost is the ruling's intended
-  //     behaviour: a charter-sanctioned K3 re-pin changes the run of record, so
-  //     it REFUSES at this seam until the run of record is re-cut — the same
-  //     class `control` already carries under A12 — rather than measuring drift
-  //     on every arm but the one that matters.
+  //     carry no run identity, so — while the chain-producing source (the
+  //     lowerer, the certifier, the record bytes, the pinned toolchain) is
+  //     unchanged, which is exactly what this sensor measures — a re-execution
+  //     at any commit whose committed manifest records `recordSet: 'seed20'`
+  //     regenerates the same bytes, and committed-vs-published byte-equality is
+  //     a LIVE certifier-drift sensor on the arm the E23 replay itself takes:
+  //     the TOP-LEVEL arm. A `seed20` run publishing under a named
+  //     `SPIKE_ARTIFACTS_SUBDIR` (a § S8 K-control arm — K4's swap) is not that
+  //     arm and is SKIPPED by name; its chains are that control's to compare.
+  //     The cost is the ruling's intended behaviour: a charter-sanctioned K3
+  //     re-pin changes the run of record, so it REFUSES at this seam until the
+  //     run of record is re-cut — the same class `control` already carries under
+  //     A12 — rather than measuring drift on every arm but the one that matters.
   //   - ABSENT committed manifest (pre-manifest history): treated as the
   //     specimens-baseline era. Absence is established by `ls-tree` — a no-match
   //     pathspec exits 0 with empty stdout — NEVER by a failed `git show`: `gitShow`
@@ -427,18 +433,24 @@ function main(): void {
   // the specimens baseline, the committed specimen chain (a control-only rebuild
   // of a committed specimen record IS K3 arm B); against a committed run of
   // record, the run's own committed `k3-control/` build — and (A13.1) for
-  // `seed20`, where it is the whole committed run of record when HEAD's committed
-  // baseline IS a seed run: the top-level chains, byte for byte. A `seed20` run
-  // over the specimens-baseline era (or an absent committed manifest) has no
-  // referent, and a `specimens` run over a committed run of record has none
-  // either unless the re-homed baseline is committed.
+  // `seed20` ON THE TOP-LEVEL ARM, where it is the whole committed run of record
+  // when HEAD's committed baseline IS a seed run: the top-level chains, byte for
+  // byte. Two things narrow the ruled clause (`committedChainsApply = true when
+  // committedRecordSet === 'seed20'`), both disclosed: the MANIFEST's set must be
+  // `seed20` too (a `specimens` run over a committed seed baseline would otherwise
+  // compare specimen chains against seed chains), and `SPIKE_ARTIFACTS_SUBDIR`
+  // must be unset — a `seed20` run under a named subdir is a § S8 K-control arm
+  // (K4's swap), not the arm the E23 replay takes. A `seed20` run over the
+  // specimens-baseline era (or an absent committed manifest) has no referent, and
+  // a `specimens` run over a committed run of record has none either unless the
+  // re-homed baseline is committed.
   const committedChainsApply =
     manifestRecordSet === 'control'
       ? true
       : manifestRecordSet === 'specimens'
         ? specimensHomeCommitted || committedRecordSet === 'specimens'
         : manifestRecordSet === 'seed20'
-          ? committedIsRunOfRecord
+          ? committedIsRunOfRecord && ARTIFACTS_SUBDIR === null
           : false;
   if (manifestRecordSet === 'specimens' && !committedChainsApply) {
     // Reachable only before the re-homed baseline is committed AND when the
@@ -471,19 +483,38 @@ function main(): void {
     // chain set must be exactly the committed top-level set, and each chain is
     // then held BYTE-EQUAL in the per-chain loop below (`drift-detection`, the
     // committed chains carry `manifestSha256`). A mismatch here is a FAILED check
-    // — a re-pin or a certifier delta — never a skip; the cure is to re-cut the
-    // run of record, by the charter's E6 loop, not to loosen the seam.
+    // — a re-pin or a certifier delta — never a skip, and the seam stops here
+    // (`certify` = `certify.mts && certify-verify.mts`; nothing after it runs).
+    // The escape is the charter's E6 loop, not a flag: `certify.mts` has already
+    // published the new chains beside this refusal, so the owner commits them as
+    // a NEW run of record (the artifacts-only commit over the pin) and re-runs
+    // the seam at that commit, where this check reads its own bytes back. Same
+    // path `control` takes under A12; there is deliberately no dev seam here.
     checks.eq(
       `INV 2 (A13.1) — the published seed-20 chain set is exactly the committed run of record's chain set at HEAD (referent: \`${committedChainsDir}\`, the committed \`recordSet: ${JSON.stringify(committedRecordSet)}\` baseline; every chain is held byte-equal below)`,
       chainFiles,
       committedNames,
+    );
+  } else if (manifestRecordSet === 'seed20' && ARTIFACTS_SUBDIR !== null) {
+    // (A13.1's scope) A `seed20` run publishing under a named subdir is a § S8
+    // K-control arm (K4's swap, or another named set): not the arm the E23 replay
+    // takes, and its chains are that control's to compare. The top-level committed
+    // chains are named, never compared against a sub-arm's published set.
+    checks.check(
+      `INV 2 — SKIPPED with the named reason \`seed20-under-named-subdir\`: this run publishes its ${chainFiles.length} chain(s) under \`artifacts/${ARTIFACTS_SUBDIR}/\` (a § S8 K-control arm), not the top-level arm the E23 replay takes, so the committed-vs-published half (A13.1, mmnto-ai/totem#2704) is not run on this arm — \`${committedChainsDir}\` at HEAD holds ${committedNames.length} chain(s) from the committed \`${String(committedRecordSet)}\` baseline; the per-chain claims that need no referent still run`,
+      true,
+      `published under: ${CHAINS_DIR}; committed at HEAD under \`${committedChainsDir}\`: ${committedNames.length}`,
     );
   } else {
     // A `seed20` run whose committed baseline is NOT a seed run: the specimens
     // era, or an absent committed manifest. The top-level chains at HEAD are then
     // a different record set's, never a referent for these — named, not compared.
     checks.check(
-      `INV 2 — SKIPPED with the named reason \`no-seed20-referent-at-HEAD\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's) but \`artifacts/manifest.json\` at HEAD records \`recordSet: ${JSON.stringify(committedRecordSet)}\`, so \`${committedChainsDir}\` at HEAD (${committedNames.length} chain(s)) is not a committed run of record and the committed-vs-published half is not run on this arm (A13.1 applies only over a committed seed run; mmnto-ai/totem#2704); the per-chain claims that need no referent still run`,
+      `INV 2 — SKIPPED with the named reason \`no-seed20-referent-at-HEAD\`: the ${chainFiles.length} published chain(s) belong to record set \`${String(manifestRecordSet)}\` (the manifest's) but ${
+        committedManifestPresent
+          ? `\`artifacts/manifest.json\` at HEAD records \`recordSet: ${JSON.stringify(committedRecordSet)}\``
+          : '`artifacts/manifest.json` is ABSENT at HEAD (pre-manifest history)'
+      }, so \`${committedChainsDir}\` at HEAD (${committedNames.length} chain(s)) is not a committed run of record and the committed-vs-published half is not run on this arm (A13.1 applies only over a committed seed run; mmnto-ai/totem#2704); the per-chain claims that need no referent still run`,
       true,
       `published: ${chainFiles.length}; committed at HEAD: ${committedNames.length}`,
     );
