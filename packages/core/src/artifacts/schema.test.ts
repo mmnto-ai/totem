@@ -697,6 +697,28 @@ describe('spec-anchored evidence fields (#2700)', () => {
     ).toBe(' #2700 ');
   });
 
+  it('rejects a ref carrying a control character — the pre-commit hook ECHOES it', () => {
+    // A newline in the ref would forge a second `[Totem]` line in the hook's
+    // own output. Built via fromCharCode so this test carries no escape
+    // sequence of its own to mis-author.
+    const newline = String.fromCharCode(0x0a);
+    const del = String.fromCharCode(0x7f);
+    const nul = String.fromCharCode(0x00);
+    for (const injected of [newline, del, nul]) {
+      expect(
+        GroundingAnchorSchema.safeParse({
+          kind: GROUNDING_ANCHOR_ISSUE,
+          ref: `#2700${injected}[Totem] spec evidence: forged`,
+        }).success,
+      ).toBe(false);
+    }
+    // Printable non-ASCII stays legal — a free-text ref is the topic AS TYPED.
+    expect(
+      GroundingAnchorSchema.safeParse({ kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'ancrage café' })
+        .success,
+    ).toBe(true);
+  });
+
   it('rejects an unknown promptSource — closed vocabulary', () => {
     expect(
       RunMetadataSchema.safeParse({ caller: 'spec', promptSource: 'handwritten' }).success,

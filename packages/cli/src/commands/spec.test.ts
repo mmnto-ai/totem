@@ -29,6 +29,7 @@ import {
   evaluateGroundingFloor,
   expandSpecQuery,
   formatGroundingRefusal,
+  isRecordPathOutsideRoot,
   loadSpecRecord,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
@@ -812,6 +813,37 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.floorExempt).toBe(2);
   });
 
+  // A non-finite relevance is what the CORE builder drops: the item it writes
+  // carries no relevance at all, exactly an FTS-only hit's shape. The floor
+  // must read it the same way, or the artifact and the judgment disagree.
+  it.each([NaN, Infinity, -Infinity])(
+    'a non-finite relevance (%s) is floor-EXEMPT, never counted as signal',
+    (relevance) => {
+      const verdict = evaluateGroundingFloor(
+        { ...emptyContext(), specs: [relevantHit(relevance)] },
+        FLOOR,
+      );
+      expect(verdict.floorExempt).toBe(1);
+      expect(verdict.bestRelevance).toBeNull();
+      expect(verdict.withheld).toEqual([]);
+      expect(verdict.refuse).toBe(false);
+    },
+  );
+
+  it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(NaN)],
+      },
+      FLOOR,
+    );
+    // One exempt hit is enough to proceed — and nothing is withheld.
+    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.withheld).toEqual([]);
+  });
+
   it('counts hits across ALL FOUR partitions', () => {
     const verdict = evaluateGroundingFloor(
       {
@@ -1018,6 +1050,78 @@ describe('loadSpecRecord', () => {
       /--from record is empty/,
     );
   });
+
+  // ── The ref is relative to the GIT ROOT, not the cwd (mmnto-ai/totem#2700) ──
+  //
+  // Every case above stubs `resolveGitRoot: () => null`, which collapses root
+  // and cwd and leaves the git-root half of the path untested. The pre-commit
+  // reader resolves the ref from the WORKTREE TOP, so a `root = cwd` mutation
+  // would publish a ref no hook could open.
+
+  it('binds the ref against the git root even when the command runs from a subdirectory', () => {
+    const sub = path.join(tmpDir, 'sub');
+    fs.mkdirSync(sub, { recursive: true });
+    const nested = path.join(tmpDir, '.totem', 'specs');
+    fs.mkdirSync(nested, { recursive: true });
+    const file = path.join(nested, 'x.md');
+    fs.writeFileSync(file, '# X\n\nBody.\n');
+
+    const loaded = loadSpecRecord(file, sub, { resolveGitRoot: () => tmpDir }, TotemConfigError);
+
+    // A `root = cwd` mutation yields `../.totem/specs/x.md` — and would now be
+    // refused outright by the containment gate below.
+    expect(loaded.record.path).toBe('.totem/specs/x.md');
+  });
+
+  // ── Containment: the record must live inside the git root ──
+
+  it('refuses a record OUTSIDE the git root, naming the path and the root', () => {
+    const root = path.join(tmpDir, 'repo');
+    fs.mkdirSync(root, { recursive: true });
+    const outside = path.join(tmpDir, 'sibling.md');
+    fs.writeFileSync(outside, '# S\n\nBody.\n');
+
+    let thrown: unknown;
+    try {
+      loadSpecRecord('../sibling.md', root, { resolveGitRoot: () => root }, TotemConfigError);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+    const message = String((thrown as Error).message);
+    expect(message).toContain('outside the repository');
+    expect(message).toContain(outside);
+    expect(message).toContain(root);
+  });
+
+  it('a file named `..notes.md` INSIDE the root is contained and binds normally', () => {
+    const file = path.join(tmpDir, '..notes.md');
+    fs.writeFileSync(file, '# N\n\nBody.\n');
+
+    const loaded = loadSpecRecord(file, tmpDir, { resolveGitRoot: () => tmpDir }, TotemConfigError);
+    expect(loaded.record.path).toBe('..notes.md');
+  });
+});
+
+describe('isRecordPathOutsideRoot', () => {
+  // The cross-drive arm (`path.relative` returning an ABSOLUTE path when the
+  // record lives on another volume) cannot be staged portably through
+  // loadSpecRecord, so the predicate is exercised directly. It consults both
+  // path flavors because its input is already normalized to forward slashes:
+  // `D:/x.md` is not a repo-relative path on any platform.
+  it.each(['..', '../sibling.md', '../../etc/passwd', '/etc/passwd', 'D:/records/x.md'])(
+    'refuses %s as outside the root',
+    (relativePath) => {
+      expect(isRecordPathOutsideRoot(relativePath)).toBe(true);
+    },
+  );
+
+  it.each(['.totem/specs/2700.md', '..notes.md', 'a/../b.md', 'x.md'])(
+    'accepts %s as contained',
+    (relativePath) => {
+      expect(isRecordPathOutsideRoot(relativePath)).toBe(false);
+    },
+  );
 });
 
 describe('assertOutDoesNotOverwriteRecord', () => {
@@ -1049,6 +1153,95 @@ describe('assertOutDoesNotOverwriteRecord', () => {
         TotemConfigError,
       ),
     ).not.toThrow();
+  });
+
+  // ── Aliases: a second NAME for the record is still the record ──
+  //
+  // The path-spelling comparison alone is defeated by either link kind: a
+  // symlink has a different resolved path, and a hardlink's two names share no
+  // path relationship at all — both would let the draft clobber the record.
+
+  describe('link aliases', () => {
+    /**
+     * Whether this platform (and this account) can make each link kind — a
+     * Windows account without SeCreateSymbolicLinkPrivilege cannot symlink,
+     * and a filesystem without hardlinks cannot link. Probed ONCE, outside any
+     * test, so the skip is a real capability check rather than a swallowed
+     * failure inside the assertion.
+     */
+    const linkable = ((): { hard: boolean; sym: boolean } => {
+      const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-link-probe-'));
+      const target = path.join(probeDir, 'target');
+      fs.writeFileSync(target, 'probe');
+      const attempt = (make: () => void): boolean => {
+        try {
+          make();
+          return true;
+        } catch (err) {
+          void err;
+          return false;
+        }
+      };
+      const hard = attempt(() => fs.linkSync(target, path.join(probeDir, 'hard')));
+      const sym = attempt(() => fs.symlinkSync(target, path.join(probeDir, 'sym')));
+      cleanTmpDir(probeDir);
+      return { hard, sym };
+    })();
+
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-out-alias-')));
+    });
+
+    afterEach(() => {
+      cleanTmpDir(tmpDir);
+    });
+
+    /** The record, written fresh, plus the absolute path of a would-be alias. */
+    function stage(aliasName: string): { record: string; alias: string } {
+      const record = path.join(tmpDir, 'record.md');
+      fs.writeFileSync(record, '# Record\n\nThe ruled contract.\n');
+      return { record, alias: path.join(tmpDir, aliasName) };
+    }
+
+    it.skipIf(!linkable.hard)(
+      'refuses a HARDLINK to the record — the two names share an inode, not a path',
+      () => {
+        const { record, alias } = stage('hard-alias.md');
+        fs.linkSync(record, alias);
+
+        expect(() =>
+          assertOutDoesNotOverwriteRecord(alias, record, tmpDir, TotemConfigError),
+        ).toThrowError(/never drafts over the record/);
+      },
+    );
+
+    it.skipIf(!linkable.sym)('refuses a SYMLINK to the record', () => {
+      const { record, alias } = stage('sym-alias.md');
+      fs.symlinkSync(record, alias);
+
+      expect(() =>
+        assertOutDoesNotOverwriteRecord(alias, record, tmpDir, TotemConfigError),
+      ).toThrowError(/never drafts over the record/);
+    });
+
+    it('an unrelated EXISTING file beside the record is still allowed', () => {
+      const { record, alias } = stage('other.md');
+      fs.writeFileSync(alias, 'a different file\n');
+
+      expect(() =>
+        assertOutDoesNotOverwriteRecord(alias, record, tmpDir, TotemConfigError),
+      ).not.toThrow();
+    });
+
+    it('a --out that does not exist yet is allowed (the common case)', () => {
+      const { record, alias } = stage('not-yet.md');
+
+      expect(() =>
+        assertOutDoesNotOverwriteRecord(alias, record, tmpDir, TotemConfigError),
+      ).not.toThrow();
+    });
   });
 });
 
@@ -1181,8 +1374,13 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
       caller: 'spec',
       promptSource: PROMPT_SOURCE_BUILTIN,
     });
-    // The prompt carries the very bytes the digest binds.
-    expect(String(harness.orchestratorArgs[0]!['prompt'])).toContain('The ruled contract.');
+    // The prompt carries the very bytes the digest binds — the WHOLE record,
+    // not a fragment of it. A `toContain` on one sentence would still pass if
+    // the record were truncated or re-wrapped on the way into the prompt, and
+    // `anchor.sha256` would then name bytes the model never saw.
+    const prompt = String(harness.orchestratorArgs[0]!['prompt']);
+    const bytes = fs.readFileSync(record, 'utf-8');
+    expect(prompt).toContain(`<record_body>\n${bytes}\n</record_body>`);
     expect(harness.writes).toEqual([{ content: 'DRAFT' }]);
   });
 
@@ -1244,13 +1442,14 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     expect(warnings.some((line) => line.includes('NOT gate evidence'))).toBe(true);
   });
 
+  // "Mints nothing" is proved by the orchestrator never being REACHED —
+  // `runOrchestrator` is the only writer of a run artifact and it is stubbed
+  // here, so a run-store file count could not fail whatever the command did.
   it('a free-text run with 0 hits REFUSES and mints nothing (the orchestrator is never reached)', async () => {
-    const before = runArtifactNames();
     await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
       /Retrieval returned 0 hits/,
     );
     expect(harness.orchestratorArgs).toEqual([]);
-    expect(runArtifactNames()).toEqual(before);
   });
 
   it('a free-text run entirely below the floor REFUSES, naming the floor and every withheld candidate', async () => {
@@ -1270,7 +1469,6 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     );
     expect(message).toContain('docs/a.md — relevance 0.100');
     expect(harness.orchestratorArgs).toEqual([]);
-    expect(runArtifactNames()).toEqual([]);
   });
 
   it('an ISSUE-anchored run with 0 hits is NEVER refused (an issue is grounding)', async () => {

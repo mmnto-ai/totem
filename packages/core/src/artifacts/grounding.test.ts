@@ -255,7 +255,7 @@ describe('grounding schemas', () => {
     expect(parsed.grounding.hash).toBe(calculateDeterministicHash(parsed.grounding.bundle));
   });
 
-  it('the 1.2.0 writer preserves the 1.1 bundle-semantics minor marker (Q3)', () => {
-    expect(RUN_ARTIFACT_SCHEMA_VERSION).toBe('1.2.0');
+  it('the writer stamps the 1.3.0 anchored-evidence minor marker (mmnto-ai/totem#2700)', () => {
+    expect(RUN_ARTIFACT_SCHEMA_VERSION).toBe('1.3.0');
   });
 });

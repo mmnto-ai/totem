@@ -49,6 +49,8 @@ A pass prints the evidence line with the artifact's own age, its anchor and its 
 
 The reader's exit vocabulary is `0` evidence, `2` no spec artifact in this checkout, `3` the newest spec artifact is not evidence (its reason is printed), and anything else a reader failure — each reported distinctly, all fail-closed. The check claims only that a grounded run preceded the commit and that its subject is a document with a body. It never claims the document is any good: a draft that mimics the skeleton with filler bodies is outside any content check's reach.
 
+The BLOCKED line names both cures — `totem spec <issue>` and `totem spec --from <record>` — and adds `--fresh`: a response served from the response cache writes no run artifact, so a re-run that hits the cache leaves the gate exactly where it was.
+
 Two disclosures:
 
 - **Migration.** Every spec artifact written before this rule reads as not-evidence, because none carries `grounding.anchor`. On a strict-tier install this affects human commits too, not only agent commits. One run of `totem spec <issue>` or `totem spec --from <record>` restores evidence.

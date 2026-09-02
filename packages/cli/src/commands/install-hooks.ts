@@ -786,6 +786,17 @@ export function buildPreCommitHook(options: {
   // headings from `SPEC_REQUIRED_SECTIONS`, the anchor kinds and the
   // prompt-source spelling from the core schema's exported constants. The hook
   // text can never drift from the writer's vocabulary by re-spelling it.
+  //
+  // The artifact is a plain JSON file a seat can hand-edit, so nothing read out
+  // of it is trusted as text: `anchor.ref` (and `anchor.kind`) pass through
+  // `safe()` before any echo — a newline in a ref would otherwise forge a
+  // second `[Totem]` line in the hook's own output — a `record` ref that is
+  // absolute or starts with `..` is refused as outside the worktree, and a
+  // `record` anchor whose `sha256` is not a 64-hex digest is refused outright
+  // rather than reported as a malformed sensor line. Every reason and the pass
+  // line go out through `fs.writeSync(1, …)`: `process.stdout.write` is
+  // asynchronous on a pipe (macOS), so `process.exit` could truncate the text
+  // the `sh` arm is about to echo.
   const strictBlock = `
 # Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690, mmnto-ai/totem#2700).
 # Evidence = a totem spec run artifact (${runsDir}/*.json with a
@@ -802,6 +813,7 @@ if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   spec_evidence=$(node -e '
 const fs = require("fs");
 const crypto = require("crypto");
+const nodePath = require("path");
 const dir = ${JSON.stringify(runsDir)};
 const REQUIRED = ${JSON.stringify(SPEC_REQUIRED_SECTIONS)};
 const KIND_ISSUE = ${JSON.stringify(GROUNDING_ANCHOR_ISSUE)};
@@ -821,14 +833,28 @@ for (const name of names) {
 }
 if (!best) process.exit(2);
 const file = dir + "/" + best.name;
-function block(reason) { process.stdout.write(reason); process.exit(3); }
-function startsWithHash(line) { return ["#"].indexOf(line.slice(0, 1)) > -1; }
+function emit(text) { fs.writeSync(1, text); }
+function block(reason) { emit(reason); process.exit(3); }
+function safe(text) {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    out = out + (code < 32 || [127].indexOf(code) > -1 ? "?" : text.charAt(i));
+  }
+  return out;
+}
 function isHeading(line) {
   let n = 0;
   while (n < line.length && ["#"].indexOf(line.charAt(n)) > -1) n = n + 1;
   if (n < 1 || n > 6) return false;
-  if ([" "].indexOf(line.charAt(n)) < 0) return false;
+  if ([" ", "\\t"].indexOf(line.charAt(n)) < 0) return false;
   return line.slice(n + 1).trim().length > 0;
+}
+function outsideWorktree(r) {
+  const norm = r.split("\\\\").join("/");
+  if (nodePath.isAbsolute(norm)) return true;
+  if (["/"].indexOf(norm.slice(0, 1)) > -1) return true;
+  return [".."].indexOf(norm.split("/")[0]) > -1;
 }
 const art = best.art;
 const grounding = art.grounding;
@@ -836,7 +862,9 @@ const anchor = grounding && grounding.anchor;
 if (!anchor || ["string"].indexOf(typeof anchor.kind) < 0) block("the newest spec run artifact (" + file + ") predates the anchored-evidence rule (no grounding.anchor)");
 const kind = anchor.kind;
 const ref = ["string"].indexOf(typeof anchor.ref) < 0 ? "(no ref)" : anchor.ref;
-if (kind !== KIND_ISSUE && kind !== KIND_RECORD) block("the newest spec run artifact (" + file + ") is anchored " + kind + " (" + ref + "), which is not gate evidence");
+const shownKind = safe(kind);
+const shownRef = safe(ref);
+if (kind !== KIND_ISSUE && kind !== KIND_RECORD) block("the newest spec run artifact (" + file + ") is anchored " + shownKind + " (" + shownRef + "), which is not gate evidence");
 let subject = "";
 let shape = "";
 let recordStatus = "";
@@ -848,20 +876,23 @@ if (kind !== KIND_RECORD) {
   const source = meta && meta.promptSource;
   shape = source !== PROMPT_OVERRIDE ? "TEMPLATE" : "DOCUMENT";
 } else {
+  if (outsideWorktree(ref)) block("the bound record ref is outside the worktree: " + shownRef);
+  const bound = ["string"].indexOf(typeof anchor.sha256) < 0 ? "" : anchor.sha256;
+  if (!/^[0-9a-f]{64}$/.test(bound)) block("the record anchor carries no sha256 — not evidence (" + file + ")");
   let bytes = null;
   let read = false;
   try { bytes = fs.readFileSync(ref); read = true; } catch (err) { read = false; }
-  if (!read) block("the bound record is missing at " + ref + " (bound by " + file + ")");
+  if (!read) block("the bound record is missing at " + shownRef + " (bound by " + file + ")");
   subject = bytes.toString("utf8");
   shape = "DOCUMENT";
   const now = crypto.createHash("sha256").update(bytes).digest("hex");
-  const bound = ["string"].indexOf(typeof anchor.sha256) < 0 ? "" : anchor.sha256;
   recordStatus = now !== bound ? "record revised since binding (bound " + bound.slice(0, ${RECORD_HASH_DISPLAY_PREFIX}) + ", now " + now.slice(0, ${RECORD_HASH_DISPLAY_PREFIX}) + ")" : "record sha256 matches";
 }
+if ([65279].indexOf(subject.charCodeAt(0)) > -1) subject = subject.slice(1);
 const lines = subject.split("\\n");
 function hasBodyAfter(start) {
   for (let i = start + 1; i < lines.length; i++) {
-    if (startsWithHash(lines[i])) return false;
+    if (isHeading(lines[i])) return false;
     if (lines[i].trim().length > 0) return true;
   }
   return false;
@@ -877,14 +908,14 @@ if (shape !== "DOCUMENT") {
   let bodied = false;
   for (let i = 0; i < lines.length; i++) { if (isHeading(lines[i]) && hasBodyAfter(i)) { bodied = true; break; } }
   if (!bodied && kind !== KIND_RECORD) block("the draft in " + file + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
-  if (!bodied) block("the bound record at " + ref + " has no heading with a body");
+  if (!bodied) block("the bound record at " + shownRef + " has no heading with a body");
 }
 const stamp = best.at ? Date.parse(best.at) : NaN;
 const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / 86400000);
 let out = file + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
-out = out + " · anchor " + kind + " " + ref + " · shape " + shape;
+out = out + " · anchor " + shownKind + " " + shownRef + " · shape " + shape;
 if (recordStatus.length > 0) out = out + " · " + recordStatus;
-process.stdout.write(out);
+emit(out);
 ' 2>/dev/null)
   # Reader status: 0 = evidence found · 2 = no spec artifact at all · 3 = the
   # newest spec artifact is NOT evidence (the reason is on stdout) · anything
@@ -894,7 +925,7 @@ process.stdout.write(out);
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" = "3" ]; then
-    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (strict mode)"
+    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
     exit 1
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${runsDir}/ unreadable); fix the runtime and retry (strict mode)"

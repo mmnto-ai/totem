@@ -306,6 +306,29 @@ export interface SpecRecordDeps {
   resolveGitRoot: (cwd: string) => string | null;
 }
 
+/**
+ * Whether a root-relative record path ESCAPES the repository — the containment
+ * gate on `grounding.anchor.ref` (mmnto-ai/totem#2700).
+ *
+ * The published ref is resolved by the strict pre-commit reader from the
+ * WORKTREE TOP, so a path that leaves the root names a file the gate would
+ * read from outside the repo: `--from ../sibling/x.md` binds `../sibling/x.md`,
+ * and a record on another drive binds an absolute path (`path.relative` returns
+ * one when the two paths share no root). The hook carries the same refusal —
+ * the artifact is hand-editable, so neither half may trust the other — but a
+ * ref that escapes must never be MINTED either.
+ *
+ * Both `path` flavors are consulted because the caller normalizes to forward
+ * slashes before asking: `D:/x.md` is not a repo-relative path on ANY platform,
+ * so the answer must not depend on which one is running. Compared by path
+ * SEGMENT, not by prefix — a file named `..notes.md` inside the root is
+ * contained and stays legal.
+ */
+export function isRecordPathOutsideRoot(relativePath: string): boolean {
+  if (path.win32.isAbsolute(relativePath) || path.posix.isAbsolute(relativePath)) return true;
+  return relativePath === '..' || relativePath.startsWith('../');
+}
+
 export interface LoadedSpecRecord {
   record: SpecRecord;
   /** The record's resolved absolute path — the subject of the `--out` collision check. */
@@ -370,14 +393,50 @@ export function loadSpecRecord(
   // this ref from the worktree top, which is where git runs hooks.
   const root = deps.resolveGitRoot(cwd) ?? cwd;
   const relativePath = path.relative(root, absolutePath).split(path.sep).join('/');
+  if (isRecordPathOutsideRoot(relativePath)) {
+    throw new TotemConfigErrorCtor(
+      `--from record is outside the repository: ${absolutePath} (git root ${root}).`,
+      'Point --from at a record inside this repo — the pre-commit gate resolves the bound ref from the worktree top.',
+      'CONFIG_INVALID',
+    );
+  }
 
   return { record: { path: relativePath, sha256, body }, absolutePath };
 }
 
 /**
+ * Whether two paths are the same FILE, not merely the same spelling.
+ *
+ * Three tests, cheapest first: the resolved spellings (which is all a
+ * not-yet-created `--out` has), the two paths' real targets (a SYMLINK to the
+ * record resolves to the record), and the filesystem's own identity —
+ * `(dev, ino)` — which is the only thing that catches a HARDLINK, whose two
+ * names are equally real and share no path relationship at all.
+ *
+ * Only the spelling test runs when either path is absent — `--out` usually does
+ * not exist yet, and a path that names nothing cannot alias the record. Once
+ * both exist the `fs` calls run UNGUARDED: a realpath or stat that fails on a
+ * file we just saw is a real fault (a permission change, a vanished volume),
+ * and swallowing it would silently downgrade this check to the spelling
+ * comparison it exists to replace.
+ */
+function isSameFile(a: string, b: string): boolean {
+  if (path.relative(a, b).length === 0) return true;
+  if (!fs.existsSync(a) || !fs.existsSync(b)) return false;
+  const realA = fs.realpathSync.native(a);
+  const realB = fs.realpathSync.native(b);
+  if (path.relative(realA, realB).length === 0) return true;
+  const statA = fs.statSync(realA);
+  const statB = fs.statSync(realB);
+  return statA.dev === statB.dev && statA.ino === statB.ino;
+}
+
+/**
  * `--out` may never resolve to the bound record: the tool BINDS a hand-authored
- * record, it never drafts over it. Compared via `path.relative` so the check
- * inherits the platform's own path equality (case-insensitive on win32).
+ * record, it never drafts over it. Identity is decided by {@link isSameFile},
+ * so a symlink or a hardlink pointed at the record is refused with the same
+ * words a literal path collision gets — a spelling comparison alone would let
+ * either one through and clobber the record.
  */
 export function assertOutDoesNotOverwriteRecord(
   out: string | undefined,
@@ -386,7 +445,7 @@ export function assertOutDoesNotOverwriteRecord(
   TotemConfigErrorCtor: typeof TotemConfigErrorClass,
 ): void {
   if (out === undefined) return;
-  if (path.relative(path.resolve(cwd, out), recordAbsolutePath).length > 0) return;
+  if (!isSameFile(path.resolve(cwd, out), recordAbsolutePath)) return;
   throw new TotemConfigErrorCtor(
     `--out resolves to the --from record (${recordAbsolutePath}) — totem spec never drafts over the record.`,
     'Send the draft elsewhere: --out <another path>, or --stdout.',
@@ -484,7 +543,13 @@ export function evaluateGroundingFloor(
   let bestRelevance: number | null = null;
   for (const hit of all) {
     const relevance = hit.relevance;
-    if (typeof relevance !== 'number') {
+    // Finite or it is not a signal. The core bundle builder DROPS a non-finite
+    // relevance from the item it writes, so a NaN/Infinity hit reaches the
+    // artifact with no relevance at all — exactly an FTS-only hit's shape.
+    // Counting it as signal here disagreed with that: it made `floorExempt`
+    // zero and let a NaN be disclosed as a withheld `relevance NaN` candidate
+    // beside a genuinely weak sibling.
+    if (typeof relevance !== 'number' || !Number.isFinite(relevance)) {
       floorExempt += 1;
       continue;
     }

@@ -26,6 +26,9 @@ import { z } from 'zod';
 
 /**
  * The schemaVersion WRITTEN by this code. Readers accept any 1.x (F1).
+ * 1.3.0 (mmnto-ai/totem#2700): `grounding` gained the optional `anchor` +
+ * `floor`, bundle items the optional `relevance` (which enters
+ * `grounding.hash`), `runMetadata` the optional `promptSource`.
  * 1.2.0 (mmnto-ai/totem#2452): `output` gained optional execution-attempt
  * evidence for fallback/configured-shell provenance. 1.1.0
  * (mmnto-ai/totem#2101): `grounding` gained the optional per-item
@@ -33,7 +36,7 @@ import { z } from 'zod';
  * to hash-of-bundle — the minor is the observable marker for that meaning
  * change; the registry stays empty because the tolerant reader parses both.
  */
-export const RUN_ARTIFACT_SCHEMA_VERSION = '1.2.0';
+export const RUN_ARTIFACT_SCHEMA_VERSION = '1.3.0';
 
 /**
  * Schema version for the distinct terminal-invocation failure ledger. The
@@ -239,16 +242,42 @@ export const GroundingBundleSchema = z.object({
  * bytes to bind, and a digest beside a non-record anchor would claim a binding
  * that does not exist.
  */
+/**
+ * Whether `value` carries a control character (code point below 0x20, or DEL).
+ *
+ * `grounding.anchor.ref` is ECHOED by the strict pre-commit hook's evidence and
+ * BLOCKED lines, so a newline in it would forge a second `[Totem]` line in the
+ * hook's own output. The hook collapses control characters defensively (the
+ * artifact is a hand-editable JSON file it must not trust), and this refine is
+ * the writer-side gate that keeps a legitimately minted artifact from carrying
+ * one at all. Deliberately narrow: a `free-text` ref is the topic AS TYPED and
+ * may carry any printable character, including non-ASCII. Written as a
+ * code-point walk rather than a regex so the predicate carries no escape
+ * sequence of its own to mis-author (the {@link hasUnrenderableHookChar}
+ * precedent).
+ */
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
 export const GroundingAnchorSchema = z
   .object({
     /** Closed vocabulary — the canonical spellings are {@link GROUNDING_ANCHOR_KINDS}. */
     kind: z.enum(GROUNDING_ANCHOR_KINDS),
-    /** `#<n>` / the input as typed for a URL or `owner/repo#N` (comma-joined for several); the repo-relative record path for `record`; the topic text for `free-text`. */
+    /** `#<n>` / the input as typed for a URL or `owner/repo#N` (comma-joined for several); the repo-relative record path for `record`; the topic text for `free-text`. Never carries a control character — it is echoed by the pre-commit hook. */
     ref: z
       .string()
       .refine(
         (value) => value.trim().length > 0,
         'grounding.anchor.ref must not be empty or whitespace-only',
+      )
+      .refine(
+        (value) => !hasControlCharacter(value),
+        'grounding.anchor.ref must not carry a control character — it is echoed by the pre-commit hook',
       ),
     /** sha256 of the bound record's bytes — `record` anchors only. */
     sha256: z

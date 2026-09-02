@@ -4,8 +4,12 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { RunArtifact, TotemConfig } from '@mmnto/totem';
-import { RUN_ARTIFACT_SCHEMA_VERSION, saveRunArtifact } from '@mmnto/totem';
+import type { GroundingBundle, GroundingItem, RunArtifact, TotemConfig } from '@mmnto/totem';
+import {
+  calculateDeterministicHash,
+  RUN_ARTIFACT_SCHEMA_VERSION,
+  saveRunArtifact,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 
@@ -123,6 +127,53 @@ describe('rerunArtifact', () => {
       provenanceSummary: 'similarity-only:1',
       bundle,
     });
+  });
+
+  // ─── Anchor + floor replay (mmnto-ai/totem#2700) ──
+  //
+  // A rerun replays `runMetadata` verbatim, so a rerun of a `caller: spec`
+  // artifact mints a NEW newest spec artifact. If the anchor did not ride
+  // along, that newest artifact would carry none — and the strict pre-commit
+  // gate would print a FALSE "predates the anchored-evidence rule" over a run
+  // whose source was properly anchored.
+
+  it('carries a `record` anchor and the floor verbatim onto the rerun request (mmnto-ai/totem#2700)', async () => {
+    const anchor = {
+      kind: 'record' as const,
+      ref: '.totem/specs/2700.md',
+      sha256: 'a'.repeat(64),
+    };
+    const anchoredHash = saveRunArtifact(
+      path.join(tmpDir, '.totem'),
+      artifact({
+        inputBundle: { maskedPrompt: 'anchored prompt' },
+        grounding: {
+          hash: 'd'.repeat(64),
+          provenanceSummary: 'similarity-only:1',
+          anchor,
+          floor: 0.25,
+        },
+        admission: { runMetadata: { caller: 'spec', command: 'spec' } },
+      }),
+    ).hash;
+
+    await rerunArtifact({ hash: anchoredHash, config: config(), cwd: tmpDir });
+
+    const call = mockedRunOrchestrator.mock.calls[0]![0];
+    expect(call.artifact).toMatchObject({ anchor, floor: 0.25 });
+    // The whole grounding identity replays together — the anchor is part of it.
+    expect(call.artifact).toMatchObject({
+      groundingHash: 'd'.repeat(64),
+      provenanceSummary: 'similarity-only:1',
+    });
+  });
+
+  it('a source WITHOUT an anchor or a floor puts NEITHER key on the rerun request', async () => {
+    await rerunArtifact({ hash: sourceHash, config: config(), cwd: tmpDir });
+
+    const call = mockedRunOrchestrator.mock.calls[0]![0];
+    expect(call.artifact).not.toHaveProperty('anchor');
+    expect(call.artifact).not.toHaveProperty('floor');
   });
 
   it('throws on a missing source hash without invoking anything', async () => {
@@ -243,6 +294,58 @@ describe('compareRunArtifacts', () => {
     const a = artifact();
     const b = artifact({ output: { content: 'y', metrics: { durationMs: 1 } } });
     expect(compareRunArtifacts(a, b)).toEqual(compareRunArtifacts(a, b));
+  });
+
+  // ─── sameGrounding vs the per-item relevance (mmnto-ai/totem#2700) ──
+  //
+  // `relevance` ENTERS `grounding.hash` from 1.3.0, so the same delivered
+  // items measured differently hash differently. `sameGrounding` must keep
+  // meaning "the same items grounded both runs" rather than narrowing to
+  // "the same items measured identically".
+
+  /** One bundled artifact whose recorded hash is the real hash of its bundle (the writer's own invariant). */
+  function bundled(items: GroundingItem[], summary = 'similarity-only:1'): RunArtifact {
+    const bundle: GroundingBundle = { items };
+    return artifact({
+      grounding: { hash: calculateDeterministicHash(bundle), provenanceSummary: summary, bundle },
+    });
+  }
+
+  const ITEM: GroundingItem = {
+    provenance: 'similarity-only',
+    contentHash: 'c'.repeat(64),
+    sourceType: 'code',
+    filePath: 'src/x.ts',
+  };
+
+  it('the SAME delivered items with DIFFERENT relevances are the same grounding', () => {
+    const a = bundled([{ ...ITEM, relevance: 0.71 }]);
+    const b = bundled([{ ...ITEM, relevance: 0.42 }]);
+    // The recorded hashes really do differ — relevance is inside them.
+    expect(a.grounding.hash).not.toBe(b.grounding.hash);
+    expect(compareRunArtifacts(a, b).sameGrounding).toBe(true);
+  });
+
+  it('DIFFERENT delivered items are NOT the same grounding, however they were measured', () => {
+    const a = bundled([{ ...ITEM, relevance: 0.71 }]);
+    const b = bundled([{ ...ITEM, filePath: 'src/y.ts', relevance: 0.71 }]);
+    expect(compareRunArtifacts(a, b).sameGrounding).toBe(false);
+  });
+
+  it('a differing provenanceSummary is NOT the same grounding even over identical items', () => {
+    const a = bundled([{ ...ITEM, relevance: 0.71 }], 'similarity-only:1');
+    const b = bundled([{ ...ITEM, relevance: 0.71 }], 'structurally-verified:1');
+    expect(compareRunArtifacts(a, b).sameGrounding).toBe(false);
+  });
+
+  it('a BUNDLE-LESS pair still compares on the recorded grounding hash (slice-1 behavior unchanged)', () => {
+    const a = artifact();
+    const b = artifact({
+      grounding: { hash: 'e'.repeat(64), provenanceSummary: 'similarity-only' },
+    });
+    expect(a.grounding.bundle).toBeUndefined();
+    expect(compareRunArtifacts(a, b).sameGrounding).toBe(false);
+    expect(compareRunArtifacts(a, artifact()).sameGrounding).toBe(true);
   });
 
   // ─── Admission comparison (mmnto-ai/totem#2102) ──
