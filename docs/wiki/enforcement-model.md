@@ -23,6 +23,37 @@ The pre-push hook runs two stateless checks:
 
 No flag files. No LLM calls. No workflow opinions. Works air-gapped.
 
+### The Strict Pre-Commit Spec-Evidence Rule (Opt-In Tier)
+
+Under the strict tier (`hooks.tier: 'strict'`, `TOTEM_HOOK_TIER=strict`, or a detected agent), the managed pre-commit hook requires spec EVIDENCE before a commit. Evidence is the grounded run artifact `totem spec` writes under `<totemDir>/artifacts/runs/` — read JSON-aware, never by substring — whose top-level `admission.runMetadata.caller` is `"spec"`.
+
+Since mmnto-ai/totem#2700 the rule has a second half: the newest such artifact must be **anchored**, and its **subject** must carry a shape.
+
+**Anchored** means `grounding.anchor.kind` is `issue` or `record`. A `free-text` or `mixed` anchor is BLOCKED by name — its free-text half is the surface the rule exists for. An artifact with no `grounding.anchor` at all predates the rule and is BLOCKED as such.
+
+**The subject** depends on the anchor, and is checked against one of two shapes:
+
+| Anchor                            | Subject                               | Shape                                                                                             |
+| --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `issue`, built-in prompt          | the draft (`output.content`)          | **TEMPLATE** — every heading the command promises, each followed by a non-blank, non-heading line |
+| `issue`, overridden system prompt | the draft (`output.content`)          | **DOCUMENT** — at least one markdown heading followed by a non-blank, non-heading line            |
+| `record`                          | the RECORD's bytes, re-read from disk | **DOCUMENT**                                                                                      |
+
+On a `record` anchor the reader opens the file at `grounding.anchor.ref` relative to the worktree top (where git runs hooks) and judges THOSE bytes — the draft is discarded on that path, so checking it would check nothing. A missing or unreadable record BLOCKS, naming the path. The record's sha256 is compared against the bound digest and REPORTED in the evidence line (`record sha256 matches` / `record revised since binding (bound <8>, now <8>)`) as a **sensor**, never a gate: blocking on revision would price every fold of a design record at one LLM call.
+
+A pass prints the evidence line with the artifact's own age, its anchor and its shape:
+
+```text
+[Totem] spec evidence: .totem/artifacts/runs/9f2c….json (2026-09-02T04:00:00.000Z, 0 days old) · anchor record .totem/specs/2700.md · shape DOCUMENT · record sha256 matches
+```
+
+The reader's exit vocabulary is `0` evidence, `2` no spec artifact in this checkout, `3` the newest spec artifact is not evidence (its reason is printed), and anything else a reader failure — each reported distinctly, all fail-closed. The check claims only that a grounded run preceded the commit and that its subject is a document with a body. It never claims the document is any good: a draft that mimics the skeleton with filler bodies is outside any content check's reach.
+
+Two disclosures:
+
+- **Migration.** Every spec artifact written before this rule reads as not-evidence, because none carries `grounding.anchor`. On a strict-tier install this affects human commits too, not only agent commits. One run of `totem spec <issue>` or `totem spec --from <record>` restores evidence.
+- **Reach.** Until agent detection for Claude Code is restored (mmnto-ai/totem#2706), the strict arm fires only where `TOTEM_HOOK_TIER=strict` is set and on Cursor seats. Totem's own repo ships `tools/pre-commit` at tier `standard`.
+
 ### The PreToolUse Hook (Reference Implementation, Opt-In)
 
 For teams using AI agents, Totem provides a reference `PreToolUse` hook that uses **content hashing** to verify the agent reviewed the code before pushing. This is actor-aware. It only fires for the AI agent, never for the human developer.

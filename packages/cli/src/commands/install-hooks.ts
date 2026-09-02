@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
+import {
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_RECORD,
+  PROMPT_SOURCE_OVERRIDE,
+} from '../artifact-vocabulary.js';
 import { resolveGitRoot } from '../git.js';
+import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
 
 export const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 export const TOTEM_HOOK_END = '[totem] end post-merge';
@@ -14,6 +20,13 @@ export const TOTEM_PRECOMMIT_MARKER = '[totem] pre-commit hook';
 export const TOTEM_PRECOMMIT_END = '[totem] end pre-commit';
 export const TOTEM_PREPUSH_MARKER = '[totem] pre-push hook';
 export const TOTEM_PREPUSH_END = '[totem] end pre-push';
+
+/**
+ * Hex characters of each sha256 the strict reader's record SENSOR shows when
+ * a bound record has been revised (mmnto-ai/totem#2700). Identity at a glance,
+ * not a full digest — the comparison itself is over the whole hash.
+ */
+const RECORD_HASH_DISPLAY_PREFIX = 8;
 
 type HookManager = 'husky' | 'lefthook' | 'simple-git-hooks';
 
@@ -734,34 +747,66 @@ export function buildPreCommitHook(options: {
   // The run store the strict arm reads, rendered from the CONFIGURED totemDir so
   // the reader names the tree `totem spec` actually writes (mmnto-ai/totem#2692).
   const runsDir = `${totemDir}/artifacts/runs`;
-  // Strict-tier evidence (mmnto-ai/totem#2690): the gate names `totem spec`,
-  // so it must pass on what `totem spec` actually writes — the grounded run
-  // artifact under .totem/artifacts/runs/ (mmnto-ai/totem#2100; written on
-  // every successful run, --fresh included) whose TOP-LEVEL
+  // Strict-tier evidence (mmnto-ai/totem#2690, tightened by
+  // mmnto-ai/totem#2700): the gate names `totem spec`, so it must pass on what
+  // `totem spec` actually writes — the grounded run artifact under
+  // <totemDir>/artifacts/runs/ (mmnto-ai/totem#2100; written on every
+  // successful run, --fresh included) whose TOP-LEVEL
   // admission.runMetadata.caller is "spec". The read is JSON-aware on purpose:
   // the run store is written by every orchestrator caller, and a `review`
   // artifact's inputBundle embeds the reviewed diff — a substring grep would
   // pass the gate on a review of any text that merely QUOTES the key (this
   // very test fixture). node is already assumed by the pre-push template's
   // format-check block; ~50 ms, no CLI boot, nothing written (Tenet 13). The
-  // former .totem/cache/.spec-completed marker is NOT honored: no CLI path ever
-  // wrote it, so "compatibility" with it would be compatibility with a hand
-  // hack (operator ruling 2026-08-29 — no legacy shims while there is no hard
-  // consumer, Tenet 19). The evidence line makes a stale pass VISIBLE (age
+  // former <totemDir>/cache/.spec-completed marker is NOT honored: no CLI path
+  // ever wrote it, so "compatibility" with it would be compatibility with a
+  // hand hack (operator ruling 2026-08-29 — no legacy shims while there is no
+  // hard consumer, Tenet 19).
+  //
+  // #2700 adds the second half of the rule: an artifact is EVIDENCE only when
+  // it is ANCHORED (`grounding.anchor.kind` of "issue" or "record" — a
+  // "free-text" or "mixed" run is the confabulation surface the rule exists
+  // for) and its SUBJECT carries a real shape. The SUBJECT depends on the
+  // anchor: for an `issue` run it is the draft (`output.content`); for a
+  // `record` run it is the RECORD'S OWN BYTES, re-read from disk at commit
+  // time — the draft is discarded on that path, so checking it would check
+  // nothing. The record's sha256 is compared and REPORTED (matches / revised
+  // since binding) but never blocks: blocking on revision would price every
+  // fold of a design record at one LLM call, the friction this slice retires.
+  // Exit vocabulary: 0 evidence · 2 no spec artifact · 3 the newest spec
+  // artifact is NOT evidence (reason on stdout) · anything else = the reader
+  // itself could not run. The evidence line makes a stale pass VISIBLE (age
   // from the artifact's own createdAt); a freshness rule is a separate policy,
   // deliberately not here. This is the ONLY reader of the rule — the repo's
   // pre-managed-era `.gemini/hooks/BeforeTool.js` (unregistered, inert) was
   // deleted with the marker rather than kept in step.
+  //
+  // Every value the reader compares against is RENDERED from the one canonical
+  // constant via JSON.stringify (the runsDir precedent): the required section
+  // headings from `SPEC_REQUIRED_SECTIONS`, the anchor kinds and the
+  // prompt-source spelling from the core schema's exported constants. The hook
+  // text can never drift from the writer's vocabulary by re-spelling it.
   const strictBlock = `
-# Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690).
+# Strict mode: require spec EVIDENCE before commit (mmnto-ai/totem#2690, mmnto-ai/totem#2700).
 # Evidence = a totem spec run artifact (${runsDir}/*.json with a
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
-# substring match would accept a review artifact that merely quotes the key.
+# substring match would accept a review artifact that merely quotes the key —
+# that is ANCHORED on an issue or a bound design record, and whose subject
+# carries a real shape: the required headings each with a body (an issue run
+# drafted by the built-in prompt), or at least one heading with a body (a
+# record run, or an issue run drafted under a custom prompt). A record run is
+# judged on the bytes of the record at grounding.anchor.ref, re-read here from
+# the worktree top; its sha256 is REPORTED, never enforced.
 # The former ${totemDir}/cache/.spec-completed marker is not honored (no CLI wrote it).
 if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
   spec_evidence=$(node -e '
 const fs = require("fs");
+const crypto = require("crypto");
 const dir = ${JSON.stringify(runsDir)};
+const REQUIRED = ${JSON.stringify(SPEC_REQUIRED_SECTIONS)};
+const KIND_ISSUE = ${JSON.stringify(GROUNDING_ANCHOR_ISSUE)};
+const KIND_RECORD = ${JSON.stringify(GROUNDING_ANCHOR_RECORD)};
+const PROMPT_OVERRIDE = ${JSON.stringify(PROMPT_SOURCE_OVERRIDE)};
 let names = [];
 try { names = fs.readdirSync(dir); } catch (err) { names = []; }
 let best = null;
@@ -772,19 +817,85 @@ for (const name of names) {
   const caller = a && a.admission && a.admission.runMetadata && a.admission.runMetadata.caller;
   if (["spec"].indexOf(caller) < 0) continue;
   const at = ["string"].indexOf(typeof a.createdAt) < 0 ? "" : a.createdAt;
-  if (!best || at > best.at) best = { name: name, at: at };
+  if (!best || at > best.at) best = { name: name, at: at, art: a };
 }
 if (!best) process.exit(2);
-const parsed = best.at ? Date.parse(best.at) : NaN;
-const days = Number.isNaN(parsed) ? -1 : Math.floor((Date.now() - parsed) / 86400000);
-process.stdout.write(dir + "/" + best.name + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")");
+const file = dir + "/" + best.name;
+function block(reason) { process.stdout.write(reason); process.exit(3); }
+function startsWithHash(line) { return ["#"].indexOf(line.slice(0, 1)) > -1; }
+function isHeading(line) {
+  let n = 0;
+  while (n < line.length && ["#"].indexOf(line.charAt(n)) > -1) n = n + 1;
+  if (n < 1 || n > 6) return false;
+  if ([" "].indexOf(line.charAt(n)) < 0) return false;
+  return line.slice(n + 1).trim().length > 0;
+}
+const art = best.art;
+const grounding = art.grounding;
+const anchor = grounding && grounding.anchor;
+if (!anchor || ["string"].indexOf(typeof anchor.kind) < 0) block("the newest spec run artifact (" + file + ") predates the anchored-evidence rule (no grounding.anchor)");
+const kind = anchor.kind;
+const ref = ["string"].indexOf(typeof anchor.ref) < 0 ? "(no ref)" : anchor.ref;
+if (kind !== KIND_ISSUE && kind !== KIND_RECORD) block("the newest spec run artifact (" + file + ") is anchored " + kind + " (" + ref + "), which is not gate evidence");
+let subject = "";
+let shape = "";
+let recordStatus = "";
+if (kind !== KIND_RECORD) {
+  const content = art.output && art.output.content;
+  if (["string"].indexOf(typeof content) < 0) block("the newest spec run artifact (" + file + ") is not evidence: the draft is not text");
+  subject = content;
+  const meta = art.admission && art.admission.runMetadata;
+  const source = meta && meta.promptSource;
+  shape = source !== PROMPT_OVERRIDE ? "TEMPLATE" : "DOCUMENT";
+} else {
+  let bytes = null;
+  let read = false;
+  try { bytes = fs.readFileSync(ref); read = true; } catch (err) { read = false; }
+  if (!read) block("the bound record is missing at " + ref + " (bound by " + file + ")");
+  subject = bytes.toString("utf8");
+  shape = "DOCUMENT";
+  const now = crypto.createHash("sha256").update(bytes).digest("hex");
+  const bound = ["string"].indexOf(typeof anchor.sha256) < 0 ? "" : anchor.sha256;
+  recordStatus = now !== bound ? "record revised since binding (bound " + bound.slice(0, ${RECORD_HASH_DISPLAY_PREFIX}) + ", now " + now.slice(0, ${RECORD_HASH_DISPLAY_PREFIX}) + ")" : "record sha256 matches";
+}
+const lines = subject.split("\\n");
+function hasBodyAfter(start) {
+  for (let i = start + 1; i < lines.length; i++) {
+    if (startsWithHash(lines[i])) return false;
+    if (lines[i].trim().length > 0) return true;
+  }
+  return false;
+}
+if (shape !== "DOCUMENT") {
+  for (const heading of REQUIRED) {
+    let at = -1;
+    for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    if (at < 0) block("the draft in " + file + " is missing heading " + heading);
+    if (!hasBodyAfter(at)) block("the draft in " + file + " has an empty heading " + heading);
+  }
+} else {
+  let bodied = false;
+  for (let i = 0; i < lines.length; i++) { if (isHeading(lines[i]) && hasBodyAfter(i)) { bodied = true; break; } }
+  if (!bodied && kind !== KIND_RECORD) block("the draft in " + file + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
+  if (!bodied) block("the bound record at " + ref + " has no heading with a body");
+}
+const stamp = best.at ? Date.parse(best.at) : NaN;
+const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / 86400000);
+let out = file + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
+out = out + " · anchor " + kind + " " + ref + " · shape " + shape;
+if (recordStatus.length > 0) out = out + " · " + recordStatus;
+process.stdout.write(out);
 ' 2>/dev/null)
-  # Reader status: 0 = evidence found · 2 = none found · anything else = the
-  # reader itself could not run (node missing from PATH, a crash) — reported
-  # distinctly, never as "no evidence", and still fail-closed.
+  # Reader status: 0 = evidence found · 2 = no spec artifact at all · 3 = the
+  # newest spec artifact is NOT evidence (the reason is on stdout) · anything
+  # else = the reader itself could not run (node missing from PATH, a crash) —
+  # each reported distinctly, never as "no evidence", and all fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
     echo "[Totem] spec evidence: $spec_evidence"
+  elif [ "$reader_status" = "3" ]; then
+    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (strict mode)"
+    exit 1
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${runsDir}/ unreadable); fix the runtime and retry (strict mode)"
     exit 1

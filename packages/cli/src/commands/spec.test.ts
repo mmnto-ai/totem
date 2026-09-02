@@ -1,21 +1,120 @@
-import { describe, expect, it, vi } from 'vitest';
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
-import { type LanceStore, type SearchResult, TotemConfigError } from '@mmnto/totem';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import {
+  GROUNDING_ANCHOR_FREE_TEXT,
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_MIXED,
+  GROUNDING_ANCHOR_RECORD,
+  hasUnrenderableHookChar,
+  type LanceStore,
+  PROMPT_SOURCE_BUILTIN,
+  PROMPT_SOURCE_OVERRIDE,
+  type SearchResult,
+  TotemConfigError,
+} from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
+import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
-import type { RetrievedContext } from './spec.js';
+import type { ParsedInput, RetrievedContext, SpecRecord } from './spec.js';
 import {
   assemblePrompt,
+  assertOutDoesNotOverwriteRecord,
+  buildRecordSearchQuery,
+  evaluateGroundingFloor,
   expandSpecQuery,
+  formatGroundingRefusal,
+  loadSpecRecord,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
   resolveDefaultSpecPath,
+  resolveGroundingAnchor,
   retrieveContext,
   sanitizeSpecFilename,
   SPEC_SYSTEM_PROMPT,
+  specCommand,
   validateOutputOptions,
+  validateSpecInvocation,
 } from './spec.js';
+import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
+
+// ─── Mocks for the executed `specCommand` suite ─────────
+//
+// Everything the command touches OUTSIDE its own logic is stubbed so the
+// anchored-evidence invariants (mmnto-ai/totem#2700) are measured on control
+// flow, not on a live index: `runOrchestrator` is the ONLY writer of a run
+// artifact, so "a refusal mints nothing" is provable by it never being
+// reached, and `connect` counts prove a validation refused before the store.
+
+const harness = vi.hoisted(() => ({
+  /** Store hits keyed by the `typeFilter` `retrieveContext` asks for. */
+  searchResults: {} as Record<string, unknown[]>,
+  /** Every `runOrchestrator` invocation, in order — empty means no artifact could exist. */
+  orchestratorArgs: [] as Array<Record<string, unknown>>,
+  /** What the stubbed orchestrator returns as the draft. */
+  orchestratorContent: 'DRAFT' as string | undefined,
+  /** Resolved config the command reads (floor, dirs, embedding). */
+  config: {} as Record<string, unknown>,
+  /** How many times a store was connected — 0 proves a refusal preceded the store. */
+  connects: 0,
+  /** Every `writeOutput(content, outPath?)` call. */
+  writes: [] as Array<{ content: string; outPath?: string }>,
+}));
+
+vi.mock('@mmnto/totem', async () => {
+  const actual = await vi.importActual<typeof import('@mmnto/totem')>('@mmnto/totem');
+  return {
+    ...actual,
+    createEmbedder: vi.fn(() => ({})),
+    LanceStore: class {
+      async connect(): Promise<void> {
+        harness.connects += 1;
+      }
+      async search({ typeFilter }: { typeFilter: string }): Promise<unknown[]> {
+        return harness.searchResults[typeFilter] ?? [];
+      }
+    },
+  };
+});
+
+vi.mock('../utils.js', async () => {
+  const actual = await vi.importActual<typeof import('../utils.js')>('../utils.js');
+  return {
+    ...actual,
+    resolveConfigPath: (cwd: string) => path.join(cwd, 'totem.config.ts'),
+    loadEnv: () => {},
+    loadConfig: async () => harness.config,
+    requireEmbedding: () => ({ provider: 'gemini', model: 'test' }),
+    runOrchestrator: async (args: Record<string, unknown>) => {
+      harness.orchestratorArgs.push(args);
+      return harness.orchestratorContent;
+    },
+    writeOutput: (content: string, outPath?: string) => {
+      harness.writes.push(outPath === undefined ? { content } : { content, outPath });
+    },
+  };
+});
+
+vi.mock('./qbd-seam.js', () => ({
+  recordQbdDerive: async () => ({}),
+}));
+
+vi.mock('../adapters/create-issue-adapter.js', () => ({
+  createIssueAdapter: async () => ({
+    fetchIssue: (num: number): StandardIssue => ({
+      number: num,
+      title: `Issue ${num}`,
+      body: 'issue body',
+      state: 'open',
+      labels: [],
+    }),
+  }),
+}));
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -94,7 +193,7 @@ describe('assemblePrompt', () => {
       lessons: [makeLesson()],
     };
     const result = await assemblePrompt(
-      [{ issue: null, freeText: 'test topic' }],
+      [{ issue: null, freeText: 'test topic', record: null }],
       ctx,
       'system prompt',
     );
@@ -104,7 +203,7 @@ describe('assemblePrompt', () => {
 
   it('omits lessons section when no lessons found', async () => {
     const result = await assemblePrompt(
-      [{ issue: null, freeText: 'test topic' }],
+      [{ issue: null, freeText: 'test topic', record: null }],
       emptyContext(),
       'system prompt',
     );
@@ -117,7 +216,11 @@ describe('assemblePrompt', () => {
       ...emptyContext(),
       lessons: [makeLesson({ content: longBody })],
     };
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
     expect(result).toContain(longBody);
   });
 
@@ -126,7 +229,11 @@ describe('assemblePrompt', () => {
       ...emptyContext(),
       lessons: [makeLesson({ score: 0.789 })],
     };
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
     expect(result).toContain('0.789');
   });
 
@@ -136,7 +243,11 @@ describe('assemblePrompt', () => {
     const lessons = Array.from({ length: 10 }, () => ({ ...bigLesson }));
     const ctx: RetrievedContext = { ...emptyContext(), lessons };
 
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
 
     // Extract just the lessons section (stop at the next === section)
     const afterLessons = result.split('RELEVANT LESSONS (HARD CONSTRAINTS)')[1] ?? '';
@@ -151,7 +262,11 @@ describe('assemblePrompt', () => {
       ...emptyContext(),
       lessons: [hugeLesson, smallLesson],
     };
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
     expect(result).toContain('RELEVANT LESSONS');
     expect(result).toContain('Small lesson body');
     expect(result).not.toContain('H'.repeat(100));
@@ -159,7 +274,7 @@ describe('assemblePrompt', () => {
 
   it('includes shared helpers section (#1015)', async () => {
     const result = await assemblePrompt(
-      [{ issue: null, freeText: 'test topic' }],
+      [{ issue: null, freeText: 'test topic', record: null }],
       emptyContext(),
       'system prompt',
     );
@@ -174,7 +289,11 @@ describe('assemblePrompt', () => {
       specs: [makeSpec()],
       lessons: [makeLesson()],
     };
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
     expect(result).toContain('RELATED SPECS & ADRs');
     expect(result).toContain('RELEVANT LESSONS (HARD CONSTRAINTS)');
   });
@@ -195,6 +314,7 @@ describe('assemblePrompt', () => {
             labels: ['bug'],
           },
           freeText: null,
+          record: null,
         },
       ],
       ctx,
@@ -297,7 +417,11 @@ describe('retrieveContext partitioning', () => {
       code: [],
       lessons: [makeLesson({ filePath: '.totem/lessons.md' })],
     };
-    const result = await assemblePrompt([{ issue: null, freeText: 'test' }], ctx, 'system prompt');
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: 'test', record: null }],
+      ctx,
+      'system prompt',
+    );
     // Lessons appear in their own section, not mixed with specs
     const specSection = result.split('RELATED SPECS & ADRs')[1]?.split('===')[0] ?? '';
     expect(specSection).not.toContain('lessons.md');
@@ -424,7 +548,7 @@ describe('resolveDefaultSpecPath', () => {
 
   it('resolves single issue input to <gitRoot>/.totem/specs/<number>.md', () => {
     const result = resolveDefaultSpecPath(
-      [{ issue: makeIssue(1555), freeText: null }],
+      [{ issue: makeIssue(1555), freeText: null, record: null }],
       '/repo/packages/cli',
       deps,
     );
@@ -433,7 +557,7 @@ describe('resolveDefaultSpecPath', () => {
 
   it('resolves single free-text input to sanitized filename', () => {
     const result = resolveDefaultSpecPath(
-      [{ issue: null, freeText: 'migration plan' }],
+      [{ issue: null, freeText: 'migration plan', record: null }],
       '/repo',
       deps,
     );
@@ -446,7 +570,7 @@ describe('resolveDefaultSpecPath', () => {
       pathJoin: (...parts: string[]) => parts.join('/'),
     };
     const result = resolveDefaultSpecPath(
-      [{ issue: makeIssue(42), freeText: null }],
+      [{ issue: makeIssue(42), freeText: null, record: null }],
       '/some/cwd',
       fallbackDeps,
     );
@@ -456,8 +580,8 @@ describe('resolveDefaultSpecPath', () => {
   it('returns null for multi-input invocations', () => {
     const result = resolveDefaultSpecPath(
       [
-        { issue: makeIssue(1), freeText: null },
-        { issue: makeIssue(2), freeText: null },
+        { issue: makeIssue(1), freeText: null, record: null },
+        { issue: makeIssue(2), freeText: null, record: null },
       ],
       '/repo',
       deps,
@@ -466,21 +590,710 @@ describe('resolveDefaultSpecPath', () => {
   });
 
   it('returns null when free text sanitizes to empty', () => {
-    const result = resolveDefaultSpecPath([{ issue: null, freeText: '!!!' }], '/repo', deps);
+    const result = resolveDefaultSpecPath(
+      [{ issue: null, freeText: '!!!', record: null }],
+      '/repo',
+      deps,
+    );
     expect(result).toBeNull();
   });
 
   it('returns null when single input has neither issue nor free text', () => {
-    const result = resolveDefaultSpecPath([{ issue: null, freeText: null }], '/repo', deps);
+    const result = resolveDefaultSpecPath(
+      [{ issue: null, freeText: null, record: null }],
+      '/repo',
+      deps,
+    );
     expect(result).toBeNull();
   });
 
   it('uses git root over cwd for monorepo subpackages', () => {
     const result = resolveDefaultSpecPath(
-      [{ issue: makeIssue(99), freeText: null }],
+      [{ issue: makeIssue(99), freeText: null, record: null }],
       '/repo/packages/cli/src',
       deps,
     );
     expect(result).toBe('/repo/.totem/specs/99.md');
+  });
+
+  // mmnto-ai/totem#2700: a bound record derives NO path — the only path it
+  // could derive is the record's own, and the tool never drafts over it.
+  it('returns null for a bound record (the draft goes to stdout or --out)', () => {
+    const result = resolveDefaultSpecPath(
+      [{ issue: null, freeText: null, record: makeRecord() }],
+      '/repo',
+      deps,
+    );
+    expect(result).toBeNull();
+  });
+});
+
+// ─── SPEC_REQUIRED_SECTIONS (mmnto-ai/totem#2700) ────────
+
+describe('SPEC_REQUIRED_SECTIONS', () => {
+  it('every entry is a VERBATIM line of the system prompt (the gate requires only what the command asks for)', () => {
+    const promptLines = SPEC_SYSTEM_PROMPT.split('\n');
+    for (const section of SPEC_REQUIRED_SECTIONS) {
+      expect(promptLines, `${section} is not a line of SPEC_SYSTEM_PROMPT`).toContain(section);
+    }
+  });
+
+  it('every entry is renderable into the single-quoted node -e reader (the mmnto-ai/totem#2692 C4 predicate)', () => {
+    for (const section of SPEC_REQUIRED_SECTIONS) {
+      // A quote, backslash, dollar, backtick, control character or non-ASCII
+      // byte would break the `sh` single-quoted word, the JS string literal
+      // inside it, or both — and could forge hook lines.
+      expect(hasUnrenderableHookChar(section), `${section} cannot be rendered`).toBe(false);
+    }
+  });
+
+  it('names both promised sections, in prompt order', () => {
+    expect([...SPEC_REQUIRED_SECTIONS]).toEqual([
+      '### Problem Statement',
+      '### Implementation Tasks',
+    ]);
+  });
+});
+
+// ─── resolveGroundingAnchor (mmnto-ai/totem#2700) ────────
+
+const RECORD_SHA = 'a'.repeat(64);
+
+function makeRecord(overrides: Partial<SpecRecord> = {}): SpecRecord {
+  return {
+    path: '.totem/specs/2700.md',
+    sha256: RECORD_SHA,
+    body: '# Design record\n\nA body under the heading.\n',
+    ...overrides,
+  };
+}
+
+function issueInput(num: number, typed?: string): ParsedInput {
+  return {
+    issue: makeIssue(num),
+    freeText: null,
+    record: null,
+    ...(typed !== undefined ? { issueRef: typed } : {}),
+  };
+}
+
+function topicInput(text: string): ParsedInput {
+  return { issue: null, freeText: text, record: null };
+}
+
+describe('resolveGroundingAnchor', () => {
+  it('a single bare-number issue anchors `issue` with a #<n> ref', () => {
+    expect(resolveGroundingAnchor([issueInput(2700, '2700')])).toEqual({
+      kind: GROUNDING_ANCHOR_ISSUE,
+      ref: '#2700',
+    });
+  });
+
+  it('keeps an owner/repo#N or URL input AS TYPED (a fetched issue carries only a number)', () => {
+    expect(resolveGroundingAnchor([issueInput(2700, 'mmnto-ai/totem#2700')])).toEqual({
+      kind: GROUNDING_ANCHOR_ISSUE,
+      ref: 'mmnto-ai/totem#2700',
+    });
+    expect(
+      resolveGroundingAnchor([issueInput(42, 'https://github.com/mmnto-ai/totem/issues/42')]),
+    ).toEqual({
+      kind: GROUNDING_ANCHOR_ISSUE,
+      ref: 'https://github.com/mmnto-ai/totem/issues/42',
+    });
+  });
+
+  it('falls back to #<number> when no typed form was recorded', () => {
+    expect(resolveGroundingAnchor([issueInput(7)])).toEqual({
+      kind: GROUNDING_ANCHOR_ISSUE,
+      ref: '#7',
+    });
+  });
+
+  it('comma-joins several issue refs', () => {
+    expect(resolveGroundingAnchor([issueInput(1, '1'), issueInput(2, 'mmnto-ai/totem#2')])).toEqual(
+      {
+        kind: GROUNDING_ANCHOR_ISSUE,
+        ref: '#1, mmnto-ai/totem#2',
+      },
+    );
+  });
+
+  it('a bound record anchors `record` with the repo-relative path and the sha256 of its bytes', () => {
+    expect(resolveGroundingAnchor([{ issue: null, freeText: null, record: makeRecord() }])).toEqual(
+      {
+        kind: GROUNDING_ANCHOR_RECORD,
+        ref: '.totem/specs/2700.md',
+        sha256: RECORD_SHA,
+      },
+    );
+  });
+
+  it('topics only anchor `free-text`, several joined with a pipe', () => {
+    expect(resolveGroundingAnchor([topicInput('cache invalidation')])).toEqual({
+      kind: GROUNDING_ANCHOR_FREE_TEXT,
+      ref: 'cache invalidation',
+    });
+    expect(resolveGroundingAnchor([topicInput('alpha'), topicInput('beta')])).toEqual({
+      kind: GROUNDING_ANCHOR_FREE_TEXT,
+      ref: 'alpha | beta',
+    });
+  });
+
+  it('issues AND topics anchor the honest `mixed` kind — issue refs first, then topics', () => {
+    expect(
+      resolveGroundingAnchor([issueInput(9, '9'), topicInput('alpha'), topicInput('beta')]),
+    ).toEqual({
+      kind: GROUNDING_ANCHOR_MIXED,
+      ref: '#9 | alpha | beta',
+    });
+  });
+});
+
+// ─── evaluateGroundingFloor (mmnto-ai/totem#2700) ────────
+
+function relevantHit(relevance: number | undefined, overrides: Partial<SearchResult> = {}) {
+  return makeSpec({
+    ...(relevance !== undefined ? { relevance } : {}),
+    ...overrides,
+  });
+}
+
+const FLOOR = 0.25;
+
+describe('evaluateGroundingFloor', () => {
+  it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    expect(verdict).toEqual({
+      refuse: true,
+      hits: 0,
+      bestRelevance: null,
+      withheld: [],
+      floorExempt: 0,
+    });
+  });
+
+  it('every signal-bearing hit below the floor, none exempt, REFUSES', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.2), relevantHit(0.11)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.hits).toBe(2);
+    expect(verdict.bestRelevance).toBeCloseTo(0.2, 10);
+    expect(verdict.floorExempt).toBe(0);
+  });
+
+  it('one hit AT the floor PROCEEDS (the floor is inclusive)', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.1), relevantHit(FLOOR)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.withheld).toEqual([]);
+  });
+
+  it('one floor-EXEMPT hit beside below-floor signal PROCEEDS (a keyword-only hit is never withheld for a weak sibling)', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.05)], code: [relevantHit(undefined)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.withheld).toEqual([]);
+  });
+
+  it('no relevance anywhere PROCEEDS — a pure-FTS corpus is never demoted', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(undefined)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.bestRelevance).toBeNull();
+    expect(verdict.floorExempt).toBe(2);
+  });
+
+  it('counts hits across ALL FOUR partitions', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        specs: [relevantHit(0.9)],
+        sessions: [relevantHit(0.8)],
+        code: [relevantHit(0.7)],
+        lessons: [relevantHit(0.6)],
+      },
+      FLOOR,
+    );
+    expect(verdict.hits).toBe(4);
+    expect(verdict.bestRelevance).toBeCloseTo(0.9, 10);
+  });
+
+  it('the withheld list carries every below-floor candidate as path + relevance (linked hits keep their store)', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        ...emptyContext(),
+        specs: [
+          relevantHit(0.2, { filePath: 'docs/a.md' }),
+          relevantHit(0.1, { filePath: 'doctrine/b.md', sourceRepo: 'strategy' }),
+        ],
+      },
+      FLOOR,
+    );
+    expect(verdict.withheld).toEqual([
+      { filePath: 'docs/a.md', relevance: 0.2 },
+      { filePath: 'doctrine/b.md', sourceRepo: 'strategy', relevance: 0.1 },
+    ]);
+  });
+});
+
+// ─── formatGroundingRefusal (mmnto-ai/totem#2700) ────────
+
+describe('formatGroundingRefusal', () => {
+  it('a 0-hit refusal names the topic, the 0 hits, and the floor VALUE and PLACE', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR);
+    expect(message).toContain('an-unanchored-slug');
+    expect(message).toContain('0 hits');
+    expect(message).toContain(
+      'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
+    );
+  });
+
+  it('a below-floor refusal names the best relevance and DISCLOSES every withheld candidate', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        ...emptyContext(),
+        specs: [
+          relevantHit(0.2, { filePath: 'docs/a.md' }),
+          relevantHit(0.1, { filePath: 'doctrine/b.md', sourceRepo: 'strategy' }),
+        ],
+      },
+      FLOOR,
+    );
+    const { message } = formatGroundingRefusal('weak topic', verdict, FLOOR);
+    expect(message).toContain('best relevance 0.200');
+    expect(message).toContain('1. docs/a.md — relevance 0.200');
+    expect(message).toContain('2. [strategy] doctrine/b.md — relevance 0.100');
+  });
+
+  it('the hint names both cures and the --raw inspection path', () => {
+    const { recoveryHint } = formatGroundingRefusal(
+      'topic',
+      evaluateGroundingFloor(emptyContext(), FLOOR),
+      FLOOR,
+    );
+    expect(recoveryHint).toContain('totem spec <issue>');
+    expect(recoveryHint).toContain('totem spec --from <record>');
+    expect(recoveryHint).toContain('--raw');
+  });
+});
+
+// ─── The record arm of assemblePrompt + its query ────────
+
+describe('assemblePrompt — the record arm (mmnto-ai/totem#2700)', () => {
+  it('renders the RECORD banner with the path and the digest head, and the body verbatim', async () => {
+    const record = makeRecord({ body: '# Design record\n\nThe ruled contract.\n' });
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: null, record }],
+      emptyContext(),
+      'system prompt',
+    );
+    expect(result).toContain(`=== RECORD .totem/specs/2700.md (sha256 ${'a'.repeat(12)}) ===`);
+    expect(result).toContain('<record_body>');
+    expect(result).toContain('The ruled contract.');
+  });
+
+  it('does not emit an ISSUE or TOPIC section for a record', async () => {
+    const result = await assemblePrompt(
+      [{ issue: null, freeText: null, record: makeRecord() }],
+      emptyContext(),
+      'system prompt',
+    );
+    expect(result).not.toContain('=== TOPIC ===');
+    expect(result).not.toContain('=== ISSUE #');
+  });
+});
+
+describe('buildRecordSearchQuery', () => {
+  it('queries on the record`s first heading plus the head of its body', () => {
+    const query = buildRecordSearchQuery(
+      makeRecord({ body: '# Anchored evidence\n\nThe body head.\n' }),
+    );
+    expect(query.startsWith('Anchored evidence')).toBe(true);
+    expect(query).toContain('The body head.');
+  });
+
+  it('degrades to the body head when the record carries no heading', () => {
+    const query = buildRecordSearchQuery(makeRecord({ body: 'no heading at all' }));
+    expect(query).toBe('no heading at all');
+  });
+});
+
+// ─── --from validation (mmnto-ai/totem#2700) ─────────────
+
+describe('validateSpecInvocation', () => {
+  it('refuses no inputs and no --from, carrying the usage line', () => {
+    let thrown: unknown;
+    try {
+      validateSpecInvocation([], {}, TotemConfigError);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+    expect(String((thrown as Error).message)).toContain('at least one issue/topic');
+    expect(String((thrown as { recoveryHint: string }).recoveryHint)).toContain(
+      'Usage: totem spec [inputs...] [--from <record>]',
+    );
+  });
+
+  it('refuses --from together with positional inputs', () => {
+    expect(() =>
+      validateSpecInvocation(['2700'], { from: 'record.md' }, TotemConfigError),
+    ).toThrowError(/--from <record> cannot be combined with positional inputs/);
+  });
+
+  it('accepts inputs alone and --from alone', () => {
+    expect(() => validateSpecInvocation(['2700'], {}, TotemConfigError)).not.toThrow();
+    expect(() => validateSpecInvocation([], { from: 'record.md' }, TotemConfigError)).not.toThrow();
+  });
+});
+
+describe('loadSpecRecord', () => {
+  let tmpDir: string;
+  const deps = { resolveGitRoot: () => null };
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-spec-record-')));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('binds the record: repo-relative forward-slash path, sha256 of the bytes, the body from the SAME buffer', () => {
+    const nested = path.join(tmpDir, '.totem', 'specs');
+    fs.mkdirSync(nested, { recursive: true });
+    const file = path.join(nested, '2700.md');
+    const bytes = Buffer.from('# Record\n\nBody.\n', 'utf-8');
+    fs.writeFileSync(file, bytes);
+
+    const loaded = loadSpecRecord(file, tmpDir, deps, TotemConfigError);
+    expect(loaded.record.path).toBe('.totem/specs/2700.md');
+    expect(loaded.record.sha256).toBe(crypto.createHash('sha256').update(bytes).digest('hex'));
+    expect(loaded.record.body).toBe(bytes.toString('utf-8'));
+    expect(loaded.absolutePath).toBe(path.resolve(file));
+  });
+
+  it('refuses a missing path, naming it', () => {
+    const missing = path.join(tmpDir, 'nope.md');
+    let thrown: unknown;
+    try {
+      loadSpecRecord(missing, tmpDir, deps, TotemConfigError);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+    expect(String((thrown as Error).message)).toContain('--from record not found');
+    expect(String((thrown as Error).message)).toContain(missing);
+  });
+
+  it('refuses a directory', () => {
+    const dir = path.join(tmpDir, 'adir');
+    fs.mkdirSync(dir);
+    expect(() => loadSpecRecord(dir, tmpDir, deps, TotemConfigError)).toThrowError(
+      /--from record is not a file/,
+    );
+  });
+
+  it('refuses an empty record', () => {
+    const file = path.join(tmpDir, 'empty.md');
+    fs.writeFileSync(file, '');
+    expect(() => loadSpecRecord(file, tmpDir, deps, TotemConfigError)).toThrowError(
+      /--from record is empty/,
+    );
+  });
+
+  it('refuses a whitespace-only record', () => {
+    const file = path.join(tmpDir, 'blank.md');
+    fs.writeFileSync(file, '   \n\t\n  \n');
+    expect(() => loadSpecRecord(file, tmpDir, deps, TotemConfigError)).toThrowError(
+      /--from record is empty/,
+    );
+  });
+});
+
+describe('assertOutDoesNotOverwriteRecord', () => {
+  it('refuses an --out that resolves to the record — never drafts over it', () => {
+    expect(() =>
+      assertOutDoesNotOverwriteRecord(
+        './specs/2700.md',
+        path.resolve('/repo', 'specs/2700.md'),
+        '/repo',
+        TotemConfigError,
+      ),
+    ).toThrowError(/never drafts over the record/);
+  });
+
+  it('allows any other --out, and a missing --out', () => {
+    expect(() =>
+      assertOutDoesNotOverwriteRecord(
+        'draft.md',
+        path.resolve('/repo', 'specs/2700.md'),
+        '/repo',
+        TotemConfigError,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertOutDoesNotOverwriteRecord(
+        undefined,
+        path.resolve('/repo', 'specs/2700.md'),
+        '/repo',
+        TotemConfigError,
+      ),
+    ).not.toThrow();
+  });
+});
+
+// ─── specCommand, executed (mmnto-ai/totem#2700) ─────────
+
+describe('specCommand — anchored evidence, executed against stubbed seams', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  /** Every `log.warn` message the command emitted, in order. */
+  let warnings: string[] = [];
+  /** Every `log.dim` message the command emitted, in order. */
+  let dims: string[] = [];
+
+  /** Files currently under the run store the orchestrator would write to. */
+  function runArtifactNames(): string[] {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    return fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+  }
+
+  function writeRecord(body: string, name = 'record.md'): string {
+    const file = path.join(tmpDir, name);
+    fs.writeFileSync(file, body, 'utf-8');
+    return file;
+  }
+
+  function sha256Of(file: string): string {
+    return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  }
+
+  /** The artifact request the (single) orchestrator call carried. */
+  function artifactRequest(): Record<string, unknown> {
+    expect(harness.orchestratorArgs.length).toBe(1);
+    return harness.orchestratorArgs[0]!['artifact'] as Record<string, unknown>;
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-spec-cmd-')));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    harness.searchResults = {};
+    harness.orchestratorArgs = [];
+    harness.orchestratorContent = 'DRAFT';
+    harness.connects = 0;
+    harness.writes = [];
+    harness.config = {
+      totemDir: '.totem',
+      lanceDir: '.lancedb',
+      searchRelevanceFloor: FLOOR,
+      embedding: { provider: 'gemini', model: 'test' },
+    };
+    warnings = [];
+    dims = [];
+    vi.spyOn(log, 'warn').mockImplementation((_tag: string, msg: string) => {
+      warnings.push(msg);
+    });
+    vi.spyOn(log, 'dim').mockImplementation((_tag: string, msg: string) => {
+      dims.push(msg);
+    });
+    vi.spyOn(log, 'info').mockImplementation(() => {});
+    vi.spyOn(log, 'success').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('refuses "no inputs and no --from" BEFORE the store connects', async () => {
+    await expect(specCommand([], {})).rejects.toThrowError(/at least one issue\/topic/);
+    expect(harness.connects).toBe(0);
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
+
+  it.each([
+    ['a missing record', () => path.join(tmpDir, 'nope.md'), /--from record not found/],
+    [
+      'a directory',
+      () => {
+        const dir = path.join(tmpDir, 'adir');
+        fs.mkdirSync(dir);
+        return dir;
+      },
+      /--from record is not a file/,
+    ],
+    ['an empty record', () => writeRecord(''), /--from record is empty/],
+    ['a whitespace-only record', () => writeRecord('  \n \n'), /--from record is empty/],
+  ])('refuses %s BEFORE the store connects and before any LLM call', async (_label, make, re) => {
+    await expect(specCommand([], { from: make() })).rejects.toThrowError(re);
+    expect(harness.connects).toBe(0);
+    expect(harness.orchestratorArgs).toEqual([]);
+    expect(runArtifactNames()).toEqual([]);
+  });
+
+  it('refuses --from together with positional inputs BEFORE the store connects', async () => {
+    const record = writeRecord('# R\n\nbody\n');
+    await expect(specCommand(['2700'], { from: record })).rejects.toThrowError(
+      /cannot be combined with positional inputs/,
+    );
+    expect(harness.connects).toBe(0);
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
+
+  it('refuses an --out that resolves to the record BEFORE the store connects', async () => {
+    const record = writeRecord('# R\n\nbody\n');
+    await expect(specCommand([], { from: record, out: record })).rejects.toThrowError(
+      /never drafts over the record/,
+    );
+    expect(harness.connects).toBe(0);
+    expect(harness.orchestratorArgs).toEqual([]);
+    expect(runArtifactNames()).toEqual([]);
+  });
+
+  it('a --from run anchors on the record, leaves its bytes UNCHANGED, and drafts to stdout', async () => {
+    const record = writeRecord('# Design record\n\nThe ruled contract.\n');
+    const before = sha256Of(record);
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand([], { from: record, stdout: true });
+
+    expect(sha256Of(record)).toBe(before);
+    const artifact = artifactRequest();
+    expect(artifact['anchor']).toEqual({
+      kind: GROUNDING_ANCHOR_RECORD,
+      ref: 'record.md',
+      sha256: before,
+    });
+    expect(artifact['floor']).toBe(FLOOR);
+    expect(harness.orchestratorArgs[0]!['runMetadata']).toMatchObject({
+      caller: 'spec',
+      promptSource: PROMPT_SOURCE_BUILTIN,
+    });
+    // The prompt carries the very bytes the digest binds.
+    expect(String(harness.orchestratorArgs[0]!['prompt'])).toContain('The ruled contract.');
+    expect(harness.writes).toEqual([{ content: 'DRAFT' }]);
+  });
+
+  it('a --from run without --out or --stdout says there is NO derived path for a record', async () => {
+    const record = writeRecord('# R\n\nbody\n');
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand([], { from: record });
+
+    expect(harness.writes).toEqual([{ content: 'DRAFT' }]);
+    expect(dims).toContain('No derived path for a record — use --out <path> to keep the draft.');
+  });
+
+  it('records promptSource "override" when a custom system prompt drafted the run', async () => {
+    const promptsDir = path.join(tmpDir, '.totem', 'prompts');
+    fs.mkdirSync(promptsDir, { recursive: true });
+    fs.writeFileSync(path.join(promptsDir, 'spec.md'), '# Custom prompt\n', 'utf-8');
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand(['2700'], { stdout: true });
+
+    expect(harness.orchestratorArgs[0]!['runMetadata']).toMatchObject({
+      promptSource: PROMPT_SOURCE_OVERRIDE,
+    });
+  });
+
+  it('an ISSUE-anchored run proceeds with anchor kind `issue` and emits NO not-evidence warning', async () => {
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand(['2700'], { stdout: true });
+
+    expect(artifactRequest()['anchor']).toEqual({ kind: GROUNDING_ANCHOR_ISSUE, ref: '#2700' });
+    expect(warnings.some((line) => line.includes('NOT gate evidence'))).toBe(false);
+  });
+
+  it('a free-text run above the floor PROCEEDS but is warned as NOT gate evidence', async () => {
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand(['some topic'], { stdout: true });
+
+    expect(artifactRequest()['anchor']).toEqual({
+      kind: GROUNDING_ANCHOR_FREE_TEXT,
+      ref: 'some topic',
+    });
+    expect(warnings.some((line) => line.includes('NOT gate evidence'))).toBe(true);
+    expect(warnings.some((line) => line.includes(GROUNDING_ANCHOR_FREE_TEXT))).toBe(true);
+  });
+
+  it('an issue + topic run anchors `mixed`, proceeds, and is warned as NOT gate evidence', async () => {
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+
+    await specCommand(['2700', 'a loose topic'], { stdout: true });
+
+    expect(artifactRequest()['anchor']).toEqual({
+      kind: GROUNDING_ANCHOR_MIXED,
+      ref: '#2700 | a loose topic',
+    });
+    expect(warnings.some((line) => line.includes(GROUNDING_ANCHOR_MIXED))).toBe(true);
+    expect(warnings.some((line) => line.includes('NOT gate evidence'))).toBe(true);
+  });
+
+  it('a free-text run with 0 hits REFUSES and mints nothing (the orchestrator is never reached)', async () => {
+    const before = runArtifactNames();
+    await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
+      /Retrieval returned 0 hits/,
+    );
+    expect(harness.orchestratorArgs).toEqual([]);
+    expect(runArtifactNames()).toEqual(before);
+  });
+
+  it('a free-text run entirely below the floor REFUSES, naming the floor and every withheld candidate', async () => {
+    harness.searchResults = { spec: [relevantHit(0.1, { filePath: 'docs/a.md' })] };
+    let thrown: unknown;
+    try {
+      await specCommand(['weak slug'], { stdout: true });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'GATE_INVALID' });
+    const message = String((thrown as Error).message);
+    expect(message).toContain('weak slug');
+    expect(message).toContain('best relevance 0.100');
+    expect(message).toContain(
+      'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
+    );
+    expect(message).toContain('docs/a.md — relevance 0.100');
+    expect(harness.orchestratorArgs).toEqual([]);
+    expect(runArtifactNames()).toEqual([]);
+  });
+
+  it('an ISSUE-anchored run with 0 hits is NEVER refused (an issue is grounding)', async () => {
+    await specCommand(['2700'], { stdout: true });
+    expect(harness.orchestratorArgs.length).toBe(1);
+  });
+
+  it('a --from run with 0 hits is NEVER refused (a record is grounding)', async () => {
+    const record = writeRecord('# R\n\nbody\n');
+    await specCommand([], { from: record, stdout: true });
+    expect(harness.orchestratorArgs.length).toBe(1);
+  });
+
+  it('--raw is EXEMPT from the refusal: it reaches the orchestrator, which prints context and mints nothing', async () => {
+    await specCommand(['nonsense slug'], { raw: true });
+    expect(harness.orchestratorArgs.length).toBe(1);
+    expect(harness.orchestratorArgs[0]!['options']).toMatchObject({ raw: true });
+  });
+
+  it('the proceed path records the floor it was judged against on the artifact', async () => {
+    harness.config = { ...harness.config, searchRelevanceFloor: 0.6 };
+    harness.searchResults = { spec: [relevantHit(0.9)] };
+    await specCommand(['2700'], { stdout: true });
+    expect(artifactRequest()['floor']).toBe(0.6);
   });
 });

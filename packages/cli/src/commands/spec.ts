@@ -1,11 +1,24 @@
+import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import type {
   ContentType,
+  GroundingAnchor,
   LanceStore,
   SearchResult,
   TotemConfigError as TotemConfigErrorClass,
 } from '@mmnto/totem';
 
 import type { StandardIssue } from '../adapters/issue-adapter.js';
+import {
+  GROUNDING_ANCHOR_FREE_TEXT,
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_MIXED,
+  GROUNDING_ANCHOR_RECORD,
+  PROMPT_SOURCE_BUILTIN,
+  PROMPT_SOURCE_OVERRIDE,
+} from '../artifact-vocabulary.js';
 import { SYSTEM_PROMPT } from './spec-templates.js';
 
 // ─── Constants ──────────────────────────────────────────
@@ -13,6 +26,18 @@ import { SYSTEM_PROMPT } from './spec-templates.js';
 const TAG = 'Spec';
 const QUERY_BODY_TRUNCATE = 500;
 const MAX_INPUTS = 5;
+/** Digest prefix rendered into the prompt's RECORD banner — identity, not the whole digest. */
+const RECORD_SHA_PROMPT_PREFIX = 12;
+/** Separator between several topics (and between the issue half and the topic half of a `mixed` ref). */
+const ANCHOR_TOPIC_JOIN = ' | ';
+/** Separator between several issue refs. */
+const ANCHOR_ISSUE_JOIN = ', ';
+/** Decimal places every relevance and floor is disclosed at (the MCP guard's shape). */
+const RELEVANCE_DECIMALS = 3;
+/** Where the floor comes from — named in every refusal (B1: the config-vs-default bit is NOT derivable after `TotemConfigSchema.parse`). */
+const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)';
+/** The two cures, named in every refusal and in the gate's BLOCKED line. */
+const ANCHOR_CURES = "run 'totem spec <issue>' or 'totem spec --from <record>'";
 export const MAX_LESSONS = 10;
 export const MAX_LESSON_CHARS = 8_000;
 const SPEC_SEARCH_POOL = 20;
@@ -89,6 +114,25 @@ function buildSearchQuery(issue: StandardIssue): string {
   return `${issue.title} ${labels} ${bodySnippet}`.trim();
 }
 
+/** Text of the first markdown heading in `body`, or `''` when it carries none. */
+function firstHeadingText(body: string): string {
+  for (const line of body.split('\n')) {
+    const match = line.match(/^#{1,6}[ \t]+(.+)$/);
+    if (match) return match[1]!.trim();
+  }
+  return '';
+}
+
+/**
+ * Retrieval query for a bound record (mmnto-ai/totem#2700) — the same shape
+ * {@link buildSearchQuery} gives an issue: the record's own title (its first
+ * markdown heading) plus the head of its body, so a record retrieves the same
+ * way an issue does rather than through a hand-picked slug.
+ */
+export function buildRecordSearchQuery(record: SpecRecord): string {
+  return `${firstHeadingText(record.body)} ${record.body.slice(0, QUERY_BODY_TRUNCATE)}`.trim();
+}
+
 const TEST_KEYWORD_RE =
   /\b(test(?:s|ing)?|verif(?:y|ies|ication)|example(?:s)?|fixture(?:s)?|hits|misses|rule-?tester)\b/i;
 const TEST_EXPANSION = ' test testing infrastructure fixture verification testRule rule-tester';
@@ -104,9 +148,34 @@ export function expandSpecQuery(query: string): string {
 
 // ─── Input types ────────────────────────────────────────
 
+/**
+ * A hand-authored design record bound with `--from` (mmnto-ai/totem#2700).
+ * Read ONCE as a Buffer at command start: `sha256` and `body` come from that
+ * same buffer, so the digest and the bytes rendered into the prompt agree by
+ * construction. The record is never written back.
+ */
+export interface SpecRecord {
+  /** Repo-relative path (forward slashes) — the anchor's `ref`; the gate reads the file at this path from the worktree top. */
+  path: string;
+  /** sha256 (hex) of the very bytes rendered into the prompt. */
+  sha256: string;
+  /** The record's text, decoded utf-8 from the same buffer the digest was taken over. */
+  body: string;
+}
+
 export interface ParsedInput {
   issue: StandardIssue | null;
   freeText: string | null;
+  /** The bound design record (mmnto-ai/totem#2700) — the third arm; `null` on the issue and topic arms. */
+  record: SpecRecord | null;
+  /**
+   * The ISSUE input exactly as typed (`owner/repo#N` or a URL) — the anchor's
+   * `ref` must round-trip what the operator wrote, and a fetched
+   * {@link StandardIssue} carries only the number. Absent for a bare-number
+   * input (the ref is then `#<number>`) and on the topic / record arms, whose
+   * refs are the topic text and the record path.
+   */
+  issueRef?: string;
 }
 
 // ─── Prompt assembly ────────────────────────────────────
@@ -119,7 +188,7 @@ export async function assemblePrompt(
   const { formatLessonSection, formatResults, wrapXml } = await import('../utils.js');
   const sections: string[] = [systemPrompt];
 
-  for (const { issue, freeText } of inputs) {
+  for (const { issue, freeText, record } of inputs) {
     if (issue) {
       const issueLabels = issue.labels.join(', ');
       sections.push(`\n=== ISSUE #${issue.number}: ${issue.title} ===`);
@@ -130,6 +199,14 @@ export async function assemblePrompt(
         sections.push('');
         sections.push(wrapXml('issue_body', issue.body));
       }
+    } else if (record) {
+      // The bound record enters the prompt VERBATIM, banner-identified by the
+      // path the anchor records and the head of the digest the anchor binds —
+      // so the prompt and `grounding.anchor` name the same bytes.
+      sections.push(
+        `\n=== RECORD ${record.path} (sha256 ${record.sha256.slice(0, RECORD_SHA_PROMPT_PREFIX)}) ===`,
+      );
+      sections.push(wrapXml('record_body', record.body));
     } else if (freeText) {
       sections.push('\n=== TOPIC ===');
       sections.push(wrapXml('topic_text', freeText));
@@ -170,6 +247,8 @@ export interface SpecOptions {
   stdout?: boolean;
   model?: string;
   fresh?: boolean;
+  /** Path to a hand-authored design record to ground the run on (mmnto-ai/totem#2700). */
+  from?: string;
 }
 
 /**
@@ -187,6 +266,283 @@ export function validateOutputOptions(
       'CONFIG_INVALID',
     );
   }
+}
+
+// ─── Invocation validation (mmnto-ai/totem#2700) ────────
+//
+// Every check below runs BEFORE the config is resolved, before the store
+// connects and before any LLM call — a user error surfaces with no API cost
+// and no artifact written.
+
+/**
+ * Refuse the two invocation shapes that carry no single grounded subject:
+ * nothing at all (commander no longer refuses it — `spec [inputs...]` is
+ * optional so `--from` is reachable, mmnto-ai/totem#2700 B2), and a record
+ * bound alongside positional inputs (two subjects, one anchor).
+ */
+export function validateSpecInvocation(
+  inputs: string[],
+  options: Pick<SpecOptions, 'from'>,
+  TotemConfigErrorCtor: typeof TotemConfigErrorClass,
+): void {
+  const hasRecord = options.from !== undefined;
+  if (hasRecord && inputs.length > 0) {
+    throw new TotemConfigErrorCtor(
+      `--from <record> cannot be combined with positional inputs (${inputs.join(', ')}).`,
+      'Pass one or the other: issue/topic inputs, or --from <record>.',
+      'CONFIG_INVALID',
+    );
+  }
+  if (!hasRecord && inputs.length === 0) {
+    throw new TotemConfigErrorCtor(
+      'No inputs. `totem spec` needs at least one issue/topic, or --from <record>.',
+      'Usage: totem spec [inputs...] [--from <record>] — e.g. `totem spec 2700`, `totem spec "cache invalidation"`, or `totem spec --from .totem/specs/2700.md`.',
+      'CONFIG_INVALID',
+    );
+  }
+}
+
+export interface SpecRecordDeps {
+  resolveGitRoot: (cwd: string) => string | null;
+}
+
+export interface LoadedSpecRecord {
+  record: SpecRecord;
+  /** The record's resolved absolute path — the subject of the `--out` collision check. */
+  absolutePath: string;
+}
+
+/**
+ * Read and bind the `--from` record. ONE `readFileSync` produces both the
+ * digest and the prompt bytes, so `grounding.anchor.sha256` provably names
+ * what the model was shown. Every rejection names the path.
+ */
+export function loadSpecRecord(
+  fromPath: string,
+  cwd: string,
+  deps: SpecRecordDeps,
+  TotemConfigErrorCtor: typeof TotemConfigErrorClass,
+): LoadedSpecRecord {
+  const absolutePath = path.resolve(cwd, fromPath);
+
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(absolutePath);
+  } catch (err) {
+    throw new TotemConfigErrorCtor(
+      `--from record not found: ${absolutePath}`,
+      'Point --from at an existing design record (a markdown file you wrote).',
+      'CONFIG_INVALID',
+      err,
+    );
+  }
+  if (!stats.isFile()) {
+    throw new TotemConfigErrorCtor(
+      `--from record is not a file: ${absolutePath}`,
+      'Point --from at the record file itself, not a directory.',
+      'CONFIG_INVALID',
+    );
+  }
+
+  let buffer: Buffer;
+  try {
+    buffer = fs.readFileSync(absolutePath);
+  } catch (err) {
+    throw new TotemConfigErrorCtor(
+      `--from record is unreadable: ${absolutePath}`,
+      'Check the file permissions and retry.',
+      'CONFIG_INVALID',
+      err,
+    );
+  }
+
+  const body = buffer.toString('utf-8');
+  if (body.trim().length === 0) {
+    throw new TotemConfigErrorCtor(
+      `--from record is empty: ${absolutePath}`,
+      'Write the record before binding it — an empty record grounds nothing.',
+      'CONFIG_INVALID',
+    );
+  }
+
+  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+  // Repo-relative with forward slashes: the strict pre-commit reader resolves
+  // this ref from the worktree top, which is where git runs hooks.
+  const root = deps.resolveGitRoot(cwd) ?? cwd;
+  const relativePath = path.relative(root, absolutePath).split(path.sep).join('/');
+
+  return { record: { path: relativePath, sha256, body }, absolutePath };
+}
+
+/**
+ * `--out` may never resolve to the bound record: the tool BINDS a hand-authored
+ * record, it never drafts over it. Compared via `path.relative` so the check
+ * inherits the platform's own path equality (case-insensitive on win32).
+ */
+export function assertOutDoesNotOverwriteRecord(
+  out: string | undefined,
+  recordAbsolutePath: string,
+  cwd: string,
+  TotemConfigErrorCtor: typeof TotemConfigErrorClass,
+): void {
+  if (out === undefined) return;
+  if (path.relative(path.resolve(cwd, out), recordAbsolutePath).length > 0) return;
+  throw new TotemConfigErrorCtor(
+    `--out resolves to the --from record (${recordAbsolutePath}) — totem spec never drafts over the record.`,
+    'Send the draft elsewhere: --out <another path>, or --stdout.',
+    'CONFIG_INVALID',
+  );
+}
+
+// ─── Anchor + floor (mmnto-ai/totem#2700) ───────────────
+
+/** The anchor's `ref` for one issue arm: the input as typed, `#<n>` for a bare number. */
+function issueAnchorRef(input: ParsedInput): string {
+  const issue = input.issue;
+  if (!issue) return '';
+  const typed = input.issueRef;
+  if (typed !== undefined && !/^\d+$/.test(typed)) return typed;
+  return `#${issue.number}`;
+}
+
+/**
+ * Classify what the run is ANCHORED on (mmnto-ai/totem#2700). A record wins
+ * outright (it is the only kind carrying bytes); otherwise the kind is
+ * `issue` when every input resolved to an issue, `free-text` when every input
+ * is a topic, and the honest `mixed` when both are present — `mixed` proceeds
+ * (an issue IS grounding) but is not gate evidence, because its free-text half
+ * is the confabulation surface.
+ *
+ * The caller guarantees at least one parsed input ({@link
+ * validateSpecInvocation}); the schema's non-empty `ref` refine is the
+ * backstop if that ever stops holding.
+ */
+export function resolveGroundingAnchor(parsed: ParsedInput[]): GroundingAnchor {
+  const bound = parsed.find((input) => input.record !== null)?.record;
+  if (bound) {
+    return { kind: GROUNDING_ANCHOR_RECORD, ref: bound.path, sha256: bound.sha256 };
+  }
+  const issueRefs = parsed.filter((input) => input.issue !== null).map(issueAnchorRef);
+  const topics = parsed
+    .filter((input) => input.issue === null && input.freeText !== null)
+    .map((input) => input.freeText!);
+
+  if (topics.length === 0) {
+    return { kind: GROUNDING_ANCHOR_ISSUE, ref: issueRefs.join(ANCHOR_ISSUE_JOIN) };
+  }
+  if (issueRefs.length === 0) {
+    return { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: topics.join(ANCHOR_TOPIC_JOIN) };
+  }
+  return {
+    kind: GROUNDING_ANCHOR_MIXED,
+    ref: `${issueRefs.join(ANCHOR_ISSUE_JOIN)}${ANCHOR_TOPIC_JOIN}${topics.join(ANCHOR_TOPIC_JOIN)}`,
+  };
+}
+
+/** One below-floor candidate, disclosed as path + relevance only — never content. */
+export interface WithheldCandidate {
+  filePath: string;
+  sourceRepo?: string;
+  relevance: number;
+}
+
+export interface GroundingFloorVerdict {
+  /** True when the run must be refused before any LLM call and before any artifact is minted. */
+  refuse: boolean;
+  /** Retrieved items across all four partitions. */
+  hits: number;
+  /** The highest relevance among signal-bearing items; `null` when nothing carried a vector leg. */
+  bestRelevance: number | null;
+  /** The below-floor signal-bearing candidates the refusal withheld — empty whenever the run proceeds. */
+  withheld: WithheldCandidate[];
+  /** Items with no relevance at all (FTS-only) — floor-EXEMPT, never withheld for a weak sibling's sake. */
+  floorExempt: number;
+}
+
+/**
+ * Judge the retrieval against the relevance floor, over ALL items across the
+ * four partitions (mmnto-ai/totem#2700). Mirrors the MCP tool's semantics
+ * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
+ * real relevance signal exists, and judges only the hits that carry one —
+ * keyword-only hits have no comparable relevance and are floor-EXEMPT, so a
+ * mixed batch is never withheld because its vector-leg siblings scored weak.
+ *
+ * Zero items is this command's OWN rule, not an MCP mirror: nothing retrieved
+ * means nothing grounds the run, so it refuses regardless of any floor.
+ */
+export function evaluateGroundingFloor(
+  context: RetrievedContext,
+  floor: number,
+): GroundingFloorVerdict {
+  const all = [...context.specs, ...context.sessions, ...context.code, ...context.lessons];
+  if (all.length === 0) {
+    return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0 };
+  }
+
+  const signal: WithheldCandidate[] = [];
+  let floorExempt = 0;
+  let bestRelevance: number | null = null;
+  for (const hit of all) {
+    const relevance = hit.relevance;
+    if (typeof relevance !== 'number') {
+      floorExempt += 1;
+      continue;
+    }
+    signal.push({
+      filePath: hit.filePath,
+      ...(hit.sourceRepo !== undefined ? { sourceRepo: hit.sourceRepo } : {}),
+      relevance,
+    });
+    if (bestRelevance === null || relevance > bestRelevance) bestRelevance = relevance;
+  }
+
+  const refuse =
+    signal.length > 0 && bestRelevance !== null && bestRelevance < floor && floorExempt === 0;
+  return {
+    refuse,
+    hits: all.length,
+    bestRelevance,
+    withheld: refuse ? signal : [],
+    floorExempt,
+  };
+}
+
+/**
+ * The refusal's text: the topic(s) refused, the measurement (`0 hits` or the
+ * best relevance), the floor's VALUE and its PLACE, and every withheld
+ * candidate as `path — relevance` (linked hits prefixed with their store).
+ * Exclusion is disclosed, never silently dropped.
+ */
+export function formatGroundingRefusal(
+  topics: string,
+  verdict: GroundingFloorVerdict,
+  floor: number,
+): { message: string; recoveryHint: string } {
+  const lines = [`Refusing to draft an unanchored spec for topic(s): ${topics}.`];
+  if (verdict.hits === 0) {
+    lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
+  } else {
+    const best = verdict.bestRelevance ?? 0;
+    lines.push(
+      `Retrieval returned ${verdict.hits} hits, but best relevance ${best.toFixed(RELEVANCE_DECIMALS)} is below the floor.`,
+    );
+  }
+  lines.push(`floor ${floor.toFixed(RELEVANCE_DECIMALS)} — ${FLOOR_PLACE}`);
+  if (verdict.withheld.length > 0) {
+    lines.push('Withheld candidates (path + relevance only, no content):');
+    for (const [index, candidate] of verdict.withheld.entries()) {
+      const label = candidate.sourceRepo
+        ? `[${candidate.sourceRepo}] ${candidate.filePath}`
+        : candidate.filePath;
+      lines.push(
+        `${index + 1}. ${label} — relevance ${candidate.relevance.toFixed(RELEVANCE_DECIMALS)}`,
+      );
+    }
+  }
+  return {
+    message: lines.join('\n'),
+    recoveryHint: `To anchor the run, ${ANCHOR_CURES}. To inspect the retrieval without drafting, run 'totem spec --raw <topic>'.`,
+  };
 }
 
 /**
@@ -216,6 +572,10 @@ export function resolveDefaultSpecPath(
 ): string | null {
   if (parsedInputs.length !== 1) return null;
   const first = parsedInputs[0]!;
+  // A bound record has no derived path by design (mmnto-ai/totem#2700): the
+  // only path it could derive is the record's own, and the tool never drafts
+  // over the record. The draft goes to stdout unless --out says otherwise.
+  if (first.record) return null;
   let stem: string;
   if (first.issue) {
     stem = String(first.issue.number);
@@ -232,13 +592,13 @@ export function resolveDefaultSpecPath(
 // ─── Main command ───────────────────────────────────────
 
 export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
-  const path = await import('node:path');
   const {
     createEmbedder,
     LanceStore: LanceStoreImpl,
     resolveGitRoot,
     sanitizeForTerminal,
     TotemConfigError,
+    TotemError,
   } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const {
@@ -264,6 +624,19 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
 
   const cwd = process.cwd();
+
+  // ── Invocation + record binding (mmnto-ai/totem#2700) ──
+  // Everything here runs before the config resolves, before the store connects
+  // and before any LLM call: a bad invocation costs nothing and mints nothing.
+  validateSpecInvocation(unique, options, TotemConfigError);
+  const boundRecord =
+    options.from !== undefined
+      ? loadSpecRecord(options.from, cwd, { resolveGitRoot }, TotemConfigError)
+      : null;
+  if (boundRecord) {
+    assertOutDoesNotOverwriteRecord(options.out, boundRecord.absolutePath, cwd, TotemConfigError);
+  }
+
   const configPath = resolveConfigPath(cwd);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
@@ -314,6 +687,13 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const parsed: ParsedInput[] = [];
   const queryParts: string[] = [];
 
+  if (boundRecord) {
+    // A record is a complete, single subject: no issue fetch, no topic.
+    parsed.push({ issue: null, freeText: null, record: boundRecord.record });
+    queryParts.push(buildRecordSearchQuery(boundRecord.record));
+    log.info(TAG, `Record: ${boundRecord.record.path} (sha256 ${boundRecord.record.sha256})`);
+  }
+
   for (const input of unique) {
     // Match GitHub, GitLab, or any URL ending in /issues/<number> or /-/issues/<number>
     const urlMatch = input.match(/^https?:\/\/[^/]+\/.*\/(?:-\/)?issues\/(\d+)/);
@@ -340,11 +720,13 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
       log.info(TAG, `Fetching issue #${issueNumber}...`);
       const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
-      parsed.push({ issue, freeText: null });
+      // `issueRef` keeps the input AS TYPED so the anchor's ref round-trips
+      // `owner/repo#N` and URL forms (a fetched issue carries only a number).
+      parsed.push({ issue, freeText: null, record: null, issueRef: input });
       queryParts.push(buildSearchQuery(issue));
     } else {
       log.info(TAG, `Topic: ${input}`);
-      parsed.push({ issue: null, freeText: input });
+      parsed.push({ issue: null, freeText: input, record: null });
       queryParts.push(input);
     }
   }
@@ -364,8 +746,38 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     `Found: ${context.specs.length} specs, ${context.sessions.length} sessions, ${context.code.length} code, ${context.lessons.length} lessons`,
   );
 
+  // ── Anchored-evidence gate (mmnto-ai/totem#2700) ──
+  // The anchor is what the run is grounded ON. A run with NO issue and NO
+  // record is the confabulation surface: it refuses when retrieval returned
+  // nothing, or when every signal-bearing hit is below the floor and no
+  // floor-exempt hit exists. `--raw` is EXEMPT — it makes no LLM call and
+  // mints no artifact, so it is how a weak topic's retrieval is inspected.
+  // The refusal returns BEFORE `runOrchestrator`, the only writer of a run
+  // artifact, so "mints nothing" holds by control flow.
+  const floor = config.searchRelevanceFloor;
+  const anchor = resolveGroundingAnchor(parsed);
+  if (anchor.kind === GROUNDING_ANCHOR_FREE_TEXT && !options.raw) {
+    const verdict = evaluateGroundingFloor(context, floor);
+    if (verdict.refuse) {
+      const refusal = formatGroundingRefusal(anchor.ref, verdict, floor);
+      throw new TotemError('GATE_INVALID', refusal.message, refusal.recoveryHint);
+    }
+  }
+  if (anchor.kind === GROUNDING_ANCHOR_FREE_TEXT || anchor.kind === GROUNDING_ANCHOR_MIXED) {
+    log.warn(
+      TAG,
+      `This run is NOT gate evidence: anchor kind "${anchor.kind}" (${anchor.ref}). To make it evidence, ${ANCHOR_CURES}.`,
+    );
+  }
+
   // Resolve system prompt (allow .totem/prompts/spec.md override)
   const systemPrompt = getSystemPrompt('spec', SYSTEM_PROMPT, cwd, config.totemDir);
+  // Captured HERE, before the code-blind directive is folded in: the artifact
+  // records which prompt drafted the output, and the strict evidence reader
+  // chooses the TEMPLATE vs DOCUMENT shape on it (a draft written under a
+  // custom prompt cannot be held to the built-in template's headings).
+  const promptSource =
+    systemPrompt === SYSTEM_PROMPT ? PROMPT_SOURCE_BUILTIN : PROMPT_SOURCE_OVERRIDE;
 
   // Code-blind grounding guard (mmnto-ai/totem#2106): 0 code retrieved → surface
   // an advisory banner + fold a suppression directive into the prompt; never
@@ -401,11 +813,15 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     // Admission contract (mmnto-ai/totem#2102): the same value the slice-1
     // constant recorded, now caller-supplied — spec is factually completion-only.
     backendAdmissionClass: ADMISSION_COMPLETION_ONLY,
-    runMetadata: { caller: 'spec', codeBlind: codeBlindGuard.codeBlind },
+    runMetadata: { caller: 'spec', codeBlind: codeBlindGuard.codeBlind, promptSource },
     artifact: {
       groundingHash: calculateDeterministicHash(groundingBundle),
       provenanceSummary: summarizeProvenance(groundingBundle),
       bundle: groundingBundle,
+      // What the run was anchored on, and the floor it was judged against
+      // (mmnto-ai/totem#2700) — published, never inferred by a reader.
+      anchor,
+      floor,
     },
   });
   if (content == null) return;
@@ -448,7 +864,12 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     );
     log.success(TAG, `Spec saved to ${safeRelativePath}`);
   } else {
-    log.dim(TAG, 'No default save path — writing to stdout. Use --out <path> to save.');
+    log.dim(
+      TAG,
+      boundRecord
+        ? 'No derived path for a record — use --out <path> to keep the draft.'
+        : 'No default save path — writing to stdout. Use --out <path> to save.',
+    );
     writeOutput(content);
   }
 }

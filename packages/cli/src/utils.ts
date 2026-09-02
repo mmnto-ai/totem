@@ -10,6 +10,7 @@ import type {
   BoundedTextEvidence,
   ContextPolicy,
   CustomSecret,
+  GroundingAnchor,
   GroundingBundle,
   InvocationFailureArtifact,
   InvokeAttemptEvidence,
@@ -503,6 +504,19 @@ export interface RunArtifactRequest {
    * carry their original grounding identity and have no bundle to forge.
    */
   bundle?: GroundingBundle;
+  /**
+   * What the run was ANCHORED on (mmnto-ai/totem#2700) — recorded verbatim
+   * into `grounding.anchor`. Supplied by `spec`; omitted by every other
+   * caller (a `review` artifact has no spec anchor, and the strict evidence
+   * reader reads its absence as not-evidence).
+   */
+  anchor?: GroundingAnchor;
+  /**
+   * The relevance floor the run was judged against (`searchRelevanceFloor`,
+   * post-parse) — recorded into `grounding.floor`. Names the number, never a
+   * config-vs-default bit (which is not derivable after the schema parse).
+   */
+  floor?: number;
   /** Deterministic diff input when the run was scoped (`lint/review --branch`, #2098). */
   diffScope?: string;
   /** The grounded spec contract, when the run senses against one. */
@@ -709,6 +723,10 @@ function buildArtifactSharedFields(args: {
       hash: args.artifact.groundingHash,
       provenanceSummary: args.artifact.provenanceSummary,
       ...(args.groundingBundle !== undefined ? { bundle: args.groundingBundle } : {}),
+      // mmnto-ai/totem#2700: present only when the caller supplied them, so a
+      // `review` artifact's grounding shape is byte-identical to today's.
+      ...(args.artifact.anchor !== undefined ? { anchor: args.artifact.anchor } : {}),
+      ...(args.artifact.floor !== undefined ? { floor: args.artifact.floor } : {}),
     },
     ...(args.outputContract !== undefined ||
     args.contextPolicy !== undefined ||
@@ -793,8 +811,14 @@ function quotaFallbackAttempts(
   return attempts.map((attempt) => ({ ...attempt, route: 'quota-model-fallback' }));
 }
 
-/** The identity-relevant subset of a retrieval hit — what the bundle records. */
-type RetrievalItem = Pick<SearchResult, 'content' | 'filePath' | 'sourceRepo'>;
+/**
+ * The identity-relevant subset of a retrieval hit — what the bundle records.
+ * Widened with `relevance` (mmnto-ai/totem#2700): the vector-leg signal rides
+ * the hit into the core builder, which carries it onto the canonically SORTED
+ * item, so no index correspondence with this array is ever needed. An FTS-only
+ * hit carries none, and that absence is the disclosure.
+ */
+type RetrievalItem = Pick<SearchResult, 'content' | 'filePath' | 'sourceRepo' | 'relevance'>;
 
 /**
  * Assemble the grounding bundle for the spec/review retrieval shape
