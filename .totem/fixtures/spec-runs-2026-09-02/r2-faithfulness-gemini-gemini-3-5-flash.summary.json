@@ -1,0 +1,35 @@
+{
+  "judge": "gemini",
+  "model": "gemini-3.5-flash",
+  "ollamaContextNote": null,
+  "n": 55,
+  "scored": 54,
+  "notScored": [
+    {
+      "id": "29bacc3e",
+      "status": "NOT_SCORED",
+      "reason": "empty draft"
+    }
+  ],
+  "wallSeconds": 1508.3,
+  "meanSecondsPerScored": 809.6,
+  "byKind": {
+    "issue": {
+      "n": 31,
+      "mean": 0.012,
+      "min": 0.0,
+      "max": 0.06060606060606061
+    },
+    "topic": {
+      "n": 23,
+      "mean": 0.044,
+      "min": 0.0,
+      "max": 0.1111111111111111
+    }
+  },
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.5"
+  },
+  "at": "2026-09-02T21:45:12Z"
+}

@@ -1,0 +1,429 @@
+{
+  "probe": "R3 structured-output (mmnto-ai/totem-strategy#1193)",
+  "at": "2026-09-02T21:05:26.321Z",
+  "host": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 265K",
+    "cores": 20,
+    "node": "v24.16.0"
+  },
+  "artifact": {
+    "id": "e5a15c9c217d449fc8cf15c1ab534dc07703f5965561eff922d01c3d75f8bca0",
+    "createdAt": "2026-09-02T01:04:00.649Z",
+    "model": "gemini-3.5-flash",
+    "anchorLine": "=== ISSUE #2700: spec: `totem spec` refuses an unanchored topic + `--from <record>` binds the hand record; the strict pre-commit gate reads ANCHORED + non-empty-by-content — 4/4 slug-topic runs confabulated this week; 53/53 runs read `similarity-only:8` (the artifact records no anchor); an EMPTY draft satisfies the gate today (ruled with strategy 2026-08-30; queued behind the seed-20 run of record) ===",
+    "promptChars": 18434,
+    "originalOutputChars": 9783
+  },
+  "originalReader": {
+    "ok": true,
+    "reasons": []
+  },
+  "originalAllNine": {
+    "ok": false,
+    "reasons": [
+      "empty heading ### Technical Approach & Contracts",
+      "missing heading ### Execution Flow (structural constraint)",
+      "missing heading ### Verification (MANDATORY — do not skip)"
+    ]
+  },
+  "originalHeadingsPresent": 7,
+  "required": [
+    "### Problem Statement",
+    "### Implementation Tasks"
+  ],
+  "sections": [
+    "### Problem Statement",
+    "### Architectural Context",
+    "### Files to Examine",
+    "### Technical Approach & Contracts",
+    "### Edge Cases & Traps",
+    "### Implementation Tasks",
+    "### Execution Flow (structural constraint)",
+    "### Verification (MANDATORY — do not skip)",
+    "### Test Plan"
+  ],
+  "sdk": "@google/genai 2.6.0",
+  "maxOutputTokens": 16384,
+  "arms": [
+    {
+      "name": "unconstrained",
+      "config": {}
+    },
+    {
+      "name": "responseSchema",
+      "config": {
+        "responseMimeType": "application/json",
+        "responseSchema": {
+          "type": "OBJECT",
+          "properties": {
+            "problemStatement": {
+              "type": "STRING"
+            },
+            "architecturalContext": {
+              "type": "STRING"
+            },
+            "filesToExamine": {
+              "type": "STRING"
+            },
+            "technicalApproachAndContracts": {
+              "type": "STRING"
+            },
+            "edgeCasesAndTraps": {
+              "type": "STRING"
+            },
+            "implementationTasks": {
+              "type": "STRING"
+            },
+            "executionFlow": {
+              "type": "STRING"
+            },
+            "verification": {
+              "type": "STRING"
+            },
+            "testPlan": {
+              "type": "STRING"
+            }
+          },
+          "required": [
+            "problemStatement",
+            "architecturalContext",
+            "filesToExamine",
+            "technicalApproachAndContracts",
+            "edgeCasesAndTraps",
+            "implementationTasks",
+            "executionFlow",
+            "verification",
+            "testPlan"
+          ],
+          "propertyOrdering": [
+            "problemStatement",
+            "architecturalContext",
+            "filesToExamine",
+            "technicalApproachAndContracts",
+            "edgeCasesAndTraps",
+            "implementationTasks",
+            "executionFlow",
+            "verification",
+            "testPlan"
+          ]
+        }
+      }
+    },
+    {
+      "name": "responseJsonSchema-minLength1",
+      "config": {
+        "responseMimeType": "application/json",
+        "responseJsonSchema": {
+          "type": "object",
+          "properties": {
+            "problemStatement": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecturalContext": {
+              "type": "string",
+              "minLength": 1
+            },
+            "filesToExamine": {
+              "type": "string",
+              "minLength": 1
+            },
+            "technicalApproachAndContracts": {
+              "type": "string",
+              "minLength": 1
+            },
+            "edgeCasesAndTraps": {
+              "type": "string",
+              "minLength": 1
+            },
+            "implementationTasks": {
+              "type": "string",
+              "minLength": 1
+            },
+            "executionFlow": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verification": {
+              "type": "string",
+              "minLength": 1
+            },
+            "testPlan": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "problemStatement",
+            "architecturalContext",
+            "filesToExamine",
+            "technicalApproachAndContracts",
+            "edgeCasesAndTraps",
+            "implementationTasks",
+            "executionFlow",
+            "verification",
+            "testPlan"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "results": [
+    {
+      "arm": "unconstrained",
+      "run": 1,
+      "ok": true,
+      "text": "### Problem Statement\nThe `totem spec` command confabulates when run on unanchored free-text slug topics, and the strict pre-commit gate accepts these discarded drafts (or even completely empty runs) as valid spec evidence. We must update `totem spec` to refuse unanchored free-text topics that fall below a similarity floor (and print the floor information without writing an artifact), implement `--from <record>` to bind hand-authored specs, and upgrade the pre-commit gate to strictly require a non-empty spec run anchored to an `issue` or `record`.\n\n### Architectural Context\n- **Core Principle:** \"`totem spec` writes a contract only when it is grounded; its output is one retrieval input, never the contract.\"\n- **Ritual Constraint:** \"spec-first is a ritual with a gate, not a text to obey.\"\n- **Grounding Limitation:** Currently, all runs are summarized as `similarity-only:8` because anchor metadata is not preserved in the grounding artifact. We must publish the anchor as a first-class field (`grounding.anchor`) and preserve the similarity scores of individual retrieved items.\n\n### Files to Examine\n- `packages/core/src/artifacts/grounding.ts` — Location of the grounding artifact schemas, types, and the `provenanceSummary` derivation logic.\n- `packages/cli/src/commands/spec.ts` — Command definition for `totem spec`, including topic resolution, vector database retrieval, and artifact emission.\n- `packages/cli/src/utils.ts` — Implements retrieval grounding bundle preparation (`buildRetrievalGroundingBundle`).\n- `packages/cli/src/commands/install-hooks.ts` — Generates the git hook scripts (including `tools/pre-commit`) and the embedded JS runner that reads spec runs.\n- `packages/cli/src/commands/install-hooks.test.ts` — Integration tests verifying the pre-commit hook and spec-evidence verification.\n\n### Technical Approach & Contracts\n\n#### 1. Schema Extensions\nIn `packages/core/src/artifacts/grounding.ts`, we must add Zod schemas and TypeScript interfaces for the grounding anchor and update the retrieval items to store their similarity scores:\n\n```typescript\nimport { z } from 'zod';\n\nexport const GroundingAnchorSchema = z.object({\n  kind: z.enum(['issue', 'record', 'free-text']),\n  ref: z.string(),\n  sha256: z.string().optional(), // Used when kind is \"record\" to bind hand-authored specs\n});\n\nexport type GroundingAnchor = z.infer<typeof GroundingAnchorSchema>;\n\nexport const GroundingItemSchema = z.object({\n  provenance: z.string(),\n  contentHash: z.string(),\n  sourceType: z.string(),\n  filePath: z.string(),\n  score: z.number().optional(), // Store similarity score of each retrieved item\n});\n\n// Update GroundingBundleSchema to require the anchor\nexport const GroundingBundleSchema = z.object({\n  anchor: GroundingAnchorSchema,\n  items: z.array(GroundingItemSchema),\n  provenanceSummary: z.string(),\n});\n```\n\n#### 2. Spec Refusal & Grounding Flow\nWe will adapt the core flow in `packages/cli/src/commands/spec.ts`:\n\n```\n              [totem spec <slug>]\n                       │\n             Does --from exist?\n             ├── Yes: Read and hash hand-authored record. Skip LLM/retrieval.\n             │        Write run artifact with anchor kind \"record\". Exit 0.\n             └── No:\n                      │\n            Resolve anchor kind:\n            - Issue ref/URL -> \"issue\"\n            - Free-text/slug -> \"free-text\"\n                      │\n             Retrieve top hits.\n             Are there hits >= configured floor?\n             ├── Yes: Populate grounding.anchor and item scores.\n             │        Run LLM to draft spec. Write artifact. Exit 0.\n             └── No & anchor kind is \"free-text\":\n                      │\n                      Reject: Throw error, print floor + source.\n                      Exit non-zero. DO NOT write artifact.\n```\n\n- **Similarity Floor Configuration:** The floor threshold should be read from `config.embedding.similarityFloor` (defaulting to `0.7` if not configured).\n- **Refusal Output:** When refusing, print:\n  `Error: No knowledge hits above similarity floor of <floor> (configured in <source>). Highest score found: <highestScore>`.\n\n#### 3. Pre-Commit Gate Evidence Upgrade\nThe generated pre-commit hook script inside `packages/cli/src/commands/install-hooks.ts` must parse the newest `.totem/artifacts/runs/*.json` where `admission.runMetadata.caller === \"spec\"` (sorted descending by `createdAt`) and perform two strict checks:\n1. `grounding.anchor.kind` must be either `\"issue\"` or `\"record\"`.\n2. `output.content` must be a string and contain a body longer than `100` bytes of non-empty content:\n   ```javascript\n   const isValidBody = specRun.output && \n                       typeof specRun.output.content === 'string' && \n                       specRun.output.content.trim().length > 100;\n   ```\n\n### Edge Cases & Traps\n- **Empty Hand-Authored Records:** If `--from <path>` points to an empty or too-short file (< 100 bytes), the tool must exit non-zero immediately rather than writing an artifact that would fail the pre-commit gate anyway.\n- **FS Path Resolution:** The path passed to `--from` must be resolved relative to the current workspace root (using the `resolveGitRoot` shared helper) to guarantee consistency regardless of where the CLI is executed.\n- **Race Conditions in Artifact Sorting:** Sorting by file modification time (`mtime`) can be unreliable. We must parse and sort using the `createdAt` ISO timestamp or equivalent metadata inside the JSON payload.\n- **Silent Pin Failures:** If the CLI fails to write the artifact when it should, there must be a clean loud error so the developer knows immediately.\n\n### Implementation Tasks\n\n- [ ] **Task 1: Update Grounding and Run Schemas**\n  - Modify `packages/core/src/artifacts/grounding.ts` to define and export `GroundingAnchorSchema`, `GroundingAnchor`, and update `GroundingItemSchema` to include an optional `score: number` field.\n  - Update `GroundingBundleSchema` to include the `anchor` field.\n  - Update the run artifact schemas to incorporate these modifications.\n  > TEST DIRECTIVE: Before implementing, write a failing test named `rejectsGroundingArtifactWithoutAnchor` in grounding serialization tests.\n  - Write test -> verify fails -> implement -> verify passes -> lint\n\n- [ ] **Task 2: Inject Scores and Anchor during Retrieval Bundle Creation**\n  - Update `buildRetrievalGroundingBundle` in `packages/cli/src/utils.ts` to accept the `anchor` object and the raw retrieval items with their associated similarity scores.\n  - Map these scores correctly into the returned grounding bundle items.\n  - Write test -> verify fails -> implement -> verify passes -> lint\n\n- [ ] **Task 3: Refuse Unanchored Specs & Handle `--from` in `totem spec`**\n  - Modify `packages/cli/src/commands/spec.ts` to add the `--from <path>` CLI option.\n  - Implement the logic for `--from`: verify path, ensure file contains > 100 bytes, calculate SHA256, create run artifact with `kind: \"record\"`, bypass LLM, save artifact, and exit 0.\n  - Implement the similarity floor logic for `free-text` anchors: if no hit is above the threshold (e.g., `config.embedding.similarityFloor`), throw a clear error disclosing the highest score and the floor value/source, and do not save any run artifact.\n  - Ensure regular issue paths correctly bind `kind: \"issue\"`.\n  > TEST DIRECTIVE: Before implementing, write a failing test named `refusesFreetextSpecUnderFloorWithoutArtifact` verifying no JSON is outputted to `.totem/artifacts/runs` when falling below the similarity floor.\n  - Write test -> verify fails -> implement -> verify passes -> lint\n\n- [ ] **Task 4: Upgrade the Git Hook Pre-Commit Gate Template**\n  - Modify the inline validation script template in `packages/cli/src/commands/install-hooks.ts`.\n  - Update the reader to find the latest spec run, parse it, and ensure `grounding.anchor.kind` is in `[\"issue\", \"record\"]` and `output.content.trim().length > 100`.\n  - Make sure validation failures print descriptive diagnostics naming the run ID, anchor kind, and body length.\n  - Write test -> verify fails -> implement -> verify passes -> lint\n\n- [ ] **Task 5: Update Hook and Spec Evidence Verification Tests**\n  - Modify the test suites in `packages/cli/src/commands/install-hooks.test.ts`.\n  - Add test scenarios for:\n    - Failing on an unanchored `free-text` spec run.\n    - Failing on an empty spec run (e.g., < 100 characters of content).\n    - Passing when a valid `\"issue\"` or `\"record\"` anchored run is present.\n  - Write test -> verify fails -> implement -> verify passes -> lint\n\n### Execution Flow (structural constraint)\n```dot\ndigraph workflow {\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\n  verify_fails -> implement [label=\"RED only\"]\n  verify_passes -> lint [label=\"GREEN required\"]\n  lint -> next_task [label=\"0 violations\"]\n  lint -> implement [label=\"violations found — fix first\"]\n}\n```\n\n### Verification\n1. Run `totem lint` to ensure zero deterministic rule violations.\n2. Run `totem review` to execute the AI verification lanes over the diff and fix critical feedback.\n\n### Test Plan\n- **Grounding Serialization:** Verify that serialization and parsing of `GroundingBundle` validates presence of the `anchor` schema correctly.\n- **Similarity Floor Refusal:** Mock embedding scores and confirm `totem spec` aborts with a non-zero exit code and appropriate error output when all scores are below the threshold.\n- **Design Record Binding (`--from`):** Assert that passing `--from <path>` yields a correctly constructed artifact with `kind: \"record\"`, the record content as output, the SHA256 of the file, and no calls to the LLM agent.\n- **Hook Isolation:** Assert that the pre-commit hook successfully passes when presented with an anchored, populated spec run and rejects any empty, missing, or `\"free-text\"` anchored runs.",
+      "durationMs": 36448,
+      "inputTokens": 5298,
+      "outputTokens": 2403,
+      "finishReason": "STOP",
+      "markdownLength": 9853,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": false,
+        "reasons": [
+          "empty heading ### Technical Approach & Contracts",
+          "missing heading ### Verification (MANDATORY — do not skip)"
+        ]
+      },
+      "exactHeadingsPresent": 8,
+      "sectionBodyLengths": {
+        "### Problem Statement": 531,
+        "### Architectural Context": 509,
+        "### Files to Examine": 709,
+        "### Technical Approach & Contracts": 0,
+        "### Edge Cases & Traps": 804,
+        "### Implementation Tasks": 2895,
+        "### Execution Flow (structural constraint)": 317,
+        "### Verification (MANDATORY — do not skip)": null,
+        "### Test Plan": 738
+      },
+      "textSha256Prefix": "51dcca88848a"
+    },
+    {
+      "arm": "unconstrained",
+      "run": 2,
+      "ok": true,
+      "text": "### Problem Statement\nThe `totem spec` command currently allows unanchored free-text topics (which lead to context-free hallucinations/confabulations over arbitrary vector hits) and writes spec artifacts that lack clear grounding metadata. Furthermore, the pre-commit gate accepts these unanchored or empty specs because it only checks for the existence of any recent run metadata, rather than validating anchor kind and non-empty content.\n\n### Architectural Context\n* **Grounding Principles:** \"‘totem spec’ writes a contract only when it is grounded; its output is one retrieval input, never the contract\" and \"spec-first is a ritual with a gate, not a text to obey\".\n* **Maturity Alignment:** Pre-commit hooks must remain highly deterministic, offline-first, and perform zero-network evaluations of git-tracked or local cache states.\n\n### Files to Examine\n* `packages/core/src/artifacts/grounding.ts` — Location where the grounding bundle schemas, `provenanceSummary` extraction, and grounding structures are defined.\n* `packages/cli/src/commands/spec.ts` — Command logic for resolving issue/topic inputs, orchestrating LLM execution, and saving run metadata.\n* `packages/cli/src/utils.ts` — Grounding bundle builders (e.g., `buildRetrievalGroundingBundle`) where similarity items are packaged.\n* `packages/cli/src/commands/install-hooks.ts` — Code generating the `tools/pre-commit` script, including logic that parses the run artifact.\n* `packages/cli/src/commands/install-hooks.test.ts` — Test coverage for the pre-commit hook generation and the spec evidence validation suite.\n\n### Technical Approach & Contracts\n\n#### 1. Contract Changes (Zod & Type Schemas)\nModify `packages/core/src/artifacts/grounding.ts` (and any sibling schema modules) to declare the new grounding anchor schema and update the item payload to include scores:\n\n```typescript\nimport { z } from 'zod';\n\nexport const GroundingAnchorSchema = z.object({\n  kind: z.enum([\"issue\", \"record\", \"free-text\"]),\n  ref: z.string(),\n  sha256: z.string().optional(), // Populated only when kind is 'record' (representing the design record file hash)\n});\n\nexport type GroundingAnchor = z.infer<typeof GroundingAnchorSchema>;\n\nexport const GroundingItemSchema = z.object({\n  provenance: z.string(),\n  contentHash: z.string(),\n  sourceType: z.string(),\n  filePath: z.string(),\n  score: z.number(), // Explicit similarity/retrieval score\n});\n\n// Update GroundingBundle schema to encompass anchor and item updates:\nexport const GroundingBundleSchema = z.object({\n  anchor: GroundingAnchorSchema,\n  items: z.array(GroundingItemSchema),\n  provenanceSummary: z.string(),\n});\n```\n\n#### 2. Input Resolution & Fallback Logic (`totem spec`)\n* Add `--from <path>` to `spec` options.\n* Resolve input according to these priorities:\n  1. If `--from <path>` is provided: verify path exists, calculate `sha256`, and set `anchor = { kind: \"record\", ref: path, sha256 }`. Do not trigger draft creation or overwrite the record; bind it directly.\n  2. If the input matches an issue format (issue URL, ID, or `owner/repo#ID`): set `anchor = { kind: \"issue\", ref: input }`.\n  3. If the input is free-text / slug:\n     * Query similarity hits.\n     * If the highest score among retrieved hits falls below the configured floor (e.g., 0.70 / `similarity-only:8` with no high-confidence signals), exit non-zero, print a refusal showing the floor and highest hit score, and **do not write** any run artifact.\n     * If hits are acceptable: set `anchor = { kind: \"free-text\", ref: input }`.\n\n#### 3. Pre-Commit Hook Logic (`tools/pre-commit`)\nUpgrade the Node-based JSON parser rendered in `install-hooks.ts`:\n* It must read the newest JSON run artifact from `.totem/artifacts/runs/` where `admission.runMetadata.caller === \"spec\"`.\n* Extract `grounding.anchor.kind`. Fails verification if `kind` is not `\"issue\"` or `\"record\"`.\n* Inspect `output.content`. Fails verification if `output.content` is empty or lacks structural elements of a generated spec (e.g., length < 200 characters, or missing Markdown section skeleton headers like `## ` or `# `).\n\n---\n\n### Edge Cases & Traps\n* **Backward Compatibility of Artifacts:** Older runs in checkouts won't have the `anchor` field. The hook parser must handle undefined properties gracefully, treating missing fields as \"no evidence\" or failing safely without throwing uncaught runtime exceptions in the git hook.\n* **Refusal Generation Bypass:** A 400-token model refusal text (e.g., \"I cannot write this spec because...\") is technically non-empty but is invalid. The content check must enforce syntactic patterns (such as containing valid Markdown headings matching the spec command skeleton) in addition to bare character count checks.\n* **Pre-commit Performance:** Parsing JSON must use synchronous, optimized filesystem functions (e.g., using `@mmnto/totem` shared helper `readJsonSafe` where applicable in test suites, and fast lightweight standard library operations in the generated shell script).\n\n---\n\n### Implementation Tasks\n\n- [ ] **Task 1: Grounding Types and Schema Upgrades**\n  * Modify `packages/core/src/artifacts/grounding.ts` to include `GroundingAnchorSchema`, update retrieval items to contain `score`, and integrate them into the primary grounding interfaces.\n  * Update tests in `packages/core/src/artifacts/grounding.test.ts` (or matching test suite) to assert correct parsing of the new schema elements.\n  > TEST DIRECTIVE: Before implementing, write a failing test named `rejects_grounding_without_anchor` that ensures serialization fails if `anchor` metadata is absent.\n\n- [ ] **Task 2: Update Retrieval Bundling and CLI Spec Resolver**\n  * Modify `packages/cli/src/utils.ts` (`buildRetrievalGroundingBundle`) to pass the similarity score down to the grounding schema.\n  * In `packages/cli/src/commands/spec.ts`, update option definitions to accept `--from` and calculate SHA-256 for hand-authored design records.\n  * Implement the floor-check refusal mechanism for free-text slugs when scores are insufficient, printing the exact floor and refusing to emit run artifacts.\n  * Ensure `totem spec` correctly assigns and writes `grounding.anchor` inside the run artifact.\n\n- [ ] **Task 3: Upgrade Pre-Commit Gate Evidence Check**\n  * Modify `packages/cli/src/commands/install-hooks.ts` inside the generated pre-commit logic.\n  * Upgrade the artifact selection logic to check that `grounding.anchor.kind` is strictly in `['issue', 'record']` AND that the output contains non-empty markdown structure (minimum 200 non-whitespace bytes containing Markdown headers).\n  > TEST DIRECTIVE: Before implementing, write a failing test named `pre_commit_rejects_unanchored_and_empty_specs` verifying the hook correctly blocks commits with dummy or empty spec runs.\n\n- [ ] **Task 4: Update Verification & Parity Tests**\n  * Update `packages/cli/src/commands/install-hooks.test.ts` and `tools-hook-parity.test.ts` to mock and assert both success and failure cases of the upgraded pre-commit hook validator.\n  * Verify that older run formats missing the anchor block commits as expected.\n\n---\n\n### Execution Flow\n\n```dot\ndigraph workflow {\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\n  verify_fails -> implement [label=\"RED only\"]\n  verify_passes -> lint [label=\"GREEN required\"]\n  lint -> next_task [label=\"0 violations\"]\n  lint -> implement [label=\"violations found — fix first\"]\n}\n```\n\n---\n\n### Verification\n\nEvery implementation MUST end with these steps:\n1. `totem lint` — deterministic rule check (zero LLM, ~2s). Fixes any violations.\n2. `totem review` — supplementary AI lanes over the diff (~18s, advisory). Address critical findings.\n\n---\n\n### Test Plan\n\n* **Unit Tests (Grounding & Validation):**\n  * Assert `GroundingAnchorSchema` validates issues, records (with hashes), and correctly rejects arbitrary objects.\n  * Mock low-similarity runs to verify the CLI exits non-zero, logs the hit scores vs floor, and writes no JSON artifact.\n* **Integration Tests (Hook Execution):**\n  * Mock `.totem/artifacts/runs/` directory states containing:\n    * An unanchored free-text run.\n    * An empty/one-token spec run.\n    * A high-confidence issue-anchored spec run.\n  * Execute the pre-commit script logic against each state, confirming only the issue/record anchored, structurally populated artifacts successfully pass the gate.",
+      "durationMs": 18135,
+      "inputTokens": 5298,
+      "outputTokens": 2083,
+      "finishReason": "STOP",
+      "markdownLength": 8370,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": false,
+        "reasons": [
+          "empty heading ### Technical Approach & Contracts",
+          "missing heading ### Execution Flow (structural constraint)",
+          "missing heading ### Verification (MANDATORY — do not skip)"
+        ]
+      },
+      "exactHeadingsPresent": 7,
+      "sectionBodyLengths": {
+        "### Problem Statement": 417,
+        "### Architectural Context": 369,
+        "### Files to Examine": 723,
+        "### Technical Approach & Contracts": 0,
+        "### Edge Cases & Traps": 876,
+        "### Implementation Tasks": 2066,
+        "### Execution Flow (structural constraint)": null,
+        "### Verification (MANDATORY — do not skip)": null,
+        "### Test Plan": 669
+      },
+      "textSha256Prefix": "8c59c2fb26d2"
+    },
+    {
+      "arm": "responseSchema",
+      "run": 1,
+      "ok": true,
+      "text": "{\n  \"problemStatement\": \"The `totem spec` command erroneously drafts specs on unanchored free-text topics and records them as valid grounding runs, allowing empty or hallucinated drafts to bypass the pre-commit gate. The pre-commit gate must be upgraded to strictly require anchored runs (either an issue or a hand-authored design record) with non-empty content, and unanchored runs falling below similarity thresholds must be refused without minting artifacts.\",\n  \"architecturalContext\": \"The codebase implements git pre-commit verification via `tools/pre-commit` which is rendered from `packages/cli/src/commands/install-hooks.ts`. Past spec runs are saved as JSON artifacts in `.totem/artifacts/runs/`. To establish a strict quality gate, we must explicitly record the anchor type and retrieval score inside the grounding bundle schema, refusing unanchored topics failing to meet configured similarity floors.\",\n  \"filesToExamine\": \"1. `packages/cli/src/commands/spec.ts` — Core command resolving input topics, executing similarity searches, and producing the grounding bundle and output artifacts.\\n2. `packages/core/src/artifacts/grounding.ts` — Definition of types and schemas representing grounding bundles and provenance.\\n3. `packages/cli/src/utils.ts` — Contains helper functions like `buildRetrievalGroundingBundle` that build grounding records.\\n4. `packages/cli/src/commands/install-hooks.ts` — Generates and writes the `tools/pre-commit` hook that reads spec artifacts.\\n5. `packages/cli/src/commands/install-hooks.test.ts` — Spec evidence readers test suite verifying hook execution and validation logic.\",\n  \"technicalApproachAndContracts\": \"1. **Anchor Field Contract**: Update the grounding bundle schema (`GroundingBundle`) in `packages/core/src/artifacts/grounding.ts` to expose an `anchor` field:\\n   ```typescript\\n   export interface GroundingAnchor {\\n     kind: 'issue' | 'record' | 'free-text';\\n     ref: string;\\n     sha256?: string;\\n   }\\n   ```\\n   Each item inside the grounding bundle must also include its similarity `score: number`.\\n2. **Hand-Authored Record Anchoring**: Add `--from <path>` to `totem spec`. Read and compute the SHA-256 hash of the record file at `<path>`. Bind this file with anchor `kind: \\\"record\\\"` and save both `ref: path` and `sha256` in the artifact. Do not attempt to run LLM drafts over hand-authored records; instead, bind the record content and save the artifact.\\n3. **Floor Refusal Enforcement**: For unanchored free-text topics, run similarity retrieval. If the highest score is below the configured similarity floor (e.g. 0.7, fetched from Totem config), the command must exit with a non-zero code, print the floor threshold and its configuration source, and write no run artifact.\\n4. **Upgraded Hook Gate**: Update the pre-commit hook template in `packages/cli/src/commands/install-hooks.ts` to parse the newest JSON spec artifact. Assert that:\\n   - `grounding.anchor.kind` is in `['issue', 'record']`.\\n   - `output.content` is a string with a trimmed size greater than 150 characters.\",\n  \"edgeCasesAndTraps\": \"1. **Legacy Run Artifacts**: Legacy run artifacts in the local run store will not contain `grounding.anchor`. The gate's JSON parser must use defensive optional chaining (e.g., `artifact?.grounding?.anchor?.kind`) to prevent runtime crashes, safely treating missing anchors as unanchored (rejected).\\n2. **Refusal Hallucinations**: Some LLMs generate a polite refusal message exceeding 150 characters when failing on topics. Validating only output length is insufficient; the primary gate constraint must enforce `anchor.kind ∈ {issue, record}`.\\n3. **Race Conditions**: Parallel specs can cause timestamp collisions. Always sort run artifacts by modification time/creation time deterministically when selecting the newest artifact.\",\n  \"implementationTasks\": \"- [ ] **Task 1: Extend Grounding Schema with Anchors and Scores**\\n  - Modify `packages/core/src/artifacts/grounding.ts` and `packages/cli/src/utils.ts` to support the new `anchor` object and include `score: number` inside grounding items.\\n  - TEST DIRECTIVE: Before implementing, write a failing test named `rejectsLegacyArtifactWithoutAnchorField` verifying that missing anchor properties fail strict validation constraints.\\n  - write test -> verify fails -> implement -> verify passes -> lint\\n\\n- [ ] **Task 2: Support Hand-Authored Records via `--from`**\\n  - Update `packages/cli/src/commands/spec.ts` to parse `--from <path>` parameters.\\n  - Read the targeted file, compute its SHA-256 hash, and populate the grounding anchor metadata with `kind: \\\"record\\\"`.\\n  - TEST DIRECTIVE: Before implementing, write a failing test named `correctlyBindsHandAuthoredRecordAnchor` that asserts a file passed via `--from` is correctly hashed and anchored.\\n  - write test -> verify fails -> implement -> verify passes -> lint\\n\\n- [ ] **Task 3: Refuse Unanchored Similarity Runs Below Floor**\\n  - Update similarity threshold evaluation in `packages/cli/src/commands/spec.ts` for free-text inputs.\\n  - If no scores meet the floor, print the floor value, its configuration source, and exit non-zero without writing an artifact.\\n  - TEST DIRECTIVE: Before implementing, write a failing test named `refusesUnanchoredTopicBelowFloorWithoutArtifact` that triggers on low similarity and validates the error output format.\\n  - write test -> verify fails -> implement -> verify passes -> lint\\n\\n- [ ] **Task 4: Upgrade Pre-Commit Hook Generator Gate**\\n  - Update hook generation template inside `packages/cli/src/commands/install-hooks.ts` to parse the JSON artifact and assert valid anchor kinds along with a content length > 150 characters.\\n  - TEST DIRECTIVE: Before implementing, write a failing test named `preCommitGateRejectsUnanchoredAndEmptySpecs` in `packages/cli/src/commands/install-hooks.test.ts` to assert that unanchored, empty, or legacy drafts fail the verification gate.\\n  - write test -> verify fails -> implement -> verify passes -> lint\",\n  \"executionFlow\": \"digraph workflow {\\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\\n  verify_fails -> implement [label=\\\"RED only\\\"]\\n  verify_passes -> lint [label=\\\"GREEN required\\\"]\\n  lint -> next_task [label=\\\"0 violations\\\"]\\n  lint -> implement [label=\\\"violations found — fix first\\\"]\\n}\",\n  \"verification\": \"Every implementation MUST end with these steps:\\n1. `totem lint` — deterministic rule check (zero LLM, ~2s). Fixes any violations.\\n2. `totem review` — supplementary AI lanes over the diff (~18s, advisory). Address critical findings; your team's review discipline decides the review of record.\\n3. If using MCP, call `verify_execution` to confirm compliance before declaring the task done.\",\n  \"testPlan\": \"1. **Spec Command Grounding**: Write unit tests validating that `totem spec` successfully hashes and anchors hand-authored files under `--from`, and safely errors out on free-text inputs that fall below similarity score thresholds.\\n2. **Hook Parity Validation**: Write unit and integration tests verifying both the JS/TS verification logic and the generated shell script hook properly block commit sequences if the latest artifact is unanchored or empty.\\n3. **Fallback Resiliency**: Ensure existing test runner suites pass when analyzing legacy run artifacts that lack the new metadata structure, treating them safely as unanchored.\"\n}",
+      "durationMs": 24644,
+      "inputTokens": 5298,
+      "outputTokens": 1773,
+      "finishReason": "STOP",
+      "jsonParsed": true,
+      "keys": [
+        "problemStatement",
+        "architecturalContext",
+        "filesToExamine",
+        "technicalApproachAndContracts",
+        "edgeCasesAndTraps",
+        "implementationTasks",
+        "executionFlow",
+        "verification",
+        "testPlan"
+      ],
+      "emptyValues": [],
+      "missingKeys": [],
+      "markdownLength": 7379,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": true,
+        "reasons": []
+      },
+      "exactHeadingsPresent": 9,
+      "sectionBodyLengths": {
+        "### Problem Statement": 436,
+        "### Architectural Context": 422,
+        "### Files to Examine": 679,
+        "### Technical Approach & Contracts": 1387,
+        "### Edge Cases & Traps": 730,
+        "### Implementation Tasks": 2132,
+        "### Execution Flow (structural constraint)": 306,
+        "### Verification (MANDATORY — do not skip)": 386,
+        "### Test Plan": 632
+      },
+      "textSha256Prefix": "cb123e4288bf"
+    },
+    {
+      "arm": "responseSchema",
+      "run": 2,
+      "ok": true,
+      "text": "{\n  \"problemStatement\": \"The `totem spec` command incorrectly permits unanchored free-text topics to pass through similarity-only searches without verification, generating empty or useless draft artifacts that satisfy the weak pre-commit gate. This task requires enforcing strict grounding checks, rejecting unanchored specs failing retrieval floor limits, recording anchor metadata and retrieval scores, and upgrading the pre-commit gate to validate non-empty, anchored specs.\",\n  \"architecturalContext\": \"Based on the 2026-08-30 strategy ruling, 'totem spec writes a contract only when it is grounded; its output is one retrieval input, never the contract'. We must enforce that unanchored free-text runs without any retrieval hit above the floor exit loudly without writing artifacts. `--from <record>` binds the hand-authored file by recording its SHA-256 and path. The pre-commit gate must be upgraded from merely checking 'a spec ran' to checking 'a spec was anchored (issue or record) and has content (> 100 bytes of non-whitespace)'. This coordinates directly with hooks and run artifact structures.\",\n  \"filesToExamine\": \"packages/cli/src/commands/spec.ts — contains command entrypoint, resolver logic, and prompting pipeline.\\npackages/core/src/artifacts/grounding.ts — contains grounding interfaces, grounding bundle schema, and provenance types.\\npackages/cli/src/utils.ts — contains buildRetrievalGroundingBundle and utility methods for grounding construction.\\npackages/cli/src/commands/install-hooks.ts — contains pre-commit hook installer script template and verification logic.\\npackages/cli/src/commands/install-hooks.test.ts — contains hook and spec evidence testing suites.\",\n  \"technicalApproachAndContracts\": \"1. **Artifact Schema Upgrade**: In `packages/core/src/artifacts/grounding.ts`, add a first-class `anchor` property: `{ kind: 'issue' | 'record' | 'free-text'; ref: string; sha256?: string }`. Modify the individual grounding item interface to include optional `score: number` so that retrieval floors can be evaluated and disclosed.\\n2. **Grounding Resolver Changes**: When executing `totem spec`, resolve the input. If the input is free-text and `--from` is omitted, query the vector DB and evaluate scores. If no item's score exceeds the threshold (the 'floor', sourced from configuration), throw a clean CLI exit error disclosing the floor threshold and source, and skip creating any artifact files. If `--from <path>` is provided, read the file, compute its SHA-256 hash, write the anchor with kind='record', and bypass model drafting to bind the hand-authored file as the spec of record.\\n3. **Pre-commit Gate Upgrade**: In `packages/cli/src/commands/install-hooks.ts` (which templates the pre-commit hook), update the JSON-parsing step of the latest spec run. Ensure it verifies: `grounding.anchor.kind` is 'issue' or 'record', and `output.content` stripped of whitespace is > 100 bytes. Reject empty or unanchored artifacts with a clean exit status.\",\n  \"edgeCasesAndTraps\": \"1. **Whitespace-Only Artifacts**: Some runs might complete with whitespace-only content (e.g. '\\\\n') but record high output token counts due to LLM overhead. We must strictly measure length on trimmed string content rather than raw token counts.\\n2. **Missing Grounding Scores**: Legacy run artifacts in checkout stores do not have 'score' or 'anchor' properties. The upgraded parser must handle these properties gracefully as optional or default to 'free-text' and score '0' to avoid crashing on old runs.\\n3. **Silent Failures**: Ensure that a refusal due to failing the floor limit exits with a non-zero code and outputs to stderr, satisfying the 'silent-to-loud' paradigm.\",\n  \"implementationTasks\": \"- [ ] **Task 1: Update Grounding Artifact Types and Schemas**\\n  Update `packages/core/src/artifacts/grounding.ts` to support the new `anchor` object and add `score` to the grounding items.\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `rejectsLegacyMetadataWithoutAnchor` to verify fallback handling.\\n  Modify types -> update validation schemas -> verify build\\n\\n- [ ] **Task 2: Implement Retrieval Floor Checking and Refusal in Spec Command**\\n  Modify `packages/cli/src/commands/spec.ts` to verify similarity scores against the configured floor. Refuse unanchored free-text if all scores are below the floor, printing the floor and source.\\n  > TOTEM INVARIANT (unanchored refusal): A free-text topic that resolves to no anchor and no knowledge hit above floor must exit non-zero and write NO artifact.\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `refusesUnanchoredSpecBelowFloor` that triggers this clean failure.\\n  Modify spec.ts -> add threshold validation -> prevent artifact creation -> test and lint\\n\\n- [ ] **Task 3: Support Hand-Authored Records via `--from`**\\n  Update the command option parser to accept `--from <record-path>`. Calculate the SHA-256 of the record file, fill the `anchor` object with kind 'record' and the SHA-256, and skip LLM synthesis.\\n  Modify spec.ts command options -> implement SHA-256 calculation -> bypass LLM -> update tests\\n\\n- [ ] **Task 4: Upgrade the Strict Pre-commit Gate**\\n  Update the pre-commit template hook generator in `packages/cli/src/commands/install-hooks.ts` to inspect `grounding.anchor.kind` and assert `output.content` is non-empty (> 100 bytes of trimmed content).\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `preCommitRejectsEmptyOrUnanchoredArtifact` in `packages/cli/src/commands/install-hooks.test.ts`.\\n  Modify pre-commit template script -> parse JSON fields -> implement validator checks -> verify test coverage -> lint\",\n  \"executionFlow\": \"digraph workflow {\\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\\n  verify_fails -> implement [label=\\\"RED only\\\"]\\n  verify_passes -> lint [label=\\\"GREEN required\\\"]\\n  lint -> next_task [label=\\\"0 violations\\\"]\\n  lint -> implement [label=\\\"violations found — fix first\\\"]\\n}\",\n  \"verification\": \"1. Run `totem lint` to ensure zero code formatting or structural violations exist across the modified workspace files.\\n2. Run `totem review` on the resulting git diff to verify hook structure and schemas match the strategic directives.\\n3. Execute the newly added hook checks and spec-resolution tests to ensure complete execution flow verification.\",\n  \"testPlan\": \"1. **Grounding Serialization Test**: Verify that running `totem spec` with a valid issue or a valid record properly serializes `grounding.anchor` and individual item `score` fields.\\n2. **Floor Limit Failure Test**: Mock vector DB results to return scores below the configured floor. Assert `totem spec` exits with code 1, prints the threshold and its configuration source, and does not write any JSON artifact to `.totem/artifacts/runs/`.\\n3. **Gate Verification Test**: In `install-hooks.test.ts`, feed the hook validator with three run JSONs: one empty spec (should fail), one unanchored spec (should fail), and one anchored issue spec with real content (should pass). Confirm the exit codes align with gate requirements.\"\n}",
+      "durationMs": 13871,
+      "inputTokens": 5298,
+      "outputTokens": 1697,
+      "finishReason": "STOP",
+      "jsonParsed": true,
+      "keys": [
+        "problemStatement",
+        "architecturalContext",
+        "filesToExamine",
+        "technicalApproachAndContracts",
+        "edgeCasesAndTraps",
+        "implementationTasks",
+        "executionFlow",
+        "verification",
+        "testPlan"
+      ],
+      "emptyValues": [],
+      "missingKeys": [],
+      "markdownLength": 7130,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": true,
+        "reasons": []
+      },
+      "exactHeadingsPresent": 9,
+      "sectionBodyLengths": {
+        "### Problem Statement": 452,
+        "### Architectural Context": 600,
+        "### Files to Examine": 558,
+        "### Technical Approach & Contracts": 1253,
+        "### Edge Cases & Traps": 673,
+        "### Implementation Tasks": 1949,
+        "### Execution Flow (structural constraint)": 306,
+        "### Verification (MANDATORY — do not skip)": 348,
+        "### Test Plan": 722
+      },
+      "textSha256Prefix": "842a1c5e9d81"
+    },
+    {
+      "arm": "responseJsonSchema-minLength1",
+      "run": 1,
+      "ok": true,
+      "text": "{\n  \"problemStatement\": \"The `totem spec` command drafts unanchored specs for free-text topics without concrete grounding anchors, allowing empty or unanchored run artifacts to satisfy the strict pre-commit gate. We must enforce strict grounding anchors (`issue` or `--from <record>`), publish anchor metadata and retrieval scores in the grounding schema, reject unanchored free-text topics falling below similarity floors, and upgrade the hook/pre-commit gate to validate anchored, non-empty specs.\",\n  \"architecturalContext\": \"Ruled under strategy 2026-08-30. The directive mandates that `totem spec` writes a contract only when grounded, and its output is a retrieval input, never the contract itself. It aligns with mmnto-ai/totem#2691 (the strict pre-commit gate) and mmnto-ai/totem#2692 (the shared hook reader logic). Built to resolve recent issues where 4/4 slug-topic runs confabulated and empty drafts satisfied the gate.\",\n  \"filesToExamine\": \"1. `packages/cli/src/commands/spec.ts` — Command implementation where input parsing, topic resolution, and LLM orchestration are executed.\\n2. `packages/cli/src/commands/install-hooks.ts` — Location of the pre-commit gate script compilation logic.\\n3. `packages/core/src/artifacts/grounding.ts` — Grounding bundle structures and metadata schemas including item provenances.\\n4. `packages/cli/src/utils.ts` — Helper methods including `buildRetrievalGroundingBundle` where artifact schemas are created.\\n5. `packages/cli/src/commands/install-hooks.test.ts` — Contains the spec-evidence unit testing for pre-commit gate behavior.\\n6. `tools-hook-parity.test.ts` — Verification tests for parity across scripts and compiled pre-commit tools.\",\n  \"technicalApproachAndContracts\": \"1. **Schema & Contract Updates**:\\n   - Enhance `grounding.ts` to support the anchor schema: `grounding.anchor: { kind: \\\"issue\\\" | \\\"record\\\" | \\\"free-text\\\", ref: string, sha256?: string }`.\\n   - Extend individual retrieval item schemas to include an optional `score: number` field representing vector similarity.\\n2. **Grounding & CLI Enforcements**:\\n   - Map issues to anchor `kind: \\\"issue\\\"`.\\n   - Support `--from <path>` to ground on hand-authored design records. Read the target path, compute its sha256, and register anchor `kind: \\\"record\\\"` with `sha256` and `ref`.\\n   - For free-text slugs with no issue/record, map anchor `kind: \\\"free-text\\\"`.\\n   - If any free-text topic run yields no knowledge retrieval results above the configured minimum floor, terminate immediately with a non-zero exit code, print the floor threshold and its configuration source, and write no run artifact JSON.\\n3. **Gate/Hook Reader Upgrades**:\\n   - Upgrade the hook generator in `install-hooks.ts` and `tools/pre-commit` to inspect the latest spec artifact's `grounding.anchor.kind` property, asserting that it belongs to the set `{\\\"issue\\\", \\\"record\\\"}`.\\n   - Assert that `output.content` contains a drafted document that is non-empty by content (at least 200 characters of trimmed, non-whitespace body).\",\n  \"edgeCasesAndTraps\": \"1. **Backward Compatibility**: Existing or legacy spec artifacts will lack the `grounding.anchor` structure. The upgraded hook reader must handle missing properties gracefully (treating them as unanchored/invalid rather than throwing runtime exceptions).\\n2. **Refusal Hallucinations**: An LLM refusing to write a spec might output a refusal message over 200 bytes. Requiring `grounding.anchor.kind` to be strictly `issue` or `record` prevents these runs from qualifying as valid spec evidence.\\n3. **Checksum Stability**: The SHA256 of hand-authored design records must be calculated on normalized file content (e.g., handling line-ending differences) to guarantee cross-platform build consistency.\",\n  \"implementationTasks\": \"- [ ] **Task 1: Extend Grounding and Retrieval Schema Contracts**\\n      Update the Zod schemas and type definitions in `packages/core/src/artifacts/grounding.ts` to include the `anchor` field and optional similarity `score` in grounding items. Verify that legacy artifacts without these properties parse with safe fallback defaults.\\n      - Name the files to modify: `packages/core/src/artifacts/grounding.ts`\\n      - Write test -> verify fails -> implement -> verify passes -> lint.\\n\\n- [ ] **Task 2: Implement Refusal and Similarity Floor Enforcements in `totem spec`**\\n      Modify `buildRetrievalGroundingBundle` in `packages/cli/src/utils.ts` and the main command in `packages/cli/src/commands/spec.ts` to enforce the minimum similarity score floor. If the highest retrieval score is below the threshold, exit non-zero, output the threshold value and its configuration source, and generate no artifact.\\n      - Name the files to modify: `packages/cli/src/commands/spec.ts`, `packages/cli/src/utils.ts`\\n      > TEST DIRECTIVE: Before implementing, write a failing test named `rejectsUnanchoredTopicBelowFloor` that proves a free-text run below the score floor exits non-zero and writes no artifact file.\\n      - Write test -> verify fails -> implement -> verify passes -> lint.\\n\\n- [ ] **Task 3: Implement `--from <record>` Anchor Binding**\\n      Add `--from <path>` parsing support. When provided, verify path existence, compute its SHA256, and populate the grounding anchor with `kind: \\\"record\\\"`, `ref: path`, and `sha256: computedHash`.\\n      - Name the files to modify: `packages/cli/src/commands/spec.ts`\\n      - Write test -> verify fails -> implement -> verify passes -> lint.\\n\\n- [ ] **Task 4: Upgrade the Hook Generator and Gate Script**\\n      In `packages/cli/src/commands/install-hooks.ts`, modify the compiled `tools/pre-commit` template block. Ensure the parser verifies the latest spec artifact is anchored (`kind: \\\"issue\\\"` or `kind: \\\"record\\\"`) and has a non-empty `output.content` (> 200 characters of trimmed text).\\n      - Name the files to modify: `packages/cli/src/commands/install-hooks.ts`\\n      > TEST DIRECTIVE: Before implementing, write a failing test named `gateRejectsEmptyOrUnanchoredArtifacts` that feeds the hook reader an unanchored run or an empty-content run and proves the gate fails.\\n      - Write test -> verify fails -> implement -> verify passes -> lint.\\n\\n- [ ] **Task 5: Update Gate Test Suites and Hook Parity**\\n      Update testing fixtures and mock artifacts in the gate verification test suite to ensure they correctly mirror and pass the new hook validations.\\n      - Name the files to modify: `packages/cli/src/commands/install-hooks.test.ts`, `tools-hook-parity.test.ts`\\n      - Write test -> verify fails -> implement -> verify passes -> lint.\",\n  \"executionFlow\": \"```dot\\ndigraph workflow {\\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\\n  verify_fails -> implement [label=\\\"RED only\\\"]\\n  verify_passes -> lint [label=\\\"GREEN required\\\"]\\n  lint -> next_task [label=\\\"0 violations\\\"]\\n  lint -> implement [label=\\\"violations found — fix first\\\"]\\n}\\n```\",\n  \"verification\": \"All implementation efforts must be verified sequentially:\\n1. Execute `totem lint` to ensure 100% compliance with repository formatting, type-safety, and structural constraints.\\n2. Execute `totem review` to inspect implementation changes through advisory lanes.\\n3. Run all unit and integration tests inside `packages/cli/src/commands/install-hooks.test.ts` and `tools-hook-parity.test.ts` to prove correct gate behaviors.\",\n  \"testPlan\": \"1. **Artifact Metadata Verification**: Assert grounding bundles preserve and correctly parse `anchor` metadata and retrieval scores.\\n2. **Floor Constraint Verification**: Verify running `totem spec` with a free-text slug below the similarity score limit results in non-zero exit codes, error transparency, and zero minted artifacts.\\n3. **Binding Record Verification**: Ensure passing `--from <path>` binds the target file's path and SHA256 accurately in the resulting grounding artifact.\\n4. **Gate Compliance Verification**: Test that `tools/pre-commit` successfully rejects runs that are empty, only contain whitespace, contain refusal messages with no valid structures, or have an anchor kind of `free-text`.\"\n}",
+      "durationMs": 26302,
+      "inputTokens": 5298,
+      "outputTokens": 2009,
+      "finishReason": "STOP",
+      "jsonParsed": true,
+      "keys": [
+        "problemStatement",
+        "architecturalContext",
+        "filesToExamine",
+        "technicalApproachAndContracts",
+        "edgeCasesAndTraps",
+        "implementationTasks",
+        "executionFlow",
+        "verification",
+        "testPlan"
+      ],
+      "emptyValues": [],
+      "missingKeys": [],
+      "markdownLength": 8090,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": true,
+        "reasons": []
+      },
+      "exactHeadingsPresent": 9,
+      "sectionBodyLengths": {
+        "### Problem Statement": 474,
+        "### Architectural Context": 402,
+        "### Files to Examine": 731,
+        "### Technical Approach & Contracts": 1279,
+        "### Edge Cases & Traps": 697,
+        "### Implementation Tasks": 2791,
+        "### Execution Flow (structural constraint)": 317,
+        "### Verification (MANDATORY — do not skip)": 420,
+        "### Test Plan": 710
+      },
+      "textSha256Prefix": "d4516c7cc949"
+    },
+    {
+      "arm": "responseJsonSchema-minLength1",
+      "run": 2,
+      "ok": true,
+      "text": "{\"problemStatement\":\"The spec-first pre-commit gate allows empty or unanchored free-text spec run artifacts to satisfy commit validation. The `totem spec` command must refuse unanchored free-text topics below configured score floors, support `--from <path>` to bind hand-authored records, and the pre-commit hook must enforce both non-empty content and valid anchored run artifacts (issue or record).\",\"architecturalContext\":\"As ruled in strategy 2026-08-30 (queued behind the seed-20 run of record), `totem spec` must write a contract only when grounded and its output should be used for retrieval input, never the contract itself. Historically, 53/53 spec runs lacked specific anchor metadata beyond a generic 'similarity-only' tag, permitting unanchored topics and empty drafts to slip through the strict pre-commit gate (defined in mmnto-ai/totem#2691).\",\"filesToExamine\":\"- `packages/cli/src/commands/spec.ts` — Contains the spec generation command, the input resolver, and the run artifact persistence logic.\\\\n- `packages/core/src/artifacts/grounding.ts` — Defines the schemas, types, and summary generator for grounding bundles.\\\\n- `packages/cli/src/commands/install-hooks.ts` — Generates the pre-commit hook script including the latest spec run validation logic.\\\\n- `packages/cli/src/commands/install-hooks.test.ts` — Tests for validating pre-commit hook behavior and artifact parsing.\",\"technicalApproachAndContracts\":\"1. **Contract Upgrades**: Modify the grounding bundle type and schema inside `packages/core/src/artifacts/grounding.ts` to add a first-class `anchor` property: `{ kind: 'issue' | 'record' | 'free-text'; ref: string; sha256?: string }`. Also, ensure each retrieved item includes its retrieval `score: number` to make floor thresholds evaluatable.\\\\n2. **Spec Resolver Refinement**: In `packages/cli/src/commands/spec.ts`, if resolving a free-text topic with no issue or record anchor, perform vector/knowledge retrieval and check retrieved scores against the floor threshold. If below the threshold, log the floor and highest score, then exit with code 1 without minting any JSON artifact.\\\\n3. **Hand-Authored Record Binding**: Implement `--from <design-record path>`. When used, read the file, compute its SHA256, set the anchor kind to 'record' with the ref and sha256, and save the artifact directly as grounded without invoking the LLM.\\\\n4. **Pre-Commit Gate Upgrade**: In `packages/cli/src/commands/install-hooks.ts`, upgrade the hook logic to find the newest run artifact where `admission.runMetadata.caller === 'spec'`. Check that `grounding.anchor.kind` is either 'issue' or 'record' AND that `output.content` is non-empty by content (at least 120 bytes of non-trivial structured text). Ensure safe navigation to prevent crashes on older, unanchored artifacts.\",\"edgeCasesAndTraps\":\"1. **Older Run Artifacts**: Legacy JSON files in `.totem/artifacts/runs/` will not have `grounding.anchor` defined. The parser in the pre-commit hook must use safe optional chaining (e.g., `run?.grounding?.anchor?.kind`) and treat missing anchors as unanchored/invalid rather than throwing a script execution error.\\\\n2. **Trivial/Refusal Outputs**: A model refusal message or minor whitespace draft satisfies simple length checks. We must check for at least 120 bytes of non-whitespace characters and ensure the anchor restriction restricts these runs to authorized issues/records anyway.\\\\n3. **Hook Parity and Generation**: Modifications to `install-hooks.ts` must match what is validated in `tools-hook-parity.test.ts` and actual shell/node templates to prevent lint/test mismatches.\",\"implementationTasks\":\"- [ ] **Task 1: Grounding Schema Upgrades**\\\\n  - Modify `packages/core/src/artifacts/grounding.ts` to append `score: number` to individual retrieved items and add `anchor: { kind: 'issue' | 'record' | 'free-text'; ref: string; sha256?: string }` to the GroundingBundle schema.\\\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `rejectsGroundingWithMissingOrInvalidAnchor` in grounding test suite.\\\\n  - Run test -> verify fails -> implement -> verify passes -> lint.\\\\n- [ ] **Task 2: Implement Score Floor Enforcement and Unanchored Refusal**\\\\n  - Modify `packages/cli/src/commands/spec.ts` to intercept free-text runs. Check retrieved item scores against floor value; if below floor, exit non-zero with diagnostic text and avoid writing any run artifact.\\\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `refusesUnanchoredTopicBelowFloorWithoutMintingArtifact` in spec CLI tests.\\\\n  - Run test -> verify fails -> implement -> verify passes -> lint.\\\\n- [ ] **Task 3: Implement Record Binding via --from Option**\\\\n  - In `packages/cli/src/commands/spec.ts`, add the `--from` command option. If present, read the hand-authored file, calculate its SHA256, and populate the grounding anchor record fields without generating a new draft via LLM.\\\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `bindsHandAuthoredRecordWithSha256Anchor` verifying that the `--from` flag writes the correct sha256 and ref to the run file.\\\\n  - Run test -> verify fails -> implement -> verify passes -> lint.\\\\n- [ ] **Task 4: Upgrade Hook Gate Spec Verification**\\\\n  - Modify `packages/cli/src/commands/install-hooks.ts` to evaluate the newest spec run artifact's `grounding.anchor.kind` (enforce 'issue' or 'record') and ensure `output.content` is at least 120 bytes of actual text.\\\\n  > TEST DIRECTIVE: Before implementing, write a failing test named `rejectsEmptyOrUnanchoredArtifactsInPreCommitGate` in hook tests.\\\\n  - Run test -> verify fails -> implement -> verify passes -> lint.\",\"executionFlow\":\"digraph workflow {\\\\n  spec -> write_test -> verify_fails -> implement -> verify_passes -> lint -> next_task\\\\n  verify_fails -> implement [label='RED only']\\\\n  verify_passes -> lint [label='GREEN required']\\\\n  lint -> next_task [label='0 violations']\\\\n  lint -> implement [label='violations found — fix first']\\\\n}\",\"verification\":\"1. `totem lint` — deterministic rule check (zero LLM, ~2s) to fix any syntax or styling violations.\\\\n2. `totem review` — supplementary AI lanes over the diff (~18s, advisory) to ensure architectural correctness.\\\\n3. Execute manual or programmatic validation of pre-commit scripts on a dummy repo state via `verify_execution` tool.\",\"testPlan\":\"1. **Unit Tests (Grounding)**: Verify that the grounding Zod schema successfully validates and parses anchor formats (`issue`, `record`, `free-text`) and individual item retrieval scores.\\\\n2. **Integration Tests (CLI Spec Command)**: Mock high and low score retrievals to verify that low scores successfully exit with non-zero status code and display appropriate floor disclosures without creating files. Mock a `--from` path execution to verify correct sha256 binding.\\\\n3. **Integration Tests (Pre-commit Hooks)**: Provide mock `.totem/artifacts/runs/` folder with varying artifacts (empty content, unanchored, old formats, valid records/issues) and verify that only non-empty, properly-anchored run files successfully pass hook validation.\"}",
+      "durationMs": 34142,
+      "inputTokens": 5298,
+      "outputTokens": 1742,
+      "finishReason": "STOP",
+      "jsonParsed": true,
+      "keys": [
+        "problemStatement",
+        "architecturalContext",
+        "filesToExamine",
+        "technicalApproachAndContracts",
+        "edgeCasesAndTraps",
+        "implementationTasks",
+        "executionFlow",
+        "verification",
+        "testPlan"
+      ],
+      "emptyValues": [],
+      "missingKeys": [],
+      "markdownLength": 7150,
+      "reader": {
+        "ok": true,
+        "reasons": []
+      },
+      "readerAllNine": {
+        "ok": true,
+        "reasons": []
+      },
+      "exactHeadingsPresent": 9,
+      "sectionBodyLengths": {
+        "### Problem Statement": 379,
+        "### Architectural Context": 431,
+        "### Files to Examine": 516,
+        "### Technical Approach & Contracts": 1366,
+        "### Edge Cases & Traps": 785,
+        "### Implementation Tasks": 2021,
+        "### Execution Flow (structural constraint)": 312,
+        "### Verification (MANDATORY — do not skip)": 330,
+        "### Test Plan": 741
+      },
+      "textSha256Prefix": "737da245802c"
+    }
+  ]
+}

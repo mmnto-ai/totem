@@ -1,0 +1,170 @@
+{
+  "generatedAt": "2026-09-02T21:09:14.936Z",
+  "dbPath": "D:\\Dev\\totem\\.lancedb",
+  "table": "totem_chunks",
+  "tableRowCount": 5903,
+  "indices": [
+    {
+      "name": "content_idx",
+      "indexType": "FTS",
+      "columns": [
+        "content"
+      ]
+    }
+  ],
+  "storedVectorNorms": {
+    "n": 2000,
+    "min": 0.99999918506041,
+    "p5": 0.9999996230097485,
+    "median": 1.0000000159527795,
+    "mean": 1.000000013390915,
+    "p95": 1.0000003953576584,
+    "max": 1.0000007567175073,
+    "unitNorm": true,
+    "tolerance": 0.001,
+    "sampled": 2000
+  },
+  "queryVectorNorms": [
+    {
+      "chars": 692,
+      "preview": "tooling: bare `bash` resolves to WSL on Windows — export ONE",
+      "dims": 768,
+      "norm": 1.0000000459165832
+    },
+    {
+      "chars": 621,
+      "preview": "status: 'Rules: 0 compiled' when manifest absent contradicts",
+      "dims": 768,
+      "norm": 0.9999997838221546
+    },
+    {
+      "chars": 621,
+      "preview": "mail CLI: add a seat-specific --self/--to selector + documen",
+      "dims": 768,
+      "norm": 1.0000000573163943
+    },
+    {
+      "chars": 26,
+      "preview": "xyzzy plugh qwertyuiop zzz",
+      "dims": 768,
+      "norm": 1.000000154327807
+    },
+    {
+      "chars": 32,
+      "preview": "blorptak fnord wibblewobble quux",
+      "dims": 768,
+      "norm": 0.9999998715371231
+    }
+  ],
+  "queryVectorsUnitNorm": true,
+  "metric": {
+    "determined": "l2sq",
+    "trials": [
+      {
+        "a": {
+          "filePath": "packages/mcp/src/utils.ts",
+          "label": "function: detectPackageManager",
+          "type": "code"
+        },
+        "selfHit": {
+          "isSelf": true,
+          "filePath": "packages/mcp/src/utils.ts",
+          "label": "function: detectPackageManager",
+          "_distance": 0,
+          "vectorIdentical": true
+        },
+        "b": {
+          "filePath": "packages/cli/src/orchestrators/orchestrator.ts",
+          "label": "function: detectPackageManager",
+          "sdkDistance": 0.30962544679641724
+        },
+        "handComputed": {
+          "l2": 0.556439973755524,
+          "l2sq": 0.3096254443930483,
+          "cos": 0.8451872159165481,
+          "oneMinusCos": 0.1548127840834519
+        },
+        "matches": {
+          "l2": false,
+          "l2sq": true,
+          "cos": false,
+          "oneMinusCos": false
+        },
+        "cosineDistanceForB": 0.15481287240982056
+      },
+      {
+        "a": {
+          "filePath": ".gemini/skills/totem.md",
+          "label": ".gemini/skills/totem.md",
+          "type": "spec"
+        },
+        "selfHit": {
+          "isSelf": true,
+          "filePath": ".gemini/skills/totem.md",
+          "label": ".gemini/skills/totem.md",
+          "_distance": 0,
+          "vectorIdentical": true
+        },
+        "b": {
+          "filePath": ".gemini/skills/signoff.md",
+          "label": ".gemini/skills/signoff.md",
+          "sdkDistance": 0.2731357514858246
+        },
+        "handComputed": {
+          "l2": 0.5226239297945754,
+          "l2sq": 0.27313577199392525,
+          "cos": 0.8634320917294267,
+          "oneMinusCos": 0.1365679082705733
+        },
+        "matches": {
+          "l2": false,
+          "l2sq": true,
+          "cos": false,
+          "oneMinusCos": false
+        },
+        "cosineDistanceForB": 0.13656795024871826
+      },
+      {
+        "a": {
+          "filePath": ".totem/lessons/testing-conventions.md",
+          "label": "Lesson",
+          "type": "lesson"
+        },
+        "selfHit": {
+          "isSelf": true,
+          "filePath": ".totem/lessons/testing-conventions.md",
+          "label": "Lesson",
+          "_distance": 0,
+          "vectorIdentical": true
+        },
+        "b": {
+          "filePath": ".totem/lessons/testing-conventions.md",
+          "label": "Lesson > Testing Conventions",
+          "sdkDistance": 0.2628495991230011
+        },
+        "handComputed": {
+          "l2": 0.5126885816854466,
+          "l2sq": 0.26284958179063483,
+          "cos": 0.868575199704946,
+          "oneMinusCos": 0.131424800295054
+        },
+        "matches": {
+          "l2": false,
+          "l2sq": true,
+          "cos": false,
+          "oneMinusCos": false
+        },
+        "cosineDistanceForB": 0.13142478466033936
+      }
+    ],
+    "sdkVersion": "0.26.2",
+    "sdkDefaultDoc": "query.d.ts VectorQuery.distanceType: \"Set the distance metric to use ... By default \\\"l2\\\" is used.\"",
+    "sdkMetricDoc": "indices.d.ts IvfPqOptions.distanceType: \"l2\" - Euclidean distance ... range of [0, inf). \"cosine\" - Cosine distance ... range of [0, 2]. \"dot\" - Dot product ... range of (-inf, inf)."
+  },
+  "relevanceRangeForUnitVectors": {
+    "distance": "[0, 4]",
+    "relevance": "[1/5, 1] = [0.2, 1]"
+  },
+  "embedderTaskType": "RETRIEVAL_DOCUMENT (gemini-embedder.ts embedWithRetry — same for queries)",
+  "wallMs": 1615
+}

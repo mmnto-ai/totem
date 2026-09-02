@@ -1,0 +1,1834 @@
+{
+  "at": "2026-09-02T21:55:30.907Z",
+  "labelStats": {
+    "pairsLabelled": 814,
+    "byLabel": {
+      "0": 413,
+      "1": 141,
+      "2": 260
+    },
+    "missingLookups": 478
+  },
+  "issueAnchored": {
+    "n": 31,
+    "arms": {
+      "baseline": {
+        "meanP8": 0.3952,
+        "meanP5spec": 0.1097,
+        "meanP3code": 0.871,
+        "gainP8": 0,
+        "noRegression": 31,
+        "improved": 0,
+        "regressed": 0
+      },
+      "ce-rerank": {
+        "meanP8": 0.3226,
+        "meanP5spec": 0.0774,
+        "meanP3code": 0.7312,
+        "gainP8": -0.0726,
+        "noRegression": 15,
+        "improved": 7,
+        "regressed": 16
+      },
+      "query-tasktype": {
+        "meanP8": 0.3911,
+        "meanP5spec": 0.1032,
+        "meanP3code": 0.871,
+        "gainP8": -0.004,
+        "noRegression": 29,
+        "improved": 1,
+        "regressed": 2
+      },
+      "ce-top10": {
+        "meanP8": 0.3266,
+        "meanP5spec": 0.1032,
+        "meanP3code": 0.6989,
+        "gainP8": -0.0685,
+        "noRegression": 16,
+        "improved": 4,
+        "regressed": 15
+      },
+      "ce-top20": {
+        "meanP8": 0.3347,
+        "meanP5spec": 0.0968,
+        "meanP3code": 0.7312,
+        "gainP8": -0.0605,
+        "noRegression": 16,
+        "improved": 7,
+        "regressed": 15
+      }
+    }
+  },
+  "topicAnchored": {
+    "n": 24,
+    "arms": {
+      "baseline": {
+        "meanP8": 0.375,
+        "meanP5spec": 0.1333,
+        "meanP3code": 0.7778,
+        "gainP8": 0,
+        "noRegression": 24,
+        "improved": 0,
+        "regressed": 0
+      },
+      "ce-rerank": {
+        "meanP8": 0.3385,
+        "meanP5spec": 0.075,
+        "meanP3code": 0.7778,
+        "gainP8": -0.0365,
+        "noRegression": 17,
+        "improved": 4,
+        "regressed": 7
+      },
+      "query-tasktype": {
+        "meanP8": 0.3698,
+        "meanP5spec": 0.125,
+        "meanP3code": 0.7778,
+        "gainP8": -0.0052,
+        "noRegression": 23,
+        "improved": 0,
+        "regressed": 1
+      },
+      "ce-top10": {
+        "meanP8": 0.349,
+        "meanP5spec": 0.1167,
+        "meanP3code": 0.7361,
+        "gainP8": -0.026,
+        "noRegression": 17,
+        "improved": 4,
+        "regressed": 7
+      },
+      "ce-top20": {
+        "meanP8": 0.3438,
+        "meanP5spec": 0.0833,
+        "meanP3code": 0.7778,
+        "gainP8": -0.0313,
+        "noRegression": 17,
+        "improved": 4,
+        "regressed": 7
+      }
+    }
+  },
+  "cost": {
+    "baseline": {
+      "addedMsP95": 0,
+      "note": "production path; no added latency"
+    },
+    "ce-rerank": {
+      "addedMsP95": 32302,
+      "addedMsMean": 24575,
+      "measured": true,
+      "pairsMean": 91.5
+    },
+    "query-tasktype": {
+      "addedMsP95": 616,
+      "addedMsMean": 421,
+      "measured": true,
+      "note": "one extra embed call per query (RETRIEVAL_QUERY) + two vector legs; replaces the production embed in a real deployment"
+    },
+    "ce-top10": {
+      "addedMsMeanDerived": 5369,
+      "addedMsP95Derived": 5374,
+      "measured": false,
+      "pairsMean": 20,
+      "note": "derived from the measured ms/pair (268.7); not a timed run"
+    },
+    "ce-top20": {
+      "addedMsMeanDerived": 9424,
+      "addedMsP95Derived": 10211,
+      "measured": false,
+      "pairsMean": 35.1,
+      "note": "derived from the measured ms/pair (268.7); not a timed run"
+    }
+  },
+  "verdictsOnThe31": {
+    "ce-rerank": {
+      "i_gain_ge_0_10": false,
+      "ii_noRegression_ge_24": false,
+      "iii_p95_le_2000ms": false,
+      "pass": false,
+      "preRegistered": true,
+      "p95Ms": 32302,
+      "p95Measured": true
+    },
+    "query-tasktype": {
+      "i_gain_ge_0_10": false,
+      "ii_noRegression_ge_24": true,
+      "iii_p95_le_2000ms": true,
+      "pass": false,
+      "preRegistered": true,
+      "p95Ms": 616,
+      "p95Measured": true
+    },
+    "ce-top10": {
+      "i_gain_ge_0_10": false,
+      "ii_noRegression_ge_24": false,
+      "iii_p95_le_2000ms": false,
+      "pass": false,
+      "preRegistered": false,
+      "p95Ms": 5374,
+      "p95Measured": false
+    },
+    "ce-top20": {
+      "i_gain_ge_0_10": false,
+      "ii_noRegression_ge_24": false,
+      "iii_p95_le_2000ms": false,
+      "pass": false,
+      "preRegistered": false,
+      "p95Ms": 10211,
+      "p95Measured": false
+    }
+  },
+  "perQuery": [
+    {
+      "id": "03fb1a579611a250498fec9e888aa96861322dc6c5d91f6fdaafd6733a6da159",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 1,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 95
+      }
+    },
+    {
+      "id": "0426a34ae471a19094a972b2d2a3543f4ba8017feaa1a18507f5e6a5de385913",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 98
+      }
+    },
+    {
+      "id": "0b83049355cf19558d89e51bf06ce4721900393af7954c37339fc9fce22348c8",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 92
+      }
+    },
+    {
+      "id": "0eb7c23caad428c611ecce352574811792e1ed7cc384c1f9926ed1f4695ebf03",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 86
+      }
+    },
+    {
+      "id": "1331db73b056806a2d1b1251b9c780ed3b53c21f858d1f4301b2c1929c998f4b",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.5,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 1,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 98
+      }
+    },
+    {
+      "id": "18dbd77a66a99e1b59b7b61bbaf410c7a25663663c1b9a19ee6429885f27694e",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 1,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 87
+      }
+    },
+    {
+      "id": "1a7353e7fcc6f24a6072efd4d81473e71a78ac8e6574b8f2c1b2ee65dd9d4927",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.625,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.625,
+        "ce-top10": 0.625,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0,
+        "query-tasktype": 0.4,
+        "ce-top10": 0.4,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 87
+      }
+    },
+    {
+      "id": "1bd416c1a8c85cb13563dff0ed3ae7426b811775cdd4efc232fd069160e163c4",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 86
+      }
+    },
+    {
+      "id": "2017563ef959a616af39479c63d09947c56a15ce176c0bb977bd27f7dfc6e831",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 90
+      }
+    },
+    {
+      "id": "29bacc3ea8f1b4707785869f4db41874aec00745410770998013c85ee4865596",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.625,
+        "ce-rerank": 0.625,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.625,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0.4,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.4,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 92
+      }
+    },
+    {
+      "id": "2a1603dd9139d494d07ac674e43c5eee7f728656330b330124f5e4c7b533a2ca",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 112
+      }
+    },
+    {
+      "id": "2a5ce271fc73394e698a47aae7e7e75040b319857b4dc7532198c3eaaacd2625",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 106
+      }
+    },
+    {
+      "id": "353b28b810accf507916e58e03b538fda3b6afe3557009d6189a0f7e03ddc25c",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 75
+      }
+    },
+    {
+      "id": "43b0939a14bb64558242cc1477146788577b1d4723835d20227e89dca1bc991a",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 92
+      }
+    },
+    {
+      "id": "480fe8e8567fb33c3850ad99b6927d7847bc347fc3ce679ebf767990d54fde6c",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 1,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 109
+      }
+    },
+    {
+      "id": "4d666857069ad3c03876674cbea272ea80db37827ab09e48247140d26db1886e",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 32,
+        "ce-rerank": 73
+      }
+    },
+    {
+      "id": "4fb89ea7d086a3cae25958e4f84043fe8883a50917739765167e2ac78104f312",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.625,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.625,
+        "ce-top10": 0.625,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.4,
+        "ce-top10": 0.4,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 84
+      }
+    },
+    {
+      "id": "511fa4102fed11e3944cb1eb135c568f7a3aef991e773bf04a8e4c70227270bc",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.4,
+        "ce-top10": 0.4,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 79
+      }
+    },
+    {
+      "id": "518e6de3fc72978010f870a1b8aa7d3954482e37d4ff5decd55d31238792664b",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.125,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.125,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 88
+      }
+    },
+    {
+      "id": "5628da37762f7bc2b29bc20167972b8d9802b926a68cf7d672248415479cfa17",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.125,
+        "ce-rerank": 0.125,
+        "query-tasktype": 0.125,
+        "ce-top10": 0,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0.3333333333333333,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0,
+        "ce-top20": 0.3333333333333333
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 86
+      }
+    },
+    {
+      "id": "56fcaf32514661d6be5f4a0a5a9ae538871ee51b63cea1affb2e155a5d66b14c",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.625,
+        "ce-top10": 0.5,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.4,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 94
+      }
+    },
+    {
+      "id": "56fd363b7989c65ad28e9bfb8813146925f931438130183d030753e853133160",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.625,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.5,
+        "ce-top20": 0.625
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.4,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.4
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 94
+      }
+    },
+    {
+      "id": "5b37047f3585f3cd4738e141e7eb34f6caed97c6f0d3bd64ffb1232ab22b84eb",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 83
+      }
+    },
+    {
+      "id": "60f7b069c8a6930abb6021903e50c4460d9c9ee0287c726ea893fed0013d5953",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 100
+      }
+    },
+    {
+      "id": "6d167986d57dfab8220b4d84e0dfaff2daa4703865f78b04461058c3dce14f93",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.25,
+        "ce-top20": 0
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0,
+        "query-tasktype": 1,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 88
+      }
+    },
+    {
+      "id": "7a9c818c5f033f4f88a749aa1910f358b184c4b27b10648156250f638a626906",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 32,
+        "ce-rerank": 91
+      }
+    },
+    {
+      "id": "819b41c2a82e9c8f64ef4200849c5ad61ef73caafad52c865a627ff2ec6d9947",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.625,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.375,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 90
+      }
+    },
+    {
+      "id": "83d431a2604aebbe0ebd6651929daec74dd7d818ed44b960394c1c38ca5b3303",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 101
+      }
+    },
+    {
+      "id": "871bdbd72e1677c3fb61e6d709a5c27b40b05d57992ee00a7a22369f393ec1cf",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 114
+      }
+    },
+    {
+      "id": "87ef36b6a6ce358b2aebf383142ebf9b4b499e76890b4e04b84806e898d525a9",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 97
+      }
+    },
+    {
+      "id": "8be1a66a399e7cde001812bdbefa7a1bf277448d1bd07f135722481fac355691",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 82
+      }
+    },
+    {
+      "id": "940ec4c9647eb15ad28269284b432795ba89382117b6c83552bf0750cf6e1496",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.125,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.3333333333333333,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 88
+      }
+    },
+    {
+      "id": "9de640436f13fb6b7bd9d24d12a439b1eabc12f0cc361c6f2c715928eed584f4",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.5,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 111
+      }
+    },
+    {
+      "id": "9e87194b8a122d2d7496a1e27b285d3880cf217e06b99902e4b236f7812d0503",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 84
+      }
+    },
+    {
+      "id": "9f75c4989ba56898bfee862532dcc9cc1916fb44d4371e970d546ead22a16f55",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 1,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 78
+      }
+    },
+    {
+      "id": "a498ded3984740547f20dd884df056b362e585f02460434bdac1eaf4c980309e",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 19,
+        "ce-top20": 29,
+        "ce-rerank": 69
+      }
+    },
+    {
+      "id": "a4d12d22ccb52f72955737a64a1d2848ed51b35a924fa2363aae3c93411c702e",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.25,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 98
+      }
+    },
+    {
+      "id": "a8ad7218d13daf800fe65c1004c5d0469ff6fa9a55a68471bbdc9486d388244d",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 97
+      }
+    },
+    {
+      "id": "aeb91debdf17037570de7c216f270d07999ba9dff006af7deb344b3a077343e9",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.125,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.125,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 1,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 38,
+        "ce-rerank": 84
+      }
+    },
+    {
+      "id": "afbe3e235bac05cecb61ac5c3a15c3f9c660ebe8db4ca12dc810e0792ff8aed1",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0.4,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.3333333333333333,
+        "ce-rerank": 0,
+        "query-tasktype": 0.3333333333333333,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 85
+      }
+    },
+    {
+      "id": "b1cf42a04197bb200725bf5f905323ea45d82188341edc6c969c282f1883719b",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 78
+      }
+    },
+    {
+      "id": "b23b1ad4362b0207271d2638a88c9242246bef95faf8221e82f9889fef7d3af3",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.125,
+        "ce-top20": 0.125
+      },
+      "p5spec": {
+        "baseline": 0.6,
+        "ce-rerank": 0,
+        "query-tasktype": 0.6,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 79
+      }
+    },
+    {
+      "id": "bd0782d14303f9354d4238b60dcae275725791cdea87321b3de85fcce6c95dda",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 83
+      }
+    },
+    {
+      "id": "be5140ac0f7007864002e6d154f34ba22f37fea5cd449d6df290acc04fd31096",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.5,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 96
+      }
+    },
+    {
+      "id": "c609892831014dbe19f9a407b8defd98d8e5d65a9154b76eaeddc88dea46abc6",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 93
+      }
+    },
+    {
+      "id": "cf2ebc4a2c824b602a1e9a57e011a300d2aa8f5168959ccdd651bc986165ee73",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.25,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.25,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 109
+      }
+    },
+    {
+      "id": "d2c006865363a78b5860c911439f8b2156e0a912ac1ee07ef9b5e0171ab98303",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 37,
+        "ce-rerank": 95
+      }
+    },
+    {
+      "id": "d34c7bb79f45e8956f22d57be951de73a4e84ca5f090a0ec2f0d9460d30b9a7e",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 34,
+        "ce-rerank": 90
+      }
+    },
+    {
+      "id": "d3afa2a8a8ebb00fa04f261e51a6b05ecacbd1d449f6ec92cd5041c933521c82",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.25,
+        "ce-top20": 0.25
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 101
+      }
+    },
+    {
+      "id": "da927720b0803e845a6bb82cf552af5bc7af307aa0c7e75a6215fadc3ada285f",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.5,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0.2,
+        "query-tasktype": 0,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 35,
+        "ce-rerank": 98
+      }
+    },
+    {
+      "id": "dc3c90969c028c5a861e1140ea412945cc54590d795b903f83fbc1e913f6cac4",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.25,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.2
+      },
+      "p3code": {
+        "baseline": 0.6666666666666666,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 0.6666666666666666,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 97
+      }
+    },
+    {
+      "id": "e1a1c6d381877a8d471f09f09672dc036e04594cc4d840ba0befd0ad59a42310",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.5,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.5,
+        "ce-top20": 0.5
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.4,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.4,
+        "ce-top20": 0.4
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 0.6666666666666666,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 0.6666666666666666
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 33,
+        "ce-rerank": 101
+      }
+    },
+    {
+      "id": "e5a15c9c217d449fc8cf15c1ab534dc07703f5965561eff922d01c3d75f8bca0",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.5,
+        "ce-rerank": 0.75,
+        "query-tasktype": 0.5,
+        "ce-top10": 0.375,
+        "ce-top20": 0.75
+      },
+      "p5spec": {
+        "baseline": 0.2,
+        "ce-rerank": 0.6,
+        "query-tasktype": 0.2,
+        "ce-top10": 0.2,
+        "ce-top20": 0.6
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 0.6666666666666666,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 36,
+        "ce-rerank": 90
+      }
+    },
+    {
+      "id": "ef349a9e2e09831a3e17f70519c246ca0cea0fbb5f55972aff8fa0d3f88da088",
+      "kind": "issue",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 32,
+        "ce-rerank": 84
+      }
+    },
+    {
+      "id": "f121fc1d2e12c68b4b4677c802632addcdfccccdca00025ee416039c08094d01",
+      "kind": "topic",
+      "p8": {
+        "baseline": 0.375,
+        "ce-rerank": 0.375,
+        "query-tasktype": 0.375,
+        "ce-top10": 0.375,
+        "ce-top20": 0.375
+      },
+      "p5spec": {
+        "baseline": 0,
+        "ce-rerank": 0,
+        "query-tasktype": 0,
+        "ce-top10": 0,
+        "ce-top20": 0
+      },
+      "p3code": {
+        "baseline": 1,
+        "ce-rerank": 1,
+        "query-tasktype": 1,
+        "ce-top10": 1,
+        "ce-top20": 1
+      },
+      "pairs": {
+        "ce-top10": 20,
+        "ce-top20": 31,
+        "ce-rerank": 93
+      }
+    }
+  ]
+}

@@ -38,3 +38,7 @@ spikes/spine-adopt/wazero-probe/artifacts/
 spikes/spine-adopt/seed/controls/
 spikes/spine-adopt/egg-probe/artifacts/
 spikes/serena-pilot/artifacts/
+
+# Round fixtures (mmnto-ai/totem-strategy#1193): sha256-pinned data + the scripts that regenerate it —
+# `SHA256SUMS` seals every byte, so a formatter rewrite would break the pin (same class as `.totem/spine/`).
+.totem/fixtures/

@@ -1,0 +1,35 @@
+{
+  "judge": "local",
+  "model": "qwen3-coder:30b",
+  "ollamaContextNote": "Ollama 0.33.2 loads qwen3-coder:30b with num_ctx 16384 (ollama ps)",
+  "n": 55,
+  "scored": 54,
+  "notScored": [
+    {
+      "id": "29bacc3e",
+      "status": "NOT_SCORED",
+      "reason": "empty draft"
+    }
+  ],
+  "wallSeconds": 3723.5,
+  "meanSecondsPerScored": 69.0,
+  "byKind": {
+    "issue": {
+      "n": 31,
+      "mean": 0.645,
+      "min": 0.0,
+      "max": 1.0
+    },
+    "topic": {
+      "n": 23,
+      "mean": 0.755,
+      "min": 0.0,
+      "max": 1.0
+    }
+  },
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.5"
+  },
+  "at": "2026-09-02T22:57:37Z"
+}
