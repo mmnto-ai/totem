@@ -704,7 +704,12 @@ describe('spec-anchored evidence fields (#2700)', () => {
     const newline = String.fromCharCode(0x0a);
     const del = String.fromCharCode(0x7f);
     const nul = String.fromCharCode(0x00);
-    for (const injected of [newline, del, nul]) {
+    // U+0085 NEL is a C1 control that some terminals and pagers BREAK a line
+    // on: a predicate stopping at 0x7f would have let this forge the second
+    // `[Totem]` line the C0 cases are refused for.
+    const nel = String.fromCharCode(0x85);
+    const apc = String.fromCharCode(0x9f);
+    for (const injected of [newline, del, nul, nel, apc]) {
       expect(
         GroundingAnchorSchema.safeParse({
           kind: GROUNDING_ANCHOR_ISSUE,

@@ -52,16 +52,22 @@ for (const name of names) {
 }
 if (!best) process.exit(2);
 const file = dir + "/" + best.name;
+// fs.writeSync, not process.stdout.write: stdout is a PIPE here (the sh arm
+// captures it) and a piped write is asynchronous on macOS, so process.exit
+// below could truncate the very text the sh arm is about to echo.
 function emit(text) { fs.writeSync(1, text); }
 function block(reason) { emit(reason); process.exit(3); }
 function safe(text) {
   let out = "";
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    out = out + (code < 32 || [127].indexOf(code) > -1 ? "?" : text.charAt(i));
+    const control = code < 32 || (code >= 127 && code <= 159);
+    out = out + (control ? "?" : text.charAt(i));
   }
   return out;
 }
+const shownFile = safe(file);
+const shownAt = safe(best.at);
 function isHeading(line) {
   let n = 0;
   while (n < line.length && ["#"].indexOf(line.charAt(n)) > -1) n = n + 1;
@@ -71,25 +77,27 @@ function isHeading(line) {
 }
 function outsideWorktree(r) {
   const norm = r.split("\\").join("/");
-  if (nodePath.isAbsolute(norm)) return true;
-  if (["/"].indexOf(norm.slice(0, 1)) > -1) return true;
-  return [".."].indexOf(norm.split("/")[0]) > -1;
+  if (nodePath.win32.isAbsolute(norm) || nodePath.posix.isAbsolute(norm)) return true;
+  const top = process.cwd();
+  const rel = nodePath.relative(top, nodePath.resolve(top, norm)).split("\\").join("/");
+  if (nodePath.win32.isAbsolute(rel) || nodePath.posix.isAbsolute(rel)) return true;
+  return [".."].indexOf(rel) > -1 || ["../"].indexOf(rel.slice(0, 3)) > -1;
 }
 const art = best.art;
 const grounding = art.grounding;
 const anchor = grounding && grounding.anchor;
-if (!anchor || ["string"].indexOf(typeof anchor.kind) < 0) block("the newest spec run artifact (" + file + ") predates the anchored-evidence rule (no grounding.anchor)");
+if (!anchor || ["string"].indexOf(typeof anchor.kind) < 0) block("the newest spec run artifact (" + shownFile + ") predates the anchored-evidence rule (no grounding.anchor)");
 const kind = anchor.kind;
 const ref = ["string"].indexOf(typeof anchor.ref) < 0 ? "(no ref)" : anchor.ref;
 const shownKind = safe(kind);
 const shownRef = safe(ref);
-if (kind !== KIND_ISSUE && kind !== KIND_RECORD) block("the newest spec run artifact (" + file + ") is anchored " + shownKind + " (" + shownRef + "), which is not gate evidence");
+if (kind !== KIND_ISSUE && kind !== KIND_RECORD) block("the newest spec run artifact (" + shownFile + ") is anchored " + shownKind + " (" + shownRef + "), which is not gate evidence");
 let subject = "";
 let shape = "";
 let recordStatus = "";
 if (kind !== KIND_RECORD) {
   const content = art.output && art.output.content;
-  if (["string"].indexOf(typeof content) < 0) block("the newest spec run artifact (" + file + ") is not evidence: the draft is not text");
+  if (["string"].indexOf(typeof content) < 0) block("the newest spec run artifact (" + shownFile + ") is not evidence: the draft is not text");
   subject = content;
   const meta = art.admission && art.admission.runMetadata;
   const source = meta && meta.promptSource;
@@ -97,11 +105,11 @@ if (kind !== KIND_RECORD) {
 } else {
   if (outsideWorktree(ref)) block("the bound record ref is outside the worktree: " + shownRef);
   const bound = ["string"].indexOf(typeof anchor.sha256) < 0 ? "" : anchor.sha256;
-  if (!/^[0-9a-f]{64}$/.test(bound)) block("the record anchor carries no sha256 — not evidence (" + file + ")");
+  if (!/^[0-9a-f]{64}$/.test(bound)) block("the record anchor carries no sha256 — not evidence (" + shownFile + ")");
   let bytes = null;
   let read = false;
   try { bytes = fs.readFileSync(ref); read = true; } catch (err) { read = false; }
-  if (!read) block("the bound record is missing at " + shownRef + " (bound by " + file + ")");
+  if (!read) block("the bound record is missing at " + shownRef + " (bound by " + shownFile + ")");
   subject = bytes.toString("utf8");
   shape = "DOCUMENT";
   const now = crypto.createHash("sha256").update(bytes).digest("hex");
@@ -120,18 +128,18 @@ if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
     for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
-    if (at < 0) block("the draft in " + file + " is missing heading " + heading);
-    if (!hasBodyAfter(at)) block("the draft in " + file + " has an empty heading " + heading);
+    if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
+    if (!hasBodyAfter(at)) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
   }
 } else {
   let bodied = false;
   for (let i = 0; i < lines.length; i++) { if (isHeading(lines[i]) && hasBodyAfter(i)) { bodied = true; break; } }
-  if (!bodied && kind !== KIND_RECORD) block("the draft in " + file + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
+  if (!bodied && kind !== KIND_RECORD) block("the draft in " + shownFile + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
   if (!bodied) block("the bound record at " + shownRef + " has no heading with a body");
 }
 const stamp = best.at ? Date.parse(best.at) : NaN;
 const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / 86400000);
-let out = file + " (" + (best.at || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
+let out = shownFile + " (" + (shownAt || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
 out = out + " · anchor " + shownKind + " " + shownRef + " · shape " + shape;
 if (recordStatus.length > 0) out = out + " · " + recordStatus;
 emit(out);

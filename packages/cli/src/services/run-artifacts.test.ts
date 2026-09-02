@@ -338,6 +338,20 @@ describe('compareRunArtifacts', () => {
     expect(compareRunArtifacts(a, b).sameGrounding).toBe(false);
   });
 
+  it('carries BOTH recorded grounding hashes verbatim — the strict signal stays observable', () => {
+    // `sameGrounding` compares the relevance-STRIPPED surface, so the strict
+    // `grounding.hash` equality would otherwise be invisible from
+    // `totem artifact compare`. The two hashes are published beside the looser
+    // verdict, not derived from it.
+    const a = bundled([{ ...ITEM, relevance: 0.71 }]);
+    const b = bundled([{ ...ITEM, relevance: 0.42 }]);
+    const cmp = compareRunArtifacts(a, b);
+    expect(cmp.groundingHashA).toBe(a.grounding.hash);
+    expect(cmp.groundingHashB).toBe(b.grounding.hash);
+    expect(cmp.groundingHashA).not.toBe(cmp.groundingHashB);
+    expect(cmp.sameGrounding).toBe(true);
+  });
+
   it('a BUNDLE-LESS pair still compares on the recorded grounding hash (slice-1 behavior unchanged)', () => {
     const a = artifact();
     const b = artifact({

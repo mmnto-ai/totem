@@ -320,13 +320,20 @@ export interface SpecRecordDeps {
  *
  * Both `path` flavors are consulted because the caller normalizes to forward
  * slashes before asking: `D:/x.md` is not a repo-relative path on ANY platform,
- * so the answer must not depend on which one is running. Compared by path
- * SEGMENT, not by prefix — a file named `..notes.md` inside the root is
- * contained and stays legal.
+ * so the answer must not depend on which one is running.
+ *
+ * Containment is decided by NORMALIZATION, not by inspecting the first segment:
+ * `a/../../x.md` escapes the root even though its first segment does not say
+ * so, while a mid-path `..` that stays inside (`a/../b.md`) is contained and
+ * legal. `path.posix.normalize` is the cwd-free equivalent of the reader's
+ * `resolve` + `relative` containment test, so both sides answer the same on the
+ * same input — the predicate is compared by path SEGMENT throughout, which is
+ * why a file named `..notes.md` inside the root stays legal.
  */
 export function isRecordPathOutsideRoot(relativePath: string): boolean {
   if (path.win32.isAbsolute(relativePath) || path.posix.isAbsolute(relativePath)) return true;
-  return relativePath === '..' || relativePath.startsWith('../');
+  const normalized = path.posix.normalize(relativePath);
+  return normalized === '..' || normalized.startsWith('../');
 }
 
 export interface LoadedSpecRecord {
@@ -455,6 +462,43 @@ export function assertOutDoesNotOverwriteRecord(
 
 // ─── Anchor + floor (mmnto-ai/totem#2700) ───────────────
 
+/** Highest C0 control code unit; everything at or below it is collapsed in an anchor ref. */
+const ANCHOR_REF_C0_MAX = 0x1f;
+/** DEL — first code unit of the DEL/C1 band the anchor ref collapses. */
+const ANCHOR_REF_C1_MIN = 0x7f;
+/** Last C1 control code unit (0x9f); U+0085 NEL sits inside this band. */
+const ANCHOR_REF_C1_MAX = 0x9f;
+/** What a collapsed control character is rendered as — the same substitute the hook's reader uses. */
+const ANCHOR_REF_SUBSTITUTE = '?';
+
+/**
+ * Collapse control characters in a free-text topic to `?` before it becomes an
+ * anchor `ref` (mmnto-ai/totem#2700).
+ *
+ * A topic is the ONE anchor ref the CLI builds out of raw argv, so it is the
+ * one that can carry a tab or a newline the user typed. `GroundingAnchorSchema`
+ * refuses such a ref outright — correctly, since the pre-commit hook echoes it
+ * — but that refusal fires inside `saveRunArtifact`, under `runOrchestrator`'s
+ * warn-and-continue catch: the draft would survive and only the ARTIFACT would
+ * be lost, silently, for a ref the CLI itself produced. Collapsing at the mint
+ * site keeps the artifact writable and the echo safe, and the substitution is
+ * the same one the reader applies defensively to what it reads back.
+ *
+ * Only the TOPIC text is collapsed. An issue ref is a number or a URL and a
+ * record ref must stay byte-exact — the hook RESOLVES it, so a rewritten record
+ * path would name a file that is not the bound record.
+ */
+function sanitizeTopicRef(topic: string): string {
+  let out = '';
+  for (const character of topic) {
+    const code = character.codePointAt(0) ?? 0;
+    const control =
+      code <= ANCHOR_REF_C0_MAX || (code >= ANCHOR_REF_C1_MIN && code <= ANCHOR_REF_C1_MAX);
+    out += control ? ANCHOR_REF_SUBSTITUTE : character;
+  }
+  return out;
+}
+
 /** The anchor's `ref` for one issue arm: the input as typed, `#<n>` for a bare number. */
 function issueAnchorRef(input: ParsedInput): string {
   const issue = input.issue;
@@ -474,7 +518,9 @@ function issueAnchorRef(input: ParsedInput): string {
  *
  * The caller guarantees at least one parsed input ({@link
  * validateSpecInvocation}); the schema's non-empty `ref` refine is the
- * backstop if that ever stops holding.
+ * backstop if that ever stops holding. Topic text passes through {@link
+ * sanitizeTopicRef} on the way into the ref, so a control character the user
+ * typed cannot cost the run its artifact.
  */
 export function resolveGroundingAnchor(parsed: ParsedInput[]): GroundingAnchor {
   const bound = parsed.find((input) => input.record !== null)?.record;
@@ -484,7 +530,7 @@ export function resolveGroundingAnchor(parsed: ParsedInput[]): GroundingAnchor {
   const issueRefs = parsed.filter((input) => input.issue !== null).map(issueAnchorRef);
   const topics = parsed
     .filter((input) => input.issue === null && input.freeText !== null)
-    .map((input) => input.freeText!);
+    .map((input) => sanitizeTopicRef(input.freeText!));
 
   if (topics.length === 0) {
     return { kind: GROUNDING_ANCHOR_ISSUE, ref: issueRefs.join(ANCHOR_ISSUE_JOIN) };

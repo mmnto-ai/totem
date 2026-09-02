@@ -140,6 +140,17 @@ export interface RunArtifactComparison {
   sameInput: boolean;
   /** Provenance equality plus delivered-item equality — the bundles compared with `relevance` stripped when both sides carry one, the recorded `grounding.hash` otherwise (mmnto-ai/totem#2700). */
   sameGrounding: boolean;
+  /**
+   * The recorded `grounding.hash` of each side, verbatim (mmnto-ai/totem#2700).
+   *
+   * `sameGrounding` deliberately compares the relevance-STRIPPED surface, so
+   * the strict hash equality — which `relevance` entered at 1.3.0 — would
+   * otherwise be unobservable from `totem artifact compare`. Publishing both
+   * hashes lets a reader see the strict signal beside the looser verdict
+   * without re-loading either artifact.
+   */
+  groundingHashA: string;
+  groundingHashB: string;
   /** Backend identity equality across all recorded fields. */
   sameBackend: boolean;
   /** Backend field names that differ (empty when sameBackend). */
@@ -266,6 +277,8 @@ export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifact
   return {
     sameInput: a.inputHash === b.inputHash,
     sameGrounding: sameGroundingSurface(a, b),
+    groundingHashA: a.grounding.hash,
+    groundingHashB: b.grounding.hash,
     sameBackend: backendDelta.length === 0,
     backendDelta,
     sameAdmission: admissionDelta.length === 0,

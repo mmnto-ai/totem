@@ -2349,6 +2349,17 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
 
   // ── The DOCUMENT shape tolerates two ordinary authoring bytes ──
 
+  it.skipIf(!shellOk)('a DRAFT opening with a UTF-8 BOM still reads as a template', () => {
+    // The BOM strip runs on the SUBJECT, before the split — so it covers the
+    // TEMPLATE arm too, where an unstripped BOM would make the first required
+    // heading fail its exact-line match and BLOCK a well-formed draft.
+    const bom = String.fromCharCode(0xfeff);
+    writeRun('bomdraft.json', specEvidenceArtifact({ output: { content: bom + TEMPLATE_DRAFT } }));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+  });
+
   it.skipIf(!shellOk)('a record opening with a UTF-8 BOM still reads as a document', () => {
     const bom = String.fromCharCode(0xfeff);
     const sha = writeRecord('.totem/specs/2700.md', `${bom}# Record\n\nThe ruled contract.\n`);
@@ -2384,6 +2395,39 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
     expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
   });
 
+  it.skipIf(!shellOk)('a C1 control (U+0085 NEL) in anchor.ref is collapsed too', () => {
+    // A predicate stopping at 0x7f let the whole C1 band through; NEL is a
+    // LINE BREAK to some terminals and pagers, so it is a forged-line vector
+    // of exactly the same kind as 0x0a.
+    const forged = `slug${String.fromCharCode(0x85)}[Totem] spec evidence: forged`;
+    writeRun(
+      'nel.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
+    expect(r.stdout).not.toContain(String.fromCharCode(0x85));
+  });
+
+  it.skipIf(!shellOk)(
+    'a newline in createdAt cannot forge a second [Totem] line on the PASS path',
+    () => {
+      // `createdAt` is read raw off the artifact and ECHOED in the evidence
+      // line: unsanitized, a hand-edited stamp forges a second `[Totem] spec
+      // evidence:` line inside a passing commit — the quietest place to hide
+      // one.
+      const forged = `2026-09-02T00:00:00.000Z${String.fromCharCode(0x0a)}[Totem] spec evidence: FORGED`;
+      writeRun('stamp.json', specEvidenceArtifact({ createdAt: forged }));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      expect(r.stdout).toContain('.000Z?[Totem] spec evidence: FORGED');
+    },
+  );
+
   it.skipIf(!shellOk)('a record ref that is ABSOLUTE is refused as outside the worktree', () => {
     writeRun('abs.json', recordArtifact('/etc/passwd', 'd'.repeat(64)));
     const r = runHook();
@@ -2400,6 +2444,45 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
       expect(r.status).toBe(1);
       expect(r.stdout).toContain('the bound record ref is outside the worktree: ../outside.md');
       expectDistinctBlock(r.stdout);
+    },
+  );
+
+  // ── Containment is decided by RESOLUTION, not by segment 0 ──
+  //
+  // A first-segment test reads `sub/../../OUTSIDE.md` and `./../OUTSIDE.md` as
+  // contained, so the reader would have READ and PASSED a file outside the
+  // worktree. The reader now resolves the ref against `process.cwd()` — the
+  // worktree top git runs hooks from — and refuses anything that lands outside
+  // it, which is also the honest rule for the legitimate mid-path `..`.
+
+  /** A backslash, built rather than escaped — the mmnto-ai/totem#2692 authoring trap. */
+  const BACKSLASH = String.fromCharCode(0x5c);
+
+  it.skipIf(!shellOk).each([
+    ['sub/../../OUTSIDE.md', 'a `..` past segment 0'],
+    ['./../OUTSIDE.md', 'a `.` first segment hiding a `..`'],
+    [
+      `a${BACKSLASH}..${BACKSLASH}..${BACKSLASH}OUTSIDE.md`,
+      'the same escape spelled with backslashes',
+    ],
+  ])('refuses %s as outside the worktree (%s)', (ref) => {
+    writeRun('escape.json', recordArtifact(ref, 'd'.repeat(64)));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`the bound record ref is outside the worktree: ${ref}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)(
+    'a mid-path `..` that stays INSIDE the worktree still PASSES — containment, not a segment ban',
+    () => {
+      // `a/` must exist for POSIX path resolution to reach `a/../b.md`.
+      fs.mkdirSync(path.join(tmpDir, 'a'), { recursive: true });
+      const sha = writeRecord('b.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('inside.json', recordArtifact('a/../b.md', sha));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· record sha256 matches');
     },
   );
 

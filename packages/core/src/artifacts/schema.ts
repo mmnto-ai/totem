@@ -129,9 +129,9 @@ export const GROUNDING_ANCHOR_KINDS = [
 /**
  * Which system prompt drafted the output (mmnto-ai/totem#2700). Closed
  * vocabulary, derived at the writer (`getSystemPrompt(...) === SYSTEM_PROMPT`
- * → `builtin`, read BEFORE the code-blind directive is folded in). Spec only
- * for this slice — the core schema publishes the field; the CLI writer and the
- * reader that chooses TEMPLATE vs DOCUMENT shape on it land with the CLI leg.
+ * → `builtin`, read BEFORE the code-blind directive is folded in). The CLI's
+ * `spec` command sets it and the strict pre-commit reader chooses the TEMPLATE
+ * or the DOCUMENT shape on it.
  */
 export const PROMPT_SOURCE_BUILTIN = 'builtin';
 export const PROMPT_SOURCE_OVERRIDE = 'override';
@@ -242,24 +242,35 @@ export const GroundingBundleSchema = z.object({
  * bytes to bind, and a digest beside a non-record anchor would claim a binding
  * that does not exist.
  */
+/** Highest C0 control code point (0x1f); everything at or below it is a control character. */
+const C0_CONTROL_MAX = 0x1f;
+/** DEL — the first code point of the C1 range this predicate treats as control. */
+const C1_CONTROL_MIN = 0x7f;
+/** Last C1 control code point (0x9f, APC); U+0085 NEL sits inside this range. */
+const C1_CONTROL_MAX = 0x9f;
+
 /**
- * Whether `value` carries a control character (code point below 0x20, or DEL).
+ * Whether `value` carries a control character — C0 (0x00–0x1f) or the DEL/C1
+ * band (0x7f–0x9f).
  *
  * `grounding.anchor.ref` is ECHOED by the strict pre-commit hook's evidence and
  * BLOCKED lines, so a newline in it would forge a second `[Totem]` line in the
  * hook's own output. The hook collapses control characters defensively (the
  * artifact is a hand-editable JSON file it must not trust), and this refine is
  * the writer-side gate that keeps a legitimately minted artifact from carrying
- * one at all. Deliberately narrow: a `free-text` ref is the topic AS TYPED and
- * may carry any printable character, including non-ASCII. Written as a
- * code-point walk rather than a regex so the predicate carries no escape
- * sequence of its own to mis-author (the {@link hasUnrenderableHookChar}
- * precedent).
+ * one at all. The C1 band is covered because U+0085 (NEL) is a LINE BREAK to
+ * some terminals and pagers — a forged-line vector that stopping at 0x7f would
+ * have let straight through. Deliberately narrow beyond that: a `free-text` ref
+ * is the topic AS TYPED and may carry any printable character, including
+ * non-ASCII. Written as a code-point walk rather than a regex so the predicate
+ * carries no escape sequence of its own to mis-author (the {@link
+ * hasUnrenderableHookChar} precedent).
  */
 function hasControlCharacter(value: string): boolean {
   for (const character of value) {
     const code = character.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) return true;
+    if (code <= C0_CONTROL_MAX) return true;
+    if (code >= C1_CONTROL_MIN && code <= C1_CONTROL_MAX) return true;
   }
   return false;
 }

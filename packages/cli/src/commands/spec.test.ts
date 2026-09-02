@@ -10,6 +10,7 @@ import {
   GROUNDING_ANCHOR_ISSUE,
   GROUNDING_ANCHOR_MIXED,
   GROUNDING_ANCHOR_RECORD,
+  GroundingAnchorSchema,
   hasUnrenderableHookChar,
   type LanceStore,
   PROMPT_SOURCE_BUILTIN,
@@ -748,6 +749,37 @@ describe('resolveGroundingAnchor', () => {
       ref: '#9 | alpha | beta',
     });
   });
+
+  // A topic is the one anchor ref built out of raw argv, so it is the one that
+  // can carry a control character the user typed. `GroundingAnchorSchema`
+  // refuses such a ref — inside `saveRunArtifact`, under `runOrchestrator`'s
+  // warn-and-continue catch, so the run would survive and only the ARTIFACT
+  // would be silently lost. Collapsing at the mint site keeps the request
+  // parsable for a ref the CLI itself produced.
+  it.each([
+    ['a tab', 0x09],
+    ['a newline', 0x0a],
+    ['a DEL', 0x7f],
+    ['a C1 NEL', 0x85],
+  ])('collapses %s in a free-text topic to `?`, keeping the anchor parsable', (_label, code) => {
+    const topic = `cache${String.fromCharCode(code)}invalidation`;
+    const anchor = resolveGroundingAnchor([topicInput(topic)]);
+    expect(anchor).toEqual({ kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'cache?invalidation' });
+    expect(GroundingAnchorSchema.safeParse(anchor).success).toBe(true);
+  });
+
+  it('leaves printable non-ASCII in a topic alone — a free-text ref is the topic AS TYPED', () => {
+    expect(resolveGroundingAnchor([topicInput('ancrage café')]).ref).toBe('ancrage café');
+  });
+
+  it('collapses the topic half of a `mixed` ref too', () => {
+    const anchor = resolveGroundingAnchor([
+      issueInput(9, '9'),
+      topicInput(`alpha${String.fromCharCode(0x0a)}beta`),
+    ]);
+    expect(anchor.ref).toBe('#9 | alpha?beta');
+    expect(GroundingAnchorSchema.safeParse(anchor).success).toBe(true);
+  });
 });
 
 // ─── evaluateGroundingFloor (mmnto-ai/totem#2700) ────────
@@ -1109,12 +1141,20 @@ describe('isRecordPathOutsideRoot', () => {
   // loadSpecRecord, so the predicate is exercised directly. It consults both
   // path flavors because its input is already normalized to forward slashes:
   // `D:/x.md` is not a repo-relative path on any platform.
-  it.each(['..', '../sibling.md', '../../etc/passwd', '/etc/passwd', 'D:/records/x.md'])(
-    'refuses %s as outside the root',
-    (relativePath) => {
-      expect(isRecordPathOutsideRoot(relativePath)).toBe(true);
-    },
-  );
+  // `a/../../x.md` is the case a first-segment test misses: it escapes the root
+  // without SAYING `..` first. The strict pre-commit reader is probed with the
+  // same shape (resolved against the worktree top), so neither side can be the
+  // looser of the two.
+  it.each([
+    '..',
+    '../sibling.md',
+    '../../etc/passwd',
+    'a/../../x.md',
+    '/etc/passwd',
+    'D:/records/x.md',
+  ])('refuses %s as outside the root', (relativePath) => {
+    expect(isRecordPathOutsideRoot(relativePath)).toBe(true);
+  });
 
   it.each(['.totem/specs/2700.md', '..notes.md', 'a/../b.md', 'x.md'])(
     'accepts %s as contained',

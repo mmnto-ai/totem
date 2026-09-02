@@ -109,6 +109,25 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(REFLEX_VERSION).toBeGreaterThanOrEqual(1); // totem-ignore — version floor check, not a set count
     expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
   });
+
+  // The managed block is what a consumer's CLAUDE.md TELLS the agent the
+  // pre-commit gate does. Before mmnto-ai/totem#2700 it described the
+  // pre-rule gate ("a spec run happened"), so an agent following it verbatim
+  // would have been blocked by a rule its own instructions did not name.
+  // These lock the three load-bearing halves of the rewritten clause.
+  it('the gate clause states the ANCHORED rule, both cures included', () => {
+    expect(AI_PROMPT_BLOCK).toContain('ANCHORED');
+    expect(AI_PROMPT_BLOCK).toContain('grounded on an ISSUE');
+    expect(AI_PROMPT_BLOCK).toContain('totem spec --from <record>');
+  });
+
+  it('the gate clause says a free-text topic run is NOT evidence', () => {
+    expect(AI_PROMPT_BLOCK).toContain('A free-text topic run is NOT evidence');
+  });
+
+  it('the gate clause names --fresh as the cure for a cached response', () => {
+    expect(AI_PROMPT_BLOCK).toContain('--fresh');
+  });
 });
 
 // ─── `totem review` billing honesty (mmnto-ai/totem#2536) ─
