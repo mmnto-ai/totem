@@ -12,10 +12,11 @@
  * provenance silently).
  *
  * Assembly is caller-side (the deterministic layer) — providers stay dumb
- * pipes. The bundle is what `grounding.hash` attests, so it must be a pure
- * function of the logical item set: items are canonically sorted here because
- * retrieval order is score-dependent and `calculateDeterministicHash` is
- * order-significant for arrays.
+ * pipes. The bundle is what `grounding.hash` attests: the DELIVERED items with
+ * their measured relevance (mmnto-ai/totem#2700). Items are canonically sorted
+ * here BECAUSE the hash is order-significant for arrays and retrieval order is
+ * score-dependent — the sort is what makes two runs over the same delivered
+ * set hash alike.
  */
 
 import { calculateDeterministicHash } from './hash.js';
@@ -39,6 +40,12 @@ export interface GroundingSourceItem {
     filePath: string;
     /** Linked-index name for cross-repo hits; absent = the run's own repo (strategy review F1 on mmnto-ai/totem#2101). */
     sourceRepo?: string | undefined;
+    /**
+     * The vector-leg relevance the hit was delivered with, `1 / (1 + distance)`
+     * (mmnto-ai/totem#2700). Absent when the hit had no vector leg (FTS-only) —
+     * absence is the honest disclosure, never a zero.
+     */
+    relevance?: number | undefined;
   };
 }
 
@@ -68,6 +75,12 @@ function compareItems(a: GroundingItem, b: GroundingItem): number {
  * twice). All items are classed `similarity-only`: this is the first-cut
  * wrapper around the existing retrieval, and the ONLY class this builder can
  * emit by construction.
+ *
+ * A hit's vector-leg `relevance` is carried onto its item ONLY when it is a
+ * finite number (mmnto-ai/totem#2700) — an FTS-only hit carries none, and the
+ * absence is the disclosure. The value rides the item through the canonical
+ * sort, so no index correspondence with the input array is ever needed. Range
+ * ([0, 1]) is the schema's to enforce, not this builder's.
  */
 export function buildGroundingBundle(items: GroundingSourceItem[]): GroundingBundle {
   const mapped: GroundingItem[] = items.map(({ sourceType, result }) => ({
@@ -76,6 +89,9 @@ export function buildGroundingBundle(items: GroundingSourceItem[]): GroundingBun
     sourceType,
     filePath: result.filePath,
     ...(result.sourceRepo !== undefined ? { sourceRepo: result.sourceRepo } : {}),
+    ...(typeof result.relevance === 'number' && Number.isFinite(result.relevance)
+      ? { relevance: result.relevance }
+      : {}),
   }));
   mapped.sort(compareItems);
   return { items: mapped };

@@ -3,20 +3,34 @@ import { describe, expect, it } from 'vitest';
 import type {
   BackendAdmissionClass,
   BoundedTextEvidence,
+  GroundingAnchor,
+  GroundingAnchorKind,
   InvocationFailureArtifact,
   InvokeAttemptEvidence,
+  PromptSource,
   RunArtifact,
 } from './schema.js';
 import {
   ADMISSION_COMPLETION_ONLY,
   ADMISSION_SELF_GROUNDING_AGENT,
   ContextPolicySchema,
+  GROUNDING_ANCHOR_FREE_TEXT,
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_KINDS,
+  GROUNDING_ANCHOR_MIXED,
+  GROUNDING_ANCHOR_RECORD,
+  GroundingAnchorSchema,
+  GroundingItemSchema,
   INVOCATION_FAILURE_ARTIFACT_SCHEMA_VERSION,
   InvocationFailureArtifactSchema,
   INVOKE_MESSAGE_EVIDENCE_LIMIT_BYTES,
   InvokeAttemptEvidenceSchema,
   InvokeProcessEvidenceSchema,
   OutputContractSchema,
+  PROMPT_SOURCE_BUILTIN,
+  PROMPT_SOURCE_OVERRIDE,
+  PROMPT_SOURCES,
+  PROVENANCE_SIMILARITY_ONLY,
   RUN_ARTIFACT_SCHEMA_VERSION,
   RunArtifactSchema,
   RunMetadataSchema,
@@ -514,5 +528,200 @@ describe('admission contract schemas (#2102)', () => {
     expect(RunMetadataSchema.parse({ caller: 'spec' }).codeBlind).toBeUndefined();
     // Wrong type is rejected.
     expect(RunMetadataSchema.safeParse({ caller: 'spec', codeBlind: 'yes' }).success).toBe(false);
+  });
+});
+
+// ─── Spec-anchored evidence (mmnto-ai/totem#2700) ──
+
+/** sha256 of the bound record's bytes — shape-valid, value irrelevant here. */
+const RECORD_SHA256 = 'c'.repeat(64);
+
+/** A shape-valid anchor of each kind: only `record` binds bytes. */
+function anchorOf(kind: GroundingAnchorKind): GroundingAnchor {
+  return kind === GROUNDING_ANCHOR_RECORD
+    ? { kind, ref: '.totem/specs/2700.md', sha256: RECORD_SHA256 }
+    : { kind, ref: '#2700' };
+}
+
+/** A valid grounding bundle item, mutable per case. */
+function bundleItem(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    provenance: PROVENANCE_SIMILARITY_ONLY,
+    contentHash: 'd'.repeat(64),
+    sourceType: 'code',
+    filePath: 'src/x.ts',
+    ...overrides,
+  };
+}
+
+describe('spec-anchored evidence fields (#2700)', () => {
+  it('the anchor-kind tuple is the ONE spelling the enum is built from', () => {
+    expect(GROUNDING_ANCHOR_KINDS).toEqual([
+      GROUNDING_ANCHOR_ISSUE,
+      GROUNDING_ANCHOR_RECORD,
+      GROUNDING_ANCHOR_FREE_TEXT,
+      GROUNDING_ANCHOR_MIXED,
+    ]);
+    for (const kind of GROUNDING_ANCHOR_KINDS) {
+      expect(GroundingAnchorSchema.safeParse(anchorOf(kind)).success).toBe(true);
+    }
+    // Compile-time lock: both prompt-source constants are the inferred union.
+    const sources: PromptSource[] = [PROMPT_SOURCE_BUILTIN, PROMPT_SOURCE_OVERRIDE];
+    expect(sources).toEqual([...PROMPT_SOURCES]);
+  });
+
+  it.each([...GROUNDING_ANCHOR_KINDS])('accepts a %s anchor on the run artifact', (kind) => {
+    const artifact = validArtifact();
+    artifact.grounding.anchor = anchorOf(kind);
+    expect(RunArtifactSchema.parse(artifact)).toEqual(artifact);
+  });
+
+  it('accepts the judged floor and a per-item relevance in [0, 1]', () => {
+    const artifact = validArtifact();
+    artifact.grounding.floor = 0.25;
+    artifact.grounding.bundle = {
+      items: [
+        {
+          provenance: PROVENANCE_SIMILARITY_ONLY,
+          contentHash: 'd'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/x.ts',
+          relevance: 0,
+        },
+        {
+          provenance: PROVENANCE_SIMILARITY_ONLY,
+          contentHash: 'e'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/y.ts',
+          relevance: 0.548,
+        },
+        {
+          provenance: PROVENANCE_SIMILARITY_ONLY,
+          contentHash: 'f'.repeat(64),
+          sourceType: 'code',
+          filePath: 'src/z.ts',
+          relevance: 1,
+        },
+      ],
+    };
+    const parsed = RunArtifactSchema.parse(artifact);
+    expect(parsed.grounding.floor).toBe(0.25);
+    expect(parsed.grounding.bundle?.items.map((i) => i.relevance)).toEqual([0, 0.548, 1]);
+  });
+
+  it.each([...PROMPT_SOURCES])('accepts promptSource %s on the run metadata', (promptSource) => {
+    const artifact: RunArtifact = {
+      ...validArtifact(),
+      admission: { runMetadata: { caller: 'spec', promptSource } },
+    };
+    expect(RunArtifactSchema.parse(artifact)).toEqual(artifact);
+  });
+
+  it('a pre-existing artifact carrying none of the new fields still parses, unchanged', () => {
+    const preExisting = {
+      ...validArtifact(),
+      schemaVersion: '1.1.0',
+      grounding: {
+        hash: 'b'.repeat(64),
+        provenanceSummary: `${PROVENANCE_SIMILARITY_ONLY}:1`,
+        bundle: { items: [bundleItem()] },
+      },
+      admission: { runMetadata: { caller: 'spec' } },
+    };
+    const parsed = RunArtifactSchema.parse(preExisting);
+    expect(parsed).toEqual(preExisting);
+    // Nothing is defaulted in: the new keys are absent, not undefined-valued.
+    expect(Object.keys(parsed.grounding).sort()).toEqual(Object.keys(preExisting.grounding).sort());
+    expect(Object.keys(parsed.grounding.bundle!.items[0]!).sort()).toEqual(
+      Object.keys(preExisting.grounding.bundle.items[0]!).sort(),
+    );
+    expect(Object.keys(parsed.admission!.runMetadata!)).toEqual(['caller']);
+  });
+
+  it('requires sha256 on a record anchor — the binding is the bytes, or it is not a binding', () => {
+    const unbound = { kind: GROUNDING_ANCHOR_RECORD, ref: '.totem/specs/2700.md' };
+    expect(GroundingAnchorSchema.safeParse(unbound).success).toBe(false);
+    // The refinement must fire nested inside the artifact, not only standalone.
+    const artifact = validArtifact();
+    expect(
+      RunArtifactSchema.safeParse({
+        ...artifact,
+        grounding: { ...artifact.grounding, anchor: unbound },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('forbids sha256 on every non-record kind — nothing else binds bytes', () => {
+    for (const kind of GROUNDING_ANCHOR_KINDS) {
+      if (kind === GROUNDING_ANCHOR_RECORD) continue;
+      expect(
+        GroundingAnchorSchema.safeParse({ kind, ref: '#2700', sha256: RECORD_SHA256 }).success,
+      ).toBe(false);
+    }
+    const artifact = validArtifact();
+    expect(
+      RunArtifactSchema.safeParse({
+        ...artifact,
+        grounding: {
+          ...artifact.grounding,
+          anchor: { kind: GROUNDING_ANCHOR_ISSUE, ref: '#2700', sha256: RECORD_SHA256 },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects an anchor sha256 that is not a 64-char hex digest', () => {
+    for (const sha256 of ['c'.repeat(63), 'c'.repeat(65), `${'c'.repeat(63)}Z`, 'not-a-hash']) {
+      expect(
+        GroundingAnchorSchema.safeParse({
+          kind: GROUNDING_ANCHOR_RECORD,
+          ref: '.totem/specs/2700.md',
+          sha256,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('rejects an unknown anchor kind and an empty or whitespace-only ref — closed vocabulary, named referent', () => {
+    expect(GroundingAnchorSchema.safeParse({ kind: 'vibes', ref: '#2700' }).success).toBe(false);
+    expect(GroundingAnchorSchema.safeParse({ kind: GROUNDING_ANCHOR_ISSUE, ref: '' }).success).toBe(
+      false,
+    );
+    // A whitespace-only ref names nothing; rejected by a non-transforming refine so the
+    // stored ref round-trips verbatim (a `.trim()` transform would rewrite it on every read).
+    expect(
+      GroundingAnchorSchema.safeParse({ kind: GROUNDING_ANCHOR_ISSUE, ref: ' \t\n' }).success,
+    ).toBe(false);
+    expect(
+      GroundingAnchorSchema.safeParse({ kind: GROUNDING_ANCHOR_ISSUE, ref: ' #2700 ' }).data?.ref,
+    ).toBe(' #2700 ');
+  });
+
+  it('rejects an unknown promptSource — closed vocabulary', () => {
+    expect(
+      RunMetadataSchema.safeParse({ caller: 'spec', promptSource: 'handwritten' }).success,
+    ).toBe(false);
+    expect(RunMetadataSchema.parse({ caller: 'spec' }).promptSource).toBeUndefined();
+  });
+
+  it.each([-0.1, 1.1])('rejects a relevance outside [0, 1] (%s)', (relevance) => {
+    expect(GroundingItemSchema.safeParse(bundleItem({ relevance })).success).toBe(false);
+    const artifact = validArtifact();
+    expect(
+      RunArtifactSchema.safeParse({
+        ...artifact,
+        grounding: { ...artifact.grounding, bundle: { items: [bundleItem({ relevance })] } },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects a floor outside [0, 1] (1.5) — a floor is a relevance', () => {
+    const artifact = validArtifact();
+    expect(
+      RunArtifactSchema.safeParse({
+        ...artifact,
+        grounding: { ...artifact.grounding, floor: 1.5 },
+      }).success,
+    ).toBe(false);
   });
 });

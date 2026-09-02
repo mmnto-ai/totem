@@ -101,6 +101,40 @@ export const PROVENANCE_CLASSES = [
 export const PROVENANCE_UNGROUNDED = 'ungrounded';
 
 /**
+ * What the run was ANCHORED on (mmnto-ai/totem#2700). A closed vocabulary —
+ * these four strings are the single spelling shared by the writer, the strict
+ * pre-commit evidence reader and the artifact verbs, so a gate and a producer
+ * can never disagree about the word.
+ *
+ * `issue` — every resolved input was an issue; `record` — a hand-authored
+ * design record bound with `--from` (the only kind carrying a `sha256`);
+ * `free-text` — every input was a topic; `mixed` — issues AND topics together.
+ * `mixed` is the honest fourth kind, NOT evidence: its free-text half is the
+ * confabulation surface.
+ */
+export const GROUNDING_ANCHOR_ISSUE = 'issue';
+export const GROUNDING_ANCHOR_RECORD = 'record';
+export const GROUNDING_ANCHOR_FREE_TEXT = 'free-text';
+export const GROUNDING_ANCHOR_MIXED = 'mixed';
+export const GROUNDING_ANCHOR_KINDS = [
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_RECORD,
+  GROUNDING_ANCHOR_FREE_TEXT,
+  GROUNDING_ANCHOR_MIXED,
+] as const;
+
+/**
+ * Which system prompt drafted the output (mmnto-ai/totem#2700). Closed
+ * vocabulary, derived at the writer (`getSystemPrompt(...) === SYSTEM_PROMPT`
+ * → `builtin`, read BEFORE the code-blind directive is folded in). Spec only
+ * for this slice — the core schema publishes the field; the CLI writer and the
+ * reader that chooses TEMPLATE vs DOCUMENT shape on it land with the CLI leg.
+ */
+export const PROMPT_SOURCE_BUILTIN = 'builtin';
+export const PROMPT_SOURCE_OVERRIDE = 'override';
+export const PROMPT_SOURCES = [PROMPT_SOURCE_BUILTIN, PROMPT_SOURCE_OVERRIDE] as const;
+
+/**
  * Slice-1 admission class for both migrated callers (spec + review): factually
  * completion-only today. #2102 (backend admission contract) changes who
  * supplies the value, not the field. Day-one self-description, same retrofit
@@ -174,6 +208,16 @@ export const GroundingItemSchema = z.object({
   filePath: z.string().min(1),
   /** Linked-index name for cross-repo hits; ABSENT = the run's own repo (F1) — post-checks resolve `filePath` against the run's config root when absent. */
   sourceRepo: z.string().min(1).optional(),
+  /**
+   * The vector-leg relevance the hit was delivered with (mmnto-ai/totem#2700):
+   * `1 / (1 + _distance)` ∈ [0, 1]. ABSENT iff the hit had no vector leg
+   * (FTS-only) — "no signal" stays distinguishable from "weak signal"
+   * (mmnto-ai/totem#2463 / mmnto-ai/totem#2494), so absence is the disclosure,
+   * never a zero. Identical bytes across stores need not give identical
+   * relevance (a linked store embeds with its own embedder), which is why the
+   * value lives on the item rather than in a hash-keyed map.
+   */
+  relevance: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -185,20 +229,75 @@ export const GroundingBundleSchema = z.object({
   items: z.array(GroundingItemSchema),
 });
 
+/**
+ * What the run was anchored ON (mmnto-ai/totem#2700) — the discriminator the
+ * strict pre-commit reader gates evidence with, published as a first-class
+ * artifact field rather than inferred from heuristics.
+ *
+ * `sha256` is REQUIRED iff `kind === 'record'` (the digest of the very record
+ * bytes rendered into the prompt) and FORBIDDEN otherwise: nothing else has
+ * bytes to bind, and a digest beside a non-record anchor would claim a binding
+ * that does not exist.
+ */
+export const GroundingAnchorSchema = z
+  .object({
+    /** Closed vocabulary — the canonical spellings are {@link GROUNDING_ANCHOR_KINDS}. */
+    kind: z.enum(GROUNDING_ANCHOR_KINDS),
+    /** `#<n>` / the input as typed for a URL or `owner/repo#N` (comma-joined for several); the repo-relative record path for `record`; the topic text for `free-text`. */
+    ref: z
+      .string()
+      .refine(
+        (value) => value.trim().length > 0,
+        'grounding.anchor.ref must not be empty or whitespace-only',
+      ),
+    /** sha256 of the bound record's bytes — `record` anchors only. */
+    sha256: z
+      .string()
+      .regex(SHA256_HEX, 'grounding.anchor.sha256 must be a sha256 hex digest')
+      .optional(),
+  })
+  .superRefine((anchor, ctx) => {
+    if (anchor.kind === GROUNDING_ANCHOR_RECORD && anchor.sha256 === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sha256'],
+        message: `a "${GROUNDING_ANCHOR_RECORD}" anchor must carry the sha256 of the bound record's bytes`,
+      });
+    }
+    if (anchor.kind !== GROUNDING_ANCHOR_RECORD && anchor.sha256 !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sha256'],
+        message: `sha256 belongs only to a "${GROUNDING_ANCHOR_RECORD}" anchor — "${anchor.kind}" binds no bytes`,
+      });
+    }
+  });
+
 /** What KIND of grounding the run had — day-one field, never retrofittable. */
 export const GroundingSchema = z.object({
   /**
    * Deterministic hash of the grounding surface. From 1.1.0 this is
-   * `calculateDeterministicHash(bundle)` — the verifier recomputes it from
-   * the artifact surface ALONE (one enumeration, two readers). Slice-1
-   * artifacts (no `bundle`) carry their original hash-of-raw-context, which
-   * is self-consistent but not recomputable offline.
+   * `calculateDeterministicHash(bundle)` over the canonically SORTED items —
+   * sorted BECAUSE the hash is order-significant for arrays (the sort key
+   * `sourceType, sourceRepo, filePath, contentHash` is unchanged). The
+   * verifier recomputes it from the artifact surface ALONE (one enumeration,
+   * two readers) — an invariant mmnto-ai/totem#2700 leaves untouched. Each
+   * item's `relevance` is part of the item, so it ENTERS this hash; `anchor`
+   * and `floor` sit BESIDE the bundle and do NOT (they enter the artifact's
+   * content address like every other field, as `output.metrics.durationMs`
+   * already does). Slice-1 artifacts (no `bundle`) carry their original
+   * hash-of-raw-context, which is self-consistent but not recomputable
+   * offline.
    */
   hash: z.string().regex(SHA256_HEX, 'grounding.hash must be a sha256 hex digest'),
   /** Derived from the bundle since 1.1.0 (sorted class counts, or `ungrounded`); wholesale string in slice-1 artifacts. */
   provenanceSummary: z.string().min(1),
   /** Per-item provenance record (mmnto-ai/totem#2101). Optional: slice-1 artifacts predate it and cannot be re-classed. */
   bundle: GroundingBundleSchema.optional(),
+  /** What the run was anchored on (mmnto-ai/totem#2700). Optional: artifacts written before the anchored-evidence rule predate it, and the gate reads that absence as not-evidence. */
+  anchor: GroundingAnchorSchema.optional(),
+  /** The relevance floor the run was judged against (`searchRelevanceFloor`, post-parse — always a number when recorded). No config-vs-default bit is stored: it is not derivable after `TotemConfigSchema.parse`. */
+  floor: z.number().min(0).max(1).optional(),
 });
 
 /** Backend identity as RESOLVED (post quota-fallback), not as requested. */
@@ -457,6 +556,16 @@ export const RunMetadataSchema = z.object({
    * recomputing `code.length === 0` from the grounding bundle.
    */
   codeBlind: z.boolean().optional(),
+  /**
+   * Which system prompt drafted the output (mmnto-ai/totem#2700): `builtin`
+   * when `getSystemPrompt(...) === SYSTEM_PROMPT`, `override` otherwise —
+   * derived at the writer, read BEFORE the code-blind directive is folded in.
+   * The strict evidence reader chooses the TEMPLATE vs DOCUMENT shape on it:
+   * a draft written under a custom prompt cannot be held to the built-in
+   * template's headings. Absent on pre-existing artifacts (which block on the
+   * missing anchor first, so the shape choice is never reached for them).
+   */
+  promptSource: z.enum(PROMPT_SOURCES).optional(),
 });
 
 /**
@@ -553,6 +662,11 @@ export type InvocationFailureArtifact = z.infer<typeof InvocationFailureArtifact
 export type InputBundle = z.infer<typeof InputBundleSchema>;
 export type GroundingItem = z.infer<typeof GroundingItemSchema>;
 export type GroundingBundle = z.infer<typeof GroundingBundleSchema>;
+export type GroundingAnchor = z.infer<typeof GroundingAnchorSchema>;
+/** Inferred from the anchor schema's enum — the canonical anchor-kind union (mmnto-ai/totem#2700). */
+export type GroundingAnchorKind = GroundingAnchor['kind'];
+/** Inferred from the tuple the `RunMetadataSchema.promptSource` enum is built from — the canonical prompt-source union (mmnto-ai/totem#2700). */
+export type PromptSource = (typeof PROMPT_SOURCES)[number];
 export type OutputContract = z.infer<typeof OutputContractSchema>;
 export type ContextPolicy = z.infer<typeof ContextPolicySchema>;
 export type RunMetadata = z.infer<typeof RunMetadataSchema>;

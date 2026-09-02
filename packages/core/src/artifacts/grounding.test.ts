@@ -91,6 +91,62 @@ describe('buildGroundingBundle', () => {
     expect(JSON.stringify(bundle)).not.toContain('the snippet');
   });
 
+  it('carries each delivered relevance onto ITS OWN item, through the canonical sort (#2700)', () => {
+    // Fed out of canonical order with distinct relevances: a positional carry
+    // (map-then-sort by index) would attach the wrong number to every item.
+    const delivered = [
+      { filePath: 'src/c.ts', relevance: 0.31 },
+      { filePath: 'src/a.ts', relevance: 0.92 },
+      { filePath: 'src/b.ts', relevance: 0.55 },
+    ];
+    const bundle = buildGroundingBundle(
+      delivered.map((hit) =>
+        source({
+          content: `content of ${hit.filePath}`,
+          filePath: hit.filePath,
+          relevance: hit.relevance,
+        }),
+      ),
+    );
+    expect(bundle.items.map((i) => i.filePath)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+    for (const hit of delivered) {
+      expect(bundle.items.find((i) => i.filePath === hit.filePath)?.relevance).toBe(hit.relevance);
+    }
+  });
+
+  it('omits relevance when the hit had no vector leg — absence is the disclosure, never a zero', () => {
+    const bundle = buildGroundingBundle([source({ filePath: 'src/fts-only.ts' })]);
+    expect('relevance' in bundle.items[0]!).toBe(false);
+    expect(JSON.stringify(bundle)).not.toContain('relevance');
+  });
+
+  it.each([
+    { label: 'NaN', relevance: Number.NaN },
+    { label: 'undefined', relevance: undefined },
+  ])('does not carry a non-finite relevance ($label) onto the item', ({ relevance }) => {
+    const bundle = buildGroundingBundle([source({ relevance })]);
+    expect('relevance' in bundle.items[0]!).toBe(false);
+  });
+
+  it('relevance enters grounding.hash — a different measured relevance is a different bundle', () => {
+    const weaker = buildGroundingBundle([source({ relevance: 0.4 })]);
+    const stronger = buildGroundingBundle([source({ relevance: 0.5 })]);
+    expect(calculateDeterministicHash(weaker)).not.toBe(calculateDeterministicHash(stronger));
+  });
+
+  it('input order still never moves the hash once relevances ride along (sort invariant unchanged)', () => {
+    const items = [
+      source({ filePath: 'src/b.ts', relevance: 0.2 }),
+      source({ filePath: 'src/a.ts', relevance: 0.9 }, 'spec'),
+      source({ filePath: 'src/a.ts', relevance: 0.7 }),
+      source({ content: 'other content', filePath: 'src/a.ts' }),
+    ];
+    const forward = buildGroundingBundle(items);
+    const reversed = buildGroundingBundle([...items].reverse());
+    expect(forward).toEqual(reversed);
+    expect(calculateDeterministicHash(forward)).toBe(calculateDeterministicHash(reversed));
+  });
+
   it("carries sourceRepo only when present — absent means the run's own repo (F1)", () => {
     const bundle = buildGroundingBundle([
       source({ sourceRepo: 'strategy' }),
