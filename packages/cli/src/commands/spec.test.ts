@@ -1235,9 +1235,12 @@ describe('loadSpecRecord', () => {
       const message = String((thrown as Error).message);
       expect(message).toContain('outside the repository');
       // The link as given AND what it resolves to — the second is the whole
-      // reason the first was refused.
+      // reason the first was refused. The resolved form is the filesystem's
+      // canonical path (a Windows runner's temp dir is handed out as an 8.3
+      // short name like RUNNER~1, which realpath expands), so compare against
+      // the same canonicalization the code applies, never the raw temp path.
       expect(message).toContain(link);
-      expect(message).toContain(`resolves to ${outside}`);
+      expect(message).toContain(`resolves to ${fs.realpathSync.native(outside)}`);
     },
   );
 
