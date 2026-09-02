@@ -60,6 +60,24 @@ export default {
     },
   },
 
+  // Minimum per-hit relevance (the vector-leg similarity, 0..1) below which a
+  // retrieval is treated as noise. TWO consumers read it:
+  //   1. the MCP `search_knowledge` tool, which reports
+  //      `status="no_useful_hits"` instead of returning noise-floor matches;
+  //   2. `totem spec` (mmnto-ai/totem#2700), which REFUSES an unanchored
+  //      free-text run when every signal-bearing hit is below this floor and
+  //      no keyword-only (floor-exempt) hit exists — the refusal names this
+  //      value and this key, exits non-zero, and writes no run artifact.
+  // Hits with no vector leg are floor-EXEMPT: absence of a relevance signal is
+  // never read as a weak signal. `--raw` is exempt from the spec refusal.
+  // MEASURED CAVEAT: on a gemini-embedding index (relevance =
+  // 1/(1+distance)) a deliberately nonsensical query still scores far above
+  // 0.25 — 0.36 and 0.55 measured on this repo's index at two points — so at
+  // the default the below-floor arm cannot fire and only the zero-hit arm
+  // does. Calibrating the default is filed as mmnto-ai/totem#2727; raise this
+  // value in config to make the below-floor arm reachable for your corpus.
+  searchRelevanceFloor: 0.25,
+
   // Command-Specific Options
   compileOptions: {
     concurrency: 4, // Max parallel lesson compilations

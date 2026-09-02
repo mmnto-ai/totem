@@ -1427,8 +1427,86 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
       outputTokens: 50,
       durationMs: 500,
     });
-    expect(artifact.schemaVersion).toBe('1.2.0');
+    expect(artifact.schemaVersion).toBe('1.3.0');
     expect(artifact.output.execution).toBeUndefined();
+  });
+
+  // ─── The anchor + floor seam (mmnto-ai/totem#2700) ──
+  //
+  // `RunArtifactRequest.anchor/floor` → `grounding.anchor/floor` is the ONE
+  // hop between what `specCommand` decided and what the strict pre-commit
+  // reader reads. The assertion is on the PERSISTED bytes, parsed back through
+  // the real schema — a request-shape assertion would not catch a writer that
+  // dropped the keys on the way to disk.
+
+  it('records grounding.anchor and grounding.floor verbatim from the request (mmnto-ai/totem#2700)', async () => {
+    const anchor = {
+      kind: 'record' as const,
+      ref: '.totem/specs/2700.md',
+      sha256: 'd'.repeat(64),
+    };
+    const emitted: string[] = [];
+
+    await runOrchestrator({
+      prompt: 'anchored prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: { ...artifactRequest((hash) => emitted.push(hash)), anchor, floor: 0.25 },
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const artifact = RunArtifactSchema.parse(JSON.parse(fs.readFileSync(file, 'utf-8')));
+    expect(artifact.grounding.anchor).toEqual(anchor);
+    expect(artifact.grounding.floor).toBe(0.25);
+  });
+
+  it('a floor of 0 is PERSISTED, not dropped as falsy (mmnto-ai/totem#2700)', async () => {
+    // The writer spreads `floor` on `!== undefined`, not on truthiness. Zero is
+    // a legal `searchRelevanceFloor` — it is the value that disables the
+    // refusal — and it is the one number a falsy guard would silently discard,
+    // leaving an artifact that claims no floor was applied when one was.
+    const emitted: string[] = [];
+
+    await runOrchestrator({
+      prompt: 'zero floor prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: { ...artifactRequest((hash) => emitted.push(hash)), floor: 0 },
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+      grounding: Record<string, unknown>;
+    };
+    expect(raw.grounding['floor']).toBe(0);
+    const artifact = RunArtifactSchema.parse(raw);
+    expect(artifact.grounding.floor).toBe(0);
+  });
+
+  it('a request WITHOUT an anchor or a floor writes NEITHER key (a review artifact is unchanged)', async () => {
+    const emitted: string[] = [];
+
+    await runOrchestrator({
+      prompt: 'unanchored prompt',
+      tag: 'Review',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: artifactRequest((hash) => emitted.push(hash)),
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+      grounding: Record<string, unknown>;
+    };
+    expect(Object.keys(raw.grounding)).toEqual(['hash', 'provenanceSummary']);
+    const artifact = RunArtifactSchema.parse(raw);
+    expect(artifact.grounding.anchor).toBeUndefined();
+    expect(artifact.grounding.floor).toBeUndefined();
   });
 
   it('persists DLP-safe execution evidence only when runtime attempts are present', async () => {

@@ -76,3 +76,25 @@ Every implementation MUST end with these steps:
 `;
 
 export { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT };
+
+/**
+ * The section skeleton `totem spec` PROMISES (mmnto-ai/totem#2700) — the ONE
+ * source for that promise, shared by the built-in prompt above and the strict
+ * pre-commit evidence reader, which renders these strings into its
+ * single-quoted `node -e '…'` body via `JSON.stringify` (the `runsDir`
+ * precedent) and checks the draft carries each heading with a non-blank body.
+ *
+ * Two invariants keep the two halves honest, both unit-tested:
+ * 1. every entry is a VERBATIM line of {@link SYSTEM_PROMPT} — the gate can
+ *    only require what the command actually asks for;
+ * 2. every entry is RENDERABLE into the reader (no quote, backslash, dollar,
+ *    backtick, newline or control character — the mmnto-ai/totem#2692 C4
+ *    predicate), so a new heading can never break the hook silently.
+ *
+ * The skeleton is only applied to a draft written under the BUILT-IN prompt;
+ * an override prompt is held to the looser DOCUMENT shape instead.
+ */
+export const SPEC_REQUIRED_SECTIONS = [
+  '### Problem Statement',
+  '### Implementation Tasks',
+] as const;

@@ -288,9 +288,19 @@ program
   });
 
 program
-  .command('spec <inputs...>')
-  .description('Generate a pre-work spec briefing for GitHub issue(s) or topic(s)')
+  // `[inputs...]` (OPTIONAL variadic) since mmnto-ai/totem#2700: a required
+  // variadic made `--from <record>` unreachable — commander refused the
+  // invocation before `specCommand` could bind the record. "No inputs and no
+  // --from" is now the command's own CONFIG_INVALID, carrying the usage line.
+  .command('spec [inputs...]')
+  .description(
+    'Generate a pre-work spec briefing for GitHub issue(s), topic(s), or a design record',
+  )
   .option('--raw', 'Output retrieved context without LLM synthesis')
+  .option(
+    '--from <record>',
+    'Ground the run on a hand-authored design record (the record is the anchor; it is never written)',
+  )
   .option(
     '--out <path>',
     'Write output to a specific file (overrides default .totem/specs/<topic>.md)',
@@ -304,7 +314,14 @@ program
   .action(
     async (
       inputs: string[],
-      opts: { raw?: boolean; out?: string; stdout?: boolean; model?: string; fresh?: boolean },
+      opts: {
+        raw?: boolean;
+        out?: string;
+        stdout?: boolean;
+        model?: string;
+        fresh?: boolean;
+        from?: string;
+      },
     ) => {
       try {
         const { specCommand } = await import('./commands/spec.js');

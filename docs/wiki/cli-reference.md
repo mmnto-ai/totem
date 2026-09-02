@@ -374,9 +374,35 @@ The classifier is a fixed table over the four-axis cube `(severityBucket × roun
 
 Extracts systemic lessons from resolved bot review comments on a merged PR. The input half of the extract → compile → enforce loop.
 
-### `totem spec <issue-ids...>`
+### `totem spec [inputs...]`
 
-Fetches GitHub Issues and synthesizes a pre-work spec. Injects a prior art concierge (shared helper registry) enriched by your project's vector DB lessons to prevent hallucinations.
+Fetches GitHub Issues (or takes free-text topics) and synthesizes a pre-work spec. Injects a prior art concierge (shared helper registry) enriched by your project's vector DB lessons to prevent hallucinations.
+
+Inputs are OPTIONAL because `--from <record>` is an alternative subject. Running `totem spec` with neither inputs nor `--from` is an error naming the usage line.
+
+- **Flags:**
+  - `--from <record>`: Ground the run on a hand-authored design record. The LLM still runs — the record and the retrieved context are its input — but the RECORD is the anchor (repo-relative path plus the sha256 of the bytes rendered into the prompt) and the record is **never written**. The draft goes to `--stdout` or `--out`; with neither it goes to stdout, because a record derives no default path. `--out` resolving to the record itself is refused, as are a missing, unreadable, empty or whitespace-only record, `--from` combined with positional inputs, and **a record outside the git root the command runs in** (outside a git repo, the root is the cwd) — the bound ref is stored repo-relative and the pre-commit gate resolves it from the worktree top, so a record it cannot reach from there is not a binding. A cohort seat binding a record from a sibling checkout (`--from ../other-repo/design.md`) is therefore refused: copy the record into this repo, or reference it from a record that lives here.
+  - `--raw`: Output the retrieved context without LLM synthesis (no artifact is written).
+  - `--out <path>`: Write the draft to a specific file.
+  - `--stdout`: Print the draft to standard output (mutually exclusive with `--out`).
+  - `--model <name>`: Override the default orchestrator model.
+  - `--fresh`: Bypass the cache and force a fresh LLM call.
+
+#### The unanchored-topic refusal
+
+Every run publishes what it was ANCHORED on, in `grounding.anchor.kind` of the run artifact: `issue` (every input resolved to an issue), `record` (`--from`), `free-text` (every input was a topic), or `mixed` (issues and topics together).
+
+A run with **no issue and no record** refuses when retrieval returns zero items, or when every hit carrying a relevance signal is below `searchRelevanceFloor` and no floor-exempt (keyword-only) hit exists. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate:
+
+```text
+[Totem Error] Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.
+Retrieval returned 0 hits — nothing in the index grounds this run.
+floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)
+```
+
+It exits non-zero and writes **no run artifact**. A free-text or mixed run that proceeds prints one warning that it is not gate evidence.
+
+`--raw` is **exempt**: it makes no LLM call and mints nothing, so it stays the way to inspect a weak topic's retrieval before deciding how to anchor it.
 
 ### `totem handoff`
 

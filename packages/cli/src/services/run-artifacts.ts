@@ -18,7 +18,7 @@
 
 import * as path from 'node:path';
 
-import type { RunArtifact, TotemConfig } from '@mmnto/totem';
+import type { GroundingBundle, RunArtifact, TotemConfig } from '@mmnto/totem';
 import {
   ADMISSION_COMPLETION_ONLY,
   calculateDeterministicHash,
@@ -97,10 +97,17 @@ export async function rerunArtifact(opts: RerunArtifactOptions): Promise<RerunAr
       : {}),
     artifact: {
       // The rerun makes no new grounding claim — identity carried verbatim,
-      // including the per-item bundle when the source artifact has one (mmnto-ai/totem#2101).
+      // including the per-item bundle when the source artifact has one (mmnto-ai/totem#2101)
+      // and the anchor + floor when it has those (mmnto-ai/totem#2700). The
+      // anchor is PART of that identity: dropping it would mint a newest
+      // `caller: spec` artifact with no anchor at all, and the strict gate
+      // would then print a false "predates the anchored-evidence rule" over a
+      // run whose source was properly anchored.
       groundingHash: source.grounding.hash,
       provenanceSummary: source.grounding.provenanceSummary,
       ...(source.grounding.bundle !== undefined ? { bundle: source.grounding.bundle } : {}),
+      ...(source.grounding.anchor !== undefined ? { anchor: source.grounding.anchor } : {}),
+      ...(source.grounding.floor !== undefined ? { floor: source.grounding.floor } : {}),
       ...(source.inputBundle.diffScope !== undefined
         ? { diffScope: source.inputBundle.diffScope }
         : {}),
@@ -131,8 +138,19 @@ export async function rerunArtifact(opts: RerunArtifactOptions): Promise<RerunAr
 export interface RunArtifactComparison {
   /** `inputHash` equality — same logical bundle in. */
   sameInput: boolean;
-  /** Grounding hash + provenance equality. */
+  /** Provenance equality plus delivered-item equality — the bundles compared with `relevance` stripped when both sides carry one, the recorded `grounding.hash` otherwise (mmnto-ai/totem#2700). */
   sameGrounding: boolean;
+  /**
+   * The recorded `grounding.hash` of each side, verbatim (mmnto-ai/totem#2700).
+   *
+   * `sameGrounding` deliberately compares the relevance-STRIPPED surface, so
+   * the strict hash equality — which `relevance` entered at 1.3.0 — would
+   * otherwise be unobservable from `totem artifact compare`. Publishing both
+   * hashes lets a reader see the strict signal beside the looser verdict
+   * without re-loading either artifact.
+   */
+  groundingHashA: string;
+  groundingHashB: string;
   /** Backend identity equality across all recorded fields. */
   sameBackend: boolean;
   /** Backend field names that differ (empty when sameBackend). */
@@ -201,6 +219,45 @@ function tokenDelta(a: number | null | undefined, b: number | null | undefined):
 }
 
 /**
+ * The bundle with every item's `relevance` dropped — canonical order preserved
+ * (the array is mapped, never re-sorted; the sort key is unchanged by
+ * mmnto-ai/totem#2700).
+ *
+ * `relevance` ENTERS `grounding.hash` from 1.3.0, so two runs that delivered
+ * the SAME items with different measured relevance now hash differently. A raw
+ * hash comparison would report those as different grounding — a silent
+ * narrowing of `sameGrounding`'s meaning from "the same items grounded both
+ * runs" to "the same items measured identically". Stripping the measurement
+ * keeps the delivered-item set the subject of the comparison.
+ */
+function bundleWithoutRelevance(bundle: GroundingBundle): GroundingBundle {
+  return {
+    items: bundle.items.map((item) => {
+      const { relevance: _relevance, ...rest } = item;
+      return rest;
+    }),
+  };
+}
+
+/**
+ * Whether two artifacts were grounded on the same surface. When BOTH carry a
+ * bundle the comparison is over the delivered items with `relevance` stripped
+ * (see {@link bundleWithoutRelevance}); otherwise there is nothing to strip
+ * and the recorded `grounding.hash` is the only identity either side has, so
+ * the pre-1.3.0 comparison stands unchanged.
+ */
+function sameGroundingSurface(a: RunArtifact, b: RunArtifact): boolean {
+  if (a.grounding.provenanceSummary !== b.grounding.provenanceSummary) return false;
+  const bundleA = a.grounding.bundle;
+  const bundleB = b.grounding.bundle;
+  if (bundleA === undefined || bundleB === undefined) return a.grounding.hash === b.grounding.hash;
+  return (
+    calculateDeterministicHash(bundleWithoutRelevance(bundleA)) ===
+    calculateDeterministicHash(bundleWithoutRelevance(bundleB))
+  );
+}
+
+/**
  * Deterministic artifact-vs-artifact diff. Pure function of its two inputs —
  * no I/O, no scoring, no randomness.
  */
@@ -219,9 +276,9 @@ export function compareRunArtifacts(a: RunArtifact, b: RunArtifact): RunArtifact
 
   return {
     sameInput: a.inputHash === b.inputHash,
-    sameGrounding:
-      a.grounding.hash === b.grounding.hash &&
-      a.grounding.provenanceSummary === b.grounding.provenanceSummary,
+    sameGrounding: sameGroundingSurface(a, b),
+    groundingHashA: a.grounding.hash,
+    groundingHashB: b.grounding.hash,
     sameBackend: backendDelta.length === 0,
     backendDelta,
     sameAdmission: admissionDelta.length === 0,

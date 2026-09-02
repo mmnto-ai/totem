@@ -663,8 +663,12 @@ export const TotemConfigSchema = z.object({
        *  `totem spec` run artifact under `<totemDir>/artifacts/runs/` (`.totem/artifacts/runs/`
        *  unless `totemDir` overrides it; top-level
        *  `admission.runMetadata.caller === 'spec'`, mmnto-ai/totem#2690) — and shield
-       *  gates. Agents are auto-detected and enforced at strict level regardless of
-       *  this setting. The tier is rendered into the hook at install, so re-run
+       *  gates. Since mmnto-ai/totem#2700 that check requires an ANCHORED artifact —
+       *  grounded on an issue, or on a design record bound with `totem spec --from
+       *  <record>` — whose subject carries the shape the command promises; a
+       *  free-text topic run, and any artifact written before the rule, read as
+       *  not-evidence. Agents are auto-detected and enforced at strict level regardless
+       *  of this setting. The tier is rendered into the hook at install, so re-run
        *  `totem hook install --force` after changing it (mmnto-ai/totem#2692). */
       tier: z.enum(['strict', 'standard']).default('standard'),
     })

@@ -1,9 +1,21 @@
 import { execSync, spawnSync } from 'node:child_process';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import {
+  GROUNDING_ANCHOR_FREE_TEXT,
+  GROUNDING_ANCHOR_ISSUE,
+  GROUNDING_ANCHOR_MIXED,
+  GROUNDING_ANCHOR_RECORD,
+  PROMPT_SOURCE_BUILTIN,
+  PROMPT_SOURCE_OVERRIDE,
+  RUN_ARTIFACT_SCHEMA_VERSION,
+  RunArtifactSchema,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -26,6 +38,7 @@ import {
   TOTEM_PREPUSH_MARKER,
   upgradePrePushHookIfNeeded,
 } from './install-hooks.js';
+import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
 
 // The default render options every pre-#2692 positional call implied
 // (mmnto-ai/totem#2692 C2 — the builders take a REQUIRED options object now, so
@@ -36,6 +49,102 @@ const RENDER = {
   totemDir: '.totem',
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };
+
+// ─── Anchored-evidence fixtures (mmnto-ai/totem#2700) ───
+//
+// Since #2700 an artifact is evidence only when it is ANCHORED and its SUBJECT
+// carries a shape. These build the smallest artifact that satisfies each arm,
+// so a test that means to exercise something else (age, newest-wins, torn
+// files) does not accidentally exercise the shape check.
+
+/** A draft that satisfies the TEMPLATE shape: every required heading with a body. */
+const TEMPLATE_DRAFT = SPEC_REQUIRED_SECTIONS.map(
+  (heading) => `${heading}\n\nA non-blank body under ${heading}.\n`,
+).join('\n');
+
+/** A draft that satisfies only the looser DOCUMENT shape — one heading with a body. */
+const DOCUMENT_DRAFT = '## A hand-shaped section\n\nA body under it.\n';
+
+/** The minimal ISSUE-anchored, template-shaped run artifact the gate accepts. */
+function specEvidenceArtifact(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    admission: { runMetadata: { caller: 'spec', promptSource: PROMPT_SOURCE_BUILTIN } },
+    grounding: { anchor: { kind: GROUNDING_ANCHOR_ISSUE, ref: '#2700' } },
+    output: { content: TEMPLATE_DRAFT },
+    createdAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+/**
+ * The fixture wrapped in the fields every run artifact must carry and the
+ * reader never touches — so the whole thing can be parsed by the REAL schema.
+ */
+function asRunArtifact(fixture: Record<string, unknown>): Record<string, unknown> {
+  const grounding = fixture['grounding'] as Record<string, unknown>;
+  const output = fixture['output'] as Record<string, unknown>;
+  return {
+    ...fixture,
+    schemaVersion: RUN_ARTIFACT_SCHEMA_VERSION,
+    inputBundle: { maskedPrompt: 'the masked prompt' },
+    inputHash: 'a'.repeat(64),
+    grounding: { hash: 'b'.repeat(64), provenanceSummary: 'similarity-only:1', ...grounding },
+    backend: {
+      provider: 'gemini',
+      model: 'gemini-3-flash-preview',
+      qualifiedModel: 'gemini:gemini-3-flash-preview',
+      admissionClass: 'completion_only',
+      taskProfile: 'Spec',
+    },
+    output: { metrics: { durationMs: 500 }, ...output },
+  };
+}
+
+// The hook's reader is a rendered `node -e` string: it walks the artifact by
+// HAND-SPELLED paths (`grounding.anchor`, `admission.runMetadata.promptSource`,
+// `output.content`) that no type checker sees. These tests bind the PASS
+// fixtures those paths are exercised against to the real core schema, so a
+// rename or a shape change on the writer's side breaks a test here rather than
+// silently leaving the hook reading a field that no longer exists.
+describe('the anchored-evidence fixtures parse as real run artifacts (mmnto-ai/totem#2700)', () => {
+  it('the issue-anchored PASS fixture round-trips through RunArtifactSchema with its three read paths intact', () => {
+    const parsed = RunArtifactSchema.parse(asRunArtifact(specEvidenceArtifact()));
+    expect(parsed.grounding.anchor).toEqual({ kind: GROUNDING_ANCHOR_ISSUE, ref: '#2700' });
+    expect(parsed.admission?.runMetadata?.promptSource).toBe(PROMPT_SOURCE_BUILTIN);
+    expect(parsed.output.content).toBe(TEMPLATE_DRAFT);
+  });
+
+  it('the record-anchored PASS fixture round-trips, sha256 and all', () => {
+    const sha256 = 'a'.repeat(64);
+    const parsed = RunArtifactSchema.parse(
+      asRunArtifact(
+        specEvidenceArtifact({
+          grounding: {
+            anchor: { kind: GROUNDING_ANCHOR_RECORD, ref: '.totem/specs/2700.md', sha256 },
+          },
+        }),
+      ),
+    );
+    expect(parsed.grounding.anchor).toEqual({
+      kind: GROUNDING_ANCHOR_RECORD,
+      ref: '.totem/specs/2700.md',
+      sha256,
+    });
+  });
+
+  it('the override-prompt PASS fixture round-trips with promptSource "override"', () => {
+    const parsed = RunArtifactSchema.parse(
+      asRunArtifact(
+        specEvidenceArtifact({
+          admission: { runMetadata: { caller: 'spec', promptSource: PROMPT_SOURCE_OVERRIDE } },
+          output: { content: DOCUMENT_DRAFT },
+        }),
+      ),
+    );
+    expect(parsed.admission?.runMetadata?.promptSource).toBe(PROMPT_SOURCE_OVERRIDE);
+    expect(parsed.output.content).toBe(DOCUMENT_DRAFT);
+  });
+});
 
 describe('detectTotemPrefix', () => {
   let tmpDir: string;
@@ -1728,6 +1837,35 @@ describe('buildPreCommitHook with strict tier', () => {
     expect(hook).toContain('spec evidence:');
     expect(hook).not.toContain('(legacy marker)');
   });
+
+  // mmnto-ai/totem#2700 — the reader's vocabulary is RENDERED from the one
+  // canonical constant, never re-spelled in the hook text, so a change to the
+  // writer's spelling can never leave the gate reading a stale word.
+  it('renders SPEC_REQUIRED_SECTIONS and the anchor vocabulary as JSON literals', () => {
+    const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
+    expect(hook).toContain(`const REQUIRED = ${JSON.stringify(SPEC_REQUIRED_SECTIONS)};`);
+    expect(hook).toContain(`const KIND_ISSUE = ${JSON.stringify(GROUNDING_ANCHOR_ISSUE)};`);
+    expect(hook).toContain(`const KIND_RECORD = ${JSON.stringify(GROUNDING_ANCHOR_RECORD)};`);
+    expect(hook).toContain(`const PROMPT_OVERRIDE = ${JSON.stringify(PROMPT_SOURCE_OVERRIDE)};`);
+  });
+
+  it('carries the exit-3 arm distinctly from the exit-2 and reader-failure arms', () => {
+    const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
+    expect(hook).toContain('elif [ "$reader_status" = "3" ]; then');
+    expect(hook).toContain(
+      `echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"`,
+    );
+    // The two pre-existing arms keep their exact text.
+    expect(hook).toContain('no totem spec run artifact under .totem/artifacts/runs/');
+    expect(hook).toContain('the spec-evidence reader could not run (node exit status');
+  });
+
+  it('the reader body carries no single quote (it lives inside a single-quoted node -e word)', () => {
+    const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
+    const reader = hook.split("node -e '")[1]?.split("\n' 2>/dev/null)")[0] ?? '';
+    expect(reader.length).toBeGreaterThan(0);
+    expect(reader).not.toContain("'");
+  });
 });
 
 // The strict block EXECUTED under sh (mmnto-ai/totem#2690): the string checks
@@ -1822,10 +1960,7 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
   it.skipIf(!shellOk)(
     'passes on a spec run artifact and prints the evidence line with its age',
     () => {
-      writeRun('a.json', {
-        admission: { runMetadata: { caller: 'spec' } },
-        createdAt: new Date().toISOString(),
-      });
+      writeRun('a.json', specEvidenceArtifact());
       const r = runHook();
       expect(r.status).toBe(0);
       expect(r.stdout).toContain('[Totem] spec evidence: .totem/artifacts/runs/a.json (');
@@ -1872,10 +2007,7 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
     'skips a torn (unparseable) artifact and still passes on a valid one beside it',
     () => {
       writeRun('torn.json', '{"admission": {"runMetadata": {"caller": "spec"');
-      writeRun('ok.json', {
-        admission: { runMetadata: { caller: 'spec' } },
-        createdAt: new Date().toISOString(),
-      });
+      writeRun('ok.json', specEvidenceArtifact());
       const r = runHook();
       expect(r.status).toBe(0);
       expect(r.stdout).toContain('.totem/artifacts/runs/ok.json');
@@ -1889,18 +2021,631 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
   });
 
   it.skipIf(!shellOk)('names the NEWEST spec artifact by its own createdAt', () => {
-    writeRun('old.json', {
-      admission: { runMetadata: { caller: 'spec' } },
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
-    writeRun('new.json', {
-      admission: { runMetadata: { caller: 'spec' } },
-      createdAt: new Date().toISOString(),
-    });
+    writeRun('old.json', specEvidenceArtifact({ createdAt: '2026-01-01T00:00:00.000Z' }));
+    writeRun('new.json', specEvidenceArtifact());
     const r = runHook();
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('.totem/artifacts/runs/new.json');
     expect(r.stdout).not.toContain('old.json');
+  });
+});
+
+// The mmnto-ai/totem#2700 arm, EXECUTED: an artifact is evidence only when it
+// is ANCHORED (issue | record) and its SUBJECT carries a shape. Every negation
+// must BLOCK with its OWN named reason — never with the "no artifact" line and
+// never as a reader failure — because the reason is the whole cure.
+describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/totem#2700)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+  /**
+   * Whether this platform (and this account) can make a symlink — a Windows
+   * account without SeCreateSymbolicLinkPrivilege cannot. Probed ONCE, outside
+   * any test, so the skip is a real capability check rather than a swallowed
+   * failure inside the assertion.
+   */
+  const symlinkable = ((): boolean => {
+    const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-link-probe-'));
+    const target = path.join(probeDir, 'target');
+    fs.writeFileSync(target, 'probe');
+    let ok = false;
+    try {
+      fs.symlinkSync(target, path.join(probeDir, 'sym'));
+      ok = true;
+    } catch (err) {
+      void err;
+      ok = false;
+    }
+    cleanTmpDir(probeDir);
+    return ok;
+  })();
+  let tmpDir: string;
+  /** A directory OUTSIDE the worktree — the target of the escaping-symlink case. */
+  let outsideDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-anchor-'));
+    outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-outside-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/anchored', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+    cleanTmpDir(outsideDir);
+  });
+
+  function runHook(): { status: number | null; stdout: string } {
+    const r = spawnSync('sh', ['./pre-commit'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+    });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  function writeRun(name: string, artifact: Record<string, unknown>): void {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), JSON.stringify(artifact, null, 2));
+  }
+
+  /** Write a bound record at a repo-relative path and return its sha256. */
+  function writeRecord(relPath: string, body: string): string {
+    const abs = path.join(tmpDir, ...relPath.split('/'));
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body, 'utf-8');
+    return crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+  }
+
+  /** Every BLOCKED arm must be distinguishable from the other two arms. */
+  function expectDistinctBlock(stdout: string): void {
+    expect(stdout).not.toContain('no totem spec run artifact');
+    expect(stdout).not.toContain('the spec-evidence reader could not run');
+  }
+
+  // ── The migration invariant ──
+
+  it.skipIf(!shellOk)(
+    'a PRE-EXISTING artifact (no grounding.anchor) BLOCKS with the `predates` reason, not the no-artifact line',
+    () => {
+      writeRun('legacy.json', {
+        admission: { runMetadata: { caller: 'spec' } },
+        output: { content: TEMPLATE_DRAFT },
+        createdAt: new Date().toISOString(),
+      });
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('predates the anchored-evidence rule (no grounding.anchor)');
+      expect(r.stdout).toContain('.totem/artifacts/runs/legacy.json');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  // ── The unanchored kinds ──
+
+  it.skipIf(!shellOk)('a `free-text` anchor BLOCKS, naming the kind and the topic', () => {
+    writeRun(
+      'ft.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'a loose slug' } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is anchored ${GROUNDING_ANCHOR_FREE_TEXT} (a loose slug)`);
+    expect(r.stdout).toContain('not gate evidence');
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a `mixed` anchor BLOCKS, naming the kind and the ref', () => {
+    writeRun(
+      'mx.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_MIXED, ref: '#2700 | a loose slug' } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is anchored ${GROUNDING_ANCHOR_MIXED} (#2700 | a loose slug)`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('both cures are named on every BLOCKED arm', () => {
+    writeRun(
+      'ft.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'slug' } },
+      }),
+    );
+    const r = runHook();
+    expect(r.stdout).toContain("run 'totem spec <issue>' or 'totem spec --from <record>'");
+  });
+
+  // ── The TEMPLATE shape (issue anchor, built-in prompt) ──
+
+  it.skipIf(!shellOk)(
+    'the one-token draft (a lone newline) BLOCKS on the first missing heading',
+    () => {
+      writeRun('thin.json', specEvidenceArtifact({ output: { content: '\n' } }));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('is missing heading ### Problem Statement');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'both required headings present over EMPTY bodies BLOCK, naming the empty heading',
+    () => {
+      writeRun(
+        'empty.json',
+        specEvidenceArtifact({
+          output: { content: '### Problem Statement\n\n### Implementation Tasks\n' },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('has an empty heading ### Problem Statement');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  it.skipIf(!shellOk)('a second required heading left empty BLOCKS, naming THAT heading', () => {
+    writeRun(
+      'half.json',
+      specEvidenceArtifact({
+        output: {
+          content: '### Problem Statement\n\nA real body.\n\n### Implementation Tasks\n',
+        },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('has an empty heading ### Implementation Tasks');
+  });
+
+  it.skipIf(!shellOk)(
+    'both required headings with bodies PASS, and the evidence line carries the anchor and the shape',
+    () => {
+      writeRun('ok.json', specEvidenceArtifact());
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('[Totem] spec evidence: .totem/artifacts/runs/ok.json (');
+      expect(r.stdout).toContain(`· anchor ${GROUNDING_ANCHOR_ISSUE} #2700`);
+      expect(r.stdout).toContain('· shape TEMPLATE');
+    },
+  );
+
+  it.skipIf(!shellOk)('a non-string draft on an issue anchor BLOCKS as not-text', () => {
+    writeRun('nt.json', specEvidenceArtifact({ output: { content: { nested: true } } }));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('the draft is not text');
+    expectDistinctBlock(r.stdout);
+  });
+
+  // ── The DOCUMENT shape (override prompt on an issue anchor) ──
+
+  it.skipIf(!shellOk)(
+    'an OVERRIDE-prompt draft without the template headings PASSES on one heading with a body',
+    () => {
+      writeRun(
+        'ov.json',
+        specEvidenceArtifact({
+          admission: {
+            runMetadata: { caller: 'spec', promptSource: PROMPT_SOURCE_OVERRIDE },
+          },
+          output: { content: DOCUMENT_DRAFT },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· shape DOCUMENT');
+    },
+  );
+
+  it.skipIf(!shellOk)('an OVERRIDE-prompt draft with no heading at all BLOCKS', () => {
+    writeRun(
+      'ovbad.json',
+      specEvidenceArtifact({
+        admission: { runMetadata: { caller: 'spec', promptSource: PROMPT_SOURCE_OVERRIDE } },
+        output: { content: 'just prose, no heading\n' },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('has no heading with a body');
+    expect(r.stdout).toContain('custom prompt');
+    expectDistinctBlock(r.stdout);
+  });
+
+  // ── The record arm: the SUBJECT is the record's bytes ──
+
+  function recordArtifact(ref: string, sha256: string, draft = TEMPLATE_DRAFT) {
+    return specEvidenceArtifact({
+      grounding: { anchor: { kind: GROUNDING_ANCHOR_RECORD, ref, sha256 } },
+      output: { content: draft },
+    });
+  }
+
+  it.skipIf(!shellOk)(
+    'a present record with a heading and a body PASSES, reporting `record sha256 matches`',
+    () => {
+      const sha = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('rec.json', recordArtifact('.totem/specs/2700.md', sha));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(`· anchor ${GROUNDING_ANCHOR_RECORD} .totem/specs/2700.md`);
+      expect(r.stdout).toContain('· shape DOCUMENT');
+      expect(r.stdout).toContain('· record sha256 matches');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a REVISED record still PASSES — the digest is a SENSOR, never a gate',
+    () => {
+      const bound = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('rec.json', recordArtifact('.totem/specs/2700.md', bound));
+      const now = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract, folded.\n');
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain(
+        `record revised since binding (bound ${bound.slice(0, 8)}, now ${now.slice(0, 8)})`,
+      );
+    },
+  );
+
+  it.skipIf(!shellOk)('a MISSING record BLOCKS, naming the path it was bound at', () => {
+    writeRun('rec.json', recordArtifact('.totem/specs/gone.md', 'b'.repeat(64)));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('the bound record is missing at .totem/specs/gone.md');
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a record with NO heading-with-a-body BLOCKS', () => {
+    const sha = writeRecord('.totem/specs/2700.md', 'prose with no heading\n');
+    writeRun('rec.json', recordArtifact('.totem/specs/2700.md', sha));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(
+      'the bound record at .totem/specs/2700.md has no heading with a body',
+    );
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)(
+    'a record whose heading has no body BLOCKS (a heading alone is not a document)',
+    () => {
+      const sha = writeRecord('.totem/specs/2700.md', '# Heading only\n\n## Another heading\n');
+      writeRun('rec.json', recordArtifact('.totem/specs/2700.md', sha));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('has no heading with a body');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a THIN draft with a rich record PASSES — the reader never reads output.content on a record anchor',
+    () => {
+      const sha = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('rec.json', recordArtifact('.totem/specs/2700.md', sha, '\n'));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· record sha256 matches');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a RICH draft with a missing record BLOCKS — the record is the subject, not the draft',
+    () => {
+      writeRun('rec.json', recordArtifact('.totem/specs/gone.md', 'c'.repeat(64), TEMPLATE_DRAFT));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the bound record is missing at');
+    },
+  );
+
+  // ── The body-line boundary is a HEADING, not a leading "#" ──
+  //
+  // `#2700 is the issue.` is prose about an issue number, not a heading: no
+  // space follows the hashes. Reading it as a boundary made a real body look
+  // empty — the exact sentence a totem design record is most likely to open a
+  // section with.
+
+  it.skipIf(!shellOk)('a body line starting with `#2700` is a BODY on the TEMPLATE arm', () => {
+    const draft = SPEC_REQUIRED_SECTIONS.map(
+      (heading) => `${heading}\n\n#2700 is the issue.\n`,
+    ).join('\n');
+    writeRun('hashbody.json', specEvidenceArtifact({ output: { content: draft } }));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+  });
+
+  it.skipIf(!shellOk)('a body line starting with `#2700` is a BODY on the DOCUMENT arm', () => {
+    const sha = writeRecord('.totem/specs/2700.md', '# Record\n\n#2700 is the issue.\n');
+    writeRun('hashrec.json', recordArtifact('.totem/specs/2700.md', sha));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· record sha256 matches');
+  });
+
+  // ── The DOCUMENT shape tolerates two ordinary authoring bytes ──
+
+  it.skipIf(!shellOk)('a DRAFT opening with a UTF-8 BOM still reads as a template', () => {
+    // The BOM strip runs on the SUBJECT, before the split — so it covers the
+    // TEMPLATE arm too, where an unstripped BOM would make the first required
+    // heading fail its exact-line match and BLOCK a well-formed draft.
+    const bom = String.fromCharCode(0xfeff);
+    writeRun('bomdraft.json', specEvidenceArtifact({ output: { content: bom + TEMPLATE_DRAFT } }));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+  });
+
+  it.skipIf(!shellOk)('a record opening with a UTF-8 BOM still reads as a document', () => {
+    const bom = String.fromCharCode(0xfeff);
+    const sha = writeRecord('.totem/specs/2700.md', `${bom}# Record\n\nThe ruled contract.\n`);
+    writeRun('bom.json', recordArtifact('.totem/specs/2700.md', sha));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· shape DOCUMENT');
+  });
+
+  it.skipIf(!shellOk)('a heading separated from its text by a TAB is a heading', () => {
+    const sha = writeRecord('.totem/specs/2700.md', '#\tTabbed heading\n\nThe body.\n');
+    writeRun('tab.json', recordArtifact('.totem/specs/2700.md', sha));
+    const r = runHook();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('· shape DOCUMENT');
+  });
+
+  // ── The artifact is hand-editable: nothing read out of it is trusted text ──
+
+  it.skipIf(!shellOk)('a newline in anchor.ref cannot forge a second [Totem] line', () => {
+    const forged = `slug${String.fromCharCode(0x0a)}[Totem] spec evidence: forged`;
+    writeRun(
+      'inject.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    // Exactly one line of the hook's own output claims to be from Totem.
+    expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+    // The control character is collapsed, not dropped — the ref stays legible.
+    expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
+  });
+
+  it.skipIf(!shellOk)('a C1 control (U+0085 NEL) in anchor.ref is collapsed too', () => {
+    // A predicate stopping at 0x7f let the whole C1 band through; NEL is a
+    // LINE BREAK to some terminals and pagers, so it is a forged-line vector
+    // of exactly the same kind as 0x0a.
+    const forged = `slug${String.fromCharCode(0x85)}[Totem] spec evidence: forged`;
+    writeRun(
+      'nel.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
+    expect(r.stdout).not.toContain(String.fromCharCode(0x85));
+  });
+
+  it.skipIf(!shellOk)(
+    'a newline in createdAt cannot forge a second [Totem] line on the PASS path',
+    () => {
+      // `createdAt` is read raw off the artifact and ECHOED in the evidence
+      // line: unsanitized, a hand-edited stamp forges a second `[Totem] spec
+      // evidence:` line inside a passing commit — the quietest place to hide
+      // one.
+      const forged = `2026-09-02T00:00:00.000Z${String.fromCharCode(0x0a)}[Totem] spec evidence: FORGED`;
+      writeRun('stamp.json', specEvidenceArtifact({ createdAt: forged }));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      expect(r.stdout).toContain('.000Z?[Totem] spec evidence: FORGED');
+    },
+  );
+
+  it.skipIf(!shellOk)('a record ref that is ABSOLUTE is refused as outside the worktree', () => {
+    writeRun('abs.json', recordArtifact('/etc/passwd', 'd'.repeat(64)));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('the bound record ref is outside the worktree: /etc/passwd');
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)(
+    'a record ref whose first segment is `..` is refused as outside the worktree',
+    () => {
+      writeRun('dotdot.json', recordArtifact('../outside.md', 'd'.repeat(64)));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the bound record ref is outside the worktree: ../outside.md');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  // ── Containment is decided by RESOLUTION, not by segment 0 ──
+  //
+  // A first-segment test reads `sub/../../OUTSIDE.md` and `./../OUTSIDE.md` as
+  // contained, so the reader would have READ and PASSED a file outside the
+  // worktree. The reader now resolves the ref against `process.cwd()` — the
+  // worktree top git runs hooks from — and refuses anything that lands outside
+  // it, which is also the honest rule for the legitimate mid-path `..`.
+
+  /** A backslash, built rather than escaped — the mmnto-ai/totem#2692 authoring trap. */
+  const BACKSLASH = String.fromCharCode(0x5c);
+
+  it.skipIf(!shellOk).each([
+    ['sub/../../OUTSIDE.md', 'a `..` past segment 0'],
+    ['./../OUTSIDE.md', 'a `.` first segment hiding a `..`'],
+    [
+      `a${BACKSLASH}..${BACKSLASH}..${BACKSLASH}OUTSIDE.md`,
+      'the same escape spelled with backslashes',
+    ],
+  ])('refuses %s as outside the worktree (%s)', (ref) => {
+    writeRun('escape.json', recordArtifact(ref, 'd'.repeat(64)));
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`the bound record ref is outside the worktree: ${ref}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)(
+    'a mid-path `..` that stays INSIDE the worktree still PASSES — containment, not a segment ban',
+    () => {
+      // `a/` must exist for POSIX path resolution to reach `a/../b.md`.
+      fs.mkdirSync(path.join(tmpDir, 'a'), { recursive: true });
+      const sha = writeRecord('b.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('inside.json', recordArtifact('a/../b.md', sha));
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· record sha256 matches');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a record anchor with NO sha256 BLOCKS — a binding without bytes is not a binding',
+    () => {
+      writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      writeRun(
+        'nosha.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_RECORD, ref: '.totem/specs/2700.md' } },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the record anchor carries no sha256 — not evidence');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a record anchor whose sha256 is MALFORMED BLOCKS with its OWN reason, not the absent one',
+    () => {
+      // "No digest" and "a digest that is not a digest" are different repairs:
+      // the first says re-bind, the second says the artifact was edited. One
+      // shared message would send both to the wrong cure.
+      writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      writeRun('badsha.json', recordArtifact('.totem/specs/2700.md', 'not-a-digest'));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        'the record anchor sha256 is not a 64-hex digest (not-a-digest) — not evidence',
+      );
+      expect(r.stdout).not.toContain('carries no sha256');
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  // ── Containment sees THROUGH a link (mmnto-ai/totem#2700) ──
+  //
+  // A symlink inside the worktree is LEXICALLY contained, so the resolve-based
+  // test above reads it as legal — and the reader would open, hash and judge a
+  // file outside the tree. The realpath pair is compared once the ref is known
+  // to exist and BEFORE its bytes are read.
+
+  it.skipIf(!shellOk || !symlinkable)(
+    'a record ref that is a SYMLINK to OUTSIDE the worktree BLOCKS, naming both spellings',
+    () => {
+      const target = path.join(outsideDir, 'record.md');
+      fs.writeFileSync(target, '# Outside\n\nThe ruled contract.\n', 'utf-8');
+      const sha = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+      fs.symlinkSync(target, path.join(tmpDir, 'linked.md'));
+      // A CORRECT digest, so the block cannot be the sha256 arm firing early.
+      writeRun('symlink-out.json', recordArtifact('linked.md', sha));
+
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the bound record resolves outside the worktree: linked.md -> ');
+      expect(r.stdout).toContain(fs.realpathSync.native(target));
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  it.skipIf(!shellOk || !symlinkable)(
+    'a record ref that is a SYMLINK to an IN-worktree file PASSES — containment, not a link ban',
+    () => {
+      const sha = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      fs.symlinkSync(
+        path.join(tmpDir, '.totem', 'specs', '2700.md'),
+        path.join(tmpDir, 'linked.md'),
+      );
+      writeRun('symlink-in.json', recordArtifact('linked.md', sha));
+
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· record sha256 matches');
+    },
+  );
+
+  // ── The cure names the cache (mmnto-ai/totem#2700 m11) ──
+
+  it.skipIf(!shellOk)(
+    'the BLOCKED cure names --fresh — a cached response mints no artifact',
+    () => {
+      writeRun(
+        'ft.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'slug' } },
+        }),
+      );
+      const r = runHook();
+      expect(r.stdout).toContain('(add --fresh if the response is cached)');
+    },
+  );
+
+  // ── The other arms stay distinct ──
+
+  it.skipIf(!shellOk)('exit 3 is NEVER reported as a reader failure', () => {
+    writeRun(
+      'ft.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'slug' } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).not.toContain('node exit status');
+  });
+
+  it.skipIf(!shellOk)(
+    'the carried-object substring control still BLOCKS with the no-artifact line',
+    () => {
+      // Only the TOP-LEVEL caller counts: a review artifact that carries a
+      // `caller: spec` object below the top level is not a spec artifact at all,
+      // so the gate reports "none found", not "not evidence".
+      writeRun('r.json', {
+        admission: { runMetadata: { caller: 'review' } },
+        inputBundle: { runMetadata: { caller: 'spec' } },
+        createdAt: new Date().toISOString(),
+      });
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('no totem spec run artifact');
+    },
+  );
+
+  it.skipIf(!shellOk)('the retired hand-set marker still rescues nothing', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'cache'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'cache', '.spec-completed'), '');
+    writeRun(
+      'ft.json',
+      specEvidenceArtifact({
+        grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: 'slug' } },
+      }),
+    );
+    const r = runHook();
+    expect(r.status).toBe(1);
+    expect(r.stdout).not.toContain('spec evidence:');
   });
 });
 
@@ -1947,10 +2692,7 @@ describe('buildPreCommitHook strict evidence under a CUSTOM totemDir — execute
     fs.writeFileSync(path.join(dir, name), JSON.stringify(artifact, null, 2));
   }
 
-  const specArtifact = (): Record<string, unknown> => ({
-    admission: { runMetadata: { caller: 'spec' } },
-    createdAt: new Date().toISOString(),
-  });
+  const specArtifact = (): Record<string, unknown> => specEvidenceArtifact();
 
   it.skipIf(!shellOk)('PASSES on evidence written under the configured totemDir', () => {
     writeRunUnder(CUSTOM_TOTEM_DIR, 'a.json', specArtifact());

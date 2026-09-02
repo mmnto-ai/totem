@@ -130,3 +130,26 @@ The full cycle — every change lands through a human-reviewed PR:
 7. **Human reviews and merges** the PR.
 
 Rules that work get stronger. Rules that don't get weaker. The system learns to stay out of your way.
+
+---
+
+## 3. Named Trap Classes
+
+Some traps are not rule-tuning problems — they are shapes in the tooling itself, closed by a code change and recorded here so the shape stays recognizable when it recurs.
+
+### Slug confabulation in `totem spec`
+
+_Closed by mmnto-ai/totem#2700._
+
+**The shape.** `totem spec <slug>` on a free-text topic retrieves whatever the vector index returns for that string and drafts a confident specification over it. Vector retrieval always returns SOMETHING: on a gemini-embedding index a deliberately nonsensical query still measures well above any noise threshold a reader would guess at — ~0.55 when this was first measured, and 0.36 on a freshly synced index (where a genuinely relevant query scored 0.337–0.354, so the signal barely discriminated at all). Neither measurement leaves room for a floor to catch a slug. Four runs in one week produced architectures naming files, types and flags that do not exist. The drafts read exactly like a grounded run, because nothing in the output — or in the run artifact — recorded which one it had been.
+
+**Why the gate did not catch it.** The strict pre-commit hook asked "did a `totem spec` run happen in this checkout". A confabulated run answers that as well as a grounded one, and so did a run whose entire output was a single newline. The gate measured the ritual, not the grounding.
+
+**The cure — two halves, both deterministic.**
+
+1. **The writer publishes the discriminator.** `grounding.anchor` records what the run was anchored ON (`issue` | `record` | `free-text` | `mixed`), `grounding.floor` records the relevance floor it was judged against, each bundle item carries its `relevance` (absent when the hit had no vector leg — "no signal" is not "weak signal"), and `runMetadata.promptSource` records which system prompt drafted it. A run with no issue and no record REFUSES when retrieval returns nothing, or when every signal-bearing hit is below the floor and no floor-exempt hit exists — naming the floor, its place, and every withheld candidate, and writing no artifact.
+2. **The gate reads the discriminator.** Evidence must be anchored `issue` or `record`, and its subject must carry a shape (see [Enforcement Model](enforcement-model.md)). A `free-text` or `mixed` run BLOCKS by name.
+
+**The named residual.** A draft that mimics the required skeleton with filler bodies is outside any content check's reach. The gate is a ritual with a check on it, not a text to obey — it claims a grounded run preceded the commit, never that the document is good.
+
+**The recognizable signature.** A tool that measures whether a step HAPPENED, when what matters is whether the step was GROUNDED. The cure is always the same: make the producer publish the property, and make the reader gate on it — never let a reader infer it from heuristics.

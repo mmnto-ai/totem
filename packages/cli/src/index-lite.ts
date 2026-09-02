@@ -559,7 +559,11 @@ registerExcluded(
   'review',
   'Supplementary AI review lanes over your diff (advisory — not a merge gate)',
 );
-registerExcluded('spec <inputs...>', 'Generate a pre-work spec briefing');
+// `[inputs...]` mirrors index.ts since mmnto-ai/totem#2700: the required
+// variadic refused `totem spec --from <record>` at the parser, so the lite
+// binary would print commander's usage error instead of its own
+// requires-the-full-install line.
+registerExcluded('spec [inputs...]', 'Generate a pre-work spec briefing');
 registerExcluded('handoff', 'Generate an end-of-session handoff snapshot');
 registerExcluded('triage-pr <pr-number>', 'Categorized triage view of bot review comments');
 registerExcluded('triage', 'Prioritize open issues into an active work roadmap');
