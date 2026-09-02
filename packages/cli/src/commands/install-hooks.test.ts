@@ -2037,10 +2037,34 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
 describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/totem#2700)', () => {
   const shellOk =
     spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+  /**
+   * Whether this platform (and this account) can make a symlink — a Windows
+   * account without SeCreateSymbolicLinkPrivilege cannot. Probed ONCE, outside
+   * any test, so the skip is a real capability check rather than a swallowed
+   * failure inside the assertion.
+   */
+  const symlinkable = ((): boolean => {
+    const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-link-probe-'));
+    const target = path.join(probeDir, 'target');
+    fs.writeFileSync(target, 'probe');
+    let ok = false;
+    try {
+      fs.symlinkSync(target, path.join(probeDir, 'sym'));
+      ok = true;
+    } catch (err) {
+      void err;
+      ok = false;
+    }
+    cleanTmpDir(probeDir);
+    return ok;
+  })();
   let tmpDir: string;
+  /** A directory OUTSIDE the worktree — the target of the escaping-symlink case. */
+  let outsideDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-anchor-'));
+    outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-outside-'));
     execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
     execSync('git checkout -q -b feat/anchored', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
@@ -2048,6 +2072,7 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
 
   afterEach(() => {
     cleanTmpDir(tmpDir);
+    cleanTmpDir(outsideDir);
   });
 
   function runHook(): { status: number | null; stdout: string } {
@@ -2504,14 +2529,61 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
   );
 
   it.skipIf(!shellOk)(
-    'a record anchor whose sha256 is not a 64-hex digest BLOCKS the same way',
+    'a record anchor whose sha256 is MALFORMED BLOCKS with its OWN reason, not the absent one',
     () => {
+      // "No digest" and "a digest that is not a digest" are different repairs:
+      // the first says re-bind, the second says the artifact was edited. One
+      // shared message would send both to the wrong cure.
       writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
       writeRun('badsha.json', recordArtifact('.totem/specs/2700.md', 'not-a-digest'));
       const r = runHook();
       expect(r.status).toBe(1);
-      expect(r.stdout).toContain('the record anchor carries no sha256 — not evidence');
+      expect(r.stdout).toContain(
+        'the record anchor sha256 is not a 64-hex digest (not-a-digest) — not evidence',
+      );
+      expect(r.stdout).not.toContain('carries no sha256');
       expectDistinctBlock(r.stdout);
+    },
+  );
+
+  // ── Containment sees THROUGH a link (mmnto-ai/totem#2700) ──
+  //
+  // A symlink inside the worktree is LEXICALLY contained, so the resolve-based
+  // test above reads it as legal — and the reader would open, hash and judge a
+  // file outside the tree. The realpath pair is compared once the ref is known
+  // to exist and BEFORE its bytes are read.
+
+  it.skipIf(!shellOk || !symlinkable)(
+    'a record ref that is a SYMLINK to OUTSIDE the worktree BLOCKS, naming both spellings',
+    () => {
+      const target = path.join(outsideDir, 'record.md');
+      fs.writeFileSync(target, '# Outside\n\nThe ruled contract.\n', 'utf-8');
+      const sha = crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+      fs.symlinkSync(target, path.join(tmpDir, 'linked.md'));
+      // A CORRECT digest, so the block cannot be the sha256 arm firing early.
+      writeRun('symlink-out.json', recordArtifact('linked.md', sha));
+
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the bound record resolves outside the worktree: linked.md -> ');
+      expect(r.stdout).toContain(fs.realpathSync.native(target));
+      expectDistinctBlock(r.stdout);
+    },
+  );
+
+  it.skipIf(!shellOk || !symlinkable)(
+    'a record ref that is a SYMLINK to an IN-worktree file PASSES — containment, not a link ban',
+    () => {
+      const sha = writeRecord('.totem/specs/2700.md', '# Record\n\nThe ruled contract.\n');
+      fs.symlinkSync(
+        path.join(tmpDir, '.totem', 'specs', '2700.md'),
+        path.join(tmpDir, 'linked.md'),
+      );
+      writeRun('symlink-in.json', recordArtifact('linked.md', sha));
+
+      const r = runHook();
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('· record sha256 matches');
     },
   );
 

@@ -794,14 +794,20 @@ export function buildPreCommitHook(options: {
   // newline in any of them would otherwise forge a second `[Totem]` line in the
   // hook's own output; `safe()` collapses C0 (0x00–0x1f) AND the DEL/C1 band
   // (0x7f–0x9f), because U+0085 (NEL) breaks a line on some terminals.
-  // Containment is decided by RESOLUTION, not by inspecting one segment: a
-  // `record` ref that is absolute (either path flavor) or whose resolved path
-  // leaves `process.cwd()` — the worktree top git runs hooks from — is refused,
-  // so `sub/../../x.md` and `./../x.md` are caught where a first-segment test
-  // let them through, while a mid-path `..` that stays inside stays legal. A
-  // `record` anchor whose `sha256` is not a 64-hex digest is refused outright
-  // rather than reported as a malformed sensor line. Every reason and the pass
-  // line go out through `fs.writeSync(1, …)`: `process.stdout.write` is
+  // Containment is decided by RESOLUTION, not by inspecting one segment, and
+  // it is decided TWICE. Lexically first: a `record` ref that is absolute
+  // (either path flavor) or whose `path.resolve` against `process.cwd()` — the
+  // worktree top git runs hooks from — lands outside it is refused, so
+  // `sub/../../x.md` and `./../x.md` are caught where a first-segment test let
+  // them through, while a mid-path `..` that stays inside stays legal. Then by
+  // REALPATH, once the ref is known to exist and before its bytes are read: an
+  // in-repo SYMLINK whose target lives outside the tree is lexically contained
+  // and would otherwise be read and judged, so the resolved pair is compared
+  // too and the block names both spellings. A `record` anchor whose `sha256` is
+  // missing and one whose `sha256` is not a 64-hex digest are refused with
+  // their OWN reasons — "no sha256" and "not a 64-hex digest" are different
+  // repairs — rather than as one malformed sensor line. Every reason and the
+  // pass line go out through `fs.writeSync(1, …)`: `process.stdout.write` is
   // asynchronous on a pipe (macOS), so `process.exit` could truncate the text
   // the `sh` arm is about to echo.
   const strictBlock = `
@@ -863,13 +869,16 @@ function isHeading(line) {
   if ([" ", "\\t"].indexOf(line.charAt(n)) < 0) return false;
   return line.slice(n + 1).trim().length > 0;
 }
+function escapesTop(rel) {
+  const norm = rel.split("\\\\").join("/");
+  if (nodePath.win32.isAbsolute(norm) || nodePath.posix.isAbsolute(norm)) return true;
+  return [".."].indexOf(norm) > -1 || ["../"].indexOf(norm.slice(0, 3)) > -1;
+}
 function outsideWorktree(r) {
   const norm = r.split("\\\\").join("/");
   if (nodePath.win32.isAbsolute(norm) || nodePath.posix.isAbsolute(norm)) return true;
   const top = process.cwd();
-  const rel = nodePath.relative(top, nodePath.resolve(top, norm)).split("\\\\").join("/");
-  if (nodePath.win32.isAbsolute(rel) || nodePath.posix.isAbsolute(rel)) return true;
-  return [".."].indexOf(rel) > -1 || ["../"].indexOf(rel.slice(0, 3)) > -1;
+  return escapesTop(nodePath.relative(top, nodePath.resolve(top, norm)));
 }
 const art = best.art;
 const grounding = art.grounding;
@@ -893,11 +902,16 @@ if (kind !== KIND_RECORD) {
 } else {
   if (outsideWorktree(ref)) block("the bound record ref is outside the worktree: " + shownRef);
   const bound = ["string"].indexOf(typeof anchor.sha256) < 0 ? "" : anchor.sha256;
-  if (!/^[0-9a-f]{64}$/.test(bound)) block("the record anchor carries no sha256 — not evidence (" + shownFile + ")");
+  if (bound.length < 1) block("the record anchor carries no sha256 — not evidence (" + shownFile + ")");
+  if (!/^[0-9a-f]{64}$/.test(bound)) block("the record anchor sha256 is not a 64-hex digest (" + safe(bound) + ") — not evidence (" + shownFile + ")");
+  const missingRecord = "the bound record is missing at " + shownRef + " (bound by " + shownFile + ")";
+  if (!fs.existsSync(ref)) block(missingRecord);
+  const realRef = fs.realpathSync.native(ref);
+  if (escapesTop(nodePath.relative(fs.realpathSync.native(process.cwd()), realRef))) block("the bound record resolves outside the worktree: " + shownRef + " -> " + safe(realRef));
   let bytes = null;
   let read = false;
   try { bytes = fs.readFileSync(ref); read = true; } catch (err) { read = false; }
-  if (!read) block("the bound record is missing at " + shownRef + " (bound by " + shownFile + ")");
+  if (!read) block(missingRecord);
   subject = bytes.toString("utf8");
   shape = "DOCUMENT";
   const now = crypto.createHash("sha256").update(bytes).digest("hex");

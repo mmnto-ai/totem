@@ -157,9 +157,14 @@ export function expandSpecQuery(query: string): string {
 export interface SpecRecord {
   /** Repo-relative path (forward slashes) — the anchor's `ref`; the gate reads the file at this path from the worktree top. */
   path: string;
-  /** sha256 (hex) of the very bytes rendered into the prompt. */
+  /** sha256 (hex) of the file's RAW bytes — what the pre-commit reader hashes. */
   sha256: string;
-  /** The record's text, decoded utf-8 from the same buffer the digest was taken over. */
+  /**
+   * The record's text, decoded utf-8 from the same buffer the digest was taken
+   * over, with one leading byte-order mark stripped: the mark is a decoding
+   * artifact, never part of the document, and the digest above still names the
+   * raw bytes so both sides hash the same thing.
+   */
   body: string;
 }
 
@@ -169,11 +174,13 @@ export interface ParsedInput {
   /** The bound design record (mmnto-ai/totem#2700) — the third arm; `null` on the issue and topic arms. */
   record: SpecRecord | null;
   /**
-   * The ISSUE input exactly as typed (`owner/repo#N` or a URL) — the anchor's
-   * `ref` must round-trip what the operator wrote, and a fetched
-   * {@link StandardIssue} carries only the number. Absent for a bare-number
-   * input (the ref is then `#<number>`) and on the topic / record arms, whose
-   * refs are the topic text and the record path.
+   * The ISSUE input exactly as typed — recorded for EVERY issue input, bare
+   * numbers included, because a fetched {@link StandardIssue} carries only the
+   * number and the anchor's `ref` must round-trip what the operator wrote.
+   * {@link issueAnchorRef} decides what reaches the ref: a bare number renders
+   * as `#<n>`, while a qualified `owner/repo#N` or a URL is kept as typed
+   * (sanitized). Absent on the topic / record arms, whose refs are the topic
+   * text and the record path.
    */
   issueRef?: string;
 }
@@ -307,6 +314,18 @@ export interface SpecRecordDeps {
 }
 
 /**
+ * The byte-order mark's code point. Written numerically because an authored
+ * `\u` escape lands in this file as a RAW control byte through some editing
+ * paths (mmnto-ai/totem#2692).
+ */
+const UTF8_BOM_CODE_POINT = 0xfeff;
+
+/** A path in the one spelling every containment predicate and the hook agree on. */
+function toForwardSlashes(target: string): string {
+  return target.split(path.sep).join('/');
+}
+
+/**
  * Whether a root-relative record path ESCAPES the repository — the containment
  * gate on `grounding.anchor.ref` (mmnto-ai/totem#2700).
  *
@@ -329,6 +348,11 @@ export interface SpecRecordDeps {
  * `resolve` + `relative` containment test, so both sides answer the same on the
  * same input — the predicate is compared by path SEGMENT throughout, which is
  * why a file named `..notes.md` inside the root stays legal.
+ *
+ * {@link loadSpecRecord} asks this TWICE: once on the lexical repo-relative
+ * spelling that becomes the ref, and once on the relative path between the two
+ * REALPATHS, so an in-repo symlink whose target lives outside the tree is
+ * refused as well. Normalization alone cannot see through a link.
  */
 export function isRecordPathOutsideRoot(relativePath: string): boolean {
   if (path.win32.isAbsolute(relativePath) || path.posix.isAbsolute(relativePath)) return true;
@@ -346,6 +370,19 @@ export interface LoadedSpecRecord {
  * Read and bind the `--from` record. ONE `readFileSync` produces both the
  * digest and the prompt bytes, so `grounding.anchor.sha256` provably names
  * what the model was shown. Every rejection names the path.
+ *
+ * Order is load-bearing. Existence is decided FIRST, so a path that names
+ * nothing keeps the "record not found" cure. CONTAINMENT is decided second —
+ * before any `statSync` or `readFileSync` — so a record outside the repository
+ * is refused as uncontained rather than by whatever the read happens to say
+ * about it (a directory outside the root must not surface as "not a file").
+ * Containment is judged twice: LEXICALLY on the spelling that becomes the
+ * published ref, and again on the REALPATHS of the record and the root, so an
+ * in-repo symlink pointing out of the tree cannot bind a file the gate would
+ * read from outside the worktree. `record.path` stays the LEXICAL
+ * repo-relative path of the file as given — the hook resolves links on its own
+ * side, and rewriting the ref to a link's target would publish a path the
+ * operator never wrote.
  */
 export function loadSpecRecord(
   fromPath: string,
@@ -355,13 +392,43 @@ export function loadSpecRecord(
 ): LoadedSpecRecord {
   const absolutePath = path.resolve(cwd, fromPath);
 
+  if (!fs.existsSync(absolutePath)) {
+    throw new TotemConfigErrorCtor(
+      `--from record not found: ${absolutePath}`,
+      'Point --from at an existing design record (a markdown file you wrote).',
+      'CONFIG_INVALID',
+    );
+  }
+
+  // Repo-relative with forward slashes: the strict pre-commit reader resolves
+  // this ref from the worktree top, which is where git runs hooks.
+  const root = deps.resolveGitRoot(cwd) ?? cwd;
+  const relativePath = toForwardSlashes(path.relative(root, absolutePath));
+  // The realpath pair: `absolutePath` exists (checked above) and `root` is the
+  // git root or the cwd the process is running in. A realpath that fails on
+  // either is a real fault (a permission change, a vanished volume), and
+  // swallowing it would silently downgrade containment to the lexical half it
+  // exists to reinforce — so these calls run UNGUARDED, as `isSameFile` does.
+  const realAbs = fs.realpathSync.native(absolutePath);
+  const realRoot = fs.realpathSync.native(root);
+  const resolvedRelativePath = toForwardSlashes(path.relative(realRoot, realAbs));
+  if (isRecordPathOutsideRoot(relativePath) || isRecordPathOutsideRoot(resolvedRelativePath)) {
+    const resolved =
+      path.relative(absolutePath, realAbs).length === 0 ? '' : ` (resolves to ${realAbs})`;
+    throw new TotemConfigErrorCtor(
+      `--from record is outside the repository: ${absolutePath}${resolved} (git root ${root}).`,
+      'Point --from at a record inside this repo — the pre-commit gate resolves the bound ref from the worktree top.',
+      'CONFIG_INVALID',
+    );
+  }
+
   let stats: fs.Stats;
   try {
     stats = fs.statSync(absolutePath);
   } catch (err) {
     throw new TotemConfigErrorCtor(
-      `--from record not found: ${absolutePath}`,
-      'Point --from at an existing design record (a markdown file you wrote).',
+      `--from record is unreadable: ${absolutePath}`,
+      'Check the file permissions and retry.',
       'CONFIG_INVALID',
       err,
     );
@@ -386,7 +453,16 @@ export function loadSpecRecord(
     );
   }
 
-  const body = buffer.toString('utf-8');
+  // A record saved by a BOM-writing editor decodes with U+FEFF in front of its
+  // first heading — invisible, but enough to make the first line stop matching
+  // a heading, so the retrieval query would open with the mark and the mark
+  // would ride into the prompt's `record_body`. One leading mark is stripped
+  // from the DECODED text only; the digest below is taken over the RAW bytes,
+  // BOM included, because the pre-commit reader hashes the file's raw bytes —
+  // stripping before the hash would make every bound BOM record read as
+  // "revised since binding" on the very first commit.
+  const decoded = buffer.toString('utf-8');
+  const body = decoded.charCodeAt(0) === UTF8_BOM_CODE_POINT ? decoded.slice(1) : decoded;
   if (body.trim().length === 0) {
     throw new TotemConfigErrorCtor(
       `--from record is empty: ${absolutePath}`,
@@ -396,17 +472,6 @@ export function loadSpecRecord(
   }
 
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
-  // Repo-relative with forward slashes: the strict pre-commit reader resolves
-  // this ref from the worktree top, which is where git runs hooks.
-  const root = deps.resolveGitRoot(cwd) ?? cwd;
-  const relativePath = path.relative(root, absolutePath).split(path.sep).join('/');
-  if (isRecordPathOutsideRoot(relativePath)) {
-    throw new TotemConfigErrorCtor(
-      `--from record is outside the repository: ${absolutePath} (git root ${root}).`,
-      'Point --from at a record inside this repo — the pre-commit gate resolves the bound ref from the worktree top.',
-      'CONFIG_INVALID',
-    );
-  }
 
   return { record: { path: relativePath, sha256, body }, absolutePath };
 }
@@ -472,23 +537,29 @@ const ANCHOR_REF_C1_MAX = 0x9f;
 const ANCHOR_REF_SUBSTITUTE = '?';
 
 /**
- * Collapse control characters in a free-text topic to `?` before it becomes an
- * anchor `ref` (mmnto-ai/totem#2700).
+ * Collapse control characters to `?` in an anchor `ref` built out of raw argv
+ * (mmnto-ai/totem#2700).
  *
- * A topic is the ONE anchor ref the CLI builds out of raw argv, so it is the
- * one that can carry a tab or a newline the user typed. `GroundingAnchorSchema`
- * refuses such a ref outright — correctly, since the pre-commit hook echoes it
- * — but that refusal fires inside `saveRunArtifact`, under `runOrchestrator`'s
- * warn-and-continue catch: the draft would survive and only the ARTIFACT would
- * be lost, silently, for a ref the CLI itself produced. Collapsing at the mint
- * site keeps the artifact writable and the echo safe, and the substitution is
- * the same one the reader applies defensively to what it reads back.
+ * A topic and a qualified issue ref are the anchor refs the CLI takes VERBATIM
+ * from the command line, so they are the ones that can carry a tab or a newline
+ * the user typed. `GroundingAnchorSchema` refuses such a ref outright —
+ * correctly, since the pre-commit hook echoes it — but that refusal fires
+ * inside `saveRunArtifact`, under `runOrchestrator`'s warn-and-continue catch:
+ * the draft would survive and only the ARTIFACT would be lost, silently, for a
+ * ref the CLI itself produced. Collapsing at the mint site keeps the artifact
+ * writable and the echo safe, and the substitution is the same one the reader
+ * applies defensively to what it reads back.
  *
- * Only the TOPIC text is collapsed. An issue ref is a number or a URL and a
- * record ref must stay byte-exact — the hook RESOLVES it, so a rewritten record
- * path would name a file that is not the bound record.
+ * The issue-URL match is NOT end-anchored (`.../issues/(\d+)` with trailing
+ * text allowed), so an argument such as `https://host/o/r/issues/1<newline>x`
+ * resolves to issue 1 and carries the newline into the typed ref — the same
+ * hazard the topic arm has, reached through the issue arm.
+ *
+ * A RECORD ref is never collapsed: the hook RESOLVES it, so a rewritten record
+ * path would name a file that is not the bound record. It stays byte-exact and
+ * is contained by {@link loadSpecRecord} instead.
  */
-function sanitizeTopicRef(topic: string): string {
+function sanitizeRefText(topic: string): string {
   let out = '';
   for (const character of topic) {
     const code = character.codePointAt(0) ?? 0;
@@ -499,12 +570,16 @@ function sanitizeTopicRef(topic: string): string {
   return out;
 }
 
-/** The anchor's `ref` for one issue arm: the input as typed, `#<n>` for a bare number. */
+/**
+ * The anchor's `ref` for one issue arm: the input as typed, `#<n>` for a bare
+ * number. The typed spelling goes through {@link sanitizeRefText} — it comes
+ * from argv unfiltered, and the URL match that admitted it is not end-anchored.
+ */
 function issueAnchorRef(input: ParsedInput): string {
   const issue = input.issue;
   if (!issue) return '';
   const typed = input.issueRef;
-  if (typed !== undefined && !/^\d+$/.test(typed)) return typed;
+  if (typed !== undefined && !/^\d+$/.test(typed)) return sanitizeRefText(typed);
   return `#${issue.number}`;
 }
 
@@ -518,9 +593,9 @@ function issueAnchorRef(input: ParsedInput): string {
  *
  * The caller guarantees at least one parsed input ({@link
  * validateSpecInvocation}); the schema's non-empty `ref` refine is the
- * backstop if that ever stops holding. Topic text passes through {@link
- * sanitizeTopicRef} on the way into the ref, so a control character the user
- * typed cannot cost the run its artifact.
+ * backstop if that ever stops holding. Topic text and a typed issue ref both
+ * pass through {@link sanitizeRefText} on the way into the ref, so a control
+ * character the user typed cannot cost the run its artifact.
  */
 export function resolveGroundingAnchor(parsed: ParsedInput[]): GroundingAnchor {
   const bound = parsed.find((input) => input.record !== null)?.record;
@@ -530,7 +605,7 @@ export function resolveGroundingAnchor(parsed: ParsedInput[]): GroundingAnchor {
   const issueRefs = parsed.filter((input) => input.issue !== null).map(issueAnchorRef);
   const topics = parsed
     .filter((input) => input.issue === null && input.freeText !== null)
-    .map((input) => sanitizeTopicRef(input.freeText!));
+    .map((input) => sanitizeRefText(input.freeText!));
 
   if (topics.length === 0) {
     return { kind: GROUNDING_ANCHOR_ISSUE, ref: issueRefs.join(ANCHOR_ISSUE_JOIN) };

@@ -1462,6 +1462,31 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(artifact.grounding.floor).toBe(0.25);
   });
 
+  it('a floor of 0 is PERSISTED, not dropped as falsy (mmnto-ai/totem#2700)', async () => {
+    // The writer spreads `floor` on `!== undefined`, not on truthiness. Zero is
+    // a legal `searchRelevanceFloor` — it is the value that disables the
+    // refusal — and it is the one number a falsy guard would silently discard,
+    // leaving an artifact that claims no floor was applied when one was.
+    const emitted: string[] = [];
+
+    await runOrchestrator({
+      prompt: 'zero floor prompt',
+      tag: 'Spec',
+      options: { fresh: true },
+      config: artifactConfig(),
+      cwd: tmpDir,
+      artifact: { ...artifactRequest((hash) => emitted.push(hash)), floor: 0 },
+    });
+
+    const file = path.join(runsDirPath(), `${emitted[0]!}.json`);
+    const raw = JSON.parse(fs.readFileSync(file, 'utf-8')) as {
+      grounding: Record<string, unknown>;
+    };
+    expect(raw.grounding['floor']).toBe(0);
+    const artifact = RunArtifactSchema.parse(raw);
+    expect(artifact.grounding.floor).toBe(0);
+  });
+
   it('a request WITHOUT an anchor or a floor writes NEITHER key (a review artifact is unchanged)', async () => {
     const emitted: string[] = [];
 

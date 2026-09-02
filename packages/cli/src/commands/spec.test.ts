@@ -780,6 +780,28 @@ describe('resolveGroundingAnchor', () => {
     expect(anchor.ref).toBe('#9 | alpha?beta');
     expect(GroundingAnchorSchema.safeParse(anchor).success).toBe(true);
   });
+
+  // The topic arm is not the only ref taken verbatim from argv. The issue-URL
+  // match is NOT end-anchored (`.../issues/(\d+)` with trailing text allowed),
+  // so `https://host/o/r/issues/1<newline>x` resolves to issue 1 and the typed
+  // spelling — newline and all — becomes the ref. Unsanitized it costs the run
+  // its artifact exactly as an unsanitized topic did.
+  it('collapses a control character in a TYPED issue ref (the URL match is not end-anchored)', () => {
+    const typed = `https://github.com/mmnto-ai/totem/issues/1${String.fromCharCode(0x0a)}[Totem] forged`;
+    const anchor = resolveGroundingAnchor([issueInput(1, typed)]);
+
+    expect(anchor).toEqual({
+      kind: GROUNDING_ANCHOR_ISSUE,
+      ref: 'https://github.com/mmnto-ai/totem/issues/1?[Totem] forged',
+    });
+    expect(GroundingAnchorSchema.safeParse(anchor).success).toBe(true);
+  });
+
+  it('leaves a printable typed issue ref byte-identical', () => {
+    expect(resolveGroundingAnchor([issueInput(2700, 'mmnto-ai/totem#2700')]).ref).toBe(
+      'mmnto-ai/totem#2700',
+    );
+  });
 });
 
 // ─── evaluateGroundingFloor (mmnto-ai/totem#2700) ────────
@@ -1020,6 +1042,34 @@ describe('validateSpecInvocation', () => {
   });
 });
 
+/**
+ * Whether this platform (and this account) can make each link kind — a Windows
+ * account without SeCreateSymbolicLinkPrivilege cannot symlink, and a
+ * filesystem without hardlinks cannot link. Probed ONCE, outside any test, so
+ * every `skipIf` below is a real capability check rather than a swallowed
+ * failure inside an assertion. Shared by the containment suite (`loadSpecRecord`
+ * must see THROUGH a link) and the `--out` alias suite (a link is a second name
+ * for the record).
+ */
+const linkable = ((): { hard: boolean; sym: boolean } => {
+  const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-link-probe-'));
+  const target = path.join(probeDir, 'target');
+  fs.writeFileSync(target, 'probe');
+  const attempt = (make: () => void): boolean => {
+    try {
+      make();
+      return true;
+    } catch (err) {
+      void err;
+      return false;
+    }
+  };
+  const hard = attempt(() => fs.linkSync(target, path.join(probeDir, 'hard')));
+  const sym = attempt(() => fs.symlinkSync(target, path.join(probeDir, 'sym')));
+  cleanTmpDir(probeDir);
+  return { hard, sym };
+})();
+
 describe('loadSpecRecord', () => {
   let tmpDir: string;
   const deps = { resolveGitRoot: () => null };
@@ -1133,6 +1183,128 @@ describe('loadSpecRecord', () => {
     const loaded = loadSpecRecord(file, tmpDir, { resolveGitRoot: () => tmpDir }, TotemConfigError);
     expect(loaded.record.path).toBe('..notes.md');
   });
+
+  // Containment must run BEFORE the record is stat'd or read: otherwise the
+  // out-of-root refusal is decided by whatever the read happens to say, and a
+  // path that escapes the repo surfaces as "not a file" (or an EISDIR-class
+  // read error) rather than as the containment refusal that carries the cure.
+  it('an out-of-root DIRECTORY is refused as uncontained, not as "not a file"', () => {
+    const root = path.join(tmpDir, 'repo');
+    fs.mkdirSync(root, { recursive: true });
+    const outsideDir = path.join(tmpDir, 'sibling-dir');
+    fs.mkdirSync(outsideDir, { recursive: true });
+
+    let thrown: unknown;
+    try {
+      loadSpecRecord('../sibling-dir', root, { resolveGitRoot: () => root }, TotemConfigError);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+    const message = String((thrown as Error).message);
+    expect(message).toContain('outside the repository');
+    expect(message).not.toContain('is not a file');
+  });
+
+  // ── Containment sees THROUGH a link (mmnto-ai/totem#2700) ──
+  //
+  // A symlink inside the repo is lexically contained, so normalization alone
+  // reads it as legal — and would publish a ref the pre-commit reader resolves
+  // to a file outside the tree. Containment therefore also compares the two
+  // REALPATHS. `record.path` still carries the LEXICAL spelling of the file as
+  // given: the hook resolves links on its own side, and rewriting the ref to a
+  // link's target would publish a path the operator never wrote.
+
+  it.skipIf(!linkable.sym)(
+    'refuses an in-repo SYMLINK whose target is OUTSIDE the root, naming both paths',
+    () => {
+      const root = path.join(tmpDir, 'repo');
+      fs.mkdirSync(root, { recursive: true });
+      const outside = path.join(tmpDir, 'outside.md');
+      fs.writeFileSync(outside, '# Outside\n\nBody.\n');
+      const link = path.join(root, 'linked.md');
+      fs.symlinkSync(outside, link);
+
+      let thrown: unknown;
+      try {
+        loadSpecRecord('linked.md', root, { resolveGitRoot: () => root }, TotemConfigError);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toMatchObject({ code: 'CONFIG_INVALID' });
+      const message = String((thrown as Error).message);
+      expect(message).toContain('outside the repository');
+      // The link as given AND what it resolves to — the second is the whole
+      // reason the first was refused.
+      expect(message).toContain(link);
+      expect(message).toContain(`resolves to ${outside}`);
+    },
+  );
+
+  it.skipIf(!linkable.sym)(
+    'accepts an in-repo SYMLINK to an in-repo file, binding the LEXICAL path',
+    () => {
+      const root = path.join(tmpDir, 'repo');
+      const nested = path.join(root, '.totem', 'specs');
+      fs.mkdirSync(nested, { recursive: true });
+      const target = path.join(nested, '2700.md');
+      fs.writeFileSync(target, '# Record\n\nBody.\n');
+      const link = path.join(root, 'linked.md');
+      fs.symlinkSync(target, link);
+
+      const loaded = loadSpecRecord(
+        'linked.md',
+        root,
+        { resolveGitRoot: () => root },
+        TotemConfigError,
+      );
+      expect(loaded.record.path).toBe('linked.md');
+      expect(loaded.record.body).toBe('# Record\n\nBody.\n');
+    },
+  );
+
+  // ── A leading BOM is a decoding artifact, not part of the document ──
+
+  it('strips ONE leading BOM from the body while hashing the RAW bytes', () => {
+    const file = path.join(tmpDir, 'bom.md');
+    // Built numerically: an authored `\u` escape lands in a source file as a
+    // raw control byte through some editing paths (mmnto-ai/totem#2692).
+    const bom = String.fromCharCode(0xfeff);
+    const text = `${bom}# Anchored evidence\n\nThe body head.\n`;
+    const bytes = Buffer.from(text, 'utf-8');
+    fs.writeFileSync(file, bytes);
+
+    const loaded = loadSpecRecord(file, tmpDir, deps, TotemConfigError);
+
+    // The body the prompt and the query see opens on the heading itself.
+    expect(loaded.record.body.startsWith('#')).toBe(true);
+    expect(loaded.record.body).toBe('# Anchored evidence\n\nThe body head.\n');
+    expect(buildRecordSearchQuery(loaded.record).startsWith('Anchored evidence')).toBe(true);
+    // The digest is over the RAW bytes, BOM included: the pre-commit reader
+    // hashes the file as it sits on disk, so a stripped-before-hash digest
+    // would read as "revised since binding" on the very first commit.
+    expect(loaded.record.sha256).toBe(crypto.createHash('sha256').update(bytes).digest('hex'));
+    expect(loaded.record.sha256).not.toBe(
+      crypto.createHash('sha256').update(Buffer.from(loaded.record.body, 'utf-8')).digest('hex'),
+    );
+  });
+
+  it('renders a BOM-prefixed record into the prompt with no mark in record_body', async () => {
+    const file = path.join(tmpDir, 'bom-prompt.md');
+    const bom = String.fromCharCode(0xfeff);
+    fs.writeFileSync(file, `${bom}# Anchored evidence\n\nThe body head.\n`, 'utf-8');
+
+    const loaded = loadSpecRecord(file, tmpDir, deps, TotemConfigError);
+    const prompt = await assemblePrompt(
+      [{ issue: null, freeText: null, record: loaded.record }],
+      emptyContext(),
+      'SYSTEM',
+    );
+
+    expect(prompt).toContain(`<record_body>\n${loaded.record.body}\n</record_body>`);
+    expect(prompt).toContain('<record_body>\n# Anchored evidence');
+    expect(prompt).not.toContain(bom);
+  });
 });
 
 describe('isRecordPathOutsideRoot', () => {
@@ -1202,32 +1374,6 @@ describe('assertOutDoesNotOverwriteRecord', () => {
   // path relationship at all — both would let the draft clobber the record.
 
   describe('link aliases', () => {
-    /**
-     * Whether this platform (and this account) can make each link kind — a
-     * Windows account without SeCreateSymbolicLinkPrivilege cannot symlink,
-     * and a filesystem without hardlinks cannot link. Probed ONCE, outside any
-     * test, so the skip is a real capability check rather than a swallowed
-     * failure inside the assertion.
-     */
-    const linkable = ((): { hard: boolean; sym: boolean } => {
-      const probeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-link-probe-'));
-      const target = path.join(probeDir, 'target');
-      fs.writeFileSync(target, 'probe');
-      const attempt = (make: () => void): boolean => {
-        try {
-          make();
-          return true;
-        } catch (err) {
-          void err;
-          return false;
-        }
-      };
-      const hard = attempt(() => fs.linkSync(target, path.join(probeDir, 'hard')));
-      const sym = attempt(() => fs.symlinkSync(target, path.join(probeDir, 'sym')));
-      cleanTmpDir(probeDir);
-      return { hard, sym };
-    })();
-
     let tmpDir: string;
 
     beforeEach(() => {

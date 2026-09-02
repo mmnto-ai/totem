@@ -97,4 +97,15 @@ describe('totem spec command surface (mmnto-ai/totem#2700)', () => {
       expect(source).not.toContain('spec <inputs...>');
     }
   });
+
+  // The optional variadic is only half of B2: it makes `--from` REACHABLE, but
+  // the flag still has to be registered for the parser to bind it. The mirror
+  // above declares the option itself, so it would keep passing against an
+  // index.ts that never spelled it. Only the full CLI is checked —
+  // `index-lite.ts` registers the command as an EXCLUDED stub
+  // (`registerExcluded('spec [inputs...]', …)`) with no options at all, so
+  // asserting `--from` there would assert a shape the lite binary does not have.
+  it('index.ts registers the --from option the mirror declares', () => {
+    expect(readCliSource('index.ts')).toContain("'--from <record>'");
+  });
 });
