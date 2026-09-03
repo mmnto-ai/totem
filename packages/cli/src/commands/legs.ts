@@ -51,6 +51,15 @@ const TAG = 'Legs';
 const MAX_DISCLOSED_BASIS_PAIRS = 5;
 
 /**
+ * How many changed paths the gate's own scope line names before it collapses
+ * the rest into `+K more`. Higher than the basis cap because this line is the
+ * scope itself rather than a reason, but still bounded: an unbounded list is a
+ * screenful in a hook's output on a large branch, and the true count stays in
+ * the parentheses either way.
+ */
+const MAX_DISCLOSED_CHANGED_FILES = 12;
+
+/**
  * List what a candidate could have READ: the paths its own branch diff added
  * relative to `base` (three-dot).
  *
@@ -177,12 +186,15 @@ async function resolveCommitSha(cwd: string, ref: string): Promise<string> {
   let out: string;
   try {
     out = safeExec('git', ['rev-parse', '--verify', `${trimmed}^{commit}`], { cwd });
-    // totem-context: intentional — git's own stderr is not the useful surface here; the refusal must NAME the ref the seat passed, which the wrapper below does
-  } catch {
+  } catch (err) {
+    // git's own failure rides as the CAUSE (styleguide rule 9): the message
+    // names the ref the seat passed, and `--debug` can still reach what git
+    // actually said.
     throw new TotemError(
       'GIT_FAILED',
       `--sha ${echoSafe(trimmed)} does not name a commit in this repository.`,
       'Pass a commit this checkout can resolve (e.g. HEAD), or fetch the missing history first.',
+      err,
     );
   }
   const sha = out.trim();
@@ -230,8 +242,9 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   } catch (err) {
     throw new TotemError(
       'PARSE_FAILED',
-      `Could not read the leg's findings at ${echoSafe(options.from)}: ${echoSafe(err instanceof Error ? err.message : String(err))}`,
-      'Pass --from <file> pointing at the leg deposit JSON the falsification leg returned.',
+      `Could not read the leg's findings at ${echoSafe(options.from)}.`,
+      'Pass --from <file> pointing at the leg deposit JSON the review leg returned.',
+      err,
     );
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
@@ -302,6 +315,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
         'PARSE_FAILED',
         `The leg deposit built from ${echoSafe(options.from)} is not valid:\n${issues}`,
         'Fix the fields listed above; every finding needs a unique id, and folded may only name finding ids.',
+        err,
       );
     }
     throw err;
@@ -497,8 +511,21 @@ export async function runLegsGate(
   if (winner !== undefined) {
     const counts = countLegFindings(winner.deposit);
     const stamp = Date.parse(winner.deposit.readAt);
-    const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / MS_PER_DAY);
-    const age = days >= 0 ? `${days} days old` : 'age unknown';
+    const deltaMs = Number.isNaN(stamp) ? undefined : Date.now() - stamp;
+    const days = deltaMs === undefined ? undefined : Math.floor(deltaMs / MS_PER_DAY);
+    // A negative age is not an unknown age. A deposit stamped in the FUTURE —
+    // a skewed clock, a hand-edited instant — used to print `age unknown`,
+    // which reads as "unparseable" and hides the one thing worth acting on:
+    // this instant is wrong, and ranking breaks ties on it.
+    const age =
+      days === undefined
+        ? 'age unknown'
+        : days >= 0
+          ? `${days} days old`
+          : // The MAGNITUDE is floored, not the signed value: `Math.floor` on a
+            // negative delta rounds AWAY from zero, so a stamp two days and a
+            // second ahead reported three.
+            `read ${Math.floor(Math.abs(deltaMs ?? 0) / MS_PER_DAY)} days in the FUTURE — check the clock or the deposit`;
     const reach =
       winner.rank === 'exact'
         ? 'exact'
@@ -670,7 +697,15 @@ export async function resolveUnfilteredBranchScope(
   // The gate's own disclosure, from the RAW list — so the names it prints are
   // the names it judged, spelled as they are on disk.
   if (narrate) {
-    log.info(TAG, safeLine(`Changed files (${files.length}): ${files.map(safeLine).join(', ')}`));
+    const shownFiles = files.slice(0, MAX_DISCLOSED_CHANGED_FILES).map(safeLine);
+    const moreFiles =
+      files.length > shownFiles.length ? `, +${files.length - shownFiles.length} more` : '';
+    // The count in the parentheses is the TRUE one — the cap shortens the list,
+    // never the number.
+    log.info(
+      TAG,
+      safeLine(`Changed files (${files.length}): ${shownFiles.join(', ')}${moreFiles}`),
+    );
   }
   return { files, ...(base === undefined ? {} : { base }) };
 }

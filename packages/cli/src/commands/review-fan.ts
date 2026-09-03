@@ -60,7 +60,7 @@ import {
   KNOWN_PROVIDERS,
   parseModelString,
 } from '../orchestrators/orchestrator.js';
-import { legReachPaths, type LegsCoverageResolution } from './legs.js';
+import type { LegsCoverageResolution } from './legs.js';
 import {
   computeReviewedContentHash,
   deriveLaneOutcome,
@@ -1614,7 +1614,10 @@ export interface LegFieldResolution {
  * "not an ancestor"), not an error — so an `undefined` Result reads as `false`
  * and no probe site carries a bare swallow.
  */
-function makeLegGitAdapter(gitExec: GitExec): LegGitAdapter {
+function makeLegGitAdapter(
+  gitExec: GitExec,
+  legReachPaths: typeof import('./legs.js').legReachPaths,
+): LegGitAdapter {
   const succeeds = (args: readonly string[]): boolean => tryGit(gitExec, args) !== undefined;
   return {
     isCommit: (sha) => succeeds(['cat-file', '-e', `${sha}^{commit}`]),
@@ -1683,10 +1686,13 @@ export async function resolveLegFieldForHead(
   // the site could derive them (mmnto-ai/totem#2698 fold 3): a field that named
   // a deposit the gate rejects as no-coverage would be the round reading
   // evidence the push gate does not accept.
+  // Dynamic, per `.coderabbit.yaml`'s CLI-dependency rule: the module-scope
+  // import pulled `legs.ts` into every path that loads this file.
+  const { legReachPaths } = await import('./legs.js');
   const resolution = findLegDepositForHead(
     totemDirAbs,
     head,
-    makeLegGitAdapter(git),
+    makeLegGitAdapter(git, legReachPaths),
     coverage?.query,
   );
   return {

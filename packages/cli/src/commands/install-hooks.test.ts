@@ -2802,7 +2802,10 @@ describe('buildPrePushHook with strict tier', () => {
       'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
       doctorIdx,
     );
-    const fiCloseIdx = hook.indexOf('fi', doctorIdx);
+    // Anchored to a LINE, not a substring: a bare `fi` also matches the one
+    // inside "findings" in the shield block's comment, which sits between the
+    // invocation and the real closing `fi` (CodeRabbit on PR mmnto-ai/totem#2745).
+    const fiCloseIdx = hook.indexOf(`${String.fromCharCode(10)}  fi`, doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);
@@ -2847,7 +2850,10 @@ describe('buildPrePushHook with standard tier', () => {
       'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
       doctorIdx,
     );
-    const fiCloseIdx = hook.indexOf('fi', doctorIdx);
+    // Anchored to a LINE, not a substring: a bare `fi` also matches the one
+    // inside "findings" in the shield block's comment, which sits between the
+    // invocation and the real closing `fi` (CodeRabbit on PR mmnto-ai/totem#2745).
+    const fiCloseIdx = hook.indexOf(`${String.fromCharCode(10)}  fi`, doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);

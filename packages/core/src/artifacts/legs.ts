@@ -37,6 +37,7 @@
  * without a git fixture.
  */
 
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -299,9 +300,17 @@ function peekReadAt(filePath: string): string | undefined {
  * Ordering is contract: the deposit is VALIDATED before the filesystem is
  * touched at all, and the occupancy check precedes the write — so a refused
  * write (schema-invalid, or occupied without `replace`) leaves no file and no
- * temp behind. The write itself goes through the shared atomic helper
- * (temp in the same directory, fsync, rename), so a reader never observes a
- * torn deposit.
+ * temp behind. The bytes go through the shared atomic helper (temp in the same
+ * directory, fsync), so a reader never observes a torn deposit.
+ *
+ * The PUBLISH is exclusive, not merely checked (Greptile P1 on PR
+ * mmnto-ai/totem#2745). `existsSync` then rename is check-then-act: two
+ * no-replace writers for one sha both see "absent" and the later rename wins
+ * silently, overwriting one leg's read with another's. Without `replace` the
+ * final name is therefore created by `fs.linkSync`, which is atomic and fails
+ * `EEXIST` if the name is taken — the loser refuses exactly as the pre-check
+ * does, and the incumbent's bytes are never touched. `replace: true` keeps the
+ * rename path, because overwriting is what it asks for.
  *
  * The file's name is DERIVED from `deposit.diffSha`, which is how the store's
  * "the name is the read sha" invariant holds by construction; the loader
@@ -319,6 +328,10 @@ export function saveLegDeposit(
   const filePath = legDepositPath(totemDirAbs, validated.diffSha);
 
   let replaced: { readAt: string | undefined } | undefined;
+  // The cheap early refusal — it answers the common case without writing a
+  // byte. It is NOT the guarantee: two writers can both pass it (the exclusive
+  // publish below is what actually decides). Greptile P1 on PR
+  // mmnto-ai/totem#2745.
   if (fs.existsSync(filePath)) {
     const existingReadAt = peekReadAt(filePath);
     if (options.replace !== true) {
@@ -328,9 +341,64 @@ export function saveLegDeposit(
   }
 
   fs.mkdirSync(legsDir(totemDirAbs), { recursive: true });
-  writeFileAtomicSync(filePath, JSON.stringify(validated, null, 2), { mode: 0o600 });
+  const body = JSON.stringify(validated, null, 2);
 
-  return replaced === undefined ? { path: filePath } : { path: filePath, replaced };
+  if (options.replace === true) {
+    // `replace` is ALLOWED to overwrite, so the rename path is correct here:
+    // the incumbent's `readAt` is already captured above and reported.
+    writeFileAtomicSync(filePath, body, { mode: 0o600 });
+    // `replaced` stays absent when `--replace` was passed with nothing to
+    // replace: reporting a replacement that did not happen would be a lie the
+    // writer's own success line then prints.
+    return replaced === undefined ? { path: filePath } : { path: filePath, replaced };
+  }
+
+  // Create-exclusive for real. `existsSync` then rename is check-then-act: two
+  // no-replace writers for one sha both see "absent", both rename, and the
+  // later one silently wins — one leg's read overwritten by another's with no
+  // refusal and no disclosure, in a store whose whole contract is that a
+  // second read at a head is a different observation.
+  //
+  // `link` is the exclusive primitive: it creates the final name atomically
+  // and fails EEXIST if anything already holds it. Measured on NTFS as well as
+  // POSIX for this fix — the loser gets EEXIST, the incumbent's bytes are
+  // untouched, and the loser's temp survives to be cleaned up here.
+  const tempPath = `${filePath}.${process.pid}-${randomSuffix()}.tmp`;
+  try {
+    writeFileAtomicSync(tempPath, body, { mode: 0o600 });
+    fs.linkSync(tempPath, filePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      // Someone published between the pre-check and here. Same refusal the
+      // pre-check raises, carrying the incumbent's instant — read AFTER the
+      // loss, so it names the deposit that actually won.
+      const existingReadAt = peekReadAt(filePath);
+      removeQuietly(tempPath);
+      throw new LegDepositExistsError(validated.diffSha, existingReadAt, filePath);
+    }
+    removeQuietly(tempPath);
+    throw err;
+  }
+  // The link succeeded, so `filePath` and `tempPath` name the same inode; the
+  // temp is just the second name and goes away.
+  removeQuietly(tempPath);
+
+  return { path: filePath };
+}
+
+/** Entropy for the publish temp's name — the `writeFileAtomicSync` idiom. */
+function randomSuffix(): string {
+  return crypto.randomUUID().slice(0, 8);
+}
+
+/** Best-effort unlink of a publish temp. */
+function removeQuietly(target: string): void {
+  try {
+    fs.rmSync(target, { force: true });
+    // totem-context: intentional cleanup — a failed temp unlink must not mask the publish's own outcome, and the file it leaves behind is a `.tmp` sibling the loader already ignores (it is not `.json`)
+  } catch {
+    /* best-effort: the temp is a `.tmp` sibling the loader never reads */
+  }
 }
 
 // ─── Load ───────────────────────────────────────────────────────────────────

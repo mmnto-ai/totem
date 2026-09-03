@@ -3957,7 +3957,13 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
       'covariate line format v1.2 — do not alter without a spec amendment',
     );
     // The absent-deposit spelling is contract too (the pilot ledger greps it).
-    expect(REVIEW_LOOP_SKILL_CONTENT).toContain('`leg: none` replaces the field');
+    // The pin follows the sentence CodeRabbit narrowed on PR
+    // mmnto-ai/totem#2745: `leg: none` is a FIRST-TWO-SHAPES statement, and the
+    // deposit-only head is named in the same breath.
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      '`leg: none` replaces the field on the FIRST TWO shapes',
+    );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain('The third shape is the DEPOSIT-ONLY head');
   });
 
   // The crown-gate + S0 fold (strategy#488 R-table, operator-ruled 2026-08-13/14)

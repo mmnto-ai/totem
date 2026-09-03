@@ -20,7 +20,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   countLegFindings,
@@ -100,6 +100,36 @@ function fakeGit(options: {
     changedFiles: (_base, head) => reach[head] ?? [],
   };
 }
+
+/**
+ * Armed by a test to publish a COMPETING deposit inside the window between the
+ * occupancy pre-check and the exclusive publish (mmnto-ai/totem#2745).
+ *
+ * The seam is the atomic writer rather than `fs.existsSync`: a `node:fs` export
+ * cannot be spied under ESM (the namespace is not configurable), and this hook
+ * fires at exactly the moment a second process would land — after this writer's
+ * temp exists, before it claims the final name.
+ */
+let publishInsideWindow: (() => void) | undefined;
+
+vi.mock('../fs-atomic.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../fs-atomic.js')>();
+  return {
+    ...actual,
+    writeFileAtomicSync: (
+      target: string,
+      data: string | Buffer,
+      options?: { mode?: number },
+    ): void => {
+      actual.writeFileAtomicSync(target, data, options);
+      const hook = publishInsideWindow;
+      // Cleared BEFORE firing: the competing write goes through this same
+      // wrapper and must not re-enter.
+      publishInsideWindow = undefined;
+      hook?.();
+    },
+  };
+});
 
 let tmpDir = '';
 
@@ -718,5 +748,84 @@ describe('findLegDepositForHead — coverage (mmnto-ai/totem#2698 fold 3)', () =
     );
     expect(seen).toEqual([`origin/release...${OLDEST}`]);
     expect(resolution.winner?.coverage?.covered).toBe(3);
+  });
+});
+
+// ─── The publish is EXCLUSIVE, not merely checked ──────────────────────────
+//
+// Greptile P1 on PR mmnto-ai/totem#2745: `existsSync` then rename is
+// check-then-act. Two no-replace writers for one sha both see "absent", both
+// rename, and the later one wins SILENTLY — one leg's read overwritten by
+// another's, in a store whose whole contract is that a second read at a head is
+// a different observation. These drive the window directly.
+describe('saveLegDeposit publishes exclusively (mmnto-ai/totem#2745, Greptile P1)', () => {
+  /** The incumbent's bytes, so a test can prove they were never touched. */
+  function incumbentBytes(): string {
+    return fs.readFileSync(legDepositPath(tmpDir, HEAD), 'utf-8');
+  }
+
+  afterEach(() => {
+    publishInsideWindow = undefined;
+  });
+
+  it('a deposit published INSIDE the check-to-publish window is refused, not overwritten', () => {
+    const winner = deposit({ diffSha: HEAD, readAt: '2026-09-01T00:00:00.000Z' });
+    const loser = deposit({ diffSha: HEAD, readAt: '2026-09-02T00:00:00.000Z' });
+
+    // The store is EMPTY, so the loser's pre-check honestly reports "absent".
+    // The competitor then publishes in the window the pre-check opened —
+    // after the loser's temp is written, before it claims the final name.
+    // That is the interleaving a second process produces, driven here.
+    publishInsideWindow = () => {
+      saveLegDeposit(tmpDir, winner);
+    };
+    expect(() => saveLegDeposit(tmpDir, loser)).toThrow(LegDepositExistsError);
+
+    // The incumbent is intact byte for byte: the loser overwrote nothing.
+    expect(incumbentBytes()).toBe(JSON.stringify(winner, null, 2));
+    expect((JSON.parse(incumbentBytes()) as LegDeposit).readAt).toBe('2026-09-01T00:00:00.000Z');
+
+    // And the loser left no temp behind — the store holds exactly one file.
+    expect(fs.readdirSync(legsDir(tmpDir))).toEqual([`${HEAD}.json`]);
+  });
+
+  it('the refusal from that window carries the WINNER instant, not the loser one', () => {
+    publishInsideWindow = () => {
+      saveLegDeposit(tmpDir, deposit({ diffSha: HEAD, readAt: '2026-09-01T00:00:00.000Z' }));
+    };
+    let caught: unknown;
+    try {
+      saveLegDeposit(tmpDir, deposit({ diffSha: HEAD, readAt: '2026-09-02T00:00:00.000Z' }));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(LegDepositExistsError);
+    // Read AFTER the loss, so it names the deposit that actually won — the one
+    // a seat has to decide whether to `--replace`.
+    expect((caught as LegDepositExistsError).existingReadAt).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('`replace` still overwrites, and leaves one file behind', () => {
+    // The exclusive publish must not turn `--replace` into a refusal: it is the
+    // one caller allowed to overwrite.
+    saveLegDeposit(tmpDir, deposit({ diffSha: HEAD, readAt: '2026-09-01T00:00:00.000Z' }));
+    const result = saveLegDeposit(
+      tmpDir,
+      deposit({ diffSha: HEAD, readAt: '2026-09-02T00:00:00.000Z' }),
+      { replace: true },
+    );
+    expect(result.replaced).toEqual({ readAt: '2026-09-01T00:00:00.000Z' });
+    expect((JSON.parse(incumbentBytes()) as LegDeposit).readAt).toBe('2026-09-02T00:00:00.000Z');
+    expect(fs.readdirSync(legsDir(tmpDir))).toEqual([`${HEAD}.json`]);
+  });
+
+  it('`replace` with NOTHING to replace reports no replacement', () => {
+    const result = saveLegDeposit(tmpDir, deposit({ diffSha: HEAD }), { replace: true });
+    expect(result.replaced).toBeUndefined();
+  });
+
+  it('an ordinary create leaves no temp beside the deposit', () => {
+    saveLegDeposit(tmpDir, deposit({ diffSha: HEAD }));
+    expect(fs.readdirSync(legsDir(tmpDir))).toEqual([`${HEAD}.json`]);
   });
 });

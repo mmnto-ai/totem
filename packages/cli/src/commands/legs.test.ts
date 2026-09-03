@@ -1136,3 +1136,120 @@ describe.skipIf(process.platform === 'win32')(
     });
   },
 );
+
+// ─── Bot round on PR mmnto-ai/totem#2745 ───────────────────────────────────
+
+describe('the evidence line names a future-dated readAt (mmnto-ai/totem#2745, CodeRabbit)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-age-')));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function depositAgeDeps(): LegsGateDeps {
+    return {
+      root: tmpDir,
+      totemDirAbs: path.join(tmpDir, '.totem'),
+      globs: ['docs/**'],
+      git: {
+        isCommit: () => true,
+        isAncestor: () => true,
+        distance: () => 0,
+        changedFiles: () => ['docs/a.md'],
+      },
+      resolveHead: () => HEAD_SHA,
+      changedFiles: async () => ({ files: ['docs/a.md'], base: BASE }),
+    };
+  }
+
+  it('a PAST readAt still reports its age in days', async () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    saveLegDeposit(
+      path.join(tmpDir, '.totem'),
+      depositFixture({ diffSha: HEAD_SHA, readAt: threeDaysAgo }),
+    );
+    const outcome = await runLegsGate({}, depositAgeDeps());
+    expect(outcome.stdout[0]).toContain('3 days old');
+  });
+
+  it('a FUTURE readAt is named as such, not reported as `age unknown`', async () => {
+    // `age unknown` reads as "unparseable" and hides the one thing worth
+    // acting on: the instant is wrong, and ranking breaks ties on it.
+    const twoDaysAhead = new Date(Date.now() + 2 * 86_400_000 + 1000).toISOString();
+    saveLegDeposit(
+      path.join(tmpDir, '.totem'),
+      depositFixture({ diffSha: HEAD_SHA, readAt: twoDaysAhead }),
+    );
+    const outcome = await runLegsGate({}, depositAgeDeps());
+    expect(outcome.stdout[0]).toContain(
+      'read 2 days in the FUTURE — check the clock or the deposit',
+    );
+    expect(outcome.stdout[0]).not.toContain('age unknown');
+    // Still evidence: a skewed clock is a disclosure, not a block.
+    expect(outcome.derived).toBe(0);
+  });
+});
+
+describe('the gate caps its changed-files disclosure (mmnto-ai/totem#2745, CodeRabbit)', () => {
+  const realCwd = process.cwd();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-cap-')));
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    git('init', '-b', 'main');
+    fs.writeFileSync(path.join(tmpDir, 'src.ts'), 'export const a = 1;');
+    git('add', '.');
+    git('commit', '-m', 'base');
+    git('checkout', '-b', 'feat/many');
+    fs.mkdirSync(path.join(tmpDir, 'docs'), { recursive: true });
+    // 20 changed paths — more than the cap, so the line must collapse.
+    for (let i = 0; i < 20; i++) {
+      fs.writeFileSync(path.join(tmpDir, 'docs', `page-${i}.md`), `# page ${i}`);
+    }
+    git('add', '-A', 'docs');
+    git('commit', '-m', 'many pages');
+
+    loadConfigMock.mockResolvedValue({
+      totemDir: '.totem',
+      ignorePatterns: [],
+      hooks: { legsOwed: { globs: ['docs/**'] } },
+    } as unknown as TotemConfig);
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    loadConfigMock.mockResolvedValue(TEST_CONFIG);
+    process.chdir(realCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('names 12 paths, counts the rest, and keeps the TRUE total in the parentheses', async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '));
+    });
+    const { buildLegsGateDeps } = await import('./legs.js');
+    const deps = await buildLegsGateDeps();
+    await deps.changedFiles();
+    const line = lines.find((entry) => entry.includes('Changed files ('));
+    expect(line).toBeDefined();
+    // The count is the truth; the list is what got shortened.
+    expect(line).toContain('Changed files (20):');
+    expect(line).toContain('+8 more');
+    expect(line).toContain('docs/page-0.md');
+    // The 13th name onward is collapsed. Names sort lexically, so `page-9.md`
+    // is last of the twenty and certainly past the cap.
+    expect(line).not.toContain('docs/page-9.md');
+  });
+});

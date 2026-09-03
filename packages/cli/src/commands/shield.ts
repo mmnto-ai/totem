@@ -1,10 +1,4 @@
-import type {
-  ContentType,
-  LanceStore,
-  LegCoverageQuery,
-  SearchResult,
-  TotemConfig,
-} from '@mmnto/totem';
+import type { ContentType, LanceStore, SearchResult, TotemConfig } from '@mmnto/totem';
 
 import type { ExemptionShared } from '../exemptions/exemption-schema.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
@@ -2027,7 +2021,7 @@ async function emitNotApplicableDisposition(params: {
 async function legCoverageForCovariate(
   config: TotemConfig,
   cwd: string,
-): Promise<{ query?: LegCoverageQuery; reason?: string }> {
+): Promise<import('./legs.js').LegsCoverageResolution> {
   const { deriveLegsCoverageForHead, legsOwedGlobs } = await import('./legs.js');
   return deriveLegsCoverageForHead(cwd, await legsOwedGlobs(config), {
     suppressScopeNarration: true,

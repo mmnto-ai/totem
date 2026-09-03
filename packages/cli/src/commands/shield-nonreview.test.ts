@@ -84,6 +84,17 @@ function diffFor(file: string): string {
 }
 
 describe('deterministic skips are not-applicable ADMISSIONS: record + calm line, never a stamp (#2473)', () => {
+  /**
+   * The REAL working directory, captured before any spy.
+   *
+   * This suite mocks `process.cwd()`, and since mmnto-ai/totem#2698 the
+   * covariate path shells out through `cross-spawn`, which resolves a command
+   * by chdir-ing into the child's `cwd` and restoring with `process.cwd()` —
+   * so the process is left parked in the temp dir, which on Windows holds it
+   * open and fails teardown with EPERM. Restoring it explicitly is the
+   * `verify-manifest.test.ts` precedent (CodeRabbit on PR mmnto-ai/totem#2745).
+   */
+  const realCwd = process.cwd();
   let tmpDir: string;
   let output: string[];
   let infoLines: string[];
@@ -133,6 +144,7 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
 
   afterEach(() => {
     vi.restoreAllMocks();
+    process.chdir(realCwd);
     // The non-skip case (mixed diff) runs into the LLM path and aborts on the
     // unmocked embedding config, which can leave a handle open under the temp
     // dir — Windows then EPERMs the recursive remove. That is a harness artifact
