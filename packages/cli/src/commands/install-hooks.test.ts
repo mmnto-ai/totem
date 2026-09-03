@@ -2792,9 +2792,16 @@ describe('buildPrePushHook with strict tier', () => {
     const hook = buildPrePushHook({ ...RENDER, tier: 'strict' });
     // Find the position of the doctor --strict invocation and the surrounding
     // guard; assert the invocation lives INSIDE the agent-or-tier block.
-    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
     const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
-    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    // Anchored on the guard that ENCLOSES this invocation: since
+    // mmnto-ai/totem#2698 the pre-push hook carries more than one agent/strict
+    // guard (the review-leg floor arm has its own, and it is rendered first),
+    // so a bare first-match lookup would measure the wrong block.
+    const guardIdx = hook.lastIndexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      doctorIdx,
+    );
+    const fiCloseIdx = hook.indexOf('fi', doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);
@@ -2830,9 +2837,16 @@ describe('buildPrePushHook with standard tier', () => {
   // standard, so the guard branch never enters.
   it('emits doctor --strict gated by agent/strict guard (no unconditional fire in standard tier)', () => {
     const hook = buildPrePushHook(RENDER);
-    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
     const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
-    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    // Anchored on the guard that ENCLOSES this invocation: since
+    // mmnto-ai/totem#2698 the pre-push hook carries more than one agent/strict
+    // guard (the review-leg floor arm has its own, and it is rendered first),
+    // so a bare first-match lookup would measure the wrong block.
+    const guardIdx = hook.lastIndexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      doctorIdx,
+    );
+    const fiCloseIdx = hook.indexOf('fi', doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);
@@ -2861,4 +2875,224 @@ describe('agent detection uses POSIX syntax', () => {
     // Must use #!/bin/sh
     expect(hook).toMatch(/^#!\/bin\/sh\n/);
   });
+});
+
+// ─── The strict pre-push review-leg floor arm (mmnto-ai/totem#2698) ──────────
+
+describe('buildPrePushHook — the review-leg floor arm (mmnto-ai/totem#2698)', () => {
+  const hook = buildPrePushHook(RENDER);
+
+  it('probes `legs --help` for the gate verb before invoking it', () => {
+    expect(hook).toContain(`if $TOTEM_CMD legs --help 2>/dev/null | grep -q -- 'gate'; then`);
+  });
+
+  it('invokes the bare gate on strict and the advisory form otherwise', () => {
+    expect(hook).toContain('$TOTEM_CMD legs gate\n');
+    expect(hook).toContain('$TOTEM_CMD legs gate --advisory');
+    expect(hook).toContain('legs_status=$?');
+  });
+
+  it('blocks on exit 3 and on any other non-zero with DISTINCT lines', () => {
+    expect(hook).toContain(
+      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698, strict mode)"`,
+    );
+    expect(hook).toContain(
+      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status $legs_status) — fix the checkout and retry (strict mode)"',
+    );
+    expect(hook).toContain('if [ "$legs_status" = "3" ]; then');
+    expect(hook).toContain('elif [ "$legs_status" != "0" ]; then');
+  });
+
+  it('FAILS CLOSED on strict when the resolved CLI lacks the verb, compat-opens otherwise', () => {
+    // The OPPOSITE of the `--gate` / `--scope-to-diff` precedent, by ruling
+    // (mmnto-ai/totem#2698 OQ2): those flags degrade to a form that still runs;
+    // an absent VERB has no degraded form, so strict blocks with the cure.
+    expect(hook).toContain(
+      `echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2`,
+    );
+    expect(hook).toContain(
+      `echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2`,
+    );
+  });
+
+  it('runs BEFORE the shield block and inside the $TOTEM_CMD guard', () => {
+    const cmdGuardIdx = hook.indexOf('if [ -n "$TOTEM_CMD" ]; then');
+    const legsIdx = hook.indexOf('$TOTEM_CMD legs --help');
+    const shieldIdx = hook.indexOf('Running shield gate (strict mode)');
+    expect(cmdGuardIdx).toBeGreaterThan(-1);
+    expect(legsIdx).toBeGreaterThan(cmdGuardIdx);
+    // Slotted first so a legs-owed push is not paid for with the slow review gate.
+    expect(legsIdx).toBeLessThan(shieldIdx);
+  });
+
+  it('gates the blocking arms on the agent/strict guard', () => {
+    const legsIdx = hook.indexOf('$TOTEM_CMD legs --help');
+    const guardIdx = hook.indexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      legsIdx,
+    );
+    const gateIdx = hook.indexOf('$TOTEM_CMD legs gate\n');
+    expect(guardIdx).toBeGreaterThan(legsIdx);
+    expect(gateIdx).toBeGreaterThan(guardIdx);
+  });
+});
+
+// The arm, EXECUTED. String assertions alone are satisfiable without the
+// behavior, and the exit-code mapping IS the contract here. The stub `totem` is
+// the FIRST entry on an isolated PATH and records its argv, so every case
+// proves the hook actually reached it — an un-isolated PATH or a stub on the
+// wrong stream is the false-green shape this suite exists to exclude.
+describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () => {
+  const shellOk = spawnSync('sh', ['-c', 'exit 0'], { encoding: 'utf-8' }).status === 0;
+  let tmpDir: string;
+  let repoDir: string;
+  let binDir: string;
+  let logPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-hook-'));
+    repoDir = path.join(tmpDir, 'repo');
+    binDir = path.join(tmpDir, 'stub-bin');
+    fs.mkdirSync(repoDir, { recursive: true });
+    fs.mkdirSync(binDir);
+    // Forward slashes: the stub is read by `sh`, and a Windows path's
+    // backslashes would not survive the shell's quoting.
+    logPath = path.join(tmpDir, 'totem-invocations.log').split(path.sep).join('/');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /**
+   * A stub `totem` that records every invocation, answers the `legs --help`
+   * probe with the given help text, and exits `gateExit` for `legs gate`. The
+   * bare repo dir clears every earlier hook gate (no manifest, no compiled
+   * rules, no lockfile, no package.json), so the legs arm and the shield block
+   * are the only live ones.
+   */
+  function writeStub(params: { helpText: string; helpExit?: number; gateExit?: number }): void {
+    const stub = [
+      '#!/bin/sh',
+      `printf '%s\\n' "$*" >> "${logPath}"`,
+      'if [ "$1" = "legs" ] && [ "$2" = "--help" ]; then',
+      "  cat <<'TOTEM_STUB_HELP'",
+      params.helpText,
+      'TOTEM_STUB_HELP',
+      `  exit ${params.helpExit ?? 0}`,
+      'fi',
+      'if [ "$1" = "legs" ] && [ "$2" = "gate" ]; then',
+      '  echo "[Totem] legs: stub gate line"',
+      `  exit ${params.gateExit ?? 0}`,
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(binDir, 'totem'), stub, { mode: 0o755 });
+  }
+
+  /** Help text WITH the verb, and the one without it (no `gate` substring). */
+  const HELP_WITH_GATE = 'Usage: totem legs\n\nCommands:\n  deposit  record\n  gate     judge';
+  const HELP_WITHOUT_GATE = 'Usage: totem legs\n\nCommands:\n  deposit  record a leg';
+
+  function runHook(options: { tier: 'strict' | 'standard'; agent: boolean }): {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  } {
+    fs.writeFileSync(
+      path.join(repoDir, 'pre-push'),
+      buildPrePushHook({ ...RENDER, tier: options.tier }),
+    );
+    // Every agent-detection variable is cleared explicitly: this suite runs
+    // inside an agent session, and an inherited CLAUDE_CODE_AGENT would make
+    // the standard-tier cases silently exercise the strict arm.
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
+    };
+    delete env['CLAUDE_CODE_AGENT'];
+    delete env['CLAUDE_VERSION'];
+    delete env['CURSOR_TRACE_ID'];
+    if (options.agent) env['CLAUDE_CODE_AGENT'] = '1';
+    const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
+    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  }
+
+  /** Every recorded stub invocation, in order. Empty when it was never reached. */
+  const invocations = (): string[] => {
+    const native = logPath.split('/').join(path.sep);
+    return fs.existsSync(native) ? fs.readFileSync(native, 'utf-8').trim().split('\n') : [];
+  };
+
+  it.skipIf(!shellOk)('probe UNSUPPORTED + strict: blocks with the upgrade line', () => {
+    writeStub({ helpText: HELP_WITHOUT_GATE });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs --help');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("this hook expects 'totem legs gate'");
+    expect(r.stderr).toContain('npm i -g @mmnto/cli@latest');
+    // Fail-closed means the gate was never invoked, not that it passed.
+    expect(invocations()).not.toContain('legs gate');
+  });
+
+  it.skipIf(!shellOk)('probe UNSUPPORTED + standard: passes with the compat line on stderr', () => {
+    writeStub({ helpText: HELP_WITHOUT_GATE });
+    const r = runHook({ tier: 'standard', agent: false });
+    expect(invocations()).toContain('legs --help');
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("Hook running without the legs gate (CLI predates 'totem legs')");
+  });
+
+  it.skipIf(!shellOk)('gate exit 3 + strict: blocks with the legs-owed line and the cure', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+    expect(r.stdout).toContain('totem legs deposit --sha HEAD --from <findings.json>');
+    // The gate's own line is not swallowed.
+    expect(r.stdout).toContain('[Totem] legs: stub gate line');
+  });
+
+  it.skipIf(!shellOk)('gate exit 2 + strict: blocks with the DISTINCT not-derived line', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 2 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('the legs gate could not derive (totem legs gate exit status 2)');
+    expect(r.stdout).not.toContain('this push is legs-owed');
+  });
+
+  it.skipIf(!shellOk)('gate exit 0 + strict: the hook proceeds PAST the arm', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 0 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    // The shield block sits after the arm — reaching it proves the arm passed.
+    expect(invocations()).toContain('doctor --strict');
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('BLOCKED');
+  });
+
+  it.skipIf(!shellOk)('an AGENT on the standard tier still takes the strict arm', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+    const r = runHook({ tier: 'standard', agent: true });
+    expect(invocations()).toContain('legs gate');
+    expect(invocations()).not.toContain('legs gate --advisory');
+    expect(r.status).toBe(1);
+  });
+
+  it.skipIf(!shellOk)(
+    'standard tier, no agent: --advisory is passed and exit 3 does NOT block',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      const r = runHook({ tier: 'standard', agent: false });
+      // Read from the recorded argv, not from the hook text: the flag has to
+      // have reached the CLI, not merely appear in the template.
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(invocations()).not.toContain('legs gate');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('BLOCKED');
+    },
+  );
 });

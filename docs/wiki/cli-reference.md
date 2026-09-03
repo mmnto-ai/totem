@@ -548,6 +548,49 @@ Inspects grounded run artifacts under `.totem/artifacts/runs/`.
 - `artifact rerun <hash>` re-invokes a recorded run with its exact stored bundle and backend, emitting a new artifact.
 - `artifact compare <hashA> <hashB>` produces a deterministic artifact-vs-artifact diff (structural equality plus metric deltas).
 
+### `totem legs` (deposit / gate)
+
+The two verbs over the falsification-leg deposit store under `<totemDir>/artifacts/legs/`. A **deposit** is the machine-readable record a review leg leaves behind after it READ a diff: the head it read (`diffSha`), when it read it (`readAt`), its typed findings, which of them the seat folded, and its one-line verdict. The gate's question is narrow and it is the only one either verb answers — _was this head read by a leg?_
+
+`totem legs deposit --sha <ref> --from <file> [--replace] [--read-at <iso>]` is the single writer.
+
+- `--from <file>` (required): the leg's findings JSON. Each finding carries `id` (unique, `[A-Za-z0-9_-]{1,32}`), `severity` (`BLOCKING` | `MATERIAL` | `MINOR`), `file`, `line`, `claim` and `counterexample`; `folded` may only name ids that exist in `findings`.
+- `--sha <ref>` (default `HEAD`): the head the leg read, resolved through `git rev-parse --verify <ref>^{commit}`. A ref that is not a commit in this repository is refused by name, and a file whose own `diffSha` disagrees with the resolved sha is refused naming both — a deposit must name the head it read.
+- `--replace`: overwrite an existing deposit for this sha. Without it an occupied address is refused, carrying the incumbent's `readAt`; with it, the replaced instant is printed.
+- `--read-at <iso>`: the leg's own instant. Absent from both the flag and the file, `now` is stamped and the substitution is printed (`readAt defaulted to … — pass --read-at for the leg's own instant`), because ties between deposits are broken on it.
+
+The write is validated before the filesystem is touched, so a refused deposit leaves no file and no temp behind; a schema violation is reported with its path (`findings.0.severity`, `folded.0`). On success the stored path is printed with `blocking=N material=N minor=N folded=N`.
+
+`totem legs gate [--advisory] [--head <ref>]` is the reader the managed pre-push hook calls. It writes nothing, and it never judges a finding's severity or disposition — the floor is that a leg read this diff.
+
+- **Exit vocabulary:** `0` the push is not legs-owed, or a deposit answers for its head · `3` the push is legs-owed and no deposit answers · `2` the gate could not derive (not a git repo, an unresolvable head, a branch diff that will not resolve).
+- `--advisory`: print the byte-identical lines of every state and always exit `0`. The tier changes the exit code and nothing else.
+- `--head <ref>` (default `HEAD`): the head to judge.
+
+A push is legs-owed when a changed path in the branch-vs-base diff matches `hooks.legsOwed.globs`. Not owed prints what it judged against and never consults the store:
+
+```text
+[Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (7 globs; head 4f21ab90)
+```
+
+A deposit answers for its own head and for every descendant of it (ancestor-or-equal), with the exact read outranking the nearest ancestor. The pass line carries the read's age and how far the head has moved since, so a stale-but-valid pass is visible rather than silent:
+
+```text
+[Totem] legs evidence: .totem/artifacts/legs/4f21….json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · blocking=2 material=1 folded=3
+```
+
+Owed with nothing fresh names the basis — which glob matched which file — plus every stale candidate with its own reason, and the cure:
+
+```text
+[Totem] BLOCKED: this push is legs-owed (docs/wiki/** → docs/wiki/enforcement-model.md, .changeset/** → .changeset/five-cats-smile.md) and carries no fresh falsification-leg deposit for head 4f21ab90
+[Totem] legs: stale deposit 9c02be71: not an ancestor of head
+[Totem] legs: run the leg, then: totem legs deposit --sha HEAD --from <findings.json>
+```
+
+A deposit file that is unreadable, not JSON, schema-invalid, or named for a sha other than the one it stores is a per-file sensor row on stderr (`[Totem] legs: sensor — ignoring corrupt deposit <file>: <reason>`). It never counts as evidence and never masks a valid sibling.
+
+**Covariate.** Since format **v1.2** the `local-lane:` line `totem review --covariate` prints carries a `leg:` field: `leg: <sha8> blocking=N material=N folded=N` when a deposit resolves for the lineage, `leg: none` when none does. A folded finding is counted in BOTH its severity bucket and in `folded`, so `blocking=3 folded=3` reads "all three were addressed" and `blocking=3 folded=0` reads "none were". The v1 shapes before the field are byte-unchanged; consumers keep discriminating on the second token.
+
 ### `totem spine` (windtunnel / freeze-split)
 
 Spine evidence harness for Gate-1 wind-tunnel evaluation.

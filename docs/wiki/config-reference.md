@@ -145,8 +145,49 @@ export default {
     junie: '.junie/guidelines.md',
     copilot: '.github/copilot-instructions.md',
   },
+
+  // Enforcement hook configuration.
+  hooks: {
+    // The tier rendered INTO the managed hooks at install — re-run
+    // `totem hook install --force` after changing it.
+    tier: 'standard', // 'strict' | 'standard'
+
+    // The judgment-dense path floor `totem legs gate` judges a push against
+    // (mmnto-ai/totem#2698). See the section below.
+    legsOwed: {
+      globs: ['doctrine/**', 'adr/**', 'docs/wiki/**', '.changeset/**'],
+    },
+  },
 };
 ```
+
+## The Legs-Owed Floor (`hooks.legsOwed.globs`)
+
+`totem legs gate` calls a push **legs-owed** when a changed path in the branch-vs-base diff matches one of these globs. An owed push must carry a falsification-leg deposit for its head; under the strict tier the pre-push hook blocks without one (see [Enforcement Model](enforcement-model.md)).
+
+**The default floor** — used when the key is absent — is the doctrine surfaces, the public-copy surfaces, and one contract proxy:
+
+```text
+doctrine/**
+design-tenets.md
+adr/**
+proposals/**
+README.md
+docs/wiki/**
+.changeset/**
+```
+
+`.changeset/**` is in the default deliberately: a changeset IS the release's compatibility contract, so every releasable slice is owed a leg by derivation rather than by anyone remembering to declare it.
+
+**A configured list REPLACES the default; it does not merge with it.** A repo declaring its own contract classes must restate every default entry it still wants — dropping one silently retires that part of the floor. (Totem's own `totem.config.ts` restates all seven before adding its schemas, its routing seam, its hook/template builders and its distributed skills.)
+
+**An empty array is a parse error, not a synonym for "nothing is owed."** `globs: []` fails config load with `hooks.legsOwed.globs must contain at least one glob — omit the key to take the default floor`. There is deliberately no spelling for disabling the floor by emptying it; omit the key to take the default (the `review.lanes` precedent).
+
+**Bare patterns match by basename.** The matcher is the same dialect `ignorePatterns` uses, so a bare `README.md` matches a file of that name anywhere in the tree — which is what makes it cover every package README, i.e. the npm-public copy. A `!`-prefixed glob is an exclusion, and a file matching any exclusion is never owed whatever positives it also matched.
+
+**Read at run time.** Unlike `hooks.tier`, these globs are never rendered into the hook — the hook calls back into `totem legs gate`, which loads this config itself — so editing the list needs no `totem hook install --force`.
+
+One interaction to know: the gate judges the branch diff AFTER `ignorePatterns` / `shieldIgnorePatterns` filtering, so a path class this config also ignores cannot make a push owed. The filter names every file it drops.
 
 ## Secrets Management
 

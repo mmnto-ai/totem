@@ -992,6 +992,53 @@ export function buildPrePushHook(options: {
   const { fallbackCmd, totemDir } = options;
   const effectiveTier = options.tier;
   assertRenderableTotemDir(totemDir);
+  // The strict-tier review-leg floor (mmnto-ai/totem#2698; doctrine
+  // `model-tiering.md` § Review legs — a self-authored judgment-dense diff owes
+  // one falsification leg before it is presented). The gate itself derives
+  // everything: whether the push is legs-owed (the changed-file set against
+  // `hooks.legsOwed.globs`, read at RUN time so a glob edit needs no hook
+  // re-install) and whether a deposit ancestor-or-equal of HEAD answers for it.
+  // The hook maps that derivation onto exit codes and NOTHING else — the tier
+  // changes only which code blocks, never a line of the text.
+  //
+  // Slotted BEFORE the shield block deliberately: on strict this is a sub-second
+  // local read, and paying for the slow review gate before discovering the push
+  // is legs-owed wastes the operator's minute and an LLM call.
+  //
+  // The `--help` probe is the `--gate` / `--scope-to-diff` precedent, with the
+  // OPPOSITE fallback (mmnto-ai/totem#2698 OQ2, ruled): those flags degrade to
+  // a bare sensor form that still runs, while an ABSENT VERB has no degraded
+  // form at all. So strict FAILS CLOSED with the one-command cure, and only the
+  // advisory tiers print the compat line and pass.
+  const legsBlock = `
+  # Strict mode: require a fresh falsification-leg deposit for legs-owed pushes
+  # (mmnto-ai/totem#2698, doctrine/model-tiering.md § Review legs).
+  # Exit vocabulary of \`totem legs gate\`: 0 = not owed, or a deposit answers for
+  # this head · 3 = owed with no fresh deposit · 2 = the gate could not derive
+  # (not a git repo, HEAD or the branch diff unresolvable). Advisory tiers print
+  # the SAME lines and exit 0.
+  if $TOTEM_CMD legs --help 2>/dev/null | grep -q -- 'gate'; then
+    if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+      $TOTEM_CMD legs gate
+      legs_status=$?
+      if [ "$legs_status" = "3" ]; then
+        echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698, strict mode)"
+        exit 1
+      elif [ "$legs_status" != "0" ]; then
+        echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status $legs_status) — fix the checkout and retry (strict mode)"
+        exit 1
+      fi
+    else
+      $TOTEM_CMD legs gate --advisory
+    fi
+  else
+    if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+      echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2
+      exit 1
+    else
+      echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2
+    fi
+  fi`;
   // Strict-tier gate per Proposal 273 § 6 Q2 (mmnto-ai/totem#1908): operator-invoked
   // is the default for new checks while behavior calibrates. Doctor's `--strict`
   // mode gates on repo-state `fail` results; unconditional firing would break
@@ -1088,6 +1135,7 @@ if [ -n "$TOTEM_CMD" ]; then
       fi
     fi
   fi
+${legsBlock}
 ${shieldBlock}
 fi
 

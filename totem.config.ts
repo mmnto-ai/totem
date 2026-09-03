@@ -67,6 +67,49 @@ const config: TotemConfig = {
     lanes: ['anthropic:claude-sonnet-5', 'gemini:gemini-3.5-flash'],
   },
 
+  // mmnto-ai/totem#2698: the judgment-dense path floor `totem legs gate` judges
+  // a push against. A configured list REPLACES `DEFAULT_LEGS_OWED_GLOBS`, so the
+  // seven default entries are RESTATED verbatim below before this repo's own
+  // additions — dropping one here would silently retire the floor it belongs to.
+  //
+  // The first seven are the doctrine floor plus the public-copy surfaces plus
+  // `.changeset/**` (a changeset IS the release's compatibility contract, so
+  // every releasable slice is owed a leg by derivation). The rest are THIS
+  // repo's contract classes: the artifact schemas, the config schema, the
+  // routing seam, the two template builders whose output every consumer
+  // installs, and the distributed skills.
+  //
+  // Bare patterns match by BASENAME anywhere under the rule-engine glob profile
+  // this matcher shares with `ignorePatterns` — so `README.md` covers every
+  // package README, which is the npm-public copy.
+  //
+  // Read at RUN time, never rendered into the hook: editing this list needs no
+  // `totem hook install --force`.
+  //
+  // Disclosure (mmnto-ai/totem#2698): the gate judges the branch diff AFTER
+  // `ignorePatterns` / `shieldIgnorePatterns` filtering, so a class this repo
+  // also ignores cannot fire here — `README.md` and `.claude/**` are in
+  // `ignorePatterns` today.
+  hooks: {
+    legsOwed: {
+      globs: [
+        'doctrine/**',
+        'design-tenets.md',
+        'adr/**',
+        'proposals/**',
+        'README.md',
+        'docs/wiki/**',
+        '.changeset/**',
+        'packages/core/src/artifacts/**',
+        'packages/core/src/config-schema.ts',
+        'packages/core/src/routing/**',
+        'packages/cli/src/commands/install-hooks.ts',
+        'packages/cli/src/commands/init-templates.ts',
+        '.claude/skills/**',
+      ],
+    },
+  },
+
   docs: [
     { path: 'docs/wiki/roadmap.md', description: 'Strategic roadmap with phase progress' },
     {

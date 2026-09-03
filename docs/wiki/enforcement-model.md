@@ -56,6 +56,25 @@ Two disclosures:
 - **Migration.** Every spec artifact written before this rule reads as not-evidence, because none carries `grounding.anchor`. On a strict-tier install this affects human commits too, not only agent commits. One run of `totem spec <issue>` or `totem spec --from <record>` restores evidence.
 - **Reach.** Until agent detection for Claude Code is restored (mmnto-ai/totem#2706), the strict arm fires only where `TOTEM_HOOK_TIER=strict` is set and on Cursor seats. Totem's own repo ships `tools/pre-commit` at tier `standard`.
 
+### The Strict Pre-Push Review-Leg Floor (Opt-In Tier)
+
+Under the same strict tier, the managed pre-push hook requires a **falsification-leg deposit** for a push whose diff is judgment-dense. The doctrine the floor mechanizes is `doctrine/model-tiering.md` § Review legs: a self-authored judgment-dense diff owes one falsification leg before it is presented, and a fold that rewires semantics re-arms it.
+
+A **deposit** is what a leg leaves behind after it READ a diff — the head it read, when it read it, its typed findings, which of them the seat folded, and a one-line verdict — stored at `<totemDir>/artifacts/legs/<diffSha>.json` and written by `totem legs deposit`. It is evidence of a READ, not a grade: the gate never looks at a finding's severity or disposition. Whether the findings were addressed is the round's question, and the counts ride the covariate line for the round to rule on.
+
+**The ancestor-or-equal rule.** A deposit read at commit X answers for X and for every descendant of X. The exact read outranks the nearest ancestor, the nearest ancestor outranks a farther one, and equal reach resolves to the latest read. The pass line carries `+N commits since the leg read`, so a deposit that is valid but old is VISIBLE rather than silently sufficient — a sensor, not a gate. Re-arming after a semantics-moving fold is doctrine's rule, owed by the seat, not enforced here.
+
+**Not owed.** The push is judged against the branch-vs-base diff — the same scope the push gate lints. A changed path matching `hooks.legsOwed.globs` makes the push legs-owed; nothing matching makes it not owed, and the line says how many globs it was judged against. A not-owed push never consults the deposit store at all. Judgment-density is derived from file CLASS (doctrine surfaces, public-copy surfaces, a contract class) because a path glob is an honest mechanism for that where a line-count floor is only a proxy. The default floor is `doctrine/**`, `design-tenets.md`, `adr/**`, `proposals/**`, `README.md`, `docs/wiki/**` and `.changeset/**` — a changeset IS the release's compatibility contract, so a releasable slice is owed a leg by derivation rather than by anyone remembering to declare it.
+
+**The verb probe fails closed.** The hook probes `totem legs --help` for the `gate` verb before invoking it. Where the resolved CLI does not carry it, the strict tier BLOCKS with the one-command cure (`npm i -g @mmnto/cli@latest`) and the advisory tiers print a compat line and pass. This is deliberately the opposite of the `--gate` and `--scope-to-diff` probes beside it: those flags degrade to a bare form that still runs, and an absent verb has no degraded form at all.
+
+The gate's exit vocabulary is `0` not owed or a deposit answers, `3` owed with no fresh deposit, and `2` could not derive. The strict arm blocks on `3` and on `2` with DISTINCT lines — "run the leg" and "fix the checkout" are different repairs — and every other tier passes both, printing the same text. The tier changes only the exit code.
+
+Two disclosures:
+
+- **Reach.** Exactly as with the pre-commit spec rule: until agent detection for Claude Code is restored (mmnto-ai/totem#2706), the strict arm fires only where `TOTEM_HOOK_TIER=strict` is set and on Cursor seats. Totem's own repo ships `tools/pre-push` at tier `standard`, so this repo's own pushes print the advisory line and pass.
+- **Scope.** The gate judges `HEAD`'s branch diff, not the ref list git hands the hook on stdin. Pushing a branch other than the checked-out one judges the wrong head — the pass line discloses which head it judged, so the mismatch is legible rather than silent.
+
 ### The PreToolUse Hook (Reference Implementation, Opt-In)
 
 For teams using AI agents, Totem provides a reference `PreToolUse` hook that uses **content hashing** to verify the agent reviewed the code before pushing. This is actor-aware. It only fires for the AI agent, never for the human developer.
