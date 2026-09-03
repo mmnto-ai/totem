@@ -59,11 +59,19 @@ describe('DEFAULT_LEGS_OWED_GLOBS — the ruled floor', () => {
     // EVERY README.md in a monorepo is owed, not just the root one. That is the
     // shipped dialect `ignorePatterns` already uses — the design's "the matcher
     // is the one `ignorePatterns` already uses" — so it is pinned here rather
-    // than worked around, and a repo that wants the root file only declares
-    // `./README.md`-style anchoring in its own `hooks.legsOwed.globs`.
+    // than worked around. The profile offers NO root-only spelling: a `./`
+    // prefix is anchored literally and changed paths are never `./`-prefixed,
+    // so `./README.md` matches nothing (the falsification leg's F8 — a repo
+    // following that remedy would silently retire the entry). A repo that
+    // wants the root file only declares a NEGATIVE for its nested trees.
     for (const file of ['docs/README.md', 'packages/cli/README.md', 'sub/design-tenets.md']) {
       expect(classifyLegsOwed([file], DEFAULTS).owed, file).toBe(true);
     }
+    expect(classifyLegsOwed(['README.md'], ['./README.md']).owed).toBe(false);
+    const rootOnly = ['README.md', '!packages/**', '!docs/**'];
+    expect(classifyLegsOwed(['README.md'], rootOnly).owed).toBe(true);
+    expect(classifyLegsOwed(['packages/cli/README.md'], rootOnly).owed).toBe(false);
+    expect(classifyLegsOwed(['docs/README.md'], rootOnly).owed).toBe(false);
     // Same profile, same consequence on the other side: `.changeset/**` covers
     // the tool's own config file, not only the release notes under it.
     expect(classifyLegsOwed(['.changeset/config.json'], DEFAULTS).owed).toBe(true);
