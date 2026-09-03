@@ -408,7 +408,13 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
         ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
         { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
       ).trim();
-    git('init');
+    // `-b main`, explicitly: the mocked branch scope below names `main` as the
+    // base, and the leg field's coverage probe diffs `main...HEAD` in THIS repo.
+    // A bare `git init` takes the machine's `init.defaultBranch` — `main` on a
+    // seat whose system gitconfig sets it, `master` on the CI runners — and on
+    // `master` the probe has no `main` to diff against, coverage is underivable
+    // and the field honestly answers `leg: none` (mmnto-ai/totem#2745 CI run 1).
+    git('init', '-b', 'main');
     git('commit', '--allow-empty', '-m', 'leg-fixture');
     const head = git('rev-parse', 'HEAD');
 
@@ -480,7 +486,13 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
         ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
         { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
       ).trim();
-    git('init');
+    // `-b main`, explicitly: the mocked branch scope below names `main` as the
+    // base, and the leg field's coverage probe diffs `main...HEAD` in THIS repo.
+    // A bare `git init` takes the machine's `init.defaultBranch` — `main` on a
+    // seat whose system gitconfig sets it, `master` on the CI runners — and on
+    // `master` the probe has no `main` to diff against, coverage is underivable
+    // and the field honestly answers `leg: none` (mmnto-ai/totem#2745 CI run 1).
+    git('init', '-b', 'main');
     git('commit', '--allow-empty', '-m', 'leg-fixture');
     const head = git('rev-parse', 'HEAD');
 
