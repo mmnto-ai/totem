@@ -286,11 +286,22 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
 // ─── `totem legs gate` ──────────────────────────────────────────────────────
 
 export interface LegsGateOptions {
-  /** Print every line of the derived state, but always exit 0. */
+  /**
+   * Print every line of the derived state, but exit 0 for every GATE state
+   * (not owed, evidence, blocked, not derived). A failure BEFORE the
+   * derivation — an unloadable config, an unknown flag — still exits non-zero.
+   */
   advisory?: boolean;
-  /** The head to judge. Any rev git accepts; defaults to `HEAD`. */
-  head?: string;
 }
+
+/**
+ * There is deliberately no `--head`: the gate judges `HEAD` and nothing else
+ * (mmnto-ai/totem#2698 fold 2, MATERIAL). A caller-chosen head turns a block
+ * into a pass — a deposit written on a sibling branch answers for a commit
+ * this push does not contain — and the hook has no reason to ask about any
+ * head but the one being pushed. Tests inject a head through
+ * {@link LegsGateDeps.resolveHead}, which is a seam, not a public flag.
+ */
 
 /**
  * The derivation seam. Everything the gate needs that touches the world —
@@ -456,13 +467,18 @@ export async function runLegsGate(
  * Exported so the UNFILTERED-diff contract below is testable against a real
  * checkout without capturing a process exit: a test resolves these deps in a
  * fixture repo and asserts what `changedFiles()` actually returns.
+ *
+ * It takes no options: since `--head` was removed (mmnto-ai/totem#2698 fold 2)
+ * nothing about the seam varies with a flag — `--advisory` is applied to the
+ * STATUS, after the derivation, and never to what is derived.
  */
-export async function buildLegsGateDeps(options: LegsGateOptions): Promise<LegsGateDeps> {
+export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
   const path = await import('node:path');
-  const { DEFAULT_LEGS_OWED_GLOBS, safeExec } = await import('@mmnto/totem');
+  const { DEFAULT_LEGS_OWED_GLOBS, safeExec, TotemError } = await import('@mmnto/totem');
   const { getDiffForReview, isAncestor } = await import('../git.js');
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
+  await loadSanitizer();
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -484,14 +500,21 @@ export async function buildLegsGateDeps(options: LegsGateOptions): Promise<LegsG
       return isAncestor(cwd, base, head);
     },
     distance(base, head) {
-      const count = Number.parseInt(
-        safeExec('git', ['rev-list', '--count', `${base}..${head}`], { cwd }).trim(),
-        10,
-      );
-      // A throw here reaches the NOT DERIVED arm (the checkout is the repair);
-      // a non-numeric answer from a successful rev-list cannot happen, and
-      // guessing 0 would print a stale read as an exact one.
-      return Number.isNaN(count) ? 0 : count;
+      const raw = safeExec('git', ['rev-list', '--count', `${base}..${head}`], { cwd }).trim();
+      const count = Number.parseInt(raw, 10);
+      if (Number.isNaN(count)) {
+        // Never guessed (mmnto-ai/totem#2698 fold 2, MINOR). The number is
+        // PRINTED as fact — `+N commits since the leg read` — so an
+        // unparseable answer is a failure to derive, not a zero: it throws,
+        // reaches the gate's NOT DERIVED arm, and the strict hook blocks on it.
+        // Guessing 0 would render a stale read as an exact one.
+        throw new TotemError(
+          'GIT_FAILED',
+          `git rev-list --count ${base}..${head} returned ${JSON.stringify(echoSafe(raw))}, which is not a commit count.`,
+          'Fix the checkout (a corrupt or truncated object store) and retry.',
+        );
+      }
+      return count;
     },
   };
 
@@ -501,9 +524,7 @@ export async function buildLegsGateDeps(options: LegsGateOptions): Promise<LegsG
     globs: config.hooks?.legsOwed?.globs ?? [...DEFAULT_LEGS_OWED_GLOBS],
     git,
     resolveHead() {
-      return safeExec('git', ['rev-parse', '--verify', `${options.head ?? 'HEAD'}^{commit}`], {
-        cwd,
-      }).trim();
+      return safeExec('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd }).trim();
     },
     async changedFiles() {
       // The push-gate scope (`--branch`): the branch-vs-base diff is what the
@@ -538,15 +559,17 @@ export async function buildLegsGateDeps(options: LegsGateOptions): Promise<LegsG
 }
 
 /**
- * `totem legs gate [--advisory] [--head <ref>]`
+ * `totem legs gate [--advisory]`
  *
  * The reader the strict pre-push arm calls. Loads the repo's config, builds
  * the real git and diff seams, derives, writes SYNCHRONOUSLY, exits with the
- * tier-mapped status.
+ * tier-mapped status. `--advisory` maps every GATE state to 0; a failure
+ * before the derivation (config load, flag parse) still exits non-zero
+ * through the CLI's error boundary.
  */
 export async function legsGateCommand(options: LegsGateOptions): Promise<void> {
   const fs = await import('node:fs');
-  const deps = await buildLegsGateDeps(options);
+  const deps = await buildLegsGateDeps();
   const outcome = await runLegsGate(options, deps);
   for (const line of outcome.stderr) fs.writeSync(2, `${line}\n`);
   // fs.writeSync, not console.log: stdout is a PIPE under the hook, and a

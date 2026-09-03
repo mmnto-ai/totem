@@ -77,7 +77,9 @@ const config: TotemConfig = {
   // every releasable slice is owed a leg by derivation). The rest are THIS
   // repo's contract classes: the artifact schemas, the config schema, the
   // routing seam, the two template builders whose output every consumer
-  // installs, and the distributed skills.
+  // installs, and the distributed skills — BOTH spellings: ADR-038 makes
+  // `.agents/` the canonical home and `.claude/` its harness mirror, they are
+  // written from one constant, and this very slice changed both.
   //
   // Bare patterns match by BASENAME anywhere under the rule-engine glob profile
   // this matcher shares with `ignorePatterns` — so `README.md` covers every
@@ -106,6 +108,7 @@ const config: TotemConfig = {
         'packages/cli/src/commands/install-hooks.ts',
         'packages/cli/src/commands/init-templates.ts',
         '.claude/skills/**',
+        '.agents/skills/**',
       ],
     },
   },

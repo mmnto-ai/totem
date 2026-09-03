@@ -636,11 +636,11 @@ artifactCommand
 // derivation — a missing config, an unreadable repo.
 const legsCommand = program
   .command('legs')
-  .description('Falsification-leg deposits (doctrine/model-tiering.md § Review legs)');
+  .description('Leg deposits — record what a review leg read, and gate a legs-owed push on it');
 
 legsCommand
   .command('deposit')
-  .description("Record a falsification leg's findings against the head it read")
+  .description("Record a review leg's findings against the head it read")
   .requiredOption('--from <file>', "Path to the leg's findings JSON")
   .option('--sha <ref>', 'The head the leg read (default: HEAD)')
   .option('--replace', 'Overwrite an existing deposit for this sha, reporting what it replaced')
@@ -657,10 +657,12 @@ legsCommand
 
 legsCommand
   .command('gate')
-  .description('Is this push legs-owed, and does a fresh deposit answer for its head?')
-  .option('--advisory', 'Print the same lines for every state but always exit 0')
-  .option('--head <ref>', 'The head to judge (default: HEAD)')
-  .action(async (opts: { advisory?: boolean; head?: string }) => {
+  .description('Is this push legs-owed, and does a fresh deposit answer for HEAD?')
+  .option(
+    '--advisory',
+    'Print the same lines for every state, exiting 0 for every gate state (a failure before the derivation still exits non-zero)',
+  )
+  .action(async (opts: { advisory?: boolean }) => {
     try {
       const { legsGateCommand } = await import('./commands/legs.js');
       await legsGateCommand(opts);

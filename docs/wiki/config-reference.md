@@ -179,7 +179,7 @@ docs/wiki/**
 
 `.changeset/**` is in the default deliberately: a changeset IS the release's compatibility contract, so every releasable slice is owed a leg by derivation rather than by anyone remembering to declare it.
 
-**A configured list REPLACES the default; it does not merge with it.** A repo declaring its own contract classes must restate every default entry it still wants — dropping one silently retires that part of the floor. (Totem's own `totem.config.ts` restates all seven before adding its schemas, its routing seam, its hook/template builders and its distributed skills.)
+**A configured list REPLACES the default; it does not merge with it.** A repo declaring its own contract classes must restate every default entry it still wants — dropping one silently retires that part of the floor. (Totem's own `totem.config.ts` restates all seven before adding its schemas, its routing seam, its hook/template builders and its distributed skills — the latter under BOTH `.agents/skills/**` and `.claude/skills/**`, because the two are written from one constant and a floor that watches only one of them can be walked around by editing the other.)
 
 **An empty array is a parse error, not a synonym for "nothing is owed."** `globs: []` fails config load with `hooks.legsOwed.globs must contain at least one glob — omit the key to take the default floor`. There is deliberately no spelling for disabling the floor by emptying it; omit the key to take the default (the `review.lanes` precedent).
 

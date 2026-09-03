@@ -95,7 +95,7 @@ if [ -n "$TOTEM_CMD" ]; then
   # this head · 3 = owed with no fresh deposit · 2 = the gate could not derive
   # (not a git repo, HEAD or the branch diff unresolvable). Advisory tiers print
   # the SAME lines and exit 0.
-  if $TOTEM_CMD legs --help 2>/dev/null | grep -q -- 'gate'; then
+  if $TOTEM_CMD legs gate --help 2>/dev/null | grep -q -- '--advisory'; then
     if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
       $TOTEM_CMD legs gate
       legs_status=$?

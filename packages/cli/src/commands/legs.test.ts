@@ -606,7 +606,7 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
 
   it('an ignorePatterns-named path still reaches the predicate, and still owes a leg', async () => {
     const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
-    const deps = await buildLegsGateDeps({});
+    const deps = await buildLegsGateDeps();
 
     // The seam itself: the resolution returns the ignored path.
     const changed = await deps.changedFiles();
@@ -624,7 +624,7 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
       lines.push(args.map((a) => String(a)).join(' '));
     });
     const { buildLegsGateDeps } = await import('./legs.js');
-    const deps = await buildLegsGateDeps({});
+    const deps = await buildLegsGateDeps();
     await deps.changedFiles();
     expect(lines.join('\n')).toContain(
       'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
@@ -719,5 +719,48 @@ describe('every echoed value is line-safe (mmnto-ai/totem#2698 fold 2)', () => {
     expect(notDerived.stdout).toHaveLength(1);
     expect(notDerived.stdout[0]).toContain('NOT DERIVED — fatal: bad revision?');
     expect(notDerived.stdout[0]).toContain('?[Totem] legs evidence: forged');
+  });
+});
+
+// ─── Fold 2 (MINOR): a distance is derived or it is not derived ─────────────
+
+describe('the gate never GUESSES a distance (mmnto-ai/totem#2698 fold 2)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-dist-')));
+    saveLegDeposit(path.join(tmpDir, '.totem'), depositFixture({ diffSha: OTHER_SHA }));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('an adapter whose distance fails yields NOT DERIVED, never a fabricated +0', async () => {
+    const { runLegsGate } = await import('./legs.js');
+    const outcome = await runLegsGate(
+      {},
+      {
+        root: tmpDir,
+        totemDirAbs: path.join(tmpDir, '.totem'),
+        globs: ['docs/wiki/**'],
+        git: {
+          isCommit: () => true,
+          isAncestor: () => true,
+          distance: () => {
+            throw new Error('git rev-list --count returned "" , which is not a commit count.');
+          },
+        },
+        resolveHead: () => HEAD_SHA,
+        changedFiles: async () => ['docs/wiki/page.md'],
+      },
+    );
+    // The number is PRINTED as fact on the evidence line, so an underivable
+    // one is a failure to derive — not a zero that would render a stale read
+    // as an exact one.
+    expect(outcome.derived).toBe(2);
+    expect(outcome.stdout[0]).toContain('[Totem] legs: NOT DERIVED — git rev-list --count');
+    expect(outcome.stdout.join(' ')).not.toContain('legs evidence');
+    expect(outcome.stdout.join(' ')).not.toContain('+0 commits');
   });
 });

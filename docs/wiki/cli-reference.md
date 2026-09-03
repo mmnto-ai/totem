@@ -561,11 +561,10 @@ The two verbs over the falsification-leg deposit store under `<totemDir>/artifac
 
 The write is validated before the filesystem is touched, so a refused deposit leaves no file and no temp behind; a schema violation is reported with its path (`findings.0.severity`, `folded.0`). On success the stored path is printed with `blocking=N material=N minor=N folded=N`.
 
-`totem legs gate [--advisory] [--head <ref>]` is the reader the managed pre-push hook calls. It writes nothing, and it never judges a finding's severity or disposition — the floor is that a leg read this diff.
+`totem legs gate [--advisory]` is the reader the managed pre-push hook calls. It judges `HEAD` and only `HEAD` — there is deliberately no flag for choosing another, because a caller-chosen head turns a block into a pass (a deposit written on a sibling branch answers for a commit the push does not contain). It writes nothing, and it never judges a finding's severity or disposition — the floor is that a leg read this diff.
 
 - **Exit vocabulary:** `0` the push is not legs-owed, or a deposit answers for its head · `3` the push is legs-owed and no deposit answers · `2` the gate could not derive (not a git repo, an unresolvable head, a branch diff that will not resolve).
-- `--advisory`: print the byte-identical lines of every state and always exit `0`. The tier changes the exit code and nothing else.
-- `--head <ref>` (default `HEAD`): the head to judge.
+- `--advisory`: print the byte-identical lines of every state and exit `0` for every GATE state (not owed, evidence, blocked, not derived). A failure BEFORE the derivation — an unloadable config, an unknown flag — still exits non-zero through the CLI's error boundary. The tier changes the gate's exit code and nothing else.
 
 A push is legs-owed when a changed path in the branch-vs-base diff matches `hooks.legsOwed.globs`. That diff is resolved UNFILTERED — `ignorePatterns` and `shieldIgnorePatterns` never hide a path from the floor, and the `[Legs] Diff source:` line says so. Not owed prints what it judged against and never consults the store:
 
@@ -576,7 +575,7 @@ A push is legs-owed when a changed path in the branch-vs-base diff matches `hook
 A deposit answers for its own head and for every descendant of it (ancestor-or-equal), with the exact read outranking the nearest ancestor. The pass line carries the read's age and how far the head has moved since, so a stale-but-valid pass is visible rather than silent:
 
 ```text
-[Totem] legs evidence: .totem/artifacts/legs/4f21….json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · blocking=2 material=1 folded=3
+[Totem] legs evidence: .totem/artifacts/legs/b7d3e0a1….json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · blocking=2 material=1 folded=3
 ```
 
 Owed with nothing fresh names the basis — which glob matched which file — plus every stale candidate with its own reason, and the cure:

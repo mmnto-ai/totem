@@ -462,6 +462,67 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     );
   });
 
+  // The v1.2 DEPOSIT-ONLY head on the ADMISSION arm (mmnto-ai/totem#2698 fold
+  // 2, MATERIAL). `printCovariateLine` shipped this shape for the verdict arm;
+  // the admission arm's no-record branch logged its sensor and returned, so a
+  // not-applicable diff whose head a leg HAD read still printed nothing — the
+  // mmnto-ai/totem#2694 exhibit, reached by the other door.
+  it('the admission arm prints the deposit-only head when no record exists but a leg read HEAD (v1.2)', async () => {
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    git('init');
+    git('commit', '--allow-empty', '-m', 'leg-fixture');
+    const head = git('rev-parse', 'HEAD');
+
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted' as const,
+    });
+    const { shieldCommand } = await import('./shield.js');
+
+    // No deposit and no record: today's behavior is preserved exactly — the
+    // sensor names the missing record and NOTHING reaches stdout.
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    expect(output.some((l) => l.startsWith('local-lane:'))).toBe(false);
+
+    // Now a leg has read this head — still no admission record.
+    saveLegDeposit(path.join(tmpDir, '.totem'), {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha: head,
+      readAt: '2026-09-03T05:00:00.000Z',
+      findings: [
+        {
+          id: 'm1',
+          severity: 'MATERIAL',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'the plan overstates the floor',
+          counterexample: 'the gate reads no severities',
+        },
+      ],
+      folded: [],
+      verdict: 'read the docs-only diff; one material finding stands',
+    });
+
+    output.length = 0;
+    warnLines.length = 0;
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+
+    // The sensor STAYS — it names the record that is missing, which is still
+    // true; the deposit line is additional evidence, not a substitute.
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    const lane = output.find((l) => l.startsWith('local-lane:'));
+    expect(lane).toBe(`local-lane: none leg: ${head.slice(0, 8)} blocking=0 material=1 folded=0`);
+    // Still not-applicable: no admission record was written by a read-only verb.
+    expect(admissionRecords()).toHaveLength(0);
+  });
+
   it('covariate falls back LOUD on a corrupt exact-identity record — never a stale line (leg MINOR 7)', async () => {
     getDiffForReviewSpy.mockResolvedValue({
       diff: diffFor('docs/plan.md'),

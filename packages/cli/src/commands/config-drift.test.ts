@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AI_PROMPT_BLOCK, buildNpxCommand, REFLEX_VERSION } from '../commands/init.js';
 import { DOCS_SYSTEM_PROMPT } from './docs.js';
+import { REVIEW_LOOP_SKILL_CONTENT, REVIEW_REPLY_SKILL_CONTENT } from './init-templates.js';
 import {
   buildPreCommitHook,
   buildPrePushHook,
@@ -34,6 +35,36 @@ const RENDER = {
 
 function readRoot(file: string): string {
   return fs.readFileSync(path.join(ROOT, file), 'utf-8');
+}
+
+/**
+ * Internal review-process vocabulary (mmnto-ai/totem-strategy#619). T1: it
+ * describes how THIS cohort reviews itself and means nothing to a consumer, so
+ * it never ships in a template, a distributed skill, or CLI help text.
+ */
+const BANNED_CONSUMER_TERMS = ['review-leg', 'cohort', 'falsification'] as const;
+
+/**
+ * The `.description(...)` strings of the `totem legs` group and its verbs, read
+ * out of the command registration source.
+ *
+ * Source text, not a spawned `--help`: the registration is the authoring site,
+ * and reading it keeps this assertion honest on an unbuilt tree (importing
+ * `index.ts` would execute the CLI's own `program.parse`).
+ */
+function legsHelpDescriptions(): string[] {
+  const source = readRoot('packages/cli/src/index.ts');
+  const start = source.indexOf('const legsCommand = program');
+  expect(start).toBeGreaterThan(-1);
+  // The needle is built, never authored as an escape — this repo has a banked
+  // incident where an editing tool decoded one into a raw byte in source.
+  const lf = String.fromCharCode(10);
+  const end = source.indexOf(`${lf}program${lf}`, start);
+  expect(end).toBeGreaterThan(start);
+  const block = source.slice(start, end);
+  return [...block.matchAll(/\.description\(\s*(?:'([^']*)'|"([^"]*)")/g)].map(
+    (match) => match[1] ?? match[2] ?? '',
+  );
 }
 
 // ─── Git hook drift ──────────────────────────────────
@@ -165,9 +196,41 @@ describe('product surfaces bill `totem review` as an advisory sensor', () => {
   // Sterilization (mmnto-ai/totem-strategy#619): the internal review-process
   // vocabulary is T1 and never ships in a consumer-facing template.
   it('no internal review-process vocabulary reaches the consumer template', () => {
-    for (const term of ['review-leg', 'cohort', 'falsification']) {
+    for (const term of BANNED_CONSUMER_TERMS) {
       expect(AI_PROMPT_BLOCK.toLowerCase()).not.toContain(term);
     }
+  });
+
+  // The rule had a mechanism on ONE surface while three others shipped the same
+  // vocabulary to the same consumers (mmnto-ai/totem#2698 fold 2): the two
+  // distributed skills are written verbatim into a consumer's repo by
+  // `totem init`, and the CLI's own `--help` is read by every operator and
+  // every agent. A ban with no mechanism on the surfaces a slice touches is
+  // the claim-without-mechanism shape.
+  it.each([
+    ['the review-loop skill', REVIEW_LOOP_SKILL_CONTENT],
+    ['the review-reply skill', REVIEW_REPLY_SKILL_CONTENT],
+  ])('no internal review-process vocabulary reaches %s', (_name, content) => {
+    for (const term of BANNED_CONSUMER_TERMS) {
+      expect(content.toLowerCase()).not.toContain(term);
+    }
+  });
+
+  it('no internal review-process vocabulary reaches the `totem legs` help text', () => {
+    // Read from the command REGISTRATION rather than by spawning the built CLI:
+    // this assertion must hold on a tree that has not been built, and the
+    // registration is where the strings a consumer sees are authored.
+    const descriptions = legsHelpDescriptions();
+    // The group plus both verbs — a registration that stops describing one of
+    // them would silently shrink the surface under test.
+    expect(descriptions).toHaveLength(3);
+    for (const description of descriptions) {
+      for (const term of BANNED_CONSUMER_TERMS) {
+        expect(description.toLowerCase()).not.toContain(term);
+      }
+    }
+    // Nor the internal doctrine path the group description used to carry.
+    expect(descriptions.join(' ')).not.toContain('model-tiering');
   });
 
   // The spec prompt is the strongest stale surface: every generated spec hands

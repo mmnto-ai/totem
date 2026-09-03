@@ -1010,6 +1010,16 @@ export function buildPrePushHook(options: {
   // a bare sensor form that still runs, while an ABSENT VERB has no degraded
   // form at all. So strict FAILS CLOSED with the one-command cure, and only the
   // advisory tiers print the compat line and pass.
+  //
+  // It probes the VERB'S OWN help for an option only that verb has, never the
+  // group's help for the word `gate` (mmnto-ai/totem#2698 fold 2). A CLI that
+  // predates `totem legs` answers ANY `legs …` invocation with its curated
+  // TOP-LEVEL help and exits 0 — measured on `@mmnto/cli` 1.122.0 — so a
+  // group-level `grep gate` is really grepping the top-level command list,
+  // which is a moving surface: the queued `merge-gate` verb
+  // (mmnto-ai/totem#2708) would make the probe pass on a CLI that has no
+  // `legs gate` at all. `--advisory` is specific to this verb, so its presence
+  // in that output means the verb itself answered.
   const legsBlock = `
   # Strict mode: require a fresh falsification-leg deposit for legs-owed pushes
   # (mmnto-ai/totem#2698, doctrine/model-tiering.md § Review legs).
@@ -1017,7 +1027,7 @@ export function buildPrePushHook(options: {
   # this head · 3 = owed with no fresh deposit · 2 = the gate could not derive
   # (not a git repo, HEAD or the branch diff unresolvable). Advisory tiers print
   # the SAME lines and exit 0.
-  if $TOTEM_CMD legs --help 2>/dev/null | grep -q -- 'gate'; then
+  if $TOTEM_CMD legs gate --help 2>/dev/null | grep -q -- '--advisory'; then
     if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
       $TOTEM_CMD legs gate
       legs_status=$?

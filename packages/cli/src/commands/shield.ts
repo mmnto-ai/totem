@@ -2165,6 +2165,26 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           DISPLAY_TAG,
           `Covariate: the current state is not-applicable (${admission.reason}) but no admission record exists for this exact observation — run \`totem review\` to record it (sensor; exit 0).`,
         );
+        // Format v1.2's DEPOSIT-ONLY head (mmnto-ai/totem#2698 fold 2): the
+        // sensor above names the record that is MISSING, which is not a reason
+        // to withhold the evidence that EXISTS. If a leg read this head, the
+        // `local-lane: none …` shape says exactly that — the
+        // mmnto-ai/totem#2694 exhibit is a diff presented with no evidence line
+        // at all, and an absent admission record is one of the two ways to
+        // reach it (the verdict arm in `printCovariateLine` is the other, and
+        // both discriminate on the SAME `winner === undefined`).
+        const { resolveLegFieldForHead } = await import('./review-fan.js');
+        const leg = await resolveLegFieldForHead(path.join(configRoot, config.totemDir), cwd);
+        for (const entry of leg.corrupt) {
+          log.warn(
+            DISPLAY_TAG,
+            `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`,
+          );
+        }
+        if (leg.winner !== undefined) {
+          // STDOUT, not the stderr log: the line IS the transport payload.
+          console.log(`local-lane: none ${leg.field}`);
+        }
       }
       return;
     }
