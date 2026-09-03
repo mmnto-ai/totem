@@ -19,13 +19,14 @@
  * the skip branches are exercised without a real repo, config, or network invoke.
  */
 
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TotemConfig } from '@mmnto/totem';
+import { LEG_DEPOSIT_SCHEMA_VERSION, saveLegDeposit, type TotemConfig } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -387,10 +388,77 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     output.length = 0;
     await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
     const lane = output.find((l) => l.startsWith('local-lane:'));
+    // Format v1.2 (mmnto-ai/totem#2698): the v1.1 admission text is byte-
+    // unchanged and the leg field is APPENDED. No deposit store here, so the
+    // field is `leg: none` — the whole line, byte-for-byte.
     expect(lane).toBe(
       `local-lane: not-applicable (all-non-code) recorded=${String(
         fs.readdirSync(admissionsDir())[0],
-      ).slice(0, 8)} at=${String(record['createdAt'])}`,
+      ).slice(0, 8)} at=${String(record['createdAt'])} leg: none`,
+    );
+  });
+
+  it('the admission form carries the leg field resolved from a REAL deposit at HEAD (v1.2)', async () => {
+    // A real repo with one commit: the admission path resolves HEAD through the
+    // production git runner (no seam to inject), so the deposit must be keyed by
+    // the sha git actually reports — the wiring this test exists to prove.
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    git('init');
+    git('commit', '--allow-empty', '-m', 'leg-fixture');
+    const head = git('rev-parse', 'HEAD');
+
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted' as const,
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await shieldCommand({} as Parameters<typeof shieldCommand>[0]); // record the admission
+    const record = expectSingleRecord('all-non-code', 1);
+
+    saveLegDeposit(path.join(tmpDir, '.totem'), {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha: head,
+      readAt: '2026-09-03T04:00:00.000Z',
+      findings: [
+        {
+          id: 'b1',
+          severity: 'BLOCKING',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'the claim',
+          counterexample: '',
+        },
+        {
+          id: 'n1',
+          severity: 'MINOR',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'a minor claim',
+          counterexample: '',
+        },
+      ],
+      folded: ['b1'],
+      verdict: 'read the docs-only diff; the blocking claim was folded',
+    });
+
+    output.length = 0;
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    const lane = output.find((l) => l.startsWith('local-lane:'));
+    // `minor` is deliberately absent from the field; the folded BLOCKING counts
+    // in BOTH buckets, so `blocking=1 folded=1` reads "addressed".
+    expect(lane).toBe(
+      `local-lane: not-applicable (all-non-code) recorded=${String(
+        fs.readdirSync(admissionsDir())[0],
+      ).slice(
+        0,
+        8,
+      )} at=${String(record['createdAt'])} leg: ${head.slice(0, 8)} blocking=1 material=0 folded=1`,
     );
   });
 

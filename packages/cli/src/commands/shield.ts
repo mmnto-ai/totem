@@ -2145,8 +2145,19 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         (msg) => log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
       );
       if (found !== undefined) {
+        // Format v1.2 (mmnto-ai/totem#2698): the SAME leg-field resolution the
+        // verdict form uses (one helper, two sites), composed BESIDE
+        // `renderAdmissionLine` so the v1.1 admission text is byte-unchanged.
+        const { resolveLegFieldForHead } = await import('./review-fan.js');
+        const leg = await resolveLegFieldForHead(path.join(configRoot, config.totemDir), cwd);
+        for (const entry of leg.corrupt) {
+          log.warn(
+            DISPLAY_TAG,
+            `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`,
+          );
+        }
         // STDOUT, not the stderr log: the line IS the transport payload.
-        console.log(renderAdmissionLine(found));
+        console.log(`${renderAdmissionLine(found)} ${leg.field}`);
       } else {
         // LOUD no-current-record sensor — never a silent fallback to an older
         // verdict on the lineage (codex on mmnto-ai/totem#2473).

@@ -128,6 +128,19 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   it('the gate clause names --fresh as the cure for a cached response', () => {
     expect(AI_PROMPT_BLOCK).toContain('--fresh');
   });
+
+  // Sibling of the ANCHORED clause above, for the strict pre-push legs gate
+  // (mmnto-ai/totem#2698). Same failure it guards against: a consumer's
+  // CLAUDE.md that does not name a gate its own hook enforces leaves the agent
+  // blocked by a rule its instructions never stated. The predicate's config key
+  // and the one-command cure are the two halves an agent needs; the reflex
+  // version rides the same test so a clause edit without a bump is loud (a
+  // stale block would otherwise pass doctor's drift check silently).
+  it('the gate clause names the legs gate and its cure', () => {
+    expect(AI_PROMPT_BLOCK).toContain('hooks.legsOwed.globs');
+    expect(AI_PROMPT_BLOCK).toContain('totem legs deposit --sha HEAD --from <findings.json>');
+    expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
+  });
 });
 
 // ─── `totem review` billing honesty (mmnto-ai/totem#2536) ─

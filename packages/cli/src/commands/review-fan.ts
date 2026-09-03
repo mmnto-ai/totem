@@ -35,6 +35,9 @@
 import type {
   GroundingBundle,
   InvokeFailureKind,
+  LegDepositCorruptEntry,
+  LegDepositWinner,
+  LegGitAdapter,
   LessonsConsulted,
   LineageKeyInput,
   PersistedPostCheckFinding,
@@ -1577,6 +1580,83 @@ export interface CovariateQuery {
 }
 
 /**
+ * The covariate line's format-v1.2 `leg:` field for the current HEAD, plus what
+ * the deposit store disclosed on the way to it (mmnto-ai/totem#2698).
+ */
+export interface LegFieldResolution {
+  /**
+   * Exactly `leg: <sha8> blocking=N material=N folded=N` (a deposit answered for
+   * HEAD) or `leg: none` — the core renderer's bytes, never re-spelled here.
+   */
+  field: string;
+  /** The deposit that answered, with its rank and `distance`; absent when none did. */
+  winner?: LegDepositWinner;
+  /**
+   * Files in the store that are not deposits. The CALLER prints each as a loud
+   * `Sensor:` line (Tenet 4) — the helper stays print-free so both covariate
+   * sites share one resolution and one warning shape.
+   */
+  corrupt: LegDepositCorruptEntry[];
+}
+
+/**
+ * The core resolver's ancestry seam over the injected git runner (core never
+ * shells out). Every probe goes through {@link tryGit}, the module's ONE
+ * declared degrade point: `git cat-file -e` and `merge-base --is-ancestor` are
+ * exit-code predicates whose non-zero exit is an ANSWER ("not a commit here",
+ * "not an ancestor"), not an error — so an `undefined` Result reads as `false`
+ * and no probe site carries a bare swallow.
+ */
+function makeLegGitAdapter(gitExec: GitExec): LegGitAdapter {
+  const succeeds = (args: readonly string[]): boolean => tryGit(gitExec, args) !== undefined;
+  return {
+    isCommit: (sha) => succeeds(['cat-file', '-e', `${sha}^{commit}`]),
+    isAncestor: (base, head) => succeeds(['merge-base', '--is-ancestor', base, head]),
+    distance: (base, head) => {
+      const count = Number.parseInt(
+        tryGit(gitExec, ['rev-list', '--count', `${base}..${head}`]) ?? '',
+        10,
+      );
+      // An unparseable count is "unknown", and the resolver's only use of the
+      // number is RANKING (nearest ancestor first) — 0 keeps it a candidate and
+      // never fabricates distance the caller would print as fact.
+      return Number.isNaN(count) ? 0 : count;
+    },
+  };
+}
+
+/**
+ * Resolve the format-v1.2 `leg:` field for the checkout's HEAD — the ONE
+ * resolution both covariate sites share (`totem review --covariate`'s verdict
+ * form here, and `shieldCommand`'s admission form).
+ *
+ * Read-only and zero-LLM, like everything on the `--covariate` path: it resolves
+ * `HEAD` through the injected runner, hands core's {@link findLegDepositForHead}
+ * an adapter over the same runner, and returns the core-owned field. A HEAD that
+ * does not resolve (not a git repo, an unborn branch) is `leg: none` — no
+ * deposit can answer for a head that does not exist — never a thrown error on a
+ * verb whose contract is to print a line and exit 0.
+ */
+export async function resolveLegFieldForHead(
+  totemDirAbs: string,
+  cwd: string,
+  gitExec?: GitExec,
+): Promise<LegFieldResolution> {
+  const { findLegDepositForHead, renderLegField } = await import('@mmnto/totem');
+  const git = gitExec ?? (await defaultGitExec(cwd));
+  const head = tryGit(git, ['rev-parse', 'HEAD']);
+  if (head === undefined || head.length === 0) {
+    return { field: renderLegField(undefined), corrupt: [] };
+  }
+  const resolution = findLegDepositForHead(totemDirAbs, head, makeLegGitAdapter(git));
+  return {
+    field: renderLegField(resolution.winner?.deposit),
+    ...(resolution.winner === undefined ? {} : { winner: resolution.winner }),
+    corrupt: resolution.corrupt,
+  };
+}
+
+/**
  * `totem review --covariate` (rev-5 item 4): the EXECUTABLE covariate transport.
  * Read-only and zero-LLM — resolves the CURRENT lineage through exactly the same
  * {@link resolveLineage} path `runReviewFan` uses (never a re-implementation), loads
@@ -1600,17 +1680,32 @@ export async function printCovariateLine(query: CovariateQuery): Promise<void> {
   const verdict = findLatestVerdictForLineage(query.totemDirAbs, lineage.lineageKey, (msg) =>
     log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
   );
+  // Format v1.2 (mmnto-ai/totem#2698): the leg field is COMPOSED BESIDE the core
+  // renderer, never inside it — the v1/v1.1 text stays byte-identical and a
+  // consumer keeps discriminating on the second token. Resolved before the
+  // no-verdict arm because a deposit with no verdict is its OWN shape, not a miss.
+  const leg = await resolveLegFieldForHead(query.totemDirAbs, query.cwd, gitExec);
+  for (const entry of leg.corrupt) {
+    log.warn(DISPLAY_TAG, `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`);
+  }
   if (verdict === undefined) {
-    log.warn(
-      DISPLAY_TAG,
-      'Covariate: no verdict artifact recorded for the current lineage — run `totem review` with review.lanes configured to emit one (sensor; exit 0).',
-    );
+    if (leg.winner === undefined) {
+      log.warn(
+        DISPLAY_TAG,
+        'Covariate: no verdict artifact recorded for the current lineage — run `totem review` with review.lanes configured to emit one (sensor; exit 0).',
+      );
+      return;
+    }
+    // No lineage artifact of either family, but a leg DID read this head: the
+    // v1.2 head shape says exactly that rather than printing nothing (the
+    // mmnto-ai/totem#2694 exhibit — a diff presented with no evidence line at all).
+    console.log(`local-lane: none ${leg.field}`);
     return;
   }
-  // STDOUT, not the stderr log: this line IS the transport payload (format v1). The
+  // STDOUT, not the stderr log: this line IS the transport payload (format v1.2). The
   // loader returns the artifact WITH its verified stored address (rev-6 item 1), so a
   // forward-minor verdict advertises its RAW file address — byte-equal to the filename.
-  console.log(renderCovariateLine(verdict));
+  console.log(`${renderCovariateLine(verdict)} ${leg.field}`);
 }
 
 /** Name the failing cache-eligibility conjunct(s) for an honest exit reason. */

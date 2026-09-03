@@ -12,10 +12,13 @@ import {
   deriveSettled,
   findLatestVerdictForLineage,
   type InvokeFailureKind,
+  LEG_DEPOSIT_SCHEMA_VERSION,
+  type LegFinding,
   listVerdictArtifacts,
   readLedgerEvents,
   renderCovariateLine,
   type RunArtifact,
+  saveLegDeposit,
   type TotemConfig,
   TotemConfigError,
   VERDICT_ARTIFACT_SCHEMA_VERSION,
@@ -36,6 +39,7 @@ import {
   type LaneInvoker,
   type LaneRunResult,
   printCovariateLine,
+  resolveLegFieldForHead,
   resolveLineage,
   type ReviewFanContext,
   runLane,
@@ -1790,11 +1794,13 @@ describe('printCovariateLine (rev-5 item 4)', () => {
       cwd: tmpDir,
       gitExec: git,
     });
-    // EXACTLY the core renderer's line, on stdout — format v1, byte-for-byte.
+    // EXACTLY the core renderer's line, on stdout, with the format-v1.2 leg
+    // field appended — the v1 text is byte-for-byte unchanged BEFORE the field,
+    // and an empty deposit store renders `leg: none` (mmnto-ai/totem#2698).
     expect(logSpy).toHaveBeenCalledTimes(1);
-    expect(logSpy).toHaveBeenCalledWith(renderCovariateLine(verdict));
+    expect(logSpy).toHaveBeenCalledWith(`${renderCovariateLine(verdict)} leg: none`);
     const line = String(logSpy.mock.calls[0]![0]);
-    expect(line).toMatch(/^local-lane: [0-9a-f]{8} round=0 settled=true lanes=2\/2$/);
+    expect(line).toMatch(/^local-lane: [0-9a-f]{8} round=0 settled=true lanes=2\/2 leg: none$/);
   });
 
   it('resolves the LATEST verdict for the lineage (round chain respected)', async () => {
@@ -1858,5 +1864,242 @@ describe('printCovariateLine (rev-5 item 4)', () => {
     expect(logSpy).not.toHaveBeenCalled();
     const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
     expect(out).toMatch(/no diff detected/i);
+  });
+});
+
+// ─── Covariate format v1.2 — the leg field (mmnto-ai/totem#2698) ──────────────
+
+describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'covariate-leg-'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  /** A 40-char lowercase hex commit name derived from a seed (the schema's shape). */
+  const sha40 = (seed: string): string => hex(seed).slice(0, 40);
+
+  /**
+   * A git runner over an IN-MEMORY commit graph. It answers the four lineage
+   * probes `fakeGit` does, plus the three the leg adapter makes — and RECORDS
+   * every ancestry probe, so a test can assert that an exact-match deposit
+   * spends none of them.
+   */
+  function legGit(
+    head: string,
+    graph: { commits?: string[]; ancestorOf?: Record<string, string[]>; distance?: number } = {},
+  ): GitExec & { ancestryCalls: string[][] } {
+    const ancestryCalls: string[][] = [];
+    const commits = graph.commits ?? [];
+    const ancestorOf = graph.ancestorOf ?? {};
+    const run = ((args: readonly string[]): string => {
+      if (args[0] === 'symbolic-ref') return 'feature-leg';
+      if (args[0] === 'rev-parse' && args[1] === '--show-toplevel') return REPO_TOPLEVEL;
+      if (args[0] === 'rev-parse') return head;
+      if (args[0] === 'cat-file') {
+        ancestryCalls.push([...args]);
+        const sha = String(args[2]).replace('^{commit}', '');
+        if (!commits.includes(sha)) throw new Error(`fatal: not a commit: ${sha}`);
+        return '';
+      }
+      if (args[0] === 'merge-base' && args[1] === '--is-ancestor') {
+        ancestryCalls.push([...args]);
+        if (!(ancestorOf[String(args[2])] ?? []).includes(String(args[3]))) {
+          throw new Error('not an ancestor');
+        }
+        return '';
+      }
+      if (args[0] === 'merge-base') return 'legbase';
+      if (args[0] === 'rev-list') {
+        ancestryCalls.push([...args]);
+        return String(graph.distance ?? 0);
+      }
+      return '';
+    }) as GitExec & { ancestryCalls: string[][] };
+    run.ancestryCalls = ancestryCalls;
+    return run;
+  }
+
+  /** Write a deposit through the REAL core writer (never a hand-rolled file). */
+  function deposit(diffSha: string, findings: LegFinding[] = [], folded: string[] = []): void {
+    saveLegDeposit(tmpDir, {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha,
+      readAt: '2026-09-03T04:00:00.000Z',
+      findings,
+      folded,
+      verdict: 'read the diff; two blocking claims folded',
+    });
+  }
+
+  const finding = (id: string, severity: LegFinding['severity']): LegFinding => ({
+    id,
+    severity,
+    file: 'packages/cli/src/commands/review-fan.ts',
+    line: 1,
+    claim: `${id} claim`,
+    counterexample: '',
+  });
+
+  const twoLaneInvoker = () =>
+    mapInvoker({
+      'anthropic:claude-a': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'anthropic',
+        model: 'claude-a',
+        seed: 'lega',
+      }),
+      'gemini:g': completedInvocation({
+        content: wrapVerdict([]),
+        provider: 'gemini',
+        model: 'g',
+        seed: 'legb',
+      }),
+    });
+
+  it('appends the leg field to the VERDICT shape, leaving the v1 text byte-unchanged', async () => {
+    const head = sha40('head-exact');
+    const git = legGit(head);
+    await runReviewFan(
+      makeCtx(tmpDir, ['anthropic:claude-a', 'gemini:g'], twoLaneInvoker(), { gitExec: git }),
+    );
+    const verdict = listVerdictArtifacts(tmpDir, noWarn)[0]!;
+    // Two BLOCKING (both folded) + one MATERIAL: the ruled semantic is that a
+    // folded finding counts in BOTH its severity bucket and `folded`, so
+    // `blocking=2 folded=2` reads "all addressed".
+    deposit(
+      head,
+      [finding('b1', 'BLOCKING'), finding('b2', 'BLOCKING'), finding('m1', 'MATERIAL')],
+      ['b1', 'b2'],
+    );
+
+    const logSpy = vi.mocked(console.log);
+    logSpy.mockClear();
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: git,
+    });
+    const line = String(logSpy.mock.calls[0]![0]);
+    const field = `leg: ${head.slice(0, 8)} blocking=2 material=1 folded=2`;
+    expect(line).toBe(`${renderCovariateLine(verdict)} ${field}`);
+    // The v1 prefix is byte-identical: everything before the field is exactly
+    // what v1/v1.1 consumers already parse, and the second token still
+    // discriminates the shape.
+    expect(line.slice(0, line.length - field.length - 1)).toBe(renderCovariateLine(verdict));
+    expect(line.split(' ')[1]).toMatch(/^[0-9a-f]{8}$/);
+  });
+
+  it('prints the deposit-only head shape `local-lane: none <field>` when no verdict artifact exists', async () => {
+    const head = sha40('head-deposit-only');
+    const git = legGit(head);
+    deposit(head, [finding('b1', 'BLOCKING')], []);
+
+    const logSpy = vi.mocked(console.log);
+    const errSpy = vi.mocked(console.error);
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: git,
+    });
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(String(logSpy.mock.calls[0]![0])).toBe(
+      `local-lane: none leg: ${head.slice(0, 8)} blocking=1 material=0 folded=0`,
+    );
+    // The head shape REPLACES the no-verdict sensor: there IS a line to carry.
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).not.toMatch(/no verdict artifact recorded for the current lineage/i);
+  });
+
+  it('keeps the no-verdict sensor (and prints nothing) when neither a verdict nor a deposit resolves', async () => {
+    const logSpy = vi.mocked(console.log);
+    const errSpy = vi.mocked(console.error);
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: legGit(sha40('head-empty')),
+    });
+    expect(logSpy).not.toHaveBeenCalled();
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toMatch(/no verdict artifact recorded for the current lineage/i);
+  });
+
+  it('discloses a corrupt deposit sibling as a Sensor line without changing the field', async () => {
+    const head = sha40('head-corrupt-sibling');
+    const git = legGit(head);
+    deposit(head, [finding('m1', 'MATERIAL')], []);
+    // A sibling that is not a deposit at all. Its NAME is a valid address, so
+    // the loader must reject it on content, not on the filename.
+    const sibling = `${sha40('corrupt-sibling')}.json`;
+    fs.writeFileSync(path.join(tmpDir, 'artifacts', 'legs', sibling), '{ not json', 'utf-8');
+
+    const logSpy = vi.mocked(console.log);
+    const errSpy = vi.mocked(console.error);
+    await printCovariateLine({
+      diffMeta: { source: 'branch-vs-base', base: 'main' },
+      totemDirAbs: tmpDir,
+      cwd: tmpDir,
+      gitExec: git,
+    });
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toContain(`Sensor: ignoring corrupt leg deposit ${sibling}`);
+    // Loud, and NEVER masking the valid sibling: the field is the good one's.
+    expect(String(logSpy.mock.calls[0]![0])).toBe(
+      `local-lane: none leg: ${head.slice(0, 8)} blocking=0 material=1 folded=0`,
+    );
+  });
+
+  it('resolveLegFieldForHead spends NO ancestry probe on an exact match', async () => {
+    const head = sha40('head-no-probe');
+    const git = legGit(head);
+    deposit(head, [], []);
+
+    const resolution = await resolveLegFieldForHead(tmpDir, tmpDir, git);
+    expect(resolution.field).toBe(`leg: ${head.slice(0, 8)} blocking=0 material=0 folded=0`);
+    expect(resolution.winner?.rank).toBe('exact');
+    expect(resolution.winner?.distance).toBe(0);
+    // `cat-file`, `merge-base --is-ancestor` and `rev-list --count` are the
+    // three probes the adapter can make; an exact match answers the gate's
+    // question without spawning any of them.
+    expect(git.ancestryCalls).toEqual([]);
+  });
+
+  it('resolveLegFieldForHead accepts an ANCESTOR deposit and reports its distance', async () => {
+    const head = sha40('head-descendant');
+    const base = sha40('base-ancestor');
+    const git = legGit(head, { commits: [base], ancestorOf: { [base]: [head] }, distance: 7 });
+    deposit(base, [finding('b1', 'BLOCKING')], ['b1']);
+
+    const resolution = await resolveLegFieldForHead(tmpDir, tmpDir, git);
+    expect(resolution.field).toBe(`leg: ${base.slice(0, 8)} blocking=1 material=0 folded=1`);
+    expect(resolution.winner?.rank).toBe('ancestor');
+    expect(resolution.winner?.distance).toBe(7);
+  });
+
+  it('resolveLegFieldForHead is `leg: none` for a deposit that is not ancestor-or-equal, and for an unresolvable HEAD', async () => {
+    const head = sha40('head-disjoint');
+    const other = sha40('other-branch');
+    const git = legGit(head, { commits: [other] });
+    deposit(other, [], []);
+    expect((await resolveLegFieldForHead(tmpDir, tmpDir, git)).field).toBe('leg: none');
+
+    // A HEAD that does not resolve at all (not a repo / unborn branch) is
+    // `leg: none`, never a throw on a verb contracted to exit 0.
+    const noHead: GitExec = (args) => {
+      if (args[0] === 'rev-parse') throw new Error('fatal: not a git repository');
+      return '';
+    };
+    const resolution = await resolveLegFieldForHead(tmpDir, tmpDir, noHead);
+    expect(resolution.field).toBe('leg: none');
+    expect(resolution.winner).toBeUndefined();
+    expect(resolution.corrupt).toEqual([]);
   });
 });
