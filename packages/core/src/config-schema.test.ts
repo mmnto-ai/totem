@@ -12,6 +12,7 @@ import {
   requireEmbedding,
   TotemConfigSchema,
 } from './config-schema.js';
+import { DEFAULT_LEGS_OWED_GLOBS } from './routing/legs-owed.js';
 
 const BASE_TARGETS = [
   { glob: '**/*.md', type: 'spec' as const, strategy: 'markdown-heading' as const },
@@ -1204,5 +1205,89 @@ describe('totemDir — normalised, then refused where the managed hooks could no
       expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(true);
     for (const ch of accepted)
       expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(false);
+  });
+});
+
+describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem#2698)', () => {
+  it('resolves to the default floor when `hooks` is absent entirely', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS });
+    expect(result.success).toBe(true);
+    // `hooks` is optional, so an absent key stays absent — the consumer falls
+    // back to the exported constant, which is why it is exported at all.
+    if (result.success) {
+      expect(result.data.hooks).toBeUndefined();
+      expect([...DEFAULT_LEGS_OWED_GLOBS]).toEqual([
+        'doctrine/**',
+        'design-tenets.md',
+        'adr/**',
+        'proposals/**',
+        'README.md',
+        'docs/wiki/**',
+        '.changeset/**',
+      ]);
+    }
+  });
+
+  it('resolves to the default floor when `hooks: {}` is present', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+      // …and the sibling default is untouched.
+      expect(result.data.hooks?.tier).toBe('standard');
+    }
+  });
+
+  it('resolves to the default floor when `hooks` declares only a tier', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { tier: 'strict' },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+    }
+  });
+
+  it('an explicitly EMPTY globs array is a hard parse error (the review.lanes precedent)', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { legsOwed: { globs: [] } },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((i) => i.message).join('\n')).toMatch(
+        /must contain at least one glob/,
+      );
+    }
+  });
+
+  it('a custom list REPLACES the default rather than extending it', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { legsOwed: { globs: ['packages/core/src/artifacts/**', '!**/*.test.ts'] } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hooks?.legsOwed.globs).toEqual([
+        'packages/core/src/artifacts/**',
+        '!**/*.test.ts',
+      ]);
+    }
+  });
+
+  it('refuses an empty-string glob and a non-array', () => {
+    expect(
+      TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { legsOwed: { globs: [''] } },
+      }).success,
+    ).toBe(false);
+    expect(
+      TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { legsOwed: { globs: 'doctrine/**' } },
+      }).success,
+    ).toBe(false);
   });
 });

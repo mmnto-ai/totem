@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { ADMISSION_CLASSES } from './artifacts/schema.js';
 import { TotemConfigError } from './errors.js';
+// The legs-owed floor lives with the predicate that consumes it (`routing/legs-owed.ts`),
+// so the schema default and the classifier can never drift apart. That module imports
+// only `sys/glob.ts` (which imports nothing), so this edge introduces no cycle.
+import { DEFAULT_LEGS_OWED_GLOBS } from './routing/legs-owed.js';
 import { CustomSecretSchema } from './secrets.js';
 
 /**
@@ -671,6 +675,34 @@ export const TotemConfigSchema = z.object({
        *  of this setting. The tier is rendered into the hook at install, so re-run
        *  `totem hook install --force` after changing it (mmnto-ai/totem#2692). */
       tier: z.enum(['strict', 'standard']).default('standard'),
+
+      /** The judgment-dense path floor `totem legs gate` judges a push against
+       *  (mmnto-ai/totem#2698). A changed file matching any of these globs owes
+       *  a falsification-leg deposit for the head being pushed; the default is
+       *  the doctrine floor plus `.changeset/**` (see
+       *  {@link DEFAULT_LEGS_OWED_GLOBS}), and a repo declares its own contract
+       *  classes by REPLACING the list.
+       *
+       *  Read at RUN time, never rendered into the hook — unlike `tier`, editing
+       *  these globs needs no `totem hook install --force`, because the hook
+       *  calls back into `totem legs gate` which loads this config itself.
+       *
+       *  ABSENT ⇒ the default floor. PRESENT ⇒ present means ≥1: an explicitly
+       *  EMPTY array (`globs: []`) is a hard config PARSE error, never a silent
+       *  synonym for "nothing is ever owed" (the `review.lanes` precedent —
+       *  omit the key to take the default; there is deliberately no spelling
+       *  for disabling the floor by emptying it). */
+      legsOwed: z
+        .object({
+          globs: z
+            .array(z.string().min(1))
+            .min(
+              1,
+              'hooks.legsOwed.globs must contain at least one glob — omit the key to take the default floor',
+            )
+            .default([...DEFAULT_LEGS_OWED_GLOBS]),
+        })
+        .default({}),
     })
     .optional(),
 

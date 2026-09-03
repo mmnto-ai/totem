@@ -953,6 +953,48 @@ export {
   saveAdmissionRecord,
 } from './artifacts/admission.js';
 
+// Leg-deposit contract — "was THIS head read by a falsification leg" (mmnto-ai/totem#2698)
+export type {
+  LegDeposit,
+  LegDepositCorruptEntry,
+  LegDepositRank,
+  LegDepositResolution,
+  LegDepositStale,
+  LegDepositStaleReason,
+  LegDepositSuperseded,
+  LegDepositWinner,
+  LegDepositWithAddress,
+  LegFinding,
+  LegFindingCounts,
+  LegFindingSeverity,
+  LegGitAdapter,
+  LoadLegDepositsResult,
+  SaveLegDepositOptions,
+  SaveLegDepositResult,
+} from './artifacts/legs.js';
+export {
+  countLegFindings,
+  findLegDepositForHead,
+  LEG_DEPOSIT_KNOWN_MAJOR,
+  LEG_DEPOSIT_SCHEMA_VERSION,
+  LEG_FINDING_SEVERITIES,
+  LegDepositExistsError,
+  legDepositPath,
+  LegDepositSchema,
+  LegFindingIdSchema,
+  LegFindingSchema,
+  LegFindingSeveritySchema,
+  legsDir,
+  loadLegDeposits,
+  renderLegField,
+  saveLegDeposit,
+} from './artifacts/legs.js';
+
+// Routing seam — the minimal `legs-owed` predicate `totem route` will grow
+// (mmnto-ai/totem#2534; carried here per mmnto-ai/totem#2698)
+export type { LegsOwedBasisEntry, LegsOwedVerdict } from './routing/legs-owed.js';
+export { classifyLegsOwed, DEFAULT_LEGS_OWED_GLOBS } from './routing/legs-owed.js';
+
 // Strategy-root resolver (mmnto-ai/totem#1710)
 export type {
   StrategyResolverConfig,
