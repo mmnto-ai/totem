@@ -2005,6 +2005,29 @@ async function emitNotApplicableDisposition(params: {
 
 // ─── Main command ───────────────────────────────────
 
+/**
+ * The coverage inputs for a COVARIATE site (mmnto-ai/totem#2698 fold 3,
+ * corrected in fold 4).
+ *
+ * One derivation, owned by `legs.ts` — the same unfiltered branch scope and the
+ * same `classifyLegsOwed` the gate uses — so the leg field can never name a
+ * deposit the gate would reject as covering none of the owed paths. It takes
+ * HEAD's scope and NOT the review's: the field answers "was this HEAD read",
+ * which cannot depend on whether the operator reviewed a staged slice. Quiet,
+ * because this runs inside a `[Review]` run. When HEAD has no branch base the
+ * result carries a REASON, which the caller prints as one `Sensor:` line and
+ * which resolves the field to `none`.
+ */
+async function legCoverageForCovariate(
+  config: TotemConfig,
+  cwd: string,
+): Promise<import('./legs.js').LegsCoverageResolution> {
+  const { deriveLegsCoverageForHead, legsOwedGlobs } = await import('./legs.js');
+  return deriveLegsCoverageForHead(cwd, await legsOwedGlobs(config), {
+    suppressScopeNarration: true,
+  });
+}
+
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const path = await import('node:path');
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
@@ -2145,8 +2168,26 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         (msg) => log.warn(DISPLAY_TAG, `Sensor: ${msg}`),
       );
       if (found !== undefined) {
+        // Format v1.2 (mmnto-ai/totem#2698): the SAME leg-field resolution the
+        // verdict form uses (one helper, two sites), composed BESIDE
+        // `renderAdmissionLine` so the v1.1 admission text is byte-unchanged.
+        const { resolveLegFieldForHead } = await import('./review-fan.js');
+        const coverage = await legCoverageForCovariate(config, cwd);
+        if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
+        const leg = await resolveLegFieldForHead(
+          path.join(configRoot, config.totemDir),
+          cwd,
+          undefined,
+          coverage,
+        );
+        for (const entry of leg.corrupt) {
+          log.warn(
+            DISPLAY_TAG,
+            `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`,
+          );
+        }
         // STDOUT, not the stderr log: the line IS the transport payload.
-        console.log(renderAdmissionLine(found));
+        console.log(`${renderAdmissionLine(found)} ${leg.field}`);
       } else {
         // LOUD no-current-record sensor — never a silent fallback to an older
         // verdict on the lineage (codex on mmnto-ai/totem#2473).
@@ -2154,10 +2195,38 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
           DISPLAY_TAG,
           `Covariate: the current state is not-applicable (${admission.reason}) but no admission record exists for this exact observation — run \`totem review\` to record it (sensor; exit 0).`,
         );
+        // Format v1.2's DEPOSIT-ONLY head (mmnto-ai/totem#2698 fold 2): the
+        // sensor above names the record that is MISSING, which is not a reason
+        // to withhold the evidence that EXISTS. If a leg read this head, the
+        // `local-lane: none …` shape says exactly that — the
+        // mmnto-ai/totem#2694 exhibit is a diff presented with no evidence line
+        // at all, and an absent admission record is one of the two ways to
+        // reach it (the verdict arm in `printCovariateLine` is the other, and
+        // both discriminate on the SAME `winner === undefined`).
+        const { resolveLegFieldForHead } = await import('./review-fan.js');
+        const coverage = await legCoverageForCovariate(config, cwd);
+        if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
+        const leg = await resolveLegFieldForHead(
+          path.join(configRoot, config.totemDir),
+          cwd,
+          undefined,
+          coverage,
+        );
+        for (const entry of leg.corrupt) {
+          log.warn(
+            DISPLAY_TAG,
+            `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`,
+          );
+        }
+        if (leg.winner !== undefined) {
+          // STDOUT, not the stderr log: the line IS the transport payload.
+          console.log(`local-lane: none ${leg.field}`);
+        }
       }
       return;
     }
     const { printCovariateLine } = await import('./review-fan.js');
+    const { legsOwedGlobs } = await import('./legs.js');
     await printCovariateLine({
       // An empty/absent resolution never reaches here (it resolves through the
       // admission arm above); the null arm is type-narrowing, not a live path.
@@ -2172,6 +2241,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
             },
       totemDirAbs: path.join(configRoot, config.totemDir),
       cwd,
+      globs: await legsOwedGlobs(config),
     });
     return;
   }

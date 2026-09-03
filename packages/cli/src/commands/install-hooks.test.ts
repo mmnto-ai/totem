@@ -1,8 +1,9 @@
-import { execSync, spawnSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -2792,9 +2793,19 @@ describe('buildPrePushHook with strict tier', () => {
     const hook = buildPrePushHook({ ...RENDER, tier: 'strict' });
     // Find the position of the doctor --strict invocation and the surrounding
     // guard; assert the invocation lives INSIDE the agent-or-tier block.
-    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
     const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
-    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    // Anchored on the guard that ENCLOSES this invocation: since
+    // mmnto-ai/totem#2698 the pre-push hook carries more than one agent/strict
+    // guard (the review-leg floor arm has its own, and it is rendered first),
+    // so a bare first-match lookup would measure the wrong block.
+    const guardIdx = hook.lastIndexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      doctorIdx,
+    );
+    // Anchored to a LINE, not a substring: a bare `fi` also matches the one
+    // inside "findings" in the shield block's comment, which sits between the
+    // invocation and the real closing `fi` (CodeRabbit on PR mmnto-ai/totem#2745).
+    const fiCloseIdx = hook.indexOf(`${String.fromCharCode(10)}  fi`, doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);
@@ -2830,9 +2841,19 @@ describe('buildPrePushHook with standard tier', () => {
   // standard, so the guard branch never enters.
   it('emits doctor --strict gated by agent/strict guard (no unconditional fire in standard tier)', () => {
     const hook = buildPrePushHook(RENDER);
-    const guardIdx = hook.indexOf('if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]');
     const doctorIdx = hook.indexOf('$TOTEM_CMD doctor --strict');
-    const fiCloseIdx = hook.indexOf('fi', guardIdx);
+    // Anchored on the guard that ENCLOSES this invocation: since
+    // mmnto-ai/totem#2698 the pre-push hook carries more than one agent/strict
+    // guard (the review-leg floor arm has its own, and it is rendered first),
+    // so a bare first-match lookup would measure the wrong block.
+    const guardIdx = hook.lastIndexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      doctorIdx,
+    );
+    // Anchored to a LINE, not a substring: a bare `fi` also matches the one
+    // inside "findings" in the shield block's comment, which sits between the
+    // invocation and the real closing `fi` (CodeRabbit on PR mmnto-ai/totem#2745).
+    const fiCloseIdx = hook.indexOf(`${String.fromCharCode(10)}  fi`, doctorIdx);
     expect(guardIdx).toBeGreaterThan(-1);
     expect(doctorIdx).toBeGreaterThan(guardIdx);
     expect(doctorIdx).toBeLessThan(fiCloseIdx);
@@ -2860,5 +2881,553 @@ describe('agent detection uses POSIX syntax', () => {
     expect(hook).not.toMatch(/[^!]==/);
     // Must use #!/bin/sh
     expect(hook).toMatch(/^#!\/bin\/sh\n/);
+  });
+});
+
+// ─── The strict pre-push review-leg floor arm (mmnto-ai/totem#2698) ──────────
+
+describe('buildPrePushHook — the review-leg floor arm (mmnto-ai/totem#2698)', () => {
+  const hook = buildPrePushHook(RENDER);
+
+  it("probes the VERB's own help for an option only that verb has", () => {
+    expect(hook).toContain(
+      `if $TOTEM_CMD legs gate --help 2>/dev/null | grep -q -- '--advisory'; then`,
+    );
+    // NOT the group's help for the word `gate` (mmnto-ai/totem#2698 fold 2): a
+    // CLI predating `totem legs` answers any `legs …` with its curated
+    // TOP-LEVEL help and exits 0, so that grep reads a moving surface and the
+    // queued `merge-gate` verb (mmnto-ai/totem#2708) would satisfy it.
+    expect(hook).not.toContain(`$TOTEM_CMD legs --help`);
+  });
+
+  it('invokes the bare gate on strict and the advisory form otherwise', () => {
+    expect(hook).toContain('$TOTEM_CMD legs gate\n');
+    expect(hook).toContain('$TOTEM_CMD legs gate --advisory');
+    expect(hook).toContain('legs_status=$?');
+  });
+
+  it('blocks on exit 3 and on any other non-zero with DISTINCT lines', () => {
+    expect(hook).toContain(
+      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698, strict mode)"`,
+    );
+    expect(hook).toContain(
+      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status $legs_status) — fix the checkout and retry (strict mode)"',
+    );
+    expect(hook).toContain('if [ "$legs_status" = "3" ]; then');
+    expect(hook).toContain('elif [ "$legs_status" != "0" ]; then');
+  });
+
+  it('FAILS CLOSED on strict when the resolved CLI lacks the verb, compat-opens otherwise', () => {
+    // The OPPOSITE of the `--gate` / `--scope-to-diff` precedent, by ruling
+    // (mmnto-ai/totem#2698 OQ2): those flags degrade to a form that still runs;
+    // an absent VERB has no degraded form, so strict blocks with the cure.
+    expect(hook).toContain(
+      `echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2`,
+    );
+    expect(hook).toContain(
+      `echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2`,
+    );
+  });
+
+  it('runs BEFORE the shield block and inside the $TOTEM_CMD guard', () => {
+    const cmdGuardIdx = hook.indexOf('if [ -n "$TOTEM_CMD" ]; then');
+    const legsIdx = hook.indexOf('$TOTEM_CMD legs gate --help');
+    const shieldIdx = hook.indexOf('Running shield gate (strict mode)');
+    expect(cmdGuardIdx).toBeGreaterThan(-1);
+    expect(legsIdx).toBeGreaterThan(cmdGuardIdx);
+    // Slotted first so a legs-owed push is not paid for with the slow review gate.
+    expect(legsIdx).toBeLessThan(shieldIdx);
+  });
+
+  it('gates the blocking arms on the agent/strict guard', () => {
+    const legsIdx = hook.indexOf('$TOTEM_CMD legs gate --help');
+    const guardIdx = hook.indexOf(
+      'if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]',
+      legsIdx,
+    );
+    const gateIdx = hook.indexOf('$TOTEM_CMD legs gate\n');
+    expect(guardIdx).toBeGreaterThan(legsIdx);
+    expect(gateIdx).toBeGreaterThan(guardIdx);
+  });
+});
+
+// The arm, EXECUTED. String assertions alone are satisfiable without the
+// behavior, and the exit-code mapping IS the contract here. The stub `totem` is
+// the FIRST entry on an isolated PATH and records its argv, so every case
+// proves the hook actually reached it — an un-isolated PATH or a stub on the
+// wrong stream is the false-green shape this suite exists to exclude.
+describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () => {
+  const shellOk = spawnSync('sh', ['-c', 'exit 0'], { encoding: 'utf-8' }).status === 0;
+  let tmpDir: string;
+  let repoDir: string;
+  let binDir: string;
+  let logPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-hook-'));
+    repoDir = path.join(tmpDir, 'repo');
+    binDir = path.join(tmpDir, 'stub-bin');
+    fs.mkdirSync(repoDir, { recursive: true });
+    fs.mkdirSync(binDir);
+    // Forward slashes: the stub is read by `sh`, and a Windows path's
+    // backslashes would not survive the shell's quoting.
+    logPath = path.join(tmpDir, 'totem-invocations.log').split(path.sep).join('/');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /**
+   * A stub `totem` that records every invocation, answers the `legs --help`
+   * probe with the given help text, and exits `gateExit` for `legs gate`. The
+   * bare repo dir clears every earlier hook gate (no manifest, no compiled
+   * rules, no lockfile, no package.json), so the legs arm and the shield block
+   * are the only live ones.
+   */
+  function writeStub(params: { helpText: string; helpExit?: number; gateExit?: number }): void {
+    const stub = [
+      '#!/bin/sh',
+      `printf '%s\\n' "$*" >> "${logPath}"`,
+      // The help arm is tested FIRST and on THREE words: since
+      // mmnto-ai/totem#2698 fold 2 the probe is `legs gate --help`, which also
+      // matches the gate arm's first two.
+      'if [ "$1" = "legs" ] && [ "$2" = "gate" ] && [ "$3" = "--help" ]; then',
+      "  cat <<'TOTEM_STUB_HELP'",
+      params.helpText,
+      'TOTEM_STUB_HELP',
+      `  exit ${params.helpExit ?? 0}`,
+      'fi',
+      'if [ "$1" = "legs" ] && [ "$2" = "gate" ]; then',
+      '  echo "[Totem] legs: stub gate line"',
+      `  exit ${params.gateExit ?? 0}`,
+      'fi',
+      'exit 0',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(binDir, 'totem'), stub, { mode: 0o755 });
+  }
+
+  /**
+   * The verb's OWN help, and the top-level help an older CLI answers with.
+   *
+   * The unsupported fixture is a HOSTILE VARIANT of the 1.122.0 shape, not
+   * that shape verbatim: the measured seven-command top-level help contains no
+   * `gate` at all, so today's probe does not false-pass on it. This fixture
+   * INJECTS a `merge-gate` entry (mmnto-ai/totem#2708 is queued for that list),
+   * so the OLD group-level grep would false-pass and the verb-specific probe
+   * must not. The defect it guards is latent, and this is what keeps it so.
+   */
+  const HELP_WITH_GATE =
+    'Usage: totem legs gate [options]\n\nOptions:\n  --advisory  Print the same lines for every state\n  -h, --help  display help for command';
+  const HELP_WITHOUT_GATE =
+    'Totem: local-first toolkit\n\nUsage: totem [command]\n\nCommands:\n  init         Initialize Totem\n  lint         Run compiled rules\n  merge-gate   Gate a merge';
+
+  function runHook(options: { tier: 'strict' | 'standard'; agent: boolean }): {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  } {
+    fs.writeFileSync(
+      path.join(repoDir, 'pre-push'),
+      buildPrePushHook({ ...RENDER, tier: options.tier }),
+    );
+    // Every agent-detection variable is cleared explicitly: this suite runs
+    // inside an agent session, and an inherited CLAUDE_CODE_AGENT would make
+    // the standard-tier cases silently exercise the strict arm.
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
+    };
+    delete env['CLAUDE_CODE_AGENT'];
+    delete env['CLAUDE_VERSION'];
+    delete env['CURSOR_TRACE_ID'];
+    if (options.agent) env['CLAUDE_CODE_AGENT'] = '1';
+    const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
+    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  }
+
+  /** Every recorded stub invocation, in order. Empty when it was never reached. */
+  const invocations = (): string[] => {
+    const native = logPath.split('/').join(path.sep);
+    return fs.existsSync(native) ? fs.readFileSync(native, 'utf-8').trim().split('\n') : [];
+  };
+
+  it.skipIf(!shellOk)('probe UNSUPPORTED + strict: blocks with the upgrade line', () => {
+    writeStub({ helpText: HELP_WITHOUT_GATE });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate --help');
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain("this hook expects 'totem legs gate'");
+    expect(r.stderr).toContain('npm i -g @mmnto/cli@latest');
+    // Fail-closed means the gate was never invoked, not that it passed.
+    expect(invocations()).not.toContain('legs gate');
+  });
+
+  it.skipIf(!shellOk)('probe UNSUPPORTED + standard: passes with the compat line on stderr', () => {
+    writeStub({ helpText: HELP_WITHOUT_GATE });
+    const r = runHook({ tier: 'standard', agent: false });
+    expect(invocations()).toContain('legs gate --help');
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("Hook running without the legs gate (CLI predates 'totem legs')");
+  });
+
+  it.skipIf(!shellOk)('gate exit 3 + strict: blocks with the legs-owed line and the cure', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+    expect(r.stdout).toContain('totem legs deposit --sha HEAD --from <findings.json>');
+    // The gate's own line is not swallowed.
+    expect(r.stdout).toContain('[Totem] legs: stub gate line');
+  });
+
+  it.skipIf(!shellOk)('gate exit 2 + strict: blocks with the DISTINCT not-derived line', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 2 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('the legs gate could not derive (totem legs gate exit status 2)');
+    expect(r.stdout).not.toContain('this push is legs-owed');
+  });
+
+  it.skipIf(!shellOk)('gate exit 0 + strict: the hook proceeds PAST the arm', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 0 });
+    const r = runHook({ tier: 'strict', agent: false });
+    expect(invocations()).toContain('legs gate');
+    // The shield block sits after the arm — reaching it proves the arm passed.
+    expect(invocations()).toContain('doctor --strict');
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('BLOCKED');
+  });
+
+  it.skipIf(!shellOk)('an AGENT on the standard tier still takes the strict arm', () => {
+    writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+    const r = runHook({ tier: 'standard', agent: true });
+    expect(invocations()).toContain('legs gate');
+    expect(invocations()).not.toContain('legs gate --advisory');
+    expect(r.status).toBe(1);
+  });
+
+  it.skipIf(!shellOk)(
+    'standard tier, no agent: --advisory is passed and exit 3 does NOT block',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      const r = runHook({ tier: 'standard', agent: false });
+      // Read from the recorded argv, not from the hook text: the flag has to
+      // have reached the CLI, not merely appear in the template.
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(invocations()).not.toContain('legs gate');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('BLOCKED');
+    },
+  );
+});
+
+// The arm COMPOSED with the real gate (mmnto-ai/totem#2698 fold 2, MATERIAL).
+//
+// The stub suite above proves the hook's exit MAPPING — it scripts the gate's
+// status, so the gate's own derivation is never exercised through the hook, and
+// a gate that stopped returning 3 for an owed-and-unanswered push would leave
+// every one of those tests green. This suite closes that: the shim on the
+// isolated PATH DELEGATES `legs` to the real built CLI, so each case runs the
+// whole composition — predicate, store, ancestry, exit code, hook arm, hook
+// line. Everything after the arm (the shield block's `doctor --strict` and
+// `review --gate`) is a different gate with its own coverage and stays stubbed,
+// so this suite's verdict never depends on state it does not control.
+//
+// COVERAGE DECLARATION (Q5). It needs `packages/cli/dist/index.js`, which
+// exists after this repo's CI builds before it tests (`pnpm -r build` precedes
+// the test run); when it does not, every case SKIPS rather than passing
+// vacuously, and the skip is visible in the reporter. It runs wherever `sh`
+// resolves: win32 through git-bash, plus the ubuntu and macos CI legs. The stub
+// suite above is retained and carries the mapping, including the states this
+// suite cannot reach through a real CLI (a build that predates the verb).
+//
+// One case inside it is POSIX-only, and says so at its own site: a quote- and
+// backslash-bearing owed path cannot exist on NTFS. Every other case, the
+// non-ASCII one included, runs on win32 too.
+describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2698)', () => {
+  /** Built, never authored as an escape (the banked decode trap). */
+  const NL = String.fromCharCode(10);
+  /**
+   * A NON-ASCII owed path (mmnto-ai/totem#2698 fold 4). git C-quotes this name
+   * on BOTH surfaces the gate reads, in two different ways, so an un-normalized
+   * pair reports a covering leg as covering nothing. Driven here through the
+   * REAL CLI, where the argv and the quoting actually happen.
+   */
+  const ACCENTED = `docs/caf${String.fromCharCode(0xe9)}.md`;
+  /** The two-character sequence `printf` needs in the shim, likewise built. */
+  const BACKSLASH_N = String.fromCharCode(92) + 'n';
+
+  const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist/index.js');
+  const shellOk = spawnSync('sh', ['-c', 'exit 0'], { encoding: 'utf-8' }).status === 0;
+  const composedOk = shellOk && fs.existsSync(DIST);
+
+  /**
+   * The REAL working directory, restored after each case: `cross-spawn` (which
+   * the CLI's `safeExec` goes through) chdirs into a child's cwd and restores
+   * with `process.cwd()`, which on Windows would otherwise leave this process
+   * holding the temp repo open and fail teardown.
+   */
+  const realCwd = process.cwd();
+  let tmpDir: string;
+  let repoDir: string;
+  let binDir: string;
+  let logPath: string;
+  let baseSha: string;
+  let ancestorSha: string;
+  let headSha: string;
+
+  function git(...args: string[]): string {
+    return execFileSync('git', args, { cwd: repoDir, encoding: 'utf-8' });
+  }
+
+  beforeEach(() => {
+    if (!composedOk) return;
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-composed-')));
+    repoDir = path.join(tmpDir, 'repo');
+    binDir = path.join(tmpDir, 'stub-bin');
+    fs.mkdirSync(repoDir, { recursive: true });
+    fs.mkdirSync(binDir);
+    logPath = path.join(tmpDir, 'totem-invocations.log').split(path.sep).join('/');
+
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'leg@example.test');
+    git('config', 'user.name', 'Leg');
+    // The minimal config the schema accepts, declaring ONE glob so the
+    // owed / not-owed axis of this suite is unambiguous.
+    fs.writeFileSync(
+      path.join(repoDir, 'totem.config.ts'),
+      [
+        'export default {',
+        "  targets: [{ glob: 'docs/**/*.md', type: 'spec', strategy: 'markdown-heading' }],",
+        "  hooks: { legsOwed: { globs: ['docs/**'] } },",
+        '};',
+        '',
+      ].join(NL),
+    );
+    fs.writeFileSync(path.join(repoDir, 'src.ts'), 'export const a = 1;' + NL);
+    git('add', '.');
+    git('commit', '-q', '-m', 'base');
+    baseSha = git('rev-parse', 'HEAD').trim();
+
+    // The branch under test: it touches the declared glob, so it is legs-owed.
+    git('checkout', '-q', '-b', 'feat/owed');
+    fs.mkdirSync(path.join(repoDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(repoDir, 'docs', 'note.md'), '# a judgment-dense page' + NL);
+    fs.writeFileSync(path.join(repoDir, ...ACCENTED.split('/')), '# an accented page' + NL);
+    git('add', '-A', 'docs');
+    git('commit', '-q', '-m', 'a docs change');
+    // C1 — the head a leg could read, and an ANCESTOR of the head being pushed.
+    ancestorSha = git('rev-parse', 'HEAD').trim();
+    // C2 — one commit further, touching nothing owed, so the owed set is still
+    // C1's two docs pages and a deposit at C1 covers all of them. Without it
+    // that deposit would be EXACT, credited by construction, and the reach
+    // probe this suite exists to exercise would never run.
+    fs.writeFileSync(path.join(repoDir, 'src.ts'), 'export const a = 2;' + NL);
+    git('add', 'src.ts');
+    git('commit', '-q', '-m', 'a code-only change');
+    headSha = git('rev-parse', 'HEAD').trim();
+
+    // The shim IS the real CLI for `legs`, recorded either way. First on PATH,
+    // so the hook's resolve block finds it as a plain `totem` (the temp repo has
+    // no package.json, no node_modules and no workspace file, so no earlier
+    // resolution tier can win).
+    fs.writeFileSync(
+      path.join(binDir, 'totem'),
+      [
+        '#!/bin/sh',
+        `printf '%s${BACKSLASH_N}' "$*" >> "${logPath}"`,
+        'if [ "$1" = "legs" ]; then',
+        `  exec node "${DIST.split(path.sep).join('/')}" "$@"`,
+        'fi',
+        'exit 0',
+        '',
+      ].join(NL),
+      { mode: 0o755 },
+    );
+  });
+
+  afterEach(() => {
+    if (!composedOk) return;
+    process.chdir(realCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(): { status: number | null; stdout: string; stderr: string } {
+    fs.writeFileSync(
+      path.join(repoDir, 'pre-push'),
+      buildPrePushHook({ ...RENDER, tier: 'strict' }),
+    );
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
+    };
+    delete env['CLAUDE_CODE_AGENT'];
+    delete env['CLAUDE_VERSION'];
+    delete env['CURSOR_TRACE_ID'];
+    const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
+    return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  }
+
+  const invocations = (): string[] => {
+    const native = logPath.split('/').join(path.sep);
+    return fs.existsSync(native) ? fs.readFileSync(native, 'utf-8').trim().split(NL) : [];
+  };
+
+  /** Deposit through the REAL writer, at `sha`. */
+  function deposit(sha: string): void {
+    fs.writeFileSync(
+      path.join(repoDir, 'findings.json'),
+      JSON.stringify({
+        readAt: new Date().toISOString(),
+        findings: [
+          {
+            id: 'f1',
+            severity: 'MATERIAL',
+            file: 'docs/note.md',
+            line: 1,
+            claim: 'the page overstates the floor',
+            counterexample: 'the gate never reads severities',
+          },
+        ],
+        folded: ['f1'],
+        verdict: 'one material finding, folded',
+      }),
+    );
+    const result = spawnSync(
+      'node',
+      [DIST, 'legs', 'deposit', '--sha', sha, '--from', 'findings.json'],
+      { cwd: repoDir, encoding: 'utf-8' },
+    );
+    // Anchored, with the writer's own stderr as the failure message: the
+    // previous `toContain('0:')` also passed on a status of 10 or 130.
+    expect(result.status, result.stderr ?? '').toBe(0);
+  }
+
+  it.skipIf(!composedOk)(
+    'OWED with no deposit: the hook blocks, and BOTH lines are present',
+    () => {
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      // The GATE's own line, derived end to end from the real predicate + store.
+      // Both owed paths are named, the accented one spelled as it is on disk.
+      expect(r.stdout).toContain(
+        `[Totem] BLOCKED: this push is legs-owed (docs/** → ${ACCENTED}, docs/** → docs/note.md)`,
+      );
+      expect(r.stdout).toContain(`for head ${headSha.slice(0, 8)}`);
+      // And the HOOK's own cure line, which only the strict arm emits.
+      expect(r.stdout).toContain(
+        "run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>'",
+      );
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    'OWED with an ANCESTOR deposit that covers the owed set: the hook passes',
+    () => {
+      deposit(ancestorSha);
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.stdout).toContain('[Totem] legs evidence: .totem/artifacts/legs/');
+      // ANCESTOR, so the reach probe actually RAN: this is the only composed
+      // state that drives `git diff --name-only -z base...<deposit>` end to
+      // end. Depositing at the head took core's exact branch, which credits
+      // coverage by construction and never probes (mmnto-ai/totem#2698 fold 5).
+      expect(r.stdout).toContain(
+        `· head ${headSha.slice(0, 8)} · nearest ancestor, +1 commits since the leg read ·`,
+      );
+      // 2/2 with an accented owed path among them: the measured result of
+      // reading both sides raw.
+      expect(r.stdout).toContain('· covers 2/2 owed paths ·');
+      expect(r.stdout).toContain('blocking=0 material=1 folded=1');
+      expect(r.stdout).not.toContain('BLOCKED');
+      expect(r.status).toBe(0);
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    'OWED with a deposit on a SIBLING branch: the hook blocks and the gate calls it stale',
+    () => {
+      // A commit that is not an ancestor of HEAD: a second branch off the base.
+      git('checkout', '-q', '-b', 'feat/sibling', baseSha);
+      fs.writeFileSync(path.join(repoDir, 'other.ts'), 'export const b = 2;' + NL);
+      git('add', 'other.ts');
+      git('commit', '-q', '-m', 'a sibling commit');
+      const siblingSha = git('rev-parse', 'HEAD').trim();
+      git('checkout', '-q', 'feat/owed');
+      deposit(siblingSha);
+
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        `[Totem] legs: stale deposit ${siblingSha.slice(0, 8)}: not an ancestor of head`,
+      );
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    'OWED with a MERGE-BASE deposit: ancestor, but it covers none of the owed paths',
+    () => {
+      // The fold-3 exhibit, end to end: a deposit at the base is a real
+      // ancestor one commit behind, so ancestry alone passed it — while the leg
+      // that wrote it saw none of the diff this push proposes.
+      deposit(baseSha);
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        `[Totem] legs: stale deposit ${baseSha.slice(0, 8)}: covers none of the owed paths (the deposit predates every owed change)`,
+      );
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      // And it is NOT reported as an ancestry failure — the reason is the cure.
+      expect(r.stdout).not.toContain('not an ancestor of head');
+    },
+  );
+
+  // POSIX-only, and only for these two names: NTFS refuses a double quote and a
+  // backslash in a filename, while Linux and macOS — where the strict-tier
+  // population runs — allow both, and git C-quotes both in the `diff --git`
+  // headers the owed set used to be parsed from. This drives them through the
+  // REAL CLI and the generated hook (mmnto-ai/totem#2698 fold 5).
+  it.skipIf(!composedOk || process.platform === 'win32')(
+    'OWED on quote- and backslash-bearing paths: the hook names them as they are on disk',
+    () => {
+      const quoted = `docs/a${String.fromCharCode(34)}quoted${String.fromCharCode(34)}.md`;
+      const backslashed = `docs/back${String.fromCharCode(92)}slash.md`;
+      fs.writeFileSync(path.join(repoDir, ...quoted.split('/')), '# quoted' + NL);
+      fs.writeFileSync(path.join(repoDir, ...backslashed.split('/')), '# backslashed' + NL);
+      git('add', '-A', 'docs');
+      git('commit', '-q', '-m', 'the hostile pages');
+
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      // Raw in the basis. Escaped names here would be the fold-4 defect, and
+      // the decoder that fold shipped could not have reached either of these.
+      expect(r.stdout).toContain(quoted);
+      expect(r.stdout).toContain(backslashed);
+      expect(r.stdout).not.toContain(String.fromCharCode(92) + '"');
+    },
+  );
+
+  it.skipIf(!composedOk)('NOT OWED: the hook passes and the gate says what it judged', () => {
+    // A branch whose only change misses the one declared glob.
+    git('checkout', '-q', '-b', 'feat/not-owed', baseSha);
+    fs.writeFileSync(path.join(repoDir, 'src.ts'), 'export const a = 2;' + NL);
+    git('add', 'src.ts');
+    git('commit', '-q', '-m', 'a code-only change');
+    const r = runHook();
+    expect(invocations()).toContain('legs gate');
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(
+      '[Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (1 globs; head',
+    );
+    expect(r.stdout).not.toContain('BLOCKED');
   });
 });

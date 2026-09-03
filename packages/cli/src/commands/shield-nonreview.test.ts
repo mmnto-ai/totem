@@ -19,13 +19,14 @@
  * the skip branches are exercised without a real repo, config, or network invoke.
  */
 
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TotemConfig } from '@mmnto/totem';
+import { LEG_DEPOSIT_SCHEMA_VERSION, saveLegDeposit, type TotemConfig } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -83,6 +84,17 @@ function diffFor(file: string): string {
 }
 
 describe('deterministic skips are not-applicable ADMISSIONS: record + calm line, never a stamp (#2473)', () => {
+  /**
+   * The REAL working directory, captured before any spy.
+   *
+   * This suite mocks `process.cwd()`, and since mmnto-ai/totem#2698 the
+   * covariate path shells out through `cross-spawn`, which resolves a command
+   * by chdir-ing into the child's `cwd` and restoring with `process.cwd()` —
+   * so the process is left parked in the temp dir, which on Windows holds it
+   * open and fails teardown with EPERM. Restoring it explicitly is the
+   * `verify-manifest.test.ts` precedent (CodeRabbit on PR mmnto-ai/totem#2745).
+   */
+  const realCwd = process.cwd();
   let tmpDir: string;
   let output: string[];
   let infoLines: string[];
@@ -132,6 +144,7 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
 
   afterEach(() => {
     vi.restoreAllMocks();
+    process.chdir(realCwd);
     // The non-skip case (mixed diff) runs into the LLM path and aborts on the
     // unmocked embedding config, which can leave a handle open under the temp
     // dir — Windows then EPERMs the recursive remove. That is a harness artifact
@@ -387,11 +400,163 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     output.length = 0;
     await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
     const lane = output.find((l) => l.startsWith('local-lane:'));
+    // Format v1.2 (mmnto-ai/totem#2698): the v1.1 admission text is byte-
+    // unchanged and the leg field is APPENDED. No deposit store here, so the
+    // field is `leg: none` — the whole line, byte-for-byte.
     expect(lane).toBe(
       `local-lane: not-applicable (all-non-code) recorded=${String(
         fs.readdirSync(admissionsDir())[0],
-      ).slice(0, 8)} at=${String(record['createdAt'])}`,
+      ).slice(0, 8)} at=${String(record['createdAt'])} leg: none`,
     );
+  });
+
+  it('the admission form carries the leg field resolved from a REAL deposit at HEAD (v1.2)', async () => {
+    // A real repo with one commit: the admission path resolves HEAD through the
+    // production git runner (no seam to inject), so the deposit must be keyed by
+    // the sha git actually reports — the wiring this test exists to prove.
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    // `-b main`, explicitly: the mocked branch scope below names `main` as the
+    // base, and the leg field's coverage probe diffs `main...HEAD` in THIS repo.
+    // A bare `git init` takes the machine's `init.defaultBranch` — `main` on a
+    // seat whose system gitconfig sets it, `master` on the CI runners — and on
+    // `master` the probe has no `main` to diff against, coverage is underivable
+    // and the field honestly answers `leg: none` (mmnto-ai/totem#2745 CI run 1).
+    git('init', '-b', 'main');
+    git('commit', '--allow-empty', '-m', 'leg-fixture');
+    const head = git('rev-parse', 'HEAD');
+
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted' as const,
+      // The resolver populates `base` for a branch scope, and since
+      // mmnto-ai/totem#2698 fold 4 the leg field derives its coverage inputs
+      // from HEAD's OWN branch scope — through this same seam — whatever the
+      // review scope is. A fixture without a base would model a repo whose
+      // HEAD has none, where the field is `leg: none` by rule.
+      base: 'main',
+    });
+    const { shieldCommand } = await import('./shield.js');
+    await shieldCommand({} as Parameters<typeof shieldCommand>[0]); // record the admission
+    const record = expectSingleRecord('all-non-code', 1);
+
+    saveLegDeposit(path.join(tmpDir, '.totem'), {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha: head,
+      readAt: '2026-09-03T04:00:00.000Z',
+      findings: [
+        {
+          id: 'b1',
+          severity: 'BLOCKING',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'the claim',
+          counterexample: '',
+        },
+        {
+          id: 'n1',
+          severity: 'MINOR',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'a minor claim',
+          counterexample: '',
+        },
+      ],
+      folded: ['b1'],
+      verdict: 'read the docs-only diff; the blocking claim was folded',
+    });
+
+    output.length = 0;
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    const lane = output.find((l) => l.startsWith('local-lane:'));
+    // `minor` is deliberately absent from the field; the folded BLOCKING counts
+    // in BOTH buckets, so `blocking=1 folded=1` reads "addressed".
+    expect(lane).toBe(
+      `local-lane: not-applicable (all-non-code) recorded=${String(
+        fs.readdirSync(admissionsDir())[0],
+      ).slice(
+        0,
+        8,
+      )} at=${String(record['createdAt'])} leg: ${head.slice(0, 8)} blocking=1 material=0 folded=1`,
+    );
+  });
+
+  // The v1.2 DEPOSIT-ONLY head on the ADMISSION arm (mmnto-ai/totem#2698 fold
+  // 2, MATERIAL). `printCovariateLine` shipped this shape for the verdict arm;
+  // the admission arm's no-record branch logged its sensor and returned, so a
+  // not-applicable diff whose head a leg HAD read still printed nothing — the
+  // mmnto-ai/totem#2694 exhibit, reached by the other door.
+  it('the admission arm prints the deposit-only head when no record exists but a leg read HEAD (v1.2)', async () => {
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    // `-b main`, explicitly: the mocked branch scope below names `main` as the
+    // base, and the leg field's coverage probe diffs `main...HEAD` in THIS repo.
+    // A bare `git init` takes the machine's `init.defaultBranch` — `main` on a
+    // seat whose system gitconfig sets it, `master` on the CI runners — and on
+    // `master` the probe has no `main` to diff against, coverage is underivable
+    // and the field honestly answers `leg: none` (mmnto-ai/totem#2745 CI run 1).
+    git('init', '-b', 'main');
+    git('commit', '--allow-empty', '-m', 'leg-fixture');
+    const head = git('rev-parse', 'HEAD');
+
+    getDiffForReviewSpy.mockResolvedValue({
+      diff: diffFor('docs/plan.md'),
+      changedFiles: ['docs/plan.md'],
+      source: 'uncommitted' as const,
+      // The resolver populates `base` for a branch scope, and since
+      // mmnto-ai/totem#2698 fold 4 the leg field derives its coverage inputs
+      // from HEAD's OWN branch scope — through this same seam — whatever the
+      // review scope is. A fixture without a base would model a repo whose
+      // HEAD has none, where the field is `leg: none` by rule.
+      base: 'main',
+    });
+    const { shieldCommand } = await import('./shield.js');
+
+    // No deposit and no record: today's behavior is preserved exactly — the
+    // sensor names the missing record and NOTHING reaches stdout.
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    expect(output.some((l) => l.startsWith('local-lane:'))).toBe(false);
+
+    // Now a leg has read this head — still no admission record.
+    saveLegDeposit(path.join(tmpDir, '.totem'), {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha: head,
+      readAt: '2026-09-03T05:00:00.000Z',
+      findings: [
+        {
+          id: 'm1',
+          severity: 'MATERIAL',
+          file: 'docs/plan.md',
+          line: 0,
+          claim: 'the plan overstates the floor',
+          counterexample: 'the gate reads no severities',
+        },
+      ],
+      folded: [],
+      verdict: 'read the docs-only diff; one material finding stands',
+    });
+
+    output.length = 0;
+    warnLines.length = 0;
+    await shieldCommand({ covariate: true } as Parameters<typeof shieldCommand>[0]);
+
+    // The sensor STAYS — it names the record that is missing, which is still
+    // true; the deposit line is additional evidence, not a substitute.
+    expect(warnLines.some((l) => l.includes('no admission record exists'))).toBe(true);
+    const lane = output.find((l) => l.startsWith('local-lane:'));
+    expect(lane).toBe(`local-lane: none leg: ${head.slice(0, 8)} blocking=0 material=1 folded=0`);
+    // Still not-applicable: no admission record was written by a read-only verb.
+    expect(admissionRecords()).toHaveLength(0);
   });
 
   it('covariate falls back LOUD on a corrupt exact-identity record — never a stale line (leg MINOR 7)', async () => {

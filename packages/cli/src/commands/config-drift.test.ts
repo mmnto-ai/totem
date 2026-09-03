@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AI_PROMPT_BLOCK, buildNpxCommand, REFLEX_VERSION } from '../commands/init.js';
 import { DOCS_SYSTEM_PROMPT } from './docs.js';
+import { REVIEW_LOOP_SKILL_CONTENT, REVIEW_REPLY_SKILL_CONTENT } from './init-templates.js';
 import {
   buildPreCommitHook,
   buildPrePushHook,
@@ -34,6 +35,36 @@ const RENDER = {
 
 function readRoot(file: string): string {
   return fs.readFileSync(path.join(ROOT, file), 'utf-8');
+}
+
+/**
+ * Internal review-process vocabulary (mmnto-ai/totem-strategy#619). T1: it
+ * describes how THIS cohort reviews itself and means nothing to a consumer, so
+ * it never ships in a template, a distributed skill, or CLI help text.
+ */
+const BANNED_CONSUMER_TERMS = ['review-leg', 'cohort', 'falsification'] as const;
+
+/**
+ * The `.description(...)` strings of the `totem legs` group and its verbs, read
+ * out of the command registration source.
+ *
+ * Source text, not a spawned `--help`: the registration is the authoring site,
+ * and reading it keeps this assertion honest on an unbuilt tree (importing
+ * `index.ts` would execute the CLI's own `program.parse`).
+ */
+function legsHelpDescriptions(): string[] {
+  const source = readRoot('packages/cli/src/index.ts');
+  const start = source.indexOf('const legsCommand = program');
+  expect(start).toBeGreaterThan(-1);
+  // The needle is built, never authored as an escape — this repo has a banked
+  // incident where an editing tool decoded one into a raw byte in source.
+  const lf = String.fromCharCode(10);
+  const end = source.indexOf(`${lf}program${lf}`, start);
+  expect(end).toBeGreaterThan(start);
+  const block = source.slice(start, end);
+  return [...block.matchAll(/\.description\(\s*(?:'([^']*)'|"([^"]*)")/g)].map(
+    (match) => match[1] ?? match[2] ?? '',
+  );
 }
 
 // ─── Git hook drift ──────────────────────────────────
@@ -128,6 +159,19 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
   it('the gate clause names --fresh as the cure for a cached response', () => {
     expect(AI_PROMPT_BLOCK).toContain('--fresh');
   });
+
+  // Sibling of the ANCHORED clause above, for the strict pre-push legs gate
+  // (mmnto-ai/totem#2698). Same failure it guards against: a consumer's
+  // CLAUDE.md that does not name a gate its own hook enforces leaves the agent
+  // blocked by a rule its instructions never stated. The predicate's config key
+  // and the one-command cure are the two halves an agent needs; the reflex
+  // version rides the same test so a clause edit without a bump is loud (a
+  // stale block would otherwise pass doctor's drift check silently).
+  it('the gate clause names the legs gate and its cure', () => {
+    expect(AI_PROMPT_BLOCK).toContain('hooks.legsOwed.globs');
+    expect(AI_PROMPT_BLOCK).toContain('totem legs deposit --sha HEAD --from <findings.json>');
+    expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
+  });
 });
 
 // ─── `totem review` billing honesty (mmnto-ai/totem#2536) ─
@@ -152,9 +196,44 @@ describe('product surfaces bill `totem review` as an advisory sensor', () => {
   // Sterilization (mmnto-ai/totem-strategy#619): the internal review-process
   // vocabulary is T1 and never ships in a consumer-facing template.
   it('no internal review-process vocabulary reaches the consumer template', () => {
-    for (const term of ['review-leg', 'cohort', 'falsification']) {
+    for (const term of BANNED_CONSUMER_TERMS) {
       expect(AI_PROMPT_BLOCK.toLowerCase()).not.toContain(term);
     }
+  });
+
+  // Scope, stated exactly (mmnto-ai/totem#2698 fold 4). This covers the two
+  // skill constants THIS slice touched — `REVIEW_LOOP_SKILL_CONTENT` and
+  // `REVIEW_REPLY_SKILL_CONTENT` — plus the `totem legs` command block, and
+  // nothing else. `totem init` also distributes `SIGNOFF_SKILL_CONTENT` (which
+  // says "cohort" 12 times) and `SIGNON_SKILL_CONTENT` (once), and
+  // `totem help --all` prints "cohort" in two pre-existing descriptions; those
+  // are mmnto-ai/totem-strategy#619 item 3's owed sweep, not this slice's, and
+  // they are deliberately NOT asserted here. The claim this file makes is the
+  // one its mechanism keeps.
+  it.each([
+    ['the review-loop skill', REVIEW_LOOP_SKILL_CONTENT],
+    ['the review-reply skill', REVIEW_REPLY_SKILL_CONTENT],
+  ])('no internal review-process vocabulary reaches %s', (_name, content) => {
+    for (const term of BANNED_CONSUMER_TERMS) {
+      expect(content.toLowerCase()).not.toContain(term);
+    }
+  });
+
+  it('no internal review-process vocabulary reaches the `totem legs` help text', () => {
+    // Read from the command REGISTRATION rather than by spawning the built CLI:
+    // this assertion must hold on a tree that has not been built, and the
+    // registration is where the strings a consumer sees are authored.
+    const descriptions = legsHelpDescriptions();
+    // The group plus both verbs — a registration that stops describing one of
+    // them would silently shrink the surface under test.
+    expect(descriptions).toHaveLength(3);
+    for (const description of descriptions) {
+      for (const term of BANNED_CONSUMER_TERMS) {
+        expect(description.toLowerCase()).not.toContain(term);
+      }
+    }
+    // Nor the internal doctrine path the group description used to carry.
+    expect(descriptions.join(' ')).not.toContain('model-tiering');
   });
 
   // The spec prompt is the strongest stale surface: every generated spec hands

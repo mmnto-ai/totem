@@ -61,6 +61,19 @@ vi.mock('../git.js', async (importOriginal) => {
 });
 
 describe('shieldCommand --covariate short-circuit (rev-6 item 7)', () => {
+  /**
+   * The REAL working directory, captured before any spy.
+   *
+   * Since mmnto-ai/totem#2698 the covariate path resolves the leg field for
+   * HEAD, which shells out through `cross-spawn` — and cross-spawn resolves a
+   * command by chdir-ing into the child's `cwd` and restoring with
+   * `process.cwd()`. A suite that MOCKS `process.cwd()` therefore leaves the
+   * process parked in the temp dir, which on Windows holds it open and fails
+   * teardown with EPERM. Restoring it explicitly is the
+   * `verify-manifest.test.ts` precedent; in production `process.cwd()` is
+   * genuine and cross-spawn's restore is correct.
+   */
+  const realCwd = process.cwd();
   let tmpDir: string;
 
   beforeEach(() => {
@@ -75,6 +88,7 @@ describe('shieldCommand --covariate short-circuit (rev-6 item 7)', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    process.chdir(realCwd);
     cleanTmpDir(tmpDir);
   });
 
@@ -89,8 +103,11 @@ describe('shieldCommand --covariate short-circuit (rev-6 item 7)', () => {
     expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
     // The short-circuit returns BEFORE engine boot, the fan, and every invoker.
     expect(bootstrapEngineSpy).not.toHaveBeenCalled();
-    // It DID take the covariate branch (getDiffForReview was consulted read-only).
-    expect(getDiffForReviewSpy).toHaveBeenCalledTimes(1);
+    // It DID take the covariate branch (getDiffForReview was consulted
+    // read-only). TWICE since mmnto-ai/totem#2698 fold 4: once for the review's
+    // own scope, and once more for HEAD's branch scope, which is where the leg
+    // field's coverage inputs come from now — both reads, neither a write.
+    expect(getDiffForReviewSpy).toHaveBeenCalledTimes(2);
 
     // Nothing was stamped — this verb authorizes no push.
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(

@@ -82,11 +82,25 @@ describe.skipIf(process.platform === 'win32')('pre-push gate matrix (POSIX behav
    * The bare repo dir skips every earlier hook gate (no manifest, no compiled
    * rules, no lockfile, no package.json), so the strict arm under
    * CLAUDE_CODE_AGENT=1 is the only live block.
+   *
+   * Since mmnto-ai/totem#2698 the hook probes `legs gate --help` for
+   * `--advisory` and runs `legs gate` BEFORE the shield arm, failing closed on
+   * strict when the CLI lacks the verb. The stub models a CLI that HAS it and
+   * answers "not owed" (exit 0), so the shield arm stays the only live block;
+   * the legs arm's own matrix lives in install-hooks.test.ts.
    */
   function writeStub(params: { helpText: string; helpExit: number; reviewExit: number }): void {
     const stub = `#!/bin/sh
 printf '%s\\n' "$*" >> "${logPath}"
 if [ "$1" = "doctor" ]; then exit 0; fi
+if [ "$1" = "legs" ] && [ "$2" = "gate" ] && [ "$3" = "--help" ]; then
+  printf '%s\\n' '  --advisory  Print the same lines for every gate state'
+  exit 0
+fi
+if [ "$1" = "legs" ]; then
+  printf '%s\\n' '[Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (0 globs; head 00000000)'
+  exit 0
+fi
 if [ "$1" = "review" ] && [ "$2" = "--help" ]; then
   cat <<'TOTEM_STUB_HELP'
 ${params.helpText}

@@ -108,6 +108,26 @@ export interface DiffForReviewOptions {
    */
   base?: string;
   /**
+   * Suppress this resolver's own SCOPE NARRATION (mmnto-ai/totem#2698 fold 4,
+   * renamed in fold 5).
+   *
+   * Named for exactly what it does, not for a mood. A field called `quiet` on
+   * a shared options object is one `--quiet` flag away from being wired to a
+   * CLI switch on `review` or `lint` and silencing operator disclosure that no
+   * operator asked to lose; this name will not survive that mistake.
+   *
+   * For a BACKGROUND derivation only: the covariate resolves HEAD's branch
+   * scope to answer the leg field, inside a run whose subject is a different
+   * scope entirely, so its `Diff source:`, `Changed files:` and diff-size
+   * lines describe a probe the operator did not ask for. Every operator-facing
+   * caller leaves it unset and is byte-identical.
+   *
+   * It silences NARRATION, never a finding: the ignore-filter warning stays
+   * unguarded, because a dropped file is a fact about the answer.
+   */
+  suppressScopeNarration?: boolean;
+
+  /**
    * Lint-only opt-in for the narrow-scope advisory (mmnto-ai/totem#2090).
    * When the resolved source is `staged`/`uncommitted` and the branch-vs-base
    * scope the pre-push gate checks would cover more files, a one-line warning
@@ -424,13 +444,17 @@ export async function getDiffForReview(
     // "git fetch origin <ref>" hint) bubbles when the base resolves nowhere.
     const base = options.base !== undefined ? options.base.trim() : getDefaultBranch(cwd);
     const safeBase = sanitizeForTerminal(base);
-    log.info(
-      tag,
-      `Diff source: branch-vs-base (${forcingFlags}; origin/${safeBase}...HEAD, else local ${safeBase})`,
-    );
+    if (options.suppressScopeNarration !== true) {
+      log.info(
+        tag,
+        `Diff source: branch-vs-base (${forcingFlags}; origin/${safeBase}...HEAD, else local ${safeBase})`,
+      );
+    }
     resolveBranchScope(base);
     if (!diff.trim()) {
-      log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
+      if (options.suppressScopeNarration !== true) {
+        log.warn(tag, noChangesMessage(BRANCH_SCOPE_EMPTY));
+      }
       return { empty: true, source, base: scopeBase, head: scopeHead, selectorForm };
     }
   } else if (options.diff !== undefined) {
@@ -488,7 +512,10 @@ export async function getDiffForReview(
     }
   }
 
-  if (diff.length > REVIEW_DIFF_TRUNCATION_THRESHOLD) {
+  // Also scope narration (mmnto-ai/totem#2698 fold 5): it is advice about an
+  // LLM review of THIS diff, and a background probe is not going to run one.
+  // On a branch whose diff is 370k chars it fired on every covariate run.
+  if (diff.length > REVIEW_DIFF_TRUNCATION_THRESHOLD && options.suppressScopeNarration !== true) {
     log.warn(
       tag,
       `Diff exceeds ${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars (${diff.length}). LLM review will see truncated content; re-run with a narrower --diff <range> to avoid degraded findings.`,
@@ -496,7 +523,9 @@ export async function getDiffForReview(
   }
 
   const changedFiles = extractChangedFiles(diff);
-  log.info(tag, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+  if (options.suppressScopeNarration !== true) {
+    log.info(tag, `Changed files (${changedFiles.length}): ${changedFiles.join(', ')}`);
+  }
 
   // ── Narrow-scope advisory (mmnto-ai/totem#2090) — lint-only opt-in ──
   // When lint resolved a working-tree scope, compare against the

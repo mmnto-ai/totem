@@ -628,6 +628,50 @@ artifactCommand
     }
   });
 
+// Falsification-leg deposits (mmnto-ai/totem#2698): `deposit` is the single
+// writer over `<totemDir>/artifacts/legs/`, `gate` the read-only push gate the
+// managed pre-push hook probes for and invokes. `gate` owns its exit vocabulary
+// (0 not owed / evidence · 2 could not derive · 3 owed with no fresh deposit)
+// and exits itself; the handleError boundary here catches everything BEFORE the
+// derivation — a missing config, an unreadable repo.
+const legsCommand = program
+  .command('legs')
+  .description('Leg deposits — record what a review leg read, and gate a legs-owed push on it');
+
+legsCommand
+  .command('deposit')
+  .description("Record a review leg's findings against the head it read")
+  .requiredOption('--from <file>', "Path to the leg's findings JSON")
+  .option('--sha <ref>', 'The head the leg read (default: HEAD)')
+  .option('--replace', 'Overwrite an existing deposit for this sha, reporting what it replaced')
+  .option('--read-at <iso>', "The leg's own instant (ISO-8601)")
+  .action(async (opts: { from: string; sha?: string; replace?: boolean; readAt?: string }) => {
+    try {
+      const { legsDepositCommand } = await import('./commands/legs.js');
+      await legsDepositCommand(opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action in this file; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
+legsCommand
+  .command('gate')
+  .description('Is this push legs-owed, and does a fresh deposit answer for HEAD?')
+  .option(
+    '--advisory',
+    'Print the same lines for every state, exiting 0 for every gate state (a failure before the derivation still exits non-zero)',
+  )
+  .action(async (opts: { advisory?: boolean }) => {
+    try {
+      const { legsGateCommand } = await import('./commands/legs.js');
+      await legsGateCommand(opts);
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action in this file; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 program
   .command('triage-pr <pr-number>')
   .description('Categorized triage view of bot review comments on a PR')

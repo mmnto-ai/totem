@@ -49,7 +49,9 @@ export type TotemErrorCode =
   /** Eject's loud backstop: every attempted cleanup mutation failed (mmnto-ai/totem#2620). */
   | 'EJECT_FAILED'
   /** Selection-manifest schema breach — an emitter programming error (mmnto-ai/totem#2468). */
-  | 'SELECTION_MANIFEST_CONTRACT';
+  | 'SELECTION_MANIFEST_CONTRACT'
+  /** A leg deposit already exists for this read sha and `--replace` was not passed (mmnto-ai/totem#2698). */
+  | 'LEG_DEPOSIT_EXISTS';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

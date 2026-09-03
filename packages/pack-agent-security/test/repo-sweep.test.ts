@@ -208,6 +208,13 @@ const ALLOWLIST: AllowEntry[] = [
       'listTrackedFilesUnder builds the NUL delimiter for `git ls-files -z` via String.fromCharCode(0) — a git output-parsing delimiter, not runtime string/command assembly. -z is required so tracked-lesson paths with spaces/unicode parse exactly (mmnto-ai/totem#2051 / mmnto-ai/totem#2055).',
   },
   {
+    hash: 'dd24f87f46e65812',
+    file: 'packages/cli/src/commands/legs.ts',
+    expectedCount: 1,
+    reason:
+      'legReachPaths builds the NUL delimiter for `git diff --name-only -z` via String.fromCharCode(0) — the same git output-parsing delimiter as git.ts above, not runtime string/command assembly. -z is what keeps the legs gate reading owed and reached paths RAW (a quote, a backslash or a non-ASCII byte in a path is otherwise C-quoted and the coverage intersection misses it); the separator is built rather than escaped because this repo has a banked editing-tool decode trap for `\\u`/`\\x` escapes (mmnto-ai/totem#2698).',
+  },
+  {
     hash: 'c2c09301bb56a02b',
     file: 'packages/core/src/sys/exec.ts',
     expectedCount: 1,

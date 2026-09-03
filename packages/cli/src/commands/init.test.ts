@@ -3936,17 +3936,34 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
   // + the do-not-alter marker into the canonical skill content. v1.1 added the
   // additive ADMISSION form under the mmnto-ai/totem#2473 design (operator-
   // approved 2026-08-14) — this pin fired on that amendment exactly as
-  // intended, and was updated WITH the spec amendment, never around it.
-  it('REVIEW_LOOP_SKILL_CONTENT carries the exact covariate line format v1.1 contract (both shapes)', () => {
+  // intended, and was updated WITH the spec amendment, never around it. v1.2
+  // (mmnto-ai/totem#2698) appends the `leg:` field to BOTH shapes and adds the
+  // `local-lane: none` head for a lineage with a leg deposit and no review
+  // artifact; the same rule applied — the pin moved with the `.totem/specs/2473.md`
+  // v1.2 clause, never around it.
+  it('REVIEW_LOOP_SKILL_CONTENT carries the exact covariate line format v1.2 contract (all three shapes)', () => {
+    // The full shapes INCLUDING the appended field: a pin on the v1.1 prefix
+    // alone would still pass if the field were dropped from a shape.
     expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
-      'local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted>',
+      'local-lane: <verdictHash8> round=<n> settled=<true|false> lanes=<completed>/<attempted> leg: <sha8> blocking=<n> material=<n> folded=<n>',
     );
     expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
-      'local-lane: not-applicable (<reason>) recorded=<recordHash8> at=<createdAt>',
+      'local-lane: not-applicable (<reason>) recorded=<recordHash8> at=<createdAt> leg: <sha8> blocking=<n> material=<n> folded=<n>',
     );
     expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
-      'covariate line format v1.1 — do not alter without a spec amendment',
+      'local-lane: none leg: <sha8> blocking=<n> material=<n> folded=<n>',
     );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      'covariate line format v1.2 — do not alter without a spec amendment',
+    );
+    // The absent-deposit spelling is contract too (the pilot ledger greps it).
+    // The pin follows the sentence CodeRabbit narrowed on PR
+    // mmnto-ai/totem#2745: `leg: none` is a FIRST-TWO-SHAPES statement, and the
+    // deposit-only head is named in the same breath.
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain(
+      '`leg: none` replaces the field on the FIRST TWO shapes',
+    );
+    expect(REVIEW_LOOP_SKILL_CONTENT).toContain('The third shape is the DEPOSIT-ONLY head');
   });
 
   // The crown-gate + S0 fold (strategy#488 R-table, operator-ruled 2026-08-13/14)
