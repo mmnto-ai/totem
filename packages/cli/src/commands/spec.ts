@@ -644,8 +644,10 @@ export interface GroundingFloorVerdict {
   refuse: boolean;
   /**
    * Retrieved items the floor judges: the spec, session and code partitions.
-   * Keeps its pre-mmnto-ai/totem#2735 meaning — delivered lessons are counted
-   * on the `Found:` line and in the artifact, never here.
+   * Keeps its pre-mmnto-ai/totem#2735 PRODUCTION meaning — the lesson partition
+   * was structurally empty, so the count is what it always was in practice,
+   * though the prior code did sum all four. Delivered lessons are counted on
+   * the `Found:` line and in the artifact, never here.
    */
   hits: number;
   /** The highest relevance among signal-bearing items; `null` when nothing carried a vector leg. */
@@ -657,8 +659,10 @@ export interface GroundingFloorVerdict {
 }
 
 /**
- * Judge the retrieval against the relevance floor, over the spec, session and
- * code partitions (mmnto-ai/totem#2700). Mirrors the MCP tool's semantics
+ * Judge the retrieval against the relevance floor (mmnto-ai/totem#2700), over
+ * the spec, session and code partitions — that three-partition scoping is
+ * mmnto-ai/totem#2735's decision, not mmnto-ai/totem#2700's, and the body
+ * comment below says why. Mirrors the MCP tool's semantics
  * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
  * real relevance signal exists, and judges only the hits that carry one —
  * keyword-only hits have no comparable relevance and are floor-EXEMPT, so a
@@ -725,15 +729,31 @@ export function evaluateGroundingFloor(
  * best relevance), the floor's VALUE and its PLACE, and every withheld
  * candidate as `path — relevance` (linked hits prefixed with their store).
  * Exclusion is disclosed, never silently dropped.
+ *
+ * `deliveredLessons` is the count the `Found:` line printed. A 0-hit refusal on
+ * a lesson-holding index would otherwise contradict that line — "nothing in the
+ * index grounds this run" beside `Found: … 10 lessons` — so when lessons were
+ * delivered the message names them and says why they did not count
+ * (mmnto-ai/totem#2735). With no lessons delivered the text is byte-unchanged.
  */
 export function formatGroundingRefusal(
   topics: string,
   verdict: GroundingFloorVerdict,
   floor: number,
+  deliveredLessons: number,
 ): { message: string; recoveryHint: string } {
   const lines = [`Refusing to draft an unanchored spec for topic(s): ${topics}.`];
   if (verdict.hits === 0) {
-    lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
+    if (deliveredLessons > 0) {
+      lines.push(
+        'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
+      );
+      lines.push(
+        `${deliveredLessons} lesson(s) were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).`,
+      );
+    } else {
+      lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
+    }
   } else {
     const best = verdict.bestRelevance ?? 0;
     lines.push(
@@ -972,7 +992,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   if (anchor.kind === GROUNDING_ANCHOR_FREE_TEXT && !options.raw) {
     const verdict = evaluateGroundingFloor(context, floor);
     if (verdict.refuse) {
-      const refusal = formatGroundingRefusal(anchor.ref, verdict, floor);
+      const refusal = formatGroundingRefusal(anchor.ref, verdict, floor, context.lessons.length);
       throw new TotemError('GATE_INVALID', refusal.message, refusal.recoveryHint);
     }
   }

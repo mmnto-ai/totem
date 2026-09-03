@@ -1100,11 +1100,50 @@ describe('evaluateGroundingFloor', () => {
 describe('formatGroundingRefusal', () => {
   it('a 0-hit refusal names the topic, the 0 hits, and the floor VALUE and PLACE', () => {
     const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
-    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toContain('an-unanchored-slug');
     expect(message).toContain('0 hits');
     expect(message).toContain(
       'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
+    );
+  });
+
+  // With lessons delivered, "nothing in the index grounds this run" sits beside
+  // a `Found: … N lessons` line. The message names the contradiction rather
+  // than leaving the reader to reconcile the two (mmnto-ai/totem#2735).
+  it('a 0-hit refusal on a lesson-holding index names the lessons it did not judge', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), lessons: [makeLesson(), makeLesson()] },
+      FLOOR,
+    );
+    expect(verdict.hits).toBe(0);
+
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 10);
+
+    expect(message).toContain('0 grounding hits (specs, sessions, code)');
+    expect(message).toContain(
+      '10 lesson(s) were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may)',
+    );
+  });
+
+  it('with NO lessons delivered the 0-hit text is unchanged, byte for byte', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
+    expect(message).toContain('Retrieval returned 0 hits — nothing in the index grounds this run.');
+    expect(message).not.toContain('grounding hits');
+    expect(message).not.toContain('lesson');
+  });
+
+  it('the below-floor refusal text is unchanged when lessons were delivered', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.2, { filePath: 'docs/a.md' })] },
+      FLOOR,
+    );
+    const withLessons = formatGroundingRefusal('weak topic', verdict, FLOOR, 10);
+    const withNone = formatGroundingRefusal('weak topic', verdict, FLOOR, 0);
+    expect(withLessons.message).toBe(withNone.message);
+    expect(withLessons.message).toContain(
+      'Retrieval returned 1 hits, but best relevance 0.200 is below the floor.',
     );
   });
 
@@ -1119,7 +1158,7 @@ describe('formatGroundingRefusal', () => {
       },
       FLOOR,
     );
-    const { message } = formatGroundingRefusal('weak topic', verdict, FLOOR);
+    const { message } = formatGroundingRefusal('weak topic', verdict, FLOOR, 0);
     expect(message).toContain('best relevance 0.200');
     expect(message).toContain('1. docs/a.md — relevance 0.200');
     expect(message).toContain('2. [strategy] doctrine/b.md — relevance 0.100');
@@ -1130,6 +1169,7 @@ describe('formatGroundingRefusal', () => {
       'topic',
       evaluateGroundingFloor(emptyContext(), FLOOR),
       FLOOR,
+      0,
     );
     expect(recoveryHint).toContain('totem spec <issue>');
     expect(recoveryHint).toContain('totem spec --from <record>');
