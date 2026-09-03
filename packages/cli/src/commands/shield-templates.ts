@@ -49,6 +49,14 @@ export const ESTIMATE_DISPLAY_TAG = 'Estimate';
 
 export const MAX_DIFF_CHARS = 50_000;
 export const QUERY_DIFF_TRUNCATE = 2_000;
+/**
+ * Spec candidates REQUESTED before the delivery cap. Kept at its
+ * pre-mmnto-ai/totem#2735 width: on the hybrid path the requested width IS the
+ * fusion window (`runHybridSearch` in `packages/core/src/store/lance-search.ts`
+ * fetches `maxResults * HYBRID_OVERFETCH_FACTOR` per leg before RRF), so a
+ * narrower request changes which specs survive fusion.
+ */
+export const SPEC_SEARCH_POOL = 15;
 export const MAX_SPEC_RESULTS = 3;
 export const MAX_LESSONS = 10;
 export const MAX_SESSION_RESULTS = 5;

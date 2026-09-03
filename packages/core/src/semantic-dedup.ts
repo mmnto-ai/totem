@@ -1,6 +1,7 @@
 import type { Embedder } from './embedders/embedder.js';
 import { TotemError } from './errors.js';
 import type { LanceStore } from './store/lance-store.js';
+import { searchLessons } from './store/search-lessons.js';
 import type { ExtractedLesson } from './suspicious-lesson.js';
 
 // ─── Cosine similarity ─────────────────────────────────
@@ -87,11 +88,7 @@ export async function deduplicateLessons(
     // Check against existing LanceDB lessons
     let isDbDuplicate = false;
     try {
-      const results = await store.search({
-        query: candidate.text,
-        typeFilter: 'spec',
-        maxResults: 1,
-      });
+      const results = await searchLessons(store, candidate.text, 1);
 
       if (results.length > 0 && results[0]!.score >= threshold) {
         isDbDuplicate = true;

@@ -32,6 +32,7 @@ import {
   type ShieldFinding,
   type ShieldStructuredVerdict,
   ShieldStructuredVerdictSchema,
+  SPEC_SEARCH_POOL,
   STRUCTURAL_SYSTEM_PROMPT_V2,
   SYSTEM_PROMPT_V2,
   TAG,
@@ -69,13 +70,17 @@ export async function retrieveContext(query: string, store: LanceStore): Promise
     store.search({ query, typeFilter, maxResults });
 
   // Lessons are their own pool, asked for by type — never partitioned out of
-  // the spec pool (mmnto-ai/totem#2735).
-  const [specs, lessons, sessions, code] = await Promise.all([
-    search('spec', MAX_SPEC_RESULTS),
+  // the spec pool (mmnto-ai/totem#2735). The spec request keeps its pre-fix
+  // width: on the hybrid path that width is the RRF fusion window.
+  const [allSpecs, lessons, sessions, code] = await Promise.all([
+    search('spec', SPEC_SEARCH_POOL),
     searchLessons(store, query, MAX_LESSONS),
     search('session_log', MAX_SESSION_RESULTS),
     search('code', MAX_CODE_RESULTS),
   ]);
+
+  // The partition's own slice, kept verbatim.
+  const specs = allSpecs.slice(0, MAX_SPEC_RESULTS);
 
   return { specs, sessions, code, lessons };
 }

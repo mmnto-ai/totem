@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { LanceStore, SearchResult } from '@mmnto/totem';
 
 import { retrieveContext } from './shield.js';
+import { MAX_SPEC_RESULTS, SPEC_SEARCH_POOL } from './shield-templates.js';
 
 // ─── retrieveContext lesson delivery (mmnto-ai/totem#2735) ──
 //
@@ -25,19 +26,22 @@ function makeRow(overrides: Partial<SearchResult> = {}): SearchResult {
   };
 }
 
-/** A store that answers per `typeFilter` and records every type it was asked for. */
+/** A store that answers per `typeFilter` and records every request it received. */
 function typedStore(rows: Partial<Record<string, SearchResult[]>>): {
   store: LanceStore;
   typeFilters: string[];
+  requests: { typeFilter: string; maxResults: number }[];
 } {
   const typeFilters: string[] = [];
+  const requests: { typeFilter: string; maxResults: number }[] = [];
   const store = {
-    search: async ({ typeFilter }: { typeFilter: string }): Promise<SearchResult[]> => {
-      typeFilters.push(typeFilter);
-      return rows[typeFilter] ?? [];
+    search: async (req: { typeFilter: string; maxResults: number }): Promise<SearchResult[]> => {
+      typeFilters.push(req.typeFilter);
+      requests.push({ typeFilter: req.typeFilter, maxResults: req.maxResults });
+      return rows[req.typeFilter] ?? [];
     },
   } as unknown as LanceStore;
-  return { store, typeFilters };
+  return { store, typeFilters, requests };
 }
 
 describe('shield retrieveContext — lessons are their own pool', () => {
@@ -74,5 +78,32 @@ describe('shield retrieveContext — lessons are their own pool', () => {
 
     expect(ctx.lessons).toEqual([]);
     expect(ctx.specs.length).toBe(1);
+  });
+
+  // Request identity is the only thing that CAN pin "the specs delivered are
+  // unchanged" against a real store: on the hybrid path the requested width is
+  // the RRF fusion window (`packages/core/src/store/lance-search.ts` fetches
+  // `maxResults * HYBRID_OVERFETCH_FACTOR` per leg), so a narrower request
+  // changes WHICH rows survive fusion, not merely how many are cut.
+  it('asks for the spec pool at exactly SPEC_SEARCH_POOL, unchanged by this slice', async () => {
+    const { store, requests } = typedStore({ spec: [makeRow()] });
+
+    await retrieveContext('test query', store);
+
+    const specRequests = requests.filter((r) => r.typeFilter === 'spec');
+    expect(specRequests).toEqual([{ typeFilter: 'spec', maxResults: SPEC_SEARCH_POOL }]);
+  });
+
+  it('delivers the top-MAX_SPEC_RESULTS specs by score, in score order', async () => {
+    const scores = [0.9, 0.8, 0.7, 0.6, 0.5];
+    expect(scores.length).toBeGreaterThan(MAX_SPEC_RESULTS);
+    const { store } = typedStore({
+      spec: scores.map((score, i) => makeRow({ label: `Spec ${i}`, score })),
+    });
+
+    const ctx = await retrieveContext('test query', store);
+
+    expect(ctx.specs.length).toBe(MAX_SPEC_RESULTS);
+    expect(ctx.specs.map((s) => s.score)).toEqual(scores.slice(0, MAX_SPEC_RESULTS));
   });
 });

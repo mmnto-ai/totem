@@ -40,6 +40,15 @@ const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts (schema default 0.2
 const ANCHOR_CURES = "run 'totem spec <issue>' or 'totem spec --from <record>'";
 export const MAX_LESSONS = 10;
 export const MAX_LESSON_CHARS = 8_000;
+/**
+ * Spec candidates REQUESTED from the store before the delivery cap is applied.
+ * Kept at its pre-mmnto-ai/totem#2735 width deliberately: on the hybrid path the
+ * requested width IS the fusion window — `runHybridSearch`
+ * (`packages/core/src/store/lance-search.ts`) fetches `maxResults *
+ * HYBRID_OVERFETCH_FACTOR` per leg before RRF merges them — so narrowing the
+ * request would change which specs survive fusion, not merely how many are cut.
+ */
+export const SPEC_SEARCH_POOL = 20;
 /** Specs delivered to the prompt. Exported so the cap test binds to the real value (mmnto-ai/totem#2735). */
 export const MAX_SPECS = 5;
 const MAX_SESSIONS = 5;
@@ -71,9 +80,10 @@ export async function retrieveContext(
     s.search({ query, typeFilter, maxResults });
 
   // Fetch from primary store. Lessons are their own pool, asked for by type —
-  // never partitioned out of the spec pool (mmnto-ai/totem#2735).
+  // never partitioned out of the spec pool (mmnto-ai/totem#2735). The spec
+  // request is byte-identical to the pre-fix one (same query, type and width).
   const [allSpecs, lessons, sessions, code] = await Promise.all([
-    search(store, 'spec', MAX_SPECS),
+    search(store, 'spec', SPEC_SEARCH_POOL),
     searchLessons(store, query, MAX_LESSONS),
     search(store, 'session_log', MAX_SESSIONS),
     search(store, 'code', MAX_CODE_RESULTS),
@@ -104,8 +114,8 @@ export async function retrieveContext(
     allSpecs.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
 
-  // Specs delivered are the top-MAX_SPECS by score across the primary and any
-  // linked stores; lessons arrive from the primary store's own pool above.
+  // The partition's own slice, kept verbatim: the top-MAX_SPECS by score across
+  // the primary and any linked stores. Lessons arrive from the pool above.
   const specs = allSpecs.slice(0, MAX_SPECS);
 
   return { specs, sessions, code, lessons };
@@ -632,7 +642,11 @@ export interface WithheldCandidate {
 export interface GroundingFloorVerdict {
   /** True when the run must be refused before any LLM call and before any artifact is minted. */
   refuse: boolean;
-  /** Retrieved items across all four partitions. */
+  /**
+   * Retrieved items the floor judges: the spec, session and code partitions.
+   * Keeps its pre-mmnto-ai/totem#2735 meaning — delivered lessons are counted
+   * on the `Found:` line and in the artifact, never here.
+   */
   hits: number;
   /** The highest relevance among signal-bearing items; `null` when nothing carried a vector leg. */
   bestRelevance: number | null;
@@ -643,8 +657,8 @@ export interface GroundingFloorVerdict {
 }
 
 /**
- * Judge the retrieval against the relevance floor, over ALL items across the
- * four partitions (mmnto-ai/totem#2700). Mirrors the MCP tool's semantics
+ * Judge the retrieval against the relevance floor, over the spec, session and
+ * code partitions (mmnto-ai/totem#2700). Mirrors the MCP tool's semantics
  * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
  * real relevance signal exists, and judges only the hits that carry one —
  * keyword-only hits have no comparable relevance and are floor-EXEMPT, so a
@@ -657,7 +671,17 @@ export function evaluateGroundingFloor(
   context: RetrievedContext,
   floor: number,
 ): GroundingFloorVerdict {
-  const all = [...context.specs, ...context.sessions, ...context.code, ...context.lessons];
+  // Lessons are DELIVERED but never judged here (mmnto-ai/totem#2735). The
+  // floor was ruled and exercised over exactly these three partitions
+  // (mmnto-ai/totem#2700, mmnto-ai/totem#2727) while the lesson partition was
+  // structurally empty. Adding a now-populated partition would silently loosen
+  // the refusal arm — an FTS-only lesson carries no relevance, so it is
+  // floor-EXEMPT, and `refuse` requires `floorExempt === 0`. Whether a lesson
+  // may ground a run at all is the mmnto-ai/totem#2727 floor arm's ruling, not
+  // this slice's, so the gate's inputs are held exactly as they were. Delivery
+  // is not the gate: the `Found:` line and the run artifact still count every
+  // delivered lesson.
+  const all = [...context.specs, ...context.sessions, ...context.code];
   if (all.length === 0) {
     return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0 };
   }
