@@ -187,7 +187,7 @@ docs/wiki/**
 
 **Read at run time.** Unlike `hooks.tier`, these globs are never rendered into the hook — the hook calls back into `totem legs gate`, which loads this config itself — so editing the list needs no `totem hook install --force`.
 
-One interaction to know: the gate judges the branch diff AFTER `ignorePatterns` / `shieldIgnorePatterns` filtering, so a path class this config also ignores cannot make a push owed. The filter names every file it drops.
+**The floor sees the unfiltered diff.** The gate resolves the same branch-vs-base scope the push gate lints, but with the ignore configuration EMPTY: neither `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the floor. Those keys carry index-exclusion semantics that were merged into the review/lint diff filter for back-compat, and letting them narrow this predicate would mean a repo that keeps `README.md` out of its index silently stops owing a leg for its public copy. Every run discloses it: `[Legs] Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)`.
 
 ## Secrets Management
 

@@ -86,10 +86,10 @@ const config: TotemConfig = {
   // Read at RUN time, never rendered into the hook: editing this list needs no
   // `totem hook install --force`.
   //
-  // Disclosure (mmnto-ai/totem#2698): the gate judges the branch diff AFTER
-  // `ignorePatterns` / `shieldIgnorePatterns` filtering, so a class this repo
-  // also ignores cannot fire here — `README.md` and `.claude/**` are in
-  // `ignorePatterns` today.
+  // The gate classifies the UNFILTERED branch diff (mmnto-ai/totem#2698 fold 1),
+  // so every glob below is live even where this repo's `ignorePatterns` names
+  // the same path — `README.md` and `.claude/**` are in `ignorePatterns` for
+  // INDEX purposes, and index exclusion is not a waiver of the review-leg floor.
   hooks: {
     legsOwed: {
       globs: [

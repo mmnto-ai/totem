@@ -567,7 +567,7 @@ The write is validated before the filesystem is touched, so a refused deposit le
 - `--advisory`: print the byte-identical lines of every state and always exit `0`. The tier changes the exit code and nothing else.
 - `--head <ref>` (default `HEAD`): the head to judge.
 
-A push is legs-owed when a changed path in the branch-vs-base diff matches `hooks.legsOwed.globs`. Not owed prints what it judged against and never consults the store:
+A push is legs-owed when a changed path in the branch-vs-base diff matches `hooks.legsOwed.globs`. That diff is resolved UNFILTERED — `ignorePatterns` and `shieldIgnorePatterns` never hide a path from the floor, and the `[Legs] Diff source:` line says so. Not owed prints what it judged against and never consults the store:
 
 ```text
 [Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (7 globs; head 4f21ab90)
@@ -589,7 +589,7 @@ Owed with nothing fresh names the basis — which glob matched which file — pl
 
 A deposit file that is unreadable, not JSON, schema-invalid, or named for a sha other than the one it stores is a per-file sensor row on stderr (`[Totem] legs: sensor — ignoring corrupt deposit <file>: <reason>`). It never counts as evidence and never masks a valid sibling.
 
-**Covariate.** Since format **v1.2** the `local-lane:` line `totem review --covariate` prints carries a `leg:` field: `leg: <sha8> blocking=N material=N folded=N` when a deposit resolves for the lineage, `leg: none` when none does. A folded finding is counted in BOTH its severity bucket and in `folded`, so `blocking=3 folded=3` reads "all three were addressed" and `blocking=3 folded=0` reads "none were". The v1 shapes before the field are byte-unchanged; consumers keep discriminating on the second token.
+**Covariate.** Since format **v1.2** the `local-lane:` line `totem review --covariate` prints carries a `leg:` field: `leg: <sha8> blocking=N material=N folded=N` when a deposit answers for the checkout's `HEAD` — the deposit is resolved against HEAD, not against the review lineage — and `leg: none` when none does (including when `HEAD` itself does not resolve). When no verdict and no admission record exists for the lineage but a deposit does, the line renders as `local-lane: none leg: <sha8> …`, so a diff is never presented with no evidence line at all. A folded finding is counted in BOTH its severity bucket and in `folded`, so `blocking=3 folded=3` reads "all three were addressed" and `blocking=3 folded=0` reads "none were". The v1 shapes before the field are byte-unchanged; consumers keep discriminating on the second token.
 
 ### `totem spine` (windtunnel / freeze-split)
 

@@ -53,6 +53,57 @@ const MAX_DISCLOSED_BASIS_PAIRS = 5;
 /** Milliseconds in a day — the evidence line's age is reported in days. */
 const MS_PER_DAY = 86_400_000;
 
+/**
+ * Collapse every C0 (0-31) and DEL/C1 (127-159) code point to `?`.
+ *
+ * `sanitizeForTerminal` deliberately PRESERVES LF and HT — it defends a
+ * multi-line log payload — so it is not sufficient on its own for a value
+ * landing inside a single `[Totem] …` line that a shell arm echoes: one
+ * newline in a glob or a path would forge a second line and a reader could not
+ * tell the forged one from the gate's own. This is the strict-pre-commit
+ * reader's `safe()` rule (`install-hooks.ts`), applied AFTER the ANSI/CSI strip
+ * so both defenses hold: escapes removed, then every remaining control byte
+ * flattened. U+0085 (NEL) is inside the band because it breaks a line on some
+ * terminals.
+ *
+ * Written as a `charCodeAt` loop, not the equivalent regex class: the class
+ * would have to be authored with `\u`/`\x` escapes, and this repo has a banked
+ * incident where an editing tool decoded such an escape into a RAW control byte
+ * in the source (mmnto-ai/totem#2692 fold 3).
+ */
+function safeLine(text: string): string {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const control = code < 32 || (code >= 127 && code <= 159);
+    out = out + (control ? '?' : text.charAt(i));
+  }
+  return out;
+}
+
+/**
+ * The ONE spelling of "this value came from outside and is about to be echoed":
+ * strip ANSI/CSI escapes, then flatten every remaining control byte. Both verbs
+ * pass every filesystem-, config- and argv-sourced value through it
+ * (mmnto-ai/totem#2698 fold 2).
+ */
+function echoSafe(value: string): string {
+  return safeLine(sanitizeForTerminalSync(value));
+}
+
+/**
+ * `sanitizeForTerminal`, bound through a module-local slot so {@link echoSafe}
+ * stays synchronous inside message templates. Assigned from the same dynamic
+ * core import the rest of the module uses, before either verb echoes anything.
+ */
+let sanitizeForTerminalSync: (value: string) => string = (value) => value;
+
+/** Bind the core sanitizer for this process. Idempotent; called by both verbs. */
+async function loadSanitizer(): Promise<void> {
+  const { sanitizeForTerminal } = await import('@mmnto/totem');
+  sanitizeForTerminalSync = sanitizeForTerminal;
+}
+
 // ─── `totem legs deposit` ───────────────────────────────────────────────────
 
 export interface LegsDepositOptions {
@@ -79,13 +130,14 @@ function renderCounts(counts: LegFindingCounts): string {
  */
 async function resolveCommitSha(cwd: string, ref: string): Promise<string> {
   const { safeExec, TotemError } = await import('@mmnto/totem');
+  await loadSanitizer();
   const trimmed = ref.trim();
   if (trimmed.length === 0 || trimmed.startsWith('-')) {
     // Mirrors `getGitDiffRange`'s flag-injection guard: a ref starting with
     // `-` reaches git as an option, not a revision.
     throw new TotemError(
       'GIT_FAILED',
-      `Invalid --sha ${JSON.stringify(ref)}: a revision may not be empty or start with '-' (git-flag injection guard).`,
+      `Invalid --sha ${JSON.stringify(echoSafe(ref))}: a revision may not be empty or start with '-' (git-flag injection guard).`,
       'Pass a plain revision such as HEAD or a commit sha.',
     );
   }
@@ -96,7 +148,7 @@ async function resolveCommitSha(cwd: string, ref: string): Promise<string> {
   } catch {
     throw new TotemError(
       'GIT_FAILED',
-      `--sha ${trimmed} does not name a commit in this repository.`,
+      `--sha ${echoSafe(trimmed)} does not name a commit in this repository.`,
       'Pass a commit this checkout can resolve (e.g. HEAD), or fetch the missing history first.',
     );
   }
@@ -104,7 +156,7 @@ async function resolveCommitSha(cwd: string, ref: string): Promise<string> {
   if (!/^[0-9a-f]{40}$/.test(sha)) {
     throw new TotemError(
       'GIT_FAILED',
-      `--sha ${trimmed} resolved to ${JSON.stringify(sha)}, which is not a 40-character commit sha.`,
+      `--sha ${echoSafe(trimmed)} resolved to ${JSON.stringify(echoSafe(sha))}, which is not a 40-character commit sha.`,
       'Pass a commit this checkout can resolve (e.g. HEAD).',
     );
   }
@@ -128,6 +180,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
+  await loadSanitizer();
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -144,14 +197,14 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   } catch (err) {
     throw new TotemError(
       'PARSE_FAILED',
-      `Could not read the leg's findings at ${options.from}: ${err instanceof Error ? err.message : String(err)}`,
+      `Could not read the leg's findings at ${echoSafe(options.from)}: ${echoSafe(err instanceof Error ? err.message : String(err))}`,
       'Pass --from <file> pointing at the leg deposit JSON the falsification leg returned.',
     );
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new TotemError(
       'PARSE_FAILED',
-      `The leg's findings at ${options.from} are not a JSON object.`,
+      `The leg's findings at ${echoSafe(options.from)} are not a JSON object.`,
       'The file must be a deposit object: { findings, folded, verdict, ... }.',
     );
   }
@@ -163,7 +216,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   if (typeof declaredSha === 'string' && declaredSha !== diffSha) {
     throw new TotemError(
       'PARSE_FAILED',
-      `The findings file names diffSha ${declaredSha}, but --sha resolved to ${diffSha}.`,
+      `The findings file names diffSha ${echoSafe(declaredSha)}, but --sha resolved to ${diffSha}.`,
       'Deposit against the head the leg actually read, or correct the diffSha in the file.',
     );
   }
@@ -172,7 +225,10 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     typeof fields['readAt'] === 'string' ? (fields['readAt'] as string) : undefined;
   const readAt = options.readAt ?? fileReadAt ?? new Date().toISOString();
   if (options.readAt === undefined && fileReadAt === undefined) {
-    log.warn(TAG, `readAt defaulted to ${readAt} — pass --read-at for the leg's own instant`);
+    log.warn(
+      TAG,
+      `readAt defaulted to ${echoSafe(readAt)} — pass --read-at for the leg's own instant`,
+    );
   }
 
   const schemaVersion =
@@ -202,11 +258,16 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
       const issues = (
         err as { issues: Array<{ path: Array<string | number>; message: string }> }
       ).issues
-        .map((issue) => `  ${issue.path.join('.') || '<root>'}: ${issue.message}`)
+        // Each issue's path and message are line-safed INDIVIDUALLY; the
+        // newline between entries is this code's own layout, not attacker
+        // input, so it survives (a whole-block flatten would destroy the list).
+        .map(
+          (issue) => `  ${echoSafe(issue.path.join('.') || '<root>')}: ${echoSafe(issue.message)}`,
+        )
         .join('\n');
       throw new TotemError(
         'PARSE_FAILED',
-        `The leg deposit built from ${options.from} is not valid:\n${issues}`,
+        `The leg deposit built from ${echoSafe(options.from)} is not valid:\n${issues}`,
         'Fix the fields listed above; every finding needs a unique id, and folded may only name finding ids.',
       );
     }
@@ -216,10 +277,10 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   if (result.replaced !== undefined) {
     log.warn(
       TAG,
-      `replaced the deposit read at ${result.replaced.readAt ?? 'an unreadable instant'} for ${diffSha}`,
+      `replaced the deposit read at ${echoSafe(result.replaced.readAt ?? 'an unreadable instant')} for ${diffSha}`,
     );
   }
-  log.success(TAG, `${result.path} · ${renderCounts(countLegFindings(candidate))}`);
+  log.success(TAG, `${echoSafe(result.path)} · ${renderCounts(countLegFindings(candidate))}`);
 }
 
 // ─── `totem legs gate` ──────────────────────────────────────────────────────
@@ -287,7 +348,10 @@ export async function runLegsGate(
     stdout,
     stderr,
   });
-  const safe = (value: string): string => sanitizeForTerminal(value);
+  // Two-stage, in this order: strip ANSI/CSI escapes, then flatten every
+  // remaining control byte. The second stage is what keeps a newline in a glob
+  // or a path from forging a second `[Totem]` line (mmnto-ai/totem#2698 fold 2).
+  const safe = (value: string): string => safeLine(sanitizeForTerminal(value));
   /** Repo-root-relative, forward-slashed — the address a reader can act on. */
   const relative = (target: string): string =>
     safe(path.relative(deps.root, target).split(path.sep).join('/'));
@@ -386,17 +450,17 @@ export async function runLegsGate(
 }
 
 /**
- * `totem legs gate [--advisory] [--head <ref>]`
+ * Build the gate's real-world seam from the repo's config and git.
  *
- * The reader the strict pre-push arm calls. Loads the repo's config, builds
- * the real git and diff seams, derives, writes SYNCHRONOUSLY, exits with the
- * tier-mapped status.
+ * Exported so the UNFILTERED-diff contract below is testable against a real
+ * checkout without capturing a process exit: a test resolves these deps in a
+ * fixture repo and asserts what `changedFiles()` actually returns.
  */
-export async function legsGateCommand(options: LegsGateOptions): Promise<void> {
-  const fs = await import('node:fs');
+export async function buildLegsGateDeps(options: LegsGateOptions): Promise<LegsGateDeps> {
   const path = await import('node:path');
   const { DEFAULT_LEGS_OWED_GLOBS, safeExec } = await import('@mmnto/totem');
   const { getDiffForReview, isAncestor } = await import('../git.js');
+  const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
 
   const cwd = process.cwd();
@@ -444,21 +508,44 @@ export async function legsGateCommand(options: LegsGateOptions): Promise<void> {
       // The push-gate scope (`--branch`): the branch-vs-base diff is what the
       // leg read, and it is what the push actually proposes. An empty result
       // is not owed — there is nothing for a leg to read.
+      //
+      // UNFILTERED, deliberately (mmnto-ai/totem#2698 fold 1). The same base/head
+      // resolution runs, but with an EMPTY ignore configuration, so neither
+      // `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the
+      // floor. Those keys carry INDEX-exclusion semantics that were merged into
+      // the review/lint diff filter for back-compat (mmnto-ai/totem#1746,
+      // mmnto-ai/totem#1748) — letting them narrow this predicate would mean a
+      // repo that excludes `README.md` from its index silently stops owing a leg
+      // for its public copy, which is the claim-without-mechanism shape the
+      // floor exists to close.
+      log.info(
+        TAG,
+        safeLine(
+          'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
+        ),
+      );
       const result = await getDiffForReview(
         { branch: true },
-        {
-          ignorePatterns: config.ignorePatterns,
-          ...(config.shieldIgnorePatterns === undefined
-            ? {}
-            : { shieldIgnorePatterns: config.shieldIgnorePatterns }),
-        },
+        { ignorePatterns: [], shieldIgnorePatterns: [] },
         cwd,
         TAG,
       );
       return 'empty' in result ? [] : result.changedFiles;
     },
   };
+  return deps;
+}
 
+/**
+ * `totem legs gate [--advisory] [--head <ref>]`
+ *
+ * The reader the strict pre-push arm calls. Loads the repo's config, builds
+ * the real git and diff seams, derives, writes SYNCHRONOUSLY, exits with the
+ * tier-mapped status.
+ */
+export async function legsGateCommand(options: LegsGateOptions): Promise<void> {
+  const fs = await import('node:fs');
+  const deps = await buildLegsGateDeps(options);
   const outcome = await runLegsGate(options, deps);
   for (const line of outcome.stderr) fs.writeSync(2, `${line}\n`);
   // fs.writeSync, not console.log: stdout is a PIPE under the hook, and a

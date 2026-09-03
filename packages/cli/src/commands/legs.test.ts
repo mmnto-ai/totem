@@ -29,6 +29,7 @@ import {
   legDepositPath,
   type LegGitAdapter,
   legsDir,
+  sanitizeForTerminal,
   saveLegDeposit,
   type TotemConfig,
 } from '@mmnto/totem';
@@ -38,6 +39,14 @@ import { type LegsGateDeps, runLegsGate } from './legs.js';
 
 const TEST_CONFIG = { totemDir: '.totem', ignorePatterns: [] } as unknown as TotemConfig;
 
+/**
+ * The config every command under test loads. Re-pointed per suite (the fold-1
+ * suite needs one whose `ignorePatterns` names the very file it asserts on), so
+ * every `beforeEach` states the config it means to run under rather than
+ * inheriting whichever the previous suite left behind.
+ */
+const loadConfigMock = vi.fn(async (): Promise<TotemConfig> => TEST_CONFIG);
+
 // Config load: an in-memory config rooted at the (spied) cwd, so the writer
 // resolves its store under the temp repo without a real config file.
 vi.mock('../utils.js', async (importOriginal) => {
@@ -46,7 +55,7 @@ vi.mock('../utils.js', async (importOriginal) => {
     ...actual,
     loadEnv: vi.fn(),
     resolveConfigPath: (cwd: string) => path.join(cwd, 'totem.config.ts'),
-    loadConfig: vi.fn(async () => TEST_CONFIG),
+    loadConfig: loadConfigMock,
   };
 });
 
@@ -111,6 +120,7 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     headSha = git('rev-parse', 'HEAD').trim();
 
     errors = [];
+    loadConfigMock.mockResolvedValue(TEST_CONFIG);
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
     vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
       errors.push(args.map((a) => String(a)).join(' '));
@@ -541,5 +551,173 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     );
     expect(outcome.derived).toBe(0);
     expect(outcome.stdout[0]).toContain('(1 globs;');
+  });
+});
+
+// ─── Fold 1: the floor sees the UNFILTERED branch diff ──────────────────────
+
+/**
+ * `ignorePatterns` carries INDEX-exclusion semantics that were merged into the
+ * review/lint diff filter for back-compat (mmnto-ai/totem#1746 /
+ * mmnto-ai/totem#1748). If it also narrowed this predicate, a repo that keeps
+ * `README.md` out of its index would silently stop owing a leg for its public
+ * copy — a floor that cannot see the surface it names. This drives the REAL
+ * seam (`buildLegsGateDeps`) against a real two-branch repo, so the assertion
+ * is about what the resolution actually returns, not about a fake.
+ */
+describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2698 fold 1)', () => {
+  const realCwd = process.cwd();
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-filter-')));
+    const git = (...args: string[]): string =>
+      execFileSync('git', args, { cwd: tmpDir, encoding: 'utf-8' });
+    git('init', '-q', '-b', 'main');
+    git('config', 'user.email', 'leg@example.test');
+    git('config', 'user.name', 'Leg');
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'the public copy\n');
+    fs.writeFileSync(path.join(tmpDir, 'src.ts'), 'export const a = 1;\n');
+    git('add', '.');
+    git('commit', '-q', '-m', 'base');
+    // The branch under test: it touches the very file `ignorePatterns` names.
+    git('checkout', '-q', '-b', 'feat/public-copy');
+    fs.writeFileSync(path.join(tmpDir, 'README.md'), 'the public copy, revised\n');
+    git('add', 'README.md');
+    git('commit', '-q', '-m', 'revise the public copy');
+
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The config IGNORES README.md — the pre-fold behavior would drop it here.
+    loadConfigMock.mockResolvedValue({
+      totemDir: '.totem',
+      ignorePatterns: ['README.md'],
+      shieldIgnorePatterns: ['README.md'],
+      hooks: { legsOwed: { globs: ['README.md', 'docs/wiki/**'] } },
+    } as unknown as TotemConfig);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    loadConfigMock.mockResolvedValue(TEST_CONFIG);
+    process.chdir(realCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('an ignorePatterns-named path still reaches the predicate, and still owes a leg', async () => {
+    const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+    const deps = await buildLegsGateDeps({});
+
+    // The seam itself: the resolution returns the ignored path.
+    const changed = await deps.changedFiles();
+    expect(changed).toContain('README.md');
+
+    // And the verdict names it as the basis.
+    const outcome = await runLegsGate({}, deps);
+    expect(outcome.derived).toBe(3);
+    expect(outcome.stdout[0]).toContain('README.md → README.md');
+  });
+
+  it('discloses that the floor judged an unfiltered diff', async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '));
+    });
+    const { buildLegsGateDeps } = await import('./legs.js');
+    const deps = await buildLegsGateDeps({});
+    await deps.changedFiles();
+    expect(lines.join('\n')).toContain(
+      'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
+    );
+  });
+});
+
+// ─── Fold 2: no echoed value can forge a second line ────────────────────────
+
+describe('every echoed value is line-safe (mmnto-ai/totem#2698 fold 2)', () => {
+  /** LF — built, never authored as an escape (the banked decode trap). */
+  const LF = String.fromCharCode(10);
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-line-')));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /**
+   * Every stdout entry is exactly ONE line.
+   *
+   * The array element IS the unit of the write (`fs.writeSync(1, line + LF)`),
+   * so "no element contains a line break" is the whole forge-prevention
+   * property — a hostile value that merely repeats the literal text `[Totem]`
+   * inside one line is ugly, not a forged line, and the count of markers is
+   * therefore not the assertion.
+   */
+  function expectNoForgedLine(lines: readonly string[]): void {
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      expect(line.includes(LF)).toBe(false);
+      expect(line.includes(String.fromCharCode(13))).toBe(false);
+    }
+  }
+
+  it('a glob AND a changed path carrying a newline cannot forge a second [Totem] line', async () => {
+    const { runLegsGate } = await import('./legs.js');
+    // A literal glob that MATCHES the hostile path, so BOTH halves of the
+    // basis pair carry the newline and both must be flattened.
+    const hostile = `docs/wiki/a${LF}b.md`;
+    const outcome = await runLegsGate(
+      {},
+      {
+        root: tmpDir,
+        totemDirAbs: path.join(tmpDir, '.totem'),
+        globs: [hostile],
+        git: {
+          isCommit: () => true,
+          isAncestor: () => false,
+          distance: () => 0,
+        },
+        resolveHead: () => HEAD_SHA,
+        changedFiles: async () => [hostile],
+      },
+    );
+    expect(outcome.derived).toBe(3);
+    // The basis pair is present — the value was flattened, not dropped.
+    expect(outcome.stdout[0]).toContain('docs/wiki/a?b.md → docs/wiki/a?b.md');
+    expectNoForgedLine(outcome.stdout);
+    // Owed-and-unanswered is exactly two lines: the block and the cure. A forged
+    // third would have to come from the payload, and cannot.
+    expect(outcome.stdout).toHaveLength(2);
+    expect(outcome.stdout.join(LF).split('[Totem]')).toHaveLength(3);
+    // sanitizeForTerminal ALONE would have left the LF standing; this is the
+    // property the second stage adds.
+    expect(sanitizeForTerminal(hostile).includes(LF)).toBe(true);
+  });
+
+  it('a corrupt-deposit reason and a NOT DERIVED cause are line-safe too', async () => {
+    const { runLegsGate } = await import('./legs.js');
+    const notDerived = await runLegsGate(
+      {},
+      {
+        root: tmpDir,
+        totemDirAbs: path.join(tmpDir, '.totem'),
+        globs: ['**'],
+        git: { isCommit: () => true, isAncestor: () => true, distance: () => 0 },
+        resolveHead: () => {
+          throw new Error(`fatal: bad revision${LF}[Totem] legs evidence: forged`);
+        },
+        changedFiles: async () => ['a.ts'],
+      },
+    );
+    expect(notDerived.derived).toBe(2);
+    expectNoForgedLine(notDerived.stdout);
+    // NOT DERIVED is ONE line, even though the cause embeds a newline AND the
+    // literal `[Totem]` marker — the flattened text stays inside that one line.
+    expect(notDerived.stdout).toHaveLength(1);
+    expect(notDerived.stdout[0]).toContain('NOT DERIVED — fatal: bad revision?');
+    expect(notDerived.stdout[0]).toContain('?[Totem] legs evidence: forged');
   });
 });
