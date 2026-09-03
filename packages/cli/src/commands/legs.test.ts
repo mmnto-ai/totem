@@ -668,9 +668,15 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
     const { buildLegsGateDeps } = await import('./legs.js');
     const deps = await buildLegsGateDeps();
     await deps.changedFiles();
-    expect(lines.join('\n')).toContain(
-      'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
-    );
+    const narration = lines.join('\n');
+    // The stable halves: the base it judged against, and the fact that the
+    // ignore config did not apply. The middle now carries the resolved base.
+    expect(narration).toContain('Diff source: branch-vs-base (');
+    expect(narration).toContain('unfiltered — ignorePatterns do not apply to the floor)');
+    expect(narration).toContain('main...HEAD');
+    // Exactly ONE `Changed files` line: the suppressed resolver no longer
+    // prints its own C-quoted one beside the gate's raw one (fold 5).
+    expect(narration.split('Changed files (')).toHaveLength(2);
   });
 });
 

@@ -2360,12 +2360,19 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
       expect(narration).not.toContain('Diff source:');
       expect(narration).not.toContain('Changed files (');
 
-      // The control that makes the assertion above non-vacuous: the SAME
-      // resolution, unsuppressed, does print all of it — so the fixture really
-      // does cross the threshold and the guard is what silenced it.
-      const { resolveUnfilteredBranchScope } = await import('./legs.js');
+      // The control that makes the assertion above non-vacuous: the same diff,
+      // resolved WITHOUT the suppression, does narrate all of it — so the
+      // fixture really does cross the 50k threshold and the option is what
+      // silenced it. Called on the resolver directly, because the legs scope
+      // resolver now suppresses it unconditionally and prints its own line.
+      const { getDiffForReview } = await import('../git.js');
       errSpy.mockClear();
-      await resolveUnfilteredBranchScope(repoDir);
+      await getDiffForReview(
+        { branch: true },
+        { ignorePatterns: [], shieldIgnorePatterns: [] },
+        repoDir,
+        'Control',
+      );
       const loud = errSpy.mock.calls.map((c) => c.join(' ')).join(NL);
       expect(loud).toContain('Diff exceeds');
       expect(loud).toContain('Changed files (');

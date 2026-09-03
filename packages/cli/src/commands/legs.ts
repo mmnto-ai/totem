@@ -626,24 +626,30 @@ export async function resolveUnfilteredBranchScope(
   // field derives coverage from HEAD's branch scope on every review scope, so
   // this resolution runs inside `totem review` runs too — and a `[Legs]` line
   // in the middle of a `[Review]` run describes a probe nobody asked for.
-  if (narrate) {
-    log.info(
-      TAG,
-      safeLine(
-        'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
-      ),
-    );
-  }
   // `getDiffForReview` still resolves the BASE (its origin-preference logic is
-  // the one this gate must agree with) and still rules on the empty-diff case.
-  // Its narration is suppressed either way for a background probe.
+  // the one this gate must agree with) and still rules on the empty-diff case,
+  // but its narration is ALWAYS suppressed: its `Changed files` line is built
+  // from `extractChangedFiles`, which spells a non-ASCII path the C-quoted way,
+  // and this module prints the RAW list below. Letting both speak printed the
+  // same line twice, in two different spellings (caught on this branch's own
+  // gate run, mmnto-ai/totem#2698 fold 5).
   const result = await getDiffForReview(
-    { branch: true, ...(narrate ? {} : { suppressScopeNarration: true }) },
+    { branch: true, suppressScopeNarration: true },
     { ignorePatterns: [], shieldIgnorePatterns: [] },
     cwd,
     TAG,
   );
   const base = result.base;
+  // One disclosure, ours, carrying the resolved base so nothing the suppressed
+  // line said is lost.
+  if (narrate) {
+    log.info(
+      TAG,
+      safeLine(
+        `Diff source: branch-vs-base (${base ?? 'no base resolved'}...HEAD, unfiltered — ignorePatterns do not apply to the floor)`,
+      ),
+    );
+  }
   // The FILE LIST is read separately, with `-z` (mmnto-ai/totem#2698 fold 5).
   //
   // Not a preference: `extractChangedFiles` parses `diff --git` headers, which
