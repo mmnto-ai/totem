@@ -85,6 +85,10 @@ describe('triage retrieveContext — lessons are their own pool', () => {
   // `maxResults * HYBRID_OVERFETCH_FACTOR` per leg), so a narrower request
   // changes WHICH rows survive fusion, not merely how many are cut.
   it('asks for the spec pool at exactly SPEC_SEARCH_POOL, unchanged by this slice', async () => {
+    // The literal is the pin: bound to the constant alone, this test would go
+    // green on a change to the constant itself. 20 is the pre-mmnto-ai/totem#2735
+    // width, which is the hybrid fusion window.
+    expect(SPEC_SEARCH_POOL).toBe(20);
     const { store, requests } = typedStore({ spec: [makeRow()] });
 
     await retrieveContext('test query', store);
@@ -93,7 +97,9 @@ describe('triage retrieveContext — lessons are their own pool', () => {
     expect(specRequests).toEqual([{ typeFilter: 'spec', maxResults: SPEC_SEARCH_POOL }]);
   });
 
-  it('delivers the top-MAX_SPEC_RESULTS specs by score, in score order', async () => {
+  // `triage.ts` does not sort — it slices. The store returns score-ordered rows
+  // and the slice keeps that order; only `spec.ts` re-sorts, after its linked merge.
+  it("delivers the first MAX_SPEC_RESULTS rows of the pool in the store's own order", async () => {
     const scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
     expect(scores.length).toBeGreaterThan(MAX_SPEC_RESULTS);
     const { store } = typedStore({

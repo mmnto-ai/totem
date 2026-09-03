@@ -129,9 +129,11 @@ function makeLesson(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     content: '**Tags:** testing\n\nAlways validate input at boundaries.',
     contextPrefix: 'Totem Lessons > Lesson — Always validate input',
-    filePath: '.totem/lessons.md',
-    absoluteFilePath: '.totem/lessons.md',
-    type: 'spec',
+    // The post-mmnto-ai/totem#431 shape: lessons carry their own content type
+    // and live under `.totem/lessons/`, one file each.
+    filePath: '.totem/lessons/lesson-always-validate-input.md',
+    absoluteFilePath: '.totem/lessons/lesson-always-validate-input.md',
+    type: 'lesson',
     label: 'Totem Lessons > Lesson — Always validate input',
     score: 0.5,
     metadata: {},
@@ -471,6 +473,10 @@ describe('retrieveContext — lessons are their own pool', () => {
   // `maxResults * HYBRID_OVERFETCH_FACTOR` per leg), so a narrower request
   // changes WHICH rows survive fusion, not merely how many are cut.
   it('asks for the spec pool at exactly SPEC_SEARCH_POOL, unchanged by this slice', async () => {
+    // The literal is the pin: bound to the constant alone, this test would go
+    // green on a change to the constant itself. 20 is the pre-mmnto-ai/totem#2735
+    // width, which is the hybrid fusion window.
+    expect(SPEC_SEARCH_POOL).toBe(20);
     const { store, requests } = typedStore({ spec: [makeSpec()] });
 
     await retrieveContext('test query', store);
