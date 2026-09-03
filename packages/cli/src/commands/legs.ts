@@ -37,7 +37,7 @@
  * `import type` is erased at build and stays static.
  */
 
-import type { LegDeposit, LegFindingCounts, LegGitAdapter } from '@mmnto/totem';
+import type { LegCoverageQuery, LegDeposit, LegFindingCounts, LegGitAdapter } from '@mmnto/totem';
 
 /** Log tag for this command pair's human output (`log.*` writes to stderr). */
 const TAG = 'Legs';
@@ -49,6 +49,9 @@ const TAG = 'Legs';
  * flood a hook's output.
  */
 const MAX_DISCLOSED_BASIS_PAIRS = 5;
+
+/** The prefix `TotemError` stamps on every message — stripped when re-branding. */
+const TOTEM_ERROR_BRAND = '[Totem Error] ';
 
 /** Milliseconds in a day — the evidence line's age is reported in days. */
 const MS_PER_DAY = 86_400_000;
@@ -320,8 +323,42 @@ export interface LegsGateDeps {
   git: LegGitAdapter;
   /** Full 40-hex head sha. Throws when the head cannot be resolved. */
   resolveHead(): string;
-  /** The push's changed-file set. Throws when the diff cannot be resolved. */
-  changedFiles(): Promise<readonly string[]>;
+  /** The push's resolved branch scope. Throws when the diff cannot be resolved. */
+  changedFiles(): Promise<LegsGateScope>;
+}
+
+/**
+ * The branch scope the gate judges: the unfiltered changed-file set, plus the
+ * base it was resolved against.
+ *
+ * The base is carried because COVERAGE is measured against it
+ * (mmnto-ai/totem#2698 fold 3) — a candidate's reach is `base...<diffSha>`, and
+ * it has to be the SAME base HEAD was resolved against or the two diffs are not
+ * comparable. Absent when the resolution produced no base, which the gate
+ * treats as "coverage is not derivable" rather than guessing one.
+ */
+export interface LegsGateScope {
+  files: readonly string[];
+  base?: string;
+}
+
+/**
+ * The coverage query for a set of owed paths, or `undefined` when it cannot be
+ * derived (no base). Exported because the covariate resolves through the SAME
+ * inputs as the gate — a field that named a deposit the gate rejects would be
+ * the round reading evidence the push gate does not accept.
+ *
+ * The basis lists one entry per `glob -> file` MATCH, so a file matching three
+ * globs appears three times; the owed set is those files, deduplicated in
+ * basis order.
+ */
+export function legsCoverageForBasis(
+  base: string | undefined,
+  basis: readonly { glob: string; file: string }[],
+): LegCoverageQuery | undefined {
+  if (base === undefined) return undefined;
+  const owedFiles = [...new Set(basis.map((entry) => entry.file))];
+  return owedFiles.length === 0 ? undefined : { base, owedFiles };
 }
 
 /** Exit vocabulary: 0 not owed / evidence · 2 could not derive · 3 owed, no deposit. */
@@ -368,21 +405,42 @@ export async function runLegsGate(
     safe(path.relative(deps.root, target).split(path.sep).join('/'));
 
   let head: string;
-  let changed: readonly string[];
+  let scope: LegsGateScope;
   let resolution: Awaited<ReturnType<typeof findLegDepositForHead>> | undefined;
   let owed: ReturnType<typeof classifyLegsOwed> | undefined;
   try {
+    const { TotemError } = await import('@mmnto/totem');
     head = deps.resolveHead();
-    changed = await deps.changedFiles();
-    owed = classifyLegsOwed(changed, deps.globs);
+    scope = await deps.changedFiles();
+    owed = classifyLegsOwed(scope.files, deps.globs);
     // The store is consulted ONLY when the diff is owed — a not-owed push must
     // not depend on the deposit directory being readable at all.
     if (owed.owed) {
-      resolution = findLegDepositForHead(deps.totemDirAbs, head, deps.git);
+      // Coverage is not optional for the GATE (mmnto-ai/totem#2698 fold 3): it
+      // only ever runs on the branch scope, so a scope that resolved without a
+      // base is a failure to derive, not a licence to fall back to
+      // ancestry-only — that fallback is exactly the merge-base pass the
+      // ruling closed.
+      const query = legsCoverageForBasis(scope.base, owed.basis);
+      if (query === undefined) {
+        throw new TotemError(
+          'GIT_FAILED',
+          'the branch scope resolved without a base ref, so coverage is not derivable',
+          'Fetch the base branch (git fetch origin <base>) and retry.',
+        );
+      }
+      resolution = findLegDepositForHead(deps.totemDirAbs, head, deps.git, query);
     }
     // totem-context: intentional — this is not a swallow but the gate's LOUDEST arm: any failure to derive (no repo, an unresolvable head, a branch diff or an ancestry probe that will not resolve) becomes the NOT DERIVED verdict, printed with its cause and exit 2, which the strict pre-push arm blocks on with its own line (mmnto-ai/totem#2698)
   } catch (err) {
-    const cause = safe(err instanceof Error ? err.message : String(err));
+    // `TotemError` brands its own message, and this line is already branded —
+    // `[Totem] legs: NOT DERIVED — [Totem Error] …` reads as two speakers. The
+    // gate owns the shape of its line, so the inner brand is stripped; the
+    // recovery hint stays on the error for any programmatic caller.
+    const raw = err instanceof Error ? err.message : String(err);
+    const cause = safe(
+      raw.startsWith(TOTEM_ERROR_BRAND) ? raw.slice(TOTEM_ERROR_BRAND.length) : raw,
+    );
     return finish(2, [`[Totem] legs: NOT DERIVED — ${cause}`], []);
   }
 
@@ -415,8 +473,17 @@ export async function runLegsGate(
       winner.rank === 'exact'
         ? 'exact'
         : `nearest ancestor, +${winner.distance} commits since the leg read`;
+    // `covers K/N owed paths` is DISCLOSURE, never a block: a leg that read
+    // some of what this push owes is still a leg that read this head, and the
+    // re-arm is doctrine's call. The gate always supplies a coverage query, so
+    // the field is always present here; the guard exists because the core
+    // resolution is shared with the covariate, which may resolve without one.
+    const covers =
+      winner.coverage === undefined
+        ? ''
+        : ` · covers ${winner.coverage.covered}/${winner.coverage.owed} owed paths`;
     const stdout = [
-      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach} · blocking=${counts.blocking} material=${counts.material} folded=${counts.folded}`,
+      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach}${covers} · blocking=${counts.blocking} material=${counts.material} folded=${counts.folded}`,
     ];
     const superseded = resolution?.superseded ?? [];
     if (superseded.length > 0) {
@@ -451,14 +518,126 @@ export async function runLegsGate(
     `[Totem] BLOCKED: this push is legs-owed (${shown}${more}) and carries no fresh falsification-leg deposit for head ${head8}`,
   ];
   for (const candidate of resolution?.stale ?? []) {
+    // One reason per candidate, because the repairs differ: fetch the missing
+    // history, deposit against this branch, or run the leg over the owed diff.
     const reason =
-      candidate.reason === 'not-ancestor' ? 'not an ancestor of head' : 'unknown to this repo';
+      candidate.reason === 'not-ancestor'
+        ? 'not an ancestor of head'
+        : candidate.reason === 'unknown-commit'
+          ? 'unknown to this repo'
+          : 'covers none of the owed paths (the deposit predates every owed change)';
     stdout.push(`[Totem] legs: stale deposit ${safe(candidate.diffSha.slice(0, 8))}: ${reason}`);
   }
   stdout.push(
     '[Totem] legs: run the leg, then: totem legs deposit --sha HEAD --from <findings.json>',
   );
   return finish(3, stdout, stderr);
+}
+
+/**
+ * Resolve the branch scope the floor is judged on — the ONE derivation the gate
+ * and the covariate both use (mmnto-ai/totem#2698 fold 3 item 3), so the
+ * covariate can never name a deposit the gate would reject.
+ *
+ * The push-gate scope (`--branch`): the branch-vs-base diff is what the leg
+ * read, and it is what the push actually proposes. An empty result is not owed
+ * — there is nothing for a leg to read.
+ *
+ * UNFILTERED, deliberately (mmnto-ai/totem#2698 fold 1). The same base/head
+ * resolution runs, but with an EMPTY ignore configuration, so neither
+ * `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the floor.
+ * Those keys carry INDEX-exclusion semantics that were merged into the
+ * review/lint diff filter for back-compat (mmnto-ai/totem#1746,
+ * mmnto-ai/totem#1748) — letting them narrow this predicate would mean a repo
+ * that excludes `README.md` from its index silently stops owing a leg for its
+ * public copy, which is the claim-without-mechanism shape the floor exists to
+ * close.
+ *
+ * The resolved BASE rides back with the files: coverage is measured against it,
+ * and it must be the same base HEAD was resolved against.
+ */
+export async function resolveUnfilteredBranchScope(cwd: string): Promise<LegsGateScope> {
+  const { getDiffForReview } = await import('../git.js');
+  const { log } = await import('../ui.js');
+  await loadSanitizer();
+  log.info(
+    TAG,
+    safeLine('Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)'),
+  );
+  const result = await getDiffForReview(
+    { branch: true },
+    { ignorePatterns: [], shieldIgnorePatterns: [] },
+    cwd,
+    TAG,
+  );
+  const files = 'empty' in result ? [] : result.changedFiles;
+  return { files, ...(result.base === undefined ? {} : { base: result.base }) };
+}
+
+/**
+ * The judgment-dense floor this repo declares, or the default when it declares
+ * none — the ONE spelling, shared by the gate and both covariate sites.
+ */
+export async function legsOwedGlobs(config: {
+  hooks?: { legsOwed?: { globs?: readonly string[] } };
+}): Promise<readonly string[]> {
+  const { DEFAULT_LEGS_OWED_GLOBS } = await import('@mmnto/totem');
+  return config.hooks?.legsOwed?.globs ?? [...DEFAULT_LEGS_OWED_GLOBS];
+}
+
+/**
+ * What a covariate site learned when it asked for coverage inputs: either the
+ * query, or the reason it is not derivable for that site's scope.
+ */
+export interface LegsCoverageResolution {
+  query?: LegCoverageQuery;
+  /** Present iff `query` is absent — the caller discloses it as one Sensor line. */
+  reason?: string;
+}
+
+/**
+ * Derive the coverage query for a COVARIATE site (mmnto-ai/totem#2698 fold 3).
+ *
+ * The gate always runs on the branch scope and treats an underivable base as a
+ * failure. `--covariate` does not: it describes whatever scope the review ran
+ * on, and a staged or explicit-range run has no branch base to measure a
+ * candidate's reach against. Those sites resolve on ancestry alone and SAY so,
+ * rather than implying a coverage check that did not happen.
+ *
+ * Both sites route through this one function, and it reuses the gate's own
+ * pieces — the unfiltered branch scope and core's single `classifyLegsOwed` —
+ * so the field can never name a deposit the gate would reject as no-coverage.
+ */
+export async function deriveLegsCoverageForScope(
+  source: string,
+  globs: readonly string[],
+  cwd: string,
+): Promise<LegsCoverageResolution> {
+  const { classifyLegsOwed } = await import('@mmnto/totem');
+  await loadSanitizer();
+  if (source !== 'branch-vs-base') {
+    return {
+      reason: `coverage was not derivable for a ${echoSafe(source)} scope (it has no branch base) — the leg field resolves on ancestry alone`,
+    };
+  }
+  let scope;
+  try {
+    scope = await resolveUnfilteredBranchScope(cwd);
+    // totem-context: intentional — `--covariate` is a read-only sensor whose contract is to print a line and exit 0, so a branch scope that will not resolve (no repo, an unfetched base) DEGRADES to ancestry-only with the reason printed, never a throw out of a transport verb
+  } catch (err) {
+    return {
+      reason: `coverage was not derivable: the branch scope would not resolve (${echoSafe(err instanceof Error ? err.message : String(err))}) — the leg field resolves on ancestry alone`,
+    };
+  }
+  const owed = classifyLegsOwed(scope.files, globs);
+  const query = legsCoverageForBasis(scope.base, owed.basis);
+  if (query !== undefined) return { query };
+  return {
+    reason:
+      owed.owed && scope.base === undefined
+        ? 'coverage was not derivable: the branch scope resolved without a base ref — the leg field resolves on ancestry alone'
+        : 'coverage was not derivable: this branch scope owes no path, so there is nothing to cover — the leg field resolves on ancestry alone',
+  };
 }
 
 /**
@@ -474,9 +653,10 @@ export async function runLegsGate(
  */
 export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
   const path = await import('node:path');
-  const { DEFAULT_LEGS_OWED_GLOBS, safeExec, TotemError } = await import('@mmnto/totem');
-  const { getDiffForReview, isAncestor } = await import('../git.js');
-  const { log } = await import('../ui.js');
+  const { safeExec, TotemError } = await import('@mmnto/totem');
+  // The branch scope (and its `Diff source:` disclosure) now lives in the
+  // shared `resolveUnfilteredBranchScope`, which the covariate calls too.
+  const { isAncestor } = await import('../git.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   await loadSanitizer();
 
@@ -498,6 +678,15 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     },
     isAncestor(base, head) {
       return isAncestor(cwd, base, head);
+    },
+    changedFiles(base, head) {
+      // Three-dot: what the branch containing `head` added relative to `base`,
+      // which is what a leg reading at `head` could have seen. Unfiltered, like
+      // the owed set it is intersected with.
+      return safeExec('git', ['diff', '--name-only', `${base}...${head}`], { cwd })
+        .split(String.fromCharCode(10))
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
     },
     distance(base, head) {
       const raw = safeExec('git', ['rev-list', '--count', `${base}..${head}`], { cwd }).trim();
@@ -521,39 +710,12 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
   const deps: LegsGateDeps = {
     root,
     totemDirAbs: path.join(root, config.totemDir),
-    globs: config.hooks?.legsOwed?.globs ?? [...DEFAULT_LEGS_OWED_GLOBS],
+    globs: await legsOwedGlobs(config),
     git,
     resolveHead() {
       return safeExec('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd }).trim();
     },
-    async changedFiles() {
-      // The push-gate scope (`--branch`): the branch-vs-base diff is what the
-      // leg read, and it is what the push actually proposes. An empty result
-      // is not owed — there is nothing for a leg to read.
-      //
-      // UNFILTERED, deliberately (mmnto-ai/totem#2698 fold 1). The same base/head
-      // resolution runs, but with an EMPTY ignore configuration, so neither
-      // `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the
-      // floor. Those keys carry INDEX-exclusion semantics that were merged into
-      // the review/lint diff filter for back-compat (mmnto-ai/totem#1746,
-      // mmnto-ai/totem#1748) — letting them narrow this predicate would mean a
-      // repo that excludes `README.md` from its index silently stops owing a leg
-      // for its public copy, which is the claim-without-mechanism shape the
-      // floor exists to close.
-      log.info(
-        TAG,
-        safeLine(
-          'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
-        ),
-      );
-      const result = await getDiffForReview(
-        { branch: true },
-        { ignorePatterns: [], shieldIgnorePatterns: [] },
-        cwd,
-        TAG,
-      );
-      return 'empty' in result ? [] : result.changedFiles;
-    },
+    changedFiles: () => resolveUnfilteredBranchScope(cwd),
   };
   return deps;
 }

@@ -572,10 +572,10 @@ A push is legs-owed when a changed path in the branch-vs-base diff matches `hook
 [Totem] legs: not owed — no changed path matched hooks.legsOwed.globs (7 globs; head 4f21ab90)
 ```
 
-A deposit answers for its own head and for every descendant of it (ancestor-or-equal), with the exact read outranking the nearest ancestor. The pass line carries the read's age and how far the head has moved since, so a stale-but-valid pass is visible rather than silent:
+A deposit answers for its own head and for every descendant of it (ancestor-or-equal), with the exact read outranking the nearest ancestor — and, for an ancestor, only when it COVERS at least one of the owed paths (the branch diff up to its own head, intersected with what this push owes). The pass line carries the read's age, how far the head has moved since, and how much of the owed set that read could have seen, so a stale-but-valid pass is visible rather than silent:
 
 ```text
-[Totem] legs evidence: .totem/artifacts/legs/b7d3e0a1….json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · blocking=2 material=1 folded=3
+[Totem] legs evidence: .totem/artifacts/legs/b7d3e0a1….json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · covers 2/3 owed paths · blocking=2 material=1 folded=3
 ```
 
 Owed with nothing fresh names the basis — which glob matched which file — plus every stale candidate with its own reason, and the cure:
@@ -583,8 +583,11 @@ Owed with nothing fresh names the basis — which glob matched which file — pl
 ```text
 [Totem] BLOCKED: this push is legs-owed (docs/wiki/** → docs/wiki/enforcement-model.md, .changeset/** → .changeset/five-cats-smile.md) and carries no fresh falsification-leg deposit for head 4f21ab90
 [Totem] legs: stale deposit 9c02be71: not an ancestor of head
+[Totem] legs: stale deposit 51ba07cc: covers none of the owed paths (the deposit predates every owed change)
 [Totem] legs: run the leg, then: totem legs deposit --sha HEAD --from <findings.json>
 ```
+
+A candidate is stale for one of three reasons, each named because each has a different repair: it names no commit here (`unknown to this repo` — fetch the history), it is not an ancestor of HEAD (`not an ancestor of head` — deposit against this branch), or it covers none of the owed paths (`covers none of the owed paths` — run the leg over the diff this push proposes). `covers K/N` on a passing line is disclosure only: a leg that read some of what this push owes still read this head, and re-arming after a fold is doctrine's rule, not the gate's.
 
 A deposit file that is unreadable, not JSON, schema-invalid, or named for a sha other than the one it stores is a per-file sensor row on stderr (`[Totem] legs: sensor — ignoring corrupt deposit <file>: <reason>`). It never counts as evidence and never masks a valid sibling.
 

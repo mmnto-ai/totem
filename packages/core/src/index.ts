@@ -955,8 +955,10 @@ export {
 
 // Leg-deposit contract — "was THIS head read by a falsification leg" (mmnto-ai/totem#2698)
 export type {
+  LegCoverageQuery,
   LegDeposit,
   LegDepositCorruptEntry,
+  LegDepositCoverage,
   LegDepositRank,
   LegDepositResolution,
   LegDepositStale,

@@ -458,18 +458,60 @@ export interface LegGitAdapter {
   isAncestor(base: string, head: string): boolean;
   /** Commits from `base` to `head` (`rev-list --count base..head`). */
   distance(base: string, head: string): number;
+  /**
+   * Paths changed between `base` and `head` (`git diff --name-only base...head`,
+   * three-dot). This is what a leg reading at `head` COULD have seen, and it is
+   * the only input the coverage predicate needs. Called only for ancestor
+   * candidates, and only when a coverage query is supplied.
+   */
+  changedFiles(base: string, head: string): readonly string[];
 }
 
 /** How a deposit reaches the head: it IS the head, or it is behind it. */
 export type LegDepositRank = 'exact' | 'ancestor';
 
 /** Why a deposit cannot answer for this head. */
-export type LegDepositStaleReason = 'unknown-commit' | 'not-ancestor';
+export type LegDepositStaleReason = 'unknown-commit' | 'not-ancestor' | 'no-coverage';
+
+/**
+ * How much of what this push OWES a leg the candidate could actually have read
+ * (mmnto-ai/totem#2698 fold 3, operator-ruled).
+ *
+ * Ancestry alone is not freshness. A deposit written against the branch's merge
+ * base satisfies ancestor-or-equal and reports a small `distance`, yet the leg
+ * that wrote it saw NONE of the diff the push proposes — the exhibit that
+ * produced this rule. Coverage is the second half of the question: of the owed
+ * paths, how many were inside the diff the candidate's own head contained?
+ */
+export interface LegDepositCoverage {
+  /** Owed paths the candidate's own branch diff contained. */
+  covered: number;
+  /** Owed paths in total — the deduplicated files in the basis. */
+  owed: number;
+  /** The owed paths the candidate could NOT have read, in basis order. */
+  missing: string[];
+}
+
+/**
+ * The inputs the coverage predicate needs, supplied by a caller that resolved a
+ * BRANCH scope. Omitted by callers that cannot (a staged or explicit-range
+ * scope has no branch base to measure a candidate's reach against), and the
+ * resolution then reports `coverage: undefined` so those callers disclose the
+ * limit rather than imply full coverage.
+ */
+export interface LegCoverageQuery {
+  /** The base ref the caller resolved for HEAD — the same one, or the measure lies. */
+  base: string;
+  /** The owed paths (the deduplicated files in the basis). */
+  owedFiles: readonly string[];
+}
 
 export interface LegDepositWinner extends LegDepositWithAddress {
   rank: LegDepositRank;
   /** Commits landed since the leg read: 0 for `exact`. */
   distance: number;
+  /** Absent iff no coverage query was supplied. */
+  coverage?: LegDepositCoverage;
 }
 
 export interface LegDepositSuperseded {
@@ -477,6 +519,8 @@ export interface LegDepositSuperseded {
   readAt: string;
   rank: LegDepositRank;
   distance: number;
+  /** Absent iff no coverage query was supplied. */
+  coverage?: LegDepositCoverage;
 }
 
 export interface LegDepositStale {
@@ -490,7 +534,7 @@ export interface LegDepositResolution {
   winner?: LegDepositWinner;
   /** Valid candidates the winner outranked — disclosed, never silently dropped. */
   superseded: LegDepositSuperseded[];
-  /** Deposits that name no commit here, or a commit that is not an ancestor. */
+  /** Deposits that name no commit here, that are not ancestors, or that cover nothing. */
   stale: LegDepositStale[];
   /** Files that are not deposits at all, with their reasons. */
   corrupt: LegDepositCorruptEntry[];
@@ -505,21 +549,52 @@ export interface LegDepositResolution {
  * winner carries its `distance` so the caller can print "+N commits since the
  * leg read" rather than pass a stale read off as a fresh one.
  *
- * Nothing here decides POLICY: a distance of 200 still resolves. Whether that
- * is evidence enough is the gate's ruling, and re-arming a fold is doctrine's.
+ * Since mmnto-ai/totem#2698 fold 3 ancestry is only HALF the question. When a
+ * `coverage` query is supplied, each ancestor candidate is also measured on
+ * what it could have READ — the branch diff up to its own head, intersected
+ * with the owed paths — and a candidate covering NONE of them is stale, not a
+ * winner: it satisfies ancestor-or-equal while its leg saw nothing this push
+ * proposes (the merge-base deposit that produced the ruling). An EXACT match
+ * covers everything by construction and costs no git call.
+ *
+ * Ranking is unchanged: along one lineage a nearer ancestor's diff is a
+ * superset of a farther one's, so nearest-first already orders by coverage.
+ *
+ * Nothing here decides POLICY beyond that floor: partial coverage still
+ * resolves, and a distance of 200 still resolves. Whether either is evidence
+ * enough is the gate's disclosure to make and doctrine's re-arm to rule.
  */
 export function findLegDepositForHead(
   totemDirAbs: string,
   headSha: string,
   git: LegGitAdapter,
+  coverage?: LegCoverageQuery,
 ): LegDepositResolution {
   const { deposits, corrupt } = loadLegDeposits(totemDirAbs);
   const stale: LegDepositStale[] = [];
   const candidates: LegDepositWinner[] = [];
 
+  // Deduplicated here as well as by the caller: `owed` is PRINTED as the
+  // denominator of `covers K/N`, and one file matching three globs must not
+  // inflate N into a number no reader can reconcile with the basis.
+  const owedFiles = coverage === undefined ? [] : [...new Set(coverage.owedFiles)];
+  const fullCoverage = (): LegDepositCoverage => ({
+    covered: owedFiles.length,
+    owed: owedFiles.length,
+    missing: [],
+  });
+
   for (const found of deposits) {
     if (found.diffSha === headSha) {
-      candidates.push({ ...found, rank: 'exact', distance: 0 });
+      // An exact match read THIS head: every owed path is inside the diff it
+      // saw, by construction. No git call — and an adapter that would throw on
+      // one is never reached, which is the property the test pins.
+      candidates.push({
+        ...found,
+        rank: 'exact',
+        distance: 0,
+        ...(coverage === undefined ? {} : { coverage: fullCoverage() }),
+      });
       continue;
     }
     if (!git.isCommit(found.diffSha)) {
@@ -534,10 +609,29 @@ export function findLegDepositForHead(
       stale.push({ diffSha: found.diffSha, readAt: found.deposit.readAt, reason: 'not-ancestor' });
       continue;
     }
+    let measured: LegDepositCoverage | undefined;
+    if (coverage !== undefined) {
+      const reachable = new Set(git.changedFiles(coverage.base, found.diffSha));
+      const missing = owedFiles.filter((file) => !reachable.has(file));
+      measured = { covered: owedFiles.length - missing.length, owed: owedFiles.length, missing };
+      // Nothing owed is not a coverage failure: 0/0 is vacuously covered, and
+      // the caller that owes nothing never consults this store anyway.
+      if (measured.covered === 0 && owedFiles.length > 0) {
+        stale.push({
+          diffSha: found.diffSha,
+          readAt: found.deposit.readAt,
+          reason: 'no-coverage',
+        });
+        continue;
+      }
+    }
     candidates.push({
       ...found,
       rank: 'ancestor',
+      // Measured AFTER coverage, so a candidate that is already stale costs no
+      // second git call.
       distance: git.distance(found.diffSha, headSha),
+      ...(measured === undefined ? {} : { coverage: measured }),
     });
   }
 
@@ -557,6 +651,7 @@ export function findLegDepositForHead(
       readAt: candidate.deposit.readAt,
       rank: candidate.rank,
       distance: candidate.distance,
+      ...(candidate.coverage === undefined ? {} : { coverage: candidate.coverage }),
     })),
     stale,
     corrupt,

@@ -1792,6 +1792,7 @@ describe('printCovariateLine (rev-5 item 4)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: git,
     });
     // EXACTLY the core renderer's line, on stdout, with the format-v1.2 leg
@@ -1834,6 +1835,7 @@ describe('printCovariateLine (rev-5 item 4)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: git,
     });
     expect(String(logSpy.mock.calls[0]![0])).toContain('round=1');
@@ -1847,6 +1849,7 @@ describe('printCovariateLine (rev-5 item 4)', () => {
         diffMeta: { source: 'branch-vs-base', base: 'main' },
         totemDirAbs: tmpDir,
         cwd: tmpDir,
+        globs: [],
         gitExec: fakeGit('feature-none', 'nobase'),
       }),
     ).resolves.toBeUndefined();
@@ -1859,7 +1862,7 @@ describe('printCovariateLine (rev-5 item 4)', () => {
     const errSpy = vi.mocked(console.error);
     const logSpy = vi.mocked(console.log);
     await expect(
-      printCovariateLine({ diffMeta: null, totemDirAbs: tmpDir, cwd: tmpDir }),
+      printCovariateLine({ diffMeta: null, totemDirAbs: tmpDir, cwd: tmpDir, globs: [] }),
     ).resolves.toBeUndefined();
     expect(logSpy).not.toHaveBeenCalled();
     const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
@@ -1984,6 +1987,7 @@ describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: git,
     });
     const line = String(logSpy.mock.calls[0]![0]);
@@ -2007,6 +2011,7 @@ describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: git,
     });
     expect(logSpy).toHaveBeenCalledTimes(1);
@@ -2025,6 +2030,7 @@ describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: legGit(sha40('head-empty')),
     });
     expect(logSpy).not.toHaveBeenCalled();
@@ -2047,6 +2053,7 @@ describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
       diffMeta: { source: 'branch-vs-base', base: 'main' },
       totemDirAbs: tmpDir,
       cwd: tmpDir,
+      globs: [],
       gitExec: git,
     });
     const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
@@ -2101,5 +2108,109 @@ describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
     expect(resolution.field).toBe('leg: none');
     expect(resolution.winner).toBeUndefined();
     expect(resolution.corrupt).toEqual([]);
+  });
+});
+
+// ─── Fold 3: the covariate resolves through the GATE's predicate ────────────
+//
+// The field must never name a deposit the gate would reject. Both sites route
+// through the same core resolution with the same coverage inputs, and a scope
+// that cannot supply them says so instead of implying a check that never ran
+// (mmnto-ai/totem#2698 fold 3).
+describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'legfield-coverage-'));
+    vi.restoreAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanTmpDir(tmpDir);
+  });
+
+  const HEAD_SHA = 'a'.repeat(40);
+  const BASE_SHA = 'b'.repeat(40);
+
+  /** A runner that answers HEAD, ancestry, and a candidate's own branch diff. */
+  function coverageGit(reach: readonly string[]): GitExec {
+    return (args) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return HEAD_SHA;
+      if (args[0] === 'cat-file') return '';
+      if (args[0] === 'merge-base') return '';
+      if (args[0] === 'rev-list') return '1';
+      if (args[0] === 'diff' && args[1] === '--name-only') return reach.join('\n');
+      return '';
+    };
+  }
+
+  function depositAt(sha: string): void {
+    saveLegDeposit(tmpDir, {
+      schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+      diffSha: sha,
+      readAt: '2026-09-03T06:00:00.000Z',
+      findings: [],
+      folded: [],
+      verdict: 'read the diff at this head',
+    });
+  }
+
+  it('a deposit the gate would reject as no-coverage resolves to `leg: none`', async () => {
+    depositAt(BASE_SHA);
+    const resolution = await resolveLegFieldForHead(
+      tmpDir,
+      tmpDir,
+      // Its own branch diff touched nothing this push owes — the merge-base shape.
+      coverageGit(['src/unrelated.ts']),
+      { base: 'main', owedFiles: ['docs/wiki/a.md'] },
+    );
+    expect(resolution.field).toBe('leg: none');
+    expect(resolution.winner).toBeUndefined();
+  });
+
+  it('the same deposit names itself once it covers an owed path', async () => {
+    depositAt(BASE_SHA);
+    const resolution = await resolveLegFieldForHead(
+      tmpDir,
+      tmpDir,
+      coverageGit(['docs/wiki/a.md']),
+      {
+        base: 'main',
+        owedFiles: ['docs/wiki/a.md'],
+      },
+    );
+    expect(resolution.field).toBe(`leg: ${BASE_SHA.slice(0, 8)} blocking=0 material=0 folded=0`);
+  });
+
+  it('WITHOUT a coverage query the field is ancestry-only — the pre-fold behavior', async () => {
+    depositAt(BASE_SHA);
+    const resolution = await resolveLegFieldForHead(tmpDir, tmpDir, coverageGit(['src/other.ts']));
+    expect(resolution.field).toBe(`leg: ${BASE_SHA.slice(0, 8)} blocking=0 material=0 folded=0`);
+  });
+
+  it('a non-branch scope discloses that coverage was not derivable', async () => {
+    const { deriveLegsCoverageForScope } = await import('./legs.js');
+    const staged = await deriveLegsCoverageForScope('staged', ['docs/**'], tmpDir);
+    expect(staged.query).toBeUndefined();
+    expect(staged.reason).toContain('coverage was not derivable for a staged scope');
+    expect(staged.reason).toContain('resolves on ancestry alone');
+  });
+
+  it('the covariate line prints that sensor on a staged scope', async () => {
+    const errSpy = vi.mocked(console.error);
+    await expect(
+      printCovariateLine({
+        diffMeta: { source: 'staged' },
+        totemDirAbs: tmpDir,
+        cwd: tmpDir,
+        globs: ['docs/**'],
+        gitExec: coverageGit([]),
+      }),
+    ).resolves.toBeUndefined();
+    const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    expect(out).toContain('coverage was not derivable for a staged scope');
   });
 });

@@ -79,17 +79,25 @@ function deposit(overrides: Partial<LegDeposit> = {}): LegDeposit {
   };
 }
 
-/** A git seam that knows a fixed commit set and a fixed ancestry map. */
+/** A git seam that knows a fixed commit set, ancestry map, and per-sha diff. */
 function fakeGit(options: {
   commits: readonly string[];
   /** `sha -> distance to head`; absent means "commit, but not an ancestor". */
   ancestors?: Record<string, number>;
+  /**
+   * `sha -> the paths its own branch diff contained` (mmnto-ai/totem#2698 fold
+   * 3). Consulted only when a coverage query is supplied; an absent entry is an
+   * empty diff, which is the merge-base candidate's shape.
+   */
+  reach?: Record<string, readonly string[]>;
 }): LegGitAdapter {
   const ancestors = options.ancestors ?? {};
+  const reach = options.reach ?? {};
   return {
     isCommit: (candidate) => options.commits.includes(candidate),
     isAncestor: (base) => Object.hasOwn(ancestors, base),
     distance: (base) => ancestors[base] ?? 0,
+    changedFiles: (_base, head) => reach[head] ?? [],
   };
 }
 
@@ -452,8 +460,19 @@ describe('findLegDepositForHead — ancestor-or-equal resolution', () => {
       distance: () => {
         throw new Error('distance must not be called for an exact match');
       },
+      changedFiles: () => {
+        throw new Error('changedFiles must not be called for an exact match');
+      },
     };
     expect(findLegDepositForHead(tmpDir, HEAD, explodes).winner?.rank).toBe('exact');
+    // Including under a coverage query: an exact match covers everything BY
+    // CONSTRUCTION, so measuring it would be a git call to confirm a tautology
+    // (mmnto-ai/totem#2698 fold 3).
+    const covered = findLegDepositForHead(tmpDir, HEAD, explodes, {
+      base: 'main',
+      owedFiles: ['docs/wiki/a.md', 'docs/wiki/b.md'],
+    });
+    expect(covered.winner?.coverage).toEqual({ covered: 2, owed: 2, missing: [] });
   });
 
   it('a corrupt file rides the resolution and never masks the valid winner', () => {
@@ -504,5 +523,177 @@ describe('countLegFindings + renderLegField — the covariate v1.2 field', () =>
     expect(renderLegField(deposit({ findings: [], folded: [] }))).toBe(
       `leg: ${HEAD.slice(0, 8)} blocking=0 material=0 folded=0`,
     );
+  });
+});
+
+// ─── Coverage as a freshness predicate (mmnto-ai/totem#2698 fold 3) ─────────
+//
+// Ancestry alone is not freshness: a deposit against the branch's MERGE BASE
+// satisfies ancestor-or-equal and reports a small distance, while the leg that
+// wrote it saw none of the diff the push proposes. That exhibit is what the
+// operator ruled on, so it is the first case here.
+describe('findLegDepositForHead — coverage (mmnto-ai/totem#2698 fold 3)', () => {
+  const OWED = ['docs/wiki/enforcement-model.md', 'docs/wiki/cli-reference.md', 'adr/adr-1.md'];
+  const COVERAGE = { base: 'main', owedFiles: OWED };
+
+  it('an ancestor whose diff contains NO owed path is stale, not a winner', () => {
+    // The merge-base shape: a real commit, a real ancestor, one commit behind —
+    // and its own branch diff touched something else entirely.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({
+        commits: [OLDER],
+        ancestors: { [OLDER]: 1 },
+        reach: { [OLDER]: ['src/other.ts'] },
+      }),
+      COVERAGE,
+    );
+    expect(resolution.winner).toBeUndefined();
+    expect(resolution.stale).toEqual([
+      { diffSha: OLDER, readAt: expect.any(String), reason: 'no-coverage' },
+    ]);
+  });
+
+  it('the same deposit WINS without a coverage query — the predicate is opt-in', () => {
+    // Which is what makes a caller that cannot resolve a branch base (a staged
+    // scope) behave exactly as it did before, and say so.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({
+        commits: [OLDER],
+        ancestors: { [OLDER]: 1 },
+        reach: { [OLDER]: ['src/other.ts'] },
+      }),
+    );
+    expect(resolution.winner?.diffSha).toBe(OLDER);
+    expect(resolution.winner?.coverage).toBeUndefined();
+    expect(resolution.stale).toEqual([]);
+  });
+
+  it('PARTIAL coverage resolves, and names exactly what the leg could not have read', () => {
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({
+        commits: [OLDER],
+        ancestors: { [OLDER]: 4 },
+        // It read one of the three owed paths, plus files nobody owes.
+        reach: { [OLDER]: ['docs/wiki/cli-reference.md', 'src/unrelated.ts'] },
+      }),
+      COVERAGE,
+    );
+    expect(resolution.winner?.diffSha).toBe(OLDER);
+    expect(resolution.winner?.distance).toBe(4);
+    // K < N is DISCLOSURE, never a block — the fold re-arm doctrine owes the
+    // new read, and this number is what makes that question legible.
+    expect(resolution.winner?.coverage).toEqual({
+      covered: 1,
+      owed: 3,
+      missing: ['docs/wiki/enforcement-model.md', 'adr/adr-1.md'],
+    });
+  });
+
+  it('a duplicated owed path never inflates the denominator', () => {
+    // `owedFiles` comes from the BASIS, where one file matching three globs
+    // appears three times. `covers 1/3` for a single file would be unreadable.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({ commits: [OLDER], ancestors: { [OLDER]: 1 }, reach: { [OLDER]: ['README.md'] } }),
+      { base: 'main', owedFiles: ['README.md', 'README.md', 'README.md'] },
+    );
+    expect(resolution.winner?.coverage).toEqual({ covered: 1, owed: 1, missing: [] });
+  });
+
+  it('nothing owed is 0/0 and NOT stale (vacuous coverage)', () => {
+    // Unreachable from the gate — it never consults the store when nothing is
+    // owed — so this pins the FUNCTION's own honest behavior rather than a
+    // live path: an empty owed set cannot be "covered by none of" anything.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({ commits: [OLDER], ancestors: { [OLDER]: 1 }, reach: { [OLDER]: [] } }),
+      { base: 'main', owedFiles: [] },
+    );
+    expect(resolution.stale).toEqual([]);
+    expect(resolution.winner?.coverage).toEqual({ covered: 0, owed: 0, missing: [] });
+  });
+
+  it('ranking is unchanged: the nearest ancestor still wins, and both carry coverage', () => {
+    // Along one lineage a nearer ancestor's diff is a superset of a farther
+    // one's, so nearest-first ALREADY orders by coverage — the ruling's reason
+    // for leaving the comparator alone.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDEST, readAt: '2026-09-01T00:00:00.000Z' }));
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER, readAt: '2026-09-02T00:00:00.000Z' }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({
+        commits: [OLDEST, OLDER],
+        ancestors: { [OLDEST]: 9, [OLDER]: 2 },
+        reach: { [OLDEST]: [OWED[1]!], [OLDER]: [OWED[0]!, OWED[1]!] },
+      }),
+      COVERAGE,
+    );
+    expect(resolution.winner?.diffSha).toBe(OLDER);
+    expect(resolution.winner?.coverage?.covered).toBe(2);
+    expect(resolution.superseded).toEqual([
+      {
+        diffSha: OLDEST,
+        readAt: '2026-09-01T00:00:00.000Z',
+        rank: 'ancestor',
+        distance: 9,
+        coverage: { covered: 1, owed: 3, missing: [OWED[0], OWED[2]] },
+      },
+    ]);
+  });
+
+  it('a no-coverage candidate never hides a covering sibling', () => {
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDEST }));
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      fakeGit({
+        commits: [OLDEST, OLDER],
+        ancestors: { [OLDEST]: 9, [OLDER]: 2 },
+        reach: { [OLDEST]: ['src/other.ts'], [OLDER]: [OWED[0]!] },
+      }),
+      COVERAGE,
+    );
+    expect(resolution.winner?.diffSha).toBe(OLDER);
+    expect(resolution.stale).toEqual([
+      { diffSha: OLDEST, readAt: expect.any(String), reason: 'no-coverage' },
+    ]);
+  });
+
+  it('coverage is measured against the caller-supplied base, not a guess', () => {
+    // The base must be the SAME one the caller resolved for HEAD, or the
+    // measure is of a different diff than the one the push proposes.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDEST }));
+    const seen: string[] = [];
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      {
+        isCommit: () => true,
+        isAncestor: () => true,
+        distance: () => 3,
+        changedFiles: (base, head) => {
+          seen.push(`${base}...${head}`);
+          return OWED;
+        },
+      },
+      { base: 'origin/release', owedFiles: OWED },
+    );
+    expect(seen).toEqual([`origin/release...${OLDEST}`]);
+    expect(resolution.winner?.coverage?.covered).toBe(3);
   });
 });

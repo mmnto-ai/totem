@@ -3304,6 +3304,8 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(invocations()).toContain('legs gate');
       expect(r.stdout).toContain('[Totem] legs evidence: .totem/artifacts/legs/');
       expect(r.stdout).toContain(`· head ${headSha.slice(0, 8)} · exact ·`);
+      // An exact match covers everything by construction (mmnto-ai/totem#2698 fold 3).
+      expect(r.stdout).toContain('· covers 1/1 owed paths ·');
       expect(r.stdout).toContain('blocking=0 material=1 folded=1');
       expect(r.stdout).not.toContain('BLOCKED');
       expect(r.status).toBe(0);
@@ -3329,6 +3331,25 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
         `[Totem] legs: stale deposit ${siblingSha.slice(0, 8)}: not an ancestor of head`,
       );
       expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    'OWED with a MERGE-BASE deposit: ancestor, but it covers none of the owed paths',
+    () => {
+      // The fold-3 exhibit, end to end: a deposit at the base is a real
+      // ancestor one commit behind, so ancestry alone passed it — while the leg
+      // that wrote it saw none of the diff this push proposes.
+      deposit(baseSha);
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        `[Totem] legs: stale deposit ${baseSha.slice(0, 8)}: covers none of the owed paths (the deposit predates every owed change)`,
+      );
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      // And it is NOT reported as an ancestry failure — the reason is the cure.
+      expect(r.stdout).not.toContain('not an ancestor of head');
     },
   );
 

@@ -62,6 +62,23 @@ vi.mock('../utils.js', async (importOriginal) => {
 /** ESC — built, never authored as an escape sequence (the banked decode trap). */
 const ESC = String.fromCharCode(27);
 
+/**
+ * The base every fake scope resolves against, and the reach every fake
+ * candidate has by default: coverage (mmnto-ai/totem#2698 fold 3) is measured
+ * as `base...<diffSha>` intersected with the owed paths, so a fixture that
+ * declares neither would read as "covers nothing" and turn every pre-coverage
+ * case stale. `DEFAULT_REACH` is deliberately broad — the cases that mean to
+ * exercise coverage override it.
+ */
+const BASE = 'main';
+const DEFAULT_REACH = [
+  'docs/wiki/enforcement-model.md',
+  'docs/wiki/cli-reference.md',
+  'docs/wiki/page.md',
+  'README.md',
+  'a.ts',
+];
+
 /** A syntactically valid 40-hex sha that names no object in any real repo. */
 const ABSENT_SHA = 'a'.repeat(40);
 const OTHER_SHA = 'b'.repeat(40);
@@ -318,6 +335,8 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     isCommit?: (sha: string) => boolean;
     isAncestor?: (base: string, head: string) => boolean;
     distance?: (base: string, head: string) => number;
+    /** What each candidate's own branch diff contained (fold 3's coverage). */
+    changedFiles?: (base: string, head: string) => readonly string[];
   }): LegGitAdapter {
     return {
       isCommit(sha) {
@@ -332,6 +351,12 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
         calls.push(`distance ${base} ${head}`);
         return answers.distance?.(base, head) ?? 0;
       },
+      changedFiles(base, head) {
+        calls.push(`changedFiles ${base} ${head}`);
+        // Default: the candidate's diff contained everything the deps declare
+        // changed, so the existing cases keep their pre-coverage meaning.
+        return answers.changedFiles?.(base, head) ?? DEFAULT_REACH;
+      },
     };
   }
 
@@ -342,7 +367,7 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
       globs: ['docs/wiki/**', '.changeset/**'],
       git: fakeGit({}),
       resolveHead: () => HEAD_SHA,
-      changedFiles: async () => ['docs/wiki/enforcement-model.md'],
+      changedFiles: async () => ({ files: ['docs/wiki/enforcement-model.md'], base: BASE }),
       ...overrides,
     };
   }
@@ -363,7 +388,12 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     storeCorrupt(ABSENT_SHA, 'not json at all');
     const outcome = await runLegsGate(
       {},
-      makeDeps({ changedFiles: async () => ['packages/cli/src/index.ts', 'README.md'] }),
+      makeDeps({
+        changedFiles: async () => ({
+          files: ['packages/cli/src/index.ts', 'README.md'],
+          base: BASE,
+        }),
+      }),
     );
     expect(outcome.derived).toBe(0);
     expect(outcome.status).toBe(0);
@@ -375,7 +405,10 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
   });
 
   it('NOT OWED: an empty branch diff is not owed', async () => {
-    const outcome = await runLegsGate({}, makeDeps({ changedFiles: async () => [] }));
+    const outcome = await runLegsGate(
+      {},
+      makeDeps({ changedFiles: async () => ({ files: [], base: BASE }) }),
+    );
     expect(outcome.derived).toBe(0);
     expect(outcome.stdout[0]).toContain('not owed');
   });
@@ -394,7 +427,10 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
 
   it('OWED: the basis line shows the first 5 pairs and counts the rest', async () => {
     const files = Array.from({ length: 8 }, (_, i) => `docs/wiki/page-${i}.md`);
-    const outcome = await runLegsGate({}, makeDeps({ changedFiles: async () => files }));
+    const outcome = await runLegsGate(
+      {},
+      makeDeps({ changedFiles: async () => ({ files: files, base: BASE }) }),
+    );
     expect(outcome.stdout[0]).toContain('docs/wiki/page-0.md');
     expect(outcome.stdout[0]).toContain('docs/wiki/page-4.md');
     expect(outcome.stdout[0]).not.toContain('docs/wiki/page-5.md');
@@ -535,7 +571,10 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
   it('every echoed value is control-character sanitized', async () => {
     // A changed path carrying a CSI sequence — built, never authored.
     const hostile = `docs/wiki/${ESC}[31mred.md`;
-    const outcome = await runLegsGate({}, makeDeps({ changedFiles: async () => [hostile] }));
+    const outcome = await runLegsGate(
+      {},
+      makeDeps({ changedFiles: async () => ({ files: [hostile], base: BASE }) }),
+    );
     expect(outcome.derived).toBe(3);
     expect(outcome.stdout[0]).toContain('docs/wiki/');
     expect(outcome.stdout[0]).not.toContain(ESC);
@@ -546,7 +585,7 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
       {},
       makeDeps({
         globs: ['packages/core/src/artifacts/**'],
-        changedFiles: async () => ['docs/wiki/enforcement-model.md'],
+        changedFiles: async () => ({ files: ['docs/wiki/enforcement-model.md'], base: BASE }),
       }),
     );
     expect(outcome.derived).toBe(0);
@@ -609,8 +648,11 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
     const deps = await buildLegsGateDeps();
 
     // The seam itself: the resolution returns the ignored path.
-    const changed = await deps.changedFiles();
-    expect(changed).toContain('README.md');
+    const scope = await deps.changedFiles();
+    expect(scope.files).toContain('README.md');
+    // The base rides back with the files: coverage is measured against it
+    // (mmnto-ai/totem#2698 fold 3), and it must be the base HEAD resolved on.
+    expect(scope.base).toBe('main');
 
     // And the verdict names it as the basis.
     const outcome = await runLegsGate({}, deps);
@@ -679,9 +721,10 @@ describe('every echoed value is line-safe (mmnto-ai/totem#2698 fold 2)', () => {
           isCommit: () => true,
           isAncestor: () => false,
           distance: () => 0,
+          changedFiles: () => [],
         },
         resolveHead: () => HEAD_SHA,
-        changedFiles: async () => [hostile],
+        changedFiles: async () => ({ files: [hostile], base: BASE }),
       },
     );
     expect(outcome.derived).toBe(3);
@@ -705,11 +748,16 @@ describe('every echoed value is line-safe (mmnto-ai/totem#2698 fold 2)', () => {
         root: tmpDir,
         totemDirAbs: path.join(tmpDir, '.totem'),
         globs: ['**'],
-        git: { isCommit: () => true, isAncestor: () => true, distance: () => 0 },
+        git: {
+          isCommit: () => true,
+          isAncestor: () => true,
+          distance: () => 0,
+          changedFiles: () => [],
+        },
         resolveHead: () => {
           throw new Error(`fatal: bad revision${LF}[Totem] legs evidence: forged`);
         },
-        changedFiles: async () => ['a.ts'],
+        changedFiles: async () => ({ files: ['a.ts'], base: BASE }),
       },
     );
     expect(notDerived.derived).toBe(2);
@@ -750,9 +798,12 @@ describe('the gate never GUESSES a distance (mmnto-ai/totem#2698 fold 2)', () =>
           distance: () => {
             throw new Error('git rev-list --count returned "" , which is not a commit count.');
           },
+          // It COVERS the owed path — so the run reaches the distance probe,
+          // which is the failure under test.
+          changedFiles: () => ['docs/wiki/page.md'],
         },
         resolveHead: () => HEAD_SHA,
-        changedFiles: async () => ['docs/wiki/page.md'],
+        changedFiles: async () => ({ files: ['docs/wiki/page.md'], base: BASE }),
       },
     );
     // The number is PRINTED as fact on the evidence line, so an underivable
@@ -762,5 +813,127 @@ describe('the gate never GUESSES a distance (mmnto-ai/totem#2698 fold 2)', () =>
     expect(outcome.stdout[0]).toContain('[Totem] legs: NOT DERIVED — git rev-list --count');
     expect(outcome.stdout.join(' ')).not.toContain('legs evidence');
     expect(outcome.stdout.join(' ')).not.toContain('+0 commits');
+  });
+});
+
+// ─── Fold 3: coverage is a freshness predicate ──────────────────────────────
+//
+// Ancestry alone let a deposit written against the branch's MERGE BASE pass:
+// it is an ancestor, it reports a small distance, and the leg that wrote it saw
+// none of the diff the push proposes. The gate now measures what a candidate
+// could have READ (mmnto-ai/totem#2698 fold 3, operator-ruled).
+describe('the gate measures COVERAGE, not only ancestry (mmnto-ai/totem#2698 fold 3)', () => {
+  let tmpDir: string;
+  let totemDirAbs: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-cov-')));
+    totemDirAbs = path.join(tmpDir, '.totem');
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  /** Deps whose candidate reached exactly `reach`, against one owed glob. */
+  function coverageDeps(reach: readonly string[], changed: readonly string[]): LegsGateDeps {
+    return {
+      root: tmpDir,
+      totemDirAbs,
+      globs: ['docs/wiki/**'],
+      git: {
+        isCommit: () => true,
+        isAncestor: () => true,
+        distance: () => 1,
+        changedFiles: () => reach,
+      },
+      resolveHead: () => HEAD_SHA,
+      changedFiles: async () => ({ files: changed, base: BASE }),
+    };
+  }
+
+  it('a merge-base deposit that covers NO owed path is stale, with its own reason', async () => {
+    saveLegDeposit(totemDirAbs, depositFixture({ diffSha: OTHER_SHA }));
+    const outcome = await runLegsGate(
+      {},
+      coverageDeps(['src/unrelated.ts'], ['docs/wiki/enforcement-model.md']),
+    );
+    expect(outcome.derived).toBe(3);
+    expect(outcome.stdout).toContain(
+      `[Totem] legs: stale deposit ${OTHER_SHA.slice(0, 8)}: covers none of the owed paths (the deposit predates every owed change)`,
+    );
+    // It is BLOCKED, not merely disclosed — the exhibit that produced the rule.
+    expect(outcome.stdout[0]).toContain('[Totem] BLOCKED: this push is legs-owed');
+  });
+
+  it('PARTIAL coverage passes, and the evidence line reports covers K/N', async () => {
+    saveLegDeposit(totemDirAbs, depositFixture({ diffSha: OTHER_SHA }));
+    const outcome = await runLegsGate(
+      {},
+      coverageDeps(['docs/wiki/a.md'], ['docs/wiki/a.md', 'docs/wiki/b.md', 'docs/wiki/c.md']),
+    );
+    expect(outcome.derived).toBe(0);
+    // K < N is DISCLOSURE, never a block: the read happened, and the number is
+    // what makes the re-arm question legible to the round.
+    expect(outcome.stdout[0]).toContain(
+      '· nearest ancestor, +1 commits since the leg read · covers 1/3 owed paths · blocking=1',
+    );
+  });
+
+  it('an EXACT deposit covers everything without a coverage git call', async () => {
+    saveLegDeposit(totemDirAbs, depositFixture({ diffSha: HEAD_SHA }));
+    const outcome = await runLegsGate(
+      {},
+      {
+        ...coverageDeps([], ['docs/wiki/a.md', 'docs/wiki/b.md']),
+        git: {
+          isCommit: () => true,
+          isAncestor: () => true,
+          distance: () => 0,
+          changedFiles: () => {
+            throw new Error('changedFiles must not be called for an exact match');
+          },
+        },
+      },
+    );
+    expect(outcome.derived).toBe(0);
+    expect(outcome.stdout[0]).toContain('· exact · covers 2/2 owed paths ·');
+  });
+
+  it('a scope with no base is NOT DERIVED — the gate never falls back to ancestry-only', async () => {
+    // Falling back would restore exactly the merge-base pass the ruling closed.
+    saveLegDeposit(totemDirAbs, depositFixture({ diffSha: OTHER_SHA }));
+    const deps = coverageDeps(['docs/wiki/a.md'], ['docs/wiki/a.md']);
+    const outcome = await runLegsGate(
+      {},
+      { ...deps, changedFiles: async () => ({ files: ['docs/wiki/a.md'] }) },
+    );
+    expect(outcome.derived).toBe(2);
+    expect(outcome.stdout[0]).toContain(
+      'NOT DERIVED — the branch scope resolved without a base ref, so coverage is not derivable',
+    );
+  });
+
+  it('coverage is measured against the base the scope resolved, not a guess', async () => {
+    saveLegDeposit(totemDirAbs, depositFixture({ diffSha: OTHER_SHA }));
+    const seen: string[] = [];
+    const deps = coverageDeps(['docs/wiki/a.md'], ['docs/wiki/a.md']);
+    await runLegsGate(
+      {},
+      {
+        ...deps,
+        changedFiles: async () => ({ files: ['docs/wiki/a.md'], base: 'origin/release' }),
+        git: {
+          isCommit: () => true,
+          isAncestor: () => true,
+          distance: () => 1,
+          changedFiles: (base, head) => {
+            seen.push(`${base}...${head}`);
+            return ['docs/wiki/a.md'];
+          },
+        },
+      },
+    );
+    expect(seen).toEqual([`origin/release...${OTHER_SHA}`]);
   });
 });

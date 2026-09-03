@@ -1,4 +1,10 @@
-import type { ContentType, LanceStore, SearchResult, TotemConfig } from '@mmnto/totem';
+import type {
+  ContentType,
+  LanceStore,
+  LegCoverageQuery,
+  SearchResult,
+  TotemConfig,
+} from '@mmnto/totem';
 
 import type { ExemptionShared } from '../exemptions/exemption-schema.js';
 import { bold, errorColor, log, success as successColor } from '../ui.js';
@@ -2005,6 +2011,26 @@ async function emitNotApplicableDisposition(params: {
 
 // ─── Main command ───────────────────────────────────
 
+/**
+ * The coverage inputs for a COVARIATE site (mmnto-ai/totem#2698 fold 3).
+ *
+ * One derivation, owned by `legs.ts` — the same unfiltered branch scope and the
+ * same `classifyLegsOwed` the gate uses — so the leg field can never name a
+ * deposit the gate would reject as covering none of the owed paths. A scope
+ * with no branch base (staged, an explicit range) yields a REASON instead,
+ * which the caller prints as one `Sensor:` line.
+ */
+async function legCoverageForCovariate(
+  diffResult: { source: string } | null,
+  config: TotemConfig,
+  cwd: string,
+): Promise<{ query?: LegCoverageQuery; reason?: string }> {
+  const { deriveLegsCoverageForScope, legsOwedGlobs } = await import('./legs.js');
+  // A null resolution means no diff resolved at all; it has no scope to measure.
+  const source = diffResult === null ? 'unresolved' : diffResult.source;
+  return deriveLegsCoverageForScope(source, await legsOwedGlobs(config), cwd);
+}
+
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const path = await import('node:path');
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
@@ -2149,7 +2175,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         // verdict form uses (one helper, two sites), composed BESIDE
         // `renderAdmissionLine` so the v1.1 admission text is byte-unchanged.
         const { resolveLegFieldForHead } = await import('./review-fan.js');
-        const leg = await resolveLegFieldForHead(path.join(configRoot, config.totemDir), cwd);
+        const coverage = await legCoverageForCovariate(diffResult, config, cwd);
+        if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
+        const leg = await resolveLegFieldForHead(
+          path.join(configRoot, config.totemDir),
+          cwd,
+          undefined,
+          coverage.query,
+        );
         for (const entry of leg.corrupt) {
           log.warn(
             DISPLAY_TAG,
@@ -2174,7 +2207,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         // reach it (the verdict arm in `printCovariateLine` is the other, and
         // both discriminate on the SAME `winner === undefined`).
         const { resolveLegFieldForHead } = await import('./review-fan.js');
-        const leg = await resolveLegFieldForHead(path.join(configRoot, config.totemDir), cwd);
+        const coverage = await legCoverageForCovariate(diffResult, config, cwd);
+        if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
+        const leg = await resolveLegFieldForHead(
+          path.join(configRoot, config.totemDir),
+          cwd,
+          undefined,
+          coverage.query,
+        );
         for (const entry of leg.corrupt) {
           log.warn(
             DISPLAY_TAG,
@@ -2189,6 +2229,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
       return;
     }
     const { printCovariateLine } = await import('./review-fan.js');
+    const { legsOwedGlobs } = await import('./legs.js');
     await printCovariateLine({
       // An empty/absent resolution never reaches here (it resolves through the
       // admission arm above); the null arm is type-narrowing, not a live path.
@@ -2203,6 +2244,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
             },
       totemDirAbs: path.join(configRoot, config.totemDir),
       cwd,
+      globs: await legsOwedGlobs(config),
     });
     return;
   }
