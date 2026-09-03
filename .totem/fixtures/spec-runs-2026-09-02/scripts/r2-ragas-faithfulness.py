@@ -93,7 +93,9 @@ async def score_one(metric, row: dict, sem: asyncio.Semaphore) -> dict:
     if not ctxs:
         return {**base, "value": None, "status": "NOT_SCORED", "reason": "no delivered context"}
     async with sem:
-        t0 = time.time()  # inside the gate: per-row seconds exclude queue wait (the 2026-09-02 runs recorded it outside; use wall/n there)
+        t0 = time.time()  # inside the gate: per-row seconds exclude queue wait. The committed gemini run (2026-09-02T21:45Z) predates this line and
+        # recorded the timer OUTSIDE the gate at concurrency 2, so its per-row seconds and summary meanSecondsPerScored are queue-inclusive
+        # (use wallSeconds/scored = 27.9 s); the committed local run (22:57Z) was produced by this version.
         try:
             result = await metric.ascore(user_input=anchor_text(row), response=resp, retrieved_contexts=ctxs)
             value = getattr(result, "value", None)

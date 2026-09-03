@@ -71,12 +71,12 @@ retrieved a session or a lesson.
 |---|---|---|
 | `artifacts.ndjson` | 1,084,822 | 55 |
 | `grounding-items.ndjson` | 118,318 | 440 |
-| `SHA256SUMS` | — | 4 |
+| `SHA256SUMS` | — | one row per file in this directory (re-sealed after every round record landed) |
 | `scripts/export-fixture.mjs` | — | — |
 
-`SHA256SUMS` covers `artifacts.ndjson`, `grounding-items.ndjson`, and **every
-file under `scripts/`**. This README is deliberately not covered (it describes
-the sums).
+`SHA256SUMS` covers **every file in this directory except itself** — the two data
+files, every round record, every file under `scripts/`, and this README (it is line 1
+of the sums). Verify with `sha256sum -c SHA256SUMS` from this directory.
 
 > **Concurrency note.** At export time a second, unrelated stream was writing its
 > own scripts into `scripts/` (`r1-retrieve.mjs`, `r2-referents.mjs`,
@@ -276,6 +276,7 @@ All produced on the same checkout at the same pin; scripts under `scripts/` rege
 | `r1-rerank.ndjson` · `r1-rerank-cost.json` | three delivered sets per query (production baseline; local cross-encoder `Xenova/bge-reranker-base` over the raw pools; the query re-embedded as `RETRIEVAL_QUERY`) with every pool item's cross-encoder score | `scripts/r1-rerank.mjs` (needs a scratch `node_modules` with `@huggingface/transformers`; nothing is added to the workspace) |
 | `r1-candidates.ndjson` · `r1-candidates-blind.ndjson` · `r1-label-rubric.md` | the union of delivered chunks per query with text; the arm-blind, per-query-shuffled labelling file; the rubric | `scripts/r1-blind-candidates.mjs` |
 | `r1-labels-part{0,1,2}.ndjson` · `r1-score.json` | per-pair relevance labels (0/1/2) by three Opus legs; precision@k per arm and the verdicts against the pre-registration | legs · `scripts/r1-score.mjs` |
+| `r1-results.md` · `r1-diagnostics.json` | the R1 results table judged against the pre-registration, and the diagnostics quoted in it (score separation AUCs, per-partition label mix, arm overlap, cost percentiles on the 31, the CE query-asymmetry split) | seat · `scripts/r1-diagnostics.mjs` |
 | `r2-referents.ndjson` · `r2-referents-summary.md` (+ `.literal.*`) | mechanical referent extraction from every draft, resolved at the run commit and at HEAD | `scripts/r2-referents.mjs` |
 | `r2-labels-part{0,1,2}.ndjson` · `r2-labels.ndjson` · `r2-labels.summary.json` · `r2-summary.md` | the hand-adjudicated confabulation labels (CONFABULATED / PARTIAL / GROUNDED / EMPTY) with cited checks | three Opus adjudication legs, seat spot-check |
 | `r2-faithfulness-*.ndjson` · `*.summary.json` | RAGAS 0.4.3 `Faithfulness` per draft, one file per judge (local Ollama `qwen3-coder:30b`; `gemini-3.5-flash`) | `scripts/r2-ragas-faithfulness.py` (a scratch venv; see the script docstring for the pins) |

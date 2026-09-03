@@ -1,5 +1,5 @@
 {
-  "at": "2026-09-02T22:59:51.100Z",
+  "at": "2026-09-03T00:16:03.152Z",
   "labelStats": {
     "pairsLabelled": 814,
     "byLabel": {
@@ -7,7 +7,8 @@
       "1": 141,
       "2": 260
     },
-    "missingLookups": 478
+    "unlabelledDeliveredItemsDistinct": 194,
+    "note": "unlabelled items occur only in the derived ce-topN variants; every item of the three pre-registered arms is labelled"
   },
   "issueAnchored": {
     "n": 31,
@@ -115,30 +116,32 @@
       "note": "production path; no added latency"
     },
     "ce-rerank": {
-      "addedMsP95": 32302,
-      "addedMsMean": 24575,
+      "addedMsP95": 65448,
+      "addedMsP95Over55": 32302,
+      "addedMsMeanOver55": 24575,
       "measured": true,
       "pairsMean": 91.5
     },
     "query-tasktype": {
-      "addedMsP95": 616,
-      "addedMsMean": 421,
+      "addedMsP95": 622,
+      "addedMsP95Over55": 616,
+      "addedMsMeanOver55": 421,
       "measured": true,
       "note": "one extra embed call per query (RETRIEVAL_QUERY) + two vector legs; replaces the production embed in a real deployment"
     },
     "ce-top10": {
-      "addedMsMeanDerived": 5369,
-      "addedMsP95Derived": 5374,
+      "addedMsMeanDerived": 5374,
+      "addedMsMaxDerived": 5374,
       "measured": false,
-      "pairsMean": 20,
-      "note": "derived from the measured ms/pair (268.7); not a timed run"
+      "pairsMeanOn31": 20,
+      "note": "derived from the measured ms/pair (268.7) over the 31; not a timed run"
     },
     "ce-top20": {
-      "addedMsMeanDerived": 9424,
-      "addedMsP95Derived": 10211,
+      "addedMsMeanDerived": 9362,
+      "addedMsMaxDerived": 10211,
       "measured": false,
-      "pairsMean": 35.1,
-      "note": "derived from the measured ms/pair (268.7); not a timed run"
+      "pairsMeanOn31": 34.8,
+      "note": "derived from the measured ms/pair (268.7) over the 31; not a timed run"
     }
   },
   "verdictsOnThe31": {
@@ -148,7 +151,7 @@
       "iii_p95_le_2000ms": false,
       "pass": false,
       "preRegistered": true,
-      "p95Ms": 32302,
+      "p95Ms": 65448,
       "p95Measured": true
     },
     "query-tasktype": {
@@ -157,7 +160,7 @@
       "iii_p95_le_2000ms": true,
       "pass": false,
       "preRegistered": true,
-      "p95Ms": 616,
+      "p95Ms": 622,
       "p95Measured": true
     },
     "ce-top10": {
@@ -167,7 +170,10 @@
       "pass": false,
       "preRegistered": false,
       "p95Ms": 5374,
-      "p95Measured": false
+      "p95Measured": false,
+      "precisionIsLowerBound": true,
+      "unlabelledDeliveredItems": "75/248",
+      "i_and_ii": "indeterminate (unlabelled items count as misses)"
     },
     "ce-top20": {
       "i_gain_ge_0_10": false,
@@ -176,7 +182,10 @@
       "pass": false,
       "preRegistered": false,
       "p95Ms": 10211,
-      "p95Measured": false
+      "p95Measured": false,
+      "precisionIsLowerBound": true,
+      "unlabelledDeliveredItems": "76/248",
+      "i_and_ii": "indeterminate (unlabelled items count as misses)"
     }
   },
   "perQuery": [
@@ -208,6 +217,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 95
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -238,6 +251,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 98
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 5,
+        "ce-top20": 4
       }
     },
     {
@@ -268,6 +285,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 92
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -298,6 +319,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 86
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -328,6 +353,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 98
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -358,6 +387,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 87
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 4
       }
     },
     {
@@ -388,6 +421,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 87
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 1
       }
     },
     {
@@ -418,6 +455,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 86
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -448,6 +489,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 90
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -478,6 +523,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 92
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 1
       }
     },
     {
@@ -508,6 +557,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 112
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -538,6 +591,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 106
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -568,6 +625,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 75
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 1
       }
     },
     {
@@ -598,6 +659,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 92
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 5,
+        "ce-top20": 3
       }
     },
     {
@@ -628,6 +693,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 109
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 2
       }
     },
     {
@@ -658,6 +727,10 @@
         "ce-top10": 20,
         "ce-top20": 32,
         "ce-rerank": 73
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 1
       }
     },
     {
@@ -688,6 +761,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 84
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 3
       }
     },
     {
@@ -718,6 +795,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 79
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 0,
+        "ce-top20": 1
       }
     },
     {
@@ -748,6 +829,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 88
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -778,6 +863,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 86
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 4,
+        "ce-top20": 3
       }
     },
     {
@@ -808,6 +897,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 94
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 1
       }
     },
     {
@@ -838,6 +931,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 94
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -868,6 +965,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 83
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 4,
+        "ce-top20": 2
       }
     },
     {
@@ -898,6 +999,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 100
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -928,6 +1033,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 88
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -958,6 +1067,10 @@
         "ce-top10": 20,
         "ce-top20": 32,
         "ce-rerank": 91
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -988,6 +1101,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 90
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 4,
+        "ce-top20": 4
       }
     },
     {
@@ -1018,6 +1135,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 101
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 3
       }
     },
     {
@@ -1048,6 +1169,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 114
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -1078,6 +1203,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 97
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -1108,6 +1237,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 82
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 1
       }
     },
     {
@@ -1138,6 +1271,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 88
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -1168,6 +1305,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 111
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -1198,6 +1339,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 84
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -1228,6 +1373,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 78
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 0,
+        "ce-top20": 1
       }
     },
     {
@@ -1258,6 +1407,10 @@
         "ce-top10": 19,
         "ce-top20": 29,
         "ce-rerank": 69
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 2
       }
     },
     {
@@ -1288,6 +1441,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 98
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -1318,6 +1475,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 97
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 2
       }
     },
     {
@@ -1348,6 +1509,10 @@
         "ce-top10": 20,
         "ce-top20": 38,
         "ce-rerank": 84
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 0
       }
     },
     {
@@ -1378,6 +1543,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 85
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 2
       }
     },
     {
@@ -1408,6 +1577,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 78
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -1438,6 +1611,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 79
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -1468,6 +1645,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 83
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 1
       }
     },
     {
@@ -1498,6 +1679,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 96
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 0,
+        "ce-top20": 0
       }
     },
     {
@@ -1528,6 +1713,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 93
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 4,
+        "ce-top20": 4
       }
     },
     {
@@ -1558,6 +1747,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 109
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 3
       }
     },
     {
@@ -1588,6 +1781,10 @@
         "ce-top10": 20,
         "ce-top20": 37,
         "ce-rerank": 95
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 3
       }
     },
     {
@@ -1618,6 +1815,10 @@
         "ce-top10": 20,
         "ce-top20": 34,
         "ce-rerank": 90
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -1648,6 +1849,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 101
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 3
       }
     },
     {
@@ -1678,6 +1883,10 @@
         "ce-top10": 20,
         "ce-top20": 35,
         "ce-rerank": 98
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 2
       }
     },
     {
@@ -1708,6 +1917,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 97
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 2,
+        "ce-top20": 3
       }
     },
     {
@@ -1738,6 +1951,10 @@
         "ce-top10": 20,
         "ce-top20": 33,
         "ce-rerank": 101
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 1,
+        "ce-top20": 2
       }
     },
     {
@@ -1768,6 +1985,10 @@
         "ce-top10": 20,
         "ce-top20": 36,
         "ce-rerank": 90
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 4,
+        "ce-top20": 2
       }
     },
     {
@@ -1798,6 +2019,10 @@
         "ce-top10": 20,
         "ce-top20": 32,
         "ce-rerank": 84
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 3,
+        "ce-top20": 4
       }
     },
     {
@@ -1828,6 +2053,10 @@
         "ce-top10": 20,
         "ce-top20": 31,
         "ce-rerank": 93
+      },
+      "unlabelledDelivered": {
+        "ce-top10": 0,
+        "ce-top20": 1
       }
     }
   ]

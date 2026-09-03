@@ -28,4 +28,6 @@ The referent-existence ratio (missing-not-proposed ÷ named) does not separate t
 
 ## Faithfulness
 
+Timer semantics: the gemini run's per-row `seconds` (and its summary `meanSecondsPerScored: 809.6`) were recorded OUTSIDE the concurrency gate at concurrency 2, so they include queue wait — the honest per-draft figure for that arm is wall ÷ scored = 1508.3 / 54 = 27.9 s of throughput (≈ 56 s of judge time per draft at concurrency 2). The local run's timer was inside the gate (sum of seconds = wall, 3723.5 s; 69 s per draft). The script now records the timer inside the gate for every run.
+
 See `r2-faithfulness-*.summary.json` and the deposit's § 3.2 for the two judge arms (local `qwen3-coder:30b` via Ollama; `gemini-3.5-flash` via Google's OpenAI-compatible endpoint), both through RAGAS 0.4.3 `Faithfulness` over the three non-empty delivered-context sections, and their separation against these labels.

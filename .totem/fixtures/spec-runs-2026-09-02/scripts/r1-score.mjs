@@ -21,12 +21,12 @@ const rel = (id, chunkId) => {
   const v = labels.get(id + '\u0000' + chunkId);
   return v === undefined ? null : v;
 };
-let missingLabels = 0;
+const missingItems = new Set();
 function precision(id, items) {
   let hits = 0;
   for (const it of items) {
     const v = rel(id, it.chunkId);
-    if (v === null) { missingLabels += 1; continue; }
+    if (v === null) { missingItems.add(id + '|' + it.chunkId); continue; }
     if (v === 2) hits += 1;
   }
   return items.length ? hits / items.length : 0;
@@ -62,6 +62,8 @@ for (const row of rerank) {
     q.p5spec[name] = precision(row.id, v.spec.items);
     q.p3code[name] = precision(row.id, v.code.items);
     q.pairs[name] = v.spec.pairs + v.code.pairs;
+    q.unlabelledDelivered = q.unlabelledDelivered ?? {};
+    q.unlabelledDelivered[name] = [...v.spec.items, ...v.code.items].filter((it) => rel(row.id, it.chunkId) === null).length;
   }
   q.pairs['ce-rerank'] = row.pools.spec + row.pools.code;
   per.push(q);
@@ -92,14 +94,17 @@ const topic = summarize('topic');
 
 // cost: measured for the three arms; derived (pairs × measured ms/pair) for the reduced-pool variants
 const msPerPair = cost.ceMsPerQuery.mean / (cost.pairsScored / cost.queries);
+const pct = (arr, p) => { const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
+const issueRows = rerank.filter((r) => r.anchorKind !== 'topic');
 const costRows = {
   baseline: { addedMsP95: 0, note: 'production path; no added latency' },
-  'ce-rerank': { addedMsP95: cost.ceMsPerQuery.p95, addedMsMean: cost.ceMsPerQuery.mean, measured: true, pairsMean: +(cost.pairsScored / cost.queries).toFixed(1) },
-  'query-tasktype': { addedMsP95: cost.tasktypeMsPerQuery.p95, addedMsMean: cost.tasktypeMsPerQuery.mean, measured: true, note: 'one extra embed call per query (RETRIEVAL_QUERY) + two vector legs; replaces the production embed in a real deployment' },
+  // p95 on the pre-registered denominator (the 31 issue-anchored queries); the all-55 figure beside it
+  'ce-rerank': { addedMsP95: pct(issueRows.map((r) => r.ms.ce), 0.95), addedMsP95Over55: cost.ceMsPerQuery.p95, addedMsMeanOver55: cost.ceMsPerQuery.mean, measured: true, pairsMean: +(cost.pairsScored / cost.queries).toFixed(1) },
+  'query-tasktype': { addedMsP95: pct(issueRows.map((r) => r.ms.tasktype), 0.95), addedMsP95Over55: cost.tasktypeMsPerQuery.p95, addedMsMeanOver55: cost.tasktypeMsPerQuery.mean, measured: true, note: 'one extra embed call per query (RETRIEVAL_QUERY) + two vector legs; replaces the production embed in a real deployment' },
 };
 for (const N of variants) {
-  const pairs = per.map((q) => q.pairs['ce-top' + N]);
-  costRows['ce-top' + N] = { addedMsMeanDerived: Math.round(mean(pairs) * msPerPair), addedMsP95Derived: Math.round(Math.max(...pairs) * msPerPair), measured: false, pairsMean: +mean(pairs).toFixed(1), note: 'derived from the measured ms/pair (' + msPerPair.toFixed(1) + '); not a timed run' };
+  const pairs31 = issueRows.map((q) => Math.min(N, q.poolItems.spec.length) + Math.min(N, q.poolItems.code.length));
+  costRows['ce-top' + N] = { addedMsMeanDerived: Math.round(mean(pairs31) * msPerPair), addedMsMaxDerived: Math.round(Math.max(...pairs31) * msPerPair), measured: false, pairsMeanOn31: +mean(pairs31).toFixed(1), note: 'derived from the measured ms/pair (' + msPerPair.toFixed(1) + ') over the 31; not a timed run' };
 }
 
 // pre-registered verdicts on the 31
@@ -107,12 +112,16 @@ const verdicts = {};
 for (const arm of arms.filter((a) => a !== 'baseline')) {
   const s = issue.arms[arm];
   const c = costRows[arm];
-  const p95 = c.addedMsP95 ?? c.addedMsP95Derived;
+  const p95 = c.addedMsP95 ?? c.addedMsMaxDerived;
   const conds = { i_gain_ge_0_10: s.gainP8 >= 0.10, ii_noRegression_ge_24: s.noRegression >= 24, iii_p95_le_2000ms: p95 <= 2000 };
-  verdicts[arm] = { ...conds, pass: Object.values(conds).every(Boolean), preRegistered: armNames.includes(arm), p95Ms: p95, p95Measured: c.measured === true };
+  const issuePer = per.filter((q) => q.kind === 'issue');
+  const unlabelled = armNames.includes(arm) ? 0 : issuePer.reduce((n, q) => n + q.unlabelledDelivered[arm], 0);
+  const delivered = issuePer.length * 8;
+  const lowerBound = unlabelled > 0;
+  verdicts[arm] = { ...conds, pass: !lowerBound && Object.values(conds).every(Boolean), preRegistered: armNames.includes(arm), p95Ms: p95, p95Measured: c.measured === true, ...(lowerBound ? { precisionIsLowerBound: true, unlabelledDeliveredItems: unlabelled + '/' + delivered, i_and_ii: 'indeterminate (unlabelled items count as misses)' } : {}) };
 }
 
-const labelStats = { pairsLabelled: labelRows.length, byLabel: labelRows.reduce((m, r) => { m[r.label] = (m[r.label] ?? 0) + 1; return m; }, {}), missingLookups: missingLabels };
+const labelStats = { pairsLabelled: labelRows.length, byLabel: labelRows.reduce((m, r) => { m[r.label] = (m[r.label] ?? 0) + 1; return m; }, {}), unlabelledDeliveredItemsDistinct: missingItems.size, note: 'unlabelled items occur only in the derived ce-topN variants; every item of the three pre-registered arms is labelled' };
 const result = { at: new Date().toISOString(), labelStats, issueAnchored: issue, topicAnchored: topic, cost: costRows, verdictsOnThe31: verdicts, perQuery: per };
 fs.writeFileSync(path.join(F, 'r1-score.json'), JSON.stringify(result, null, 2));
 console.log(JSON.stringify({ labelStats, issueAnchored: issue, topicAnchored: topic, cost: costRows, verdicts }, null, 1));
