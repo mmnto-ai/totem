@@ -1,0 +1,37 @@
+{
+  "at": "2026-09-02T21:39:48.421Z",
+  "ceModel": "Xenova/bge-reranker-base",
+  "ceDtype": "q8",
+  "transformersJs": "3.8.1",
+  "ceLoadMs": 824,
+  "pairsScored": 5030,
+  "queries": 55,
+  "ceMsPerQuery": {
+    "mean": 24575,
+    "p50": 23218,
+    "p95": 32302,
+    "max": 72943
+  },
+  "tasktypeMsPerQuery": {
+    "mean": 421,
+    "p50": 408,
+    "p95": 616,
+    "max": 642
+  },
+  "embedCallsQueryTaskType": 55,
+  "embedModel": "gemini-embedding-2-preview",
+  "embedDims": 768,
+  "chunkResolution": {
+    "tableRows": 5903,
+    "distinctKeys": 5818,
+    "ambiguousResolutions": 869,
+    "unresolved": 0
+  },
+  "ceTruncation": "tokenizer truncation=true at the model max (512 tokens per pair); the query is the RAW query (title + labels + body[:500] for issues, the topic text for topics)",
+  "machine": {
+    "cpu": "Intel(R) Core(TM) Ultra 7 265K",
+    "cores": 20,
+    "node": "v24.16.0",
+    "gpu": "none used (onnxruntime CPU EP)"
+  }
+}

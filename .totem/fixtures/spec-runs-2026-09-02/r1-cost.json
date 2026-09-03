@@ -1,0 +1,42 @@
+{
+  "runStartedAt": "2026-09-02T21:09:13.198Z",
+  "runEndedAt": "2026-09-02T21:09:50.935Z",
+  "queries": 55,
+  "specArtifactsTotal": 55,
+  "artifactsScanned": 158,
+  "embedCalls": {
+    "production": 165,
+    "harness": 60,
+    "total": 225,
+    "outerRetries": 0,
+    "failures": 0
+  },
+  "charsEmbedded": 101072,
+  "wallMs": 37736,
+  "productionCallMs": {
+    "mean": 320,
+    "p95": 407.7,
+    "n": 55,
+    "min": 248,
+    "p5": 267.7,
+    "median": 310,
+    "max": 564
+  },
+  "rawLegsMs": {
+    "mean": 333.96363636363634,
+    "p95": 406.29999999999995,
+    "n": 55,
+    "min": 268,
+    "p5": 284.1,
+    "median": 331,
+    "max": 482
+  },
+  "machine": {
+    "platform": "win32 10.0.26200",
+    "cpuModel": "Intel(R) Core(TM) Ultra 7 265K",
+    "cpuCount": 20,
+    "totalMemGiB": 63.38,
+    "node": "v24.16.0"
+  },
+  "notes": []
+}

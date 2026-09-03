@@ -1,0 +1,41 @@
+{
+  "n": 55,
+  "indices": true,
+  "byLabel": {
+    "CONFABULATED": 16,
+    "GROUNDED": 6,
+    "PARTIAL": 32,
+    "EMPTY": 1
+  },
+  "byKind": {
+    "issue": {
+      "CONFABULATED": 7,
+      "GROUNDED": 4,
+      "PARTIAL": 20
+    },
+    "topic": {
+      "PARTIAL": 12,
+      "CONFABULATED": 9,
+      "GROUNDED": 2,
+      "EMPTY": 1
+    }
+  },
+  "severity": {
+    "0": 3,
+    "1": 23,
+    "2": 23,
+    "3": 6
+  },
+  "confidence": {
+    "high": 50,
+    "medium": 5
+  },
+  "confabulatedReferents": 152,
+  "loadBearing": 74,
+  "groundedChecks": 360,
+  "adjudicators": {
+    "opus-leg-part0": 19,
+    "opus-leg-part1": 18,
+    "opus-leg-part2": 18
+  }
+}

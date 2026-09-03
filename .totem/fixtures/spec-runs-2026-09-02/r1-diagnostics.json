@@ -1,0 +1,124 @@
+{
+  "at": "2026-09-03T00:14:43.537Z",
+  "scoreSeparation": {
+    "population": "labelled union of the three arms’ delivered items, one entry per (query, chunk); ceScore where the chunk was in a CE pool, relevance where it carried a vector-leg relevance",
+    "ceScore": {
+      "n": {
+        "0": 413,
+        "1": 141,
+        "2": 260
+      },
+      "mean": {
+        "0": -1.749,
+        "1": -1.241,
+        "2": 0.047
+      },
+      "median": {
+        "0": -0.817,
+        "2": 0.727
+      },
+      "aucRelevantVsNot": 0.629
+    },
+    "vectorRelevance": {
+      "n": {
+        "0": 318,
+        "1": 112,
+        "2": 209
+      },
+      "mean": {
+        "0": 0.594,
+        "1": 0.613,
+        "2": 0.66
+      },
+      "median": {
+        "0": 0.599,
+        "2": 0.665
+      },
+      "aucRelevantVsNot": 0.846
+    },
+    "labelsByChunkType": {
+      "spec": {
+        "0": 391,
+        "1": 104,
+        "2": 43
+      },
+      "code": {
+        "0": 22,
+        "1": 37,
+        "2": 217
+      }
+    }
+  },
+  "baselineOnThe31": {
+    "queriesWithARelevantSpecItem": 14,
+    "queriesWithARelevantCodeItem": 31,
+    "specPartitionSources": [
+      [
+        "docs/wiki",
+        130
+      ],
+      [
+        "docs/reference",
+        16
+      ],
+      [
+        ".gemini/skills",
+        7
+      ],
+      [
+        "docs/manual",
+        2
+      ]
+    ]
+  },
+  "deliveredSetOverlap": {
+    "baseline~ce-rerank": {
+      "meanJaccard": 0.124,
+      "medianJaccard": 0.143,
+      "identicalOf55": 0
+    },
+    "baseline~query-tasktype": {
+      "meanJaccard": 0.886,
+      "medianJaccard": 1,
+      "identicalOf55": 29
+    },
+    "ce-rerank~query-tasktype": {
+      "meanJaccard": 0.124,
+      "medianJaccard": 0.143,
+      "identicalOf55": 0
+    }
+  },
+  "costMs": {
+    "ce": {
+      "on31": {
+        "p50": 25572,
+        "p95": 65448,
+        "max": 72943
+      },
+      "on55": {
+        "p50": 23218,
+        "p95": 32302,
+        "max": 72943
+      }
+    },
+    "tasktype": {
+      "on31": {
+        "p50": 413,
+        "p95": 622,
+        "max": 642
+      },
+      "on55": {
+        "p50": 408,
+        "p95": 616,
+        "max": 642
+      }
+    }
+  },
+  "ceQueryAsymmetry": {
+    "note": "ce-rerank scored q.raw; the baseline and query-tasktype arms embedded q.expanded",
+    "issueQueriesWhereExpansionFired": 10,
+    "ceGainWhereExpansionFired": -0.15,
+    "issueQueriesWithoutExpansion": 21,
+    "ceGainWithoutExpansion": -0.0357
+  }
+}
