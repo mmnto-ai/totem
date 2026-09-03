@@ -926,6 +926,8 @@ function relevantHit(relevance: number | undefined, overrides: Partial<SearchRes
 }
 
 const FLOOR = 0.25;
+/** The floor's PLACE exactly as a refusal renders it (`FLOOR_PLACE` in spec.ts). */
+const FLOOR_PLACE_TEXT = 'searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)';
 
 describe('evaluateGroundingFloor', () => {
   it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
@@ -1112,39 +1114,69 @@ describe('formatGroundingRefusal', () => {
   // a `Found: … N lessons` line. The message names the contradiction rather
   // than leaving the reader to reconcile the two (mmnto-ai/totem#2735).
   it('a 0-hit refusal on a lesson-holding index names the lessons it did not judge', () => {
-    const verdict = evaluateGroundingFloor(
-      { ...emptyContext(), lessons: [makeLesson(), makeLesson()] },
-      FLOOR,
-    );
+    // The seeded count IS the delivered count — the invariant production holds,
+    // where the caller passes `context.lessons.length`.
+    const lessons = [makeLesson(), makeLesson()];
+    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, FLOOR);
     expect(verdict.hits).toBe(0);
 
-    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 10);
+    const { message } = formatGroundingRefusal(
+      'an-unanchored-slug',
+      verdict,
+      FLOOR,
+      lessons.length,
+    );
 
-    expect(message).toContain('0 grounding hits (specs, sessions, code)');
-    expect(message).toContain(
-      '10 lesson(s) were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may)',
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
+        '2 lessons were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+        `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      ].join('\n'),
     );
   });
 
-  it('with NO lessons delivered the 0-hit text is unchanged, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
-    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
-    expect(message).toContain('Retrieval returned 0 hits — nothing in the index grounds this run.');
-    expect(message).not.toContain('grounding hits');
-    expect(message).not.toContain('lesson');
+  it('a single delivered lesson reads as one, not as "1 lessons"', () => {
+    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons: [makeLesson()] }, FLOOR);
+
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 1);
+
+    expect(message).toContain(
+      '1 lesson was retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+    );
   });
 
-  it('the below-floor refusal text is unchanged when lessons were delivered', () => {
+  // Pinned against the LITERAL pre-mmnto-ai/totem#2735 message, not against a
+  // sibling call: the guarantee is that this text did not move, and only an
+  // exact comparison with the old bytes can say so.
+  it('with NO lessons delivered the 0-hit message is the pre-fold text, byte for byte', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 hits — nothing in the index grounds this run.',
+        `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      ].join('\n'),
+    );
+  });
+
+  it('the below-floor message is the pre-fold text whether or not lessons were delivered', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(0.2, { filePath: 'docs/a.md' })] },
       FLOOR,
     );
-    const withLessons = formatGroundingRefusal('weak topic', verdict, FLOOR, 10);
-    const withNone = formatGroundingRefusal('weak topic', verdict, FLOOR, 0);
-    expect(withLessons.message).toBe(withNone.message);
-    expect(withLessons.message).toContain(
+    const expected = [
+      'Refusing to draft an unanchored spec for topic(s): weak topic.',
       'Retrieval returned 1 hits, but best relevance 0.200 is below the floor.',
-    );
+      `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      'Withheld candidates (path + relevance only, no content):',
+      '1. docs/a.md — relevance 0.200',
+    ].join('\n');
+
+    expect(formatGroundingRefusal('weak topic', verdict, FLOOR, 10).message).toBe(expected);
+    expect(formatGroundingRefusal('weak topic', verdict, FLOOR, 0).message).toBe(expected);
   });
 
   it('a below-floor refusal names the best relevance and DISCLOSES every withheld candidate', () => {
@@ -1867,6 +1899,19 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
   it('a free-text run with 0 hits REFUSES and mints nothing (the orchestrator is never reached)', async () => {
     await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
       /Retrieval returned 0 hits/,
+    );
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
+
+  // The WIRING, not the formatter: this is the only test that fails if the
+  // caller stops passing `context.lessons.length` (a literal 0 there leaves
+  // every formatter-level test green). One delivered lesson, no spec/session/
+  // code rows — the count in the refusal has to come from the delivered pool.
+  it('a free-text run with 0 grounding hits carries the DELIVERED lesson count into the refusal', async () => {
+    harness.searchResults = { lesson: [makeLesson()] };
+
+    await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
+      /1 lesson was retrieved, but lessons do not ground a run/,
     );
     expect(harness.orchestratorArgs).toEqual([]);
   });

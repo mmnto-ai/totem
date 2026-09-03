@@ -748,8 +748,9 @@ export function formatGroundingRefusal(
       lines.push(
         'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
       );
+      const lessonNoun = deliveredLessons === 1 ? 'lesson was' : 'lessons were';
       lines.push(
-        `${deliveredLessons} lesson(s) were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).`,
+        `${deliveredLessons} ${lessonNoun} retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).`,
       );
     } else {
       lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
