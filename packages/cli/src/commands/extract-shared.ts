@@ -18,6 +18,7 @@ import {
   requireEmbedding,
   resolveConfigPath,
   sanitize,
+  searchLessons,
 } from '../utils.js';
 import { MAX_EXISTING_LESSONS, MAX_REVIEW_BODY_CHARS } from './extract-templates.js';
 
@@ -28,11 +29,7 @@ export const TAG = 'Extract';
 // ─── LanceDB retrieval ─────────────────────────────────
 
 export async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[]> {
-  return store.search({
-    query: 'lesson trap pattern decision',
-    typeFilter: 'spec',
-    maxResults: MAX_EXISTING_LESSONS,
-  });
+  return searchLessons(store, 'lesson trap pattern decision', MAX_EXISTING_LESSONS);
 }
 
 // ─── Lesson parser ─────────────────────────────────────

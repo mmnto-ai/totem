@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { SearchResult, TotemConfig } from '@mmnto/totem';
+import type { LanceStore, SearchResult, TotemConfig } from '@mmnto/totem';
 import {
   calculateDeterministicHash,
   InvocationFailureArtifactSchema,
@@ -27,7 +27,6 @@ import {
   isGlobalConfigPath,
   loadConfig,
   loadEnv,
-  partitionLessons,
   persistRuntimeTextEvidence,
   reapOrphanedTempFiles,
   requireEmbedding,
@@ -35,6 +34,7 @@ import {
   runOrchestrator,
   runtimeMessageEvidence,
   sanitize,
+  searchLessons,
   wrapXml,
   writeOutput,
 } from './utils.js';
@@ -1097,58 +1097,57 @@ describe('runOrchestrator', { timeout: 15_000 }, () => {
   });
 });
 
-// ─── partitionLessons ────────────────────────────────────
+// ─── searchLessons (mmnto-ai/totem#2735) ─────────────────
 
-describe('partitionLessons', () => {
-  const makeResult = (filePath: string, label: string): SearchResult => ({
-    content: `content for ${label}`,
-    contextPrefix: '',
-    filePath,
-    absoluteFilePath: filePath,
-    type: 'spec',
-    label,
-    score: 0.9,
-    metadata: {},
+describe('searchLessons', () => {
+  /** A spy store that records the search request and returns one lesson row. */
+  function spyStore(): { store: LanceStore; requests: Record<string, unknown>[] } {
+    const requests: Record<string, unknown>[] = [];
+    const lesson: SearchResult = {
+      content: 'Always validate input at boundaries.',
+      contextPrefix: '',
+      filePath: '.totem/lessons/lesson-abc.md',
+      absoluteFilePath: '.totem/lessons/lesson-abc.md',
+      type: 'lesson',
+      label: 'Lesson A',
+      score: 0.9,
+      metadata: {},
+    };
+    const store = {
+      search: async (req: Record<string, unknown>): Promise<SearchResult[]> => {
+        requests.push(req);
+        return [lesson];
+      },
+    } as unknown as LanceStore;
+    return { store, requests };
+  }
+
+  it("asks the store for typeFilter 'lesson' — the one place the type is spelled", async () => {
+    const { store, requests } = spyStore();
+
+    await searchLessons(store, 'any query', 10);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!['typeFilter']).toBe('lesson');
   });
 
-  it('separates lesson results from other specs', () => {
-    const allSpecs = [
-      { ...makeResult('.totem/lessons/lesson-abc.md', 'Lesson A'), type: 'lesson' as const },
-      makeResult('docs/spec.md', 'Spec B'),
-      { ...makeResult('.totem/lessons/lesson-def.md', 'Lesson C'), type: 'lesson' as const },
-      makeResult('docs/reference/architecture.md', 'Arch D'),
-    ];
-    const { lessons, specs } = partitionLessons(allSpecs, 10, 10);
-    expect(lessons).toHaveLength(2);
-    expect(specs).toHaveLength(2);
-    expect(lessons[0]!.label).toBe('Lesson A');
-    expect(specs[0]!.label).toBe('Spec B');
+  it('passes query and maxResults through unchanged', async () => {
+    const { store, requests } = spyStore();
+
+    await searchLessons(store, 'lesson trap pattern decision', 3);
+
+    expect(requests[0]!['query']).toBe('lesson trap pattern decision');
+    expect(requests[0]!['maxResults']).toBe(3);
   });
 
-  it('respects maxLessons cap', () => {
-    const allSpecs = [
-      { ...makeResult('.totem/lessons/a.md', 'L1'), type: 'lesson' as const },
-      { ...makeResult('.totem/lessons/b.md', 'L2'), type: 'lesson' as const },
-      { ...makeResult('.totem/lessons/c.md', 'L3'), type: 'lesson' as const },
-    ];
-    const { lessons } = partitionLessons(allSpecs, 2, 5);
-    expect(lessons).toHaveLength(2);
-  });
+  it("returns the store's rows untouched", async () => {
+    const { store } = spyStore();
 
-  it('respects maxSpecs cap', () => {
-    const allSpecs = [
-      makeResult('docs/a.md', 'A'),
-      makeResult('docs/b.md', 'B'),
-      makeResult('docs/c.md', 'C'),
-    ];
-    const { specs } = partitionLessons(allSpecs, 5, 2);
-    expect(specs).toHaveLength(2);
-  });
+    const results = await searchLessons(store, 'any query', 10);
 
-  it('returns empty arrays when no results', () => {
-    const { lessons, specs } = partitionLessons([], 10, 10);
-    expect(lessons).toHaveLength(0);
-    expect(specs).toHaveLength(0);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.type).toBe('lesson');
+    expect(results[0]!.label).toBe('Lesson A');
   });
 });
 

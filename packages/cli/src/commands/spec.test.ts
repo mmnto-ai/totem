@@ -34,10 +34,12 @@ import {
   loadSpecRecord,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
+  MAX_SPECS,
   resolveDefaultSpecPath,
   resolveGroundingAnchor,
   retrieveContext,
   sanitizeSpecFilename,
+  SPEC_SEARCH_POOL,
   SPEC_SYSTEM_PROMPT,
   specCommand,
   validateOutputOptions,
@@ -56,6 +58,8 @@ import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
 const harness = vi.hoisted(() => ({
   /** Store hits keyed by the `typeFilter` `retrieveContext` asks for. */
   searchResults: {} as Record<string, unknown[]>,
+  /** Every `typeFilter` the store was asked for, in call order (mmnto-ai/totem#2735). */
+  searchTypeFilters: [] as string[],
   /** Every `runOrchestrator` invocation, in order — empty means no artifact could exist. */
   orchestratorArgs: [] as Array<Record<string, unknown>>,
   /** What the stubbed orchestrator returns as the draft. */
@@ -78,6 +82,7 @@ vi.mock('@mmnto/totem', async () => {
         harness.connects += 1;
       }
       async search({ typeFilter }: { typeFilter: string }): Promise<unknown[]> {
+        harness.searchTypeFilters.push(typeFilter);
         return harness.searchResults[typeFilter] ?? [];
       }
     },
@@ -124,9 +129,11 @@ function makeLesson(overrides: Partial<SearchResult> = {}): SearchResult {
   return {
     content: '**Tags:** testing\n\nAlways validate input at boundaries.',
     contextPrefix: 'Totem Lessons > Lesson — Always validate input',
-    filePath: '.totem/lessons.md',
-    absoluteFilePath: '.totem/lessons.md',
-    type: 'spec',
+    // The post-mmnto-ai/totem#431 shape: lessons carry their own content type
+    // and live under `.totem/lessons/`, one file each.
+    filePath: '.totem/lessons/lesson-always-validate-input.md',
+    absoluteFilePath: '.totem/lessons/lesson-always-validate-input.md',
+    type: 'lesson',
     label: 'Totem Lessons > Lesson — Always validate input',
     score: 0.5,
     metadata: {},
@@ -410,14 +417,118 @@ describe('retrieveContext — cross-totem linked stores', () => {
   });
 });
 
-describe('retrieveContext partitioning', () => {
-  it('lessons from lessons.md are separated from regular specs', async () => {
-    // Simulate what retrieveContext produces: lessons in lessons array, specs in specs array
+// ─── retrieveContext lesson delivery (mmnto-ai/totem#2735) ──
+
+/** A store that answers per `typeFilter` and records every request it received. */
+function typedStore(rows: Partial<Record<string, SearchResult[]>>): {
+  store: LanceStore;
+  typeFilters: string[];
+  requests: { typeFilter: string; maxResults: number }[];
+} {
+  const typeFilters: string[] = [];
+  const requests: { typeFilter: string; maxResults: number }[] = [];
+  const store = {
+    search: async (req: { typeFilter: string; maxResults: number }): Promise<SearchResult[]> => {
+      typeFilters.push(req.typeFilter);
+      requests.push({ typeFilter: req.typeFilter, maxResults: req.maxResults });
+      return rows[req.typeFilter] ?? [];
+    },
+  } as unknown as LanceStore;
+  return { store, typeFilters, requests };
+}
+
+describe('retrieveContext — lessons are their own pool', () => {
+  it('delivers a lesson AND a spec when the store holds one of each', async () => {
+    const { store, typeFilters } = typedStore({
+      lesson: [makeLesson({ type: 'lesson', label: 'Lesson A' })],
+      spec: [makeSpec({ label: 'Spec A' })],
+    });
+
+    const ctx = await retrieveContext('test query', store);
+
+    // The regression mmnto-ai/totem#431 introduced: lessons were partitioned
+    // out of a `spec`-typed pool, so this length was 0 for every run since.
+    expect(ctx.lessons.length).toBe(1);
+    expect(ctx.lessons[0]!.label).toBe('Lesson A');
+    expect(ctx.specs.length).toBe(1);
+    expect(ctx.specs[0]!.label).toBe('Spec A');
+    expect(typeFilters).toContain('lesson');
+  });
+
+  it('never asks a LINKED store for lessons — lessons come from the primary only', async () => {
+    const primary = typedStore({ lesson: [makeLesson({ type: 'lesson' })], spec: [makeSpec()] });
+    const linked = typedStore({ spec: [makeSpec({ label: 'linked' })] });
+
+    const ctx = await retrieveContext('test query', primary.store, [linked.store]);
+
+    expect(ctx.lessons.length).toBe(1);
+    expect(primary.typeFilters).toContain('lesson');
+    expect(linked.typeFilters).not.toContain('lesson');
+    expect(linked.typeFilters).toEqual(['spec']);
+  });
+
+  // Request identity is the only thing that CAN pin "the specs delivered are
+  // unchanged" against a real store: on the hybrid path the requested width is
+  // the RRF fusion window (`packages/core/src/store/lance-search.ts` fetches
+  // `maxResults * HYBRID_OVERFETCH_FACTOR` per leg), so a narrower request
+  // changes WHICH rows survive fusion, not merely how many are cut.
+  it('asks for the spec pool at exactly SPEC_SEARCH_POOL, unchanged by this slice', async () => {
+    // The literal is the pin: bound to the constant alone, this test would go
+    // green on a change to the constant itself. 20 is the pre-mmnto-ai/totem#2735
+    // width, which is the hybrid fusion window.
+    expect(SPEC_SEARCH_POOL).toBe(20);
+    const { store, requests } = typedStore({ spec: [makeSpec()] });
+
+    await retrieveContext('test query', store);
+
+    const specRequests = requests.filter((r) => r.typeFilter === 'spec');
+    expect(specRequests).toEqual([{ typeFilter: 'spec', maxResults: SPEC_SEARCH_POOL }]);
+  });
+
+  it('asks a LINKED store for specs at the delivery cap, unchanged by this slice', async () => {
+    const primary = typedStore({ spec: [makeSpec()] });
+    const linked = typedStore({ spec: [makeSpec({ label: 'linked' })] });
+
+    await retrieveContext('test query', primary.store, [linked.store]);
+
+    expect(linked.requests).toEqual([{ typeFilter: 'spec', maxResults: MAX_SPECS }]);
+  });
+
+  it('delivers the top-MAX_SPECS specs by score, in score order', async () => {
+    const scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
+    expect(scores.length).toBeGreaterThan(MAX_SPECS);
+    const { store } = typedStore({
+      spec: scores.map((score, i) => makeSpec({ label: `Spec ${i}`, score })),
+    });
+
+    const ctx = await retrieveContext('test query', store);
+
+    expect(ctx.specs.length).toBe(MAX_SPECS);
+    expect(ctx.specs.map((s) => s.score)).toEqual(scores.slice(0, MAX_SPECS));
+  });
+
+  it('delivers the top-MAX_SPECS by score ACROSS the primary and a linked store', async () => {
+    const primary = typedStore({
+      spec: [0.9, 0.7, 0.5, 0.3].map((score, i) => makeSpec({ label: `P${i}`, score })),
+    });
+    const linked = typedStore({
+      spec: [0.8, 0.6, 0.4, 0.2].map((score, i) => makeSpec({ label: `L${i}`, score })),
+    });
+
+    const ctx = await retrieveContext('test query', primary.store, [linked.store]);
+
+    expect(ctx.specs.length).toBe(MAX_SPECS);
+    expect(ctx.specs.map((s) => s.score)).toEqual([0.9, 0.8, 0.7, 0.6, 0.5]);
+  });
+});
+
+describe('assemblePrompt — lessons render in their own section', () => {
+  it('a lesson never appears inside the RELATED SPECS & ADRs section', async () => {
     const ctx: RetrievedContext = {
       specs: [makeSpec({ filePath: 'docs/reference/architecture.md' })],
       sessions: [],
       code: [],
-      lessons: [makeLesson({ filePath: '.totem/lessons.md' })],
+      lessons: [makeLesson({ type: 'lesson', filePath: '.totem/lessons/lesson-abc.md' })],
     };
     const result = await assemblePrompt(
       [{ issue: null, freeText: 'test', record: null }],
@@ -426,7 +537,8 @@ describe('retrieveContext partitioning', () => {
     );
     // Lessons appear in their own section, not mixed with specs
     const specSection = result.split('RELATED SPECS & ADRs')[1]?.split('===')[0] ?? '';
-    expect(specSection).not.toContain('lessons.md');
+    expect(specSection).not.toContain('.totem/lessons/');
+    expect(result).toContain('=== RELEVANT LESSONS (HARD CONSTRAINTS) ===');
   });
 });
 
@@ -814,6 +926,8 @@ function relevantHit(relevance: number | undefined, overrides: Partial<SearchRes
 }
 
 const FLOOR = 0.25;
+/** The floor's PLACE exactly as a refusal renders it (`FLOOR_PLACE` in spec.ts). */
+const FLOOR_PLACE_TEXT = 'searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)';
 
 describe('evaluateGroundingFloor', () => {
   it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
@@ -857,6 +971,54 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.withheld).toEqual([]);
   });
 
+  // Lessons are DELIVERED but never judged by the floor (mmnto-ai/totem#2735).
+  // The gate was ruled over the spec/session/code partitions while the lesson
+  // partition was structurally empty; feeding a now-populated one in would
+  // silently loosen the refusal arm, since an FTS-only lesson is floor-EXEMPT
+  // and `refuse` requires `floorExempt === 0`.
+  it('a run whose ONLY retrieved item is an FTS-only lesson REFUSES as 0 hits', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), lessons: [relevantHit(undefined, { type: 'lesson' })] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.hits).toBe(0);
+    expect(verdict.floorExempt).toBe(0);
+    expect(verdict.bestRelevance).toBeNull();
+  });
+
+  it('a below-floor spec beside an FTS-only lesson still REFUSES (a lesson is not floor-exempt evidence)', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' })],
+        lessons: [relevantHit(undefined, { type: 'lesson' })],
+      },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.hits).toBe(1);
+    expect(verdict.floorExempt).toBe(0);
+    expect(verdict.withheld).toEqual([{ filePath: 'docs/weak.md', relevance: 0.05 }]);
+  });
+
+  it('an AT-floor spec beside lessons PROCEEDS, and the lessons are not counted as hits', () => {
+    const verdict = evaluateGroundingFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(FLOOR)],
+        lessons: [relevantHit(undefined, { type: 'lesson' }), relevantHit(0.9, { type: 'lesson' })],
+      },
+      FLOOR,
+    );
+    // Delivery is not the gate: `retrieveContext` still returns those lessons
+    // (see the lesson-delivery suite) and the executed-command suite proves
+    // they reach the prompt. The floor simply never reads them.
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.hits).toBe(1);
+    expect(verdict.bestRelevance).toBeCloseTo(FLOOR, 10);
+  });
+
   it('no relevance anywhere PROCEEDS — a pure-FTS corpus is never demoted', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(undefined)] },
@@ -898,17 +1060,22 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.withheld).toEqual([]);
   });
 
-  it('counts hits across ALL FOUR partitions', () => {
+  // Was "counts hits across ALL FOUR partitions" when the lesson partition was
+  // structurally empty and could not change the count. mmnto-ai/totem#2735
+  // makes it populated, so the gate holds its ruled inputs: the three
+  // partitions it was exercised over. A delivered lesson is counted on the
+  // `Found:` line and in the artifact, never as a grounding hit.
+  it('counts hits across the spec, session and code partitions — never lessons', () => {
     const verdict = evaluateGroundingFloor(
       {
         specs: [relevantHit(0.9)],
         sessions: [relevantHit(0.8)],
         code: [relevantHit(0.7)],
-        lessons: [relevantHit(0.6)],
+        lessons: [relevantHit(0.6, { type: 'lesson' })],
       },
       FLOOR,
     );
-    expect(verdict.hits).toBe(4);
+    expect(verdict.hits).toBe(3);
     expect(verdict.bestRelevance).toBeCloseTo(0.9, 10);
   });
 
@@ -935,12 +1102,81 @@ describe('evaluateGroundingFloor', () => {
 describe('formatGroundingRefusal', () => {
   it('a 0-hit refusal names the topic, the 0 hits, and the floor VALUE and PLACE', () => {
     const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
-    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toContain('an-unanchored-slug');
     expect(message).toContain('0 hits');
     expect(message).toContain(
       'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
     );
+  });
+
+  // With lessons delivered, "nothing in the index grounds this run" sits beside
+  // a `Found: … N lessons` line. The message names the contradiction rather
+  // than leaving the reader to reconcile the two (mmnto-ai/totem#2735).
+  it('a 0-hit refusal on a lesson-holding index names the lessons it did not judge', () => {
+    // The seeded count IS the delivered count — the invariant production holds,
+    // where the caller passes `context.lessons.length`.
+    const lessons = [makeLesson(), makeLesson()];
+    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, FLOOR);
+    expect(verdict.hits).toBe(0);
+
+    const { message } = formatGroundingRefusal(
+      'an-unanchored-slug',
+      verdict,
+      FLOOR,
+      lessons.length,
+    );
+
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
+        '2 lessons were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+        `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      ].join('\n'),
+    );
+  });
+
+  it('a single delivered lesson reads as one, not as "1 lessons"', () => {
+    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons: [makeLesson()] }, FLOOR);
+
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 1);
+
+    expect(message).toContain(
+      '1 lesson was retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+    );
+  });
+
+  // Pinned against the LITERAL pre-mmnto-ai/totem#2735 message, not against a
+  // sibling call: the guarantee is that this text did not move, and only an
+  // exact comparison with the old bytes can say so.
+  it('with NO lessons delivered the 0-hit message is the pre-fold text, byte for byte', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 hits — nothing in the index grounds this run.',
+        `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      ].join('\n'),
+    );
+  });
+
+  it('the below-floor message is the pre-fold text whether or not lessons were delivered', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.2, { filePath: 'docs/a.md' })] },
+      FLOOR,
+    );
+    const expected = [
+      'Refusing to draft an unanchored spec for topic(s): weak topic.',
+      'Retrieval returned 1 hits, but best relevance 0.200 is below the floor.',
+      `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      'Withheld candidates (path + relevance only, no content):',
+      '1. docs/a.md — relevance 0.200',
+    ].join('\n');
+
+    expect(formatGroundingRefusal('weak topic', verdict, FLOOR, 10).message).toBe(expected);
+    expect(formatGroundingRefusal('weak topic', verdict, FLOOR, 0).message).toBe(expected);
   });
 
   it('a below-floor refusal names the best relevance and DISCLOSES every withheld candidate', () => {
@@ -954,7 +1190,7 @@ describe('formatGroundingRefusal', () => {
       },
       FLOOR,
     );
-    const { message } = formatGroundingRefusal('weak topic', verdict, FLOOR);
+    const { message } = formatGroundingRefusal('weak topic', verdict, FLOOR, 0);
     expect(message).toContain('best relevance 0.200');
     expect(message).toContain('1. docs/a.md — relevance 0.200');
     expect(message).toContain('2. [strategy] doctrine/b.md — relevance 0.100');
@@ -965,6 +1201,7 @@ describe('formatGroundingRefusal', () => {
       'topic',
       evaluateGroundingFloor(emptyContext(), FLOOR),
       FLOOR,
+      0,
     );
     expect(recoveryHint).toContain('totem spec <issue>');
     expect(recoveryHint).toContain('totem spec --from <record>');
@@ -1471,6 +1708,7 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     originalCwd = process.cwd();
     process.chdir(tmpDir);
     harness.searchResults = {};
+    harness.searchTypeFilters = [];
     harness.orchestratorArgs = [];
     harness.orchestratorContent = 'DRAFT';
     harness.connects = 0;
@@ -1542,6 +1780,30 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     expect(harness.connects).toBe(0);
     expect(harness.orchestratorArgs).toEqual([]);
     expect(runArtifactNames()).toEqual([]);
+  });
+
+  it('asks the store for lessons and carries them into the prompt (mmnto-ai/totem#2735)', async () => {
+    harness.searchResults = {
+      spec: [relevantHit(0.7)],
+      lesson: [
+        relevantHit(0.7, {
+          type: 'lesson',
+          label: 'Lesson A',
+          filePath: '.totem/lessons/lesson-abc.md',
+          content: 'Always validate input at boundaries.',
+        }),
+      ],
+    };
+
+    await specCommand(['2735'], { stdout: true });
+
+    expect(harness.searchTypeFilters).toContain('lesson');
+    const prompt = String(harness.orchestratorArgs[0]!['prompt']);
+    // The real section header (`formatLessonSection` in utils.ts), not the bare
+    // phrase — the system prompt carries "RELEVANT LESSONS" on its own, so a
+    // `toContain` on that alone passes with zero lessons delivered.
+    expect(prompt).toContain('=== RELEVANT LESSONS (HARD CONSTRAINTS) ===');
+    expect(prompt).toContain('Always validate input at boundaries.');
   });
 
   it('a --from run anchors on the record, leaves its bytes UNCHANGED, and drafts to stdout', async () => {
@@ -1637,6 +1899,19 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
   it('a free-text run with 0 hits REFUSES and mints nothing (the orchestrator is never reached)', async () => {
     await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
       /Retrieval returned 0 hits/,
+    );
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
+
+  // The WIRING, not the formatter: this is the only test that fails if the
+  // caller stops passing `context.lessons.length` (a literal 0 there leaves
+  // every formatter-level test green). One delivered lesson, no spec/session/
+  // code rows — the count in the refusal has to come from the delivered pool.
+  it('a free-text run with 0 grounding hits carries the DELIVERED lesson count into the refusal', async () => {
+    harness.searchResults = { lesson: [makeLesson()] };
+
+    await expect(specCommand(['nonsense slug'], { stdout: true })).rejects.toThrowError(
+      /1 lesson was retrieved, but lessons do not ground a run/,
     );
     expect(harness.orchestratorArgs).toEqual([]);
   });

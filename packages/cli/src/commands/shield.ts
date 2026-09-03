@@ -9,11 +9,11 @@ import {
   getSystemPrompt,
   loadConfig,
   loadEnv,
-  partitionLessons,
   requireEmbedding,
   resolveConfigPath,
   runOrchestrator,
   sanitize,
+  searchLessons,
   wrapXml,
   writeOutput,
 } from '../utils.js';
@@ -41,6 +41,13 @@ import {
 
 const INCREMENTAL_MAX_LINES = 15;
 
+/**
+ * How many already-indexed lessons `learnFromVerdict` pulls as dedup context.
+ * Names the value that was inline before mmnto-ai/totem#2735 re-routed that
+ * search through {@link searchLessons}; the cap itself is unchanged.
+ */
+const MAX_DEDUP_LESSONS = 10;
+
 // Re-export constants & prompts so existing consumers are not broken
 export {
   MAX_DIFF_CHARS,
@@ -57,17 +64,23 @@ interface RetrievedContext {
   lessons: SearchResult[];
 }
 
-async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
+/** Exported as the test seam for the lesson-delivery invariant (mmnto-ai/totem#2735). */
+export async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [allSpecs, sessions, code] = await Promise.all([
+  // Lessons are their own pool, asked for by type — never partitioned out of
+  // the spec pool (mmnto-ai/totem#2735). The spec request keeps its pre-fix
+  // width: on the hybrid path that width is the RRF fusion window.
+  const [allSpecs, lessons, sessions, code] = await Promise.all([
     search('spec', SPEC_SEARCH_POOL),
+    searchLessons(store, query, MAX_LESSONS),
     search('session_log', MAX_SESSION_RESULTS),
     search('code', MAX_CODE_RESULTS),
   ]);
 
-  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPEC_RESULTS);
+  // The partition's own slice, kept verbatim.
+  const specs = allSpecs.slice(0, MAX_SPEC_RESULTS);
 
   return { specs, sessions, code, lessons };
 }
@@ -931,11 +944,11 @@ export async function learnFromVerdict(
         absolutePathRoot: cwd,
       });
       await store.connect();
-      const existing = await store.search({
-        query: 'lesson trap pattern decision',
-        typeFilter: 'spec',
-        maxResults: 10,
-      });
+      const existing = await searchLessons(
+        store,
+        'lesson trap pattern decision',
+        MAX_DEDUP_LESSONS,
+      );
       const lessonSection = formatResults(existing, 'EXISTING LESSONS (do NOT duplicate)');
       if (lessonSection) {
         sections.push('\n=== DEDUP CONTEXT ===');

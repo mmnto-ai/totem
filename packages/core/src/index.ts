@@ -200,6 +200,7 @@ export { createEmbedder, isOllamaAvailable } from './embedders/embedder.js';
 // Store
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
 export { LanceStore } from './store/lance-store.js';
+export { searchLessons } from './store/search-lessons.js';
 
 // Pipeline
 export type { IndexManifest, ManifestDocument, ResolvedFile } from './ingest/sync.js';

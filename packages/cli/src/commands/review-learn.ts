@@ -24,6 +24,7 @@ import {
   resolveConfigPath,
   runOrchestrator,
   sanitize,
+  searchLessons,
   wrapUntrustedXml,
 } from '../utils.js';
 // Reuse parsing and selection helpers from extract (they are exported)
@@ -76,12 +77,9 @@ function groupIntoThreads(comments: StandardReviewComment[]): CommentThread[] {
 
 // ─── LanceDB retrieval ───────────────────────────────
 
-async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[]> {
-  return store.search({
-    query: 'lesson trap pattern decision',
-    typeFilter: 'spec',
-    maxResults: MAX_EXISTING_LESSONS,
-  });
+/** Exported as the test seam for the lesson-type invariant (mmnto-ai/totem#2735). */
+export async function retrieveExistingLessons(store: LanceStore): Promise<SearchResult[]> {
+  return searchLessons(store, 'lesson trap pattern decision', MAX_EXISTING_LESSONS);
 }
 
 // ─── Prompt assembly ─────────────────────────────────

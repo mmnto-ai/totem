@@ -349,17 +349,12 @@ export function formatResults(
 export const DEFAULT_MAX_LESSON_CHARS = 8_000;
 
 /**
- * Partition search results into lessons (from lessons.md) and non-lesson specs.
+ * The lesson retrieval helper lives in core (`store/search-lessons.ts`) so the
+ * `lesson` content type has ONE spelling across both packages — core's
+ * `deduplicateLessons` reads lessons too (mmnto-ai/totem#2735). Re-exported
+ * here because every CLI call site already imports from this module.
  */
-export function partitionLessons(
-  allSpecs: SearchResult[],
-  maxLessons: number,
-  maxSpecs: number,
-): { lessons: SearchResult[]; specs: SearchResult[] } {
-  const lessons = allSpecs.filter((r) => r.type === 'lesson').slice(0, maxLessons);
-  const specs = allSpecs.filter((r) => r.type !== 'lesson').slice(0, maxSpecs);
-  return { lessons, specs };
-}
+export { searchLessons } from '@mmnto/totem';
 
 /** Max content length for condensed lesson snippets. */
 const CONDENSED_LESSON_LENGTH = 120;

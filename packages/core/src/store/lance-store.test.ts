@@ -271,6 +271,32 @@ describe('LanceStore', () => {
       expect(results.every((r) => r.type === 'spec')).toBe(true);
     });
 
+    // The construction fact behind mmnto-ai/totem#2735: `typeFilter` is exact
+    // equality on ONE content type, so a spec-typed pool can never contain a
+    // lesson — partitioning lessons out of a `spec` query yields nothing.
+    it("a 'spec' pool never contains a lesson; lessons come only from a 'lesson' pool", async () => {
+      await store.insert([
+        makeChunk({ type: 'lesson', content: 'lesson content gamma', label: 'lesson gamma' }),
+        makeChunk({ type: 'spec', content: 'spec content gamma', label: 'spec gamma' }),
+      ]);
+
+      const lessonPool = await store.search({
+        query: 'content gamma',
+        typeFilter: 'lesson',
+        maxResults: 10,
+      });
+      expect(lessonPool.length).toBe(1);
+      expect(lessonPool.every((r) => r.type === 'lesson')).toBe(true);
+
+      const specPool = await store.search({
+        query: 'content gamma',
+        typeFilter: 'spec',
+        maxResults: 10,
+      });
+      expect(specPool.length).toBe(1);
+      expect(specPool.some((r) => r.type === 'lesson')).toBe(false);
+    });
+
     it('filters by boundary (file path prefix)', async () => {
       await store.insert([
         makeChunk({ filePath: 'packages/core/src/compiler.ts', content: 'core compiler logic' }),

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { deduplicateByHeading, normalizeHeading } from './semantic-dedup.js';
+import type { Embedder } from './embedders/embedder.js';
+import { deduplicateByHeading, deduplicateLessons, normalizeHeading } from './semantic-dedup.js';
+import type { LanceStore } from './store/lance-store.js';
+import type { SearchResult } from './types.js';
 
 describe('normalizeHeading', () => {
   it('lowercases and collapses whitespace', () => {
@@ -94,5 +97,46 @@ describe('deduplicateByHeading', () => {
     const { unique, headingDupes } = deduplicateByHeading([]);
     expect(unique).toHaveLength(0);
     expect(headingDupes).toHaveLength(0);
+  });
+});
+
+// ─── deduplicateLessons: the DB check (mmnto-ai/totem#2735) ──
+
+describe('deduplicateLessons — the existing-lesson check', () => {
+  /** A store that records every search request and returns no rows. */
+  function spyStore(): { store: LanceStore; requests: Record<string, unknown>[] } {
+    const requests: Record<string, unknown>[] = [];
+    const store = {
+      search: async (req: Record<string, unknown>): Promise<SearchResult[]> => {
+        requests.push(req);
+        return [];
+      },
+    } as unknown as LanceStore;
+    return { store, requests };
+  }
+
+  /** Deterministic embedder — the batch pass needs vectors, not real semantics. */
+  const embedder: Embedder = {
+    dimensions: 2,
+    async embed(texts: string[]): Promise<number[][]> {
+      return texts.map((t) => [t.length, 1]);
+    },
+  };
+
+  it("asks the store for typeFilter 'lesson', not 'spec'", async () => {
+    // The mmnto-ai/totem#431 defect reached core too: this check asked for
+    // `spec`, so it could never see an existing lesson and re-minted duplicates.
+    const { store, requests } = spyStore();
+
+    await deduplicateLessons(
+      [{ tags: ['a'], text: 'A lesson about pinning versions.' }],
+      store,
+      embedder,
+    );
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!['typeFilter']).toBe('lesson');
+    expect(requests[0]!['query']).toBe('A lesson about pinning versions.');
+    expect(requests[0]!['maxResults']).toBe(1);
   });
 });

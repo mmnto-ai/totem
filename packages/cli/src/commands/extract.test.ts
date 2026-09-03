@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { CustomSecret } from '@mmnto/totem';
+import type { CustomSecret, LanceStore, SearchResult } from '@mmnto/totem';
 import { maskSecrets, TotemConfigError } from '@mmnto/totem';
 
 import type { StandardCodeScanAlert } from '../adapters/pr-adapter.js';
@@ -19,12 +19,14 @@ import {
   extractCommand,
   flagSuspiciousLessons,
   LOCAL_EXTRACT_SYSTEM_PROMPT,
+  MAX_EXISTING_LESSONS,
   parseLessons,
   SCAN_EXTRACT_SYSTEM_PROMPT,
   selectLessons,
   SEMANTIC_DEDUP_THRESHOLD,
   SYSTEM_PROMPT,
 } from './extract.js';
+import { retrieveExistingLessons } from './extract-shared.js';
 
 // ─── parseLessons ───────────────────────────────────────
 
@@ -1298,5 +1300,26 @@ describe('LOCAL_EXTRACT_SYSTEM_PROMPT', () => {
 
   it('mentions NONE as output for empty results', () => {
     expect(LOCAL_EXTRACT_SYSTEM_PROMPT).toContain('NONE');
+  });
+});
+
+// ─── retrieveExistingLessons (mmnto-ai/totem#2735) ──────
+
+describe('retrieveExistingLessons', () => {
+  it("asks the store for typeFilter 'lesson', not 'spec'", async () => {
+    const requests: Record<string, unknown>[] = [];
+    const store = {
+      search: async (req: Record<string, unknown>): Promise<SearchResult[]> => {
+        requests.push(req);
+        return [];
+      },
+    } as unknown as LanceStore;
+
+    await retrieveExistingLessons(store);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!['typeFilter']).toBe('lesson');
+    expect(requests[0]!['query']).toBe('lesson trap pattern decision');
+    expect(requests[0]!['maxResults']).toBe(MAX_EXISTING_LESSONS);
   });
 });

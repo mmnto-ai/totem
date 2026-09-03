@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LanceStore, SearchResult } from '@mmnto/totem';
+
 import type { NormalizedBotFinding } from '../parsers/bot-review-parser.js';
 import {
   extractResolvedBotFindings,
   isBotComment,
   isThreadResolved,
 } from '../parsers/bot-review-parser.js';
-import { assembleReviewLearnPrompt } from './review-learn.js';
-import { REVIEW_LEARN_SYSTEM_PROMPT } from './review-learn-templates.js';
+import { assembleReviewLearnPrompt, retrieveExistingLessons } from './review-learn.js';
+import { MAX_EXISTING_LESSONS, REVIEW_LEARN_SYSTEM_PROMPT } from './review-learn-templates.js';
 
 // ─── assembleReviewLearnPrompt ──────────────────────
 
@@ -304,5 +306,26 @@ describe('REVIEW_LEARN_SYSTEM_PROMPT', () => {
 
   it('instructs to return empty array when no lessons', () => {
     expect(REVIEW_LEARN_SYSTEM_PROMPT).toContain('return an empty array');
+  });
+});
+
+// ─── retrieveExistingLessons (mmnto-ai/totem#2735) ─────
+
+describe('retrieveExistingLessons', () => {
+  it("asks the store for typeFilter 'lesson', not 'spec'", async () => {
+    const requests: Record<string, unknown>[] = [];
+    const store = {
+      search: async (req: Record<string, unknown>): Promise<SearchResult[]> => {
+        requests.push(req);
+        return [];
+      },
+    } as unknown as LanceStore;
+
+    await retrieveExistingLessons(store);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!['typeFilter']).toBe('lesson');
+    expect(requests[0]!['query']).toBe('lesson trap pattern decision');
+    expect(requests[0]!['maxResults']).toBe(MAX_EXISTING_LESSONS);
   });
 });

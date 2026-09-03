@@ -1,13 +1,22 @@
 import type { ContentType, LanceStore, SearchResult } from '@mmnto/totem';
 
 import type { StandardIssueListItem } from '../adapters/issue-adapter.js';
-import { formatLessonSection, formatResults, partitionLessons, wrapXml } from '../utils.js';
+import { formatLessonSection, formatResults, searchLessons, wrapXml } from '../utils.js';
 
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Triage';
-const SPEC_SEARCH_POOL = 20;
-const MAX_SPEC_RESULTS = 5;
+/**
+ * Spec candidates REQUESTED before the delivery cap. Kept at its
+ * pre-mmnto-ai/totem#2735 width and exported so its test binds to the real
+ * value: on the hybrid path the requested width IS the fusion window
+ * (`runHybridSearch` in `packages/core/src/store/lance-search.ts` fetches
+ * `maxResults * HYBRID_OVERFETCH_FACTOR` per leg before RRF), so a narrower
+ * request changes which specs survive fusion.
+ */
+export const SPEC_SEARCH_POOL = 20;
+/** Specs delivered to the prompt. Exported so its cap test binds to the real value. */
+export const MAX_SPEC_RESULTS = 5;
 const MAX_LESSONS = 5;
 const MAX_SESSION_RESULTS = 5;
 const QUERY_TITLES_TRUNCATE = 2_000;
@@ -56,16 +65,22 @@ interface RetrievedContext {
   lessons: SearchResult[];
 }
 
-async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
+/** Exported as the test seam for the lesson-delivery invariant (mmnto-ai/totem#2735). */
+export async function retrieveContext(query: string, store: LanceStore): Promise<RetrievedContext> {
   const search = (typeFilter: ContentType, maxResults: number) =>
     store.search({ query, typeFilter, maxResults });
 
-  const [allSpecs, sessions] = await Promise.all([
+  // Lessons are their own pool, asked for by type — never partitioned out of
+  // the spec pool (mmnto-ai/totem#2735). The spec request keeps its pre-fix
+  // width: on the hybrid path that width is the RRF fusion window.
+  const [allSpecs, lessons, sessions] = await Promise.all([
     search('spec', SPEC_SEARCH_POOL),
+    searchLessons(store, query, MAX_LESSONS),
     search('session_log', MAX_SESSION_RESULTS),
   ]);
 
-  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPEC_RESULTS);
+  // The partition's own slice, kept verbatim.
+  const specs = allSpecs.slice(0, MAX_SPEC_RESULTS);
 
   return { specs, sessions, lessons };
 }

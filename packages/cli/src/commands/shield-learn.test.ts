@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Mocks (must precede imports) ────────────────────
 
-const { mockRunOrchestrator } = vi.hoisted(() => ({
+const { mockRunOrchestrator, mockStoreSearch } = vi.hoisted(() => ({
   mockRunOrchestrator: vi.fn(),
+  /** Every `store.search` request the dedup path made (mmnto-ai/totem#2735). */
+  mockStoreSearch: vi.fn(),
 }));
 
 vi.mock('../ui.js', () => ({
@@ -31,10 +33,13 @@ vi.mock('@mmnto/totem', async () => {
   return {
     ...actual,
     createEmbedder: vi.fn(),
-    LanceStore: vi.fn().mockImplementation(() => ({
-      connect: vi.fn(),
-      search: vi.fn().mockResolvedValue([]),
-    })),
+    // A class, not `vi.fn().mockImplementation(...)`: an arrow implementation
+    // is not a constructor, so `new Store(...)` threw and the dedup path was
+    // silently swallowed by its own catch (mmnto-ai/totem#2735).
+    LanceStore: class {
+      async connect(): Promise<void> {}
+      search = mockStoreSearch;
+    },
     runSync: vi.fn().mockResolvedValue({ chunksProcessed: 0, filesProcessed: 0 }),
   };
 });
@@ -91,6 +96,8 @@ FAIL — Missing test coverage for new utility function.
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-learn-'));
     lessonsDir = path.join(tmpDir, '.totem', 'lessons');
     mockRunOrchestrator.mockReset();
+    mockStoreSearch.mockReset();
+    mockStoreSearch.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -112,6 +119,30 @@ Parsing functions must always have unit tests to catch malformed input edge case
     const content = readAllLessonFiles();
     expect(content).toContain('Parsing functions must always have unit tests');
     expect(content).toContain('**Tags:** testing, quality');
+  });
+
+  it("dedup context asks the store for typeFilter 'lesson' (mmnto-ai/totem#2735)", async () => {
+    mockRunOrchestrator.mockResolvedValueOnce('NONE');
+    // The dedup search runs only when an embedder is configured; before
+    // mmnto-ai/totem#2735 it asked for `spec`, so it never saw an existing
+    // lesson and the extractor re-minted duplicates.
+    const embeddingConfig = {
+      ...baseConfig,
+      embedding: { provider: 'gemini' as const, model: 'test' },
+    };
+
+    await learnFromVerdict(
+      failVerdict,
+      sampleDiff,
+      { learn: true, yes: true },
+      embeddingConfig,
+      tmpDir,
+    );
+
+    expect(mockStoreSearch).toHaveBeenCalledTimes(1);
+    const request = mockStoreSearch.mock.calls[0]![0] as Record<string, unknown>;
+    expect(request['typeFilter']).toBe('lesson');
+    expect(request['query']).toBe('lesson trap pattern decision');
   });
 
   it('skips when LLM returns NONE', async () => {
