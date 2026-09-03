@@ -1668,10 +1668,16 @@ export async function resolveLegFieldForHead(
   // 4): the answer is `none`, never a name resolved on ancestry alone. Falling
   // back would let the field credit exactly the merge-base deposit the gate
   // rejects — the field disagreeing with the gate, which is the one thing it
-  // must never do. The store is not read: with no coverage there is no
-  // candidate to credit, so nothing about one to disclose either.
+  // must never do.
+  //
+  // The store is still READ, for its corrupt rows only (fold 5, F7). A file
+  // that is not a deposit is a fact about the store, true whatever coverage
+  // says, and the first version of this arm silenced exactly the sensor a
+  // hand-edited deposit needs. No winner is resolved: nothing here can credit
+  // a candidate.
   if (coverage !== undefined && coverage.query === undefined) {
-    return { field: renderLegField(undefined), corrupt: [] };
+    const { loadLegDeposits } = await import('@mmnto/totem');
+    return { field: renderLegField(undefined), corrupt: loadLegDeposits(totemDirAbs).corrupt };
   }
   // The SAME core resolution the gate calls, with the same coverage inputs when
   // the site could derive them (mmnto-ai/totem#2698 fold 3): a field that named
@@ -1723,7 +1729,12 @@ export async function printCovariateLine(query: CovariateQuery): Promise<void> {
   // operator chose to review. Quiet: this resolution runs inside a `[Review]`
   // run and must not narrate a `[Legs]` diff source nobody asked for.
   const { deriveLegsCoverageForHead } = await import('./legs.js');
-  const coverage = await deriveLegsCoverageForHead(query.cwd, query.globs, { quiet: true });
+  const coverage = await deriveLegsCoverageForHead(query.cwd, query.globs, {
+    suppressScopeNarration: true,
+    // The SAME runner the head/ancestry half uses (mmnto-ai/totem#2698 fold 5,
+    // Q1): a seam honored on one probe and bypassed on another is not a seam.
+    run: (args) => tryGit(gitExec, [...args]) ?? '',
+  });
   if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
   const leg = await resolveLegFieldForHead(query.totemDirAbs, query.cwd, gitExec, coverage);
   for (const entry of leg.corrupt) {

@@ -3138,6 +3138,10 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
 // resolves: win32 through git-bash, plus the ubuntu and macos CI legs. The stub
 // suite above is retained and carries the mapping, including the states this
 // suite cannot reach through a real CLI (a build that predates the verb).
+//
+// One case inside it is POSIX-only, and says so at its own site: a quote- and
+// backslash-bearing owed path cannot exist on NTFS. Every other case, the
+// non-ASCII one included, runs on win32 too.
 describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2698)', () => {
   /** Built, never authored as an escape (the banked decode trap). */
   const NL = String.fromCharCode(10);
@@ -3167,6 +3171,7 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
   let binDir: string;
   let logPath: string;
   let baseSha: string;
+  let ancestorSha: string;
   let headSha: string;
 
   function git(...args: string[]): string {
@@ -3209,6 +3214,15 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     fs.writeFileSync(path.join(repoDir, ...ACCENTED.split('/')), '# an accented page' + NL);
     git('add', '-A', 'docs');
     git('commit', '-q', '-m', 'a docs change');
+    // C1 — the head a leg could read, and an ANCESTOR of the head being pushed.
+    ancestorSha = git('rev-parse', 'HEAD').trim();
+    // C2 — one commit further, touching nothing owed, so the owed set is still
+    // C1's two docs pages and a deposit at C1 covers all of them. Without it
+    // that deposit would be EXACT, credited by construction, and the reach
+    // probe this suite exists to exercise would never run.
+    fs.writeFileSync(path.join(repoDir, 'src.ts'), 'export const a = 2;' + NL);
+    git('add', 'src.ts');
+    git('commit', '-q', '-m', 'a code-only change');
     headSha = git('rev-parse', 'HEAD').trim();
 
     // The shim IS the real CLI for `legs`, recorded either way. First on PATH,
@@ -3307,15 +3321,21 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
   );
 
   it.skipIf(!composedOk)(
-    'OWED with a fresh deposit: the hook passes with the evidence line',
+    'OWED with an ANCESTOR deposit that covers the owed set: the hook passes',
     () => {
-      deposit(headSha);
+      deposit(ancestorSha);
       const r = runHook();
       expect(invocations()).toContain('legs gate');
       expect(r.stdout).toContain('[Totem] legs evidence: .totem/artifacts/legs/');
-      expect(r.stdout).toContain(`· head ${headSha.slice(0, 8)} · exact ·`);
-      // An exact match covers everything by construction (mmnto-ai/totem#2698 fold 3).
-      // 2/2, not 1/2: the accented path is COVERED, which is the fold-4 fix.
+      // ANCESTOR, so the reach probe actually RAN: this is the only composed
+      // state that drives `git diff --name-only -z base...<deposit>` end to
+      // end. Depositing at the head took core's exact branch, which credits
+      // coverage by construction and never probes (mmnto-ai/totem#2698 fold 5).
+      expect(r.stdout).toContain(
+        `· head ${headSha.slice(0, 8)} · nearest ancestor, +1 commits since the leg read ·`,
+      );
+      // 2/2 with an accented owed path among them: the measured result of
+      // reading both sides raw.
       expect(r.stdout).toContain('· covers 2/2 owed paths ·');
       expect(r.stdout).toContain('blocking=0 material=1 folded=1');
       expect(r.stdout).not.toContain('BLOCKED');
@@ -3361,6 +3381,32 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
       // And it is NOT reported as an ancestry failure — the reason is the cure.
       expect(r.stdout).not.toContain('not an ancestor of head');
+    },
+  );
+
+  // POSIX-only, and only for these two names: NTFS refuses a double quote and a
+  // backslash in a filename, while Linux and macOS — where the strict-tier
+  // population runs — allow both, and git C-quotes both in the `diff --git`
+  // headers the owed set used to be parsed from. This drives them through the
+  // REAL CLI and the generated hook (mmnto-ai/totem#2698 fold 5).
+  it.skipIf(!composedOk || process.platform === 'win32')(
+    'OWED on quote- and backslash-bearing paths: the hook names them as they are on disk',
+    () => {
+      const quoted = `docs/a${String.fromCharCode(34)}quoted${String.fromCharCode(34)}.md`;
+      const backslashed = `docs/back${String.fromCharCode(92)}slash.md`;
+      fs.writeFileSync(path.join(repoDir, ...quoted.split('/')), '# quoted' + NL);
+      fs.writeFileSync(path.join(repoDir, ...backslashed.split('/')), '# backslashed' + NL);
+      git('add', '-A', 'docs');
+      git('commit', '-q', '-m', 'the hostile pages');
+
+      const r = runHook();
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      // Raw in the basis. Escaped names here would be the fold-4 defect, and
+      // the decoder that fold shipped could not have reached either of these.
+      expect(r.stdout).toContain(quoted);
+      expect(r.stdout).toContain(backslashed);
+      expect(r.stdout).not.toContain(String.fromCharCode(92) + '"');
     },
   );
 

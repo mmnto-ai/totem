@@ -80,52 +80,6 @@ export function legReachPaths(
 /** The `-z` record separator, built rather than escaped (the banked decode trap). */
 const LEG_PATH_SEPARATOR = String.fromCharCode(0);
 
-/** A C-quoted octal byte escape, e.g. the two that spell `é` in UTF-8. */
-const GIT_OCTAL_ESCAPE = /\\[0-7]{3}/;
-
-/**
- * Undo git's C-style quoting on a path name (mmnto-ai/totem#2698 fold 4).
- *
- * Measured, because the fold's premise was half of the picture. Under the
- * default `core.quotePath`, git quotes a non-ASCII path in BOTH surfaces this
- * slice reads, and they disagree about how:
- *
- * - `git diff --name-only`     → `"docs/caf\303\251.md"` (with the quotes)
- * - the `diff --git` header, which `extractChangedFiles` parses and strips
- *   the quotes from  → `docs/caf\303\251.md` (escapes left as literal text)
- * - `git diff --name-only -z`  → `docs/café.md` (raw; `-z` never quotes)
- *
- * So `-z` on the reach probe alone does not make the two sets intersect — it
- * changes WHICH WAY they miss. The owed side has to speak the same spelling,
- * and this is where it is put back into one: the changed-file set is decoded
- * ONCE, at the boundary, so the globs, the basis, the printed lines and the
- * coverage intersection all name the file the way the filesystem does.
- *
- * Deliberately narrow. It decodes only a name that actually carries an octal
- * escape — the shape that produced the defect — so an ordinary path containing
- * a literal backslash (legal, and never produced by git on this surface, which
- * always emits `/`) is returned untouched rather than guessed at.
- */
-export function decodeGitQuotedPath(name: string): string {
-  if (!GIT_OCTAL_ESCAPE.test(name)) return name;
-  const bytes: number[] = [];
-  for (let i = 0; i < name.length; ) {
-    if (name.charAt(i) === String.fromCharCode(92) && i + 3 < name.length) {
-      const octal = name.slice(i + 1, i + 4);
-      if (/^[0-7]{3}$/.test(octal)) {
-        bytes.push(Number.parseInt(octal, 8));
-        i += 4;
-        continue;
-      }
-    }
-    // Any other character is already the byte it looks like: this surface is
-    // UTF-8 text, and every byte git had to escape came out as an octal triple.
-    for (const byte of Buffer.from(name.charAt(i), 'utf-8')) bytes.push(byte);
-    i += 1;
-  }
-  return Buffer.from(bytes).toString('utf-8');
-}
-
 /** The prefix `TotemError` stamps on every message — stripped when re-branding. */
 const TOTEM_ERROR_BRAND = '[Totem Error] ';
 
@@ -621,6 +575,21 @@ export async function runLegsGate(
 }
 
 /**
+ * How a caller wants the branch scope resolved.
+ *
+ * `run` is the git seam (mmnto-ai/totem#2698 fold 5, Q1): the covariate
+ * resolves HEAD and ancestry through an INJECTED runner, and a reach probe that
+ * shelled out to real git regardless left half that seam unhonored — a test
+ * could fake the ancestry half and silently get real git for the other.
+ */
+export interface LegsScopeOptions {
+  /** Suppress this module's `[Legs]` scope lines AND the resolver's own. */
+  suppressScopeNarration?: boolean;
+  /** Git runner; defaults to `safeExec('git', …, { cwd })`. */
+  run?: (args: readonly string[]) => string;
+}
+
+/**
  * Resolve the branch scope the floor is judged on — the ONE derivation the gate
  * and the covariate both use (mmnto-ai/totem#2698 fold 3 item 3), so the
  * covariate can never name a deposit the gate would reject.
@@ -644,17 +613,20 @@ export async function runLegsGate(
  */
 export async function resolveUnfilteredBranchScope(
   cwd: string,
-  options: { quiet?: boolean } = {},
+  options: LegsScopeOptions = {},
 ): Promise<LegsGateScope> {
+  const { safeExec } = await import('@mmnto/totem');
   const { getDiffForReview } = await import('../git.js');
   const { log } = await import('../ui.js');
   await loadSanitizer();
+  const run =
+    options.run ?? ((args: readonly string[]): string => safeExec('git', [...args], { cwd }));
+  const narrate = options.suppressScopeNarration !== true;
   // The GATE narrates its scope; the covariate does not. Since fold 4 the leg
   // field derives coverage from HEAD's branch scope on every review scope, so
-  // this resolution now runs inside `totem review` runs too — and a `[Legs]`
-  // diff-source line in the middle of a `[Review]` run is noise about a probe
-  // the operator did not ask for.
-  if (options.quiet !== true) {
+  // this resolution runs inside `totem review` runs too — and a `[Legs]` line
+  // in the middle of a `[Review]` run describes a probe nobody asked for.
+  if (narrate) {
     log.info(
       TAG,
       safeLine(
@@ -662,22 +634,39 @@ export async function resolveUnfilteredBranchScope(
       ),
     );
   }
+  // `getDiffForReview` still resolves the BASE (its origin-preference logic is
+  // the one this gate must agree with) and still rules on the empty-diff case.
+  // Its narration is suppressed either way for a background probe.
   const result = await getDiffForReview(
-    // `quiet` carries through to the resolver's OWN two disclosure lines: the
-    // covariate's derivation must be silent end to end, not merely stop adding
-    // a third line of its own (mmnto-ai/totem#2698 fold 4).
-    { branch: true, ...(options.quiet === true ? { quiet: true } : {}) },
+    { branch: true, ...(narrate ? {} : { suppressScopeNarration: true }) },
     { ignorePatterns: [], shieldIgnorePatterns: [] },
     cwd,
     TAG,
   );
-  // ONE spelling from here on (mmnto-ai/totem#2698 fold 4): the changed-file
-  // set arrives C-quoted for non-ASCII names, and the reach probe reads raw
-  // names through `-z`. Decoding here — the boundary both the predicate and
-  // the coverage intersection are downstream of — is what keeps them talking
-  // about the same file.
-  const files = ('empty' in result ? [] : result.changedFiles).map(decodeGitQuotedPath);
-  return { files, ...(result.base === undefined ? {} : { base: result.base }) };
+  const base = result.base;
+  // The FILE LIST is read separately, with `-z` (mmnto-ai/totem#2698 fold 5).
+  //
+  // Not a preference: `extractChangedFiles` parses `diff --git` headers, which
+  // git C-QUOTES for any path carrying a non-ASCII byte, a double quote or a
+  // backslash. The reach probe reads the same names raw. Fold 4 tried to
+  // reconcile them by DECODING the quoted side, which handled octal triples
+  // and nothing else — a name with a quote or a backslash still missed, and a
+  // literal `\123` inside a legal filename was rewritten to `S`. Reading the
+  // owed side through the SAME `-z` helper the reach uses makes both sides raw
+  // by construction, so there is nothing left to decode and no name a decoder
+  // could corrupt.
+  const files =
+    'empty' in result || base === undefined
+      ? // No base, or nothing changed: there is no `base...HEAD` to list, and
+        // an empty scope is not owed anyway.
+        []
+      : legReachPaths(run, base, 'HEAD');
+  // The gate's own disclosure, from the RAW list — so the names it prints are
+  // the names it judged, spelled as they are on disk.
+  if (narrate) {
+    log.info(TAG, safeLine(`Changed files (${files.length}): ${files.map(safeLine).join(', ')}`));
+  }
+  return { files, ...(base === undefined ? {} : { base }) };
 }
 
 /**
@@ -722,7 +711,7 @@ export interface LegsCoverageResolution {
 export async function deriveLegsCoverageForHead(
   cwd: string,
   globs: readonly string[],
-  options: { quiet?: boolean } = {},
+  options: LegsScopeOptions = {},
 ): Promise<LegsCoverageResolution> {
   const { classifyLegsOwed } = await import('@mmnto/totem');
   await loadSanitizer();
@@ -815,7 +804,10 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     resolveHead() {
       return safeExec('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd }).trim();
     },
-    changedFiles: () => resolveUnfilteredBranchScope(cwd),
+    changedFiles: () =>
+      resolveUnfilteredBranchScope(cwd, {
+        run: (args) => safeExec('git', [...args], { cwd }),
+      }),
   };
   return deps;
 }

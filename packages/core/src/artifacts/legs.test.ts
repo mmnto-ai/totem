@@ -611,6 +611,29 @@ describe('findLegDepositForHead — coverage (mmnto-ai/totem#2698 fold 3)', () =
     expect(resolution.winner?.coverage).toEqual({ covered: 1, owed: 1, missing: [] });
   });
 
+  it('nothing owed spends NO reach probe (the intersection cannot change)', () => {
+    // mmnto-ai/totem#2698 fold 5, Q3: with an empty owed set the answer is
+    // `0/0` whatever the candidate reached, so the probe is a git call whose
+    // result is discarded. An adapter that would throw on one proves it is
+    // never made.
+    saveLegDeposit(tmpDir, deposit({ diffSha: OLDER }));
+    const resolution = findLegDepositForHead(
+      tmpDir,
+      HEAD,
+      {
+        isCommit: () => true,
+        isAncestor: () => true,
+        distance: () => 2,
+        changedFiles: () => {
+          throw new Error('changedFiles must not be called when nothing is owed');
+        },
+      },
+      { base: 'main', owedFiles: [] },
+    );
+    expect(resolution.winner?.coverage).toEqual({ covered: 0, owed: 0, missing: [] });
+    expect(resolution.stale).toEqual([]);
+  });
+
   it('nothing owed is 0/0 and NOT stale (vacuous coverage)', () => {
     // Unreachable from the gate — it never consults the store when nothing is
     // owed — so this pins the FUNCTION's own honest behavior rather than a

@@ -2029,7 +2029,9 @@ async function legCoverageForCovariate(
   cwd: string,
 ): Promise<{ query?: LegCoverageQuery; reason?: string }> {
   const { deriveLegsCoverageForHead, legsOwedGlobs } = await import('./legs.js');
-  return deriveLegsCoverageForHead(cwd, await legsOwedGlobs(config), { quiet: true });
+  return deriveLegsCoverageForHead(cwd, await legsOwedGlobs(config), {
+    suppressScopeNarration: true,
+  });
 }
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {

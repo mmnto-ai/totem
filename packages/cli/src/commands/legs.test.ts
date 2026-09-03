@@ -948,6 +948,10 @@ describe('the gate measures COVERAGE, not only ancestry (mmnto-ai/totem#2698 fol
 //
 // This drives the REAL adapter (`buildLegsGateDeps`) against a real repo,
 // because the defect lives in the argv, which a fake seam cannot reproduce.
+//
+// COVERAGE DECLARATION: the two names here — non-ASCII, and ASCII with a space
+// — are legal on every platform, so this suite runs everywhere. The two NTFS
+// refuses (a double quote, a backslash) are the sibling suite below, POSIX-only.
 describe('the coverage reach reads unquoted paths (mmnto-ai/totem#2698 fold 4)', () => {
   const realCwd = process.cwd();
   let tmpDir: string;
@@ -1030,3 +1034,99 @@ describe('the coverage reach reads unquoted paths (mmnto-ai/totem#2698 fold 4)',
     expect(reach.some((entry) => entry.startsWith('"'))).toBe(false);
   });
 });
+
+// The two names NTFS refuses (mmnto-ai/totem#2698 fold 5). A double quote and a
+// backslash are legal on Linux and macOS — where the strict-tier population
+// actually runs — and git C-quotes BOTH in `diff --git` headers, exactly as it
+// does a non-ASCII byte. The fold-4 decoder handled octal triples only, so these
+// two still reached the intersection escaped while the reach read them raw.
+// Reading the owed side through the same `-z` helper is what makes them agree,
+// and these cases are the ones a decoder could never have covered.
+//
+// COVERAGE DECLARATION: this suite is POSIX-only by necessity, so it lands on
+// the ubuntu and macos CI legs; the non-ASCII and the space cases live in the
+// suite above and run everywhere, win32 included.
+describe.skipIf(process.platform === 'win32')(
+  'the coverage reach reads quote- and backslash-bearing paths (mmnto-ai/totem#2698 fold 5)',
+  () => {
+    const realCwd = process.cwd();
+    let tmpDir: string;
+    /** Built, never authored as escapes. */
+    const QUOTED = `docs/a${String.fromCharCode(34)}quoted${String.fromCharCode(34)}.md`;
+    const BACKSLASHED = `docs/back${String.fromCharCode(92)}slash.md`;
+    let coveredSha: string;
+
+    beforeEach(() => {
+      tmpDir = fs.realpathSync.native(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-hostile-')),
+      );
+      const git = (...args: string[]): string =>
+        execFileSync(
+          'git',
+          ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+          { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+        ).trim();
+      git('init', '-b', 'main');
+      fs.writeFileSync(path.join(tmpDir, 'src.ts'), 'export const a = 1;');
+      git('add', '.');
+      git('commit', '-m', 'base');
+
+      // C1 — the two hostile names a leg here could have read.
+      git('checkout', '-b', 'feat/hostile');
+      fs.mkdirSync(path.join(tmpDir, 'docs'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, ...QUOTED.split('/')), '# quoted');
+      fs.writeFileSync(path.join(tmpDir, ...BACKSLASHED.split('/')), '# backslashed');
+      git('add', '-A', 'docs');
+      git('commit', '-m', 'the hostile pages');
+      coveredSha = git('rev-parse', 'HEAD');
+
+      // C2 — one more owed path, after the read.
+      fs.writeFileSync(path.join(tmpDir, 'docs', 'later.md'), '# later');
+      git('add', 'docs/later.md');
+      git('commit', '-m', 'a later page');
+
+      loadConfigMock.mockResolvedValue({
+        totemDir: '.totem',
+        ignorePatterns: [],
+        hooks: { legsOwed: { globs: ['docs/**'] } },
+      } as unknown as TotemConfig);
+      vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      loadConfigMock.mockResolvedValue(TEST_CONFIG);
+      process.chdir(realCwd);
+      cleanTmpDir(tmpDir);
+    });
+
+    it('both names reach the owed set RAW, and an ancestor deposit covers them', async () => {
+      const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+      saveLegDeposit(path.join(tmpDir, '.totem'), depositFixture({ diffSha: coveredSha }));
+      const deps = await buildLegsGateDeps();
+
+      const scope = await deps.changedFiles();
+      // Raw on the OWED side — the half the decoder could not fix.
+      expect(scope.files).toContain(QUOTED);
+      expect(scope.files).toContain(BACKSLASHED);
+      expect(scope.files.some((file) => file.includes(String.fromCharCode(92) + '"'))).toBe(false);
+
+      const outcome = await runLegsGate({}, deps);
+      expect(outcome.derived).toBe(0);
+      // An ANCESTOR deposit, so the reach probe really ran (an exact match
+      // would have been credited without one).
+      expect(outcome.stdout[0]).toContain('nearest ancestor, +1 commits since the leg read');
+      expect(outcome.stdout[0]).toContain('covers 2/3 owed paths');
+    });
+
+    it('the BLOCKED basis spells both names as they are on disk', async () => {
+      const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+      const deps = await buildLegsGateDeps();
+      const outcome = await runLegsGate({}, deps);
+      expect(outcome.derived).toBe(3);
+      expect(outcome.stdout[0]).toContain(`${QUOTED}`);
+      expect(outcome.stdout[0]).toContain(`${BACKSLASHED}`);
+    });
+  },
+);

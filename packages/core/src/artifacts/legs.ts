@@ -610,13 +610,18 @@ export function findLegDepositForHead(
       continue;
     }
     let measured: LegDepositCoverage | undefined;
-    if (coverage !== undefined) {
+    if (coverage !== undefined && owedFiles.length === 0) {
+      // Nothing owed: the intersection is empty whatever the candidate reached,
+      // so the probe would be a git call whose result cannot change the answer
+      // (mmnto-ai/totem#2698 fold 5, Q3). `0/0` is vacuously covered.
+      measured = fullCoverage();
+    } else if (coverage !== undefined) {
       const reachable = new Set(git.changedFiles(coverage.base, found.diffSha));
       const missing = owedFiles.filter((file) => !reachable.has(file));
       measured = { covered: owedFiles.length - missing.length, owed: owedFiles.length, missing };
-      // Nothing owed is not a coverage failure: 0/0 is vacuously covered, and
-      // the caller that owes nothing never consults this store anyway.
-      if (measured.covered === 0 && owedFiles.length > 0) {
+      // Reached only with a non-empty owed set (the empty case returned above),
+      // so covering none of it is a real coverage failure.
+      if (measured.covered === 0) {
         stale.push({
           diffSha: found.diffSha,
           readAt: found.deposit.readAt,

@@ -2221,6 +2221,24 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
     expect(resolution.winner).toBeUndefined();
   });
 
+  it('the no-base arm STILL discloses a corrupt deposit (fold 5, F7)', async () => {
+    // The store is a fact about itself: a file that is not a deposit is worth
+    // saying whatever coverage concludes. The first version of this arm
+    // returned early with an empty corrupt list and silenced exactly the sensor
+    // a hand-edited deposit needs.
+    fs.mkdirSync(path.join(tmpDir, 'artifacts', 'legs'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, 'artifacts', 'legs', `${'e'.repeat(40)}.json`),
+      'not a deposit at all',
+    );
+    const resolution = await resolveLegFieldForHead(tmpDir, tmpDir, coverageGit([]), {
+      reason: 'coverage was not derivable — HEAD has no branch base',
+    });
+    expect(resolution.field).toBe('leg: none');
+    expect(resolution.winner).toBeUndefined();
+    expect(resolution.corrupt.map((entry) => entry.file)).toEqual([`${'e'.repeat(40)}.json`]);
+  });
+
   it('HEAD with no branch base: the covariate prints ONE sensor and no leg name', async () => {
     // `tmpDir` is not a git repo, so HEAD's branch scope will not resolve.
     const errSpy = vi.mocked(console.error);
@@ -2247,6 +2265,8 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
   // resolved on the review's scope, found no branch base, fell back to ancestry
   // and NAMED that deposit — the gate rejects it.
   describe('the field derives coverage from HEAD, whatever the review scope is', () => {
+    /** Built, never authored as an escape (the banked decode trap). */
+    const NL = String.fromCharCode(10);
     let repoDir: string;
     let baseSha: string;
     let headSha: string;
@@ -2308,6 +2328,47 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
       // Nothing printed: with no verdict artifact AND no leg, there is no line
       // — where before the fold this printed `local-lane: none leg: <base8>`.
       expect(printed.join(' ')).not.toContain(baseSha.slice(0, 8));
+    });
+
+    it('a LARGE branch diff narrates nothing under [Legs] (fold 5, F2)', async () => {
+      // The truncation warning is advice about an LLM review of this diff, and
+      // a background probe is not going to run one. This branch's own diff is
+      // ~370k chars, so before the guard every covariate run here printed it.
+      const big = Array.from({ length: 4000 }, (_, i) => `line ${i} of a large page`).join(NL);
+      fs.writeFileSync(path.join(repoDir, 'docs', 'big.md'), big);
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '-A'], {
+        cwd: repoDir,
+        stdio: 'ignore',
+      });
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-m', 'a large page'],
+        { cwd: repoDir, stdio: 'ignore' },
+      );
+      const errSpy = vi.mocked(console.error);
+      errSpy.mockClear();
+      await printCovariateLine({
+        diffMeta: { source: 'uncommitted' },
+        totemDirAbs: path.join(repoDir, '.totem'),
+        cwd: repoDir,
+        globs: ['docs/**'],
+      });
+      const narration = errSpy.mock.calls.map((c) => c.join(' ')).join(NL);
+      // Every one of the resolver's four narration lines, and this module's own.
+      expect(narration).not.toContain('[Legs]');
+      expect(narration).not.toContain('Diff exceeds');
+      expect(narration).not.toContain('Diff source:');
+      expect(narration).not.toContain('Changed files (');
+
+      // The control that makes the assertion above non-vacuous: the SAME
+      // resolution, unsuppressed, does print all of it — so the fixture really
+      // does cross the threshold and the guard is what silenced it.
+      const { resolveUnfilteredBranchScope } = await import('./legs.js');
+      errSpy.mockClear();
+      await resolveUnfilteredBranchScope(repoDir);
+      const loud = errSpy.mock.calls.map((c) => c.join(' ')).join(NL);
+      expect(loud).toContain('Diff exceeds');
+      expect(loud).toContain('Changed files (');
     });
 
     it('a COVERING deposit is named on the same review scope', async () => {
