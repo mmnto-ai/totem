@@ -34,6 +34,7 @@ import {
   loadSpecRecord,
   MAX_LESSON_CHARS,
   MAX_LESSONS,
+  MAX_SPECS,
   resolveDefaultSpecPath,
   resolveGroundingAnchor,
   retrieveContext,
@@ -56,6 +57,8 @@ import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
 const harness = vi.hoisted(() => ({
   /** Store hits keyed by the `typeFilter` `retrieveContext` asks for. */
   searchResults: {} as Record<string, unknown[]>,
+  /** Every `typeFilter` the store was asked for, in call order (mmnto-ai/totem#2735). */
+  searchTypeFilters: [] as string[],
   /** Every `runOrchestrator` invocation, in order — empty means no artifact could exist. */
   orchestratorArgs: [] as Array<Record<string, unknown>>,
   /** What the stubbed orchestrator returns as the draft. */
@@ -78,6 +81,7 @@ vi.mock('@mmnto/totem', async () => {
         harness.connects += 1;
       }
       async search({ typeFilter }: { typeFilter: string }): Promise<unknown[]> {
+        harness.searchTypeFilters.push(typeFilter);
         return harness.searchResults[typeFilter] ?? [];
       }
     },
@@ -407,6 +411,81 @@ describe('retrieveContext — cross-totem linked stores', () => {
     const withUndefined = await retrieveContext('test query', primary);
 
     expect(withEmpty.specs.length).toBe(withUndefined.specs.length);
+  });
+});
+
+// ─── retrieveContext lesson delivery (mmnto-ai/totem#2735) ──
+
+/** A store that answers per `typeFilter` and records every type it was asked for. */
+function typedStore(rows: Partial<Record<string, SearchResult[]>>): {
+  store: LanceStore;
+  typeFilters: string[];
+} {
+  const typeFilters: string[] = [];
+  const store = {
+    search: async ({ typeFilter }: { typeFilter: string }): Promise<SearchResult[]> => {
+      typeFilters.push(typeFilter);
+      return rows[typeFilter] ?? [];
+    },
+  } as unknown as LanceStore;
+  return { store, typeFilters };
+}
+
+describe('retrieveContext — lessons are their own pool', () => {
+  it('delivers a lesson AND a spec when the store holds one of each', async () => {
+    const { store, typeFilters } = typedStore({
+      lesson: [makeLesson({ type: 'lesson', label: 'Lesson A' })],
+      spec: [makeSpec({ label: 'Spec A' })],
+    });
+
+    const ctx = await retrieveContext('test query', store);
+
+    // The regression mmnto-ai/totem#431 introduced: lessons were partitioned
+    // out of a `spec`-typed pool, so this length was 0 for every run since.
+    expect(ctx.lessons.length).toBe(1);
+    expect(ctx.lessons[0]!.label).toBe('Lesson A');
+    expect(ctx.specs.length).toBe(1);
+    expect(ctx.specs[0]!.label).toBe('Spec A');
+    expect(typeFilters).toContain('lesson');
+  });
+
+  it('never asks a LINKED store for lessons — lessons come from the primary only', async () => {
+    const primary = typedStore({ lesson: [makeLesson({ type: 'lesson' })], spec: [makeSpec()] });
+    const linked = typedStore({ spec: [makeSpec({ label: 'linked' })] });
+
+    const ctx = await retrieveContext('test query', primary.store, [linked.store]);
+
+    expect(ctx.lessons.length).toBe(1);
+    expect(primary.typeFilters).toContain('lesson');
+    expect(linked.typeFilters).not.toContain('lesson');
+    expect(linked.typeFilters).toEqual(['spec']);
+  });
+
+  it('delivers the top-MAX_SPECS specs by score, in score order', async () => {
+    const scores = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3];
+    expect(scores.length).toBeGreaterThan(MAX_SPECS);
+    const { store } = typedStore({
+      spec: scores.map((score, i) => makeSpec({ label: `Spec ${i}`, score })),
+    });
+
+    const ctx = await retrieveContext('test query', store);
+
+    expect(ctx.specs.length).toBe(MAX_SPECS);
+    expect(ctx.specs.map((s) => s.score)).toEqual(scores.slice(0, MAX_SPECS));
+  });
+
+  it('delivers the top-MAX_SPECS by score ACROSS the primary and a linked store', async () => {
+    const primary = typedStore({
+      spec: [0.9, 0.7, 0.5, 0.3].map((score, i) => makeSpec({ label: `P${i}`, score })),
+    });
+    const linked = typedStore({
+      spec: [0.8, 0.6, 0.4, 0.2].map((score, i) => makeSpec({ label: `L${i}`, score })),
+    });
+
+    const ctx = await retrieveContext('test query', primary.store, [linked.store]);
+
+    expect(ctx.specs.length).toBe(MAX_SPECS);
+    expect(ctx.specs.map((s) => s.score)).toEqual([0.9, 0.8, 0.7, 0.6, 0.5]);
   });
 });
 
@@ -1471,6 +1550,7 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     originalCwd = process.cwd();
     process.chdir(tmpDir);
     harness.searchResults = {};
+    harness.searchTypeFilters = [];
     harness.orchestratorArgs = [];
     harness.orchestratorContent = 'DRAFT';
     harness.connects = 0;
@@ -1542,6 +1622,27 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     expect(harness.connects).toBe(0);
     expect(harness.orchestratorArgs).toEqual([]);
     expect(runArtifactNames()).toEqual([]);
+  });
+
+  it('asks the store for lessons and carries them into the prompt (mmnto-ai/totem#2735)', async () => {
+    harness.searchResults = {
+      spec: [relevantHit(0.7)],
+      lesson: [
+        relevantHit(0.7, {
+          type: 'lesson',
+          label: 'Lesson A',
+          filePath: '.totem/lessons/lesson-abc.md',
+          content: 'Always validate input at boundaries.',
+        }),
+      ],
+    };
+
+    await specCommand(['2735'], { stdout: true });
+
+    expect(harness.searchTypeFilters).toContain('lesson');
+    const prompt = String(harness.orchestratorArgs[0]!['prompt']);
+    expect(prompt).toContain('RELEVANT LESSONS');
+    expect(prompt).toContain('Always validate input at boundaries.');
   });
 
   it('a --from run anchors on the record, leaves its bytes UNCHANGED, and drafts to stdout', async () => {

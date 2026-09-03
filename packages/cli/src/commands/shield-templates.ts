@@ -49,7 +49,6 @@ export const ESTIMATE_DISPLAY_TAG = 'Estimate';
 
 export const MAX_DIFF_CHARS = 50_000;
 export const QUERY_DIFF_TRUNCATE = 2_000;
-export const SPEC_SEARCH_POOL = 15;
 export const MAX_SPEC_RESULTS = 3;
 export const MAX_LESSONS = 10;
 export const MAX_SESSION_RESULTS = 5;

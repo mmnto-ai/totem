@@ -40,8 +40,8 @@ const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts (schema default 0.2
 const ANCHOR_CURES = "run 'totem spec <issue>' or 'totem spec --from <record>'";
 export const MAX_LESSONS = 10;
 export const MAX_LESSON_CHARS = 8_000;
-const SPEC_SEARCH_POOL = 20;
-const MAX_SPECS = 5;
+/** Specs delivered to the prompt. Exported so the cap test binds to the real value (mmnto-ai/totem#2735). */
+export const MAX_SPECS = 5;
 const MAX_SESSIONS = 5;
 const MAX_CODE_RESULTS = 3;
 
@@ -66,13 +66,15 @@ export async function retrieveContext(
   linkedStores?: LanceStore[],
 ): Promise<RetrievedContext> {
   const { log } = await import('../ui.js');
-  const { partitionLessons } = await import('../utils.js');
+  const { searchLessons } = await import('../utils.js');
   const search = (s: LanceStore, typeFilter: ContentType, maxResults: number) =>
     s.search({ query, typeFilter, maxResults });
 
-  // Fetch from primary store
-  const [allSpecs, sessions, code] = await Promise.all([
-    search(store, 'spec', SPEC_SEARCH_POOL),
+  // Fetch from primary store. Lessons are their own pool, asked for by type —
+  // never partitioned out of the spec pool (mmnto-ai/totem#2735).
+  const [allSpecs, lessons, sessions, code] = await Promise.all([
+    search(store, 'spec', MAX_SPECS),
+    searchLessons(store, query, MAX_LESSONS),
     search(store, 'session_log', MAX_SESSIONS),
     search(store, 'code', MAX_CODE_RESULTS),
   ]);
@@ -102,8 +104,9 @@ export async function retrieveContext(
     allSpecs.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
 
-  // Partition: lessons come from lessons.md, everything else is a spec/ADR
-  const { lessons, specs } = partitionLessons(allSpecs, MAX_LESSONS, MAX_SPECS);
+  // Specs delivered are the top-MAX_SPECS by score across the primary and any
+  // linked stores; lessons arrive from the primary store's own pool above.
+  const specs = allSpecs.slice(0, MAX_SPECS);
 
   return { specs, sessions, code, lessons };
 }

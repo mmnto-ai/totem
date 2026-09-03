@@ -14,6 +14,7 @@ import type {
   GroundingBundle,
   InvocationFailureArtifact,
   InvokeAttemptEvidence,
+  LanceStore,
   Orchestrator,
   OutputContract,
   RunArtifact,
@@ -349,16 +350,25 @@ export function formatResults(
 export const DEFAULT_MAX_LESSON_CHARS = 8_000;
 
 /**
- * Partition search results into lessons (from lessons.md) and non-lesson specs.
+ * Ask the store for lessons — the ONE place the `lesson` content type is
+ * spelled for retrieval (mmnto-ai/totem#2735).
+ *
+ * Every lesson retrieval in the CLI routes through here. The defect it
+ * repairs: mmnto-ai/totem#431 re-keyed the old partition helper onto
+ * `type === 'lesson'` but left its callers querying the store with
+ * `typeFilter: 'spec'`, so the partitioned pool could not contain a lesson by
+ * construction and every command delivered zero of them. A single spelling
+ * makes that class of drift a one-line regression instead of a silent one.
+ *
+ * Pure pass-through: `query` and `maxResults` reach the store unchanged, and
+ * nothing is cached.
  */
-export function partitionLessons(
-  allSpecs: SearchResult[],
-  maxLessons: number,
-  maxSpecs: number,
-): { lessons: SearchResult[]; specs: SearchResult[] } {
-  const lessons = allSpecs.filter((r) => r.type === 'lesson').slice(0, maxLessons);
-  const specs = allSpecs.filter((r) => r.type !== 'lesson').slice(0, maxSpecs);
-  return { lessons, specs };
+export async function searchLessons(
+  store: LanceStore,
+  query: string,
+  maxResults: number,
+): Promise<SearchResult[]> {
+  return store.search({ query, typeFilter: 'lesson', maxResults });
 }
 
 /** Max content length for condensed lesson snippets. */
