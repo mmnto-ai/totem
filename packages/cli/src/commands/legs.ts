@@ -369,6 +369,7 @@ export async function runLegsGate(
     if (owed.owed) {
       resolution = findLegDepositForHead(deps.totemDirAbs, head, deps.git);
     }
+    // totem-context: intentional — this is not a swallow but the gate's LOUDEST arm: any failure to derive (no repo, an unresolvable head, a branch diff or an ancestry probe that will not resolve) becomes the NOT DERIVED verdict, printed with its cause and exit 2, which the strict pre-push arm blocks on with its own line (mmnto-ai/totem#2698)
   } catch (err) {
     const cause = safe(err instanceof Error ? err.message : String(err));
     return finish(2, [`[Totem] legs: NOT DERIVED — ${cause}`], []);
