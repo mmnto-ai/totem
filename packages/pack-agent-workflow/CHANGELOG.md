@@ -1,5 +1,7 @@
 # @mmnto/pack-agent-workflow
 
+## 1.123.0
+
 ## 1.122.0
 
 ## 1.121.0
