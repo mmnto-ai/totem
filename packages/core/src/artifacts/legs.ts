@@ -404,6 +404,7 @@ export function loadLegDeposits(totemDirAbs: string): LoadLegDepositsResult {
     let raw: unknown;
     try {
       raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      // totem-context: intentional — an unreadable or non-JSON file becomes a NAMED corrupt row (reason carried, control bytes collapsed) and never a throw; the loader's contract is tolerant-per-file so one bad deposit can never mask a valid sibling
     } catch (err) {
       corrupt.push({
         file: entry,
