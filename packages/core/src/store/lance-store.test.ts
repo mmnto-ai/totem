@@ -293,7 +293,7 @@ describe('LanceStore', () => {
         typeFilter: 'spec',
         maxResults: 10,
       });
-      expect(specPool.length).toBeGreaterThan(0);
+      expect(specPool.length).toBe(1);
       expect(specPool.some((r) => r.type === 'lesson')).toBe(false);
     });
 
