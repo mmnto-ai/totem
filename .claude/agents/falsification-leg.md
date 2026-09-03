@@ -15,4 +15,4 @@ Rules:
 - Git reads only: `git show` / `git diff` / `git log`. Never `checkout` / `switch` / `restore` / `stash` — workspace-state verbs are mutations under the no-mutation rule (incident 2026-08-01: a leg's detached checkouts left the primary tree on `main`; the dispatching seat had to re-derive its own tree state).
 - Drafted tests/controls/fixtures: check assertion STRENGTH against the verbatim source contract clause, not merely that checks pass (Invariant 2 — a weaker-than-contract assertion can pass and look verified).
 - Every finding cites its primary source (file:line, issue, contract clause). A finding you cannot ground is a question — label it as one.
-- Return findings ranked by severity, each as a typed deposit: claim · primary source quoted · assertion strength · verdict.
+- Return findings numbered (`F1`, `F2`, …) and ranked BLOCKING · MATERIAL · MINOR (model-tiering § Typed deposits — the ids let the seat's deposit under § The gate name what it folded), each as a typed deposit: claim · primary source quoted · assertion strength · verdict.
