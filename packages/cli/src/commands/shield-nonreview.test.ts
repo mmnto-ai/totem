@@ -416,6 +416,12 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
       diff: diffFor('docs/plan.md'),
       changedFiles: ['docs/plan.md'],
       source: 'uncommitted' as const,
+      // The resolver populates `base` for a branch scope, and since
+      // mmnto-ai/totem#2698 fold 4 the leg field derives its coverage inputs
+      // from HEAD's OWN branch scope — through this same seam — whatever the
+      // review scope is. A fixture without a base would model a repo whose
+      // HEAD has none, where the field is `leg: none` by rule.
+      base: 'main',
     });
     const { shieldCommand } = await import('./shield.js');
     await shieldCommand({} as Parameters<typeof shieldCommand>[0]); // record the admission
@@ -482,6 +488,12 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
       diff: diffFor('docs/plan.md'),
       changedFiles: ['docs/plan.md'],
       source: 'uncommitted' as const,
+      // The resolver populates `base` for a branch scope, and since
+      // mmnto-ai/totem#2698 fold 4 the leg field derives its coverage inputs
+      // from HEAD's OWN branch scope — through this same seam — whatever the
+      // review scope is. A fixture without a base would model a repo whose
+      // HEAD has none, where the field is `leg: none` by rule.
+      base: 'main',
     });
     const { shieldCommand } = await import('./shield.js');
 

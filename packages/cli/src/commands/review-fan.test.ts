@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -1873,14 +1874,28 @@ describe('printCovariateLine (rev-5 item 4)', () => {
 // ─── Covariate format v1.2 — the leg field (mmnto-ai/totem#2698) ──────────────
 
 describe('covariate format v1.2: the leg field (mmnto-ai/totem#2698)', () => {
+  /** Restored after each case — see the cross-spawn note in `legs.test.ts`. */
+  const realCwd = process.cwd();
   let tmpDir: string;
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'covariate-leg-'));
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'covariate-leg-')));
+    // A REAL repo, because since mmnto-ai/totem#2698 fold 4 the leg field
+    // derives its coverage inputs from HEAD's own branch scope on every review
+    // scope. These cases declare no owed globs, so that scope resolves, owes
+    // nothing, and coverage is vacuously satisfied — which is what keeps them
+    // about the FIELD's shape rather than about the predicate.
+    execFileSync('git', ['init', '-b', 'main'], { cwd: tmpDir, stdio: 'ignore' });
+    execFileSync(
+      'git',
+      ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '--allow-empty', '-m', 'base'],
+      { cwd: tmpDir, stdio: 'ignore' },
+    );
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    process.chdir(realCwd);
     cleanTmpDir(tmpDir);
   });
 
@@ -2165,7 +2180,7 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
       tmpDir,
       // Its own branch diff touched nothing this push owes — the merge-base shape.
       coverageGit(['src/unrelated.ts']),
-      { base: 'main', owedFiles: ['docs/wiki/a.md'] },
+      { query: { base: 'main', owedFiles: ['docs/wiki/a.md'] } },
     );
     expect(resolution.field).toBe('leg: none');
     expect(resolution.winner).toBeUndefined();
@@ -2177,10 +2192,7 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
       tmpDir,
       tmpDir,
       coverageGit(['docs/wiki/a.md']),
-      {
-        base: 'main',
-        owedFiles: ['docs/wiki/a.md'],
-      },
+      { query: { base: 'main', owedFiles: ['docs/wiki/a.md'] } },
     );
     expect(resolution.field).toBe(`leg: ${BASE_SHA.slice(0, 8)} blocking=0 material=0 folded=0`);
   });
@@ -2191,26 +2203,117 @@ describe('the leg field honors coverage (mmnto-ai/totem#2698 fold 3)', () => {
     expect(resolution.field).toBe(`leg: ${BASE_SHA.slice(0, 8)} blocking=0 material=0 folded=0`);
   });
 
-  it('a non-branch scope discloses that coverage was not derivable', async () => {
-    const { deriveLegsCoverageForScope } = await import('./legs.js');
-    const staged = await deriveLegsCoverageForScope('staged', ['docs/**'], tmpDir);
-    expect(staged.query).toBeUndefined();
-    expect(staged.reason).toContain('coverage was not derivable for a staged scope');
-    expect(staged.reason).toContain('resolves on ancestry alone');
+  it('an UNDERIVABLE coverage answer is `leg: none`, never an ancestry-only name', async () => {
+    // The fold-4 rule at the seam: an ancestor deposit exists and would have
+    // been named on ancestry alone. Once coverage was ASKED FOR and could not
+    // be derived, the honest answer is none — crediting it would be the field
+    // disagreeing with the gate, which rejects it.
+    depositAt(BASE_SHA);
+    const resolution = await resolveLegFieldForHead(
+      tmpDir,
+      tmpDir,
+      coverageGit(['docs/wiki/a.md']),
+      {
+        reason: 'coverage was not derivable — HEAD has no branch base',
+      },
+    );
+    expect(resolution.field).toBe('leg: none');
+    expect(resolution.winner).toBeUndefined();
   });
 
-  it('the covariate line prints that sensor on a staged scope', async () => {
+  it('HEAD with no branch base: the covariate prints ONE sensor and no leg name', async () => {
+    // `tmpDir` is not a git repo, so HEAD's branch scope will not resolve.
     const errSpy = vi.mocked(console.error);
+    depositAt(BASE_SHA);
     await expect(
       printCovariateLine({
         diffMeta: { source: 'staged' },
         totemDirAbs: tmpDir,
         cwd: tmpDir,
         globs: ['docs/**'],
-        gitExec: coverageGit([]),
+        gitExec: coverageGit(['docs/wiki/a.md']),
       }),
     ).resolves.toBeUndefined();
     const out = errSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-    expect(out).toContain('coverage was not derivable for a staged scope');
+    expect(out).toContain('coverage was not derivable — HEAD has no branch base');
+    // Article-free, and it never claims an ancestry-only fallback happened.
+    expect(out).not.toContain('for a staged scope');
+    expect(out).not.toContain('ancestry alone');
+    expect(vi.mocked(console.log)).not.toHaveBeenCalled();
+  });
+
+  // The reproduction, end to end: a REAL repo whose review scope is the default
+  // dirty-tree one, and a deposit at the merge base. Before fold 4 the field
+  // resolved on the review's scope, found no branch base, fell back to ancestry
+  // and NAMED that deposit — the gate rejects it.
+  describe('the field derives coverage from HEAD, whatever the review scope is', () => {
+    let repoDir: string;
+    let baseSha: string;
+    let headSha: string;
+    const realCwd = process.cwd();
+
+    beforeEach(() => {
+      repoDir = fs.realpathSync.native(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'legfield-headscope-')),
+      );
+      const git = (...args: string[]): string =>
+        execFileSync(
+          'git',
+          ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+          { cwd: repoDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+        ).trim();
+      git('init', '-b', 'main');
+      fs.writeFileSync(path.join(repoDir, 'src.ts'), 'export const a = 1;');
+      git('add', '.');
+      git('commit', '-m', 'base');
+      baseSha = git('rev-parse', 'HEAD');
+      git('checkout', '-b', 'feat/owed');
+      fs.mkdirSync(path.join(repoDir, 'docs'), { recursive: true });
+      fs.writeFileSync(path.join(repoDir, 'docs', 'page.md'), '# a page');
+      git('add', 'docs/page.md');
+      git('commit', '-m', 'a docs change');
+      headSha = git('rev-parse', 'HEAD');
+    });
+
+    afterEach(() => {
+      process.chdir(realCwd);
+      cleanTmpDir(repoDir);
+    });
+
+    function depositIn(dir: string, sha: string): void {
+      saveLegDeposit(path.join(dir, '.totem'), {
+        schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+        diffSha: sha,
+        readAt: '2026-09-03T06:00:00.000Z',
+        findings: [],
+        folded: [],
+        verdict: 'read the diff at this head',
+      });
+    }
+
+    async function covariateOn(source: 'staged' | 'uncommitted'): Promise<string[]> {
+      vi.mocked(console.log).mockClear();
+      await printCovariateLine({
+        diffMeta: { source },
+        totemDirAbs: path.join(repoDir, '.totem'),
+        cwd: repoDir,
+        globs: ['docs/**'],
+      });
+      return vi.mocked(console.log).mock.calls.map((c) => c.join(' '));
+    }
+
+    it('a MERGE-BASE deposit is `leg: none` on a dirty-tree review scope', async () => {
+      depositIn(repoDir, baseSha);
+      const printed = await covariateOn('uncommitted');
+      // Nothing printed: with no verdict artifact AND no leg, there is no line
+      // — where before the fold this printed `local-lane: none leg: <base8>`.
+      expect(printed.join(' ')).not.toContain(baseSha.slice(0, 8));
+    });
+
+    it('a COVERING deposit is named on the same review scope', async () => {
+      depositIn(repoDir, headSha);
+      const printed = await covariateOn('staged');
+      expect(printed.join(' ')).toContain(`local-lane: none leg: ${headSha.slice(0, 8)}`);
+    });
   });
 });

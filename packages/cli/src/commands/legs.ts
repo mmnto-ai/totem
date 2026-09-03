@@ -50,6 +50,82 @@ const TAG = 'Legs';
  */
 const MAX_DISCLOSED_BASIS_PAIRS = 5;
 
+/**
+ * List what a candidate could have READ: the paths its own branch diff added
+ * relative to `base` (three-dot).
+ *
+ * `-z` is load-bearing, not a style choice (mmnto-ai/totem#2698 fold 4). Under
+ * git's default `core.quotePath=true`, `--name-only` C-QUOTES any path with a
+ * non-ASCII byte, a quote or a backslash — `docs/caf\303\251.md` — while the
+ * owed set comes from `extractChangedFiles`, which is unquoted. The two sets
+ * then never intersect for such a path, and a covering ancestor is rejected
+ * with the false reason "predates every owed change". `-z` emits raw
+ * NUL-separated names and never quotes, so both sides speak one spelling.
+ *
+ * One helper, taking the runner: the gate shells out through `safeExec` and the
+ * covariate through its injected `GitExec`, and a second copy of this argv is
+ * exactly how one of them would drift back to the quoted form.
+ */
+export function legReachPaths(
+  run: (args: readonly string[]) => string,
+  base: string,
+  head: string,
+): string[] {
+  const raw = run(['diff', '--name-only', '-z', `${base}...${head}`]);
+  // NUL-terminated, not NUL-separated: the payload ends with one, so the final
+  // split element is empty and is dropped along with any other empty.
+  return raw.split(LEG_PATH_SEPARATOR).filter((entry) => entry.length > 0);
+}
+
+/** The `-z` record separator, built rather than escaped (the banked decode trap). */
+const LEG_PATH_SEPARATOR = String.fromCharCode(0);
+
+/** A C-quoted octal byte escape, e.g. the two that spell `é` in UTF-8. */
+const GIT_OCTAL_ESCAPE = /\\[0-7]{3}/;
+
+/**
+ * Undo git's C-style quoting on a path name (mmnto-ai/totem#2698 fold 4).
+ *
+ * Measured, because the fold's premise was half of the picture. Under the
+ * default `core.quotePath`, git quotes a non-ASCII path in BOTH surfaces this
+ * slice reads, and they disagree about how:
+ *
+ * - `git diff --name-only`     → `"docs/caf\303\251.md"` (with the quotes)
+ * - the `diff --git` header, which `extractChangedFiles` parses and strips
+ *   the quotes from  → `docs/caf\303\251.md` (escapes left as literal text)
+ * - `git diff --name-only -z`  → `docs/café.md` (raw; `-z` never quotes)
+ *
+ * So `-z` on the reach probe alone does not make the two sets intersect — it
+ * changes WHICH WAY they miss. The owed side has to speak the same spelling,
+ * and this is where it is put back into one: the changed-file set is decoded
+ * ONCE, at the boundary, so the globs, the basis, the printed lines and the
+ * coverage intersection all name the file the way the filesystem does.
+ *
+ * Deliberately narrow. It decodes only a name that actually carries an octal
+ * escape — the shape that produced the defect — so an ordinary path containing
+ * a literal backslash (legal, and never produced by git on this surface, which
+ * always emits `/`) is returned untouched rather than guessed at.
+ */
+export function decodeGitQuotedPath(name: string): string {
+  if (!GIT_OCTAL_ESCAPE.test(name)) return name;
+  const bytes: number[] = [];
+  for (let i = 0; i < name.length; ) {
+    if (name.charAt(i) === String.fromCharCode(92) && i + 3 < name.length) {
+      const octal = name.slice(i + 1, i + 4);
+      if (/^[0-7]{3}$/.test(octal)) {
+        bytes.push(Number.parseInt(octal, 8));
+        i += 4;
+        continue;
+      }
+    }
+    // Any other character is already the byte it looks like: this surface is
+    // UTF-8 text, and every byte git had to escape came out as an octal triple.
+    for (const byte of Buffer.from(name.charAt(i), 'utf-8')) bytes.push(byte);
+    i += 1;
+  }
+  return Buffer.from(bytes).toString('utf-8');
+}
+
 /** The prefix `TotemError` stamps on every message — stripped when re-branding. */
 const TOTEM_ERROR_BRAND = '[Totem Error] ';
 
@@ -520,12 +596,22 @@ export async function runLegsGate(
   for (const candidate of resolution?.stale ?? []) {
     // One reason per candidate, because the repairs differ: fetch the missing
     // history, deposit against this branch, or run the leg over the owed diff.
-    const reason =
-      candidate.reason === 'not-ancestor'
-        ? 'not an ancestor of head'
-        : candidate.reason === 'unknown-commit'
-          ? 'unknown to this repo'
-          : 'covers none of the owed paths (the deposit predates every owed change)';
+    // Exhaustive on purpose — a ternary chain's final arm silently ADOPTS any
+    // reason core adds later, printing the wrong repair for it.
+    const reason = ((): string => {
+      switch (candidate.reason) {
+        case 'not-ancestor':
+          return 'not an ancestor of head';
+        case 'unknown-commit':
+          return 'unknown to this repo';
+        case 'no-coverage':
+          return 'covers none of the owed paths (the deposit predates every owed change)';
+        default: {
+          const unreachable: never = candidate.reason;
+          return String(unreachable);
+        }
+      }
+    })();
     stdout.push(`[Totem] legs: stale deposit ${safe(candidate.diffSha.slice(0, 8))}: ${reason}`);
   }
   stdout.push(
@@ -556,21 +642,38 @@ export async function runLegsGate(
  * The resolved BASE rides back with the files: coverage is measured against it,
  * and it must be the same base HEAD was resolved against.
  */
-export async function resolveUnfilteredBranchScope(cwd: string): Promise<LegsGateScope> {
+export async function resolveUnfilteredBranchScope(
+  cwd: string,
+  options: { quiet?: boolean } = {},
+): Promise<LegsGateScope> {
   const { getDiffForReview } = await import('../git.js');
   const { log } = await import('../ui.js');
   await loadSanitizer();
-  log.info(
-    TAG,
-    safeLine('Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)'),
-  );
+  // The GATE narrates its scope; the covariate does not. Since fold 4 the leg
+  // field derives coverage from HEAD's branch scope on every review scope, so
+  // this resolution now runs inside `totem review` runs too — and a `[Legs]`
+  // diff-source line in the middle of a `[Review]` run is noise about a probe
+  // the operator did not ask for.
+  if (options.quiet !== true) {
+    log.info(
+      TAG,
+      safeLine(
+        'Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)',
+      ),
+    );
+  }
   const result = await getDiffForReview(
     { branch: true },
     { ignorePatterns: [], shieldIgnorePatterns: [] },
     cwd,
     TAG,
   );
-  const files = 'empty' in result ? [] : result.changedFiles;
+  // ONE spelling from here on (mmnto-ai/totem#2698 fold 4): the changed-file
+  // set arrives C-quoted for non-ASCII names, and the reach probe reads raw
+  // names through `-z`. Decoding here — the boundary both the predicate and
+  // the coverage intersection are downstream of — is what keeps them talking
+  // about the same file.
+  const files = ('empty' in result ? [] : result.changedFiles).map(decodeGitQuotedPath);
   return { files, ...(result.base === undefined ? {} : { base: result.base }) };
 }
 
@@ -596,48 +699,49 @@ export interface LegsCoverageResolution {
 }
 
 /**
- * Derive the coverage query for a COVARIATE site (mmnto-ai/totem#2698 fold 3).
+ * Derive the coverage query for a COVARIATE site (mmnto-ai/totem#2698 fold 3,
+ * corrected in fold 4).
  *
- * The gate always runs on the branch scope and treats an underivable base as a
- * failure. `--covariate` does not: it describes whatever scope the review ran
- * on, and a staged or explicit-range run has no branch base to measure a
- * candidate's reach against. Those sites resolve on ancestry alone and SAY so,
- * rather than implying a coverage check that did not happen.
+ * The inputs come from HEAD's branch-vs-base scope ALWAYS — never from the
+ * scope the review itself ran on. The leg field answers "was THIS HEAD read",
+ * so what it owes is a property of HEAD, not of whether the operator happened
+ * to review a staged slice or a dirty tree. Deriving from the review's scope
+ * meant the default `uncommitted` scope resolved ancestry-only and NAMED the
+ * merge-base deposit the gate rejects — the field disagreeing with the gate,
+ * which is the one thing it must never do.
  *
- * Both sites route through this one function, and it reuses the gate's own
- * pieces — the unfiltered branch scope and core's single `classifyLegsOwed` —
- * so the field can never name a deposit the gate would reject as no-coverage.
+ * Both covariate sites route through this one function, and it reuses the
+ * gate's own pieces — the unfiltered branch scope and core's single
+ * `classifyLegsOwed` — so the guarantee is unconditional: the field never names
+ * a deposit the gate would reject. When HEAD has no branch base the answer is
+ * `leg: none` plus one sensor, never a name resolved on ancestry alone.
  */
-export async function deriveLegsCoverageForScope(
-  source: string,
-  globs: readonly string[],
+export async function deriveLegsCoverageForHead(
   cwd: string,
+  globs: readonly string[],
+  options: { quiet?: boolean } = {},
 ): Promise<LegsCoverageResolution> {
   const { classifyLegsOwed } = await import('@mmnto/totem');
   await loadSanitizer();
-  if (source !== 'branch-vs-base') {
-    return {
-      reason: `coverage was not derivable for a ${echoSafe(source)} scope (it has no branch base) — the leg field resolves on ancestry alone`,
-    };
-  }
   let scope;
   try {
-    scope = await resolveUnfilteredBranchScope(cwd);
-    // totem-context: intentional — `--covariate` is a read-only sensor whose contract is to print a line and exit 0, so a branch scope that will not resolve (no repo, an unfetched base) DEGRADES to ancestry-only with the reason printed, never a throw out of a transport verb
+    scope = await resolveUnfilteredBranchScope(cwd, options);
+    // totem-context: intentional — `--covariate` is a read-only sensor whose contract is to print a line and exit 0, so a branch scope that will not resolve (no repo, an unfetched base) yields the no-coverage answer with its reason printed, never a throw out of a transport verb
   } catch (err) {
     return {
-      reason: `coverage was not derivable: the branch scope would not resolve (${echoSafe(err instanceof Error ? err.message : String(err))}) — the leg field resolves on ancestry alone`,
+      reason: `coverage was not derivable — HEAD has no branch base (${echoSafe(err instanceof Error ? err.message : String(err))})`,
     };
   }
   const owed = classifyLegsOwed(scope.files, globs);
   const query = legsCoverageForBasis(scope.base, owed.basis);
   if (query !== undefined) return { query };
-  return {
-    reason:
-      owed.owed && scope.base === undefined
-        ? 'coverage was not derivable: the branch scope resolved without a base ref — the leg field resolves on ancestry alone'
-        : 'coverage was not derivable: this branch scope owes no path, so there is nothing to cover — the leg field resolves on ancestry alone',
-  };
+  // Two shapes reach here and they are NOT the same answer. No base: coverage
+  // is underivable, so no deposit can be credited. Nothing owed: HEAD owes no
+  // leg at all, so an empty query is vacuously satisfied and the field resolves
+  // on ancestry — the gate would not even consult the store for this head.
+  return scope.base === undefined
+    ? { reason: 'coverage was not derivable — HEAD has no branch base' }
+    : { query: { base: scope.base, owedFiles: [] } };
 }
 
 /**
@@ -679,15 +783,8 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     isAncestor(base, head) {
       return isAncestor(cwd, base, head);
     },
-    changedFiles(base, head) {
-      // Three-dot: what the branch containing `head` added relative to `base`,
-      // which is what a leg reading at `head` could have seen. Unfiltered, like
-      // the owed set it is intersected with.
-      return safeExec('git', ['diff', '--name-only', `${base}...${head}`], { cwd })
-        .split(String.fromCharCode(10))
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-    },
+    changedFiles: (base, head) =>
+      legReachPaths((args) => safeExec('git', [...args], { cwd }), base, head),
     distance(base, head) {
       const raw = safeExec('git', ['rev-list', '--count', `${base}..${head}`], { cwd }).trim();
       const count = Number.parseInt(raw, 10);

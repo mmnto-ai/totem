@@ -2012,23 +2012,24 @@ async function emitNotApplicableDisposition(params: {
 // ─── Main command ───────────────────────────────────
 
 /**
- * The coverage inputs for a COVARIATE site (mmnto-ai/totem#2698 fold 3).
+ * The coverage inputs for a COVARIATE site (mmnto-ai/totem#2698 fold 3,
+ * corrected in fold 4).
  *
  * One derivation, owned by `legs.ts` — the same unfiltered branch scope and the
  * same `classifyLegsOwed` the gate uses — so the leg field can never name a
- * deposit the gate would reject as covering none of the owed paths. A scope
- * with no branch base (staged, an explicit range) yields a REASON instead,
- * which the caller prints as one `Sensor:` line.
+ * deposit the gate would reject as covering none of the owed paths. It takes
+ * HEAD's scope and NOT the review's: the field answers "was this HEAD read",
+ * which cannot depend on whether the operator reviewed a staged slice. Quiet,
+ * because this runs inside a `[Review]` run. When HEAD has no branch base the
+ * result carries a REASON, which the caller prints as one `Sensor:` line and
+ * which resolves the field to `none`.
  */
 async function legCoverageForCovariate(
-  diffResult: { source: string } | null,
   config: TotemConfig,
   cwd: string,
 ): Promise<{ query?: LegCoverageQuery; reason?: string }> {
-  const { deriveLegsCoverageForScope, legsOwedGlobs } = await import('./legs.js');
-  // A null resolution means no diff resolved at all; it has no scope to measure.
-  const source = diffResult === null ? 'unresolved' : diffResult.source;
-  return deriveLegsCoverageForScope(source, await legsOwedGlobs(config), cwd);
+  const { deriveLegsCoverageForHead, legsOwedGlobs } = await import('./legs.js');
+  return deriveLegsCoverageForHead(cwd, await legsOwedGlobs(config), { quiet: true });
 }
 
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
@@ -2175,13 +2176,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         // verdict form uses (one helper, two sites), composed BESIDE
         // `renderAdmissionLine` so the v1.1 admission text is byte-unchanged.
         const { resolveLegFieldForHead } = await import('./review-fan.js');
-        const coverage = await legCoverageForCovariate(diffResult, config, cwd);
+        const coverage = await legCoverageForCovariate(config, cwd);
         if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
         const leg = await resolveLegFieldForHead(
           path.join(configRoot, config.totemDir),
           cwd,
           undefined,
-          coverage.query,
+          coverage,
         );
         for (const entry of leg.corrupt) {
           log.warn(
@@ -2207,13 +2208,13 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
         // reach it (the verdict arm in `printCovariateLine` is the other, and
         // both discriminate on the SAME `winner === undefined`).
         const { resolveLegFieldForHead } = await import('./review-fan.js');
-        const coverage = await legCoverageForCovariate(diffResult, config, cwd);
+        const coverage = await legCoverageForCovariate(config, cwd);
         if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
         const leg = await resolveLegFieldForHead(
           path.join(configRoot, config.totemDir),
           cwd,
           undefined,
-          coverage.query,
+          coverage,
         );
         for (const entry of leg.corrupt) {
           log.warn(

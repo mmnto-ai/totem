@@ -35,7 +35,6 @@
 import type {
   GroundingBundle,
   InvokeFailureKind,
-  LegCoverageQuery,
   LegDepositCorruptEntry,
   LegDepositWinner,
   LegGitAdapter,
@@ -61,6 +60,7 @@ import {
   KNOWN_PROVIDERS,
   parseModelString,
 } from '../orchestrators/orchestrator.js';
+import { legReachPaths, type LegsCoverageResolution } from './legs.js';
 import {
   computeReviewedContentHash,
   deriveLaneOutcome,
@@ -1619,16 +1619,14 @@ function makeLegGitAdapter(gitExec: GitExec): LegGitAdapter {
   return {
     isCommit: (sha) => succeeds(['cat-file', '-e', `${sha}^{commit}`]),
     isAncestor: (base, head) => succeeds(['merge-base', '--is-ancestor', base, head]),
-    // The coverage seam (mmnto-ai/totem#2698 fold 3): three-dot, so it names
-    // what the branch containing `head` added relative to `base` — what a leg
-    // reading at `head` could have seen. An unavailable answer is an EMPTY
-    // reach, which reads as "covered nothing" and is the honest degrade: the
-    // field then says `none` rather than crediting an unmeasured candidate.
+    // The coverage seam (mmnto-ai/totem#2698 fold 3), through the ONE reach
+    // helper the gate uses — including its `-z` (fold 4), without which git
+    // C-quotes non-ASCII paths here and they never match the unquoted owed set.
+    // An unavailable answer is an EMPTY reach, which reads as "covered nothing"
+    // and is the honest degrade: the field says `none` rather than crediting an
+    // unmeasured candidate.
     changedFiles: (base, head) =>
-      (tryGit(gitExec, ['diff', '--name-only', `${base}...${head}`]) ?? '')
-        .split(String.fromCharCode(10))
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0),
+      legReachPaths((args) => tryGit(gitExec, [...args]) ?? '', base, head),
     distance: (base, head) => {
       const count = Number.parseInt(
         tryGit(gitExec, ['rev-list', '--count', `${base}..${head}`]) ?? '',
@@ -1658,7 +1656,7 @@ export async function resolveLegFieldForHead(
   totemDirAbs: string,
   cwd: string,
   gitExec?: GitExec,
-  coverage?: LegCoverageQuery,
+  coverage?: LegsCoverageResolution,
 ): Promise<LegFieldResolution> {
   const { findLegDepositForHead, renderLegField } = await import('@mmnto/totem');
   const git = gitExec ?? (await defaultGitExec(cwd));
@@ -1666,11 +1664,25 @@ export async function resolveLegFieldForHead(
   if (head === undefined || head.length === 0) {
     return { field: renderLegField(undefined), corrupt: [] };
   }
+  // Coverage was ASKED FOR and could not be derived (mmnto-ai/totem#2698 fold
+  // 4): the answer is `none`, never a name resolved on ancestry alone. Falling
+  // back would let the field credit exactly the merge-base deposit the gate
+  // rejects — the field disagreeing with the gate, which is the one thing it
+  // must never do. The store is not read: with no coverage there is no
+  // candidate to credit, so nothing about one to disclose either.
+  if (coverage !== undefined && coverage.query === undefined) {
+    return { field: renderLegField(undefined), corrupt: [] };
+  }
   // The SAME core resolution the gate calls, with the same coverage inputs when
   // the site could derive them (mmnto-ai/totem#2698 fold 3): a field that named
   // a deposit the gate rejects as no-coverage would be the round reading
   // evidence the push gate does not accept.
-  const resolution = findLegDepositForHead(totemDirAbs, head, makeLegGitAdapter(git), coverage);
+  const resolution = findLegDepositForHead(
+    totemDirAbs,
+    head,
+    makeLegGitAdapter(git),
+    coverage?.query,
+  );
   return {
     field: renderLegField(resolution.winner?.deposit),
     ...(resolution.winner === undefined ? {} : { winner: resolution.winner }),
@@ -1706,10 +1718,14 @@ export async function printCovariateLine(query: CovariateQuery): Promise<void> {
   // renderer, never inside it — the v1/v1.1 text stays byte-identical and a
   // consumer keeps discriminating on the second token. Resolved before the
   // no-verdict arm because a deposit with no verdict is its OWN shape, not a miss.
-  const { deriveLegsCoverageForScope } = await import('./legs.js');
-  const coverage = await deriveLegsCoverageForScope(query.diffMeta.source, query.globs, query.cwd);
+  // HEAD's branch scope, not the review's (mmnto-ai/totem#2698 fold 4) — the
+  // leg field is about HEAD, so what HEAD owes cannot depend on which slice the
+  // operator chose to review. Quiet: this resolution runs inside a `[Review]`
+  // run and must not narrate a `[Legs]` diff source nobody asked for.
+  const { deriveLegsCoverageForHead } = await import('./legs.js');
+  const coverage = await deriveLegsCoverageForHead(query.cwd, query.globs, { quiet: true });
   if (coverage.reason !== undefined) log.warn(DISPLAY_TAG, `Sensor: ${coverage.reason}`);
-  const leg = await resolveLegFieldForHead(query.totemDirAbs, query.cwd, gitExec, coverage.query);
+  const leg = await resolveLegFieldForHead(query.totemDirAbs, query.cwd, gitExec, coverage);
   for (const entry of leg.corrupt) {
     log.warn(DISPLAY_TAG, `Sensor: ignoring corrupt leg deposit ${entry.file}: ${entry.reason}`);
   }

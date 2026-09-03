@@ -201,12 +201,15 @@ describe('product surfaces bill `totem review` as an advisory sensor', () => {
     }
   });
 
-  // The rule had a mechanism on ONE surface while three others shipped the same
-  // vocabulary to the same consumers (mmnto-ai/totem#2698 fold 2): the two
-  // distributed skills are written verbatim into a consumer's repo by
-  // `totem init`, and the CLI's own `--help` is read by every operator and
-  // every agent. A ban with no mechanism on the surfaces a slice touches is
-  // the claim-without-mechanism shape.
+  // Scope, stated exactly (mmnto-ai/totem#2698 fold 4). This covers the two
+  // skill constants THIS slice touched — `REVIEW_LOOP_SKILL_CONTENT` and
+  // `REVIEW_REPLY_SKILL_CONTENT` — plus the `totem legs` command block, and
+  // nothing else. `totem init` also distributes `SIGNOFF_SKILL_CONTENT` (which
+  // says "cohort" 12 times) and `SIGNON_SKILL_CONTENT` (once), and
+  // `totem help --all` prints "cohort" in two pre-existing descriptions; those
+  // are mmnto-ai/totem-strategy#619 item 3's owed sweep, not this slice's, and
+  // they are deliberately NOT asserted here. The claim this file makes is the
+  // one its mechanism keeps.
   it.each([
     ['the review-loop skill', REVIEW_LOOP_SKILL_CONTENT],
     ['the review-reply skill', REVIEW_REPLY_SKILL_CONTENT],

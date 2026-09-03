@@ -937,3 +937,96 @@ describe('the gate measures COVERAGE, not only ancestry (mmnto-ai/totem#2698 fol
     expect(seen).toEqual([`origin/release...${OTHER_SHA}`]);
   });
 });
+
+// ─── Fold 4: the reach probe must not speak git's quoted dialect ────────────
+//
+// `git diff --name-only` C-QUOTES any path with a non-ASCII byte, a quote or a
+// backslash under the default `core.quotePath` — `"docs/caf\303\251.md"` —
+// while the owed set comes from `extractChangedFiles`, unquoted. The two then
+// never intersect for such a path, and a COVERING ancestor is rejected with the
+// false reason "predates every owed change". `-z` never quotes.
+//
+// This drives the REAL adapter (`buildLegsGateDeps`) against a real repo,
+// because the defect lives in the argv, which a fake seam cannot reproduce.
+describe('the coverage reach reads unquoted paths (mmnto-ai/totem#2698 fold 4)', () => {
+  const realCwd = process.cwd();
+  let tmpDir: string;
+  /** `docs/café.md` — built, never authored as an escape (the banked trap). */
+  const ACCENTED = `docs/caf${String.fromCharCode(0xe9)}.md`;
+  /** The ASCII control: a space is not quoted by `--name-only`, and must stay green. */
+  const SPACED = 'docs/a page.md';
+  let coveredSha: string;
+
+  beforeEach(() => {
+    tmpDir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-legs-utf8-')));
+    const git = (...args: string[]): string =>
+      execFileSync(
+        'git',
+        ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args],
+        { cwd: tmpDir, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] },
+      ).trim();
+    git('init', '-b', 'main');
+    fs.writeFileSync(path.join(tmpDir, 'src.ts'), 'export const a = 1;');
+    git('add', '.');
+    git('commit', '-m', 'base');
+
+    // C1 touches the two owed paths a leg here could have read.
+    git('checkout', '-b', 'feat/owed');
+    fs.mkdirSync(path.join(tmpDir, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ...ACCENTED.split('/')), '# accented');
+    fs.writeFileSync(path.join(tmpDir, ...SPACED.split('/')), '# spaced');
+    git('add', '-A', 'docs');
+    git('commit', '-m', 'the owed pages');
+    coveredSha = git('rev-parse', 'HEAD');
+
+    // C2 adds a third owed path the C1 leg could NOT have read.
+    fs.writeFileSync(path.join(tmpDir, 'docs', 'later.md'), '# later');
+    git('add', 'docs/later.md');
+    git('commit', '-m', 'a later page');
+
+    loadConfigMock.mockResolvedValue({
+      totemDir: '.totem',
+      ignorePatterns: [],
+      hooks: { legsOwed: { globs: ['docs/**'] } },
+    } as unknown as TotemConfig);
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    loadConfigMock.mockResolvedValue(TEST_CONFIG);
+    process.chdir(realCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('a non-ASCII owed path is COVERED, not falsely reported as uncovered', async () => {
+    const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+    saveLegDeposit(path.join(tmpDir, '.totem'), depositFixture({ diffSha: coveredSha }));
+    const deps = await buildLegsGateDeps();
+
+    // The owed set itself carries the raw name — this is the side the reach
+    // probe has to match.
+    const scope = await deps.changedFiles();
+    expect(scope.files).toContain(ACCENTED);
+
+    const outcome = await runLegsGate({}, deps);
+    // Two of the three owed paths were inside C1's diff; without `-z` the
+    // accented one would drop out and this would read `covers 1/3`.
+    expect(outcome.derived).toBe(0);
+    expect(outcome.stdout[0]).toContain('covers 2/3 owed paths');
+  });
+
+  it('the ASCII-with-space control is covered on the same run', async () => {
+    const { buildLegsGateDeps } = await import('./legs.js');
+    const deps = await buildLegsGateDeps();
+    const scope = await deps.changedFiles();
+    expect(scope.files).toContain(SPACED);
+    // The adapter's own answer, read directly: both names come back raw.
+    const reach = deps.git.changedFiles(scope.base ?? 'main', coveredSha);
+    expect(reach).toContain(SPACED);
+    expect(reach).toContain(ACCENTED);
+    // And nothing came back wearing git's quotes.
+    expect(reach.some((entry) => entry.startsWith('"'))).toBe(false);
+  });
+});

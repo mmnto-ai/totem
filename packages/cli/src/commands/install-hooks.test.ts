@@ -3005,11 +3005,12 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
   /**
    * The verb's OWN help, and the top-level help an older CLI answers with.
    *
-   * The unsupported fixture is the real 1.122.0 shape (measured): a curated
-   * top-level command list, exit 0. It deliberately CONTAINS the word `gate`
-   * (via a `merge-gate` entry, the mmnto-ai/totem#2708 verb queued for that
-   * list) and still must not satisfy the probe — which is exactly what the
-   * old group-level grep could not distinguish.
+   * The unsupported fixture is a HOSTILE VARIANT of the 1.122.0 shape, not
+   * that shape verbatim: the measured seven-command top-level help contains no
+   * `gate` at all, so today's probe does not false-pass on it. This fixture
+   * INJECTS a `merge-gate` entry (mmnto-ai/totem#2708 is queued for that list),
+   * so the OLD group-level grep would false-pass and the verb-specific probe
+   * must not. The defect it guards is latent, and this is what keeps it so.
    */
   const HELP_WITH_GATE =
     'Usage: totem legs gate [options]\n\nOptions:\n  --advisory  Print the same lines for every state\n  -h, --help  display help for command';
@@ -3140,6 +3141,13 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
 describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2698)', () => {
   /** Built, never authored as an escape (the banked decode trap). */
   const NL = String.fromCharCode(10);
+  /**
+   * A NON-ASCII owed path (mmnto-ai/totem#2698 fold 4). git C-quotes this name
+   * on BOTH surfaces the gate reads, in two different ways, so an un-normalized
+   * pair reports a covering leg as covering nothing. Driven here through the
+   * REAL CLI, where the argv and the quoting actually happen.
+   */
+  const ACCENTED = `docs/caf${String.fromCharCode(0xe9)}.md`;
   /** The two-character sequence `printf` needs in the shim, likewise built. */
   const BACKSLASH_N = String.fromCharCode(92) + 'n';
 
@@ -3198,7 +3206,8 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     git('checkout', '-q', '-b', 'feat/owed');
     fs.mkdirSync(path.join(repoDir, 'docs'), { recursive: true });
     fs.writeFileSync(path.join(repoDir, 'docs', 'note.md'), '# a judgment-dense page' + NL);
-    git('add', 'docs/note.md');
+    fs.writeFileSync(path.join(repoDir, ...ACCENTED.split('/')), '# an accented page' + NL);
+    git('add', '-A', 'docs');
     git('commit', '-q', '-m', 'a docs change');
     headSha = git('rev-parse', 'HEAD').trim();
 
@@ -3273,9 +3282,9 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       [DIST, 'legs', 'deposit', '--sha', sha, '--from', 'findings.json'],
       { cwd: repoDir, encoding: 'utf-8' },
     );
-    // A failed deposit fails THIS assertion with the writer's own reason,
-    // rather than surfacing later as a puzzling missing evidence line.
-    expect(`${result.status}: ${result.stderr ?? ''}`).toContain('0:');
+    // Anchored, with the writer's own stderr as the failure message: the
+    // previous `toContain('0:')` also passed on a status of 10 or 130.
+    expect(result.status, result.stderr ?? '').toBe(0);
   }
 
   it.skipIf(!composedOk)(
@@ -3285,8 +3294,9 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(invocations()).toContain('legs gate');
       expect(r.status).toBe(1);
       // The GATE's own line, derived end to end from the real predicate + store.
+      // Both owed paths are named, the accented one spelled as it is on disk.
       expect(r.stdout).toContain(
-        '[Totem] BLOCKED: this push is legs-owed (docs/** → docs/note.md)',
+        `[Totem] BLOCKED: this push is legs-owed (docs/** → ${ACCENTED}, docs/** → docs/note.md)`,
       );
       expect(r.stdout).toContain(`for head ${headSha.slice(0, 8)}`);
       // And the HOOK's own cure line, which only the strict arm emits.
@@ -3305,7 +3315,8 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(r.stdout).toContain('[Totem] legs evidence: .totem/artifacts/legs/');
       expect(r.stdout).toContain(`· head ${headSha.slice(0, 8)} · exact ·`);
       // An exact match covers everything by construction (mmnto-ai/totem#2698 fold 3).
-      expect(r.stdout).toContain('· covers 1/1 owed paths ·');
+      // 2/2, not 1/2: the accented path is COVERED, which is the fold-4 fix.
+      expect(r.stdout).toContain('· covers 2/2 owed paths ·');
       expect(r.stdout).toContain('blocking=0 material=1 folded=1');
       expect(r.stdout).not.toContain('BLOCKED');
       expect(r.status).toBe(0);

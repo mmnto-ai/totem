@@ -103,8 +103,11 @@ describe('shieldCommand --covariate short-circuit (rev-6 item 7)', () => {
     expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
     // The short-circuit returns BEFORE engine boot, the fan, and every invoker.
     expect(bootstrapEngineSpy).not.toHaveBeenCalled();
-    // It DID take the covariate branch (getDiffForReview was consulted read-only).
-    expect(getDiffForReviewSpy).toHaveBeenCalledTimes(1);
+    // It DID take the covariate branch (getDiffForReview was consulted
+    // read-only). TWICE since mmnto-ai/totem#2698 fold 4: once for the review's
+    // own scope, and once more for HEAD's branch scope, which is where the leg
+    // field's coverage inputs come from now — both reads, neither a write.
+    expect(getDiffForReviewSpy).toHaveBeenCalledTimes(2);
 
     // Nothing was stamped — this verb authorizes no push.
     expect(fs.existsSync(path.join(tmpDir, '.totem', 'cache', '.reviewed-content-hash'))).toBe(
