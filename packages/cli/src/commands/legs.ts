@@ -663,7 +663,10 @@ export async function resolveUnfilteredBranchScope(
     );
   }
   const result = await getDiffForReview(
-    { branch: true },
+    // `quiet` carries through to the resolver's OWN two disclosure lines: the
+    // covariate's derivation must be silent end to end, not merely stop adding
+    // a third line of its own (mmnto-ai/totem#2698 fold 4).
+    { branch: true, ...(options.quiet === true ? { quiet: true } : {}) },
     { ignorePatterns: [], shieldIgnorePatterns: [] },
     cwd,
     TAG,
