@@ -66,8 +66,9 @@ export default {
   // relevance = relevanceFromDistance('l2', _distance), and `l2` is the metric
   // every Totem vector query is explicitly issued with. LanceDB's `_distance`
   // under `l2` is the SQUARED Euclidean distance, so on unit-norm vectors it
-  // lies in [0, 4] and the relevance 1/(1+_distance) lies in [0.2, 1] — a
-  // floor below 0.2 can never fire at all.
+  // lies in [0, 4] and the relevance 1/(1+_distance) lies in [0.2, 1] — on
+  // unit-norm vectors a floor below 0.2 can never fire at all (a non-unit-norm
+  // embedder is not bounded that way; see "The Relevance Floor" below).
   // searchRelevanceFloor: 0.57,
 
   // Command-Specific Options

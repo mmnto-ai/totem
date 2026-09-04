@@ -1161,7 +1161,7 @@ describe('evaluateGroundingFloor', () => {
     expect(allFaulted.refuse).toBe(true);
     const { message: allFaultedText } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 0);
     expect(allFaultedText).toContain(
-      'Retrieval returned 2 hits, but every one carried a relevance outside [0, 1]',
+      'Retrieval returned 2 hits, but every one carried a relevance that is not a finite number in [0, 1]',
     );
     expect(allFaultedText).toContain('nothing usable grounds this run');
     // The cause is the search layer's to name (metric-specific); the refusal must
@@ -1184,7 +1184,7 @@ describe('evaluateGroundingFloor', () => {
     const { message: mixedText } = formatGroundingRefusal('weak topic', mixed, FLOOR, 0);
     expect(mixedText).toContain('best relevance 0.050 is below the floor');
     expect(mixedText).toContain(
-      '1 hit carried a relevance outside [0, 1] (a fault the search layer warned about, naming its cause) and did not count as signal or as exemption.',
+      '1 hit carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.',
     );
     expect(mixedText).toContain('1. docs/weak.md — relevance 0.050');
   });
@@ -1267,6 +1267,41 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.bestRelevance).toBeCloseTo(0.01, 10);
   });
 
+  // The one state the mmnto-ai/totem#2758 rebase created: the all-faulted arm
+  // needs no floor (final leg, F12). A fault beside a real signal proceeds with
+  // no floor to judge; every hit faulted refuses regardless.
+  it('with NO floor, an all-faulted retrieval still REFUSES, and a fault beside real signal proceeds', () => {
+    const allFaulted = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(2)] },
+      isRelevanceInRange,
+      undefined,
+    );
+    expect(allFaulted).toEqual({
+      refuse: true,
+      hits: 2,
+      bestRelevance: null,
+      withheld: [],
+      floorExempt: 0,
+      faulted: 2,
+    });
+    const { message } = formatGroundingRefusal('an-unanchored-slug', allFaulted, undefined, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 2 hits, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — so nothing usable grounds this run.',
+        FLOOR_LINE_UNSET_TEXT,
+      ].join('\n'),
+    );
+
+    const beside = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(0.001)] },
+      isRelevanceInRange,
+      undefined,
+    );
+    expect(beside.refuse).toBe(false);
+    expect(beside.faulted).toBe(1);
+  });
+
   it('omitting the floor argument entirely is the same as passing undefined', () => {
     const context = { ...emptyContext(), specs: [relevantHit(0.01)] };
     expect(evaluateGroundingFloor(context, isRelevanceInRange)).toEqual(
@@ -1344,8 +1379,9 @@ describe('formatGroundingRefusal', () => {
   // --- The floor line's two forms (mmnto-ai/totem#2727) ---
   //
   // Byte-pinned in BOTH forms. The unset form must never render a number: a
-  // refusal that reached here with no floor did so on the zero-hit arm, and
-  // printing `floor 0.250` would claim a judgment no floor made.
+  // refusal that reached here with no floor did so on an arm that needs none —
+  // zero hits, or every hit faulted — and printing `floor 0.250` would claim a
+  // judgment no floor made.
 
   it('with NO floor the 0-hit refusal names the floor as none, byte for byte', () => {
     const verdict = evaluateGroundingFloor(emptyContext(), isRelevanceInRange, undefined);

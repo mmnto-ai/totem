@@ -38,8 +38,9 @@ const RELEVANCE_DECIMALS = 3;
 const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts';
 /**
  * The floor line when NO floor is configured (mmnto-ai/totem#2727 removed the
- * schema default). A refusal that reached here did so on the zero-hit arm, and
- * the line says so rather than naming a number no run was judged against.
+ * schema default). A refusal that reached here did so on an arm that needs no
+ * floor — zero hits, or every hit faulted (mmnto-ai/totem#2738) — and the line
+ * says so rather than naming a number no run was judged against.
  */
 const FLOOR_LINE_UNSET =
   'floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)';
@@ -811,8 +812,9 @@ export function evaluateGroundingFloor(
  *
  * The floor line has TWO forms since mmnto-ai/totem#2727. With a value
  * configured it names the value and its place; with none it says so plainly —
- * a refusal that reached here without a floor did so on the zero-hit arm, and
- * printing a number would claim a judgment no floor made.
+ * a refusal that reached here without a floor did so on an arm that needs none
+ * (zero hits, or every hit faulted), and printing a number would claim a
+ * judgment no floor made.
  */
 export function formatGroundingRefusal(
   topics: string,
@@ -835,12 +837,15 @@ export function formatGroundingRefusal(
     }
   } else if (verdict.bestRelevance === null) {
     // Every hit faulted: no measurement to compare, nothing usable grounds the
-    // run. The CAUSE is metric-specific and the search layer already named it in
-    // its warning (`OUT_OF_RANGE_CAUSE`), so this line names the fault class, not
-    // a cause the running metric might not have (leg F3 on the bot-round fold).
+    // run. The CAUSE is metric-specific (`OUT_OF_RANGE_CAUSE`) and belongs to the
+    // search layer's tally, so this line names the class, not a cause the running
+    // metric might not have (leg F3). It says "tallied", not "warned": this
+    // command constructs its stores without a warning sink, so the tally's
+    // warning reaches no one on this path — the CLI-wide sink is a follow-up
+    // (final leg, F11), disclosed in the changeset.
     const noun = verdict.hits === 1 ? 'hit' : 'hits';
     lines.push(
-      `Retrieval returned ${verdict.hits} ${noun}, but every one carried a relevance outside [0, 1] — a fault the search layer warned about, naming its cause — so nothing usable grounds this run.`,
+      `Retrieval returned ${verdict.hits} ${noun}, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — so nothing usable grounds this run.`,
     );
     // The same disclosure the zero-hit arm carries (mmnto-ai/totem#2735): this
     // line would otherwise sit under a `Found: … N lessons` line unexplained.
@@ -858,7 +863,7 @@ export function formatGroundingRefusal(
     if (verdict.faulted > 0) {
       const noun = verdict.faulted === 1 ? 'hit' : 'hits';
       lines.push(
-        `${verdict.faulted} ${noun} carried a relevance outside [0, 1] (a fault the search layer warned about, naming its cause) and did not count as signal or as exemption.`,
+        `${verdict.faulted} ${noun} carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.`,
       );
     }
   }
