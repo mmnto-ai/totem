@@ -797,14 +797,16 @@ export async function installPostMergeHook(
 
   // Idempotency: check if already installed
   if (fs.existsSync(hookPath)) {
-    const existing = fs.readFileSync(hookPath, 'utf-8');
+    // Raw bytes are the user's file; the decoded text serves the probes only.
+    const raw = fs.readFileSync(hookPath);
+    const existing = raw.toString('utf-8');
     if (existing.includes(TOTEM_HOOK_MARKER)) {
       console.log('[Totem] Post-merge hook already installed.');
       return;
     }
 
     // Append to existing hook — reuse buildHookContent, strip shebang. Written as
-    // one atomic replacement of the whole file (the user's bytes + ours) rather
+    // one atomic replacement of the whole file (the user's RAW bytes + ours) rather
     // than an append: an interrupted append leaves a hook truncated mid-block,
     // which git still runs (mmnto-ai/totem#2760 round 1, leg F2). The helper
     // keeps the user's file mode.
@@ -812,7 +814,10 @@ export async function installPostMergeHook(
     const appendBlock = buildHookContent(render)
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
-    writeFileAtomicSync(hookPath, existing + separator + '\n' + appendBlock);
+    writeFileAtomicSync(
+      hookPath,
+      Buffer.concat([raw, Buffer.from(separator + '\n' + appendBlock, 'utf-8')]),
+    );
     console.log('[Totem] Appended post-merge hook to existing hook file.');
     return;
   }
@@ -1306,7 +1311,7 @@ const HOOK_EXECUTABLE_MODE = 0o755;
  * the link and created its target, the helper throws ENOENT and leaves the link
  * untouched — remove or re-point the link first. Declared, not defended.
  */
-function writeExecutableHook(hookPath: string, content: string): void {
+function writeExecutableHook(hookPath: string, content: string | Buffer): void {
   writeFileAtomicSync(hookPath, content, { mode: HOOK_EXECUTABLE_MODE });
 }
 
@@ -1444,16 +1449,18 @@ export function isTotemOwnedWithAttestedTrailer(
 }
 
 /**
- * The trailer as it must be re-attached after a regenerated managed block: the text
+ * The trailer as it must be re-attached after a regenerated managed block: the BYTES
  * after `endMarker` with exactly ONE leading line terminator (`\r\n` or `\n`)
  * removed. The canonical hook text already ends with the end marker's own
  * terminator, so re-attaching the raw slice would duplicate it (the `upgradeReflexes`
- * seam precedent in init.ts). Everything past that one terminator is untouched.
+ * seam precedent in init.ts). Everything past that one terminator is untouched —
+ * and never decoded: the trailer is the consumer's own file, and a byte that does
+ * not round-trip UTF-8 must come back as itself (mmnto-ai/totem#2760 leg F9).
  */
-function trailerTailAfterEndMarker(content: string, trailerStart: number): string {
-  const trailer = content.slice(trailerStart);
-  if (trailer.startsWith('\r\n')) return trailer.slice(2);
-  if (trailer.startsWith('\n')) return trailer.slice(1);
+function trailerTailAfterEndMarker(raw: Buffer, trailerStart: number): Buffer {
+  const trailer = raw.subarray(trailerStart);
+  if (trailer[0] === 0x0d && trailer[1] === 0x0a) return trailer.subarray(2);
+  if (trailer[0] === 0x0a) return trailer.subarray(1);
   return trailer;
 }
 
@@ -1523,7 +1530,13 @@ export function installGitHook(
   const hookPath = path.join(hooksDir, hookName);
 
   if (fs.existsSync(hookPath)) {
-    const existing = fs.readFileSync(hookPath, 'utf-8');
+    // Raw bytes are the user's file; the decoded text serves the PROBES only
+    // (markers, shebang, terminator). Every write below that carries the user's
+    // content carries it as BYTES — a hook that does not round-trip UTF-8 must
+    // never come back with U+FFFD where its bytes were (the mmnto-ai/totem#2620
+    // eject ruling, re-learned on mmnto-ai/totem#2760 leg F8).
+    const raw = fs.readFileSync(hookPath);
+    const existing = raw.toString('utf-8');
     if (existing.includes(marker)) {
       if (force) {
         // Force overwrite — replace the entire hook with the new content
@@ -1557,8 +1570,19 @@ export function installGitHook(
         // falls through to the conservative decline; it never writes on a guess.
         const trailerStart = ownedTrailerStart(existing, marker, endMarker);
         if (trailerStart !== undefined) {
-          const rewritten = hookContent + trailerTailAfterEndMarker(existing, trailerStart);
-          if (rewritten === existing) return 'exists';
+          // "Byte-for-byte" is literal: the trailer is sliced from the RAW file. The
+          // string offset converts to a byte offset only if the managed region
+          // decoded losslessly — totem wrote it, so it does, and the equality
+          // check proves it rather than assuming it; a region that does not
+          // round-trip is not ours to rewrite, so it takes the conservative
+          // decline (leg F9). The trailer's own bytes are never decoded.
+          const prefixBytes = Buffer.from(existing.slice(0, trailerStart), 'utf-8');
+          if (!raw.subarray(0, prefixBytes.length).equals(prefixBytes)) return 'exists';
+          const rewritten = Buffer.concat([
+            Buffer.from(hookContent, 'utf-8'),
+            trailerTailAfterEndMarker(raw, prefixBytes.length),
+          ]);
+          if (rewritten.equals(raw)) return 'exists';
           writeExecutableHook(hookPath, rewritten);
           return 'block-rewritten';
         }
@@ -1573,7 +1597,7 @@ export function installGitHook(
     }
 
     // Append to existing hook — preserve user's existing hooks. One atomic
-    // replacement of the whole file (their bytes + ours), not an append: an
+    // replacement of the whole file (their RAW bytes + ours), not an append: an
     // interrupted append leaves a hook truncated mid-block, which git still
     // runs (mmnto-ai/totem#2760 round 1, leg F2). The helper keeps the user's
     // file mode and writes through a symlink to its real path.
@@ -1581,7 +1605,10 @@ export function installGitHook(
     const appendBlock = hookContent
       .replace(/^#!\/bin\/sh\n/, '') // Strip shebang when appending
       .trimStart();
-    writeFileAtomicSync(hookPath, existing + separator + appendBlock);
+    writeFileAtomicSync(
+      hookPath,
+      Buffer.concat([raw, Buffer.from(separator + appendBlock, 'utf-8')]),
+    );
     return 'appended';
   }
 
@@ -2431,7 +2458,15 @@ export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> 
     const hookPath = path.join(hooksDir, 'pre-push');
     if (!fs.existsSync(hookPath)) return false;
 
-    const content = fs.readFileSync(hookPath, 'utf-8');
+    const rawContent = fs.readFileSync(hookPath);
+    const content = rawContent.toString('utf-8');
+    // The splice below is text on both sides of the block, so it is byte-exact
+    // only when the whole file decoded losslessly. A hook that does not
+    // round-trip UTF-8 is declined here — this upgrader's ruled posture is a
+    // silent `false` (mmnto-ai/totem#2692 N4), and declining beats writing U+FFFD
+    // over a user's bytes (mmnto-ai/totem#2620's eject ruling, mmnto-ai/totem#2760
+    // leg F9). Such a hook keeps its old block and takes `totem hook install --force`.
+    if (!Buffer.from(content, 'utf-8').equals(rawContent)) return false;
 
     // Only upgrade hooks that Totem owns (have our marker)
     if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;

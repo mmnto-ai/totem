@@ -653,7 +653,7 @@ describe('installGitHook', () => {
     // The append is a whole-file atomic replacement since mmnto-ai/totem#2760
     // round 1 (an interrupted append leaves a hook truncated mid-block): the
     // inode changes under rename-over, where an in-place append kept it.
-    const inodeBefore = fs.statSync(hookPath).ino;
+    const inodeBefore = fs.statSync(hookPath, { bigint: true }).ino;
 
     const result = installGitHook(
       hooksDir,
@@ -663,7 +663,7 @@ describe('installGitHook', () => {
     );
 
     expect(result).toBe('appended');
-    expect(fs.statSync(hookPath).ino).not.toBe(inodeBefore);
+    expect(fs.statSync(hookPath, { bigint: true }).ino).not.toBe(inodeBefore);
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('echo "user hook"');
     expect(written).toContain(TOTEM_PRECOMMIT_MARKER);
@@ -1478,7 +1478,7 @@ describe('installGitHook writes atomically', () => {
       // in-place `writeFileSync` truncates the SAME file — its inode survives — while
       // rename-over replaces the directory entry with the temp's, so the inode
       // changes. Cleanup and mode alone were satisfied by the old code too.
-      const inodeBefore = fs.statSync(hookPath).ino;
+      const inodeBefore = fs.statSync(hookPath, { bigint: true }).ino;
 
       const action = installGitHook(
         hooksDir,
@@ -1491,13 +1491,106 @@ describe('installGitHook writes atomically', () => {
 
       expect(action).toBe('block-rewritten');
       expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
-      expect(fs.statSync(hookPath).ino).not.toBe(inodeBefore);
+      expect(fs.statSync(hookPath, { bigint: true }).ino).not.toBe(inodeBefore);
       // The helper's temp is `<target>.<pid>-<uuid8>.tmp` beside the target; after a
       // completed write the directory holds the hook alone.
       expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
       if (process.platform !== 'win32') {
         expect(fs.statSync(hookPath).mode & 0o777).toBe(0o755);
       }
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  // The user's file is carried as BYTES (re-armed leg F8/F9): a hook that does not
+  // round-trip UTF-8 — one cp1252 `0xE9` in a comment — must come back with that
+  // byte, never with U+FFFD (EF BF BD) in its place. Decoding for the probes is
+  // fine; re-encoding for the write is the corruption.
+  const NON_UTF8_COMMENT = Buffer.from([0x23, 0x20, 0x63, 0x61, 0x66, 0xe9, 0x0a]); // "# caf\xE9\n"
+  const REPLACEMENT_CHAR = Buffer.from([0xef, 0xbf, 0xbd]);
+
+  it('appends to a user hook that is not valid UTF-8 without touching its bytes', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const userBytes = Buffer.concat([
+        Buffer.from('#!/bin/sh\n', 'utf-8'),
+        NON_UTF8_COMMENT,
+        Buffer.from('echo "user hook"\n', 'utf-8'),
+      ]);
+      fs.writeFileSync(hookPath, userBytes);
+
+      const action = installGitHook(
+        hooksDir,
+        'pre-commit',
+        buildPreCommitHook(RENDER),
+        TOTEM_PRECOMMIT_MARKER,
+      );
+
+      expect(action).toBe('appended');
+      const after = fs.readFileSync(hookPath);
+      expect(after.subarray(0, userBytes.length).equals(userBytes)).toBe(true);
+      expect(after.includes(REPLACEMENT_CHAR)).toBe(false);
+      expect(after.toString('utf-8')).toContain(TOTEM_PRECOMMIT_MARKER);
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  it('rewrites the managed block and carries a non-UTF-8 attested trailer through byte-for-byte', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      // The real liquid-city trailer, then one comment line git would never see
+      // as UTF-8. The attestation still parses (it sits above, in the decoded run).
+      const trailerBytes = Buffer.concat([
+        Buffer.from(ATTESTED_TRAILER, 'utf-8'),
+        NON_UTF8_COMMENT,
+      ]);
+      fs.writeFileSync(
+        hookPath,
+        Buffer.concat([
+          Buffer.from(
+            `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n`,
+            'utf-8',
+          ),
+          trailerBytes,
+        ]),
+      );
+
+      const first = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+
+      expect(first).toBe('block-rewritten');
+      const after = fs.readFileSync(hookPath);
+      const canonicalBytes = Buffer.from(canonical, 'utf-8');
+      expect(after.subarray(0, canonicalBytes.length).equals(canonicalBytes)).toBe(true);
+      expect(after.subarray(canonicalBytes.length).equals(trailerBytes)).toBe(true);
+      expect(after.includes(REPLACEMENT_CHAR)).toBe(false);
+
+      // Idempotent on the same bytes: the recomposed file equals the file on disk.
+      const second = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(second).toBe('exists');
+      expect(fs.readFileSync(hookPath).equals(after)).toBe(true);
     } finally {
       cleanTmpDir(tmpDir);
     }
