@@ -360,7 +360,7 @@ export async function resolveHookRenderOptions(
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     console.error(
-      `[Totem] Could not load ${configPath} (${reason.split('\n')[0]}) — the git hooks are rendered at the defaults (totemDir '${DEFAULT_TOTEM_DIR}', tier '${defaults.tier}'); fix the config and re-run \`totem hook install --force\`.`,
+      `[Totem] Could not load ${configPath} (${reason.split('\n')[0]}) — the git hooks are rendered at the defaults (totemDir '${DEFAULT_TOTEM_DIR}'); the tier follows an explicit flag, else the tier each installed hook declares, else 'standard'; fix the config and re-run \`totem hook install --force\`.`,
     );
     return { ...defaults, configError: reason };
   }
@@ -397,10 +397,11 @@ export async function resolveHookRenderOptions(
  *
  * `undefined` when the hook is absent, carries no marker, or predates the tier line.
  *
- * A hook with a start marker but NO end marker (a legacy hook) is read from the
- * marker to EOF: such a file is whole-file owned by definition — that is exactly why
- * drift-repair cannot bound it and it takes one `--force` — so there is no appended
- * user region below it whose lines could be mistaken for the declaration.
+ * A hook with a start marker but NO end marker is read from the marker to EOF. That
+ * is a POLICY, not an observation about such files: everything below an unbounded
+ * start marker is TREATED as ours, because that file's one cure is `--force`, which
+ * discards the tail anyway. So a user line below it can only steer the render toward
+ * the tier it names — fail-closed toward strict, never a silent downgrade.
  */
 export function declaredHookTier(
   content: string,
@@ -2460,6 +2461,7 @@ export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> 
 
     const blockEnd = markerIdx + endOffset;
 
+    // totem-context: mmnto-ai/totem#2753 — this upgrader is unreachable for any hook carrying TOTEM_HOOK_TIER (the verify-manifest guard above skips every current template), so it renders from config alone; if that guard ever changes, route through tierForHook.
     const render = await resolveHookRenderOptions(gitRoot);
 
     // Build the replacement block (strip shebang — we're splicing into existing file)

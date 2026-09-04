@@ -278,12 +278,16 @@ export async function checkGitHooks(
       const forceClauseNamesFiles = forceable.length !== files.length;
       const forceClauseNamesOnlyLegacy =
         forceClauseNamesFiles && forceable.length === legacy.length;
+      const legacyKind =
+        legacy.length === 1
+          ? 'a legacy hook with no end marker'
+          : 'legacy hooks with no end marker';
       const legacyNote =
         legacy.length === 0
           ? ''
           : forceClauseNamesOnlyLegacy
-            ? ' (a legacy hook with no end marker — back up any lines of your own first)'
-            : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
+            ? ` (${legacyKind} — back up any lines of your own first)`
+            : ` (${legacy.join(', ')}: ${legacyKind} — back up any lines of your own first)`;
       if (appended.length > 0) {
         clauses.push(
           `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it`,

@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   GROUNDING_ANCHOR_FREE_TEXT,
@@ -1377,6 +1377,20 @@ describe('isAttestedTrailer', () => {
     expect(isAttestedTrailer(`\nrm -rf ./build ${ATTESTED_FORK_LINE.slice(2)}\n`)).toBe(false);
   });
 
+  // The marker is parsed per LINE here, so core's multi-line (dotAll) form of it is
+  // deliberately not in play: a marker split across two comment lines does not attest.
+  it('is false when the marker is split across two comment lines', () => {
+    const split = [
+      '',
+      '# [lc] docs-inject extension',
+      '# <!-- totem:fork reason="lc docs-inject pre-commit extension"',
+      '#      owner="satur8d" attested="2026-06-07" -->',
+      'sh "tools/git-hooks/pre-commit-docs-inject.sh"',
+      '',
+    ].join('\n');
+    expect(isAttestedTrailer(split)).toBe(false);
+  });
+
   it('is false for a comment run carrying no full marker', () => {
     expect(
       isAttestedTrailer('\n# [lc] docs-inject extension\n# <!-- totem:fork -->\nsh "x.sh"\n'),
@@ -1582,6 +1596,30 @@ describe('installHooksNonInteractive', () => {
     ).toBe('standard');
   });
 
+  it('lets --strict UPGRADE a standard-installed hook when no config resolves', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
+    );
+
+    await withEmptyHome(async () => {
+      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+      expect(result!.preCommit).toBe('overwritten');
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
   it('lets an explicit tier flag win when the config RESOLVES but will not load', async () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     const hooksDir = path.join(tmpDir, '.git', 'hooks');
@@ -1594,11 +1632,19 @@ describe('installHooksNonInteractive', () => {
     // A local config that resolves and then fails to parse → the LOUD-defaults
     // early return (mmnto-ai/totem#2692 A8).
     fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), ':\n  not: [valid\n');
-
-    await withEmptyHome(async () => {
-      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
-      expect(result!.preCommit).toBe('block-rewritten');
+    const stderr: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
     });
+
+    try {
+      await withEmptyHome(async () => {
+        const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+        expect(result!.preCommit).toBe('block-rewritten');
+      });
+    } finally {
+      spy.mockRestore();
+    }
 
     expect(
       declaredHookTier(
@@ -1607,6 +1653,43 @@ describe('installHooksNonInteractive', () => {
         TOTEM_PRECOMMIT_END,
       ),
     ).toBe('standard');
+    // The loud line must not claim a tier it does not decide (fold 4 F6): the
+    // defaults it names are the totemDir only.
+    const loud = stderr.find((line) => line.includes('rendered at the defaults')) ?? '';
+    expect(loud).toContain(
+      "the tier follows an explicit flag, else the tier each installed hook declares, else 'standard'",
+    );
+    expect(loud).not.toContain("tier 'standard')");
+  });
+
+  it('lets --strict UPGRADE a standard-installed hook when the config will not load', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
+    );
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), ':\n  not: [valid\n');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await withEmptyHome(async () => {
+        const result = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+        expect(result!.preCommit).toBe('overwritten');
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
   });
 
   it('renders --force at the installed tier when nothing is pinned', async () => {

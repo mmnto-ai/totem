@@ -618,12 +618,14 @@ describe('checkGitHooks', () => {
       }
     });
 
-    // ── Mixed shapes in one repo (fold F6/F8) ──
+    // ── Mixed shapes in one repo (fold F6/F8, narrowed on fold 3 F5) ──
     //
-    // Each shape contributes its own clause, and a filename appears exactly once:
-    // when the `--force` clause already lists its files, the legacy note must not
-    // repeat them or the line reads as two hooks where there is one.
-    it('composes one clause per shape and never doubles a filename (legacy + owned-whole + attested)', async () => {
+    // Each shape contributes its own clause. A filename is named once, EXCEPT that
+    // the legacy note keeps its names when the `--force` clause lists more than the
+    // legacy hooks — otherwise the reader cannot tell which of the hooks it just
+    // listed is the legacy one. The sibling test below covers the case where the
+    // clause named exactly the legacy file and the note therefore drops its names.
+    it('composes one clause per shape; the legacy note names its file when the --force clause lists more than the legacy hooks (legacy + owned-whole + attested)', async () => {
       const tmpDir = makeTmpDir();
       try {
         execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
@@ -723,6 +725,53 @@ describe('checkGitHooks', () => {
         );
         expect(remediation).not.toContain('(pre-commit: a legacy hook');
         expect(remediation.split('pre-commit').length - 1).toBe(1);
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    it('pluralizes the legacy note when more than one hook is legacy', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const hooks = await import('./install-hooks.js');
+        const render = {
+          tier: 'standard' as const,
+          totemDir: '.totem',
+          fallbackCmd: hooks.getFallbackCommand(tmpDir),
+        };
+        await installCanonical(tmpDir, '.totem');
+        const hooksDir = path.join(tmpDir, '.git', 'hooks');
+        const stripEnd = (text: string, endMarker: string): string =>
+          text
+            .split('\n')
+            .filter((line) => !line.includes(endMarker))
+            .join('\n');
+        fs.writeFileSync(
+          path.join(hooksDir, 'pre-commit'),
+          stripEnd(
+            withStaleComment(hooks.buildPreCommitHook(render), hooks.TOTEM_PRECOMMIT_END),
+            hooks.TOTEM_PRECOMMIT_END,
+          ),
+        );
+        fs.writeFileSync(
+          path.join(hooksDir, 'pre-push'),
+          stripEnd(
+            withStaleComment(hooks.buildPrePushHook(render), hooks.TOTEM_PREPUSH_END),
+            hooks.TOTEM_PREPUSH_END,
+          ),
+        );
+
+        const result = await checkGitHooks(tmpDir, {});
+
+        expect(result.status).toBe('warn');
+        // The two stale hooks are the only stale hooks, so the `--force` clause
+        // covers them all and names none — the note therefore carries the names, and
+        // reads as a plural.
+        expect(result.remediation).toBe(
+          'totem hook install --force (pre-commit, pre-push: legacy hooks with no end marker — back up any lines of your own first)',
+        );
+        expect(result.remediation).not.toContain('a legacy hook with no end marker');
       } finally {
         cleanTmpDir(tmpDir);
       }
