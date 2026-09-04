@@ -194,6 +194,14 @@ describe('OUT_OF_RANGE_CAUSE is metric-specific (F1)', () => {
     expect(OUT_OF_RANGE_CAUSE.l2).not.toContain('unit-norm');
   });
 
+  it('names ONLY the negative-distance case for l2 — a non-finite one never reaches it', () => {
+    // The search layer requires `Number.isFinite` before the map runs at BOTH
+    // sites, so a non-finite `_distance` yields no relevance and cannot produce
+    // a breach. Naming it would describe a report this warning cannot make.
+    expect(OUT_OF_RANGE_CAUSE.l2).toContain('a negative _distance');
+    expect(OUT_OF_RANGE_CAUSE.l2).not.toContain('non-finite');
+  });
+
   it('names the unit-norm cause for cosine and dot, where the mapping really can leave [0, 1]', () => {
     expect(OUT_OF_RANGE_CAUSE.cosine).toContain('unit-norm');
     expect(OUT_OF_RANGE_CAUSE.dot).toContain('unit-norm');

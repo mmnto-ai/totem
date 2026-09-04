@@ -685,9 +685,19 @@ export interface GroundingFloorVerdict {
  * means nothing grounds the run, so it refuses regardless of any floor. Lessons
  * do not ground a run — ruled final on mmnto-ai/totem#2727 — so they are
  * delivered but never judged here.
+ *
+ * `isInRange` is core's `isRelevanceInRange` — the SAME predicate the grounding
+ * bundle builder omits on (mmnto-ai/totem#2738 fold 2, F2). It is a PARAMETER
+ * rather than a module-level import because a static value import from
+ * `@mmnto/totem` in `commands/**` pulls LanceDB into every CLI startup,
+ * including `--help` (mmnto-ai/totem#2339, an enforced rule); the one
+ * production caller supplies it from the dynamic `await import('@mmnto/totem')`
+ * the rule prescribes. Injecting a different predicate here would put the
+ * refusal gate and the run artifact back into disagreement about the same hit.
  */
 export function evaluateGroundingFloor(
   context: RetrievedContext,
+  isInRange: (relevance: number) => boolean,
   floor?: number,
 ): GroundingFloorVerdict {
   // Lessons are DELIVERED but never judged here (mmnto-ai/totem#2735). The
@@ -710,13 +720,21 @@ export function evaluateGroundingFloor(
   let bestRelevance: number | null = null;
   for (const hit of all) {
     const relevance = hit.relevance;
-    // Finite or it is not a signal. The core bundle builder DROPS a non-finite
-    // relevance from the item it writes, so a NaN/Infinity hit reaches the
-    // artifact with no relevance at all — exactly an FTS-only hit's shape.
-    // Counting it as signal here disagreed with that: it made `floorExempt`
-    // zero and let a NaN be disclosed as a withheld `relevance NaN` candidate
-    // beside a genuinely weak sibling.
-    if (typeof relevance !== 'number' || !Number.isFinite(relevance)) {
+    // In [0, 1] or it is not a signal — the SAME predicate the core bundle
+    // builder omits on (`isRelevanceInRange`, mmnto-ai/totem#2738 fold 2, F2).
+    // One predicate, two surfaces: whatever the artifact records as "no
+    // relevance", the floor must judge as "no signal", or the judgment and the
+    // record disagree about the same hit.
+    //
+    // Finiteness was already the rule: a NaN/Infinity hit reaches the artifact
+    // with no relevance at all — exactly an FTS-only hit's shape — and counting
+    // it as signal made `floorExempt` zero and disclosed a withheld `relevance
+    // NaN` candidate beside a genuinely weak sibling. The RANGE arm closes the
+    // remaining gap: a finite out-of-range relevance (say 2, from a negative
+    // `_distance`) is dropped by the bundle builder too, so before this it
+    // could set `bestRelevance` above the floor and defeat the refusal for a
+    // run whose artifact carried no relevance for that hit at all.
+    if (typeof relevance !== 'number' || !isInRange(relevance)) {
       floorExempt += 1;
       continue;
     }
@@ -1021,7 +1039,10 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const floor = config.searchRelevanceFloor;
   const anchor = resolveGroundingAnchor(parsed);
   if (anchor.kind === GROUNDING_ANCHOR_FREE_TEXT && !options.raw) {
-    const verdict = evaluateGroundingFloor(context, floor);
+    // Dynamic, per mmnto-ai/totem#2339: a static value import from the core
+    // barrel here would pull LanceDB into every CLI startup, `--help` included.
+    const { isRelevanceInRange } = await import('@mmnto/totem');
+    const verdict = evaluateGroundingFloor(context, floor, isRelevanceInRange);
     if (verdict.refuse) {
       const refusal = formatGroundingRefusal(anchor.ref, verdict, floor, context.lessons.length);
       throw new TotemError('GATE_INVALID', refusal.message, refusal.recoveryHint);

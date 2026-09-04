@@ -29,28 +29,34 @@ export const DISTANCE_METRICS: readonly DistanceMetric[] = ['l2', 'cosine', 'dot
 export const VECTOR_DISTANCE_METRIC: DistanceMetric = 'l2';
 
 /**
- * distance → relevance, one entry per SDK metric.
- *
- * Private on purpose: the map is an implementation of `relevanceFromDistance`,
- * not a second surface callers can reach around it to index.
- */
-/**
  * Why a computed relevance can leave [0, 1] — the cause is METRIC-SPECIFIC
  * (mmnto-ai/totem#2738 falsification round, F1), so the warning must not name a
  * cause the metric cannot have.
  *
  * Under `l2` the SDK returns a squared distance, which is `≥ 0` by
  * construction, so `1 / (1 + d) ∈ (0, 1]` for every value the SDK can legally
- * return: a breach there is NOT a non-unit-norm embedder, it is a fault. Under
- * `cosine` / `dot` the mapping DOES leave [0, 1] for vectors that are not
+ * return: a breach there is NOT a non-unit-norm embedder, it is a fault. And it
+ * is always a NEGATIVE, FINITE `_distance` — the search layer discards a
+ * non-finite `_distance` BEFORE the map runs (both the row-mapping site and the
+ * pre-fusion tally require `Number.isFinite`), so a non-finite value produces no
+ * relevance at all and can never reach this warning. The string names only what
+ * the warning can actually report (fold 2, F1).
+ *
+ * Under `cosine` / `dot` the mapping DOES leave [0, 1] for vectors that are not
  * unit-norm, which is the real embedder-profile signal.
  */
 export const OUT_OF_RANGE_CAUSE: Record<DistanceMetric, string> = {
-  l2: 'a negative or non-finite _distance, which squared L2 cannot produce: an SDK or data fault',
+  l2: 'a negative _distance, which squared L2 cannot produce: an SDK or data fault',
   cosine: "the embedder's vectors may not be unit-norm",
   dot: "the embedder's vectors may not be unit-norm",
 };
 
+/**
+ * distance → relevance, one entry per SDK metric.
+ *
+ * Private on purpose: the map is an implementation of `relevanceFromDistance`,
+ * not a second surface callers can reach around it to index.
+ */
 const RELEVANCE_FROM_DISTANCE: Record<DistanceMetric, (distance: number) => number> = {
   /**
    * SDK: `"l2"` — Euclidean distance, "range of [0, ∞)". MEASURED (R1,

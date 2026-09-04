@@ -932,6 +932,10 @@ describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
     expect(msg).toContain(OUT_OF_RANGE_CAUSE.l2);
     expect(msg).toContain('which squared L2 cannot produce');
     expect(msg).not.toContain('unit-norm');
+    // Nor "non-finite" (fold 2, F1): a non-finite `_distance` is discarded
+    // before the map runs, so it produces no relevance and can never reach this
+    // warning. The cause must name only what the warning can actually report.
+    expect(msg).not.toContain('non-finite');
 
     // The row is RETURNED, not filtered, and carries its computed relevance.
     expect(results).toHaveLength(1);
@@ -1010,6 +1014,13 @@ describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
     );
     expect(rangeWarnings).toHaveLength(1);
     expect(String(rangeWarnings[0]![0])).toContain('under metric "l2"');
+    // The COUNT is the load-bearing assertion (fold 2, F3). ONE row breached,
+    // and it survives fusion — so it is seen twice, once by the pre-fusion
+    // tally and once by `rrfMerge`'s row mapping. Sharing one tally across both
+    // would still emit exactly one warning, just saying "2 vector hit(s)" about
+    // a single row; only the count catches that. This is what pins the
+    // deliberately-discarded tally passed into `rrfMerge`.
+    expect(String(rangeWarnings[0]![0])).toContain('1 vector hit(s)');
     expect(results.find((r) => r.content === 'content-a')!.relevance).toBeCloseTo(2, 10);
   });
 
@@ -1092,6 +1103,16 @@ describe('non-finite `_distance` yields no relevance (mmnto-ai/totem#2738, F4)',
 
   it('Infinity: no relevance, score 0, no warning', async () => {
     const { result, onWarn } = await searchOneRow({ _distance: Number.POSITIVE_INFINITY });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('-Infinity: no relevance, score 0, no warning (fold 2, F4)', async () => {
+    // The guard's other side. Unguarded, 1/(1 + -Infinity) is -0 — an
+    // in-range-looking number that would have passed `isRelevanceInRange`
+    // silently and been recorded as a real measurement of zero similarity.
+    const { result, onWarn } = await searchOneRow({ _distance: Number.NEGATIVE_INFINITY });
     expect(result.relevance).toBeUndefined();
     expect(result.score).toBe(0);
     expect(onWarn).not.toHaveBeenCalled();
