@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-// totem-context: the cold-start premise behind the dynamic-import rule is already false for THIS module, so the dynamic form would buy nothing. `install-hooks.js` is never on the startup graph — index.ts and index-lite.ts reach every one of its verbs through `await import('./commands/install-hooks.js')`, so `--help` never loads it. And when it IS loaded, the core barrel is already in its static graph twice over: `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js` both value-import it. `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract (mmnto-ai/totem#2753) and `installGitHook` is synchronous, so `await import` is not available to them at all; the alternative is duplicating core's `parseForkMarker` regex in the CLI, which is the divergence the shared parser exists to prevent.
+// totem-context: mmnto-ai/totem#2753 — the rule's startup-cost premise does not apply to THIS module, because `install-hooks.js` is reached only through `await import` from index.ts and index-lite.ts (so it is never on the `--help` graph) and the core barrel is already in its static graph via `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js`. The dynamic form is also unavailable: `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract and `installGitHook` is synchronous, so the only alternative would be duplicating core's `parseForkMarker` regex in the CLI — the divergence the shared parser exists to prevent.
 import { parseForkMarker } from '@mmnto/totem';
 
 import {

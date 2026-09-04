@@ -325,12 +325,15 @@ export async function checkGitHooks(
 interface StaleHookRow {
   file: string;
   /** `owned-whole`: a totem-owned whole file (safe to `--force`) ·
-   *  `appended-attested`: a bounded block whose trailer is an ATTESTED `totem:fork`
-   *  extension — a bare `totem hook install` rewrites the block in place and carries
-   *  the extension through (mmnto-ai/totem#2753) · `appended`: any other bounded
-   *  block with content around it (`--force` would clobber it) · `legacy`: a start
-   *  marker with NO end marker — unbounded, so it was compared whole and takes the
-   *  one `--force` install-hooks.ts prescribes for it. */
+   *  `appended-attested`: a file totem owns THROUGH its end marker whose trailer is
+   *  an ATTESTED `totem:fork` extension — a bare `totem hook install` rewrites the
+   *  block in place and carries the extension through (mmnto-ai/totem#2753). Gated on
+   *  the installer's own `isTotemOwnedWithAttestedTrailer`, so the row never
+   *  prescribes a cure the installer would decline · `appended`: any other bounded
+   *  block with content around it, INCLUDING one with the user's own lines above it
+   *  and an attested trailer below (`--force` would clobber those lines) · `legacy`:
+   *  a start marker with NO end marker — unbounded, so it was compared whole and
+   *  takes the one `--force` install-hooks.ts prescribes for it. */
   kind: 'owned-whole' | 'appended-attested' | 'appended' | 'legacy';
 }
 
@@ -449,13 +452,20 @@ async function hooksStaleAgainstCanonical(
         continue;
       }
       const startIdx = existing.indexOf(marker);
-      const endIdx = startIdx === -1 ? -1 : existing.indexOf(endMarker, startIdx + marker.length);
-      const boundedAfterStart = endIdx !== -1;
+      const boundedAfterStart =
+        startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
       // An attested `totem:fork` extension after the end marker is the one trailing
       // shape a BARE install can now cure, so it must be told apart from the general
       // appended case BEFORE it — the remedies are opposites (mmnto-ai/totem#2753).
-      const attestedTrailer =
-        boundedAfterStart && hooks.isAttestedTrailer(existing.slice(endIdx + endMarker.length));
+      // The test is `isTotemOwnedWithAttestedTrailer`, the SAME predicate the install
+      // arm gates its cure on, not merely "bounded and the trailer is attested": that
+      // looser test would also catch a hook with the user's own lines BEFORE the totem
+      // block, which the installer declines because the marker does not OPEN the file
+      // — and the row would then prescribe a bare `totem hook install` that does
+      // nothing. A remedy that does not touch the surface it is prescribed for is an
+      // inert instruction (mmnto-ai/totem#2532); such a file stays `appended` and
+      // takes the delete-and-re-append line, which does work on it.
+      const attestedTrailer = hooks.isTotemOwnedWithAttestedTrailer(existing, marker, endMarker);
       const kind: StaleHookRow['kind'] = hooks.isTotemOwnedWholeFile(existing, marker, endMarker)
         ? 'owned-whole'
         : attestedTrailer

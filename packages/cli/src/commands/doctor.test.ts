@@ -572,6 +572,45 @@ describe('checkGitHooks', () => {
         cleanTmpDir(tmpDir);
       }
     });
+
+    // The corner the classification is gated for: the trailer IS attested, but the
+    // user's own lines sit ABOVE the totem block, so the marker does not open the
+    // file and `installGitHook` declines. Prescribing the bare install here would
+    // ship an instruction that does nothing (mmnto-ai/totem#2532) — the row must fall
+    // through to the appended remedy, which does work on this file.
+    it('does NOT prescribe the carry-through for an attested trailer under a user PREAMBLE', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const { buildPreCommitHook, TOTEM_PRECOMMIT_END } = await import('./install-hooks.js');
+        // Three canonical hooks; pre-commit gets user lines ABOVE a stale block and
+        // an attested extension BELOW its end marker.
+        await installCanonical(tmpDir, '.totem');
+        const staleBlock = withStaleComment(
+          buildPreCommitHook({ tier: 'standard', totemDir: '.totem' }),
+          TOTEM_PRECOMMIT_END,
+        )
+          .replace(/^#!\/bin\/sh\n/, '')
+          .trimStart();
+        fs.writeFileSync(
+          path.join(tmpDir, '.git', 'hooks', 'pre-commit'),
+          `#!/bin/sh\necho "user pre-commit"\n\n${staleBlock}${ATTESTED_TRAILER}`,
+        );
+
+        const result = await checkGitHooks(tmpDir, {});
+
+        expect(result.status).toBe('warn');
+        expect(result.message).toContain('pre-commit');
+        expect(result.message).not.toContain('pre-push');
+        expect(result.remediation).toContain('delete the totem block');
+        expect(result.remediation).toContain('pre-commit');
+        expect(result.remediation).toContain('would overwrite your own hook content');
+        // The cure the installer would decline on this file is never named.
+        expect(result.remediation).not.toContain('carried through unchanged');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
   });
 });
 
