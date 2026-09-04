@@ -203,6 +203,14 @@ export { createEmbedder, isOllamaAvailable } from './embedders/embedder.js';
 // Store
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
 export { LanceStore } from './store/lance-store.js';
+export type { DistanceMetric } from './store/relevance.js';
+export {
+  assertDistanceMetric,
+  DISTANCE_METRICS,
+  isRelevanceInRange,
+  relevanceFromDistance,
+  VECTOR_DISTANCE_METRIC,
+} from './store/relevance.js';
 export { searchLessons } from './store/search-lessons.js';
 
 // Pipeline

@@ -20,11 +20,19 @@ function fakeRow(id: string, overrides: Record<string, unknown> = {}): Record<st
   };
 }
 
-/** Create a chainable query builder mock. Tracks the where clause. */
+/**
+ * Create a chainable query builder mock. Tracks the where clause and the
+ * distance metric the query was issued with (mmnto-ai/totem#2738 — the metric
+ * must be a recorded fact in the query, never an inherited SDK default).
+ */
 function mockQueryBuilder(rows: Record<string, unknown>[]) {
-  const captured: { where?: string } = {};
+  const captured: { where?: string; distanceType?: string } = {};
   const builder = {
     limit: vi.fn().mockReturnThis(),
+    distanceType: vi.fn((metric: string) => {
+      captured.distanceType = metric;
+      return builder;
+    }),
     where: vi.fn((clause: string) => {
       captured.where = clause;
       return builder;
@@ -77,6 +85,13 @@ function mockEmbedder(vec: number[] = [1, 0, 0]): Embedder {
  */
 const DEFAULT_CTX = { absolutePathRoot: '/test' };
 
+/**
+ * Warning sink for the calls that are not exercising the out-of-range warning
+ * path (mmnto-ai/totem#2738 gave `runVectorSearch` an `onWarn` parameter so it
+ * can report a relevance that left [0, 1]).
+ */
+const NO_WARN = (): void => {};
+
 // ─── runVectorSearch ────────────────────────────────────
 
 describe('runVectorSearch', () => {
@@ -88,6 +103,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'test query',
       undefined,
       10,
@@ -106,6 +122,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -116,7 +133,7 @@ describe('runVectorSearch', () => {
 
   it('passes type filter as a WHERE clause', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', 'spec', 5, DEFAULT_CTX);
+    await runVectorSearch(table as never, mockEmbedder(), NO_WARN, 'query', 'spec', 5, DEFAULT_CTX);
 
     expect(table._vectorBuilder.where).toHaveBeenCalledOnce();
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
@@ -128,6 +145,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -142,7 +160,16 @@ describe('runVectorSearch', () => {
 
   it('combines type and boundary filters with AND', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', 'code', 5, DEFAULT_CTX, 'src/');
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      'code',
+      5,
+      DEFAULT_CTX,
+      'src/',
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`type` = 'code'");
@@ -152,10 +179,16 @@ describe('runVectorSearch', () => {
 
   it('handles multiple boundary prefixes with OR', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX, [
-      'src/a',
-      'src/b',
-    ]);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+      ['src/a', 'src/b'],
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`filePath` LIKE 'src/a%'");
@@ -165,7 +198,15 @@ describe('runVectorSearch', () => {
 
   it('does not call where when no filters are provided', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
     expect(table._vectorBuilder.where).not.toHaveBeenCalled();
   });
 
@@ -174,6 +215,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -191,6 +233,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -208,6 +251,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -225,6 +269,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -238,10 +283,16 @@ describe('runVectorSearch', () => {
 
   it('filters out empty boundary strings', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX, [
-      '',
-      'src/',
-    ]);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+      ['', 'src/'],
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`filePath` LIKE 'src/%'");
@@ -255,6 +306,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -270,6 +322,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -572,6 +625,7 @@ describe('source context tagging', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -590,10 +644,18 @@ describe('source context tagging', () => {
       vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'adr/adr-001.md' })],
     });
 
-    const results = await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, {
-      sourceRepo: 'strategy',
-      absolutePathRoot: '/d/Dev/totem-strategy',
-    });
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      {
+        sourceRepo: 'strategy',
+        absolutePathRoot: '/d/Dev/totem-strategy',
+      },
+    );
 
     expect(results).toHaveLength(1);
     expect(results[0]!.filePath).toBe('adr/adr-001.md');
@@ -652,10 +714,18 @@ describe('source context tagging', () => {
       vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
     });
 
-    const results = await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, {
-      sourceRepo: '',
-      absolutePathRoot: '/d/Dev/totem',
-    });
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      {
+        sourceRepo: '',
+        absolutePathRoot: '/d/Dev/totem',
+      },
+    );
 
     expect(results[0]!.sourceRepo).toBeUndefined();
   });
@@ -679,6 +749,7 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -697,6 +768,7 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -785,5 +857,163 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
     // The higher-relevance doc is deliberately ranked SECOND.
     expect(results[1]!.relevance).toBeGreaterThan(results[0]!.relevance!);
+  });
+});
+
+// ─── metric-bound relevance (mmnto-ai/totem#2738) ─────────
+//
+// The relevance normalization is bound to a NAMED metric that the query itself
+// carries: both vector query sites chain `.distanceType('l2')` so the metric is
+// a recorded fact rather than an inherited SDK default. A relevance that leaves
+// [0, 1] is a signal about the embedder (non-unit vectors), so it warns ONCE
+// per query — it never throws and never filters a row.
+
+describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
+  it('runVectorSearch issues the query with distanceType "l2"', async () => {
+    const table = mockTable({ vectorRows: [fakeRow('a')] });
+
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(table._vectorBuilder.distanceType).toHaveBeenCalledWith('l2');
+    expect(table._vectorBuilder._captured.distanceType).toBe('l2');
+  });
+
+  it('runHybridSearch issues its vector leg with distanceType "l2"', async () => {
+    const table = mockTable({ vectorRows: [fakeRow('a')], ftsRows: [fakeRow('b')] });
+
+    await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(table._vectorBuilder.distanceType).toHaveBeenCalledWith('l2');
+    expect(table._vectorBuilder._captured.distanceType).toBe('l2');
+  });
+
+  it('warns once on an out-of-range relevance and still returns the row', async () => {
+    // A negative _distance is impossible for a true squared-L2 distance, so it
+    // stands in for the real cause: an embedder whose vectors are not unit-norm.
+    const table = mockTable({ vectorRows: [fakeRow('a', { _distance: -0.5 })] });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).toHaveBeenCalledOnce();
+    const msg = onWarn.mock.calls[0]![0] as string;
+    expect(msg).toContain('1 vector hit(s) carried a relevance outside [0, 1]');
+    expect(msg).toContain('under metric "l2"');
+    expect(msg).toContain('sample 2');
+
+    // The row is RETURNED, not filtered, and carries its computed relevance.
+    expect(results).toHaveLength(1);
+    expect(results[0]!.relevance).toBeCloseTo(2, 10);
+    expect(results[0]!.score).toBeCloseTo(2, 10);
+  });
+
+  it('warns exactly ONCE per query naming the count when two rows are out of range', async () => {
+    const table = mockTable({
+      vectorRows: [
+        fakeRow('a', { _distance: -0.5 }),
+        fakeRow('b', { _distance: -0.75 }),
+        fakeRow('c', { _distance: 0.3096 }),
+      ],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).toHaveBeenCalledOnce();
+    expect(onWarn.mock.calls[0]![0]).toContain('2 vector hit(s)');
+    expect(results).toHaveLength(3);
+    // The in-range row is untouched — the R1-measured pair maps to ~0.7636.
+    expect(results[2]!.relevance).toBeCloseTo(0.7636, 4);
+  });
+
+  it('does not warn when every relevance is inside [0, 1]', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0 }), fakeRow('b', { _distance: 4 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).not.toHaveBeenCalled();
+    // The unit-norm bounds: d = 0 → 1, d = 4 → 0.2.
+    expect(results[0]!.relevance).toBe(1);
+    expect(results[1]!.relevance).toBeCloseTo(0.2, 10);
+  });
+
+  it('runHybridSearch warns once for an out-of-range vector-leg row', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: -0.5 })],
+      ftsRows: [fakeRow('b', { _distance: undefined, _score: 3 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    const rangeWarnings = onWarn.mock.calls.filter((call) =>
+      String(call[0]).includes('carried a relevance outside [0, 1]'),
+    );
+    expect(rangeWarnings).toHaveLength(1);
+    expect(String(rangeWarnings[0]![0])).toContain('under metric "l2"');
+    expect(results.find((r) => r.content === 'content-a')!.relevance).toBeCloseTo(2, 10);
+  });
+
+  it('runFtsSearch emits no range warning — FTS rows carry no relevance', async () => {
+    const table = mockTable({
+      ftsRows: [fakeRow('a', { _distance: undefined, _score: 3.1 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'query', undefined, 5, DEFAULT_CTX);
+
+    expect(results[0]!.relevance).toBeUndefined();
+    expect(onWarn).not.toHaveBeenCalled();
   });
 });

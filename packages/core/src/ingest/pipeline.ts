@@ -12,6 +12,8 @@ import type { LockRelease } from '../lock.js';
 import { withLock } from '../lock.js';
 import { sanitizeForIngestion } from '../sanitize.js';
 import { LanceStore } from '../store/lance-store.js';
+import type { DistanceMetric } from '../store/relevance.js';
+import { VECTOR_DISTANCE_METRIC } from '../store/relevance.js';
 import { sanitizeForTerminal } from '../terminal-sanitize.js';
 import type { Chunk, FullSyncCheckpoint, SyncOptions, SyncState } from '../types.js';
 import type { ResolvedFile } from './file-resolver.js';
@@ -246,6 +248,14 @@ export interface IndexManifest {
   writtenAt: string;
   documents: ManifestDocument[];
   gitCommit?: string;
+  /**
+   * The distance metric every vector query against this index is issued with
+   * (mmnto-ai/totem#2738) — a recorded fact, so a future metric change is
+   * visible in the artifact instead of silently re-scaling every relevance.
+   * OPTIONAL because manifests written before #2738 do not carry it; readers
+   * must tolerate its absence rather than treating it as a schema breach.
+   */
+  vectorDistanceMetric?: DistanceMetric;
 }
 
 /** Current schema identifier persisted to `.totem/index-manifest.json`. */
@@ -260,6 +270,9 @@ export const INDEX_MANIFEST_SCHEMA = 'totem-index-manifest-v0.2';
  *   non-empty string; null / undefined / `''` cause the field to be omitted
  *   entirely (no `sha1:unknown` or other synthesized fake-presence values).
  * - `schema` is always set to {@link INDEX_MANIFEST_SCHEMA}.
+ * - `vectorDistanceMetric` is always set to {@link VECTOR_DISTANCE_METRIC}
+ *   (mmnto-ai/totem#2738) — the metric the store's vector queries are issued
+ *   with, recorded so it is not left implicit in an SDK default.
  *
  * Pure helper — does not touch the filesystem. The sync pipeline is
  * responsible for atomic write/rename of the returned payload.
@@ -273,6 +286,7 @@ export function buildIndexManifest(input: {
     schema: INDEX_MANIFEST_SCHEMA,
     writtenAt: input.writtenAt.toISOString(),
     documents: input.documents,
+    vectorDistanceMetric: VECTOR_DISTANCE_METRIC,
   };
   if (input.headSha) {
     manifest.gitCommit = `git:${input.headSha}`;

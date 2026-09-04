@@ -5,6 +5,7 @@ import type * as lancedb from '@lancedb/lancedb';
 import type { ContentType } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
 import type { SearchResult, SourceContext } from '../types.js';
+import { isRelevanceInRange, relevanceFromDistance, VECTOR_DISTANCE_METRIC } from './relevance.js';
 
 /** RRF constant — standard value from the original RRF paper. */
 const RRF_K = 60;
@@ -22,10 +23,42 @@ interface RankedRow {
   id: string;
 }
 
+/**
+ * Per-call tally of relevances that left [0, 1] (mmnto-ai/totem#2738).
+ *
+ * `relevanceFromDistance` is a pure map — the range judgment lives here, at the
+ * search call, so one query emits at most ONE warning no matter how many rows
+ * breached. `sample` is the first breaching value, carried for the message.
+ */
+interface RelevanceRangeTally {
+  outOfRange: number;
+  sample?: number;
+}
+
+/** Fresh tally for one search call. */
+function newRelevanceTally(): RelevanceRangeTally {
+  return { outOfRange: 0 };
+}
+
+/**
+ * Emit at most one warning per query when computed relevances left [0, 1].
+ * A warning, never a throw and never a filter: the rows are returned unchanged
+ * and the operator decides whether their embedder profile is the problem.
+ */
+function warnIfOutOfRange(tally: RelevanceRangeTally, onWarn: (msg: string) => void): void {
+  if (tally.outOfRange === 0) return;
+  onWarn(
+    `[Totem] ${tally.outOfRange} vector hit(s) carried a relevance outside [0, 1] under metric ` +
+      `"${VECTOR_DISTANCE_METRIC}" (sample ${tally.sample}) — the embedder's vectors may not be ` +
+      `unit-norm; results are returned unchanged.`,
+  );
+}
+
 /** Pure vector search (original behavior). */
 export async function runVectorSearch(
   table: lancedb.Table,
   embedder: Embedder,
+  onWarn: (msg: string) => void,
   query: string,
   typeFilter: ContentType | undefined,
   maxResults: number,
@@ -34,16 +67,19 @@ export async function runVectorSearch(
 ): Promise<SearchResult[]> {
   const [queryVector] = await embedder.embed([query]);
 
-  let q = table.vectorSearch(queryVector!).limit(maxResults);
+  let q = table.vectorSearch(queryVector!).distanceType(VECTOR_DISTANCE_METRIC).limit(maxResults);
 
   const whereClause = buildWhereClause(typeFilter, boundary);
   if (whereClause) q = q.where(whereClause);
 
   const results = await q.toArray();
-  return results.map((row) => ({
-    ...rowToSearchResult(row, sourceContext),
+  const tally = newRelevanceTally();
+  const mapped = results.map((row) => ({
+    ...rowToSearchResult(row, sourceContext, tally),
     searchMethod: 'vector' as const,
   }));
+  warnIfOutOfRange(tally, onWarn);
+  return mapped;
 }
 
 /**
@@ -73,7 +109,10 @@ export async function runHybridSearch(
   ]);
 
   // Merge with RRF
-  return rrfMerge(vectorResults, ftsResults, maxResults, sourceContext);
+  const tally = newRelevanceTally();
+  const merged = rrfMerge(vectorResults, ftsResults, maxResults, sourceContext, tally);
+  warnIfOutOfRange(tally, onWarn);
+  return merged;
 }
 
 async function runVectorLeg(
@@ -82,7 +121,11 @@ async function runVectorLeg(
   whereClause: string | undefined,
   limit: number,
 ): Promise<RankedRow[]> {
-  let q = table.vectorSearch(queryVector).limit(limit).withRowId();
+  let q = table
+    .vectorSearch(queryVector)
+    .distanceType(VECTOR_DISTANCE_METRIC)
+    .limit(limit)
+    .withRowId();
   if (whereClause) q = q.where(whereClause);
 
   const rows = await q.toArray();
@@ -105,8 +148,9 @@ export async function runFtsSearch(
 ): Promise<SearchResult[]> {
   const whereClause = buildWhereClause(typeFilter, boundary);
   const rows = await runFtsLeg(table, onWarn, query, whereClause, maxResults);
-  return rows.map(({ row, rank }) => {
-    const result = rowToSearchResult(row, sourceContext);
+  const tally = newRelevanceTally();
+  const mapped = rows.map(({ row, rank }) => {
+    const result = rowToSearchResult(row, sourceContext, tally);
     // If FTS didn't provide _score, use rank-based scoring (1.0 → 0.0)
     if (row['_score'] == null) {
       result.score = 1 / rank;
@@ -116,6 +160,8 @@ export async function runFtsSearch(
     result.searchMethod = 'fts';
     return result;
   });
+  warnIfOutOfRange(tally, onWarn);
+  return mapped;
 }
 
 async function runFtsLeg(
@@ -189,17 +235,30 @@ function buildWhereClause(
 function rowToSearchResult(
   row: Record<string, unknown>,
   sourceContext: SourceContext,
+  tally: RelevanceRangeTally,
 ): SearchResult {
   // Vector search returns _distance (lower = better); FTS returns _score (higher = better).
-  // The vector-derived `1/(1+_distance)` similarity is ALSO the true relevance
-  // signal (mmnto-ai/totem#2463): captured into `relevance` here so it survives
-  // the RRF fusion that later overwrites `score` with a rank artifact. FTS rows
-  // (only `_score`, an incomparable BM25 magnitude) carry no `relevance`.
+  // The vector-derived similarity is ALSO the true relevance signal
+  // (mmnto-ai/totem#2463): captured into `relevance` here so it survives the RRF
+  // fusion that later overwrites `score` with a rank artifact. FTS rows (only
+  // `_score`, an incomparable BM25 magnitude) carry no `relevance`.
+  //
+  // The normalization is NOT written here (mmnto-ai/totem#2738): a distance only
+  // means something against the metric that produced it, so it comes from
+  // `relevanceFromDistance(VECTOR_DISTANCE_METRIC, …)` — the same named metric
+  // both query sites chain into `.distanceType(…)`. A relevance that leaves
+  // [0, 1] is tallied, never clamped and never dropped; the search call warns
+  // once per query.
   let score = 0;
   let relevance: number | undefined;
-  if (row['_distance'] != null) {
-    relevance = 1 / (1 + (row['_distance'] as number));
+  const distance = row['_distance'];
+  if (typeof distance === 'number' && Number.isFinite(distance)) {
+    relevance = relevanceFromDistance(VECTOR_DISTANCE_METRIC, distance);
     score = relevance;
+    if (!isRelevanceInRange(relevance)) {
+      tally.outOfRange += 1;
+      tally.sample ??= relevance;
+    }
   } else if (row['_score'] != null) {
     score = row['_score'] as number;
   }
@@ -238,6 +297,7 @@ function rrfMerge(
   listB: RankedRow[],
   limit: number,
   sourceContext: SourceContext,
+  tally: RelevanceRangeTally,
 ): SearchResult[] {
   const scores = new Map<string, { score: number; row: Record<string, unknown> }>();
 
@@ -259,7 +319,7 @@ function rrfMerge(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ score, row }) => ({
-      ...rowToSearchResult(row, sourceContext),
+      ...rowToSearchResult(row, sourceContext, tally),
       score,
       searchMethod: 'hybrid' as const,
     }));

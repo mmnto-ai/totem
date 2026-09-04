@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
+import { VECTOR_DISTANCE_METRIC } from '../store/relevance.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
   buildIndexManifest,
@@ -880,5 +881,14 @@ describe('buildIndexManifest', () => {
   it('does not label the git commit as indexHash (Tenet 14: identity ≠ content hash)', () => {
     const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
     expect('indexHash' in m).toBe(false);
+  });
+
+  it('records the vector distance metric the index is queried with (mmnto-ai/totem#2738)', () => {
+    // The metric is a RECORDED fact, not an inherited SDK default: a future
+    // metric change must be visible in the artifact rather than silently
+    // re-scaling every relevance number downstream.
+    const m = buildIndexManifest({ documents: docs, headSha: 'abc123', writtenAt });
+    expect(m.vectorDistanceMetric).toBe('l2');
+    expect(m.vectorDistanceMetric).toBe(VECTOR_DISTANCE_METRIC);
   });
 });

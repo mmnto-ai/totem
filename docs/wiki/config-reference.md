@@ -62,6 +62,12 @@ export default {
 
   // OPTIONAL, and NO DEFAULT (mmnto-ai/totem#2727). Omit it and no floor
   // applies. See "The relevance floor" below before setting one.
+  // The relevance being floored is METRIC-BOUND (mmnto-ai/totem#2738):
+  // relevance = relevanceFromDistance('l2', _distance), and `l2` is the metric
+  // every Totem vector query is explicitly issued with. LanceDB's `_distance`
+  // under `l2` is the SQUARED Euclidean distance, so on unit-norm vectors it
+  // lies in [0, 4] and the relevance 1/(1+_distance) lies in [0.2, 1] — a
+  // floor below 0.2 can never fire at all.
   // searchRelevanceFloor: 0.57,
 
   // Command-Specific Options
