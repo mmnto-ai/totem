@@ -1120,11 +1120,36 @@ function levelAt(i) {
   if (fenceLine[i] || inFence[i]) return 0;
   return headingLevel(lines[i]);
 }
+// A promised heading, spelled exactly or with one trailing parenthetical
+// dropped (the same tolerance the matcher extends), whatever its indentation.
+function promisedHeading(text) {
+  const t = text.trim();
+  if (REQUIRED.indexOf(t) > -1) return true;
+  const w = stripParen(t);
+  for (const h of REQUIRED) { if ([w].indexOf(stripParen(h)) > -1) return true; }
+  return false;
+}
 function isBody(i) {
   if (fenceLine[i]) return false;
   if (lines[i].trim().length < 1) return false;
-  if (inFence[i]) return REQUIRED.indexOf(lines[i].trimEnd()) < 0;
+  if (inFence[i]) return !promisedHeading(lines[i]);
   return !bareHashes(lines[i]);
+}
+// Why a section read as empty when it was not blank: the reader says which
+// rule emptied it, so the cure is never a line the seat can see and not explain.
+function emptyReason(start, level) {
+  let quoted = false;
+  let hashes = false;
+  for (let i = start + 1; i < lines.length; i++) {
+    const n = levelAt(i);
+    if (n > 0 && n <= level) break;
+    if (n > 0) continue;
+    if (inFence[i] && lines[i].trim().length > 0) quoted = true;
+    else if (!fenceLine[i] && bareHashes(lines[i])) hashes = true;
+  }
+  if (quoted) return " — its only content is a promised heading quoted inside a fenced code block";
+  if (hashes) return " — its only content is a line of # characters";
+  return "";
 }
 function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
@@ -1142,10 +1167,17 @@ function fencedCopyOf(heading) {
   const want = stripParen(heading);
   for (let i = 0; i < lines.length; i++) {
     if (!inFence[i]) continue;
-    const seen = lines[i].trimEnd();
+    const seen = lines[i].trim();
     if ([heading].indexOf(seen) > -1 || [want].indexOf(stripParen(seen)) > -1) return i;
   }
   return -1;
+}
+// The fence still open when the scan ended, if any — its copy of a heading
+// gets the cure that fits (close it) rather than the one that does not.
+const unclosedAt = fenceChar.length > 0 ? openedAt : 0;
+function fenceCure(openLine) {
+  if (unclosedAt > 0 && [unclosedAt].indexOf(openLine) > -1) return " (that fence is never closed — close it, or write the section outside it)";
+  return " (write the section outside the fence)";
 }
 if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
@@ -1159,11 +1191,11 @@ if (shape !== "DOCUMENT") {
     }
     if (at < 0) {
       const fencedAt = fencedCopyOf(heading);
-      if (fencedAt > -1) block("the draft in " + shownFile + " is missing heading " + safe(heading) + " — it appears only inside a fenced code block opened at line " + fenceOpenedAt[fencedAt] + " (close the fence, or write the section outside it)");
+      if (fencedAt > -1) block("the draft in " + shownFile + " is missing heading " + safe(heading) + " — it appears only inside a fenced code block opened at line " + fenceOpenedAt[fencedAt] + fenceCure(fenceOpenedAt[fencedAt]));
       block("the draft in " + shownFile + " is missing heading " + safe(heading));
     }
     const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
-    if (!hasBodyAfter(at, levelAt(at))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
+    if (!hasBodyAfter(at, levelAt(at))) block("the draft in " + shownFile + " has an empty heading " + shownHeading + emptyReason(at, levelAt(at)));
   }
 } else {
   let bodied = false;
