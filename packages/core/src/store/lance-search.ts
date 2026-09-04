@@ -5,7 +5,12 @@ import type * as lancedb from '@lancedb/lancedb';
 import type { ContentType } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
 import type { SearchResult, SourceContext } from '../types.js';
-import { isRelevanceInRange, relevanceFromDistance, VECTOR_DISTANCE_METRIC } from './relevance.js';
+import {
+  isRelevanceInRange,
+  OUT_OF_RANGE_CAUSE,
+  relevanceFromDistance,
+  VECTOR_DISTANCE_METRIC,
+} from './relevance.js';
 
 /** RRF constant — standard value from the original RRF paper. */
 const RRF_K = 60;
@@ -40,17 +45,44 @@ function newRelevanceTally(): RelevanceRangeTally {
   return { outOfRange: 0 };
 }
 
+/** Record one relevance against the tally when it left [0, 1]. The one place a breach is counted. */
+function recordOutOfRange(relevance: number, tally: RelevanceRangeTally): void {
+  if (isRelevanceInRange(relevance)) return;
+  tally.outOfRange += 1;
+  tally.sample ??= relevance;
+}
+
+/**
+ * Tally the relevance breaches across a leg's RAW rows, before any fusion or
+ * truncation (mmnto-ai/totem#2738 falsification round, F3). Counting at the
+ * row-mapping site alone would report only the rows that SURVIVED RRF and the
+ * `maxResults` slice, so a query whose out-of-range rows all lost the fusion
+ * would warn about none of them — or not at all.
+ */
+function tallyRelevance(rows: RankedRow[], tally: RelevanceRangeTally): void {
+  for (const { row } of rows) {
+    const distance = row['_distance'];
+    if (typeof distance !== 'number' || !Number.isFinite(distance)) continue;
+    recordOutOfRange(relevanceFromDistance(VECTOR_DISTANCE_METRIC, distance), tally);
+  }
+}
+
 /**
  * Emit at most one warning per query when computed relevances left [0, 1].
- * A warning, never a throw and never a filter: the rows are returned unchanged
- * and the operator decides whether their embedder profile is the problem.
+ * A warning, never a throw and never a filter: the rows are returned unchanged.
+ *
+ * The CAUSE named is metric-specific (F1). Under `l2` the SDK's `_distance` is
+ * a squared distance and cannot be negative, so `1 / (1 + d)` cannot leave
+ * (0, 1] for any value the SDK can legally return — a breach there is a fault,
+ * not an embedder profile. Naming the wrong cause would send the operator to
+ * inspect a vector norm that was never the problem.
  */
 function warnIfOutOfRange(tally: RelevanceRangeTally, onWarn: (msg: string) => void): void {
   if (tally.outOfRange === 0) return;
   onWarn(
     `[Totem] ${tally.outOfRange} vector hit(s) carried a relevance outside [0, 1] under metric ` +
-      `"${VECTOR_DISTANCE_METRIC}" (sample ${tally.sample}) — the embedder's vectors may not be ` +
-      `unit-norm; results are returned unchanged.`,
+      `"${VECTOR_DISTANCE_METRIC}" (sample ${tally.sample}) — ` +
+      `${OUT_OF_RANGE_CAUSE[VECTOR_DISTANCE_METRIC]}; results are returned unchanged.`,
   );
 }
 
@@ -108,9 +140,21 @@ export async function runHybridSearch(
     runFtsLeg(table, onWarn, query, whereClause, fetchCount),
   ]);
 
-  // Merge with RRF
+  // The range tally covers the vector leg's RAW rows (F3) — everything the
+  // metric was applied to, not just what survived fusion and the slice.
   const tally = newRelevanceTally();
-  const merged = rrfMerge(vectorResults, ftsResults, maxResults, sourceContext, tally);
+  tallyRelevance(vectorResults, tally);
+
+  // Merge with RRF. `rrfMerge` re-maps the retained rows and would re-count the
+  // survivors, so it gets a throwaway tally that is deliberately discarded —
+  // the one above is the query's count.
+  const merged = rrfMerge(
+    vectorResults,
+    ftsResults,
+    maxResults,
+    sourceContext,
+    newRelevanceTally(),
+  );
   warnIfOutOfRange(tally, onWarn);
   return merged;
 }
@@ -255,10 +299,7 @@ function rowToSearchResult(
   if (typeof distance === 'number' && Number.isFinite(distance)) {
     relevance = relevanceFromDistance(VECTOR_DISTANCE_METRIC, distance);
     score = relevance;
-    if (!isRelevanceInRange(relevance)) {
-      tally.outOfRange += 1;
-      tally.sample ??= relevance;
-    }
+    recordOutOfRange(relevance, tally);
   } else if (row['_score'] != null) {
     score = row['_score'] as number;
   }

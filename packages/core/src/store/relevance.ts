@@ -34,6 +34,23 @@ export const VECTOR_DISTANCE_METRIC: DistanceMetric = 'l2';
  * Private on purpose: the map is an implementation of `relevanceFromDistance`,
  * not a second surface callers can reach around it to index.
  */
+/**
+ * Why a computed relevance can leave [0, 1] — the cause is METRIC-SPECIFIC
+ * (mmnto-ai/totem#2738 falsification round, F1), so the warning must not name a
+ * cause the metric cannot have.
+ *
+ * Under `l2` the SDK returns a squared distance, which is `≥ 0` by
+ * construction, so `1 / (1 + d) ∈ (0, 1]` for every value the SDK can legally
+ * return: a breach there is NOT a non-unit-norm embedder, it is a fault. Under
+ * `cosine` / `dot` the mapping DOES leave [0, 1] for vectors that are not
+ * unit-norm, which is the real embedder-profile signal.
+ */
+export const OUT_OF_RANGE_CAUSE: Record<DistanceMetric, string> = {
+  l2: 'a negative or non-finite _distance, which squared L2 cannot produce: an SDK or data fault',
+  cosine: "the embedder's vectors may not be unit-norm",
+  dot: "the embedder's vectors may not be unit-norm",
+};
+
 const RELEVANCE_FROM_DISTANCE: Record<DistanceMetric, (distance: number) => number> = {
   /**
    * SDK: `"l2"` — Euclidean distance, "range of [0, ∞)". MEASURED (R1,
@@ -89,12 +106,17 @@ export function assertDistanceMetric(value: unknown): DistanceMetric {
 /**
  * Normalize a LanceDB `_distance` into a relevance under the given metric.
  *
- * A pure map with one job: it never warns, never throws on range, and never
+ * A pure map with one job: it never warns, never throws ON RANGE, and never
  * clamps. The caller judges the result with {@link isRelevanceInRange} and
  * decides what a range breach means at that call site.
+ *
+ * The METRIC is gated: `assertDistanceMetric` runs first (mmnto-ai/totem#2738
+ * falsification round, F5), so a spelling that reached here past the type — an
+ * `any`, a value read off a record, a JS caller — raises the named
+ * `TotemError` instead of a bare `TypeError` from an undefined map entry.
  */
 export function relevanceFromDistance(metric: DistanceMetric, distance: number): number {
-  return RELEVANCE_FROM_DISTANCE[metric](distance);
+  return RELEVANCE_FROM_DISTANCE[assertDistanceMetric(metric)](distance);
 }
 
 /** Whether a relevance is a finite number inside the closed interval [0, 1]. */

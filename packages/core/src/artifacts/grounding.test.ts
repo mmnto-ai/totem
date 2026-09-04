@@ -128,6 +128,41 @@ describe('buildGroundingBundle', () => {
     expect('relevance' in bundle.items[0]!).toBe(false);
   });
 
+  // ─── out-of-range relevance (mmnto-ai/totem#2738 falsification round, F2) ──
+  //
+  // `GroundingItemSchema.relevance` is `z.number().min(0).max(1)`, so an
+  // out-of-range value would THROW at the artifact write — turning the search
+  // layer's "warn, never throw" contract into a hard failure one layer down and
+  // killing a run the search deliberately returned unchanged. The builder omits
+  // the value instead: the ITEM survives, its relevance absent, exactly as an
+  // FTS-only hit's is. Never clamped — a clamp would launder a fault into a
+  // plausible-looking measurement.
+
+  it.each([
+    { label: 'above 1 (a negative _distance under l2)', relevance: 2 },
+    { label: 'a hair below 0 (float drift)', relevance: -1e-16 },
+  ])('omits an out-of-range relevance ($label) but KEEPS the item', ({ relevance }) => {
+    const bundle = buildGroundingBundle([source({ filePath: 'src/breach.ts', relevance })]);
+    expect(bundle.items).toHaveLength(1);
+    expect(bundle.items[0]!.filePath).toBe('src/breach.ts');
+    expect('relevance' in bundle.items[0]!).toBe(false);
+  });
+
+  it.each([{ relevance: 2 }, { relevance: -1e-16 }])(
+    'the omitted-relevance item still parses against the schema that would have thrown ($relevance)',
+    ({ relevance }) => {
+      const bundle = buildGroundingBundle([source({ relevance })]);
+      expect(() => GroundingItemSchema.parse(bundle.items[0])).not.toThrow();
+      // The schema bound is unchanged and still rejects the raw value.
+      expect(() => GroundingItemSchema.parse({ ...bundle.items[0], relevance })).toThrow();
+    },
+  );
+
+  it('keeps the in-range boundary values 0 and 1 — the omission is strictly outside [0, 1]', () => {
+    expect(buildGroundingBundle([source({ relevance: 0 })]).items[0]!.relevance).toBe(0);
+    expect(buildGroundingBundle([source({ relevance: 1 })]).items[0]!.relevance).toBe(1);
+  });
+
   it('relevance enters grounding.hash — a different measured relevance is a different bundle', () => {
     const weaker = buildGroundingBundle([source({ relevance: 0.4 })]);
     const stronger = buildGroundingBundle([source({ relevance: 0.5 })]);

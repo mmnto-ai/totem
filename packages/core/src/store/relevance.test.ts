@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { TotemError } from '../errors.js';
+import type { DistanceMetric } from './relevance.js';
 import {
   assertDistanceMetric,
   DISTANCE_METRICS,
   isRelevanceInRange,
+  OUT_OF_RANGE_CAUSE,
   relevanceFromDistance,
   VECTOR_DISTANCE_METRIC,
 } from './relevance.js';
@@ -155,5 +157,53 @@ describe('VECTOR_DISTANCE_METRIC', () => {
   it('is the l2 metric the store queries with', () => {
     expect(VECTOR_DISTANCE_METRIC).toBe('l2');
     expect(DISTANCE_METRICS).toContain(VECTOR_DISTANCE_METRIC);
+  });
+});
+
+// ─── the falsification round's folds (mmnto-ai/totem#2738) ───
+
+describe('relevanceFromDistance gates its metric (F5)', () => {
+  it('raises the named TotemError for a spelling that reached it past the type', () => {
+    // A value read off a record, an `any`, or a JS caller can carry 'ip' here.
+    // Indexing the map with it would have thrown a bare TypeError ("is not a
+    // function"); the named error says what is wrong and what is allowed.
+    const badMetric = 'ip' as unknown as DistanceMetric;
+    expect(() => relevanceFromDistance(badMetric, 0.5)).toThrow(TotemError);
+    let thrown: unknown;
+    try {
+      relevanceFromDistance(badMetric, 0.5);
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as TotemError).code).toBe('CONFIG_INVALID');
+    expect((thrown as TotemError).message).toContain('"ip"');
+  });
+
+  it('still computes for every valid metric', () => {
+    for (const metric of DISTANCE_METRICS) {
+      expect(Number.isFinite(relevanceFromDistance(metric, 0.5))).toBe(true);
+    }
+  });
+});
+
+describe('OUT_OF_RANGE_CAUSE is metric-specific (F1)', () => {
+  it('names a FAULT for l2, never a non-unit-norm embedder', () => {
+    // Squared L2 is >= 0 by construction, so 1/(1+d) is in (0, 1] for every
+    // value the SDK can legally return: no vector norm can push it out.
+    expect(OUT_OF_RANGE_CAUSE.l2).toContain('which squared L2 cannot produce');
+    expect(OUT_OF_RANGE_CAUSE.l2).not.toContain('unit-norm');
+  });
+
+  it('names the unit-norm cause for cosine and dot, where the mapping really can leave [0, 1]', () => {
+    expect(OUT_OF_RANGE_CAUSE.cosine).toContain('unit-norm');
+    expect(OUT_OF_RANGE_CAUSE.dot).toContain('unit-norm');
+    // `dot` on a non-unit vector is the live case: q·[2,0,0] = 2 → d = -1 → 1.5.
+    expect(isRelevanceInRange(relevanceFromDistance('dot', -1))).toBe(false);
+  });
+
+  it('has an entry for every metric', () => {
+    for (const metric of DISTANCE_METRICS) {
+      expect(OUT_OF_RANGE_CAUSE[metric].length).toBeGreaterThan(0);
+    }
   });
 });

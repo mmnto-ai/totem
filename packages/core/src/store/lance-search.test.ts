@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
 import { runFtsSearch, runHybridSearch, runVectorSearch } from './lance-search.js';
+import { OUT_OF_RANGE_CAUSE } from './relevance.js';
 
 // ─── Mock helpers ───────────────────────────────────────
 
@@ -904,8 +905,10 @@ describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
   });
 
   it('warns once on an out-of-range relevance and still returns the row', async () => {
-    // A negative _distance is impossible for a true squared-L2 distance, so it
-    // stands in for the real cause: an embedder whose vectors are not unit-norm.
+    // A negative _distance is the ONLY way an l2 relevance can leave [0, 1]:
+    // squared L2 is >= 0 by construction, so 1/(1+d) is in (0, 1] for every
+    // value the SDK can legally return. That makes a breach here an SDK or data
+    // fault, NOT a non-unit-norm embedder — the warning must say so (F1).
     const table = mockTable({ vectorRows: [fakeRow('a', { _distance: -0.5 })] });
     const onWarn = vi.fn();
 
@@ -924,6 +927,11 @@ describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
     expect(msg).toContain('1 vector hit(s) carried a relevance outside [0, 1]');
     expect(msg).toContain('under metric "l2"');
     expect(msg).toContain('sample 2');
+    // The cause is metric-specific (F1): under l2 it is a fault, and the
+    // non-unit-norm cause — true for cosine/dot — must NOT be named here.
+    expect(msg).toContain(OUT_OF_RANGE_CAUSE.l2);
+    expect(msg).toContain('which squared L2 cannot produce');
+    expect(msg).not.toContain('unit-norm');
 
     // The row is RETURNED, not filtered, and carries its computed relevance.
     expect(results).toHaveLength(1);
@@ -1015,5 +1023,90 @@ describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
 
     expect(results[0]!.relevance).toBeUndefined();
     expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('runHybridSearch tallies the vector leg BEFORE fusion, not the survivors (F3)', async () => {
+    // Three vector rows, two of them out of range, but `maxResults: 1` means
+    // RRF returns ONE result. Counting at the row-mapping site would have
+    // reported whatever survived the slice; the count must be 2 — every row the
+    // metric was applied to.
+    const vectorRows = [
+      fakeRow('v0', { _distance: 0.3 }),
+      fakeRow('v1', { _distance: -0.5 }),
+      fakeRow('v2', { _distance: -0.9 }),
+    ];
+    const ftsRows = [fakeRow('f0', { _distance: undefined, _score: 4 })];
+    const table = mockTable({ vectorRows, ftsRows });
+    const onWarn = vi.fn();
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      1,
+      DEFAULT_CTX,
+    );
+
+    expect(results).toHaveLength(1);
+    expect(onWarn).toHaveBeenCalledOnce();
+    const msg = onWarn.mock.calls[0]![0] as string;
+    expect(msg).toContain('2 vector hit(s)');
+    // Sample is the FIRST breaching raw row: _distance -0.5 → 1/0.5 = 2.
+    expect(msg).toContain('sample 2');
+  });
+});
+
+// ─── non-finite / non-numeric `_distance` (mmnto-ai/totem#2738, F4) ────
+//
+// Relevance is computed only for a FINITE NUMBER `_distance`. Anything else —
+// NaN, ±Infinity, a non-numeric value — yields NO relevance at all and falls
+// through to the `_score` branch (or 0). Before #2738 those inputs produced a
+// NaN or a 0 relevance; absence is the honest record, but it is a CHANGE:
+// such a hit is floor-exempt in `totem spec` (no vector leg = no signal to
+// floor), so each input class is pinned here.
+
+describe('non-finite `_distance` yields no relevance (mmnto-ai/totem#2738, F4)', () => {
+  async function searchOneRow(overrides: Record<string, unknown>) {
+    const table = mockTable({ vectorRows: [fakeRow('a', overrides)] });
+    const onWarn = vi.fn();
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+    return { result: results[0]!, onWarn };
+  }
+
+  it('NaN: no relevance, score 0, no warning', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: Number.NaN });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('Infinity: no relevance, score 0, no warning', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: Number.POSITIVE_INFINITY });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('a non-numeric _distance ("0.5"): no relevance, score 0 — never coerced', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: '0.5' });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('Infinity alongside a _score: falls through to the FTS score branch', async () => {
+    const { result } = await searchOneRow({ _distance: Number.POSITIVE_INFINITY, _score: 7 });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(7);
   });
 });

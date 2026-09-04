@@ -212,8 +212,11 @@ export const GroundingItemSchema = z.object({
   /** Linked-index name for cross-repo hits; ABSENT = the run's own repo (F1) — post-checks resolve `filePath` against the run's config root when absent. */
   sourceRepo: z.string().min(1).optional(),
   /**
-   * The vector-leg relevance the hit was delivered with (mmnto-ai/totem#2700):
-   * `1 / (1 + _distance)` ∈ [0, 1]. ABSENT iff the hit had no vector leg
+   * The vector-leg relevance from `relevanceFromDistance(VECTOR_DISTANCE_METRIC,
+   * _distance)`; on unit-norm vectors under `l2` it lies in [0.2, 1]; the schema
+   * bounds it to [0, 1] and the bundle omits a value outside it
+   * (mmnto-ai/totem#2700, metric-bound in mmnto-ai/totem#2738). ABSENT iff the
+   * hit had no vector leg
    * (FTS-only) — "no signal" stays distinguishable from "weak signal"
    * (mmnto-ai/totem#2463 / mmnto-ai/totem#2494), so absence is the disclosure,
    * never a zero. Identical bytes across stores need not give identical
