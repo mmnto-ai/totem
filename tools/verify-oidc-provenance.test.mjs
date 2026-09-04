@@ -4,10 +4,12 @@
  * Run: node --test tools/verify-oidc-provenance.test.mjs (root script test:verify-oidc).
  *
  * No npm is ever spawned here: `fetch`, `sleep`, `now`, `exit`, `env` and the
- * spawner itself are injected, and the clock is fake — it advances inside the
- * injected `sleep` AND inside the injected `fetch`, so elapsed time and
- * attempt count are not collinear and a fixed-attempt poller cannot satisfy a
- * deadline assertion by count alone.
+ * spawner itself are injected, and the clock is fake. Two fixture choices do
+ * work: charging the clock inside `fetch` makes it reflect the poll's real
+ * cost rather than its sleeps alone, and `sleep: (ms) => clock.advance(ms)`
+ * advances by the value the poller ASKED for, so a poller that sleeps some
+ * other amount fails. Neither of those is what kills a fixed-attempt poller —
+ * the deadline assertion is.
  */
 
 import assert from 'node:assert/strict';
@@ -144,8 +146,12 @@ const runThreeSpecPoll = () => {
 /** Sentinel thrown by the injected `exit` so `main` stops where process.exit would. */
 const EXIT_SENTINEL = Symbol('process.exit');
 
-/** Drives `main` with an injected clock, exit and env; captures both streams. */
-const runMain = async ({ publishedPackages, fetch }) => {
+/**
+ * Drives `main` with an injected clock, exit and env; captures both streams.
+ * `throwOnExit: false` records the code and lets `main` keep running, which
+ * is how the `return` guarding the fall-through past `exit(1)` gets observed.
+ */
+const runMain = async ({ publishedPackages, fetch, throwOnExit = true }) => {
   const clock = fakeClock();
   const exitCodes = [];
   const stdout = [];
@@ -161,7 +167,7 @@ const runMain = async ({ publishedPackages, fetch }) => {
       now: clock.now,
       exit: (code) => {
         exitCodes.push(code);
-        throw EXIT_SENTINEL;
+        if (throwOnExit) throw EXIT_SENTINEL;
       },
       env: { PUBLISHED_PACKAGES: publishedPackages },
     });
@@ -207,9 +213,12 @@ test('a persistently invisible package is polled until the deadline, not a fixed
     clock.now() >= deadlineMs,
     `poller returned at t=${clock.now()}ms, before the deadline ${deadlineMs}ms`,
   );
+  // Loose on purpose: the clock-vs-deadline assertion above is the
+  // contract-bearing one. A tight deadline/interval count would false-red the
+  // moment the fixture's per-fetch cost grows.
   assert.ok(
-    calls >= Math.floor(deadlineMs / intervalMs),
-    `only ${calls} fetch call(s); expected >= ${Math.floor(deadlineMs / intervalMs)} (deadline / interval)`,
+    calls >= Math.floor(deadlineMs / (intervalMs * 2)),
+    `only ${calls} fetch call(s); expected >= ${Math.floor(deadlineMs / (intervalMs * 2))}`,
   );
   assert.equal(missing.get(SPEC_B), 'E404');
 });
@@ -309,15 +318,32 @@ test("the workflow's outer cap covers the ceiling for every published package", 
     `timeout-minutes: ${timeoutMinutes} (${timeoutMinutes * 60_000}ms) is below the ceiling worstCaseMs(${publishedCount}) = ${worstCaseMs(publishedCount)}ms`,
   );
 
-  // The floor is stated twice — beside the constant and in the workflow
+  // The budget is stated twice — beside the constants and in the workflow
   // comment. Pin the workflow copy so a constant change without the prose
-  // fails CI rather than leaving a stale minute count in the release lane.
+  // fails CI rather than leaving stale arithmetic in the release lane. Each
+  // pin is anchored to ITS OWN line: matching anywhere in the block would let
+  // the CEILING line's "11 min 35 s" satisfy a floor pin for 11 min.
+  const comment = releaseStepComment('Verify OIDC provenance on published packages');
+
+  const floorLine = comment.find((line) => /FLOOR/.test(line));
+  assert.ok(floorLine, "the verify step's comment block has no FLOOR line");
   const floorMinutes = `${VISIBILITY_DEADLINE_MS / 60_000} min`;
   assert.ok(
-    releaseStepComment('Verify OIDC provenance on published packages')
-      .join('\n')
-      .includes(floorMinutes),
-    `the verify step's comment block does not state the floor as ${JSON.stringify(floorMinutes)}`,
+    floorLine.includes(floorMinutes),
+    `the FLOOR line must state ${JSON.stringify(floorMinutes)}; got: ${floorLine.trim()}`,
+  );
+
+  const ceilingLine = comment.find((line) => /CEILING/.test(line));
+  assert.ok(ceilingLine, "the verify step's comment block has no CEILING line");
+  const intervalSeconds = `${POLL_INTERVAL_MS / 1000} s`;
+  const spawnSeconds = `${SPAWN_TIMEOUT_MS / 1000} s`;
+  assert.ok(
+    ceilingLine.includes(intervalSeconds),
+    `the CEILING line must state the poll interval as ${JSON.stringify(intervalSeconds)}; got: ${ceilingLine.trim()}`,
+  );
+  assert.ok(
+    ceilingLine.includes(spawnSeconds),
+    `the CEILING line must state the spawn timeout as ${JSON.stringify(spawnSeconds)}; got: ${ceilingLine.trim()}`,
   );
 });
 
@@ -355,14 +381,18 @@ test('assertProvenance accepts an OIDC-shaped record and rejects a token-auth on
 test('main exits 1 when a package never becomes visible, exits 1 on a token-auth record, and does not exit when every package verifies', async () => {
   const published = `${SPEC_A}\n${SPEC_B}`;
 
+  // Non-throwing exit: `main` runs on past `exit(1)`, so the `return` that
+  // guards the fall-through is what keeps the all-verified line off stdout.
   const miss = await runMain({
     publishedPackages: published,
     fetch: (spec) =>
       spec === SPEC_A ? { ok: true, data: OIDC_RECORD } : { ok: false, err: 'E404' },
+    throwOnExit: false,
   });
   assert.deepEqual(miss.exitCodes, [1], 'a package that never becomes visible must exit 1');
   assert.match(miss.stderr, /never became visible/);
   assert.match(miss.stderr, /registry propagation, not a provenance verdict/);
+  assert.doesNotMatch(miss.stdout, /All \d+ package\(s\) verified/);
 
   const tokenAuth = await runMain({
     publishedPackages: published,
@@ -377,6 +407,40 @@ test('main exits 1 when a package never becomes visible, exits 1 on a token-auth
   });
   assert.deepEqual(allVerified.exitCodes, [], 'a clean run must not exit');
   assert.match(allVerified.stdout, /All 2 package\(s\) verified/);
+});
+
+test('worstCaseMs is a tight upper bound on the poller wall time', async () => {
+  // Worst case: every package burns a full spawn timeout, every round, and
+  // none ever resolves. Bounding from BOTH sides is the point — an
+  // upper-bound-only assertion is satisfied by any overstated formula, so an
+  // understated one (dropping the final interval, say) has to fail too.
+  for (const n of [1, 2, 4, 8]) {
+    const specs = Array.from({ length: n }, (_unused, i) => `@mmnto/pkg-${i}@1.0.0`);
+    const clock = fakeClock();
+
+    await withSilencedConsole(() =>
+      pollUntilVisible(specs, {
+        fetch: () => {
+          clock.advance(SPAWN_TIMEOUT_MS);
+          return { ok: false, err: 'E404' };
+        },
+        sleep: async (ms) => clock.advance(ms),
+        now: clock.now,
+      }),
+    );
+
+    const elapsed = clock.now();
+    const ceiling = worstCaseMs(n);
+    const understated = ceiling - POLL_INTERVAL_MS - n * SPAWN_TIMEOUT_MS;
+    assert.ok(
+      elapsed <= ceiling,
+      `n=${n}: the poll ran ${elapsed}ms, past the ceiling worstCaseMs(${n}) = ${ceiling}ms`,
+    );
+    assert.ok(
+      elapsed > understated,
+      `n=${n}: the poll ran ${elapsed}ms, which a ceiling of ${understated}ms would already cover — worstCaseMs(${n}) = ${ceiling}ms overstates`,
+    );
+  }
 });
 
 test('a timed-out npm view keeps the package pending; a spawn failure still throws', () => {
