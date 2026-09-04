@@ -45,12 +45,19 @@ jobs:
       # no parents, so the coverage probe's merge-base against a branch forked
       # below the tip cannot resolve and the gate would report NOT DERIVED. On
       # the fetch-depth: 0 checkout above, origin/<base> is complete.
+      #
+      # The `node packages/cli/dist/index.js` form, like every other step here,
+      # and NOT `pnpm exec totem`: pnpm links bins at INSTALL time and skips one
+      # whose target is absent — @mmnto/cli's bin points at packages/cli/dist,
+      # which exists only after the build step — so `pnpm exec totem` resolves
+      # only where a global totem masks the miss (measured; the leg's F1 on
+      # mmnto-ai/totem#2771). On a runner it would fail every pull request.
       - name: totem legs gate (HARD — the review-leg floor)
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch origin "$BASE_REF"
-          pnpm exec totem legs gate
+          node packages/cli/dist/index.js legs gate
 
       # ADVISORY until the rule-compilation freeze lifts (the convergent spine).
       # The compiled lesson-rules carry frozen #2055-class false-positives that

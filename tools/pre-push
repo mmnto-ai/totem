@@ -111,13 +111,13 @@ if [ -n "$TOTEM_CMD" ]; then
       legs_status=$?
     fi
     if [ "$legs_status" = "3" ]; then
-      echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode or hooks.legsOwed.enforce: block)"
+      echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode, an agent seat, or hooks.legsOwed.enforce: block)"
       exit 1
     elif [ "$legs_status" = "2" ]; then
-      echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode or hooks.legsOwed.enforce: block)"
+      echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode, an agent seat, or hooks.legsOwed.enforce: block)"
       exit 1
     elif [ "$legs_status" != "0" ] && [ "$legs_strict" = "1" ]; then
-      echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode)"
+      echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode or an agent seat)"
       exit 1
     fi
   else

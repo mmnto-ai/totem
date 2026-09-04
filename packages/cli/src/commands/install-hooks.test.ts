@@ -4076,13 +4076,13 @@ describe('buildPrePushHook — the review-leg floor arm (mmnto-ai/totem#2698)', 
 
   it('blocks on exit 3 and exit 2 at ANY tier with DISTINCT lines that name the knob; any other non-zero blocks on strict only (mmnto-ai/totem#2771)', () => {
     expect(hook).toContain(
-      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode or hooks.legsOwed.enforce: block)"`,
+      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode, an agent seat, or hooks.legsOwed.enforce: block)"`,
     );
     expect(hook).toContain(
-      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode or hooks.legsOwed.enforce: block)"',
+      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode, an agent seat, or hooks.legsOwed.enforce: block)"',
     );
     expect(hook).toContain(
-      'echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode)"',
+      'echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode or an agent seat)"',
     );
     expect(hook).toContain('if [ "$legs_status" = "3" ]; then');
     expect(hook).toContain('elif [ "$legs_status" = "2" ]; then');
@@ -4316,7 +4316,7 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
       expect(invocations()).toContain('legs gate --advisory');
       expect(r.status).toBe(1);
       expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
-      expect(r.stdout).toContain('strict mode or hooks.legsOwed.enforce: block');
+      expect(r.stdout).toContain('strict mode, an agent seat, or hooks.legsOwed.enforce: block');
       expect(r.stdout).toContain('[Totem] legs: stub gate line');
     },
   );
@@ -4333,6 +4333,9 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
     },
   );
 
+  // A PIN, not a falsifier: this case holds on the pre-knob hook too (whose
+  // standard arm never read the status at all). It is here so the one
+  // behaviour the knob must NOT change stays asserted next to the ones it does.
   it.skipIf(!shellOk)(
     'standard tier + gate exit 1 (a failure BEFORE the derivation): passes, byte for byte the pre-knob behaviour',
     () => {
@@ -4700,7 +4703,7 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(r.status).toBe(1);
       expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed (docs/** →');
       expect(r.stdout).toContain('[Totem] legs: hooks.legsOwed.enforce = block');
-      expect(r.stdout).toContain('strict mode or hooks.legsOwed.enforce: block');
+      expect(r.stdout).toContain('strict mode, an agent seat, or hooks.legsOwed.enforce: block');
       // The shield block after the arm was never reached.
       expect(invocations()).not.toContain('doctor --strict');
     },
@@ -4717,7 +4720,9 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed (docs/** →');
       expect(r.stdout).toContain('[Totem] legs: hooks.legsOwed.enforce = advisory');
       // The HOOK's block line never fires, and the hook proceeds to the shield block.
-      expect(r.stdout).not.toContain('strict mode or hooks.legsOwed.enforce: block');
+      expect(r.stdout).not.toContain(
+        'strict mode, an agent seat, or hooks.legsOwed.enforce: block',
+      );
       expect(invocations()).toContain('doctor --strict');
       expect(r.status).toBe(0);
     },

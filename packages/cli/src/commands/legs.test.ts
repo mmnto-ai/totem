@@ -632,6 +632,9 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     expect(notOwed.stderr).toEqual([]);
   });
 
+  // A PIN, not a falsifier: every assertion here is true of the pre-knob gate.
+  // It sits beside the two knob cases so the unchanged default is asserted in
+  // the same file that asserts the change.
   it('an ABSENT knob leaves the flag in charge and prints no knob line', async () => {
     const flagged = await runLegsGate({ advisory: true }, makeDeps());
     const bare = await runLegsGate({}, makeDeps());
