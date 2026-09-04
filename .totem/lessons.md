@@ -1392,9 +1392,9 @@ Use the `--recurse-submodules` flag with `git ls-files` to ensure that files loc
 
 ## Lesson — When injecting vectordb lessons into orchestrator prompts
 
-**Tags:** vectordb, spec, lessons, architecture, pattern
+**Tags:** vectordb, spec, lessons, architecture, pattern, superseded
 
-When injecting vectordb lessons into orchestrator prompts (like `totem spec`), use a single broadened search pool (e.g., 20 results) and partition by filePath rather than running multiple redundant searches. The `lessons.md` filePath convention is the reliable partition key. Use `continue` not `break` in character budget loops so oversized items are skipped but smaller ones still fit.
+SUPERSEDED (mmnto-ai/totem#2735, merged as mmnto-ai/totem#2750; specimen edit mmnto-ai/totem#2754). The original text taught a single broadened spec-typed search pool partitioned by `filePath`, with the `lessons.md` path as the partition key. Since mmnto-ai/totem#431 lessons live in `.totem/lessons/` under content type `lesson`, so that partition was empty by construction for every run and mmnto-ai/totem#2750 deleted it. When injecting vectordb lessons into orchestrator prompts (like `totem spec`), retrieve them through the one core helper `searchLessons` (`typeFilter: 'lesson'`, exported from `@mmnto/totem`) — never by partitioning a broadened pool of another content type. Still true: use `continue` not `break` in character budget loops so oversized items are skipped but smaller ones still fit.
 
 ## Lesson — Changesets interactive CLI (pnpm changeset) crashes when
 
