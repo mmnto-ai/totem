@@ -638,10 +638,11 @@ export function generateHookHelpers(gitRoot: string, render: ResolvedHookRenderO
     tier: tierForHook(hooksDir, 'pre-push.sh', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END, render),
   });
 
-  fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'pre-commit.sh'), preCommit, { mode: 0o755 });
-  fs.writeFileSync(path.join(hooksDir, 'pre-push.sh'), prePush, { mode: 0o755 });
+  // Atomic like every other git-hook write (mmnto-ai/totem#2760 round 1, leg F2).
+  writeExecutableHook(path.join(hooksDir, 'post-merge.sh'), postMerge);
+  writeExecutableHook(path.join(hooksDir, 'post-checkout.sh'), postCheckout);
+  writeExecutableHook(path.join(hooksDir, 'pre-commit.sh'), preCommit);
+  writeExecutableHook(path.join(hooksDir, 'pre-push.sh'), prePush);
 }
 
 function detectHookManager(cwd: string): HookManager | null {
@@ -802,27 +803,24 @@ export async function installPostMergeHook(
       return;
     }
 
-    // Append to existing hook — reuse buildHookContent, strip shebang
+    // Append to existing hook — reuse buildHookContent, strip shebang. Written as
+    // one atomic replacement of the whole file (the user's bytes + ours) rather
+    // than an append: an interrupted append leaves a hook truncated mid-block,
+    // which git still runs (mmnto-ai/totem#2760 round 1, leg F2). The helper
+    // keeps the user's file mode.
     const separator = existing.endsWith('\n') ? '' : '\n';
     const appendBlock = buildHookContent(render)
       .replace(/^#!\/bin\/sh\n/, '')
       .trimStart();
-    fs.appendFileSync(hookPath, separator + '\n' + appendBlock);
+    writeFileAtomicSync(hookPath, existing + separator + '\n' + appendBlock);
     console.log('[Totem] Appended post-merge hook to existing hook file.');
     return;
   }
 
-  // Create new hook
+  // Create new hook — atomic, executable on POSIX, mode skipped on Windows by the
+  // helper's own boundary (git bash owns the bit there).
   fs.mkdirSync(hooksDir, { recursive: true });
-  fs.writeFileSync(hookPath, buildHookContent(render));
-
-  // Make executable (no-op on Windows, git bash handles it)
-  try {
-    fs.chmodSync(hookPath, 0o755);
-    // totem-context: intentional cleanup — chmod may fail on Windows; the hook still runs via git bash, so a failed mode bit is not a failed install.
-  } catch {
-    // chmod may fail on Windows — hooks still work via git bash
-  }
+  writeExecutableHook(hookPath, buildHookContent(render));
 
   console.log('[Totem] Installed post-merge hook.');
 }
@@ -1303,7 +1301,10 @@ const HOOK_EXECUTABLE_MODE = 0o755;
  * must fail loud, never silently report `installed`). On Windows the exec bit is
  * skipped by the helper's own boundary: git-bash owns the executable bit there,
  * and NTFS has no POSIX mode to set. Symlinked hooks keep their link identity
- * (the helper writes through to the real path).
+ * (the helper writes through to the real path). A DANGLING symlinked hook is the
+ * one case the old in-place write handled differently: `fs.writeFileSync` followed
+ * the link and created its target, the helper throws ENOENT and leaves the link
+ * untouched — remove or re-point the link first. Declared, not defended.
  */
 function writeExecutableHook(hookPath: string, content: string): void {
   writeFileAtomicSync(hookPath, content, { mode: HOOK_EXECUTABLE_MODE });
@@ -1361,7 +1362,8 @@ function ownedTrailerStart(content: string, marker: string, endMarker: string): 
 /**
  * A trailer (the text after a managed hook's end marker) is ATTESTED when its
  * LEADING COMMENT RUN carries a full fork attestation — reason, owner and attested
- * all present and non-empty (mmnto-ai/totem#2753).
+ * all present and non-empty AFTER TRIMMING; a whitespace-only value does not attest
+ * (mmnto-ai/totem#2753; the trim from mmnto-ai/totem#2760 round 1).
  *
  * The leading comment run is every line up to the first line that is neither blank
  * nor a shell comment — i.e. up to the extension's first COMMAND. Blank lines inside
@@ -1570,12 +1572,16 @@ export function installGitHook(
       return 'skipped-non-shell';
     }
 
-    // Append to existing hook — preserve user's existing hooks
+    // Append to existing hook — preserve user's existing hooks. One atomic
+    // replacement of the whole file (their bytes + ours), not an append: an
+    // interrupted append leaves a hook truncated mid-block, which git still
+    // runs (mmnto-ai/totem#2760 round 1, leg F2). The helper keeps the user's
+    // file mode and writes through a symlink to its real path.
     const separator = existing.endsWith('\n') ? '\n' : '\n\n';
     const appendBlock = hookContent
       .replace(/^#!\/bin\/sh\n/, '') // Strip shebang when appending
       .trimStart();
-    fs.appendFileSync(hookPath, separator + appendBlock);
+    writeFileAtomicSync(hookPath, existing + separator + appendBlock);
     return 'appended';
   }
 
@@ -2488,13 +2494,10 @@ export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> 
     const after = content.slice(blockEnd);
     const upgraded = before + newBlock.trimEnd() + after;
 
-    fs.writeFileSync(hookPath, upgraded);
-
-    try {
-      fs.chmodSync(hookPath, 0o755);
-    } catch {
-      // chmod may fail on Windows — hooks still work via git bash
-    }
+    // The splice keeps the user's lines on BOTH sides of the block — the exact
+    // shape Greptile P1 named on the attested-extension arm — so it takes the same
+    // atomic, executable write (mmnto-ai/totem#2760 round 1, leg F4).
+    writeExecutableHook(hookPath, upgraded);
 
     return true;
   } catch {

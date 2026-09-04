@@ -395,9 +395,11 @@ function totemOwnedBlock(text: string, marker: string, endMarker: string): strin
  *
  * The tier is NOT an axis of the compare (amendment A10): the canonical for
  * pre-commit / pre-push is rendered at the tier the INSTALLED hook itself
- * declares (`TOTEM_HOOK_TIER="…"`), so a hook installed with `--strict` on a
- * repo whose config says nothing is never reported as drift — and never handed a
- * `--force` that would silently downgrade it to standard.
+ * declares (`TOTEM_HOOK_TIER="…"`, read through the installer's own
+ * `declaredHookTier`: the totem-owned block only, and only a line-leading
+ * assignment — a comment quoting one does not count), so a hook installed with
+ * `--strict` on a repo whose config says nothing is never reported as drift — and
+ * never handed a `--force` that would silently downgrade it to standard.
  */
 async function hooksStaleAgainstCanonical(
   gitRoot: string,
@@ -458,10 +460,12 @@ async function hooksStaleAgainstCanonical(
       // a user line that happens to carry `TOTEM_HOOK_TIER="…"` or to quote an end
       // marker must not steer the compare or the remedy (pass-2 F3/F4).
       const existingBlock = totemOwnedBlock(existing, marker, endMarker);
-      const installedTier = /TOTEM_HOOK_TIER="(strict|standard)"/.exec(existingBlock)?.[1] as
-        | 'strict'
-        | 'standard'
-        | undefined;
+      // ONE predicate with the installer (`declaredHookTier`): block-scoped, and
+      // only a line-leading assignment counts, so a comment inside the block that
+      // quotes the assignment steers neither arm — a second regex here is how the
+      // two arms came to read the same bytes at different tiers (mmnto-ai/totem#2760
+      // round 1, leg F3).
+      const installedTier = hooks.declaredHookTier(existing, marker, endMarker);
       const content = build({ ...base, tier: installedTier ?? base.tier });
       if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
         continue;

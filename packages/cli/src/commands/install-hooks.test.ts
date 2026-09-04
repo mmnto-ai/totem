@@ -650,6 +650,10 @@ describe('installGitHook', () => {
     const hookPath = path.join(hooksDir, 'pre-commit');
     const userHook = '#!/bin/sh\necho "user hook"\n';
     fs.writeFileSync(hookPath, userHook);
+    // The append is a whole-file atomic replacement since mmnto-ai/totem#2760
+    // round 1 (an interrupted append leaves a hook truncated mid-block): the
+    // inode changes under rename-over, where an in-place append kept it.
+    const inodeBefore = fs.statSync(hookPath).ino;
 
     const result = installGitHook(
       hooksDir,
@@ -659,6 +663,7 @@ describe('installGitHook', () => {
     );
 
     expect(result).toBe('appended');
+    expect(fs.statSync(hookPath).ino).not.toBe(inodeBefore);
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('echo "user hook"');
     expect(written).toContain(TOTEM_PRECOMMIT_MARKER);
@@ -1469,6 +1474,11 @@ describe('installGitHook writes atomically', () => {
         hookPath,
         `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n${ATTESTED_TRAILER}`,
       );
+      // The control that tells the two implementations apart (re-armed leg F1): an
+      // in-place `writeFileSync` truncates the SAME file — its inode survives — while
+      // rename-over replaces the directory entry with the temp's, so the inode
+      // changes. Cleanup and mode alone were satisfied by the old code too.
+      const inodeBefore = fs.statSync(hookPath).ino;
 
       const action = installGitHook(
         hooksDir,
@@ -1481,6 +1491,7 @@ describe('installGitHook writes atomically', () => {
 
       expect(action).toBe('block-rewritten');
       expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+      expect(fs.statSync(hookPath).ino).not.toBe(inodeBefore);
       // The helper's temp is `<target>.<pid>-<uuid8>.tmp` beside the target; after a
       // completed write the directory holds the hook alone.
       expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
