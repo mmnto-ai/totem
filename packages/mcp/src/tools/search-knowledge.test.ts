@@ -2406,33 +2406,63 @@ describe('search_knowledge', () => {
         return { text, m: m! };
       };
 
-      it.each([
+      const INVALID: Array<[string, number]> = [
         ['NaN', Number.NaN],
         ['negative', -0.1],
         ['above one', 1.5],
         ['Infinity', Number.POSITIVE_INFINITY],
-      ])(
-        'a lone %s relevance answers no_useful_hits with the fault disclosed — floor or no floor',
-        async (_name, value) => {
-          for (const floor of [0.4, undefined]) {
-            mockSearchRelevanceFloor = floor;
-            mockSearchResults = [hit('f', value, 'FAULTED_BODY')];
-            const { text, m } = await run();
-            expect(m[1]).toBe('no_useful_hits');
-            expect(m[3]).toBe('n/a'); // a fault never raises bestRelevance
-            expect(m[4]).toBe(floor === undefined ? 'none' : '0.400');
-            expect(m[5]).toBe('0');
-            expect(m[6]).toBe('1');
-            expect(text).toContain(
-              'Retrieval returned 1 hit, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — nothing usable to return.',
-            );
-            expect(text).toContain('/fake/project/src/f.ts — relevance faulted');
-            expect(text).not.toContain('FAULTED_BODY');
-            // Never rendered as a number a reader could compare.
-            expect(text).not.toMatch(/relevance (NaN|-0\.100|1\.500|Infinity)/);
-          }
+        ['-Infinity', Number.NEGATIVE_INFINITY],
+      ];
+      const FLOORS: Array<[string, number | undefined]> = [
+        ['a configured floor', 0.4],
+        ['no floor', undefined],
+      ];
+      /** Both renderings a number could take — the per-hit field and the disclosure line. */
+      const RENDERED_AS_NUMBER = /(relevance|Relevance:\*\*) (NaN|-?0\.100|1\.500|-?Infinity)/;
+
+      it.each(
+        INVALID.flatMap(([name, value]) =>
+          FLOORS.map(([floorName, floor]): [string, number, string, number | undefined] => [
+            name,
+            value,
+            floorName,
+            floor,
+          ]),
+        ),
+      )(
+        'a lone %s relevance under %s answers no_useful_hits with the fault disclosed',
+        async (_name, value, _floorName, floor) => {
+          mockSearchRelevanceFloor = floor;
+          mockSearchResults = [hit('f', value, 'FAULTED_BODY')];
+          const { text, m } = await run();
+          expect(m[1]).toBe('no_useful_hits');
+          expect(m[3]).toBe('n/a'); // a fault never raises bestRelevance
+          expect(m[4]).toBe(floor === undefined ? 'none' : '0.400');
+          expect(m[5]).toBe('0');
+          expect(m[6]).toBe('1');
+          expect(text).toContain(
+            'Retrieval returned 1 hit, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — nothing usable to return.',
+          );
+          expect(text).toContain('/fake/project/src/f.ts — relevance faulted');
+          // The cause is stated ONCE — the "did not count as" sentence belongs
+          // to a fault beside real hits, not to a batch with nothing else.
+          expect(text).not.toContain('did not count as signal or as exemption');
+          expect(text).not.toContain('FAULTED_BODY');
+          expect(text).not.toMatch(RENDERED_AS_NUMBER);
         },
       );
+
+      it('the all-faulted arm is reached through min_relevance as well as the config floor', async () => {
+        mockSearchRelevanceFloor = undefined;
+        mockSearchResults = [hit('f', Number.NaN, 'FAULTED_BODY')];
+        for (const minRelevance of [0.7, 0]) {
+          const { text, m } = await run({ min_relevance: minRelevance });
+          expect(m[1]).toBe('no_useful_hits');
+          expect(m[4]).toBe(minRelevance.toFixed(3));
+          expect(m[6]).toBe('1');
+          expect(text).not.toContain('FAULTED_BODY');
+        }
+      });
 
       it('a negative relevance beside a WEAK sibling under a floor: withheld, not proceeded', async () => {
         mockSearchRelevanceFloor = 0.4;
@@ -2446,6 +2476,7 @@ describe('search_knowledge', () => {
           '1 hit carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.',
         );
         expect(text).toContain('/fake/project/src/neg.ts — relevance faulted');
+        expect(text).not.toMatch(RENDERED_AS_NUMBER);
         expect(text).not.toContain('NEG_BODY');
         expect(text).not.toContain('WEAK_BODY');
       });

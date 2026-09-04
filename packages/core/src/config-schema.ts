@@ -604,7 +604,10 @@ export const TotemConfigSchema = z.object({
    *   1. the MCP `search_knowledge` tool (mmnto-ai/totem#2463): when a
    *      response's best relevance is below the floor it answers
    *      `status="no_useful_hits"` and DISCLOSES the below-floor candidates
-   *      (path + relevance, no content) instead of returning them;
+   *      (path + relevance, no content) instead of returning them — and a
+   *      retrieval whose EVERY hit is FAULTED (a relevance that is not a
+   *      finite number in [0, 1]) answers `no_useful_hits` too, floor or no
+   *      floor (mmnto-ai/totem#2770);
    *   2. `totem spec` (mmnto-ai/totem#2700): an unanchored free-text run is
    *      REFUSED when the best relevance is below the floor.
    *
@@ -629,8 +632,9 @@ export const TotemConfigSchema = z.object({
    * `docs/wiki/config-reference.md` and the worked measurement is the R4 record
    * at `.totem/fixtures/floor-arm-2026-09-03/`.
    *
-   * UNSET = NO FLOOR: `no_useful_hits` and the spec refusal's below-floor arm
-   * can never fire (the spec zero-hit arm still can). The per-call
+   * UNSET = NO FLOOR: the below-floor arms of `no_useful_hits` and the spec
+   * refusal can never fire (each reader's zero-hit / all-faulted arms still
+   * can — they need no floor). The per-call
    * `min_relevance` MCP input still applies, and still overrides this value;
    * the retrieval-envelope always discloses the effective floor, or `none`.
    */

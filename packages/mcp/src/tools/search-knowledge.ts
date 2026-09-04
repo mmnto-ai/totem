@@ -773,14 +773,21 @@ async function performSearch(
   const FAULTED_CAUSE =
     'a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer)';
   const FAULTED_REASON = 'relevance-faulted (not a finite number in [0, 1])';
+  const faultedCandidateLines = (): string[] => [
+    'Faulted candidates (disclosed, not returned — path only):',
+    ...faultedHits.map((r, i) => `${i + 1}. ${candidateLabel(r)} — relevance faulted`),
+  ];
+  // The below-floor arms' disclosure: a fault BESIDE real hits says what it
+  // did not count as — the CLI's `else` arm sentence. The all-faulted arm
+  // states its cause once in its own first line and lists the candidates
+  // only, as the CLI's `bestRelevance === null` arm does.
   const faultedDisclosure = (): string[] => {
     if (faulted === 0) return [];
     const noun = faulted === 1 ? 'hit' : 'hits';
     return [
       '',
       `${faulted} ${noun} carried ${FAULTED_CAUSE} and did not count as signal or as exemption.`,
-      'Faulted candidates (disclosed, not returned — path only):',
-      ...faultedHits.map((r, i) => `${i + 1}. ${candidateLabel(r)} — relevance faulted`),
+      ...faultedCandidateLines(),
     ];
   };
 
@@ -935,7 +942,8 @@ async function performSearch(
       'knowledge',
       [
         `Retrieval returned ${results.length} ${noun}, but every one carried ${FAULTED_CAUSE} — nothing usable to return.`,
-        ...faultedDisclosure(),
+        '',
+        ...faultedCandidateLines(),
       ].join('\n'),
     );
     const text = composeResponseText({
