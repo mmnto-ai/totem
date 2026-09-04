@@ -596,6 +596,12 @@ describe('checkGitHooks', () => {
         );
         const result = await checkGitHooks(tmpDir, {});
         expect(result.status).toBe('warn');
+        // The headline names the real cause: this block IS the canonical, so "the
+        // managed block is stale (a newer hook template, or a config change)" would be
+        // two false statements about it (final leg, F20). Mixed sets keep the stale
+        // headline for the stale hooks and append the encoding clause.
+        expect(result.message).toContain('does not decode as UTF-8');
+        expect(result.message).not.toContain('the managed block is stale');
         expect(result.remediation).toContain('re-save pre-commit as UTF-8');
         expect(result.remediation).not.toMatch(
           /totem hook install(?: --force)? for [^(]*pre-commit/,

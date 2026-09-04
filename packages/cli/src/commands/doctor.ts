@@ -328,12 +328,26 @@ export async function checkGitHooks(
         (appended.length > 0
           ? ' — `--force` rewrites the whole file and would overwrite your own hook content'
           : '');
+      // The headline names the cause. A `non-utf8` row's block may be byte-identical
+      // to the canonical (the bad byte on its shebang line), so "does not match …
+      // the managed block is stale" would be two false statements about it (final
+      // leg, F20): when every flagged hook is that shape the headline says so
+      // instead; a mixed set keeps the stale headline for the stale hooks and
+      // appends the encoding clause naming the others.
+      const encodingCause =
+        'the region above the extension (shebang line and managed block) does not decode as UTF-8';
+      const message =
+        nonUtf8.length === files.length
+          ? `All ${markers.length} hooks installed, but ${files.join(', ')} cannot be kept current by this @mmnto/cli for totemDir '${sensed.totemDir}' — ${encodingCause}`
+          : `All ${markers.length} hooks installed, but ${files.join(', ')} ${
+              files.length === 1 ? 'does' : 'do'
+            } not match the canonical this @mmnto/cli renders for totemDir '${sensed.totemDir}' — the managed block is stale (a newer hook template, or a config change)${
+              nonUtf8.length > 0 ? `; for ${nonUtf8.join(', ')} ${encodingCause}` : ''
+            }`;
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but ${files.join(', ')} ${
-          files.length === 1 ? 'does' : 'do'
-        } not match the canonical this @mmnto/cli renders for totemDir '${sensed.totemDir}' — the managed block is stale (a newer hook template, or a config change)`,
+        message,
         remediation,
       };
     }
