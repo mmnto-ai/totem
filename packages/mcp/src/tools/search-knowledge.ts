@@ -9,7 +9,7 @@ import type {
   SearchResult,
   SelectionCandidate,
 } from '@mmnto/totem';
-import { buildMeasuredCandidate, ContentTypeSchema } from '@mmnto/totem';
+import { buildMeasuredCandidate, ContentTypeSchema, isRelevanceInRange } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { logCorpusQuery, logMcpCall, logSelectionManifest } from '../ledger-writer.js';
@@ -195,9 +195,13 @@ function formatResult(r: SearchResult, index: number): string {
   // absent signal for a low one. The "keyword match" note is reserved for
   // fts-stamped hits — a vector/hybrid hit that (defensively) lacks relevance
   // shows a bare "n/a" rather than being mislabeled as a keyword match.
+  // mmnto-ai/totem#2770: a number that fails core's range predicate is a
+  // FAULT, printed as such — never as a measurement a reader could compare.
   const relevanceField =
     typeof r.relevance === 'number'
-      ? r.relevance.toFixed(3)
+      ? isRelevanceInRange(r.relevance)
+        ? r.relevance.toFixed(3)
+        : 'faulted (not a finite number in [0, 1])'
       : r.searchMethod === 'fts'
         ? 'n/a (keyword match)'
         : 'n/a';
@@ -429,7 +433,14 @@ function deriveSearchMethod(results: SearchResult[]): 'hybrid' | 'vector' | 'fts
  * `searchRelevanceFloor` (which carries no default since
  * mmnto-ai/totem#2727) nor a per-call `min_relevance`. It renders as
  * `floor="none"`, a closed token like every other attribute value, and the
- * status can then never be `no_useful_hits`.
+ * below-floor arm can then never answer `no_useful_hits`.
+ *
+ * `faulted` (mmnto-ai/totem#2770) counts the hits whose relevance failed
+ * core's `isRelevanceInRange` — NaN, ±Infinity, outside [0, 1]. They are
+ * never signal (they cannot raise `bestRelevance`), never a withheld
+ * measurement, and never an exemption; a retrieval whose every hit is faulted
+ * answers `no_useful_hits` with or without a floor. The attribute is always
+ * present, so the line keeps one closed shape.
  */
 export function formatRetrievalEnvelope(params: {
   status: 'ok' | 'no_useful_hits' | 'empty';
@@ -437,12 +448,13 @@ export function formatRetrievalEnvelope(params: {
   bestRelevance: number | null;
   floor: number | null;
   hits: number;
+  faulted: number;
 }): string {
   const best = params.bestRelevance !== null ? params.bestRelevance.toFixed(3) : 'n/a';
   const floor = params.floor !== null ? params.floor.toFixed(3) : 'none';
   return (
     `<retrieval-envelope status="${params.status}" method="${params.method}" ` +
-    `bestRelevance="${best}" floor="${floor}" hits="${params.hits}" />`
+    `bestRelevance="${best}" floor="${floor}" hits="${params.hits}" faulted="${params.faulted}" />`
   );
 }
 
@@ -723,14 +735,54 @@ async function performSearch(
       )
     : null;
 
-  // Best relevance = max over hits that CARRY a relevance signal. Empty-safe:
-  // only spread into Math.max when non-empty (else it yields -Infinity). `null`
-  // encodes "no hit carried a relevance signal" — the floor never fires then.
-  const relevances = results
-    .map((r) => r.relevance)
-    .filter((x): x is number => typeof x === 'number');
+  // ─── Three classes of hit (mmnto-ai/totem#2770) ──
+  //
+  // Judged by what the hit carries, on core's `isRelevanceInRange` — the SAME
+  // predicate the grounding-bundle builder omits on and the CLI floor gate
+  // (`evaluateGroundingFloor`, mmnto-ai/totem#2761) classifies with, so the
+  // two readers can no longer disagree about one hit. A relevance IN range is
+  // SIGNAL. No relevance at all (a keyword-only hit) is EXEMPT. A number that
+  // fails the predicate — NaN, ±Infinity, outside [0, 1]; under `l2` only a
+  // negative `_distance`, an SDK or data fault the search layer has already
+  // tallied — is FAULTED: neither signal nor exemption. It cannot raise
+  // `bestRelevance` (a NaN inside `Math.max` used to poison it, `NaN < floor`
+  // is false, and the floor never fired — a fault defeated the refusal), it is
+  // never withheld as a measurement, and it cannot save a batch the way a
+  // keyword-only hit does.
+  const hitClass = (r: SearchResult): 'signal' | 'faulted' | 'exempt' =>
+    typeof r.relevance !== 'number'
+      ? 'exempt'
+      : isRelevanceInRange(r.relevance)
+        ? 'signal'
+        : 'faulted';
+  const signalHits = results.filter((r) => hitClass(r) === 'signal');
+  const faultedHits = results.filter((r) => hitClass(r) === 'faulted');
+  const exemptHits = results.filter((r) => hitClass(r) === 'exempt');
+  const faulted = faultedHits.length;
+  // Best relevance = max over SIGNAL hits. Empty-safe: only spread into
+  // Math.max when non-empty (else it yields -Infinity). `null` encodes "no hit
+  // carried a usable relevance signal" — the below-floor arm never fires then.
+  const relevances = signalHits.map((r) => r.relevance as number);
   const hasRelevanceSignal = relevances.length > 0;
   const bestRelevance = hasRelevanceSignal ? Math.max(...relevances) : null;
+  const candidateLabel = (r: SearchResult): string =>
+    r.sourceRepo ? `[${r.sourceRepo}] ` + r.absoluteFilePath : r.absoluteFilePath;
+  // The CLI refusal's wording (`formatGroundingRefusal`), so the two readers
+  // describe one fault in one sentence. "Tallied", not "warned": the store's
+  // own warning sink is a follow-up (mmnto-ai/totem#2763).
+  const FAULTED_CAUSE =
+    'a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer)';
+  const FAULTED_REASON = 'relevance-faulted (not a finite number in [0, 1])';
+  const faultedDisclosure = (): string[] => {
+    if (faulted === 0) return [];
+    const noun = faulted === 1 ? 'hit' : 'hits';
+    return [
+      '',
+      `${faulted} ${noun} carried ${FAULTED_CAUSE} and did not count as signal or as exemption.`,
+      'Faulted candidates (disclosed, not returned — path only):',
+      ...faultedHits.map((r, i) => `${i + 1}. ${candidateLabel(r)} — relevance faulted`),
+    ];
+  };
 
   // ─── Selection-manifest emitter (mmnto-ai/totem#2468 M1) ──
   //
@@ -794,6 +846,7 @@ async function performSearch(
           finalLimit,
           method,
           status,
+          faulted,
           storesFailed,
           // Links that never initialized are absent from `linkedStores`, so
           // `answered` alone would read a permanently-broken link as a full
@@ -846,6 +899,7 @@ async function performSearch(
       bestRelevance,
       floor: effectiveFloor ?? null,
       hits: 0,
+      faulted,
     });
     const body = formatXmlResponse('knowledge', 'No results found.');
     const text = composeResponseText({
@@ -857,6 +911,44 @@ async function performSearch(
       body,
     }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
     await emitSelectionManifest('empty', {});
+    return { content: [{ type: 'text' as const, text }] };
+  }
+
+  // ─── Every hit faulted (mmnto-ai/totem#2770) ──
+  //
+  // Nothing usable to return and no measurement to compare, whatever the
+  // floor: the zero-row case's sibling, and the ONE arm that answers
+  // `no_useful_hits` with no floor configured — the CLI gate refuses the same
+  // retrieval outright (`evaluateGroundingFloor`'s `nothingUsable`). Content
+  // is withheld and every candidate disclosed by path, as the floor arm does.
+  if (results.length > 0 && signalHits.length === 0 && exemptHits.length === 0) {
+    const noun = results.length === 1 ? 'hit' : 'hits';
+    const allFaultedEnvelope = formatRetrievalEnvelope({
+      status: 'no_useful_hits',
+      method,
+      bestRelevance: null,
+      floor: effectiveFloor ?? null,
+      hits: 0,
+      faulted,
+    });
+    const body = formatXmlResponse(
+      'knowledge',
+      [
+        `Retrieval returned ${results.length} ${noun}, but every one carried ${FAULTED_CAUSE} — nothing usable to return.`,
+        ...faultedDisclosure(),
+      ].join('\n'),
+    );
+    const text = composeResponseText({
+      fallbackWarning,
+      runtimeWarning,
+      staleWarning,
+      indexEnvelope,
+      retrievalEnvelope: allFaultedEnvelope,
+      body,
+    }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
+    await emitSelectionManifest('no_useful_hits', {
+      excluded: faultedHits.map((hit) => ({ hit, reason: FAULTED_REASON })),
+    });
     return { content: [{ type: 'text' as const, text }] };
   }
 
@@ -874,20 +966,30 @@ async function performSearch(
     bestRelevance !== null &&
     bestRelevance < effectiveFloor
   ) {
-    const floorExempt = results.filter((r) => typeof r.relevance !== 'number');
-    const withheld = results.filter((r) => typeof r.relevance === 'number');
+    // EXEMPT hits are returned; SIGNAL hits are withheld as measurements;
+    // FAULTED hits are withheld too, but disclosed as faults, never as numbers
+    // a reader could compare against the floor (mmnto-ai/totem#2770).
+    const floorExempt = exemptHits;
+    const withheld = signalHits;
     // Disclose every withheld below-floor candidate compactly (path +
     // relevance, NO content) — exclusion is disclosed, never silently
     // dropped (Prop 308 F1).
     const candidateLines = withheld.map((r, i) => {
       const rel = typeof r.relevance === 'number' ? r.relevance.toFixed(3) : 'n/a';
-      const label = r.sourceRepo ? `[${r.sourceRepo}] ` + r.absoluteFilePath : r.absoluteFilePath;
-      return `${i + 1}. ${label} — relevance ${rel}`;
+      return `${i + 1}. ${candidateLabel(r)} — relevance ${rel}`;
     });
     const disclosure = [
       `Below-floor candidates (disclosed, not returned — path + relevance only; floor ${effectiveFloor.toFixed(3)}, best relevance ${bestRelevance.toFixed(3)}):`,
       ...candidateLines,
+      ...faultedDisclosure(),
     ].join('\n');
+    const withheldExclusions = [
+      ...withheld.map((hit) => ({
+        hit,
+        reason: `below-relevance-floor floor=${effectiveFloor.toFixed(3)} relevance=${typeof hit.relevance === 'number' ? hit.relevance.toFixed(3) : 'n/a'}`,
+      })),
+      ...faultedHits.map((hit) => ({ hit, reason: FAULTED_REASON })),
+    ];
 
     if (floorExempt.length === 0) {
       // Every hit carried a below-floor signal → honest no_useful_hits.
@@ -897,6 +999,7 @@ async function performSearch(
         bestRelevance,
         floor: effectiveFloor,
         hits: 0,
+        faulted,
       });
       const body = formatXmlResponse(
         'knowledge',
@@ -914,23 +1017,19 @@ async function performSearch(
         retrievalEnvelope: belowFloorEnvelope,
         body,
       }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
-      await emitSelectionManifest('no_useful_hits', {
-        excluded: withheld.map((hit) => ({
-          hit,
-          reason: `below-relevance-floor floor=${effectiveFloor.toFixed(3)} relevance=${typeof hit.relevance === 'number' ? hit.relevance.toFixed(3) : 'n/a'}`,
-        })),
-      });
+      await emitSelectionManifest('no_useful_hits', { excluded: withheldExclusions });
       return { content: [{ type: 'text' as const, text }] };
     }
 
     // Mixed batch: return the floor-exempt keyword hits, disclose the
-    // withheld signal-bearing ones alongside.
+    // withheld signal-bearing ones (and any faulted ones) alongside.
     const mixedEnvelope = formatRetrievalEnvelope({
       status: 'ok',
       method,
       bestRelevance,
       floor: effectiveFloor,
       hits: floorExempt.length,
+      faulted,
     });
     const formattedExempt = floorExempt.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
     const body = formatXmlResponse('knowledge', formattedExempt + '\n\n---\n\n' + disclosure);
@@ -947,20 +1046,22 @@ async function performSearch(
         hit,
         reason: 'floor-exempt keyword hit (no relevance signal)',
       })),
-      excluded: withheld.map((hit) => ({
-        hit,
-        reason: `below-relevance-floor floor=${effectiveFloor.toFixed(3)} relevance=${typeof hit.relevance === 'number' ? hit.relevance.toFixed(3) : 'n/a'}`,
-      })),
+      excluded: withheldExclusions,
     });
     return { content: [{ type: 'text' as const, text }] };
   }
 
+  // The batch proceeds on its real signal (or on an exemption). A faulted hit
+  // beside them is still RETURNED — the floor is a whole-run gate, not a
+  // per-hit filter — but its field reads `faulted`, the envelope counts it,
+  // and the manifest row says so (mmnto-ai/totem#2770).
   const okEnvelope = formatRetrievalEnvelope({
     status: 'ok',
     method,
     bestRelevance,
     floor: effectiveFloor ?? null,
     hits: results.length,
+    faulted,
   });
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
 
@@ -975,7 +1076,13 @@ async function performSearch(
   }); // totem-ignore mmnto-ai/totem#1294 — composed from system-generated + XML-wrapped pieces
 
   await emitSelectionManifest('ok', {
-    selected: results.map((hit, i) => ({ hit, reason: `returned rank=${i + 1}` })),
+    selected: results.map((hit, i) => ({
+      hit,
+      reason:
+        hitClass(hit) === 'faulted'
+          ? `returned rank=${i + 1} (relevance faulted)`
+          : `returned rank=${i + 1}`,
+    })),
   });
   return { content: [{ type: 'text' as const, text }] };
 }
@@ -1113,7 +1220,7 @@ export function registerSearchKnowledge(server: McpServer): void {
           .max(1)
           .optional()
           .describe(
-            'Relevance floor for this call (0..1, vector-leg similarity), compared against the BEST relevance of the whole retrieval — a whole-run gate, never a per-hit filter: one hit at or above it returns the full set, siblings below it included. Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is never `no_useful_hits`.',
+            'Relevance floor for this call (0..1, vector-leg similarity), compared against the BEST relevance of the whole retrieval — a whole-run gate, never a per-hit filter: one hit at or above it returns the full set, siblings below it included. Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is `no_useful_hits` only when EVERY hit carried a faulted relevance (not a finite number in [0, 1] — disclosed by path, never counted as signal or exemption).',
           ),
       },
       annotations: {

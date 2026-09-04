@@ -180,6 +180,8 @@ export const SELECTION_CONTEXT_KEYS = [
   'status',
   'storesFailed',
   'storesUnavailable',
+  /** Hits whose relevance failed `isRelevanceInRange` (mmnto-ai/totem#2770). */
+  'faulted',
   // orient
   'render',
   // session-start (V2 hook + published templates)
