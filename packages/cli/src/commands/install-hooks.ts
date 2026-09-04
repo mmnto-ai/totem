@@ -806,12 +806,29 @@ export function buildPreCommitHook(options: {
   // The artifact is a plain JSON file a seat can hand-edit, and its NAME comes
   // off the filesystem, so nothing echoed is trusted as text: EVERY value that
   // reaches stdout — the artifact's path, its `createdAt`, `anchor.kind`,
-  // `anchor.ref`, each required heading, and, on a tolerant match, the draft
-  // line it matched — passes through `safe()` first. A
+  // `anchor.ref`, `anchor.sha256`, the resolved realpath of a bound record,
+  // each required heading, and, on a tolerant match, the draft line it matched
+  // — passes through `safe()` first. A
   // newline in any of them would otherwise forge a second `[Totem]` line in the
   // hook's own output; `safe()` collapses C0 (0x00–0x1f), the DEL/C1 band
   // (0x7f–0x9f), and U+2028/U+2029, because U+0085 (NEL) breaks a line on some
   // terminals and U+2028/U+2029 are line separators for the same purpose.
+  //
+  // `safe()` is necessary but NOT sufficient, because it cannot see the attack
+  // that lives in PRINTABLE bytes (mmnto-ai/totem#2737 fold 3). A literal
+  // backslash followed by `n` is two printable characters, so it passes
+  // `safe()` untouched — and `/bin/sh` on Debian and Ubuntu is `dash`, whose
+  // `echo` EXPANDS backslash escapes, so that pair becomes a real newline at
+  // the shell and forges the second `[Totem]` line anyway (`\\c` truncates the
+  // line instead). bash's `echo` does not expand it, so the hole is invisible
+  // on a developer's macOS or Git Bash shell and open on the CI runner. The two
+  // sinks that echo an untrusted value — the evidence line and the BLOCKED
+  // reason, both carrying `$spec_evidence` — therefore print through
+  // `printf '%s\\n'`, which is defined to treat its ARGUMENT as literal text on
+  // every POSIX shell. The remaining echoes in this block carry only
+  // `$reader_status` (an integer from `$?`) and the render-time `runsDir`
+  // (validated by `assertRenderableTotemDir`, which refuses a backslash), so
+  // neither can carry the payload.
   // Containment is decided by RESOLUTION, not by inspecting one segment, and
   // it is decided TWICE. Lexically first: a `record` ref that is absolute
   // (either path flavor) or whose `path.resolve` against `process.cwd()` — the
@@ -990,9 +1007,9 @@ emit(out);
   # each reported distinctly, never as "no evidence", and all fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
-    echo "[Totem] spec evidence: $spec_evidence"
+    printf '%s\\n' "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" = "3" ]; then
-    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
+    printf '%s\\n' "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
     exit 1
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or ${runsDir}/ unreadable); fix the runtime and retry (strict mode)"

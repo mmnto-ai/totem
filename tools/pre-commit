@@ -178,9 +178,9 @@ emit(out);
   # each reported distinctly, never as "no evidence", and all fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
-    echo "[Totem] spec evidence: $spec_evidence"
+    printf '%s\n' "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" = "3" ]; then
-    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
+    printf '%s\n' "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
     exit 1
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"

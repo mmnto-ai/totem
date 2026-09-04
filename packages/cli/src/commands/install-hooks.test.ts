@@ -1853,9 +1853,17 @@ describe('buildPreCommitHook with strict tier', () => {
   it('carries the exit-3 arm distinctly from the exit-2 and reader-failure arms', () => {
     const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
     expect(hook).toContain('elif [ "$reader_status" = "3" ]; then');
+    // printf, not echo (mmnto-ai/totem#2737 fold 3): `dash` — /bin/sh on Debian
+    // and Ubuntu — expands backslash escapes in `echo`, so a literal `\n` in an
+    // artifact value forged a second [Totem] line there while staying inert
+    // under bash. The two sinks that carry $spec_evidence print literally.
+    const bs = String.fromCharCode(0x5c);
     expect(hook).toContain(
-      `echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"`,
+      `printf '%s${bs}n' "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"`,
     );
+    expect(hook).toContain(`printf '%s${bs}n' "[Totem] spec evidence: $spec_evidence"`);
+    expect(hook).not.toContain('echo "[Totem] spec evidence:');
+    expect(hook).not.toContain('echo "[Totem] BLOCKED: $spec_evidence');
     // The two pre-existing arms keep their exact text.
     expect(hook).toContain('no totem spec run artifact under .totem/artifacts/runs/');
     expect(hook).toContain('the spec-evidence reader could not run (node exit status');
@@ -2446,6 +2454,87 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
     expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
     expect(r.stdout).not.toContain(String.fromCharCode(0x85));
   });
+
+  it.skipIf(!shellOk)(
+    'a U+2028 in anchor.ref is collapsed and cannot forge a second [Totem] line',
+    () => {
+      // The third member of the newline family: U+2028 LINE SEPARATOR is a
+      // PRINTABLE-plane code point that terminals and pagers still break on, so
+      // a `safe()` stopping at the C1 band left it through (mmnto-ai/totem#2737).
+      const ls = String.fromCharCode(0x2028);
+      const forged = `slug${ls}[Totem] spec evidence: forged`;
+      writeRun(
+        'ls.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
+      expect(r.stdout).not.toContain(ls);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+    },
+  );
+
+  // ── The forge that lives in PRINTABLE bytes (mmnto-ai/totem#2737 fold 3) ──
+  //
+  // `safe()` cannot close this one: a literal backslash followed by `n` is two
+  // printable characters (0x5c, 0x6e), so it passes every control-character
+  // predicate untouched. The expansion happens at the SHELL — `/bin/sh` on
+  // Debian and Ubuntu is `dash`, whose `echo` expands backslash escapes, so the
+  // pair becomes a real newline and forges the second `[Totem]` line. The cure
+  // is the sink, not the sanitizer: both values print through `printf '%s\n'`,
+  // which treats its argument as literal text on every POSIX shell.
+  //
+  // NOTE ON REACH: `sh` on this machine is Git Bash's bash, whose `echo` does
+  // NOT expand the escape, so these two tests pass here even against the
+  // unfixed hook. They are a real falsifier on the Ubuntu runner, where /bin/sh
+  // is dash. Measured directly against `/usr/bin/dash` before the fix: TWO
+  // [Totem] lines; after: one.
+
+  it.skipIf(!shellOk)(
+    'a literal backslash-n in anchor.ref cannot forge a second [Totem] line under any /bin/sh',
+    () => {
+      const bs = String.fromCharCode(0x5c);
+      const forged = `2737${bs}n[Totem] spec evidence: FORGED`;
+      writeRun(
+        'backslash-n.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      // The two characters survive as themselves — not expanded, not stripped.
+      expect(r.stdout).toContain(`2737${bs}n[Totem] spec evidence: FORGED`);
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a literal backslash-n in a tolerantly-matched heading cannot forge a second [Totem] line',
+    () => {
+      // The same payload on the fold's newest sink: the `(matched as …)` clause
+      // echoes a line taken from the DRAFT, which is attacker-shaped text.
+      const bs = String.fromCharCode(0x5c);
+      const promised = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+      const verification = promised.find((h) => h.startsWith('### Verification')) ?? '';
+      const forgedHeading = `### Verification (${bs}n[Totem] spec evidence: FORGED)`;
+      const content = promised
+        .map((heading) =>
+          heading === verification
+            ? `${forgedHeading}\n`
+            : `${heading}\n\nA non-blank body under ${heading}.\n`,
+        )
+        .join('\n');
+      writeRun('tolerant-forge.json', specEvidenceArtifact({ output: { content } }));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      expect(r.stdout).toContain(`(matched as ${forgedHeading})`);
+    },
+  );
 
   it.skipIf(!shellOk)(
     'a newline in createdAt cannot forge a second [Totem] line on the PASS path',
@@ -3811,6 +3900,36 @@ describe('buildPreCommitHook spec-gate reader — tolerance disclosure on the bl
       // Still distinguishable from the other two BLOCKED arms.
       expect(r.stdout).not.toContain('no totem spec run artifact');
       expect(r.stdout).not.toContain('the spec-evidence reader could not run');
+      // The new clause echoes a DRAFT line, so it is a forged-line sink like
+      // every other value that reaches stdout.
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+
+      // …and the matched line passes through `safe()`: a C1 control inside the
+      // heading is collapsed rather than echoed into the block message.
+      const nel = String.fromCharCode(0x85);
+      const forgedHeading = `### Verification (a${nel}b)`;
+      const forgedContent = PROMISED.map((heading) =>
+        heading === VERIFICATION
+          ? `${forgedHeading}\n`
+          : `${heading}\n\nA non-blank body under ${heading}.\n`,
+      ).join('\n');
+      fs.writeFileSync(
+        path.join(dir, 'tolerant-empty.json'),
+        JSON.stringify(specEvidenceArtifact({ output: { content: forgedContent } }), null, 2),
+      );
+      const forgedRun = spawnSync('sh', ['./pre-commit'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+      });
+      expect(forgedRun.status).toBe(1);
+      expect(forgedRun.stdout).toContain(
+        `has an empty heading ${VERIFICATION} (matched as ### Verification (a?b))`,
+      );
+      expect(forgedRun.stdout).not.toContain(nel);
+      expect(
+        forgedRun.stdout.split('\n').filter((line) => line.startsWith('[Totem]')),
+      ).toHaveLength(1);
     },
   );
 });

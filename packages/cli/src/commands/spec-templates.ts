@@ -94,8 +94,9 @@ export { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT };
  * 1. every entry is a VERBATIM line of {@link SYSTEM_PROMPT} — the gate can
  *    only require what the command actually asks for;
  * 2. every entry is RENDERABLE into the reader as a HEADING — no quote,
- *    backslash, dollar, backtick, or control character in C0 or the DEL/C1
- *    band the reader's `safe()` collapses (`hasUnrenderableHeadingChar`).
+ *    backslash, dollar, backtick, or line-breaking character from the set the
+ *    reader's `safe()` collapses: C0, the DEL/C1 band, and U+2028/U+2029
+ *    (`hasUnrenderableHeadingChar`).
  *    Printable non-ASCII is permitted, unlike the path predicate that bans
  *    everything above 0x7e for git's C-quoting of `diff --name-only` output: a
  *    heading meets no path filter. That the em dash in the Verification heading
