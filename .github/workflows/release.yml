@@ -74,20 +74,40 @@ jobs:
       # Fails the release loud (Tenet 4) if OIDC silently regressed to token
       # auth — e.g. NPM_TOKEN re-added, `registry-url` re-written into .npmrc,
       # trusted publisher misconfigured. See tools/verify-oidc-provenance.mjs.
-      # timeout-minutes caps the verify step at the YAML layer; the script's
-      # MAX_ATTEMPTS × SPAWN_TIMEOUT_MS + RETRY_DELAY_MS arithmetic bounds it
-      # to ~2 min/package (8 min worst case across 4 packages), but encoding
-      # the cap in the workflow makes the contract explicit rather than
-      # implicit in script constants.
+      # Visibility budget (mmnto-ai/totem#2748). npm makes a just-published
+      # package readable minutes after publish, per package: 2 min 20 s after
+      # the old budget gave up on the 1.123.0 cut (5 attempts separated by
+      # 4 × 5 s sleeps — about 20 s of waiting; the step ran 21 s), and
+      # 6 min 57 s after the merge on the 1.124.0 cut. The script polls every
+      # still-pending package once per round, so:
+      #   FLOOR   — 10 min (VISIBILITY_DEADLINE_MS): a package that stays
+      #             invisible is polled for at least that long.
+      #   CEILING — worstCaseMs(4) = 10 min + 15 s + 4 × 20 s ≈ 11 min 35 s
+      #             for the four published packages: the deadline, plus the
+      #             one poll interval the final round can start past it, plus
+      #             one spawn timeout per package pending in that round.
+      # timeout-minutes: 13 is the OUTER cap and must stay ≥ that ceiling;
+      # tools/verify-oidc-provenance.test.mjs pins the relation, so lowering
+      # this without lowering the script's budget fails CI.
       - name: Verify OIDC provenance on published packages
         if: steps.publish.outputs.published == 'true'
-        timeout-minutes: 4
+        timeout-minutes: 13
         run: node tools/verify-oidc-provenance.mjs
         env:
           PUBLISHED_PACKAGES: ${{ steps.publish.outputs.published_packages }}
 
+      # The floating v0 repoint rides the PUBLISH verdict, not the verify
+      # verdict. A verify failure still fails the job (loud, Tenet 4), but the
+      # tags the publish already created get pushed instead of being stranded:
+      # on the 1.123.0 and 1.124.0 cuts a propagation-lag verify failure left
+      # v0 behind (mmnto-ai/totem#2748); the 1.91.0 cut hit the same class from
+      # the other side (mmnto-ai/totem#2314). !cancelled() rather than always()
+      # so a cancelled run never repoints tags. This also lets v0 advance after
+      # a genuine provenance-regression failure, which is accepted: action.yml
+      # runs the CLI unpinned, so v0 pins only the composite action source,
+      # never the suspect package.
       - name: Push release tags
-        if: steps.publish.outputs.published == 'true'
+        if: ${{ !cancelled() && steps.publish.outputs.published == 'true' }}
         run: |
           git push origin --tags --force
           git tag -f v0

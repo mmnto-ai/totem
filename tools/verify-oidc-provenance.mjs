@@ -19,18 +19,56 @@
  * (e.g., if a future change re-introduces `NPM_TOKEN` or `registry-url` and
  * OIDC negotiation falls back unnoticed).
  *
- * The npm registry has read-replica lag of a few seconds after `npm publish`
- * returns, so each `npm view` is retried up to MAX_ATTEMPTS times with
- * RETRY_DELAY_MS between attempts. After publish-oidc finishes, registry
- * convergence is typically <10s.
+ * VISIBILITY BUDGET (mmnto-ai/totem#2748). The npm registry makes a
+ * just-published package readable on a lag that is minutes, not seconds, and
+ * the lag is per-package inside a single publish. Two measured data from that
+ * issue: on the 1.123.0 cut npm made `@mmnto/totem` visible 2 min 20 s AFTER
+ * this step had already given up (its budget then was 5 attempts separated by
+ * 4 × 5 s sleeps — about 20 s of waiting; the step itself ran 21 s); on the
+ * 1.124.0 cut the same package was visible 6 min 57 s after the merge, with a
+ * per-package spread inside that one publish of 0:56 → 6:57.
+ *
+ * So the script polls rather than retries per package: `pollUntilVisible`
+ * walks every still-pending spec once per round, then sleeps
+ * POLL_INTERVAL_MS, and a spec resolved in an earlier round is never fetched
+ * again. One slow package therefore cannot hide the others.
+ *
+ *   FLOOR   — VISIBILITY_DEADLINE_MS (10 min). A package that stays invisible
+ *             is polled for AT LEAST this long from the start of polling.
+ *             The 1.124.0 datum is 6 min 57 s measured from the merge but
+ *             5 min 45 s measured from this step's start, and the poller's
+ *             clock starts at the step — so the deadline bounds the step's
+ *             clock, with margin over both figures.
+ *   CEILING — worstCaseMs(n) = VISIBILITY_DEADLINE_MS + POLL_INTERVAL_MS
+ *             + n × SPAWN_TIMEOUT_MS. The deadline is checked AFTER a round
+ *             and BEFORE the sleep, so the final round can start up to one
+ *             POLL_INTERVAL_MS past the deadline; that round can then burn a
+ *             full SPAWN_TIMEOUT_MS on each of the n packages still pending,
+ *             because a spawnSync timeout is reported as `{ ok: false }` —
+ *             the package stays pending — rather than aborting the run.
+ *
+ * The release workflow's `timeout-minutes` on this step is the OUTER cap and
+ * must stay ≥ the ceiling for the number of published packages;
+ * `tools/verify-oidc-provenance.test.mjs` pins that relation so lowering one
+ * without the other fails CI.
  */
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
-const MAX_ATTEMPTS = 5;
-const RETRY_DELAY_MS = 5000;
+/** How long to wait between polling rounds. */
+export const POLL_INTERVAL_MS = 15_000;
+/** FLOOR: a package that stays invisible is polled for at least this long. */
+export const VISIBILITY_DEADLINE_MS = 10 * 60_000;
 // Bound the per-call npm view to defend against a wedged registry/network
 // (otherwise the CI step could hang up to the job-level timeout).
-const SPAWN_TIMEOUT_MS = 20_000;
+export const SPAWN_TIMEOUT_MS = 20_000;
+/**
+ * CEILING: the deadline, plus the one poll interval the final round can start
+ * past it (the deadline is checked after a round and before the sleep), plus
+ * one spawn timeout per package still pending in that final round.
+ */
+export const worstCaseMs = (pendingCount) =>
+  VISIBILITY_DEADLINE_MS + POLL_INTERVAL_MS + pendingCount * SPAWN_TIMEOUT_MS;
 
 // On Windows, `npm` is a `.cmd` shim, and Node ≥ 20 refuses to spawnSync
 // .bat/.cmd files without shell: true (EINVAL). The workflow runs on
@@ -42,21 +80,30 @@ const EXPECTED_NPM_USER_EMAIL = 'npm-oidc-no-reply@github.com';
 const EXPECTED_NPM_USER_NAME = 'GitHub Actions';
 const EXPECTED_PROVENANCE_PREDICATE = 'https://slsa.dev/provenance/v1';
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // fetchNpmView throws on hard failures (spawn, JSON parse) — those aren't
-// recoverable by retry, so a "loud crash" via thrown Error is the right
-// shape (.gemini/styleguide.md § 120 cause-chain rule). For soft failures
-// (registry returned non-zero status, often propagation lag), returns
-// `{ ok: false, err }` so the caller's retry loop can drive backoff.
-const fetchNpmView = (spec) => {
-  const result = spawnSync('npm', ['view', spec, '--json'], {
+// recoverable by polling, so a "loud crash" via thrown Error is the right
+// shape (.gemini/styleguide.md § 9 "Error Handling & Logging Conventions",
+// the "Error cause chains (ES2022)" bullet). For soft failures the poller can
+// ride out, returns `{ ok: false, err }` so the spec stays pending: a
+// non-zero npm view status (usually propagation lag), and a spawnSync
+// timeout — which arrives as `result.error` with `code: 'ETIMEDOUT'`
+// (measured on Node 24.16.0). Throwing on the timeout would let ONE wedged
+// `npm view` abort the whole poll, which is exactly the "one slow package
+// hides the others" failure mmnto-ai/totem#2748 removes. `spawn` is a
+// parameter so the test can drive both arms without spawning npm.
+export const fetchNpmView = (spec, spawn = spawnSync) => {
+  const result = spawn('npm', ['view', spec, '--json'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: SPAWN_TIMEOUT_MS,
     ...SPAWN_OPTS_BASE,
   });
   if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') {
+      return { ok: false, err: `npm view timed out after ${SPAWN_TIMEOUT_MS}ms` };
+    }
     throw new Error('[Totem Error] verify-oidc: npm view spawn failed', {
       cause: result.error,
     });
@@ -73,35 +120,68 @@ const fetchNpmView = (spec) => {
   }
 };
 
-const fetchWithRetry = async (spec) => {
-  let lastErr = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = fetchNpmView(spec);
-    if (result.ok) return result.data;
-    lastErr = result.err;
-    if (attempt < MAX_ATTEMPTS) {
-      console.log(
-        `[verify-oidc] ${spec} not yet visible on registry (attempt ${attempt}/${MAX_ATTEMPTS}); retrying in ${RETRY_DELAY_MS}ms`,
-      );
-      await sleep(RETRY_DELAY_MS);
+/**
+ * Round-robin poller: every still-pending spec is fetched once per round, in
+ * input order, until nothing is pending or the deadline has passed. The first
+ * round runs immediately (no initial sleep). A spec that resolves is removed
+ * from the pending set and never fetched again.
+ *
+ * Returns `{ resolved, missing }` — `resolved` is a `Map<spec, data>`,
+ * `missing` a `Map<spec, lastErr>` of the specs still pending at return.
+ * A `fetch` that THROWS propagates unchanged (hard failures stay loud).
+ */
+export const pollUntilVisible = async (
+  specs,
+  {
+    fetch = fetchNpmView,
+    sleep = defaultSleep,
+    now = Date.now,
+    deadlineMs = VISIBILITY_DEADLINE_MS,
+    intervalMs = POLL_INTERVAL_MS,
+  } = {},
+) => {
+  const start = now();
+  const resolved = new Map();
+  const missing = new Map();
+  let pending = [...specs];
+
+  const elapsedSeconds = () => Math.round((now() - start) / 1000);
+
+  for (;;) {
+    const stillPending = [];
+    for (const spec of pending) {
+      const result = fetch(spec);
+      if (result.ok) {
+        resolved.set(spec, result.data);
+        missing.delete(spec);
+        console.log(`[verify-oidc] ${spec} visible after ${elapsedSeconds()}s`);
+      } else {
+        missing.set(spec, result.err);
+        stillPending.push(spec);
+      }
     }
+    pending = stillPending;
+
+    if (pending.length === 0) return { resolved, missing };
+    if (now() - start >= deadlineMs) return { resolved, missing };
+
+    console.log(
+      `[verify-oidc] ${pending.length} package(s) not yet visible after ${elapsedSeconds()}s (${pending.join(', ')}); next poll in ${intervalMs}ms`,
+    );
+    await sleep(intervalMs);
   }
-  console.error(`[verify-oidc] Failed to fetch ${spec} after ${MAX_ATTEMPTS} attempts:`, lastErr);
-  throw new Error(`[Totem Error] verify-oidc: registry fetch exhausted retries for ${spec}`, {
-    cause: lastErr,
-  });
 };
 
 // `npm view --json` returns `_npmUser` as a `<name> <<email>>` string
 // (e.g., `"GitHub Actions <npm-oidc-no-reply@github.com>"`), not an object.
-const parseNpmUser = (raw) => {
+export const parseNpmUser = (raw) => {
   if (typeof raw !== 'string') return { name: null, email: null };
   const match = raw.match(/^(.+)\s+<(.+)>$/);
   if (!match) return { name: raw.trim(), email: null };
   return { name: match[1].trim(), email: match[2].trim() };
 };
 
-const assertProvenance = (spec, data) => {
+export const assertProvenance = (spec, data) => {
   const failures = [];
 
   const npmUser = parseNpmUser(data._npmUser);
@@ -153,8 +233,15 @@ const assertProvenance = (spec, data) => {
   return true;
 };
 
-const main = async () => {
-  const published = (process.env.PUBLISHED_PACKAGES ?? '')
+/**
+ * `exit` and `env` are parameters (not `process.exit` / `process.env` reached
+ * for inline) so the fail-loud arm below is reachable from a test — it is
+ * conditional now, and an untested exit path is how a gate goes quietly
+ * green. `fetch`/`sleep`/`now` are forwarded to `pollUntilVisible` only when
+ * given, so the shipped call `main()` runs on the poller's real defaults.
+ */
+export const main = async ({ fetch, sleep, now, exit = process.exit, env = process.env } = {}) => {
+  const published = (env.PUBLISHED_PACKAGES ?? '')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -166,17 +253,41 @@ const main = async () => {
 
   console.log(`[verify-oidc] Verifying ${published.length} package(s): ${published.join(', ')}`);
 
+  const pollOptions = {};
+  if (fetch !== undefined) pollOptions.fetch = fetch;
+  if (sleep !== undefined) pollOptions.sleep = sleep;
+  if (now !== undefined) pollOptions.now = now;
+
+  const { resolved, missing } = await pollUntilVisible(published, pollOptions);
+
   const failed = [];
-  for (const spec of published) {
-    const data = await fetchWithRetry(spec);
+  for (const [spec, data] of resolved) {
     if (!assertProvenance(spec, data)) failed.push(spec);
+  }
+
+  if (missing.size > 0) {
+    console.error(
+      `[verify-oidc] ${missing.size} package(s) never became visible within ${VISIBILITY_DEADLINE_MS / 1000}s:`,
+    );
+    for (const [spec, lastErr] of missing) {
+      console.error(`  - ${spec} (${lastErr})`);
+    }
+    console.error(
+      '[verify-oidc] A miss here is registry propagation, not a provenance verdict — the publish may be complete; check with npm view. Observed propagation for one package: ~7 min (mmnto-ai/totem#2748).',
+    );
   }
 
   if (failed.length > 0) {
     console.error(
       `[verify-oidc] ${failed.length} package(s) failed provenance check: ${failed.join(', ')}`,
     );
-    process.exit(1);
+  }
+
+  if (missing.size > 0 || failed.length > 0) {
+    exit(1);
+    // `process.exit` never returns; an injected `exit` might, and falling
+    // through would print the all-verified line over a failure.
+    return;
   }
 
   console.log(
@@ -184,12 +295,15 @@ const main = async () => {
   );
 };
 
+// Only run main() when executed directly (not when imported by tests).
 // Bare `main()` would leave the hard-throw paths as unhandled rejections.
 // Node 24's default `--unhandled-rejections=throw` makes that exit non-zero
 // today, but a future flag flip or wrapper that downgrades unhandled
 // rejections to warnings would silently let the workflow pass green on a
 // real provenance regression. Make the intent explicit.
-main().catch((err) => {
-  console.error('[verify-oidc] Fatal:', err);
-  process.exit(1);
-});
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error('[verify-oidc] Fatal:', err);
+    process.exit(1);
+  });
+}

@@ -34,6 +34,10 @@ jobs:
 
       - run: pnpm test
 
+      # Root tool test: pins the verify-oidc visibility budget against the
+      # release workflow's outer timeout-minutes cap (mmnto-ai/totem#2748).
+      - run: pnpm test:verify-oidc
+
       - name: Wind Tunnel (rule fixture tests)
         run: node packages/cli/dist/index.js test
 
