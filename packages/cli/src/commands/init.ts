@@ -1838,6 +1838,12 @@ export default {
           file: '.git/hooks/pre-commit',
           action: 'Skipped — non-shell hook detected (manual integration needed)',
         });
+      } else if (enforcement.preCommit === 'skipped-non-utf8') {
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action:
+            'Skipped — the managed block does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
+        });
       }
       if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
         summary.push({
@@ -1859,6 +1865,12 @@ export default {
         summary.push({
           file: '.git/hooks/pre-push',
           action: 'Skipped — non-shell hook detected (manual integration needed)',
+        });
+      } else if (enforcement.prePush === 'skipped-non-utf8') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action:
+            'Skipped — the managed block does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
         });
       }
 

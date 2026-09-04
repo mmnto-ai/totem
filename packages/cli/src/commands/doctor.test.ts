@@ -530,6 +530,46 @@ describe('checkGitHooks', () => {
       }
     });
 
+    // The attested shape whose MANAGED REGION does not decode as UTF-8 (an ANSI-editor
+    // save turned the template's em dash into one 0x97 byte): the installer reports
+    // `skipped-non-utf8` and leaves the file alone, so this row must not prescribe
+    // the bare install it would decline — the inert-instruction rule, applied to the
+    // newest shape (re-armed leg F13 on mmnto-ai/totem#2760).
+    it('classifies a non-UTF-8 managed region as non-utf8 and prescribes re-saving, never the bare install', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installWithTrailer(tmpDir, ATTESTED_TRAILER, { stale: true });
+        const preCommit = path.join(tmpDir, '.git', 'hooks', 'pre-commit');
+        const bytes = fs.readFileSync(preCommit);
+        const emDash = Buffer.from([0xe2, 0x80, 0x94]);
+        const dashAt = bytes.indexOf(emDash);
+        expect(dashAt).toBeGreaterThan(-1);
+        fs.writeFileSync(
+          preCommit,
+          Buffer.concat([
+            bytes.subarray(0, dashAt),
+            Buffer.from([0x97]),
+            bytes.subarray(dashAt + emDash.length),
+          ]),
+        );
+        const result = await checkGitHooks(tmpDir, {});
+        expect(result.status).toBe('warn');
+        expect(result.remediation).toContain('re-save pre-commit as UTF-8');
+        expect(result.remediation).toContain('does not decode as UTF-8');
+        // The other three hooks are still the attested shape and keep the bare-install
+        // clause; pre-commit must be named ONLY in the re-save clause.
+        expect(result.remediation).toContain(
+          'totem hook install for pre-push, post-merge, post-checkout (',
+        );
+        expect(result.remediation).not.toMatch(
+          /totem hook install[^;]*pre-commit[^;]*carried through/,
+        );
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
     // The same case with the totemDir spelled out — this is precisely what the
     // pre-#2753 early return hid.
     it('WARNs identically when the default totemDir is configured explicitly', async () => {

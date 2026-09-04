@@ -1365,6 +1365,32 @@ function ownedTrailerStart(content: string, marker: string, endMarker: string): 
 }
 
 /**
+ * {@link ownedTrailerStart} as a BYTE offset into the raw file — the offset the
+ * block-rewrite arm slices the trailer at — or `undefined` when the managed region
+ * (start of file through the end marker) does not decode as UTF-8 losslessly.
+ *
+ * The string offset converts to a byte offset only if the region's re-encoded text
+ * equals its raw bytes; totem wrote the region, so it does, and the equality check
+ * PROVES it rather than assuming it. A region that fails it is not totem's text any
+ * more — an ANSI-editor save that turned the template's em dash into one `0x97`
+ * byte, say — so the installer reports that shape (`skipped-non-utf8`) and doctor
+ * classifies it (`non-utf8`) instead of either guessing an offset or prescribing a
+ * bare install that would decline (mmnto-ai/totem#2760 legs F9 and F13). The
+ * trailer's own bytes are never decoded by anything that writes them back.
+ */
+export function ownedTrailerByteStart(
+  raw: Buffer,
+  marker: string,
+  endMarker: string,
+): number | undefined {
+  const existing = raw.toString('utf-8');
+  const trailerStart = ownedTrailerStart(existing, marker, endMarker);
+  if (trailerStart === undefined) return undefined;
+  const prefixBytes = Buffer.from(existing.slice(0, trailerStart), 'utf-8');
+  return raw.subarray(0, prefixBytes.length).equals(prefixBytes) ? prefixBytes.length : undefined;
+}
+
+/**
  * A trailer (the text after a managed hook's end marker) is ATTESTED when its
  * LEADING COMMENT RUN carries a full fork attestation — reason, owner and attested
  * all present and non-empty AFTER TRIMMING; a whitespace-only value does not attest
@@ -1484,12 +1510,20 @@ function trailerTailAfterEndMarker(raw: Buffer, trailerStart: number): Buffer {
  *                           carried through byte-for-byte. Bare only —
  *                           `--force` still rewrites the whole file.
  *   - `skipped-non-shell` — a hook with a non-shell interpreter: never touched.
+ *   - `skipped-non-utf8`  — an attested-extension hook whose MANAGED REGION does not
+ *                           decode as UTF-8 (an ANSI-editor save, say): the block
+ *                           cannot be rewritten in place without guessing a byte
+ *                           offset, so the file is left byte-identical and the
+ *                           skip is REPORTED — re-save as UTF-8, or `--force`
+ *                           (mmnto-ai/totem#2760 leg F13). The extension's own
+ *                           bytes are never the reason: they are carried as bytes.
  */
 export type GitHookAction =
   | 'installed'
   | 'exists'
   | 'appended'
   | 'skipped-non-shell'
+  | 'skipped-non-utf8'
   | 'overwritten'
   | 'block-rewritten';
 
@@ -1568,19 +1602,18 @@ export function installGitHook(
         // attestation, so this reuses the offset it already proved rather than
         // recomputing the marker scan by hand (fold F11). A defensive `undefined`
         // falls through to the conservative decline; it never writes on a guess.
-        const trailerStart = ownedTrailerStart(existing, marker, endMarker);
-        if (trailerStart !== undefined) {
-          // "Byte-for-byte" is literal: the trailer is sliced from the RAW file. The
-          // string offset converts to a byte offset only if the managed region
-          // decoded losslessly — totem wrote it, so it does, and the equality
-          // check proves it rather than assuming it; a region that does not
-          // round-trip is not ours to rewrite, so it takes the conservative
-          // decline (leg F9). The trailer's own bytes are never decoded.
-          const prefixBytes = Buffer.from(existing.slice(0, trailerStart), 'utf-8');
-          if (!raw.subarray(0, prefixBytes.length).equals(prefixBytes)) return 'exists';
+        if (ownedTrailerStart(existing, marker, endMarker) !== undefined) {
+          // "Byte-for-byte" is literal: the trailer is sliced from the RAW file at
+          // the byte offset `ownedTrailerByteStart` PROVES (the managed region
+          // re-encodes to its own bytes). A region that does not round-trip is not
+          // ours to rewrite — and not something to stay silent about either: the
+          // decline is REPORTED, so `totem doctor`'s remedy and this command's
+          // summary never disagree (leg F13). The trailer's bytes are never decoded.
+          const trailerByteStart = ownedTrailerByteStart(raw, marker, endMarker);
+          if (trailerByteStart === undefined) return 'skipped-non-utf8';
           const rewritten = Buffer.concat([
             Buffer.from(hookContent, 'utf-8'),
-            trailerTailAfterEndMarker(raw, prefixBytes.length),
+            trailerTailAfterEndMarker(raw, trailerByteStart),
           ]);
           if (rewritten.equals(raw)) return 'exists';
           writeExecutableHook(hookPath, rewritten);
@@ -1729,6 +1762,17 @@ export async function installEnforcementHooks(
     console.error(
       '[Totem] Warning: pre-push hook uses a non-shell interpreter. Manually add: totem lint',
     );
+  }
+  // A skip with its reason, never a silent "already installed" (mmnto-ai/totem#2760 leg F13).
+  for (const [name, action] of [
+    ['pre-commit', preCommit],
+    ['pre-push', prePush],
+  ] as const) {
+    if (action === 'skipped-non-utf8') {
+      console.error(
+        `[Totem] Skipped ${name} hook: its managed block does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take \`totem hook install --force\` (rewrites the whole file and drops your extension).`,
+      );
+    }
   }
 
   return { preCommit, prePush };
@@ -2015,6 +2059,13 @@ export async function hooksCommand(opts: {
         case 'skipped-non-shell':
           console.error(
             `[Totem] Warning: ${name} hook uses a non-shell interpreter. Integrate manually.`,
+          );
+          break;
+        case 'skipped-non-utf8':
+          // The eject precedent (mmnto-ai/totem#2620): a skip is reported with its
+          // reason and the file is left byte-identical — never "already installed".
+          console.error(
+            `[Totem] Skipped ${name} hook: its managed block does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take --force (rewrites the whole file and drops your extension).`,
           );
           break;
       }
@@ -2460,6 +2511,12 @@ export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> 
 
     const rawContent = fs.readFileSync(hookPath);
     const content = rawContent.toString('utf-8');
+
+    // Only upgrade hooks that Totem owns (have our marker) — block presence FIRST,
+    // the order eject.ts ruled, so the two sites read alike even though this one
+    // returns a bare `false` either way.
+    if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
+
     // The splice below is text on both sides of the block, so it is byte-exact
     // only when the whole file decoded losslessly. A hook that does not
     // round-trip UTF-8 is declined here — this upgrader's ruled posture is a
@@ -2467,9 +2524,6 @@ export async function upgradePrePushHookIfNeeded(cwd: string): Promise<boolean> 
     // over a user's bytes (mmnto-ai/totem#2620's eject ruling, mmnto-ai/totem#2760
     // leg F9). Such a hook keeps its old block and takes `totem hook install --force`.
     if (!Buffer.from(content, 'utf-8').equals(rawContent)) return false;
-
-    // Only upgrade hooks that Totem owns (have our marker)
-    if (!content.includes(TOTEM_PREPUSH_MARKER)) return false;
 
     // Already on the new stateless format — no upgrade needed.
     // SAFETY INVARIANT: old hooks (pre-verify-manifest) have a single top-level

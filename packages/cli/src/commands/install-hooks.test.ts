@@ -1581,6 +1581,7 @@ describe('installGitHook writes atomically', () => {
       expect(after.includes(REPLACEMENT_CHAR)).toBe(false);
 
       // Idempotent on the same bytes: the recomposed file equals the file on disk.
+      // `exists` is unambiguous here — the decline below has its own action.
       const second = installGitHook(
         hooksDir,
         'pre-commit',
@@ -1591,6 +1592,60 @@ describe('installGitHook writes atomically', () => {
       );
       expect(second).toBe('exists');
       expect(fs.readFileSync(hookPath).equals(after)).toBe(true);
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  // The MANAGED REGION itself failing to decode is the one shape the rewrite arm
+  // cannot serve (no provable byte offset), and it must not hide behind `exists`:
+  // three silent runs against a doctor row prescribing the bare install is the
+  // inert-instruction loop this slice exists to remove (re-armed leg F13). The
+  // fixture is the realistic one: an ANSI-editor save turns the template's em dash
+  // (E2 80 94) into the single cp1252 byte 0x97.
+  it('reports skipped-non-utf8 when the managed region does not decode, leaves the file byte-identical, and --force still writes the canonical', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      const canonicalBytes = Buffer.from(canonical, 'utf-8');
+      const emDash = Buffer.from([0xe2, 0x80, 0x94]);
+      const dashAt = canonicalBytes.indexOf(emDash);
+      expect(dashAt).toBeGreaterThan(-1); // the template's marker line carries one
+      const ansiSaved = Buffer.concat([
+        canonicalBytes.subarray(0, dashAt),
+        Buffer.from([0x97]),
+        canonicalBytes.subarray(dashAt + emDash.length),
+        Buffer.from(ATTESTED_TRAILER, 'utf-8'),
+      ]);
+      fs.writeFileSync(hookPath, ansiSaved);
+
+      const bare = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(bare).toBe('skipped-non-utf8');
+      expect(fs.readFileSync(hookPath).equals(ansiSaved)).toBe(true);
+      expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
+
+      // The prescribed way out writes the canonical alone — nothing of the file is
+      // carried, so the bytes never needed to decode.
+      const forced = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        true,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(forced).toBe('overwritten');
+      expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical);
     } finally {
       cleanTmpDir(tmpDir);
     }
@@ -2534,6 +2589,28 @@ fi
     // Full block comparison: extracted totem block must match canonical output
     const actual = extractTotemBlock(content);
     expect(actual).toBe(expectedTotemBlock());
+  });
+
+  // The splice keeps the user's text on both sides of the block, so it is byte-exact
+  // only for a file that decodes losslessly; one that does not is declined with the
+  // upgrader's ruled silent `false` and left byte-identical (re-armed leg F9/F15).
+  it('declines a hook that does not decode as UTF-8 and leaves it byte-identical', async () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const oldHook = Buffer.concat([
+      Buffer.from(`#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER} `, 'utf-8'),
+      Buffer.from([0x97]), // the em dash as one cp1252 byte — an ANSI-editor save
+      Buffer.from(
+        ' run compiled rules before push.\n# Override with: git push --no-verify\n\nif [ -f ".totem/compiled-rules.json" ]; then\n  TOTEM_CMD="totem"\n  if [ -n "$TOTEM_CMD" ]; then\n    $TOTEM_CMD lint\n  fi\nfi\n',
+        'utf-8',
+      ),
+    ]);
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    const upgraded = await upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'pre-push')).equals(oldHook)).toBe(true);
   });
 
   it('skips hook without totem marker', async () => {
