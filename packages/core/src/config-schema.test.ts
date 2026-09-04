@@ -1329,6 +1329,43 @@ describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem
     }
   });
 
+  it('hooks.legsOwed.enforce accepts block | advisory, is ABSENT by default, and rejects any other spelling (mmnto-ai/totem#2771)', () => {
+    for (const enforce of ['block', 'advisory'] as const) {
+      const result = TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { legsOwed: { enforce } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.hooks?.legsOwed.enforce).toBe(enforce);
+        // Declaring the knob alone leaves the globs at the default floor — the
+        // two keys are independent.
+        expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+      }
+    }
+    // Absent stays absent: no default is minted, so an upgraded consumer keeps
+    // its tier-derived behaviour.
+    const absent = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { tier: 'strict' },
+    });
+    expect(absent.success).toBe(true);
+    if (absent.success) expect(absent.data.hooks?.legsOwed.enforce).toBeUndefined();
+    // A third spelling is a parse error, never a silent synonym for either.
+    expect(
+      TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { legsOwed: { enforce: 'sometimes' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { legsOwed: { enforce: true } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('refuses an empty-string glob and a non-array', () => {
     expect(
       TotemConfigSchema.safeParse({

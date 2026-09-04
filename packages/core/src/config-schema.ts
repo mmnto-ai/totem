@@ -764,6 +764,22 @@ export const TotemConfigSchema = z.object({
               'hooks.legsOwed.globs must contain at least one glob — omit the key to take the default floor',
             )
             .default([...DEFAULT_LEGS_OWED_GLOBS]),
+
+          /** The legs arm's OWN enforcement, decoupled from `tier`
+           *  (mmnto-ai/totem#2771). `'block'`: `totem legs gate` exits with its
+           *  derived state — 3 owed-and-unanswered, 2 could-not-derive — at EVERY
+           *  tier, so the managed pre-push hook blocks a legs-owed push on a
+           *  standard-tier install too, while the spec-evidence and shield gates
+           *  stay at the repo's tier. `'advisory'`: every gate state exits 0 at
+           *  every tier, the strict one included. ABSENT ⇒ today's tier-derived
+           *  behaviour (the strict tier and agent seats block, the others print
+           *  the same lines and pass), so no consumer changes on upgrade.
+           *
+           *  Read at RUN time like `globs` — the gate loads it itself, so setting
+           *  it needs no `totem hook install --force`. It maps onto the verb's
+           *  `--advisory` option inside the gate: the lines are composed once and
+           *  only the exit code follows the knob. */
+          enforce: z.enum(['block', 'advisory']).optional(),
         })
         .default({}),
     })

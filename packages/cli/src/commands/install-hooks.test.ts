@@ -4068,21 +4068,34 @@ describe('buildPrePushHook — the review-leg floor arm (mmnto-ai/totem#2698)', 
     expect(hook).not.toContain(`$TOTEM_CMD legs --help`);
   });
 
-  it('invokes the bare gate on strict and the advisory form otherwise', () => {
+  it('invokes the bare gate on strict and the advisory form otherwise, recording the status on BOTH arms', () => {
     expect(hook).toContain('$TOTEM_CMD legs gate\n');
-    expect(hook).toContain('$TOTEM_CMD legs gate --advisory');
-    expect(hook).toContain('legs_status=$?');
+    expect(hook).toContain('$TOTEM_CMD legs gate --advisory\n      legs_status=$?');
+    expect(hook).toContain('legs_strict=1\n      $TOTEM_CMD legs gate\n      legs_status=$?');
   });
 
-  it('blocks on exit 3 and on any other non-zero with DISTINCT lines', () => {
+  it('blocks on exit 3 and exit 2 at ANY tier with DISTINCT lines that name the knob; any other non-zero blocks on strict only (mmnto-ai/totem#2771)', () => {
     expect(hook).toContain(
-      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698, strict mode)"`,
+      `echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode or hooks.legsOwed.enforce: block)"`,
     );
     expect(hook).toContain(
-      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status $legs_status) — fix the checkout and retry (strict mode)"',
+      'echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode or hooks.legsOwed.enforce: block)"',
+    );
+    expect(hook).toContain(
+      'echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode)"',
     );
     expect(hook).toContain('if [ "$legs_status" = "3" ]; then');
-    expect(hook).toContain('elif [ "$legs_status" != "0" ]; then');
+    expect(hook).toContain('elif [ "$legs_status" = "2" ]; then');
+    expect(hook).toContain('elif [ "$legs_status" != "0" ] && [ "$legs_strict" = "1" ]; then');
+    // The mapping sits AFTER both invocations, outside the tier guard: the
+    // advisory arm falls through to the same three checks the strict arm does.
+    const advisoryIdx = hook.indexOf('$TOTEM_CMD legs gate --advisory');
+    const mappingIdx = hook.indexOf('if [ "$legs_status" = "3" ]; then');
+    expect(advisoryIdx).toBeGreaterThan(-1);
+    expect(mappingIdx).toBeGreaterThan(advisoryIdx);
+    // And the hook never reads the config itself — the knob reaches it only as
+    // an exit code (the gate is the one reader of hooks.legsOwed.enforce).
+    expect(hook).not.toContain('totem.config');
   });
 
   it('FAILS CLOSED on strict when the resolved CLI lacks the verb, compat-opens otherwise', () => {
@@ -4279,9 +4292,9 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
   });
 
   it.skipIf(!shellOk)(
-    'standard tier, no agent: --advisory is passed and exit 3 does NOT block',
+    'standard tier, no agent: --advisory is passed and exit 0 proceeds past the arm',
     () => {
-      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 0 });
       const r = runHook({ tier: 'standard', agent: false });
       // Read from the recorded argv, not from the hook text: the flag has to
       // have reached the CLI, not merely appear in the template.
@@ -4289,6 +4302,59 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
       expect(invocations()).not.toContain('legs gate');
       expect(r.status).toBe(0);
       expect(r.stdout).not.toContain('BLOCKED');
+    },
+  );
+
+  // Since mmnto-ai/totem#2771 the advisory arm's exit code is READ. A real gate
+  // under --advisory returns 3 or 2 only when hooks.legsOwed.enforce says
+  // block, so a stub exiting 3 here IS the knob's shape as the hook sees it.
+  it.skipIf(!shellOk)(
+    'standard tier + gate exit 3 (the enforce: block shape): BLOCKS with the line that names the knob',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+      const r = runHook({ tier: 'standard', agent: false });
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      expect(r.stdout).toContain('strict mode or hooks.legsOwed.enforce: block');
+      expect(r.stdout).toContain('[Totem] legs: stub gate line');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'standard tier + gate exit 2: blocks with the DISTINCT not-derived line',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 2 });
+      const r = runHook({ tier: 'standard', agent: false });
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('the legs gate could not derive (totem legs gate exit status 2)');
+      expect(r.stdout).not.toContain('this push is legs-owed');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'standard tier + gate exit 1 (a failure BEFORE the derivation): passes, byte for byte the pre-knob behaviour',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 1 });
+      const r = runHook({ tier: 'standard', agent: false });
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('BLOCKED');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'strict tier + gate exit 1: blocks with the failed-before-deriving line, not the not-derived one',
+    () => {
+      writeStub({ helpText: HELP_WITH_GATE, gateExit: 1 });
+      const r = runHook({ tier: 'strict', agent: false });
+      expect(invocations()).toContain('legs gate');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        'the legs gate failed before deriving (totem legs gate exit status 1)',
+      );
+      expect(r.stdout).not.toContain('could not derive');
     },
   );
 });
@@ -4424,11 +4490,12 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     cleanTmpDir(tmpDir);
   });
 
-  function runHook(): { status: number | null; stdout: string; stderr: string } {
-    fs.writeFileSync(
-      path.join(repoDir, 'pre-push'),
-      buildPrePushHook({ ...RENDER, tier: 'strict' }),
-    );
+  function runHook(tier: 'strict' | 'standard' = 'strict'): {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  } {
+    fs.writeFileSync(path.join(repoDir, 'pre-push'), buildPrePushHook({ ...RENDER, tier }));
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
@@ -4438,6 +4505,24 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     delete env['CURSOR_TRACE_ID'];
     const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
     return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  }
+
+  /**
+   * Rewrite the fixture's config with the knob — in the WORKING TREE only. The
+   * gate judges the committed branch diff, so an uncommitted config edit never
+   * enters the owed set; the gate's config LOAD reads the working file.
+   */
+  function setEnforce(enforce: 'block' | 'advisory'): void {
+    fs.writeFileSync(
+      path.join(repoDir, 'totem.config.ts'),
+      [
+        'export default {',
+        "  targets: [{ glob: 'docs/**/*.md', type: 'spec', strategy: 'markdown-heading' }],",
+        `  hooks: { legsOwed: { globs: ['docs/**'], enforce: '${enforce}' } },`,
+        '};',
+        '',
+      ].join(NL),
+    );
   }
 
   const invocations = (): string[] => {
@@ -4598,6 +4683,59 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     );
     expect(r.stdout).not.toContain('BLOCKED');
   });
+
+  // The knob, end to end (mmnto-ai/totem#2771): the config declares it, the
+  // REAL gate reads it and maps the exit, the STANDARD-tier hook — which passes
+  // --advisory and, before the knob, ignored the status entirely — blocks on
+  // what comes back. No stub scripts the 3 here; the derivation produces it.
+  it.skipIf(!composedOk)(
+    "OWED, no deposit, STANDARD tier, hooks.legsOwed.enforce: 'block': the hook blocks and names the knob",
+    () => {
+      setEnforce('block');
+      const r = runHook('standard');
+      // The advisory FLAG was passed — the tier did not change — and the gate
+      // still returned 3 because the knob overrode it.
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(invocations()).not.toContain('legs gate');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed (docs/** →');
+      expect(r.stdout).toContain('[Totem] legs: hooks.legsOwed.enforce = block');
+      expect(r.stdout).toContain('strict mode or hooks.legsOwed.enforce: block');
+      // The shield block after the arm was never reached.
+      expect(invocations()).not.toContain('doctor --strict');
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    "OWED, no deposit, STRICT tier, hooks.legsOwed.enforce: 'advisory': the gate's text prints, the hook passes",
+    () => {
+      setEnforce('advisory');
+      const r = runHook('strict');
+      expect(invocations()).toContain('legs gate');
+      // The gate's own verdict text is byte-identical to the blocking case —
+      // only the exit code moved — and the knob line says why.
+      expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed (docs/** →');
+      expect(r.stdout).toContain('[Totem] legs: hooks.legsOwed.enforce = advisory');
+      // The HOOK's block line never fires, and the hook proceeds to the shield block.
+      expect(r.stdout).not.toContain('strict mode or hooks.legsOwed.enforce: block');
+      expect(invocations()).toContain('doctor --strict');
+      expect(r.status).toBe(0);
+    },
+  );
+
+  it.skipIf(!composedOk)(
+    "OWED with a covering ANCESTOR deposit under enforce: 'block' on the STANDARD tier: the hook passes on evidence",
+    () => {
+      setEnforce('block');
+      deposit(ancestorSha);
+      const r = runHook('standard');
+      expect(invocations()).toContain('legs gate --advisory');
+      expect(r.stdout).toContain('[Totem] legs evidence: .totem/artifacts/legs/');
+      expect(r.stdout).toContain('[Totem] legs: hooks.legsOwed.enforce = block');
+      expect(r.stdout).not.toContain('BLOCKED');
+      expect(r.status).toBe(0);
+    },
+  );
 });
 
 // ─── The frozen mutation suite (mmnto-ai/totem#2737) ─────

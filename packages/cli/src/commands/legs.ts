@@ -337,9 +337,19 @@ export interface LegsGateOptions {
    * Print every line of the derived state, but exit 0 for every GATE state
    * (not owed, evidence, blocked, not derived). A failure BEFORE the
    * derivation — an unloadable config, an unknown flag — still exits non-zero.
+   *
+   * The repo's `hooks.legsOwed.enforce` knob OVERRIDES this flag
+   * (mmnto-ai/totem#2771): `'block'` exits the derived state whether or not
+   * the flag was passed, `'advisory'` exits 0 whether or not it was, and an
+   * absent knob leaves the flag in charge. The knob rides the deps seam
+   * ({@link LegsGateDeps.enforce}) because it is a property of the repo, not
+   * of the caller.
    */
   advisory?: boolean;
 }
+
+/** The two spellings of `hooks.legsOwed.enforce` (mmnto-ai/totem#2771). */
+export type LegsEnforce = 'block' | 'advisory';
 
 /**
  * There is deliberately no `--head`: the gate judges `HEAD` and nothing else
@@ -363,6 +373,12 @@ export interface LegsGateDeps {
   totemDirAbs: string;
   /** The judgment-dense floor this push is judged against. */
   globs: readonly string[];
+  /**
+   * The repo's `hooks.legsOwed.enforce`, when it declares one. Applied to the
+   * STATUS only, after the derivation, exactly where `--advisory` is; the
+   * lines never depend on it except for the one disclosure that names it.
+   */
+  enforce?: LegsEnforce;
   /** Ancestry seam handed to core's resolver. */
   git: LegGitAdapter;
   /** Full 40-hex head sha. Throws when the head cannot be resolved. */
@@ -411,9 +427,17 @@ export type LegsGateCode = 0 | 2 | 3;
 export interface LegsGateOutcome {
   /** The DERIVED state — what the gate concluded, before any tier mapping. */
   derived: LegsGateCode;
-  /** What the process exits with: `derived`, or 0 under `--advisory`. */
+  /**
+   * What the process exits with: `derived`, or 0 when the run is advisory —
+   * `--advisory` with no knob, or `hooks.legsOwed.enforce: 'advisory'` at any
+   * tier; `'block'` makes every tier exit `derived` (mmnto-ai/totem#2771).
+   */
   status: LegsGateCode;
-  /** stdout lines, in order. Identical for both tiers, by contract. */
+  /**
+   * stdout lines, in order. Identical for both tiers, by contract: the knob
+   * adds one line when it is SET, the same line under either flag, so a
+   * flagged and an unflagged run of one config still print the same text.
+   */
   stdout: string[];
   /** stderr lines (the corrupt-deposit sensor rows). */
   stderr: string[];
@@ -424,6 +448,10 @@ export interface LegsGateOutcome {
  *
  * The tier is applied ONLY to `status`; `stdout` is produced once, so an
  * advisory run and a strict run of the same state cannot print different text.
+ * The repo's `hooks.legsOwed.enforce` knob is applied at the SAME point and
+ * nowhere else (mmnto-ai/totem#2771): it decides `advisory` before any line is
+ * composed, so there is still one formatting path and the knob, like the
+ * tier, changes only the exit code.
  */
 export async function runLegsGate(
   options: LegsGateOptions,
@@ -433,11 +461,24 @@ export async function runLegsGate(
   const { classifyLegsOwed, countLegFindings, findLegDepositForHead, sanitizeForTerminal } =
     await import('@mmnto/totem');
 
-  const advisory = options.advisory === true;
+  // The knob wins over the flag in BOTH directions; an absent knob leaves the
+  // flag in charge, which is the pre-knob behaviour byte for byte.
+  const advisory =
+    deps.enforce === 'block'
+      ? false
+      : deps.enforce === 'advisory'
+        ? true
+        : options.advisory === true;
+  // One disclosure when the knob is set, appended LAST so every verdict line
+  // keeps its index, and printed under either flag so the two tiers' stdout
+  // stays identical for one config. A reader blocked on a standard-tier
+  // install sees which key did it; a reader passing on strict sees the same.
+  const knobLine =
+    deps.enforce === undefined ? [] : [`[Totem] legs: hooks.legsOwed.enforce = ${deps.enforce}`];
   const finish = (derived: LegsGateCode, stdout: string[], stderr: string[]): LegsGateOutcome => ({
     derived,
     status: advisory ? 0 : derived,
-    stdout,
+    stdout: [...stdout, ...knobLine],
     stderr,
   });
   // Two-stage, in this order: strip ANSI/CSI escapes, then flatten every
@@ -841,6 +882,9 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     root,
     totemDirAbs: path.join(root, config.totemDir),
     globs: await legsOwedGlobs(config),
+    ...(config.hooks?.legsOwed?.enforce === undefined
+      ? {}
+      : { enforce: config.hooks.legsOwed.enforce }),
     git,
     resolveHead() {
       return safeExec('git', ['rev-parse', '--verify', 'HEAD^{commit}'], { cwd }).trim();
@@ -856,11 +900,12 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
 /**
  * `totem legs gate [--advisory]`
  *
- * The reader the strict pre-push arm calls. Loads the repo's config, builds
- * the real git and diff seams, derives, writes SYNCHRONOUSLY, exits with the
- * tier-mapped status. `--advisory` maps every GATE state to 0; a failure
- * before the derivation (config load, flag parse) still exits non-zero
- * through the CLI's error boundary.
+ * The reader the managed pre-push arm and the CI arm call. Loads the repo's
+ * config, builds the real git and diff seams, derives, writes SYNCHRONOUSLY,
+ * exits with the tier-mapped status. `--advisory` maps every GATE state to 0
+ * unless `hooks.legsOwed.enforce` says otherwise (mmnto-ai/totem#2771); a
+ * failure before the derivation (config load, flag parse) still exits
+ * non-zero through the CLI's error boundary.
  */
 export async function legsGateCommand(options: LegsGateOptions): Promise<void> {
   const fs = await import('node:fs');
