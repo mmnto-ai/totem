@@ -1227,7 +1227,7 @@ export function buildPrePushHook(options: {
     fi
   else
     if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
-      echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2
+      echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode or an agent seat)" >&2
       exit 1
     else
       echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2

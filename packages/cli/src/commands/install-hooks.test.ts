@@ -4103,7 +4103,7 @@ describe('buildPrePushHook — the review-leg floor arm (mmnto-ai/totem#2698)', 
     // (mmnto-ai/totem#2698 OQ2): those flags degrade to a form that still runs;
     // an absent VERB has no degraded form, so strict blocks with the cure.
     expect(hook).toContain(
-      `echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2`,
+      `echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode or an agent seat)" >&2`,
     );
     expect(hook).toContain(
       `echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2`,
