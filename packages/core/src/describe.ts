@@ -80,10 +80,8 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
         else rulesPendingVerification += 1;
       }
     }
+    // totem-context: intentional — describe is a read-only sensor: a malformed or schema-invalid compiled-rules.json reports zeros here, exactly as `totem status` falls back for the same file, and fails LOUD in lint's own loader, which is the surface whose job that is (mmnto-ai/totem#1884, mmnto-ai/totem#2765)
   } catch {
-    // compiled-rules.json malformed or schema-invalid: the sensor reports
-    // zeros (as `totem status` falls back); lint's own loader is where a
-    // malformed file fails loud.
     rules = 0;
     rulesCompiled = 0;
     rulesArchived = 0;
