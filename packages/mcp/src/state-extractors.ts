@@ -15,6 +15,7 @@ import * as path from 'node:path';
 
 import {
   CompiledRulesFileSchema,
+  isActiveCompiledRule,
   readJsonSafe,
   resolveGitRoot,
   resolveOrchestrationPaths,
@@ -228,25 +229,35 @@ export function extractPackageVersions(cwd: string): Record<string, string> {
 export function extractRuleCounts(cwd: string, totemDir: string): RuleCounts {
   const rulesPath = path.join(cwd, totemDir, 'compiled-rules.json');
   if (!fs.existsSync(rulesPath)) {
-    return { active: 0, archived: 0, nonCompilable: 0 };
+    return { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 };
   }
 
   try {
     const parsed = readJsonSafe(rulesPath, CompiledRulesFileSchema);
+    // Through core's ONE active-rule predicate (mmnto-ai/totem#2765): before
+    // this, `status !== 'archived'` counted untested and pending rules as
+    // active, so one describe_project call answered `legacy.rules` 385 beside
+    // `richState.ruleCounts.active` 392 on this repo.
     let active = 0;
     let archived = 0;
+    let untested = 0;
+    let pendingVerification = 0;
     for (const rule of parsed.rules) {
-      if (rule.status === 'archived') archived += 1;
-      else active += 1;
+      if (isActiveCompiledRule(rule)) active += 1;
+      else if (rule.status === 'archived') archived += 1;
+      else if (rule.status === 'untested-against-codebase') untested += 1;
+      else pendingVerification += 1;
     }
     return {
       active,
       archived,
+      untested,
+      pendingVerification,
       nonCompilable: parsed.nonCompilable?.length ?? 0,
     };
     // totem-context: ADR-090 substrate graceful degradation — zero counts on malformed manifest.
   } catch {
-    return { active: 0, archived: 0, nonCompilable: 0 };
+    return { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 };
   }
 }
 

@@ -99,6 +99,7 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
       'active',
     ]);
     const result = describeProject(makeMinimalConfig(), tmpDir);
+    expect(result.rulesSource).toBe('compiled-rules');
     expect(result.rules).toBe(5);
     expect(result.rulesCompiled).toBe(10);
     expect(result.rulesArchived).toBe(3);
@@ -111,6 +112,8 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     ).toBe(result.rulesCompiled);
   });
 
+  // A PIN for the new fields, not a falsifier: with nothing inert the old
+  // reader already returned 4 for `rules`; only `rulesCompiled` is new here.
   it('a file with nothing inert reports rules === rulesCompiled and a zero split', () => {
     const totemDir = path.join(tmpDir, '.totem');
     writeRulesFile(totemDir, 4);
@@ -120,10 +123,11 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     expect(result.rulesArchived + result.rulesUntested + result.rulesPendingVerification).toBe(0);
   });
 
-  it('reports zeros, and does not throw, when the file is valid JSON but fails the compiled-rules schema', () => {
+  it('reports zeros labelled unreadable, and does not throw, when the file is valid JSON but fails the compiled-rules schema', () => {
     const totemDir = path.join(tmpDir, '.totem');
     // The pre-fix reader counted any `rules` array (1 here); lint's loader
-    // refuses this file, and status falls back — the banner now agrees with them.
+    // refuses this file. (`totem status` falls back to the manifest's raw
+    // rule_count for it — its own fallback, not mirrored here.)
     fs.mkdirSync(totemDir, { recursive: true });
     fs.writeFileSync(
       path.join(totemDir, 'compiled-rules.json'),
@@ -133,6 +137,7 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     const result = describeProject(makeMinimalConfig(), tmpDir);
     expect(result.rules).toBe(0);
     expect(result.rulesCompiled).toBe(0);
+    expect(result.rulesSource).toBe('unreadable');
   });
 
   it('reports 0 when compiled-rules.json is absent (graceful fallback)', () => {

@@ -8,14 +8,25 @@ export type { ProjectDescription } from '@mmnto/totem';
  * only when it is non-trivial, so `Rules: 385 active of 485 compiled (93
  * archived, 7 untested-against-codebase)` on this repo and `Rules: 12 active`
  * on a repo with nothing inert. Never a bare "N compiled": that was the raw
- * total posing as the enforced set.
+ * total posing as the enforced set. A missing file says so, and a file the
+ * loader refused says `unreadable` — a 0 the reader could mistake for an
+ * honestly empty set is the sensor-trust class this line exists to end.
  */
 export function formatRulesLine(
   d: Pick<
     ProjectDescription,
-    'rules' | 'rulesCompiled' | 'rulesArchived' | 'rulesUntested' | 'rulesPendingVerification'
+    | 'rules'
+    | 'rulesCompiled'
+    | 'rulesArchived'
+    | 'rulesUntested'
+    | 'rulesPendingVerification'
+    | 'rulesSource'
   >,
 ): string {
+  if (d.rulesSource === 'absent') return 'Rules: 0 active (no compiled-rules.json)';
+  if (d.rulesSource === 'unreadable') {
+    return "Rules: 0 active — compiled-rules.json unreadable (run 'totem lint' for the parse error)";
+  }
   const inert: string[] = [];
   if (d.rulesArchived > 0) inert.push(`${d.rulesArchived} archived`);
   if (d.rulesUntested > 0) inert.push(`${d.rulesUntested} untested-against-codebase`);

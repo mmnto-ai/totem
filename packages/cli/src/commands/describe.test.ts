@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { formatRulesLine, getProjectDescription } from './describe.js';
 
@@ -142,6 +142,7 @@ describe('getProjectDescription', () => {
       rulesArchived: 0,
       rulesUntested: 0,
       rulesPendingVerification: 0,
+      rulesSource: 'compiled-rules' as const,
     };
     expect(formatRulesLine(base)).toBe('Rules: 12 active');
     expect(
@@ -162,6 +163,40 @@ describe('getProjectDescription', () => {
     expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).not.toMatch(
       /^Rules: 20/,
     );
+    // A zero is never left ambiguous: absent and unreadable each say so.
+    const zeros = { ...base, rules: 0, rulesCompiled: 0 };
+    expect(formatRulesLine({ ...zeros, rulesSource: 'absent' })).toBe(
+      'Rules: 0 active (no compiled-rules.json)',
+    );
+    expect(formatRulesLine({ ...zeros, rulesSource: 'unreadable' })).toContain(
+      'compiled-rules.json unreadable',
+    );
+  });
+
+  // The issue's own contract clause, second conjunct: describe's number equals
+  // what `totem status` PRINTS (mmnto-ai/totem#2765). The two commands share no
+  // helper — status counts through `loadCompiledRules` inline, describe through
+  // `isActiveCompiledRule` — so this is the only place the two numbers meet.
+  it('describe reports the same active count that totem status prints', async () => {
+    const dir = makeTmpDir();
+    const originalCwd = process.cwd();
+    try {
+      scaffoldProject(dir, { rules: 10, archived: 4 });
+      const description = await getProjectDescription(dir);
+      process.chdir(dir);
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { statusCommand } = await import('./status.js');
+      await statusCommand();
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+      const printed = /Rules: (\d+) compiled/.exec(output);
+      expect(printed, output).not.toBeNull();
+      expect(Number(printed![1])).toBe(6);
+      expect(description.rules).toBe(Number(printed![1]));
+    } finally {
+      process.chdir(originalCwd);
+      vi.restoreAllMocks();
+      cleanTmpDir(dir);
+    }
   });
 
   it('returns zero counts when .totem directories are missing', async () => {
