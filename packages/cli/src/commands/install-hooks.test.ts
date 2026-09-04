@@ -2481,17 +2481,19 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
   //
   // `safe()` cannot close this one: a literal backslash followed by `n` is two
   // printable characters (0x5c, 0x6e), so it passes every control-character
-  // predicate untouched. The expansion happens at the SHELL — `/bin/sh` on
-  // Debian and Ubuntu is `dash`, whose `echo` expands backslash escapes, so the
-  // pair becomes a real newline and forges the second `[Totem]` line. The cure
-  // is the sink, not the sanitizer: both values print through `printf '%s\n'`,
-  // which treats its argument as literal text on every POSIX shell.
+  // predicate untouched. The expansion happens at the SHELL, wherever `/bin/sh`
+  // expands backslash escapes in `echo` — `dash` on Debian and Ubuntu, and
+  // macOS's `/bin/sh`, a bash built with `xpg_echo` on — where the pair becomes
+  // a real newline and forges the second `[Totem]` line. The cure is the sink,
+  // not the sanitizer: both values print through `printf '%s\n'`, which treats
+  // its argument as literal text on every POSIX shell.
   //
   // NOTE ON REACH: `sh` on this machine is Git Bash's bash, whose `echo` does
   // NOT expand the escape, so these two tests pass here even against the
-  // unfixed hook. They are a real falsifier on the Ubuntu runner, where /bin/sh
-  // is dash. Measured directly against `/usr/bin/dash` before the fix: TWO
-  // [Totem] lines; after: one.
+  // unfixed hook. Git Bash and a plain bash are the only shells that leave it
+  // inert; these are real falsifiers on the Ubuntu and macOS CI legs. Measured
+  // directly against `/usr/bin/dash` before the fix: TWO [Totem] lines; after:
+  // one.
 
   it.skipIf(!shellOk)(
     'a literal backslash-n in anchor.ref cannot forge a second [Totem] line under any /bin/sh',

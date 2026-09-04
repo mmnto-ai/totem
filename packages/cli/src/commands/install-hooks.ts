@@ -808,7 +808,8 @@ export function buildPreCommitHook(options: {
   // reaches stdout — the artifact's path, its `createdAt`, `anchor.kind`,
   // `anchor.ref`, `anchor.sha256`, the resolved realpath of a bound record,
   // each required heading, and, on a tolerant match, the draft line it matched
-  // — passes through `safe()` first. A
+  // — passes through `safe()` first, except the two sha256 prefixes in
+  // `recordStatus`, which the preceding `/^[0-9a-f]{64}$/` block proves hex. A
   // newline in any of them would otherwise forge a second `[Totem]` line in the
   // hook's own output; `safe()` collapses C0 (0x00–0x1f), the DEL/C1 band
   // (0x7f–0x9f), and U+2028/U+2029, because U+0085 (NEL) breaks a line on some
@@ -817,11 +818,13 @@ export function buildPreCommitHook(options: {
   // `safe()` is necessary but NOT sufficient, because it cannot see the attack
   // that lives in PRINTABLE bytes (mmnto-ai/totem#2737 fold 3). A literal
   // backslash followed by `n` is two printable characters, so it passes
-  // `safe()` untouched — and `/bin/sh` on Debian and Ubuntu is `dash`, whose
-  // `echo` EXPANDS backslash escapes, so that pair becomes a real newline at
-  // the shell and forges the second `[Totem]` line anyway (`\\c` truncates the
-  // line instead). bash's `echo` does not expand it, so the hole is invisible
-  // on a developer's macOS or Git Bash shell and open on the CI runner. The two
+  // `safe()` untouched — and the hole was open wherever `/bin/sh` EXPANDS
+  // backslash escapes in `echo`: `dash`, which is `/bin/sh` on Debian and
+  // Ubuntu, and macOS's own `/bin/sh`, a bash built with `xpg_echo` on. On
+  // those the pair becomes a real newline at the shell and forges the second
+  // `[Totem]` line (`\\c` truncates the line instead, swallowing the cure text
+  // that follows). Only Git Bash and a plain bash leave it inert, so the hole
+  // was invisible in exactly the shells a seat develops in. The two
   // sinks that echo an untrusted value — the evidence line and the BLOCKED
   // reason, both carrying `$spec_evidence` — therefore print through
   // `printf '%s\\n'`, which is defined to treat its ARGUMENT as literal text on
