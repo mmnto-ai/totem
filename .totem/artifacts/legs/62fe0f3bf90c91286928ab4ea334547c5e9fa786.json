@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "62fe0f3bf90c91286928ab4ea334547c5e9fa786",
+  "readAt": "2026-09-03T20:44:04Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 76,
+      "claim": "The changeset and contract assert specs delivered are unchanged, but fetching each spec pool at its delivery cap shrinks the hybrid RRF candidate window (lance-search.ts:64 fetchCount = maxResults * 3), so the fused top-N changes on any store with an FTS index.",
+      "counterexample": "Measured on this worktree .lancedb (376 spec rows, FTS index content_idx present, hybrid live): across 5 real seed queries the spec/triage top-5 retains only 1-3 of 5 rows and shield top-3 retains 1 of 3; vector-FTS leg overlap collapses from 6-15 docs to 0-2, so every new top-5 RRF score is 1/61 or 1/62 (no fusion). The invariant is pinned only by a mock store that ignores maxResults."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/semantic-dedup.ts",
+      "line": 92,
+      "claim": "A fourth lesson-seeking search still asks the store for typeFilter 'spec' - deduplicateLessons, the mechanism that actually drops duplicate lessons - refuting claim 1, the utils.ts:356 comment 'Every lesson retrieval in the CLI routes through here', and the changeset's dedup account.",
+      "counterexample": "semantic-dedup.ts:87 comment reads 'Check against existing LanceDB lessons' directly above typeFilter 'spec'; reached in production from extract-shared.ts:350 and review-learn.ts:351 under the log line 'Deduplicating against existing lessons...'. Secondary: score >= 0.92 also cannot fire on the hybrid path where score is an RRF artifact bounded near 0.033."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 688,
+      "claim": "Delivering lessons silently loosens the mmnto-ai/totem#2700 grounding-floor gate: refuse requires floorExempt === 0, and FTS-only lessons carry no relevance so they increment floorExempt and force refuse to false. No row in the contract's Failure modes table, no test.",
+      "counterexample": "The slice's own post-fix artifact e851a528 shows 5 of 10 lesson items with relevance null (FTS-only); a free-text totem spec run that previously threw GATE_INVALID can now proceed on a keyword-only lesson hit. spec.test.ts refusal tests seed only 'spec', so lessons stay empty and the path is never exercised."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".changeset/lessons-pool-2735.md",
+      "line": 7,
+      "claim": "The headline measurement 'the same run after the change is served 10 lessons' compares two different runs: the pre-change run was issue-anchored and the post-change run record-anchored, which use different query builders.",
+      "counterexample": "Artifacts read directly: 223b2efa anchor {kind issue, ref mmnto-ai/totem#2735} bundle {spec 5, code 3}; e851a528 anchor {kind record, ref .totem/specs/2735.md, sha256 15902e79...} bundle {spec 5, code 3, lesson 10}. 10 equals MAX_LESSONS (a saturated cap). The artifacts are gitignored and the recorded anchor sha256 differs from the committed record (5e7b62a5...)."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.test.ts",
+      "line": 1644,
+      "claim": "expect(prompt).toContain('RELEVANT LESSONS') is vacuous - the system prompt itself carries that phrase - though sibling assertions keep the test non-vacuous overall.",
+      "counterexample": "spec-templates.ts:17 reads 'If RELEVANT LESSONS are provided, treat each lesson as a hard architectural constraint'; the PRE-fix artifact with zero lesson items contains 'RELEVANT LESSONS' in its masked prompt. The load-bearing header is '=== RELEVANT LESSONS (HARD CONSTRAINTS) ===' at utils.ts:406."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/lessons-pool-2735.md",
+      "line": 9,
+      "claim": "The cost claim 'one concurrent read and no extra latency' understates: each store.search embeds the query independently, so the fourth pool is a fourth embedding API call per invocation.",
+      "counterexample": "lance-search.ts:67 const [queryVector] = await embedder.embed([query]); inside runHybridSearch - spec 3 to 4 embed calls (plus one per linked store), shield 3 to 4, triage 2 to 3, roughly 33 percent more provider calls per command."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2735.md",
+      "line": 110,
+      "claim": "Descriptive errors in the contract and one stale doc reference outside the diff.",
+      "counterexample": "Line 110 says 'five sites' then enumerates six; line 118 heads the deletion 'SPEC_SEARCH_POOL (20)' though shield's was 15 (19e08f56:shield-templates.ts:52); line 119 says spec.ts MAX_LESSONS is 'also imported by shield.ts' but shield.ts:27 imports it from ./shield-templates.js; .gemini/styleguide.md:63 still names SPEC_SEARCH_POOL as a live test-consumed export."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/utils.ts",
+      "line": 406,
+      "claim": "Mechanism grounded, harm unmeasured: the lesson pool passes through no relevance gate yet lands under the header RELEVANT LESSONS (HARD CONSTRAINTS), and the cap saturates on every run against this index.",
+      "counterexample": "formatLessonSection injects every row under the char budget with no score threshold; runVectorSearch applies no distance cutoff (lance-search.ts:37); evaluateGroundingFloor only refuses, never filters; the post-fix artifact shows 10 of 10 lesson slots filled out of 1881 indexed lesson chunks. No junk-lesson counterexample observed in that run (relevances ~0.34 vs floor 0.25)."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "The lesson cure itself is real, correctly typed and non-vacuously tested, and every reported gate reproduces exactly (cli 4509/20, core 4286/5, tsc clean, totem lint PASS) - but the slice ships one false published invariant (F1, specs delivered DO change: 1-3 of 5 rows survive on this repo's own index because the cap change shrinks the hybrid RRF window) and leaves a fourth lesson search asking for 'spec' in the dedup path it claims to repair (F2), so the seat should rule on F1 and F2 before presenting for merge."
+}

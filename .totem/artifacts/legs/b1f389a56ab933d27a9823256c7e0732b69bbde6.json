@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "b1f389a56ab933d27a9823256c7e0732b69bbde6",
+  "readAt": "2026-09-04T02:21:56Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1272,
+      "claim": "the first-non-blank-line attestation rule declined the founding datum: liquid-city blocks open with a # [lc] comment and carry the totem:fork marker second",
+      "counterexample": "isAttestedTrailer returned false on both live LC hooks at 74abbb3d"
+    },
+    {
+      "id": "f2",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 345,
+      "claim": "tierPinned was dropped on the config-missing and config-load-error returns, so an explicit --strict/--standard was ignored whenever no config resolved; the guarding test passed only because this machine has a home-level config",
+      "counterexample": "with USERPROFILE at an empty dir, --strict over a standard hook returned exists/standard at 2730adc7"
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 57,
+      "claim": "fixtures asserted an attestation shape the field does not produce",
+      "counterexample": "the ATTESTED_TRAILER fixture began with the marker line; install.cjs emits a label line first"
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1841,
+      "claim": "the init half of the delivery claim was false on post-merge and post-checkout and init printed no summary row for the rewrite",
+      "counterexample": "installPostMergeHook returns on marker presence; init never installs post-checkout"
+    },
+    {
+      "id": "f5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 325,
+      "claim": "a bare install re-rendered a --strict hook at standard when config pinned no tier (pre-existing on the owned-whole arm; widened by the attested arm)",
+      "counterexample": "strict hook + attested trailer + no pin gave block-rewritten at standard"
+    },
+    {
+      "id": "f6",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 592,
+      "claim": "the hook-manager helper path rendered outside the tier rule",
+      "counterexample": "a strict pre-push.sh under .husky regenerated as standard"
+    },
+    {
+      "id": "f7",
+      "severity": "MATERIAL",
+      "file": ".changeset/hook-currency-2753.md",
+      "line": 19,
+      "claim": "the changeset contradicted itself on #2138, the migration count and the named-once rule",
+      "counterexample": "what-changed said the tier fix closes the #2138 hazard while what-did-not-change said unchanged"
+    },
+    {
+      "id": "f8",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 455,
+      "claim": "doctor classified appended-attested by a looser predicate than the install cure, prescribing an inert bare install on a preambled hook",
+      "counterexample": "a user preamble plus attested trailer was told to run a bare install that declines"
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 7,
+      "claim": "the barrel-import directive lacked its ticket ref and named only two of seven dynamic importers",
+      "counterexample": "AGENTS.md requires a ticket ref on every suppression"
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 249,
+      "claim": "remaining minors: legacy-note stutter and plural, CRLF/post-checkout/no-terminator and unavailable-arm tests, ownedTrailerStart reuse, the split-marker and docstring-policy items",
+      "counterexample": "each reproduced by the legs and folded"
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10"
+  ],
+  "verdict": "four leg rounds over 3e82124f..b1f389a5: slice leg 1 BLOCKING (the barrel-import rule, resolved by a ticketed directive) folded 74abbb3d; falsification leg 1 BLOCKING (attestation position) 3/7 folded 2730adc7; re-arm 1 BLOCKING (tierPinned on early returns) 2/5 folded c793673f; re-arm 0/5/5 (prose and test strength) folded b1f389a5. Live proof: isAttestedTrailer and isTotemOwnedWithAttestedTrailer true on both liquid-city hooks; identical test counts under a real and an empty home. Ladder terminates."
+}

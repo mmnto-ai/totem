@@ -28,6 +28,30 @@ jobs:
 
       - run: pnpm build
 
+      # HARD gate — the review-leg floor (mmnto-ai/totem#2771; doctrine
+      # `model-tiering.md` § The gate; the `legs-gate` parity row, arm (a)).
+      # A pull request whose diff touches a path in `hooks.legsOwed.globs` must
+      # carry a falsification-leg deposit committed under
+      # `.totem/artifacts/legs/` (re-included from the artifacts ignore) that is
+      # ancestor-or-equal of the head and covers an owed path. Exit 3 (owed,
+      # unanswered) and exit 2 (could not derive) fail the check; not owed and
+      # evidence exit 0. It holds whatever the local hook tier is, and
+      # `--no-verify` never reaches it. `Totem Lint` is a required check on main
+      # (ruleset `main-required-checks`), so red blocks the merge.
+      #
+      # Placed BEFORE the lint step's `--depth=1` fetch on purpose: that fetch
+      # SHALLOWS the full checkout (`.git/shallow` appears — measured on a local
+      # clone; a later plain fetch does not undo it), and a shallow base tip has
+      # no parents, so the coverage probe's merge-base against a branch forked
+      # below the tip cannot resolve and the gate would report NOT DERIVED. On
+      # the fetch-depth: 0 checkout above, origin/<base> is complete.
+      - name: totem legs gate (HARD — the review-leg floor)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          pnpm exec totem legs gate
+
       # ADVISORY until the rule-compilation freeze lifts (the convergent spine).
       # The compiled lesson-rules carry frozen #2055-class false-positives that
       # cannot be recompiled away under the freeze (safe-regex2 ReDoS gate). A

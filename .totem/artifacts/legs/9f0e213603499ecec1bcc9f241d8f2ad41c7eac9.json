@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "9f0e213603499ecec1bcc9f241d8f2ad41c7eac9",
+  "readAt": "2026-09-04T17:48:00Z",
+  "findings": [
+    {
+      "id": "f9",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 400,
+      "claim": "'with the key unset only the zero-hit arm can fire' contradicts the third arm the branch added two lines above.",
+      "counterexample": "An all-faulted retrieval with floor undefined refuses (executed against the built dist) and renders the unset floor line beside a two-hit line."
+    },
+    {
+      "id": "f10",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 41,
+      "claim": "The FLOOR_LINE_UNSET docblock and its sibling assert 'A refusal that reached here did so on the zero-hit arm'; nothingUsable is floor-independent with hits > 0.",
+      "counterexample": "evaluateGroundingFloor over two faulted hits with floor undefined returns refuse:true, hits:2, faulted:2 and formatGroundingRefusal renders FLOOR_LINE_UNSET beside a two-hit line."
+    },
+    {
+      "id": "f11",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 843,
+      "claim": "'a fault the search layer warned about, naming its cause' is false on the only path that renders it: totem spec builds both stores with three arguments and lance-store.ts defaults onWarn to a no-op.",
+      "counterexample": "No LanceStore construction in packages/cli/src passes a warning sink outside hooks/auto-context.ts, so warnIfOutOfRange reaches no user on any spec run; on a proceeding run the faulted count is discarded too."
+    },
+    {
+      "id": "f12",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.test.ts",
+      "line": 1226,
+      "claim": "No test exercises the all-faulted arm with floor undefined, the one new reachable state the rebase created.",
+      "counterexample": "Deleting `nothingUsable ||` from the refuse expression leaves the no-floor test block green; the contract clause 'regardless of any floor' is asserted by nothing."
+    },
+    {
+      "id": "f13",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 843,
+      "claim": "'carried a relevance outside [0, 1]' is printed for non-finite values too, while the docblock distinguishes non-finite from out-of-range.",
+      "counterexample": "A NaN hit renders 'every one carried a relevance outside [0, 1]' (executed)."
+    },
+    {
+      "id": "f14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 843,
+      "claim": "The refusal calls every out-of-range relevance a fault unconditionally, while relevance.ts rules that under cosine/dot it is an embedder profile; the arm has no guard tying it to l2.",
+      "counterexample": "Latent only: VECTOR_DISTANCE_METRIC is a module constant pinned to l2 with no config path."
+    },
+    {
+      "id": "f15",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 69,
+      "claim": "'a floor below 0.2 can never fire at all' reads unconditionally against the page's own non-unit-norm caveat.",
+      "counterexample": "A non-unit-norm embedder with relevance 0.1 and floor 0.15 fires the below-floor arm."
+    }
+  ],
+  "folded": [
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "f13",
+    "f15"
+  ],
+  "verdict": "0 BLOCKING, 4 MATERIAL, 3 MINOR over 9f0e2136 (the rebase over mmnto-ai/totem#2758 plus the fold of the previous leg); six folded in the final prose commit: both floor-free arms named on every surface that said 'zero-hit arm', the refusal strings say 'tallied out of range by the search layer' because totem spec wires no warning sink (disclosed as a CLI-wide follow-up in the changeset), a NaN is 'not a finite number in [0, 1]', the sample's 0.2 bound is scoped to unit-norm vectors, and the all-faulted arm with no floor is pinned byte-exactly. f14 declined as latent (the metric is a module constant) with the disclosure that a metric switch must revisit the arm. The leg verified the merged evaluator by execution, the doc-hunk resolutions, the eight converted tests, and D1 over all six branch commits. The ladder terminates."
+}

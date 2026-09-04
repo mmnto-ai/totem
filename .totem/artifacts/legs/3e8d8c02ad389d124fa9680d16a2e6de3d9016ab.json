@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "3e8d8c02ad389d124fa9680d16a2e6de3d9016ab",
+  "readAt": "2026-09-04T02:04:28Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 993,
+      "claim": "the hook echoes untrusted artifact values; dash and macOS /bin/sh expand backslash escapes in echo, so a value carrying backslash-n forges a second [Totem] line and backslash-c truncates the cure",
+      "counterexample": "anchor.ref = 2737 + backslash + n[Totem] spec evidence: FORGED printed two [Totem] lines under /usr/bin/dash before the fold"
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 502,
+      "claim": "hasUnrenderableHeadingChar had no pinned-set test; an empty body passed",
+      "counterexample": "return false left the suite green"
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 12,
+      "claim": "REFLEX_VERSION governs only the AGENTS.md reflex block; the 13 to 14 bump would have churned every consumer block for no content change and never refreshed hooks",
+      "counterexample": "init.ts installs git hooks outside the reflex-version branch; doctor never reads the constant"
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 878,
+      "claim": "safe() did not collapse U+2028/U+2029 and no behavioral test covered its band",
+      "counterexample": "a U+2028 in anchor.ref reached stdout raw at 4eb93a06"
+    },
+    {
+      "id": "f5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/hook-totemdir-render.test.ts",
+      "line": 223,
+      "claim": "no parity pin between hasUnrenderableHeadingChar and the rendered safe()",
+      "counterexample": "either side could drift with the suite green"
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 964,
+      "claim": "a tolerantly matched heading that then blocked named a string the draft did not contain",
+      "counterexample": "### Verification empty body blocked naming the full promised heading only"
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2737.md",
+      "line": 30,
+      "claim": "record residue: getHeadingLevel, totem install-hooks, the DOCUMENT scope clause, the two-line marker prose",
+      "counterexample": "the shipped names are headingLevel and totem hook install"
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": ".changeset/spec-gate-reader-2737.md",
+      "line": 16,
+      "claim": "the DOCUMENT shape was called more permissive; it is equivalent; the echo-expansion reach omitted macOS",
+      "counterexample": "proof of equivalence over the OR-over-headings shape; macOS /bin/sh is bash with xpg_echo on"
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 888,
+      "claim": "two pre-existing holes: a bare #### line counts as a body; a promised heading inside a fenced code block satisfies the gate",
+      "counterexample": "both reproduce at 3e82124f; declined here, out of the slice"
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": ".changeset/spec-gate-reader-2737.md",
+      "line": 16,
+      "claim": "the --fresh clause is a restatement of the hook message the leg could not ground",
+      "counterexample": "spec.ts declares fresh and no line consumes it; pre-existing, declined"
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8"
+  ],
+  "verdict": "three leg rounds over 3e82124f..3e8d8c02: the slice leg 0/2/7 (folded 523bf274), the re-arm 1 BLOCKING (the dash echo forge) 2/7 (folded acb06915), the second re-arm 0/0/6 with one question (folded 3e8d8c02, prose). f9 and f10 declined as pre-existing and out of scope. The frozen mutation suite carried sha256 1e2a5b49 unchanged through every fold. Ladder terminates."
+}

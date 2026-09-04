@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "a99f0c2dacac81af05f5239c452fa0208d5e6d17",
+  "readAt": "2026-09-04T01:48:18Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".changeset/floor-default-2727.md",
+      "line": 27,
+      "claim": "MIGRATION headline unqualified: an unnormalized-embedding profile could reach the 0.25 default, so delivered results can change there",
+      "counterexample": "norm-2 orthogonal vectors give squared L2 = 8 and relevance 0.111 < 0.25"
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 167,
+      "claim": "the calibration recipe measures totem spec runs but the key also gates MCP search_knowledge incl. the lesson pool (lessons ~0.34; issue-anchored MCP withheld from ~0.638)",
+      "counterexample": "a spec-calibrated 0.57 empties MCP answers over lessons at ~0.34"
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.test.ts",
+      "line": 1155,
+      "claim": "two pins relaxed to prefixes of the old text; the commit body claimed not relaxed",
+      "counterexample": "restoring the old suffix passes a prefix toContain"
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 730,
+      "claim": "the floor !== undefined guard is runtime-inert (bestRelevance < undefined is false); the four evaluateGroundingFloor tests are invariant locks",
+      "counterexample": "all four tests pass on 3e82124f"
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/search-knowledge.test.ts",
+      "line": 1,
+      "claim": "min_relevance: 0 untested; a || refactor would survive the suite",
+      "counterexample": "minRelevance || configuredFloor passes 233 tests"
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 163,
+      "claim": "three surfaces cite .totem/fixtures/floor-arm-2026-09-03/ which lands with PR #2757 (merge order)",
+      "counterexample": "git ls-tree d7d39071 .totem/fixtures shows only spec-runs-2026-09-02"
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "docs/wiki/cross-repo-mesh.md",
+      "line": 74,
+      "claim": "the example envelope still showed floor=0.250, the removed default",
+      "counterexample": "the line above the bullet saying no default reads 0.250"
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2727.md",
+      "line": 147,
+      "claim": "invariant says byte-for-byte in messages while the configured-floor line drops the former suffix",
+      "counterexample": "spec.test.ts:1233 byte-pins the new line without the suffix"
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 578,
+      "claim": "could never fire overreaches: 0.25 lies inside [0.2, 1]; fired on none of the 55 is the measured claim",
+      "counterexample": "a query at cos < -0.5 on this profile would score below 0.25"
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": ".changeset/floor-default-2727.md",
+      "line": 25,
+      "claim": "semver sentence stated an unbounded conclusion (nothing outside this repo reads it) where a five-repo tracked-file grep was measured",
+      "counterexample": "the package is public on npm; the grep spans five repos"
+    },
+    {
+      "id": "f11",
+      "severity": "MINOR",
+      "file": ".totem/specs/2727.md",
+      "line": 3,
+      "claim": "the generated Problem Statement kept the falsified 0.333 bound",
+      "counterexample": "R1 measured squared L2: the bound is 0.2"
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f5",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11"
+  ],
+  "verdict": "0 BLOCKING, 3 MATERIAL, 8 MINOR over d7d39071; nine folded in a99f0c2d (doc and test only; f4 is a lock disclosure, f6 a merge-order dependency on PR #2757). Ladder terminates: the fold rewired no semantics."
+}

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ec7938a95ecce6c2337cd525e4f591b2a6771fe0",
+  "readAt": "2026-09-04T08:33:00Z",
+  "findings": [
+    {
+      "id": "f20",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 336,
+      "claim": "A hook with a non-decoding byte on its shebang line above a current block now warns instead of reading 'All 4 hooks installed'.",
+      "counterexample": "It warns, but the shared headline pushed by the new non-utf8 row read 'All 4 hooks installed, but pre-commit does not match the canonical ... - the managed block is stale (a newer hook template, or a config change)' (executed on the new test's own fixture), and for that shape the managed block is byte-identical to the canonical while the cause is an encoding problem; the test asserted status and remediation but never message, so nothing pinned it."
+    }
+  ],
+  "folded": [
+    "f20"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 1 MINOR over ec7938a9 (the doctor-ordering fold); folded in a72f1112: when every flagged hook is the non-utf8 shape the headline names the encoding cause, a mixed set appends it as a second clause, and the preamble test asserts the message. The leg verified the doctor reorder introduces no false warn on any shape, the new test fails at c3a3ab1f, the mixed remedies render one tail at most, and hygiene is clean. The ladder terminates: five re-arms measured BLOCKING, BLOCKING, MATERIAL, MINOR, MINOR, each a strictly weaker class; this fold is prose plus one assertion and was not re-armed."
+}
