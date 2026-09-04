@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
 import { runFtsSearch, runHybridSearch, runVectorSearch } from './lance-search.js';
+import { OUT_OF_RANGE_CAUSE } from './relevance.js';
 
 // ─── Mock helpers ───────────────────────────────────────
 
@@ -20,11 +21,19 @@ function fakeRow(id: string, overrides: Record<string, unknown> = {}): Record<st
   };
 }
 
-/** Create a chainable query builder mock. Tracks the where clause. */
+/**
+ * Create a chainable query builder mock. Tracks the where clause and the
+ * distance metric the query was issued with (mmnto-ai/totem#2738 — the metric
+ * must be a recorded fact in the query, never an inherited SDK default).
+ */
 function mockQueryBuilder(rows: Record<string, unknown>[]) {
-  const captured: { where?: string } = {};
+  const captured: { where?: string; distanceType?: string } = {};
   const builder = {
     limit: vi.fn().mockReturnThis(),
+    distanceType: vi.fn((metric: string) => {
+      captured.distanceType = metric;
+      return builder;
+    }),
     where: vi.fn((clause: string) => {
       captured.where = clause;
       return builder;
@@ -77,6 +86,13 @@ function mockEmbedder(vec: number[] = [1, 0, 0]): Embedder {
  */
 const DEFAULT_CTX = { absolutePathRoot: '/test' };
 
+/**
+ * Warning sink for the calls that are not exercising the out-of-range warning
+ * path (mmnto-ai/totem#2738 gave `runVectorSearch` an `onWarn` parameter so it
+ * can report a relevance that left [0, 1]).
+ */
+const NO_WARN = (): void => {};
+
 // ─── runVectorSearch ────────────────────────────────────
 
 describe('runVectorSearch', () => {
@@ -88,6 +104,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'test query',
       undefined,
       10,
@@ -106,6 +123,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -116,7 +134,7 @@ describe('runVectorSearch', () => {
 
   it('passes type filter as a WHERE clause', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', 'spec', 5, DEFAULT_CTX);
+    await runVectorSearch(table as never, mockEmbedder(), NO_WARN, 'query', 'spec', 5, DEFAULT_CTX);
 
     expect(table._vectorBuilder.where).toHaveBeenCalledOnce();
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
@@ -128,6 +146,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -142,7 +161,16 @@ describe('runVectorSearch', () => {
 
   it('combines type and boundary filters with AND', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', 'code', 5, DEFAULT_CTX, 'src/');
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      'code',
+      5,
+      DEFAULT_CTX,
+      'src/',
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`type` = 'code'");
@@ -152,10 +180,16 @@ describe('runVectorSearch', () => {
 
   it('handles multiple boundary prefixes with OR', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX, [
-      'src/a',
-      'src/b',
-    ]);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+      ['src/a', 'src/b'],
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`filePath` LIKE 'src/a%'");
@@ -165,7 +199,15 @@ describe('runVectorSearch', () => {
 
   it('does not call where when no filters are provided', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
     expect(table._vectorBuilder.where).not.toHaveBeenCalled();
   });
 
@@ -174,6 +216,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -191,6 +234,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -208,6 +252,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -225,6 +270,7 @@ describe('runVectorSearch', () => {
     await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -238,10 +284,16 @@ describe('runVectorSearch', () => {
 
   it('filters out empty boundary strings', async () => {
     const table = mockTable({ vectorRows: [] });
-    await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, DEFAULT_CTX, [
-      '',
-      'src/',
-    ]);
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+      ['', 'src/'],
+    );
 
     const clause = table._vectorBuilder.where.mock.calls[0]![0] as string;
     expect(clause).toContain("`filePath` LIKE 'src/%'");
@@ -255,6 +307,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -270,6 +323,7 @@ describe('runVectorSearch', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -572,6 +626,7 @@ describe('source context tagging', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -590,10 +645,18 @@ describe('source context tagging', () => {
       vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'adr/adr-001.md' })],
     });
 
-    const results = await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, {
-      sourceRepo: 'strategy',
-      absolutePathRoot: '/d/Dev/totem-strategy',
-    });
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      {
+        sourceRepo: 'strategy',
+        absolutePathRoot: '/d/Dev/totem-strategy',
+      },
+    );
 
     expect(results).toHaveLength(1);
     expect(results[0]!.filePath).toBe('adr/adr-001.md');
@@ -652,10 +715,18 @@ describe('source context tagging', () => {
       vectorRows: [fakeRow('a', { _distance: 0.5, filePath: 'src/foo.ts' })],
     });
 
-    const results = await runVectorSearch(table as never, mockEmbedder(), 'query', undefined, 5, {
-      sourceRepo: '',
-      absolutePathRoot: '/d/Dev/totem',
-    });
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      {
+        sourceRepo: '',
+        absolutePathRoot: '/d/Dev/totem',
+      },
+    );
 
     expect(results[0]!.sourceRepo).toBeUndefined();
   });
@@ -679,6 +750,7 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -697,6 +769,7 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     const results = await runVectorSearch(
       table as never,
       mockEmbedder(),
+      NO_WARN,
       'query',
       undefined,
       5,
@@ -785,5 +858,276 @@ describe('relevance + searchMethod (mmnto-ai/totem#2463)', () => {
     expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
     // The higher-relevance doc is deliberately ranked SECOND.
     expect(results[1]!.relevance).toBeGreaterThan(results[0]!.relevance!);
+  });
+});
+
+// ─── metric-bound relevance (mmnto-ai/totem#2738) ─────────
+//
+// The relevance normalization is bound to a NAMED metric that the query itself
+// carries: both vector query sites chain `.distanceType('l2')` so the metric is
+// a recorded fact rather than an inherited SDK default. A relevance that leaves
+// [0, 1] is a signal about the embedder (non-unit vectors), so it warns ONCE
+// per query — it never throws and never filters a row.
+
+describe('metric-bound relevance (mmnto-ai/totem#2738)', () => {
+  it('runVectorSearch issues the query with distanceType "l2"', async () => {
+    const table = mockTable({ vectorRows: [fakeRow('a')] });
+
+    await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(table._vectorBuilder.distanceType).toHaveBeenCalledWith('l2');
+    expect(table._vectorBuilder._captured.distanceType).toBe('l2');
+  });
+
+  it('runHybridSearch issues its vector leg with distanceType "l2"', async () => {
+    const table = mockTable({ vectorRows: [fakeRow('a')], ftsRows: [fakeRow('b')] });
+
+    await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      NO_WARN,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(table._vectorBuilder.distanceType).toHaveBeenCalledWith('l2');
+    expect(table._vectorBuilder._captured.distanceType).toBe('l2');
+  });
+
+  it('warns once on an out-of-range relevance and still returns the row', async () => {
+    // A negative _distance is the ONLY way an l2 relevance can leave [0, 1]:
+    // squared L2 is >= 0 by construction, so 1/(1+d) is in (0, 1] for every
+    // value the SDK can legally return. That makes a breach here an SDK or data
+    // fault, NOT a non-unit-norm embedder — the warning must say so (F1).
+    const table = mockTable({ vectorRows: [fakeRow('a', { _distance: -0.5 })] });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).toHaveBeenCalledOnce();
+    const msg = onWarn.mock.calls[0]![0] as string;
+    expect(msg).toContain('1 vector hit(s) carried a relevance outside [0, 1]');
+    expect(msg).toContain('under metric "l2"');
+    expect(msg).toContain('sample 2');
+    // The cause is metric-specific (F1): under l2 it is a fault, and the
+    // non-unit-norm cause — true for cosine/dot — must NOT be named here.
+    expect(msg).toContain(OUT_OF_RANGE_CAUSE.l2);
+    expect(msg).toContain('which squared L2 cannot produce');
+    expect(msg).not.toContain('unit-norm');
+    // Nor "non-finite" (fold 2, F1): a non-finite `_distance` is discarded
+    // before the map runs, so it produces no relevance and can never reach this
+    // warning. The cause must name only what the warning can actually report.
+    expect(msg).not.toContain('non-finite');
+
+    // The row is RETURNED, not filtered, and carries its computed relevance.
+    expect(results).toHaveLength(1);
+    expect(results[0]!.relevance).toBeCloseTo(2, 10);
+    expect(results[0]!.score).toBeCloseTo(2, 10);
+  });
+
+  it('warns exactly ONCE per query naming the count when two rows are out of range', async () => {
+    const table = mockTable({
+      vectorRows: [
+        fakeRow('a', { _distance: -0.5 }),
+        fakeRow('b', { _distance: -0.75 }),
+        fakeRow('c', { _distance: 0.3096 }),
+      ],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).toHaveBeenCalledOnce();
+    expect(onWarn.mock.calls[0]![0]).toContain('2 vector hit(s)');
+    expect(results).toHaveLength(3);
+    // The in-range row is untouched — the R1-measured pair maps to ~0.7636.
+    expect(results[2]!.relevance).toBeCloseTo(0.7636, 4);
+  });
+
+  it('does not warn when every relevance is inside [0, 1]', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: 0 }), fakeRow('b', { _distance: 4 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    expect(onWarn).not.toHaveBeenCalled();
+    // The unit-norm bounds: d = 0 → 1, d = 4 → 0.2.
+    expect(results[0]!.relevance).toBe(1);
+    expect(results[1]!.relevance).toBeCloseTo(0.2, 10);
+  });
+
+  it('runHybridSearch warns once for an out-of-range vector-leg row', async () => {
+    const table = mockTable({
+      vectorRows: [fakeRow('a', { _distance: -0.5 })],
+      ftsRows: [fakeRow('b', { _distance: undefined, _score: 3 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+
+    const rangeWarnings = onWarn.mock.calls.filter((call) =>
+      String(call[0]).includes('carried a relevance outside [0, 1]'),
+    );
+    expect(rangeWarnings).toHaveLength(1);
+    expect(String(rangeWarnings[0]![0])).toContain('under metric "l2"');
+    // The COUNT is the load-bearing assertion (fold 2, F3). ONE row breached,
+    // and it survives fusion — so it is seen twice, once by the pre-fusion
+    // tally and once by `rrfMerge`'s row mapping. Sharing one tally across both
+    // would still emit exactly one warning, just saying "2 vector hit(s)" about
+    // a single row; only the count catches that. This is what pins the
+    // deliberately-discarded tally passed into `rrfMerge`.
+    expect(String(rangeWarnings[0]![0])).toContain('1 vector hit(s)');
+    expect(results.find((r) => r.content === 'content-a')!.relevance).toBeCloseTo(2, 10);
+  });
+
+  it('runFtsSearch emits no range warning — FTS rows carry no relevance', async () => {
+    const table = mockTable({
+      ftsRows: [fakeRow('a', { _distance: undefined, _score: 3.1 })],
+    });
+    const onWarn = vi.fn();
+
+    const results = await runFtsSearch(table as never, onWarn, 'query', undefined, 5, DEFAULT_CTX);
+
+    expect(results[0]!.relevance).toBeUndefined();
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('runHybridSearch tallies the vector leg BEFORE fusion, not the survivors (F3)', async () => {
+    // Three vector rows, two of them out of range, but `maxResults: 1` means
+    // RRF returns ONE result. Counting at the row-mapping site would have
+    // reported whatever survived the slice; the count must be 2 — every row the
+    // metric was applied to.
+    const vectorRows = [
+      fakeRow('v0', { _distance: 0.3 }),
+      fakeRow('v1', { _distance: -0.5 }),
+      fakeRow('v2', { _distance: -0.9 }),
+    ];
+    const ftsRows = [fakeRow('f0', { _distance: undefined, _score: 4 })];
+    const table = mockTable({ vectorRows, ftsRows });
+    const onWarn = vi.fn();
+
+    const results = await runHybridSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      1,
+      DEFAULT_CTX,
+    );
+
+    expect(results).toHaveLength(1);
+    expect(onWarn).toHaveBeenCalledOnce();
+    const msg = onWarn.mock.calls[0]![0] as string;
+    expect(msg).toContain('2 vector hit(s)');
+    // Sample is the FIRST breaching raw row: _distance -0.5 → 1/0.5 = 2.
+    expect(msg).toContain('sample 2');
+  });
+});
+
+// ─── non-finite / non-numeric `_distance` (mmnto-ai/totem#2738, F4) ────
+//
+// Relevance is computed only for a FINITE NUMBER `_distance`. Anything else —
+// NaN, ±Infinity, a non-numeric value — yields NO relevance at all and falls
+// through to the `_score` branch (or 0). Before #2738 those inputs produced a
+// NaN or a 0 relevance; absence is the honest record, but it is a CHANGE:
+// such a hit is floor-exempt in `totem spec` (no vector leg = no signal to
+// floor), so each input class is pinned here.
+
+describe('non-finite `_distance` yields no relevance (mmnto-ai/totem#2738, F4)', () => {
+  async function searchOneRow(overrides: Record<string, unknown>) {
+    const table = mockTable({ vectorRows: [fakeRow('a', overrides)] });
+    const onWarn = vi.fn();
+    const results = await runVectorSearch(
+      table as never,
+      mockEmbedder(),
+      onWarn,
+      'query',
+      undefined,
+      5,
+      DEFAULT_CTX,
+    );
+    return { result: results[0]!, onWarn };
+  }
+
+  it('NaN: no relevance, score 0, no warning', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: Number.NaN });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('Infinity: no relevance, score 0, no warning', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: Number.POSITIVE_INFINITY });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('-Infinity: no relevance, score 0, no warning (fold 2, F4)', async () => {
+    // The guard's other side. Unguarded, 1/(1 + -Infinity) is -0 — an
+    // in-range-looking number that would have passed `isRelevanceInRange`
+    // silently and been recorded as a real measurement of zero similarity.
+    const { result, onWarn } = await searchOneRow({ _distance: Number.NEGATIVE_INFINITY });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('a non-numeric _distance ("0.5"): no relevance, score 0 — never coerced', async () => {
+    const { result, onWarn } = await searchOneRow({ _distance: '0.5' });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(0);
+    expect(onWarn).not.toHaveBeenCalled();
+  });
+
+  it('Infinity alongside a _score: falls through to the FTS score branch', async () => {
+    const { result } = await searchOneRow({ _distance: Number.POSITIVE_INFINITY, _score: 7 });
+    expect(result.relevance).toBeUndefined();
+    expect(result.score).toBe(7);
   });
 });

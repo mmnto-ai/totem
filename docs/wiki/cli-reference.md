@@ -395,9 +395,9 @@ Inputs are OPTIONAL because `--from <record>` is an alternative subject. Running
 
 Every run publishes what it was ANCHORED on, in `grounding.anchor.kind` of the run artifact: `issue` (every input resolved to an issue), `record` (`--from`), `free-text` (every input was a topic), or `mixed` (issues and topics together).
 
-A run with **no issue and no record** refuses when retrieval returns zero items, or — only when `searchRelevanceFloor` is configured — when the best relevance of the retrieval is below it and no floor-exempt (keyword-only) hit from a grounding partition (specs, sessions, code) exists — a keyword-only lesson does not count, since lessons never ground a run. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate.
+A run with **no issue and no record** refuses when retrieval returns zero items, or — only when `searchRelevanceFloor` is configured — when the best relevance of the retrieval is below it and no floor-exempt (keyword-only) hit from a grounding partition (specs, sessions, code) exists — a keyword-only lesson does not count, since lessons never ground a run. A third arm needs no floor: when every hit carries a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer — under `l2` that can only be a negative `_distance`, a fault), nothing usable grounds the run and it refuses; such a hit never saves a run the way a keyword-only hit does, and is never withheld as a measurement. The error names the topic, the measurement, the floor's value and its place, every withheld candidate, and any faulted count.
 
-`searchRelevanceFloor` carries **no default** (mmnto-ai/totem#2727), so with the key unset only the zero-hit arm can fire, and the floor line says so rather than naming a number no run was judged against:
+`searchRelevanceFloor` carries **no default** (mmnto-ai/totem#2727), so with the key unset only the arms that need no floor can fire — zero hits, or every hit faulted — and the floor line says so rather than naming a number no run was judged against:
 
 ```text
 [Totem Error] Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.

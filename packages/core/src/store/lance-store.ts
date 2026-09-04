@@ -330,6 +330,7 @@ export class LanceStore {
         return await runVectorSearch(
           snapshot.table,
           this.embedder,
+          this.onWarn,
           options.query,
           options.typeFilter as ContentType | undefined,
           maxResults,

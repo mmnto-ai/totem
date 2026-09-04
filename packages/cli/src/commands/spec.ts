@@ -38,8 +38,9 @@ const RELEVANCE_DECIMALS = 3;
 const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts';
 /**
  * The floor line when NO floor is configured (mmnto-ai/totem#2727 removed the
- * schema default). A refusal that reached here did so on the zero-hit arm, and
- * the line says so rather than naming a number no run was judged against.
+ * schema default). A refusal that reached here did so on an arm that needs no
+ * floor — zero hits, or every hit faulted (mmnto-ai/totem#2738) — and the line
+ * says so rather than naming a number no run was judged against.
  */
 const FLOOR_LINE_UNSET =
   'floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)';
@@ -663,15 +664,28 @@ export interface GroundingFloorVerdict {
   withheld: WithheldCandidate[];
   /** Items with no relevance at all (FTS-only) — floor-EXEMPT, never withheld for a weak sibling's sake. */
   floorExempt: number;
+  /**
+   * Items whose vector-leg relevance failed the range predicate (non-finite, or
+   * outside [0, 1] — under `l2` a negative `_distance`: an SDK or data fault).
+   * Neither signal nor exemption: a fault cannot raise `bestRelevance`, cannot
+   * be withheld as a measurement, and cannot save a run the way a keyword-only
+   * hit does. A run whose every hit is faulted refuses — nothing usable grounds
+   * it (mmnto-ai/totem#2761 bot round, Greptile P1).
+   */
+  faulted: number;
 }
 
 /**
  * Judge the retrieval against the relevance floor (mmnto-ai/totem#2700), over
  * the spec, session and code partitions — that three-partition scoping is
  * mmnto-ai/totem#2735's decision, not mmnto-ai/totem#2700's, and the body
- * comment below says why. Mirrors the MCP tool's semantics
- * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
- * real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
+ * comment below says why. Shares the MCP tool's floor SHAPE
+ * (`packages/mcp/src/tools/search-knowledge.ts`) but not, since the bot round
+ * on mmnto-ai/totem#2761, its predicate: the MCP reader still selects relevances
+ * on a bare `typeof` and would read an out-of-range value as signal, while this
+ * gate classes it as FAULTED and refuses an all-faulted retrieval outright —
+ * the one arm here that fires with NO real signal present. Otherwise the floor
+ * fires only when a real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
  * relevance, never a per-item filter — keyword-only hits have no comparable
  * relevance and are floor-EXEMPT, so a single exempt hit from one of those
  * three partitions saves the run.
@@ -685,9 +699,32 @@ export interface GroundingFloorVerdict {
  * means nothing grounds the run, so it refuses regardless of any floor. Lessons
  * do not ground a run — ruled final on mmnto-ai/totem#2727 — so they are
  * delivered but never judged here.
+ *
+ * `isInRange` is core's `isRelevanceInRange` — the SAME predicate the grounding
+ * bundle builder omits on (mmnto-ai/totem#2738 fold 2, F2). It is a PARAMETER
+ * rather than a module-level import because a static value import from
+ * `@mmnto/totem` in `commands/**` pulls LanceDB into every CLI startup,
+ * including `--help` (mmnto-ai/totem#2339, an enforced rule); the one
+ * production caller supplies it from the dynamic `await import('@mmnto/totem')`
+ * the rule prescribes. Injecting a different predicate here would put the
+ * refusal gate and the run artifact back into disagreement about the same hit.
+ *
+ * Three classes of hit, judged by what the hit carries: a relevance IN range is
+ * SIGNAL; no relevance at all (a keyword-only hit) is EXEMPT and can save the
+ * run; a relevance that fails the predicate is FAULTED — omitted from the
+ * artifact by the same predicate, and here neither signal nor exemption, so a
+ * fault can never authorize synthesis (the mmnto-ai/totem#2761 bot round,
+ * Greptile P1, refuted the earlier "exempt" reading: an SDK fault is not
+ * evidence the way a keyword match is). A run whose hits are ALL faulted refuses.
+ *
+ * `isInRange` precedes `floor` deliberately: mmnto-ai/totem#2758 (open, also on
+ * this file) makes `floor` OPTIONAL, and a required parameter cannot follow an
+ * optional one. This PR merges AFTER #2758 and is rebased onto it, so the order
+ * is chosen to let that change land without another signature churn.
  */
 export function evaluateGroundingFloor(
   context: RetrievedContext,
+  isInRange: (relevance: number) => boolean,
   floor?: number,
 ): GroundingFloorVerdict {
   // Lessons are DELIVERED but never judged here (mmnto-ai/totem#2735). The
@@ -702,22 +739,32 @@ export function evaluateGroundingFloor(
   // lesson.
   const all = [...context.specs, ...context.sessions, ...context.code];
   if (all.length === 0) {
-    return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0 };
+    return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0, faulted: 0 };
   }
 
   const signal: WithheldCandidate[] = [];
   let floorExempt = 0;
+  let faulted = 0;
   let bestRelevance: number | null = null;
   for (const hit of all) {
     const relevance = hit.relevance;
-    // Finite or it is not a signal. The core bundle builder DROPS a non-finite
-    // relevance from the item it writes, so a NaN/Infinity hit reaches the
-    // artifact with no relevance at all — exactly an FTS-only hit's shape.
-    // Counting it as signal here disagreed with that: it made `floorExempt`
-    // zero and let a NaN be disclosed as a withheld `relevance NaN` candidate
-    // beside a genuinely weak sibling.
-    if (typeof relevance !== 'number' || !Number.isFinite(relevance)) {
+    // No vector leg at all (keyword-only): EXEMPT — absence of a signal is never
+    // read as a weak signal, and one such hit saves the run.
+    if (typeof relevance !== 'number') {
       floorExempt += 1;
+      continue;
+    }
+    // A vector leg whose relevance fails the SAME predicate the core bundle
+    // builder omits on (`isRelevanceInRange`, mmnto-ai/totem#2738 fold 2, F2):
+    // FAULTED. The artifact records no relevance for it (never a clamp), and the
+    // floor counts it as neither signal nor exemption — it cannot raise
+    // `bestRelevance`, cannot be withheld as a measurement, and cannot save the
+    // run. Under `l2` the only way here is a negative `_distance`, an SDK or data
+    // fault the search layer has already warned about; a fault is not evidence
+    // (mmnto-ai/totem#2761 bot round, Greptile P1 — the earlier reading counted
+    // it exempt, which let a fault defeat a refusal on the negative arm).
+    if (!isInRange(relevance)) {
+      faulted += 1;
       continue;
     }
     signal.push({
@@ -728,19 +775,26 @@ export function evaluateGroundingFloor(
     if (bestRelevance === null || relevance > bestRelevance) bestRelevance = relevance;
   }
 
-  // No floor configured → the below-floor arm is unreachable by construction.
+  // Refuse when nothing usable grounds the run — every hit faulted — regardless
+  // of any floor (the zero-hit rule's sibling), or when the best real signal is
+  // below a CONFIGURED floor with no keyword-only hit to exempt it. No floor
+  // configured → the below-floor arm is unreachable by construction
+  // (mmnto-ai/totem#2727).
+  const nothingUsable = signal.length === 0 && floorExempt === 0;
   const refuse =
-    floor !== undefined &&
-    signal.length > 0 &&
-    bestRelevance !== null &&
-    bestRelevance < floor &&
-    floorExempt === 0;
+    nothingUsable ||
+    (floor !== undefined &&
+      signal.length > 0 &&
+      bestRelevance !== null &&
+      bestRelevance < floor &&
+      floorExempt === 0);
   return {
     refuse,
     hits: all.length,
     bestRelevance,
     withheld: refuse ? signal : [],
     floorExempt,
+    faulted,
   };
 }
 
@@ -758,8 +812,9 @@ export function evaluateGroundingFloor(
  *
  * The floor line has TWO forms since mmnto-ai/totem#2727. With a value
  * configured it names the value and its place; with none it says so plainly —
- * a refusal that reached here without a floor did so on the zero-hit arm, and
- * printing a number would claim a judgment no floor made.
+ * a refusal that reached here without a floor did so on an arm that needs none
+ * (zero hits, or every hit faulted), and printing a number would claim a
+ * judgment no floor made.
  */
 export function formatGroundingRefusal(
   topics: string,
@@ -780,11 +835,37 @@ export function formatGroundingRefusal(
     } else {
       lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
     }
+  } else if (verdict.bestRelevance === null) {
+    // Every hit faulted: no measurement to compare, nothing usable grounds the
+    // run. The CAUSE is metric-specific (`OUT_OF_RANGE_CAUSE`) and belongs to the
+    // search layer's tally, so this line names the class, not a cause the running
+    // metric might not have (leg F3). It says "tallied", not "warned": this
+    // command constructs its stores without a warning sink, so the tally's
+    // warning reaches no one on this path — the CLI-wide sink is a follow-up
+    // (final leg, F11), disclosed in the changeset.
+    const noun = verdict.hits === 1 ? 'hit' : 'hits';
+    lines.push(
+      `Retrieval returned ${verdict.hits} ${noun}, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — so nothing usable grounds this run.`,
+    );
+    // The same disclosure the zero-hit arm carries (mmnto-ai/totem#2735): this
+    // line would otherwise sit under a `Found: … N lessons` line unexplained.
+    if (deliveredLessons > 0) {
+      const lessonNoun = deliveredLessons === 1 ? 'lesson was' : 'lessons were';
+      lines.push(
+        `${deliveredLessons} ${lessonNoun} retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).`,
+      );
+    }
   } else {
-    const best = verdict.bestRelevance ?? 0;
+    const best = verdict.bestRelevance;
     lines.push(
       `Retrieval returned ${verdict.hits} hits, but best relevance ${best.toFixed(RELEVANCE_DECIMALS)} is below the floor.`,
     );
+    if (verdict.faulted > 0) {
+      const noun = verdict.faulted === 1 ? 'hit' : 'hits';
+      lines.push(
+        `${verdict.faulted} ${noun} carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.`,
+      );
+    }
   }
   lines.push(
     floor !== undefined
@@ -1021,7 +1102,10 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   const floor = config.searchRelevanceFloor;
   const anchor = resolveGroundingAnchor(parsed);
   if (anchor.kind === GROUNDING_ANCHOR_FREE_TEXT && !options.raw) {
-    const verdict = evaluateGroundingFloor(context, floor);
+    // Dynamic, per mmnto-ai/totem#2339: a static value import from the core
+    // barrel here would pull LanceDB into every CLI startup, `--help` included.
+    const { isRelevanceInRange } = await import('@mmnto/totem');
+    const verdict = evaluateGroundingFloor(context, isRelevanceInRange, floor);
     if (verdict.refuse) {
       const refusal = formatGroundingRefusal(anchor.ref, verdict, floor, context.lessons.length);
       throw new TotemError('GATE_INVALID', refusal.message, refusal.recoveryHint);

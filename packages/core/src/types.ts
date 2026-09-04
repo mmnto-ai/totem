@@ -115,8 +115,10 @@ export interface SearchResult {
   label: string;
   score: number;
   /**
-   * True per-hit relevance signal in the 0..1 range — the vector-leg
-   * cosine similarity `1/(1+_distance)` (mmnto-ai/totem#2463). Distinct from
+   * True per-hit relevance signal — the vector-leg relevance from
+   * `relevanceFromDistance(VECTOR_DISTANCE_METRIC, _distance)`; on unit-norm
+   * vectors under `l2` it lies in [0.2, 1]; absent on FTS-only rows
+   * (mmnto-ai/totem#2463, metric-bound in mmnto-ai/totem#2738). Distinct from
    * `score`, which in hybrid/federated modes is an RRF rank artifact
    * (`1/(60+rank)` ≈ 0.016) that carries ordering but destroys the relevance
    * magnitude. Populated by `rowToSearchResult` for vector-derived rows and

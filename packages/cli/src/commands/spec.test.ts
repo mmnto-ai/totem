@@ -12,6 +12,7 @@ import {
   GROUNDING_ANCHOR_RECORD,
   GroundingAnchorSchema,
   hasUnrenderableHeadingChar,
+  isRelevanceInRange,
   type LanceStore,
   PROMPT_SOURCE_BUILTIN,
   PROMPT_SOURCE_OVERRIDE,
@@ -954,20 +955,36 @@ function floorLineOf(message: string): string {
   return line;
 }
 
+/**
+ * Every floor call below injects the SAME predicate production injects
+ * (mmnto-ai/totem#2738 fold 2, F2): core's `isRelevanceInRange`, the one the
+ * grounding bundle builder omits on. The predicate is a PARAMETER in
+ * production because a static value import from `@mmnto/totem` inside
+ * `commands/**` pulls LanceDB into every CLI startup (mmnto-ai/totem#2339);
+ * tests may import it statically — that rule excludes `**\/*.test.ts`.
+ *
+ * The predicate precedes `floor` in the real signature so mmnto-ai/totem#2758
+ * can make `floor` optional without a required-after-optional parameter.
+ */
+function evaluateFloor(context: RetrievedContext, floor: number) {
+  return evaluateGroundingFloor(context, isRelevanceInRange, floor);
+}
+
 describe('evaluateGroundingFloor', () => {
   it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const verdict = evaluateFloor(emptyContext(), FLOOR);
     expect(verdict).toEqual({
       refuse: true,
       hits: 0,
       bestRelevance: null,
       withheld: [],
       floorExempt: 0,
+      faulted: 0,
     });
   });
 
   it('every signal-bearing hit below the floor, none exempt, REFUSES', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), specs: [relevantHit(0.2), relevantHit(0.11)] },
       FLOOR,
     );
@@ -978,7 +995,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('one hit AT the floor PROCEEDS (the floor is inclusive)', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), specs: [relevantHit(0.1), relevantHit(FLOOR)] },
       FLOOR,
     );
@@ -987,7 +1004,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('one floor-EXEMPT hit beside below-floor signal PROCEEDS (a keyword-only hit is never withheld for a weak sibling)', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), specs: [relevantHit(0.05)], code: [relevantHit(undefined)] },
       FLOOR,
     );
@@ -1002,7 +1019,7 @@ describe('evaluateGroundingFloor', () => {
   // silently loosen the refusal arm, since an FTS-only lesson is floor-EXEMPT
   // and `refuse` requires `floorExempt === 0`.
   it('a run whose ONLY retrieved item is an FTS-only lesson REFUSES as 0 hits', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), lessons: [relevantHit(undefined, { type: 'lesson' })] },
       FLOOR,
     );
@@ -1013,7 +1030,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('a below-floor spec beside an FTS-only lesson still REFUSES (a lesson is not floor-exempt evidence)', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       {
         ...emptyContext(),
         specs: [relevantHit(0.05, { filePath: 'docs/weak.md' })],
@@ -1028,7 +1045,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('an AT-floor spec beside lessons PROCEEDS, and the lessons are not counted as hits', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       {
         ...emptyContext(),
         specs: [relevantHit(FLOOR)],
@@ -1045,7 +1062,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('no relevance anywhere PROCEEDS — a pure-FTS corpus is never demoted', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(undefined)] },
       FLOOR,
     );
@@ -1054,35 +1071,122 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.floorExempt).toBe(2);
   });
 
-  // A non-finite relevance is what the CORE builder drops: the item it writes
-  // carries no relevance at all, exactly an FTS-only hit's shape. The floor
-  // must read it the same way, or the artifact and the judgment disagree.
-  it.each([NaN, Infinity, -Infinity])(
-    'a non-finite relevance (%s) is floor-EXEMPT, never counted as signal',
+  // A relevance the CORE builder drops is one the floor must not read as
+  // signal: the item it writes carries no relevance at all, so counting it as
+  // a measurement would make the judgment and the artifact disagree about the
+  // same hit. The predicate is literally shared — `isRelevanceInRange` from
+  // `@mmnto/totem` (mmnto-ai/totem#2738 fold 2, F2) — which covers non-finite
+  // values AND finite ones outside [0, 1]. The range arm matters: before it, a
+  // relevance of `2` (a negative `_distance` under l2) set `bestRelevance`
+  // above the floor and DEFEATED the refusal, while the artifact write threw
+  // on that same value.
+  //
+  // But a fault is not a keyword-only hit either (the mmnto-ai/totem#2761 bot
+  // round, Greptile P1): counting it EXEMPT let it save a run. It is FAULTED —
+  // neither signal nor exemption — and a run whose every hit is faulted has
+  // nothing usable and refuses.
+  it.each([NaN, Infinity, -Infinity, 2, -1e-16])(
+    'a relevance outside [0, 1] (%s) is FAULTED — not signal, not exempt — and alone it REFUSES',
     (relevance) => {
-      const verdict = evaluateGroundingFloor(
-        { ...emptyContext(), specs: [relevantHit(relevance)] },
-        FLOOR,
-      );
-      expect(verdict.floorExempt).toBe(1);
+      const verdict = evaluateFloor({ ...emptyContext(), specs: [relevantHit(relevance)] }, FLOOR);
+      expect(verdict.faulted).toBe(1);
+      expect(verdict.floorExempt).toBe(0);
       expect(verdict.bestRelevance).toBeNull();
       expect(verdict.withheld).toEqual([]);
-      expect(verdict.refuse).toBe(false);
+      expect(verdict.refuse).toBe(true);
     },
   );
 
-  it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate', () => {
-    const verdict = evaluateGroundingFloor(
+  it('a NEGATIVE relevance beside a weak one does NOT save the run — a fault is not evidence (Greptile P1)', () => {
+    // The build's earlier reading counted the fault as exempt, so this context
+    // proceeded into synthesis on the strength of an SDK fault. It refuses: the
+    // weak sibling is the only signal, it is below the floor, and nothing
+    // legitimately exempts it. The fault is disclosed by count, never withheld
+    // as a measurement.
+    const verdict = evaluateFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(-0.5)],
+      },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(0);
+    expect(verdict.bestRelevance).toBeCloseTo(0.05, 10);
+    expect(verdict.withheld).toEqual([{ filePath: 'docs/weak.md', relevance: 0.05 }]);
+  });
+
+  it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate, and does not save the run', () => {
+    const verdict = evaluateFloor(
       {
         ...emptyContext(),
         specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(NaN)],
       },
       FLOOR,
     );
-    // One exempt hit is enough to proceed — and nothing is withheld.
-    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(0);
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.withheld).toEqual([{ filePath: 'docs/weak.md', relevance: 0.05 }]);
+  });
+
+  it('a fault beside a hit AT or above the floor PROCEEDS on the real signal', () => {
+    const verdict = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(0.6)] },
+      FLOOR,
+    );
     expect(verdict.refuse).toBe(false);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.bestRelevance).toBeCloseTo(0.6, 10);
     expect(verdict.withheld).toEqual([]);
+  });
+
+  it('a fault beside a keyword-only hit PROCEEDS — the exemption is the keyword hit, never the fault', () => {
+    const verdict = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5)], code: [relevantHit(undefined)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.bestRelevance).toBeNull();
+  });
+
+  it('the refusal names an all-faulted retrieval and a faulted count beside a weak signal', () => {
+    const allFaulted = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(2)] },
+      FLOOR,
+    );
+    expect(allFaulted.refuse).toBe(true);
+    const { message: allFaultedText } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 0);
+    expect(allFaultedText).toContain(
+      'Retrieval returned 2 hits, but every one carried a relevance that is not a finite number in [0, 1]',
+    );
+    expect(allFaultedText).toContain('nothing usable grounds this run');
+    // The cause is the search layer's to name (metric-specific); the refusal must
+    // not assert an l2 fault the running metric might not have (leg F3).
+    expect(allFaultedText).not.toContain('l2');
+    // The delivered-lessons disclosure the zero-hit arm carries (mmnto-ai/totem#2735).
+    const { message: withLessons } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 3);
+    expect(withLessons).toContain(
+      '3 lessons were retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).',
+    );
+    expect(allFaultedText).not.toContain('best relevance');
+
+    const mixed = evaluateFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(-0.5)],
+      },
+      FLOOR,
+    );
+    const { message: mixedText } = formatGroundingRefusal('weak topic', mixed, FLOOR, 0);
+    expect(mixedText).toContain('best relevance 0.050 is below the floor');
+    expect(mixedText).toContain(
+      '1 hit carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.',
+    );
+    expect(mixedText).toContain('1. docs/weak.md — relevance 0.050');
   });
 
   // Was "counts hits across ALL FOUR partitions" when the lesson partition was
@@ -1091,7 +1195,7 @@ describe('evaluateGroundingFloor', () => {
   // partitions it was exercised over. A delivered lesson is counted on the
   // `Found:` line and in the artifact, never as a grounding hit.
   it('counts hits across the spec, session and code partitions — never lessons', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       {
         specs: [relevantHit(0.9)],
         sessions: [relevantHit(0.8)],
@@ -1105,7 +1209,7 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('the withheld list carries every below-floor candidate as path + relevance (linked hits keep their store)', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       {
         ...emptyContext(),
         specs: [
@@ -1130,6 +1234,7 @@ describe('evaluateGroundingFloor', () => {
   it('with NO floor, hits far below any plausible floor still PROCEED and withhold nothing', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(0.01), relevantHit(0.02)] },
+      isRelevanceInRange,
       undefined,
     );
     expect(verdict.refuse).toBe(false);
@@ -1141,18 +1246,20 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('with NO floor, the ZERO-HIT arm still refuses (it is not a floor arm)', () => {
-    expect(evaluateGroundingFloor(emptyContext(), undefined)).toEqual({
+    expect(evaluateGroundingFloor(emptyContext(), isRelevanceInRange, undefined)).toEqual({
       refuse: true,
       hits: 0,
       bestRelevance: null,
       withheld: [],
       floorExempt: 0,
+      faulted: 0,
     });
   });
 
   it('with NO floor, floorExempt is still counted for FTS-only hits', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(0.01)] },
+      isRelevanceInRange,
       undefined,
     );
     expect(verdict.refuse).toBe(false);
@@ -1160,9 +1267,46 @@ describe('evaluateGroundingFloor', () => {
     expect(verdict.bestRelevance).toBeCloseTo(0.01, 10);
   });
 
+  // The one state the mmnto-ai/totem#2758 rebase created: the all-faulted arm
+  // needs no floor (final leg, F12). A fault beside a real signal proceeds with
+  // no floor to judge; every hit faulted refuses regardless.
+  it('with NO floor, an all-faulted retrieval still REFUSES, and a fault beside real signal proceeds', () => {
+    const allFaulted = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(2)] },
+      isRelevanceInRange,
+      undefined,
+    );
+    expect(allFaulted).toEqual({
+      refuse: true,
+      hits: 2,
+      bestRelevance: null,
+      withheld: [],
+      floorExempt: 0,
+      faulted: 2,
+    });
+    const { message } = formatGroundingRefusal('an-unanchored-slug', allFaulted, undefined, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 2 hits, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — so nothing usable grounds this run.',
+        FLOOR_LINE_UNSET_TEXT,
+      ].join('\n'),
+    );
+
+    const beside = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(0.001)] },
+      isRelevanceInRange,
+      undefined,
+    );
+    expect(beside.refuse).toBe(false);
+    expect(beside.faulted).toBe(1);
+  });
+
   it('omitting the floor argument entirely is the same as passing undefined', () => {
     const context = { ...emptyContext(), specs: [relevantHit(0.01)] };
-    expect(evaluateGroundingFloor(context)).toEqual(evaluateGroundingFloor(context, undefined));
+    expect(evaluateGroundingFloor(context, isRelevanceInRange)).toEqual(
+      evaluateGroundingFloor(context, isRelevanceInRange, undefined),
+    );
   });
 });
 
@@ -1170,7 +1314,7 @@ describe('evaluateGroundingFloor', () => {
 
 describe('formatGroundingRefusal', () => {
   it('a 0-hit refusal names the topic, the 0 hits, and the floor VALUE and PLACE', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const verdict = evaluateFloor(emptyContext(), FLOOR);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toContain('an-unanchored-slug');
     expect(message).toContain('0 hits');
@@ -1187,7 +1331,7 @@ describe('formatGroundingRefusal', () => {
     // The seeded count IS the delivered count — the invariant production holds,
     // where the caller passes `context.lessons.length`.
     const lessons = [makeLesson(), makeLesson()];
-    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, FLOOR);
+    const verdict = evaluateFloor({ ...emptyContext(), lessons }, FLOOR);
     expect(verdict.hits).toBe(0);
 
     const { message } = formatGroundingRefusal(
@@ -1208,7 +1352,7 @@ describe('formatGroundingRefusal', () => {
   });
 
   it('a single delivered lesson reads as one, not as "1 lessons"', () => {
-    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons: [makeLesson()] }, FLOOR);
+    const verdict = evaluateFloor({ ...emptyContext(), lessons: [makeLesson()] }, FLOOR);
 
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 1);
 
@@ -1221,7 +1365,7 @@ describe('formatGroundingRefusal', () => {
   // sibling call: the guarantee is that this text did not move, and only an
   // exact comparison with the old bytes can say so.
   it('with NO lessons delivered the 0-hit message is the pre-fold text, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const verdict = evaluateFloor(emptyContext(), FLOOR);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toBe(
       [
@@ -1235,11 +1379,12 @@ describe('formatGroundingRefusal', () => {
   // --- The floor line's two forms (mmnto-ai/totem#2727) ---
   //
   // Byte-pinned in BOTH forms. The unset form must never render a number: a
-  // refusal that reached here with no floor did so on the zero-hit arm, and
-  // printing `floor 0.250` would claim a judgment no floor made.
+  // refusal that reached here with no floor did so on an arm that needs none —
+  // zero hits, or every hit faulted — and printing `floor 0.250` would claim a
+  // judgment no floor made.
 
   it('with NO floor the 0-hit refusal names the floor as none, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), undefined);
+    const verdict = evaluateGroundingFloor(emptyContext(), isRelevanceInRange, undefined);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, undefined, 0);
     expect(message).toBe(
       [
@@ -1252,7 +1397,7 @@ describe('formatGroundingRefusal', () => {
   });
 
   it('with a floor CONFIGURED the 0-hit refusal names the value and its place, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const verdict = evaluateGroundingFloor(emptyContext(), isRelevanceInRange, FLOOR);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toBe(
       [
@@ -1265,7 +1410,11 @@ describe('formatGroundingRefusal', () => {
 
   it('with NO floor the lessons clause still renders, above the none line', () => {
     const lessons = [makeLesson(), makeLesson()];
-    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, undefined);
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), lessons },
+      isRelevanceInRange,
+      undefined,
+    );
     const { message } = formatGroundingRefusal(
       'an-unanchored-slug',
       verdict,
@@ -1283,7 +1432,7 @@ describe('formatGroundingRefusal', () => {
   });
 
   it('the below-floor message is the pre-fold text whether or not lessons were delivered', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       { ...emptyContext(), specs: [relevantHit(0.2, { filePath: 'docs/a.md' })] },
       FLOOR,
     );
@@ -1300,7 +1449,7 @@ describe('formatGroundingRefusal', () => {
   });
 
   it('a below-floor refusal names the best relevance and DISCLOSES every withheld candidate', () => {
-    const verdict = evaluateGroundingFloor(
+    const verdict = evaluateFloor(
       {
         ...emptyContext(),
         specs: [
@@ -1319,7 +1468,7 @@ describe('formatGroundingRefusal', () => {
   it('the hint names both cures and the --raw inspection path', () => {
     const { recoveryHint } = formatGroundingRefusal(
       'topic',
-      evaluateGroundingFloor(emptyContext(), FLOOR),
+      evaluateFloor(emptyContext(), FLOOR),
       FLOOR,
       0,
     );
