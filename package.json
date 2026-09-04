@@ -37,6 +37,6 @@
   },
   "optionalDependencies": {
     "@mmnto/cli": "workspace:*",
-    "@mmnto/strategy-doctrine": "0.1.41"
+    "@mmnto/strategy-doctrine": "0.1.42"
   }
 }
