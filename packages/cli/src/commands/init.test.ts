@@ -1897,6 +1897,54 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(stderr.join('\n')).toContain('coexists with the managed SessionStart.cjs');
   }, 60000);
 
+  // Both rewrite actions were SILENT in init's summary before mmnto-ai/totem#2753:
+  // a stale hook was repaired and nothing said so, which is how a consumer read
+  // "Upgraded reflexes" beside hooks that had not moved (mmnto-ai/liquid-city#1174).
+  it('reports BOTH hook rewrite actions in the summary', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    spawnSync('git', ['init'], { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const { TOTEM_PRECOMMIT_END, TOTEM_PRECOMMIT_MARKER, TOTEM_PREPUSH_END, TOTEM_PREPUSH_MARKER } =
+      await import('./install-hooks.js');
+    // pre-commit: stale block + the liquid-city attested extension → the in-place
+    // rewrite that carries the extension through.
+    const attested = [
+      '',
+      '# [lc] docs-inject extension',
+      '# <!-- totem:fork reason="lc docs-inject pre-commit extension (divergence-census justified fork)" owner="satur8d" attested="2026-06-07" -->',
+      'sh "tools/git-hooks/pre-commit-docs-inject.sh"',
+      '',
+    ].join('\n');
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n${attested}`,
+    );
+    // pre-push: a stale totem-owned whole file → the #2138 whole-file drift-repair.
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-push'),
+      `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\nstale body\n# ${TOTEM_PREPUSH_END}\n`,
+    );
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    await initCommand({});
+
+    const output = stderr.join('\n');
+    expect(output).toContain(
+      'Drift-repaired main-branch protection (managed block rewritten in place; your attested extension after the end marker carried through unchanged)',
+    );
+    expect(output).toContain(
+      'Drift-repaired deterministic shield gate (totem-owned bounded region)',
+    );
+    // The extension itself survived on disk.
+    expect(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8')).toContain(
+      'sh "tools/git-hooks/pre-commit-docs-inject.sh"',
+    );
+  }, 60000);
+
   it('runs to completion with --yes on a TTY', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
 

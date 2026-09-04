@@ -1819,10 +1819,30 @@ export default {
           file: '.git/hooks/pre-commit',
           action: `${enforcement.preCommit === 'installed' ? 'Installed' : 'Appended'} main-branch protection`,
         });
+      } else if (enforcement.preCommit === 'overwritten') {
+        // Both write actions were SILENT here before mmnto-ai/totem#2753: init
+        // repaired a stale hook and said nothing, which is how a consumer read
+        // "Upgraded reflexes" beside two hooks that had not moved.
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action: 'Drift-repaired main-branch protection (totem-owned bounded region)',
+        });
+      } else if (enforcement.preCommit === 'block-rewritten') {
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action:
+            'Drift-repaired main-branch protection (managed block rewritten in place; your attested extension after the end marker carried through unchanged)',
+        });
       } else if (enforcement.preCommit === 'skipped-non-shell') {
         summary.push({
           file: '.git/hooks/pre-commit',
           action: 'Skipped — non-shell hook detected (manual integration needed)',
+        });
+      } else if (enforcement.preCommit === 'skipped-non-utf8') {
+        summary.push({
+          file: '.git/hooks/pre-commit',
+          action:
+            'Skipped — the region above the extension (shebang line and managed block) does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
         });
       }
       if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
@@ -1830,10 +1850,27 @@ export default {
           file: '.git/hooks/pre-push',
           action: `${enforcement.prePush === 'installed' ? 'Installed' : 'Appended'} deterministic shield gate`,
         });
+      } else if (enforcement.prePush === 'overwritten') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action: 'Drift-repaired deterministic shield gate (totem-owned bounded region)',
+        });
+      } else if (enforcement.prePush === 'block-rewritten') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action:
+            'Drift-repaired deterministic shield gate (managed block rewritten in place; your attested extension after the end marker carried through unchanged)',
+        });
       } else if (enforcement.prePush === 'skipped-non-shell') {
         summary.push({
           file: '.git/hooks/pre-push',
           action: 'Skipped — non-shell hook detected (manual integration needed)',
+        });
+      } else if (enforcement.prePush === 'skipped-non-utf8') {
+        summary.push({
+          file: '.git/hooks/pre-push',
+          action:
+            'Skipped — the region above the extension (shebang line and managed block) does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
         });
       }
 

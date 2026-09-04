@@ -161,19 +161,25 @@ export function checkCompiledRules(cwd: string, totemDir = '.totem'): Diagnostic
 }
 
 /**
- * Sense the four managed git hooks.
+ * Sense the four managed git hooks — presence AND currency.
  *
- * Marker-presence only on the default `totemDir` — the always-on, zero-cost
- * shape this row has always had. When the repo CONFIGURES a different
- * `totemDir` (mmnto-ai/totem#2692 C6), the row additionally regenerates the
- * canonical four and compares whole-file: a hook still naming `.totem/` there
- * reads its evidence and its gate flags out of a tree nothing writes, and
- * `doctor --parity` — which would otherwise catch it — is pin-gated behind
- * `orient.parityManifest`. Sensor, never a gate: the non-pass state stays
- * `warn`, with the same remediation the parity row emits.
+ * Presence is the marker check it has always been. Currency (mmnto-ai/totem#2753)
+ * regenerates the canonical four from the running `@mmnto/cli` at this repo's
+ * effective `totemDir` and compares each hook's MANAGED BLOCK against it, on EVERY
+ * install. Until mmnto-ai/totem#2753 the compare ran only when the repo configured a NON-default
+ * `totemDir` (mmnto-ai/totem#2692 C6) — so on the overwhelmingly common default the
+ * row reported presence and called a hook frozen at an older template "installed"
+ * (measured: `totem doctor` printed "All 4 hooks installed" over two 1.121.0 hooks
+ * under a 1.123.0 CLI, mmnto-ai/liquid-city#1174). Presence was never the question
+ * the row is asked.
+ *
+ * Sensor, never a gate: the non-pass state stays `warn`, with the remediation that
+ * actually fits the file's shape — including the one-command `totem hook install`
+ * for a block whose attested extension the installer now carries through.
  *
  * `config` is threaded from `doctorCommand`'s single config load — this check
- * never opens the config itself.
+ * never opens the config itself. Its `totemDir` may be undefined; the compare runs
+ * against the installer's default in that case rather than being skipped.
  */
 export async function checkGitHooks(
   cwd: string,
@@ -228,46 +234,120 @@ export async function checkGitHooks(
   }
 
   if (missing.length === 0) {
-    const sensed = await hooksRenderedForWrongTotemDir(gitRoot, hooksDir, config);
-    if (!Array.isArray(sensed)) {
+    const sensed = await hooksStaleAgainstCanonical(gitRoot, hooksDir, config);
+    if (sensed.kind === 'unavailable') {
       // The sensor could not run (a builder threw, a hook file was unreadable):
       // say so, never pass on an unexamined tree (Greptile P1 on mmnto-ai/totem#2701).
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${config?.totemDir}': ${sensed.failure}`,
+        message: `All ${markers.length} hooks installed, but they could not be compared against the canonical rendered for totemDir '${sensed.totemDir}': ${sensed.failure}`,
         remediation:
           'totem hook install --force (re-renders the four hooks from the current config)',
       };
     }
-    const staleForTotemDir = sensed;
-    if (staleForTotemDir.length > 0) {
-      const files = staleForTotemDir.map((row) => row.file);
-      // `--force` rewrites the WHOLE file (`installGitHook`): the right remedy for
-      // a totem-owned whole file, and the ONE remedy install-hooks.ts prescribes
-      // for a LEGACY hook (no end marker — drift-repair cannot bound it); the
-      // wrong remedy for a user hook with an APPENDED block, which would lose its
-      // own lines to it (mmnto-ai/totem#2692 amendments A4 / A10).
-      const appended = staleForTotemDir.filter((row) => row.kind === 'appended').map((r) => r.file);
-      const legacy = staleForTotemDir.filter((row) => row.kind === 'legacy').map((r) => r.file);
+    const stale = sensed.stale;
+    if (stale.length > 0) {
+      const files = stale.map((row) => row.file);
+      // The remedy follows the file's SHAPE, because the four shapes take four
+      // different cures (mmnto-ai/totem#2692 amendments A4 / A10, mmnto-ai/totem#2753):
+      //   owned-whole / legacy  → `--force`: it rewrites the WHOLE file, which is
+      //                           right for a file totem authored and the ONE cure
+      //                           install-hooks.ts prescribes for an unboundable
+      //                           legacy hook.
+      //   appended-attested     → bare `totem hook install`: the block is rewritten
+      //                           in place and the attested extension survives, so
+      //                           `--force` would needlessly destroy it.
+      //   appended              → neither: `--force` would eat the user's own lines,
+      //                           so the block is deleted and re-appended by hand.
+      //   non-utf8              → an attested-extension hook whose MANAGED REGION does
+      //                           not decode as UTF-8: the installer reports that
+      //                           shape and leaves the file alone, so prescribing the
+      //                           bare install would be inert (mmnto-ai/totem#2760
+      //                           leg F13) — re-save as UTF-8, or `--force`.
+      const attested = stale.filter((row) => row.kind === 'appended-attested').map((r) => r.file);
+      const nonUtf8 = stale.filter((row) => row.kind === 'non-utf8').map((r) => r.file);
+      const appended = stale.filter((row) => row.kind === 'appended').map((r) => r.file);
+      const legacy = stale.filter((row) => row.kind === 'legacy').map((r) => r.file);
+      const forceable = stale
+        .filter((row) => row.kind === 'owned-whole' || row.kind === 'legacy')
+        .map((r) => r.file);
+      // One clause per shape present, each naming its own files unless it covers
+      // every stale hook (then the bare command reads cleaner).
+      const clauses: string[] = [];
+      // The `--force` clause names its files whenever it does not cover all of them.
+      // The note drops its own names ONLY when that clause named exactly the legacy
+      // files — there the repetition ("…--force for pre-commit (pre-commit: a legacy
+      // hook…)") reads as two hooks where there is one. When the clause names a
+      // WIDER set, the note must keep the names or the reader cannot tell WHICH of
+      // the listed hooks is the legacy one (fold F6, narrowed on fold 3 F5).
+      const forceClauseNamesFiles = forceable.length !== files.length;
+      const forceClauseNamesOnlyLegacy =
+        forceClauseNamesFiles && forceable.length === legacy.length;
+      const legacyKind =
+        legacy.length === 1
+          ? 'a legacy hook with no end marker'
+          : 'legacy hooks with no end marker';
       const legacyNote =
         legacy.length === 0
           ? ''
-          : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
+          : forceClauseNamesOnlyLegacy
+            ? ` (${legacyKind} — back up any lines of your own first)`
+            : ` (${legacy.join(', ')}: ${legacyKind} — back up any lines of your own first)`;
+      if (appended.length > 0) {
+        clauses.push(
+          `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it`,
+        );
+      }
+      if (attested.length > 0) {
+        clauses.push(
+          `${clauses.length === 0 ? 'totem hook install' : '`totem hook install`'}${
+            attested.length === files.length ? '' : ` for ${attested.join(', ')}`
+          } (the managed block is rewritten in place; your attested extension after the end marker is carried through unchanged)`,
+        );
+      }
+      // The re-save clause sits BEFORE the --force clause and keeps its own tail
+      // inside its parenthetical, so a mixed set never renders two stacked em-dash
+      // tails about `--force` (re-armed leg F19).
+      if (nonUtf8.length > 0) {
+        clauses.push(
+          `re-save ${nonUtf8.join(', ')} as UTF-8 and re-run \`totem hook install\` (the region above the extension — shebang line and managed block — does not decode as UTF-8, so a bare install reports it and leaves the file byte-identical), or take \`totem hook install --force\` for ${
+            nonUtf8.length === 1 ? 'it' : 'them'
+          } (rewrites the whole file and drops your extension)`,
+        );
+      }
+      if (forceable.length > 0) {
+        clauses.push(
+          `${clauses.length === 0 ? 'totem hook install --force' : '`totem hook install --force`'}${
+            forceable.length === files.length ? '' : ` for ${forceable.join(', ')}`
+          }${legacyNote}`,
+        );
+      }
       const remediation =
-        appended.length === 0
-          ? `totem hook install --force${legacyNote}`
-          : `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it${
-              appended.length === files.length
-                ? ''
-                : `; \`totem hook install --force\` for the rest${legacyNote}`
-            } — \`--force\` rewrites the whole file and would overwrite your own hook content`;
+        clauses.join('; ') +
+        (appended.length > 0
+          ? ' — `--force` rewrites the whole file and would overwrite your own hook content'
+          : '');
+      // The headline names the cause. A `non-utf8` row's block may be byte-identical
+      // to the canonical (the bad byte on its shebang line), so "does not match …
+      // the managed block is stale" would be two false statements about it (final
+      // leg, F20): when every flagged hook is that shape the headline says so
+      // instead; a mixed set keeps the stale headline for the stale hooks and
+      // appends the encoding clause naming the others.
+      const encodingCause =
+        'the region above the extension (shebang line and managed block) does not decode as UTF-8';
+      const message =
+        nonUtf8.length === files.length
+          ? `All ${markers.length} hooks installed, but ${files.join(', ')} cannot be kept current by this @mmnto/cli for totemDir '${sensed.totemDir}' — ${encodingCause}`
+          : `All ${markers.length} hooks installed, but ${files.join(', ')} ${
+              files.length === 1 ? 'does' : 'do'
+            } not match the canonical this @mmnto/cli renders for totemDir '${sensed.totemDir}' — the managed block is stale (a newer hook template, or a config change)${
+              nonUtf8.length > 0 ? `; for ${nonUtf8.join(', ')} ${encodingCause}` : ''
+            }`;
       return {
         name: 'Git Hooks',
         status: 'warn',
-        message: `All ${markers.length} hooks installed, but ${files.join(', ')} ${
-          files.length === 1 ? 'does' : 'do'
-        } not match the canonical rendered for totemDir '${config?.totemDir}' — the hook reads a tree Totem does not write`,
+        message,
         remediation,
       };
     }
@@ -289,12 +369,33 @@ export async function checkGitHooks(
 /** One managed hook whose totem-owned block does not match the configured canonical. */
 interface StaleHookRow {
   file: string;
-  /** `owned-whole`: a totem-owned whole file (safe to `--force`) · `appended`: a
-   *  user hook carrying a bounded totem block (`--force` would clobber it) ·
-   *  `legacy`: a start marker with NO end marker — unbounded, so it was compared
-   *  whole and takes the one `--force` install-hooks.ts prescribes for it. */
-  kind: 'owned-whole' | 'appended' | 'legacy';
+  /** `owned-whole`: a totem-owned whole file (safe to `--force`) ·
+   *  `appended-attested`: a file totem owns THROUGH its end marker whose trailer is
+   *  an ATTESTED `totem:fork` extension — a bare `totem hook install` rewrites the
+   *  block in place and carries the extension through (mmnto-ai/totem#2753). Gated on
+   *  the installer's own `isTotemOwnedWithAttestedTrailer`, so the row never
+   *  prescribes a cure the installer would decline · `appended`: any other bounded
+   *  block with content around it, INCLUDING one with the user's own lines above it
+   *  and an attested trailer below (`--force` would clobber those lines) · `legacy`:
+   *  a start marker with NO end marker — unbounded, so it was compared whole and
+   *  takes the one `--force` install-hooks.ts prescribes for it · `non-utf8`: the
+   *  attested shape whose MANAGED REGION does not decode as UTF-8, judged by the
+   *  installer's own `ownedTrailerByteStart` — the bare install reports it and
+   *  leaves it alone, so the row prescribes re-saving as UTF-8 (or `--force`), never
+   *  the bare install (mmnto-ai/totem#2760 leg F13). */
+  kind: 'owned-whole' | 'appended-attested' | 'appended' | 'legacy' | 'non-utf8';
 }
+
+/**
+ * What {@link hooksStaleAgainstCanonical} sensed. `unavailable` is the honest
+ * could-not-compare (Tenet 13): the caller renders a `warn` naming the failure
+ * rather than passing on an unexamined tree. Both arms carry the `totemDir` the
+ * compare was (or would have been) run at, so the caller's message names the
+ * effective value rather than the possibly-undefined configured one.
+ */
+type HookCanonicalSense =
+  | { kind: 'sensed'; totemDir: string; stale: StaleHookRow[] }
+  | { kind: 'unavailable'; totemDir: string; failure: string };
 
 /**
  * The text from the hook's start marker through its end marker, inclusive — the
@@ -311,36 +412,44 @@ function totemOwnedBlock(text: string, marker: string, endMarker: string): strin
 }
 
 /**
- * The managed hooks whose totem-owned BLOCK differs from the canonical regenerated
- * at this repo's CONFIGURED `totemDir` (mmnto-ai/totem#2692 C6, amendment A4).
+ * The managed hooks whose totem-owned BLOCK differs from the canonical this
+ * `@mmnto/cli` regenerates at the repo's effective `totemDir`.
  *
- * Runs ONLY when the repo configures a non-default `totemDir` — on the default
- * the row stays the marker-only, zero-IO sense it has always been. Compares the
- * region between the hook's start and end markers, the same bounded region
- * `installGitHook`'s drift-repair owns, so a user hook with an APPENDED totem
- * block is judged on the block alone and never on the user's own lines. Each row
- * says what kind of file it is, because the remedy differs.
+ * Runs on EVERY install (mmnto-ai/totem#2753). It used to run only where the repo
+ * configured a NON-default `totemDir` (mmnto-ai/totem#2692 C6) — which made the
+ * default-`totemDir` majority a blind spot: a hook frozen at an older template read
+ * as healthy, because presence was all that was checked. The effective dir is the
+ * configured value, else `install-hooks`'s own `DEFAULT_TOTEM_DIR`, so `.totem` is
+ * compared like any other value instead of short-circuiting.
  *
- * The compare is on the `totemDir` axis ONLY (amendment A10): the canonical for
+ * Compares the region between the hook's start and end markers, the same bounded
+ * region `installGitHook` owns, so a user hook with an APPENDED totem block is
+ * judged on the block alone and never on the user's own lines. Each row says what
+ * kind of file it is, because the remedy differs.
+ *
+ * The tier is NOT an axis of the compare (amendment A10): the canonical for
  * pre-commit / pre-push is rendered at the tier the INSTALLED hook itself
- * declares (`TOTEM_HOOK_TIER="…"`), so a hook installed with `--strict` on a
- * repo whose config says nothing is never reported as `totemDir` drift — and
+ * declares (`TOTEM_HOOK_TIER="…"`, read through the installer's own
+ * `declaredHookTier`: the totem-owned block only, and only a line-leading
+ * assignment — a comment quoting one does not count), so a hook installed with
+ * `--strict` on a repo whose config says nothing is never reported as drift — and
  * never handed a `--force` that would silently downgrade it to standard.
  */
-async function hooksRenderedForWrongTotemDir(
+async function hooksStaleAgainstCanonical(
   gitRoot: string,
   hooksDir: string,
   config?: { totemDir?: string; hooks?: { tier?: 'strict' | 'standard' } },
-): Promise<StaleHookRow[] | { failure: string }> {
-  const totemDir = config?.totemDir;
-  if (totemDir === undefined || totemDir === '.totem') return [];
-
+): Promise<HookCanonicalSense> {
+  let totemDir = config?.totemDir;
   try {
     const hooks = await import('./install-hooks.js');
+    totemDir ??= hooks.DEFAULT_TOTEM_DIR;
     // A value the installer refuses (`.`, a `..` segment, …) never produced
     // installed hooks, so there is no render to compare against: the row stays
     // the marker-only sense — the same policy `doctor --parity` applies.
-    if (hooks.hookTotemDirProblem(totemDir) !== null) return [];
+    if (hooks.hookTotemDirProblem(totemDir) !== null) {
+      return { kind: 'sensed', totemDir, stale: [] };
+    }
     type Render = { tier: 'strict' | 'standard'; totemDir: string; fallbackCmd: string };
     const base: Render = {
       tier: config?.hooks?.tier ?? 'standard',
@@ -380,16 +489,46 @@ async function hooksRenderedForWrongTotemDir(
     ];
     const stale: StaleHookRow[] = [];
     for (const { file, build, marker, endMarker } of canonical) {
-      const existing = fs.readFileSync(path.join(hooksDir, file), 'utf-8');
+      // Raw bytes for the round-trip shape below; the decoded text for the compare.
+      const rawExisting = fs.readFileSync(path.join(hooksDir, file));
+      const existing = rawExisting.toString('utf-8');
       // Everything below reads the TOTEM-OWNED block, never the user's own lines:
       // a user line that happens to carry `TOTEM_HOOK_TIER="…"` or to quote an end
       // marker must not steer the compare or the remedy (pass-2 F3/F4).
       const existingBlock = totemOwnedBlock(existing, marker, endMarker);
-      const installedTier = /TOTEM_HOOK_TIER="(strict|standard)"/.exec(existingBlock)?.[1] as
-        | 'strict'
-        | 'standard'
-        | undefined;
+      // ONE predicate with the installer (`declaredHookTier`): block-scoped, and
+      // only a line-leading assignment counts, so a comment inside the block that
+      // quotes the assignment steers neither arm — a second regex here is how the
+      // two arms came to read the same bytes at different tiers (mmnto-ai/totem#2760
+      // round 1, leg F3).
+      const installedTier = hooks.declaredHookTier(existing, marker, endMarker);
       const content = build({ ...base, tier: installedTier ?? base.tier });
+      // An attested `totem:fork` extension after the end marker is the one trailing
+      // shape a BARE install can now cure, so it must be told apart from the general
+      // appended case BEFORE it — the remedies are opposites (mmnto-ai/totem#2753).
+      // The test is `isTotemOwnedWithAttestedTrailer`, the SAME predicate the install
+      // arm gates its cure on, not merely "bounded and the trailer is attested": that
+      // looser test would also catch a hook with the user's own lines BEFORE the totem
+      // block, which the installer declines because the marker does not OPEN the file
+      // — and the row would then prescribe a bare `totem hook install` that does
+      // nothing. A remedy that does not touch the surface it is prescribed for is an
+      // inert instruction (mmnto-ai/totem#2532); such a file stays `appended` and
+      // takes the delete-and-re-append line, which does work on it.
+      const attestedTrailer = hooks.isTotemOwnedWithAttestedTrailer(existing, marker, endMarker);
+      // The same byte-offset proof the installer's rewrite arm runs, BEFORE the
+      // staleness compare: the proof covers the region above the extension (shebang
+      // line and managed block) while the compare covers the block alone, so a bad
+      // byte on the shebang line leaves the block current yet makes the installer
+      // skip — the row must say so rather than "All hooks installed" (the
+      // one-predicate rule above, applied to the newest shape; mmnto-ai/totem#2760
+      // legs F13 and F16).
+      if (
+        attestedTrailer &&
+        hooks.ownedTrailerByteStart(rawExisting, marker, endMarker) === undefined
+      ) {
+        stale.push({ file, kind: 'non-utf8' });
+        continue;
+      }
       if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
         continue;
       }
@@ -398,15 +537,23 @@ async function hooksRenderedForWrongTotemDir(
         startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
       const kind: StaleHookRow['kind'] = hooks.isTotemOwnedWholeFile(existing, marker, endMarker)
         ? 'owned-whole'
-        : boundedAfterStart
-          ? 'appended'
-          : 'legacy';
+        : attestedTrailer
+          ? 'appended-attested'
+          : boundedAfterStart
+            ? 'appended'
+            : 'legacy';
       stale.push({ file, kind });
     }
-    return stale;
+    return { kind: 'sensed', totemDir, stale };
     // totem-context: a sensor that cannot regenerate or read the canonical REPORTS that it could not — the caller renders a warn row — never a silent pass and never a crash of the diagnostic pipeline (Tenet 13; Greptile P1 on mmnto-ai/totem#2701).
   } catch (err) {
-    return { failure: err instanceof Error ? err.message : String(err) };
+    return {
+      kind: 'unavailable',
+      // The default comes from the module that failed to load, so it may still be
+      // unresolved here — say so rather than printing `undefined`.
+      totemDir: totemDir ?? 'unresolved',
+      failure: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

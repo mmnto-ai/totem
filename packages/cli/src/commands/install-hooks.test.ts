@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   GROUNDING_ANCHOR_FREE_TEXT,
@@ -26,11 +26,16 @@ import {
   buildPrePushHook,
   buildResolveBlock,
   checkHooksInstalled,
+  declaredHookTier,
   detectTotemPrefix,
   generateHookHelpers,
   getFallbackCommand,
   installGitHook,
   installHooksNonInteractive,
+  isAttestedTrailer,
+  isTotemOwnedWithAttestedTrailer,
+  TOTEM_CHECKOUT_END,
+  TOTEM_CHECKOUT_MARKER,
   TOTEM_HOOK_END,
   TOTEM_HOOK_MARKER,
   TOTEM_PRECOMMIT_END,
@@ -50,6 +55,88 @@ const RENDER = {
   totemDir: '.totem',
   fallbackCmd: 'pnpm dlx @mmnto/cli',
 };
+
+// ─── Attested-extension fixtures (mmnto-ai/totem#2753) ───
+//
+// The measured liquid-city extension shape (`tools/git-hooks/install.cjs`, block 1):
+// a `# [lc] …` comment line, THEN the attestation, then the extension's commands.
+// Transcribed from that file's own string arrays and joined the way it joins them
+// (`block.join('\n')`, appended straight onto a hook that ends with a newline), so
+// each fixture is the exact byte sequence a liquid-city checkout carries after
+// `# [totem] end <hook>` (mmnto-ai/liquid-city#1174).
+//
+// The attestation is NOT on the trailer's first non-blank line. An earlier reading of
+// this contract required that, and it declined the founding datum outright.
+
+const ATTESTED_FORK_LINE =
+  '# <!-- totem:fork reason="lc docs-inject pre-commit extension (divergence-census justified fork)" owner="satur8d" attested="2026-06-07" -->';
+
+/** install.cjs `STDIN_CAPTURE`. */
+const LC_STDIN_CAPTURE = [
+  'LC_STDIN=$(cat)',
+  'lc_feed() { if [ -n "$LC_STDIN" ]; then printf \'%s\\n\' "$LC_STDIN"; fi; }',
+];
+
+/** install.cjs EXTENSIONS block 1 — pre-commit docs-inject. */
+const ATTESTED_TRAILER = [
+  '',
+  '# [lc] docs-inject extension',
+  ATTESTED_FORK_LINE,
+  'sh "tools/git-hooks/pre-commit-docs-inject.sh"',
+  '',
+].join('\n');
+
+/** install.cjs EXTENSIONS block 2 — pre-push validate-fixtures. */
+const LC_PREPUSH_FIXTURES_BLOCK = [
+  '',
+  '# [lc] validate-fixtures extension',
+  '# <!-- totem:fork reason="lc fail-closed fixture-contract validator pre-push extension (ADR-025 A2; divergence-census justified fork)" owner="satur8d" attested="2026-06-20" -->',
+  ...LC_STDIN_CAPTURE,
+  'lc_feed | sh "tools/git-hooks/pre-push-validate-fixtures.sh" || exit 1',
+  '',
+].join('\n');
+
+/** install.cjs EXTENSIONS block 3 — pre-push validate-assets. */
+const LC_PREPUSH_ASSETS_BLOCK = [
+  '',
+  '# [lc] validate-assets extension',
+  '# <!-- totem:fork reason="lc fail-closed interior-asset validator pre-push extension (mmnto-ai/liquid-city#543 Phase 2; divergence-census justified fork)" owner="satur8d" attested="2026-06-27" -->',
+  'lc_feed | sh "tools/git-hooks/pre-push-validate-assets.sh" || exit 1',
+  '',
+].join('\n');
+
+/**
+ * The canonical with ONE comment line inside the managed block altered — a hook
+ * frozen at an older template. Alters neither marker nor the trailer seam, so the
+ * ONLY difference a rewrite has to cure is the block's own text.
+ */
+function withStaleComment(canonical: string, endMarker: string): string {
+  const lines = canonical.split('\n');
+  const endLine = lines.findIndex((line) => line.includes(endMarker));
+  const commentLine = lines.findIndex(
+    (line, i) =>
+      i > 1 && i < endLine && line.trimStart().startsWith('#') && !line.includes('[totem]'),
+  );
+  // Loud, not silent: a template with no alterable comment line would make every
+  // test below compare the canonical against itself and pass vacuously.
+  if (commentLine === -1) throw new Error('no alterable comment line inside the managed block');
+  lines[commentLine] = `${lines[commentLine]} (frozen at an older template)`;
+  return lines.join('\n');
+}
+
+/** The text from the start marker through the end marker, inclusive. */
+function managedBlockOf(text: string, marker: string, endMarker: string): string {
+  const start = text.indexOf(marker);
+  const end = text.indexOf(endMarker, start + marker.length);
+  return text.slice(start, end + endMarker.length);
+}
+
+/** The bytes after the end marker — the trailer, its seam terminator included. */
+function trailerOf(text: string, marker: string, endMarker: string): string {
+  const start = text.indexOf(marker);
+  const end = text.indexOf(endMarker, start + marker.length);
+  return text.slice(end + endMarker.length);
+}
 
 // ─── Anchored-evidence fixtures (mmnto-ai/totem#2700) ───
 //
@@ -563,6 +650,10 @@ describe('installGitHook', () => {
     const hookPath = path.join(hooksDir, 'pre-commit');
     const userHook = '#!/bin/sh\necho "user hook"\n';
     fs.writeFileSync(hookPath, userHook);
+    // The append is a whole-file atomic replacement since mmnto-ai/totem#2760
+    // round 1 (an interrupted append leaves a hook truncated mid-block): the
+    // inode changes under rename-over, where an in-place append kept it.
+    const inodeBefore = fs.statSync(hookPath, { bigint: true }).ino;
 
     const result = installGitHook(
       hooksDir,
@@ -572,6 +663,7 @@ describe('installGitHook', () => {
     );
 
     expect(result).toBe('appended');
+    expect(fs.statSync(hookPath, { bigint: true }).ino).not.toBe(inodeBefore);
     const written = fs.readFileSync(hookPath, 'utf-8');
     expect(written).toContain('echo "user hook"');
     expect(written).toContain(TOTEM_PRECOMMIT_MARKER);
@@ -896,6 +988,668 @@ describe('installGitHook', () => {
     expect(result).toBe('exists');
     expect(fs.readFileSync(hookPath, 'utf-8')).toBe(staleWithTrailingUser);
   });
+
+  // ── Attested-extension carry-through (mmnto-ai/totem#2753) ──
+  //
+  // The liquid-city shape: a consumer appends its own blocks AFTER totem's end
+  // marker, each headed by a full `totem:fork` attestation. Before this slice a bare
+  // install DECLINED such a file, so `totem init -y` reported "Upgraded reflexes to
+  // v13" while both hooks stayed frozen at the 1.121.0 managed text (measured at
+  // `@mmnto/cli` 1.123.0, mmnto-ai/liquid-city#1174).
+
+  it('a bare install rewrites a stale managed block in place and carries an attested trailer through byte-for-byte', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    const existing = withStaleComment(canonical, TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER;
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('block-rewritten');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    // The managed block is the CURRENT canonical …
+    expect(managedBlockOf(written, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe(
+      managedBlockOf(canonical, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END),
+    );
+    // … and everything past the end marker is byte-identical to what was there.
+    expect(trailerOf(written, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe(
+      trailerOf(existing, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END),
+    );
+    // The seam carries exactly ONE newline: the canonical's own, not a duplicate.
+    expect(written).toBe(canonical + ATTESTED_TRAILER);
+  });
+
+  it('carries an attested trailer through on pre-push', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    const canonical = buildPrePushHook(RENDER);
+    const existing = withStaleComment(canonical, TOTEM_PREPUSH_END) + ATTESTED_TRAILER;
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      canonical,
+      TOTEM_PREPUSH_MARKER,
+      false,
+      TOTEM_PREPUSH_END,
+    );
+
+    expect(result).toBe('block-rewritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+  });
+
+  it('carries an attested trailer through on post-merge', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'post-merge');
+    const canonical = buildHookContent(RENDER);
+    const existing = withStaleComment(canonical, TOTEM_HOOK_END) + ATTESTED_TRAILER;
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'post-merge',
+      canonical,
+      TOTEM_HOOK_MARKER,
+      false,
+      TOTEM_HOOK_END,
+    );
+
+    expect(result).toBe('block-rewritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+  });
+
+  it('is idempotent — a second bare install on the rewritten hook writes nothing and reports current', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    fs.writeFileSync(hookPath, withStaleComment(canonical, TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER);
+    installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+    const afterFirst = fs.readFileSync(hookPath, 'utf-8');
+
+    const second = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    // `exists` IS the no-write arm — the function returns before `writeExecutableHook`
+    // — so the action plus byte-equality is the whole claim.
+    expect(second).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(afterFirst);
+  });
+
+  it('declines a stale block whose trailer is UNATTESTED (unchanged: byte-for-byte untouched)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    const existing =
+      withStaleComment(canonical, TOTEM_PRECOMMIT_END) +
+      '# my own pre-commit extension\necho "[me] extension"\n';
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(existing);
+  });
+
+  it('declines a trailer headed by a BARE totem:fork marker (a fork claim is not an attestation)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    const existing =
+      withStaleComment(canonical, TOTEM_PRECOMMIT_END) +
+      '# <!-- totem:fork -->\necho "[me] extension"\n';
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(existing);
+  });
+
+  it('declines a trailer attested with only a reason (owner and attested are required too)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    const existing =
+      withStaleComment(canonical, TOTEM_PRECOMMIT_END) +
+      '# <!-- totem:fork reason="lc docs-inject pre-commit extension" -->\necho "[me] extension"\n';
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(existing);
+  });
+
+  it('--force still overwrites the WHOLE file, attested trailer included (semantics unchanged)', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    fs.writeFileSync(hookPath, withStaleComment(canonical, TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      true, // force
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('overwritten');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    expect(written).toBe(canonical);
+    expect(written).not.toContain('totem:fork');
+  });
+
+  it('carries a TWO-block liquid-city pre-push trailer through — the FIRST block attests', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-push');
+    const canonical = buildPrePushHook(RENDER);
+    // install.cjs blocks 2 and 3, appended back to back exactly as a liquid-city
+    // checkout carries them. Only the first block's comment run is the trailer's
+    // leading run; the second block's marker sits far below a command.
+    const trailer = LC_PREPUSH_FIXTURES_BLOCK + LC_PREPUSH_ASSETS_BLOCK;
+    fs.writeFileSync(hookPath, withStaleComment(canonical, TOTEM_PREPUSH_END) + trailer);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-push',
+      canonical,
+      TOTEM_PREPUSH_MARKER,
+      false,
+      TOTEM_PREPUSH_END,
+    );
+
+    expect(result).toBe('block-rewritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + trailer);
+  });
+
+  it('declines when the fork line sits BELOW the extension first command', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    const existing =
+      withStaleComment(canonical, TOTEM_PRECOMMIT_END) +
+      [
+        '',
+        '# [lc] docs-inject extension',
+        'if [ -f "docs/wiki/Home.md" ]; then',
+        '  echo "[lc] docs-inject extension"',
+        'fi',
+        ATTESTED_FORK_LINE,
+        '',
+      ].join('\n');
+    fs.writeFileSync(hookPath, existing);
+
+    const result = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(result).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(existing);
+  });
+
+  it('carries an attested trailer through on post-checkout', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'post-checkout');
+    const canonical = buildPostCheckoutHookContent(RENDER);
+    fs.writeFileSync(hookPath, withStaleComment(canonical, TOTEM_CHECKOUT_END) + ATTESTED_TRAILER);
+
+    const result = installGitHook(
+      hooksDir,
+      'post-checkout',
+      canonical,
+      TOTEM_CHECKOUT_MARKER,
+      false,
+      TOTEM_CHECKOUT_END,
+    );
+
+    expect(result).toBe('block-rewritten');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+  });
+
+  it('strips exactly one CRLF seam and keeps the CRLF bytes inside the trailer', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    // A win32 checkout: the whole file, trailer included, is CRLF. The seam the
+    // rewrite removes is the end marker's own `\r\n`, and only that one.
+    const crlfTrailer = ATTESTED_TRAILER.replace(/\n/g, '\r\n');
+    fs.writeFileSync(
+      hookPath,
+      withStaleComment(canonical, TOTEM_PRECOMMIT_END).replace(/\n/g, '\r\n') + crlfTrailer,
+    );
+
+    const first = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(first).toBe('block-rewritten');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    // One seam consumed, not two: the terminator removed is the stale block's own
+    // `\r\n` after the end marker, so the trailer keeps every byte it had — its
+    // leading blank line included — behind the canonical's `\n`.
+    expect(written).toBe(canonical + crlfTrailer);
+    expect(written).toContain('\r\n# [lc] docs-inject extension\r\n');
+
+    const second = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(second).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(written);
+  });
+
+  it('handles an end marker with text on the SAME line, and is idempotent after', () => {
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const canonical = buildPreCommitHook(RENDER);
+    // No terminator after the end marker: the trailer begins mid-line. The offset
+    // `ownedTrailerStart` returns is the byte AFTER the marker, so the trailer is
+    // ` ${ATTESTED_FORK_LINE}\n…` — attested, because its first non-blank line
+    // trims to a comment carrying the marker.
+    const sameLineTrailer = ` ${ATTESTED_FORK_LINE}\nsh "tools/git-hooks/pre-commit-docs-inject.sh"\n`;
+    const stale = withStaleComment(canonical, TOTEM_PRECOMMIT_END).replace(
+      `${TOTEM_PRECOMMIT_END}\n`,
+      TOTEM_PRECOMMIT_END,
+    );
+    expect(
+      isTotemOwnedWithAttestedTrailer(
+        stale + sameLineTrailer,
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe(true);
+    fs.writeFileSync(hookPath, stale + sameLineTrailer);
+
+    const first = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    // Nothing was removed — there was no seam terminator to consume — so the
+    // same-line text is carried through verbatim, now behind the canonical's own
+    // newline.
+    expect(first).toBe('block-rewritten');
+    const written = fs.readFileSync(hookPath, 'utf-8');
+    expect(written).toBe(canonical + sameLineTrailer);
+
+    const second = installGitHook(
+      hooksDir,
+      'pre-commit',
+      canonical,
+      TOTEM_PRECOMMIT_MARKER,
+      false,
+      TOTEM_PRECOMMIT_END,
+    );
+
+    expect(second).toBe('exists');
+    expect(fs.readFileSync(hookPath, 'utf-8')).toBe(written);
+  });
+});
+
+// ─── isAttestedTrailer (mmnto-ai/totem#2753) ────────
+
+describe('isAttestedTrailer', () => {
+  it('is false for a blank trailer', () => {
+    expect(isAttestedTrailer('')).toBe(false);
+    expect(isAttestedTrailer('\n\n   \n')).toBe(false);
+  });
+
+  it('is true when a full marker heads the trailer past leading blank lines', () => {
+    expect(isAttestedTrailer(`\n\n${ATTESTED_FORK_LINE}\necho hi\n`)).toBe(true);
+  });
+
+  // The founding datum: liquid-city labels its block, THEN signs it. A rule that
+  // reads only the trailer's first non-blank line declines this.
+  it('is true for the real liquid-city block — a `# [lc] …` label line above the marker', () => {
+    expect(isAttestedTrailer(`\n${ATTESTED_TRAILER}`)).toBe(true);
+  });
+
+  it('is true when the marker sits several comment lines deep, still above the first command', () => {
+    expect(isAttestedTrailer(`\n# one\n\n#   two\n${ATTESTED_FORK_LINE}\nsh "x.sh"\n`)).toBe(true);
+  });
+
+  it('is false once a COMMAND has opened the run — an attestation below code vouches for nothing', () => {
+    expect(isAttestedTrailer(`\necho hi\n${ATTESTED_FORK_LINE}\n`)).toBe(false);
+    expect(isAttestedTrailer(`\n# a label\nsh "x.sh"\n${ATTESTED_FORK_LINE}\n`)).toBe(false);
+  });
+
+  // A marker riding a command line is not a signature (falsification-leg F10).
+  it('is false when the marker rides a NON-comment line', () => {
+    expect(isAttestedTrailer(`\nrm -rf ./build ${ATTESTED_FORK_LINE.slice(2)}\n`)).toBe(false);
+  });
+
+  // The marker is parsed per LINE here, so core's multi-line (dotAll) form of it is
+  // deliberately not in play: a marker split across two comment lines does not attest.
+  it('is false when the marker is split across two comment lines', () => {
+    const split = [
+      '',
+      '# [lc] docs-inject extension',
+      '# <!-- totem:fork reason="lc docs-inject pre-commit extension"',
+      '#      owner="satur8d" attested="2026-06-07" -->',
+      'sh "tools/git-hooks/pre-commit-docs-inject.sh"',
+      '',
+    ].join('\n');
+    expect(isAttestedTrailer(split)).toBe(false);
+  });
+
+  it('is false for a comment run carrying no full marker', () => {
+    expect(
+      isAttestedTrailer('\n# [lc] docs-inject extension\n# <!-- totem:fork -->\nsh "x.sh"\n'),
+    ).toBe(false);
+  });
+
+  // Core's parser captures the quoted value raw; a field that is only whitespace
+  // is present to a length check and absent to a reader (Greptile P2, round 1).
+  it('is false when any of the three fields is whitespace-only', () => {
+    const blankReason = '# <!-- totem:fork reason=" " owner="satur8d" attested="2026-06-07" -->';
+    const blankOwner =
+      '# <!-- totem:fork reason="deploy notice" owner="   " attested="2026-06-07" -->';
+    const blankAttested =
+      '# <!-- totem:fork reason="deploy notice" owner="satur8d" attested="\t" -->';
+    const allBlank = '# <!-- totem:fork reason=" " owner=" " attested=" " -->';
+    for (const line of [blankReason, blankOwner, blankAttested, allBlank]) {
+      expect(isAttestedTrailer(`\n${line}\nsh "x.sh"\n`), line).toBe(false);
+    }
+  });
+});
+
+// ─── declaredHookTier (mmnto-ai/totem#2753) ────────
+
+describe('declaredHookTier', () => {
+  const block = (lines: readonly string[]): string =>
+    ['#!/bin/sh', `# ${TOTEM_PRECOMMIT_MARKER}`, ...lines, `# ${TOTEM_PRECOMMIT_END}`, ''].join(
+      '\n',
+    );
+
+  it('reads the assignment the template emits', () => {
+    expect(
+      declaredHookTier(
+        block(['TOTEM_HOOK_TIER="strict"']),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
+  // Gemini, round 1: an unanchored match would have read the COMMENT first and
+  // re-rendered a standard hook as strict — or, mirrored, a strict one as standard.
+  it('ignores a comment inside the block that quotes the assignment', () => {
+    const content = block([
+      '# TOTEM_HOOK_TIER="strict" turns on the spec-evidence gate below',
+      'TOTEM_HOOK_TIER="standard"',
+    ]);
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('standard');
+  });
+
+  it('is undefined when the only mention is a comment — a quoted assignment is not a declaration', () => {
+    const content = block(['# TOTEM_HOOK_TIER="strict" was the old default']);
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBeUndefined();
+  });
+
+  it('still reads a CRLF block', () => {
+    const content = block(['TOTEM_HOOK_TIER="strict"']).replace(/\n/g, '\r\n');
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('strict');
+  });
+});
+
+// ─── the hook write is atomic (Greptile P1, mmnto-ai/totem#2760 round 1) ────────
+
+describe('installGitHook writes atomically', () => {
+  // The attested-extension rewrite carries the consumer's own lines, which no
+  // template can regenerate — so the write must leave the old file or the new one,
+  // never a truncated hook. `writeExecutableHook` routes through core's
+  // `writeFileAtomicSync`: a same-directory temp, mode on the temp, rename last.
+  it('leaves no temp sibling behind and the rewritten hook is executable', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-atomic-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      fs.writeFileSync(
+        hookPath,
+        `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n${ATTESTED_TRAILER}`,
+      );
+      // The control that tells the two implementations apart (re-armed leg F1): an
+      // in-place `writeFileSync` truncates the SAME file — its inode survives — while
+      // rename-over replaces the directory entry with the temp's, so the inode
+      // changes. Cleanup and mode alone were satisfied by the old code too.
+      const inodeBefore = fs.statSync(hookPath, { bigint: true }).ino;
+
+      const action = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+
+      expect(action).toBe('block-rewritten');
+      expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+      expect(fs.statSync(hookPath, { bigint: true }).ino).not.toBe(inodeBefore);
+      // The helper's temp is `<target>.<pid>-<uuid8>.tmp` beside the target; after a
+      // completed write the directory holds the hook alone.
+      expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
+      if (process.platform !== 'win32') {
+        expect(fs.statSync(hookPath).mode & 0o777).toBe(0o755);
+      }
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  // The user's file is carried as BYTES (re-armed leg F8/F9): a hook that does not
+  // round-trip UTF-8 — one cp1252 `0xE9` in a comment — must come back with that
+  // byte, never with U+FFFD (EF BF BD) in its place. Decoding for the probes is
+  // fine; re-encoding for the write is the corruption.
+  const NON_UTF8_COMMENT = Buffer.from([0x23, 0x20, 0x63, 0x61, 0x66, 0xe9, 0x0a]); // "# caf\xE9\n"
+  const REPLACEMENT_CHAR = Buffer.from([0xef, 0xbf, 0xbd]);
+
+  it('appends to a user hook that is not valid UTF-8 without touching its bytes', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const userBytes = Buffer.concat([
+        Buffer.from('#!/bin/sh\n', 'utf-8'),
+        NON_UTF8_COMMENT,
+        Buffer.from('echo "user hook"\n', 'utf-8'),
+      ]);
+      fs.writeFileSync(hookPath, userBytes);
+
+      const action = installGitHook(
+        hooksDir,
+        'pre-commit',
+        buildPreCommitHook(RENDER),
+        TOTEM_PRECOMMIT_MARKER,
+      );
+
+      expect(action).toBe('appended');
+      const after = fs.readFileSync(hookPath);
+      expect(after.subarray(0, userBytes.length).equals(userBytes)).toBe(true);
+      expect(after.includes(REPLACEMENT_CHAR)).toBe(false);
+      expect(after.toString('utf-8')).toContain(TOTEM_PRECOMMIT_MARKER);
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  it('rewrites the managed block and carries a non-UTF-8 attested trailer through byte-for-byte', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      // The real liquid-city trailer, then one comment line git would never see
+      // as UTF-8. The attestation still parses (it sits above, in the decoded run).
+      const trailerBytes = Buffer.concat([
+        Buffer.from(ATTESTED_TRAILER, 'utf-8'),
+        NON_UTF8_COMMENT,
+      ]);
+      fs.writeFileSync(
+        hookPath,
+        Buffer.concat([
+          Buffer.from(
+            `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n`,
+            'utf-8',
+          ),
+          trailerBytes,
+        ]),
+      );
+
+      const first = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+
+      expect(first).toBe('block-rewritten');
+      const after = fs.readFileSync(hookPath);
+      const canonicalBytes = Buffer.from(canonical, 'utf-8');
+      expect(after.subarray(0, canonicalBytes.length).equals(canonicalBytes)).toBe(true);
+      expect(after.subarray(canonicalBytes.length).equals(trailerBytes)).toBe(true);
+      expect(after.includes(REPLACEMENT_CHAR)).toBe(false);
+
+      // Idempotent on the same bytes: the recomposed file equals the file on disk.
+      // `exists` is unambiguous here — the decline below has its own action.
+      const second = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(second).toBe('exists');
+      expect(fs.readFileSync(hookPath).equals(after)).toBe(true);
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
+
+  // The MANAGED REGION itself failing to decode is the one shape the rewrite arm
+  // cannot serve (no provable byte offset), and it must not hide behind `exists`:
+  // three silent runs against a doctor row prescribing the bare install is the
+  // inert-instruction loop this slice exists to remove (re-armed leg F13). The
+  // fixture is the realistic one: an ANSI-editor save turns the template's em dash
+  // (E2 80 94) into the single cp1252 byte 0x97.
+  it('reports skipped-non-utf8 when the managed region does not decode, leaves the file byte-identical, and --force still writes the canonical', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-bytes-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      const canonicalBytes = Buffer.from(canonical, 'utf-8');
+      const emDash = Buffer.from([0xe2, 0x80, 0x94]);
+      const dashAt = canonicalBytes.indexOf(emDash);
+      expect(dashAt).toBeGreaterThan(-1); // the template's marker line carries one
+      const ansiSaved = Buffer.concat([
+        canonicalBytes.subarray(0, dashAt),
+        Buffer.from([0x97]),
+        canonicalBytes.subarray(dashAt + emDash.length),
+        Buffer.from(ATTESTED_TRAILER, 'utf-8'),
+      ]);
+      fs.writeFileSync(hookPath, ansiSaved);
+
+      const bare = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(bare).toBe('skipped-non-utf8');
+      expect(fs.readFileSync(hookPath).equals(ansiSaved)).toBe(true);
+      expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
+
+      // The prescribed way out writes the canonical alone — nothing of the file is
+      // carried, so the bytes never needed to decode.
+      const forced = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        true,
+        TOTEM_PRECOMMIT_END,
+      );
+      expect(forced).toBe('overwritten');
+      expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical);
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
 });
 
 // ─── generateHookHelpers ────────────────────────────
@@ -959,6 +1713,298 @@ describe('installHooksNonInteractive', () => {
   it('returns null when not a git repo', async () => {
     const result = await installHooksNonInteractive(tmpDir);
     expect(result).toBeNull();
+  });
+
+  // ── The installed tier survives a bare rewrite (mmnto-ai/totem#2753 fold F4) ──
+  //
+  // A bare install exists to keep a hook CURRENT. Re-rendering a `--strict` hook at
+  // `standard` because nobody re-stated the tier is a silent enforcement downgrade
+  // performed by the very command the doctor's stale-block remedy sends people to.
+
+  it('keeps a strict-installed hook strict on a bare rewrite past an attested trailer', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-push'),
+      withStaleComment(buildPrePushHook(strict), TOTEM_PREPUSH_END) + ATTESTED_TRAILER,
+    );
+
+    // No flag, no config `hooks.tier` — the hooks' own declaration must decide.
+    const result = await installHooksNonInteractive(tmpDir);
+
+    expect(result!.preCommit).toBe('block-rewritten');
+    expect(result!.prePush).toBe('block-rewritten');
+    const preCommit = fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8');
+    const prePush = fs.readFileSync(path.join(hooksDir, 'pre-push'), 'utf-8');
+    expect(declaredHookTier(preCommit, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('strict');
+    expect(declaredHookTier(prePush, TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END)).toBe('strict');
+    expect(preCommit).toBe(buildPreCommitHook(strict) + ATTESTED_TRAILER);
+    expect(prePush.endsWith(ATTESTED_TRAILER)).toBe(true);
+  });
+
+  it('keeps a strict-installed OWNED-WHOLE hook strict on a bare drift-repair', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END),
+    );
+
+    const result = await installHooksNonInteractive(tmpDir);
+
+    expect(result!.preCommit).toBe('overwritten');
+    expect(fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8')).toBe(
+      buildPreCommitHook(strict),
+    );
+  });
+
+  it('lets an explicit tier flag win over the installed hook declaration', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+
+    const downgraded = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+    expect(downgraded!.preCommit).toBe('block-rewritten');
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('standard');
+
+    const upgraded = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+    expect(upgraded!.preCommit).toBe('block-rewritten');
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
+  // ── The flag wins when NO config resolves (fold 3 F1) ──
+  //
+  // The test above passes on any machine that happens to carry a global profile at
+  // `~/.totem/totem.config.ts`, because that sends `resolveHookRenderOptions` down
+  // its fully-resolved return. The two EARLY returns — no config anywhere, and a
+  // config that will not load — handed back a `defaults` object with no
+  // `tierPinned`, so the installed hook's declaration overrode the flag. These two
+  // pin those returns with the home directory controlled, so no global profile can
+  // resolve and the outcome does not depend on whose machine runs them.
+
+  /** Run `body` with `os.homedir()` pointed at an empty directory. */
+  async function withEmptyHome<T>(body: () => Promise<T>): Promise<T> {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    const saved = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+    process.env.USERPROFILE = home;
+    process.env.HOME = home;
+    try {
+      return await body();
+    } finally {
+      if (saved.USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = saved.USERPROFILE;
+      if (saved.HOME === undefined) delete process.env.HOME;
+      else process.env.HOME = saved.HOME;
+      cleanTmpDir(home);
+    }
+  }
+
+  it('lets an explicit tier flag win when NO config resolves at all', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+
+    await withEmptyHome(async () => {
+      // No local config in tmpDir, no global profile under the empty home →
+      // `resolveConfigPath` throws and the config-missing early return is taken.
+      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+      expect(result!.preCommit).toBe('block-rewritten');
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('standard');
+  });
+
+  it('lets --strict UPGRADE a standard-installed hook when no config resolves', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
+    );
+
+    await withEmptyHome(async () => {
+      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+      expect(result!.preCommit).toBe('overwritten');
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
+  it('lets an explicit tier flag win when the config RESOLVES but will not load', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+    // A local config that resolves and then fails to parse → the LOUD-defaults
+    // early return (mmnto-ai/totem#2692 A8).
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), ':\n  not: [valid\n');
+    const stderr: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    try {
+      await withEmptyHome(async () => {
+        const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+        expect(result!.preCommit).toBe('block-rewritten');
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('standard');
+    // The loud line must not claim a tier it does not decide (fold 4 F6): the
+    // defaults it names are the totemDir only.
+    const loud = stderr.find((line) => line.includes('rendered at the defaults')) ?? '';
+    expect(loud).toContain(
+      "the tier follows an explicit flag, else the tier each installed hook declares, else 'standard'",
+    );
+    expect(loud).not.toContain("tier 'standard')");
+  });
+
+  it('lets --strict UPGRADE a standard-installed hook when the config will not load', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const standard = { ...RENDER, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(standard), TOTEM_PRECOMMIT_END),
+    );
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), ':\n  not: [valid\n');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      await withEmptyHome(async () => {
+        const result = await installHooksNonInteractive(tmpDir, false, { tier: 'strict' });
+        expect(result!.preCommit).toBe('overwritten');
+      });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
+  it('renders --force at the installed tier when nothing is pinned', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+
+    // `--force` rewrites the WHOLE file (the trailer is gone) but it is still not a
+    // tier decision: with no flag and no `hooks.tier`, the hook keeps the tier it
+    // declared.
+    await withEmptyHome(async () => {
+      const result = await installHooksNonInteractive(tmpDir, true);
+      expect(result!.preCommit).toBe('overwritten');
+    });
+
+    const written = fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8');
+    expect(declaredHookTier(written, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('strict');
+    expect(written).not.toContain('totem:fork');
+  });
+
+  it('keeps a strict hook-manager helper strict when nothing is pinned', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    // A husky repo: `installHooksNonInteractive` takes the manager path, which
+    // regenerates `<totemDir>/hooks/*.sh` instead of writing .git/hooks.
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+    const helperDir = path.join(tmpDir, '.totem', 'hooks');
+    fs.mkdirSync(helperDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(helperDir, 'pre-push.sh'),
+      withStaleComment(buildPrePushHook(strict), TOTEM_PREPUSH_END),
+    );
+    fs.writeFileSync(
+      path.join(helperDir, 'pre-commit.sh'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END),
+    );
+
+    await withEmptyHome(async () => {
+      // Manager detected → null result, helpers regenerated.
+      expect(await installHooksNonInteractive(tmpDir)).toBeNull();
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(helperDir, 'pre-push.sh'), 'utf-8'),
+        TOTEM_PREPUSH_MARKER,
+        TOTEM_PREPUSH_END,
+      ),
+    ).toBe('strict');
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(helperDir, 'pre-commit.sh'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
   });
 
   it('installs all four hooks in a git repo', async () => {
@@ -1543,6 +2589,28 @@ fi
     // Full block comparison: extracted totem block must match canonical output
     const actual = extractTotemBlock(content);
     expect(actual).toBe(expectedTotemBlock());
+  });
+
+  // The splice keeps the user's text on both sides of the block, so it is byte-exact
+  // only for a file that decodes losslessly; one that does not is declined with the
+  // upgrader's ruled silent `false` and left byte-identical (re-armed leg F9/F15).
+  it('declines a hook that does not decode as UTF-8 and leaves it byte-identical', async () => {
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const oldHook = Buffer.concat([
+      Buffer.from(`#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER} `, 'utf-8'),
+      Buffer.from([0x97]), // the em dash as one cp1252 byte — an ANSI-editor save
+      Buffer.from(
+        ' run compiled rules before push.\n# Override with: git push --no-verify\n\nif [ -f ".totem/compiled-rules.json" ]; then\n  TOTEM_CMD="totem"\n  if [ -n "$TOTEM_CMD" ]; then\n    $TOTEM_CMD lint\n  fi\nfi\n',
+        'utf-8',
+      ),
+    ]);
+    fs.writeFileSync(path.join(hooksDir, 'pre-push'), oldHook);
+
+    const upgraded = await upgradePrePushHookIfNeeded(tmpDir);
+
+    expect(upgraded).toBe(false);
+    expect(fs.readFileSync(path.join(hooksDir, 'pre-push')).equals(oldHook)).toBe(true);
   });
 
   it('skips hook without totem marker', async () => {
