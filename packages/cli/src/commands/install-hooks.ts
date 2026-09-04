@@ -773,6 +773,22 @@ export function buildPreCommitHook(options: {
   // nothing. The record's sha256 is compared and REPORTED (matches / revised
   // since binding) but never blocks: blocking on revision would price every
   // fold of a design record at one LLM call, the friction this slice retires.
+  //
+  // #2737 fixes what that shape check MEASURED, on both halves. A body now ends
+  // only at a heading of the SAME OR SHALLOWER level: a deeper heading neither
+  // ends the body nor counts as one, so a section that opens with a `####`
+  // sub-heading is no longer read as empty (it was, in 3 of the 7 recorded R3
+  // drafts, on the longest section each of them wrote). And a promised heading
+  // is matched EXACTLY first, then — only if nothing matched — tolerantly, with
+  // ONE trailing parenthetical group stripped from BOTH sides: symmetric, so a
+  // dropped `(structural constraint)` and a differing `(required)` both match,
+  // and LEVEL-EXACT, because the `###` marker is part of the compared string
+  // (`## Problem Statement` never satisfies `### Problem Statement`). A
+  // tolerant match is never silent: the pass line carries `· tolerated
+  // <promised> ~ <found>` for each one, so the drift is disclosed on the commit
+  // that relied on it rather than absorbed. Trailing whitespace is not drift —
+  // `trimEnd()` settles it on the exact pass, and nothing is named.
+  //
   // Exit vocabulary: 0 evidence · 2 no spec artifact · 3 the newest spec
   // artifact is NOT evidence (reason on stdout) · anything else = the reader
   // itself could not run. The evidence line makes a stale pass VISIBLE (age
@@ -816,8 +832,10 @@ export function buildPreCommitHook(options: {
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
 # substring match would accept a review artifact that merely quotes the key —
 # that is ANCHORED on an issue or a bound design record, and whose subject
-# carries a real shape: the required headings each with a body (an issue run
-# drafted by the built-in prompt), or at least one heading with a body (a
+# carries a real shape: every promised heading (level-exact; a trailing
+# parenthetical may differ or be dropped, and the evidence line names it) each
+# with a non-blank body before the next heading of the same or shallower level
+# (an issue run drafted by the built-in prompt), or at least one heading with a body (a
 # record run, or an issue run drafted under a custom prompt). A record run is
 # judged on the bytes of the record at grounding.anchor.ref, re-read here from
 # the worktree top; its sha256 is REPORTED, never enforced.
@@ -862,12 +880,19 @@ function safe(text) {
 }
 const shownFile = safe(file);
 const shownAt = safe(best.at);
-function isHeading(line) {
+function headingLevel(line) {
   let n = 0;
   while (n < line.length && ["#"].indexOf(line.charAt(n)) > -1) n = n + 1;
-  if (n < 1 || n > 6) return false;
-  if ([" ", "\\t"].indexOf(line.charAt(n)) < 0) return false;
-  return line.slice(n + 1).trim().length > 0;
+  if (n < 1 || n > 6) return 0;
+  if ([" ", "\\t"].indexOf(line.charAt(n)) < 0) return 0;
+  return line.slice(n + 1).trim().length > 0 ? n : 0;
+}
+function stripParen(s) {
+  const t = s.trimEnd();
+  if (t.charAt(t.length - 1) !== ")") return t;
+  const open = t.lastIndexOf("(");
+  if (open < 1) return t;
+  return t.slice(0, open).trimEnd();
 }
 function escapesTop(rel) {
   const norm = rel.split("\\\\").join("/");
@@ -919,9 +944,12 @@ if (kind !== KIND_RECORD) {
 }
 if ([65279].indexOf(subject.charCodeAt(0)) > -1) subject = subject.slice(1);
 const lines = subject.split("\\n");
-function hasBodyAfter(start) {
+const tolerated = [];
+function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
-    if (isHeading(lines[i])) return false;
+    const n = headingLevel(lines[i]);
+    if (n > 0 && n <= level) return false;
+    if (n > 0) continue;
     if (lines[i].trim().length > 0) return true;
   }
   return false;
@@ -930,12 +958,17 @@ if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
     for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    if (at < 0) {
+      const want = stripParen(heading);
+      for (let i = 0; i < lines.length; i++) { if ([want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
+      if (at > -1) tolerated.push(safe(heading) + " ~ " + safe(lines[at].trimEnd()));
+    }
     if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
-    if (!hasBodyAfter(at)) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
+    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
   }
 } else {
   let bodied = false;
-  for (let i = 0; i < lines.length; i++) { if (isHeading(lines[i]) && hasBodyAfter(i)) { bodied = true; break; } }
+  for (let i = 0; i < lines.length; i++) { const n = headingLevel(lines[i]); if (n > 0 && hasBodyAfter(i, n)) { bodied = true; break; } }
   if (!bodied && kind !== KIND_RECORD) block("the draft in " + shownFile + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
   if (!bodied) block("the bound record at " + shownRef + " has no heading with a body");
 }
@@ -943,6 +976,7 @@ const stamp = best.at ? Date.parse(best.at) : NaN;
 const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / 86400000);
 let out = shownFile + " (" + (shownAt || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
 out = out + " · anchor " + shownKind + " " + shownRef + " · shape " + shape;
+if (tolerated.length > 0) out = out + " · tolerated " + tolerated.join("; ");
 if (recordStatus.length > 0) out = out + " · " + recordStatus;
 emit(out);
 ' 2>/dev/null)
