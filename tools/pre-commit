@@ -135,28 +135,46 @@ if (kind !== KIND_RECORD) {
 if ([65279].indexOf(subject.charCodeAt(0)) > -1) subject = subject.slice(1);
 const lines = subject.split("\n");
 const tolerated = [];
-// Fences (mmnto-ai/totem#2769): a line whose trimmed start is three backticks
-// or three tildes opens a fence, and the same marker closes it. A fence
-// DELIMITER line is neither a heading, a match candidate, nor body; a line
-// INSIDE a fence is neither a heading nor a match candidate, but it IS body
-// when non-blank — a section whose content is one code block is a written
-// section, while a promised heading quoted inside a fence (the skeleton pasted
-// as an example) is not the section it names.
-const TICK3 = String.fromCharCode(96, 96, 96);
-const TILDE3 = "~~~";
+// Fences (mmnto-ai/totem#2769), by the CommonMark rule: a line indented at most
+// three spaces whose first run is three or more backticks or tildes OPENS a
+// fence — a backtick run only when the rest of the line carries no backtick —
+// and a CLOSER is the same character, at least as long, with nothing else on
+// the line; an unclosed fence runs to the end of the draft. A delimiter line
+// is neither a heading, a match candidate, nor body. A line inside a fence is
+// neither a heading nor a match candidate — a promised heading quoted there
+// (the skeleton pasted as an example) is not the section it names, and is not
+// body for the section above it either — but any other non-blank fenced line
+// IS body: a section whose content is one code block is a written section.
+const TICK = String.fromCharCode(96);
 const fenceLine = [];
 const inFence = [];
-let fenceOpen = "";
+const fenceOpenedAt = [];
+let fenceChar = "";
+let fenceLen = 0;
+let openedAt = 0;
 for (let i = 0; i < lines.length; i++) {
-  const lead = lines[i].trimStart().slice(0, 3);
-  const marker = [TICK3, TILDE3].indexOf(lead) > -1 ? lead : "";
-  if (fenceOpen.length < 1 && marker.length > 0) { fenceOpen = marker; fenceLine.push(true); inFence.push(false); continue; }
-  if (fenceOpen.length > 0 && marker.length > 0 && [fenceOpen].indexOf(marker) > -1) { fenceOpen = ""; fenceLine.push(true); inFence.push(false); continue; }
-  fenceLine.push(false);
-  inFence.push(fenceOpen.length > 0);
+  const line = lines[i];
+  let indent = 0;
+  while (indent < line.length && [" "].indexOf(line.charAt(indent)) > -1) indent = indent + 1;
+  const ch = line.charAt(indent);
+  let run = 0;
+  if (indent < 4 && [TICK, "~"].indexOf(ch) > -1) {
+    while (indent + run < line.length && [ch].indexOf(line.charAt(indent + run)) > -1) run = run + 1;
+  }
+  const rest = line.slice(indent + run);
+  if (fenceChar.length < 1) {
+    const opens = run >= 3 && ([TICK].indexOf(ch) < 0 || rest.indexOf(TICK) < 0);
+    if (opens) { fenceChar = ch; fenceLen = run; openedAt = i + 1; fenceLine.push(true); inFence.push(false); fenceOpenedAt.push(0); continue; }
+    fenceLine.push(false); inFence.push(false); fenceOpenedAt.push(0);
+    continue;
+  }
+  const closes = run >= fenceLen && [fenceChar].indexOf(ch) > -1 && rest.trim().length < 1;
+  if (closes) { fenceChar = ""; fenceLen = 0; fenceLine.push(true); inFence.push(false); fenceOpenedAt.push(0); continue; }
+  fenceLine.push(false); inFence.push(true); fenceOpenedAt.push(openedAt);
 }
 // A line of only # characters and whitespace (mmnto-ai/totem#2769): not a
-// heading (no text) and not body either — it is the skeleton of one.
+// heading (no text) and not body either — it is the skeleton of one. Inside a
+// fence it is code, and code is body.
 function bareHashes(line) {
   const t = line.trim();
   return t.length > 0 && t.split("#").join("").length < 1;
@@ -165,18 +183,32 @@ function levelAt(i) {
   if (fenceLine[i] || inFence[i]) return 0;
   return headingLevel(lines[i]);
 }
+function isBody(i) {
+  if (fenceLine[i]) return false;
+  if (lines[i].trim().length < 1) return false;
+  if (inFence[i]) return REQUIRED.indexOf(lines[i].trimEnd()) < 0;
+  return !bareHashes(lines[i]);
+}
 function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
     const n = levelAt(i);
     if (n > 0 && n <= level) return false;
     if (n > 0) continue;
-    if (fenceLine[i] || bareHashes(lines[i])) continue;
-    if (lines[i].trim().length > 0) return true;
+    if (isBody(i)) return true;
   }
   return false;
 }
 function candidate(i) {
   return !fenceLine[i] && !inFence[i];
+}
+function fencedCopyOf(heading) {
+  const want = stripParen(heading);
+  for (let i = 0; i < lines.length; i++) {
+    if (!inFence[i]) continue;
+    const seen = lines[i].trimEnd();
+    if ([heading].indexOf(seen) > -1 || [want].indexOf(stripParen(seen)) > -1) return i;
+  }
+  return -1;
 }
 if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
@@ -188,7 +220,11 @@ if (shape !== "DOCUMENT") {
       for (let i = 0; i < lines.length; i++) { if (candidate(i) && [want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
       if (at > -1) { matchedAs = safe(lines[at].trimEnd()); tolerated.push(safe(heading) + " ~ " + matchedAs); }
     }
-    if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
+    if (at < 0) {
+      const fencedAt = fencedCopyOf(heading);
+      if (fencedAt > -1) block("the draft in " + shownFile + " is missing heading " + safe(heading) + " — it appears only inside a fenced code block opened at line " + fenceOpenedAt[fencedAt] + " (close the fence, or write the section outside it)");
+      block("the draft in " + shownFile + " is missing heading " + safe(heading));
+    }
     const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
     if (!hasBodyAfter(at, levelAt(at))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
   }

@@ -4728,23 +4728,175 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
   });
 
   it.skipIf(!shellOk)(
-    'a heading that appears fenced first and real later is found at the real line',
+    'a heading that appears fenced first and real later is found at the real line — the disclosure proves which',
     () => {
-      // The fenced copy sits BEFORE the real heading; the exact pass must skip it
-      // rather than match it and then read the fence as the section.
-      const real = nineBodied();
-      const r = judge(`${FENCE}${NL}${PROMISED[0]}${NL}${FENCE}${NL}${NL}${real}`);
+      // The EXACT promised heading sits inside a fence; the real section below
+      // is written in the TOLERANT form. On the pre-fix reader the exact pass
+      // matched the fenced copy and the pass line carried no tolerance; skipping
+      // the fenced copy makes the tolerant pass find the real line and SAY so.
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: `${FENCE}${NL}${EXECUTION_FLOW}${NL}${FENCE}${NL}${NL}### Execution Flow${NL}${NL}The real section, in the tolerant spelling.${NL}`,
+        }),
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('BLOCKED');
+      expect(r.stdout).toContain(`tolerated ${EXECUTION_FLOW} ~ ### Execution Flow`);
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'an unclosed fence runs to the end of the draft, and the block says where it opened',
+    () => {
+      // Everything after an unclosed opener is inside the fence: the headings
+      // quoted there are not candidates, so the draft is missing them — and the
+      // reason names the fence, so the cure is never a heading the draft contains.
+      const r = judge(`Intro.${NL}${FENCE}${NL}${nineBodied()}`);
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(`is missing heading ${PROMISED[0]}`);
+      expect(r.stdout).toContain('it appears only inside a fenced code block opened at line 2');
+    },
+  );
+
+  // ── The fence state's edges (the leg's probes, pinned) ──
+
+  it.skipIf(!shellOk)('a three-backtick line does not close a four-backtick fence', () => {
+    // CommonMark: the closer is the same character, at least as long. A draft
+    // wrapped in a four-backtick fence with one nested three-backtick example
+    // is one code block with zero headings.
+    const FENCE4 = FENCE + String.fromCharCode(96);
+    const r = judge(
+      `Intro prose.${NL}${FENCE4}${NL}quoted example:${NL}${FENCE}${NL}${nineBodied()}${NL}${FENCE4}${NL}`,
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${PROMISED[0]}`);
+    expect(r.stdout).toContain('inside a fenced code block opened at line 2');
+  });
+
+  it.skipIf(!shellOk)('a four-backtick closer closes a three-backtick fence', () => {
+    const FENCE4 = FENCE + String.fromCharCode(96);
+    const r = judge(
+      nineBodied({
+        [EXECUTION_FLOW]: `${EXECUTION_FLOW}${NL}${FENCE}${NL}A --> B${NL}${FENCE4}${NL}`,
+      }),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('BLOCKED');
+  });
+
+  it.skipIf(!shellOk)(
+    'a fence line indented four spaces is an indented code block, not a fence',
+    () => {
+      // CommonMark: up to three spaces of indentation keeps a fence a fence; four
+      // makes it an indented code block, which is body text like any other.
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: `${EXECUTION_FLOW}${NL}${NL}    ${FENCE}${NL}    code in an indented block${NL}    ${FENCE}${NL}`,
+        }),
+      );
       expect(r.status).toBe(0);
       expect(r.stdout).not.toContain('BLOCKED');
     },
   );
 
-  it.skipIf(!shellOk)('an unclosed fence runs to the end of the draft', () => {
-    // Everything after an unclosed opener is inside the fence: the headings
-    // quoted there are not candidates, so the draft is missing them.
-    const r = judge(`Intro.${NL}${FENCE}${NL}${nineBodied()}`);
+  it.skipIf(!shellOk)(
+    'a backtick opener whose info string carries a backtick is not a fence',
+    () => {
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: `${EXECUTION_FLOW}${NL}${FENCE}js${String.fromCharCode(96)}x${NL}`,
+        }),
+      );
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('BLOCKED');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a run of tildes used as a divider opens a fence in Markdown too, and the block says so',
+    () => {
+      // Twenty tildes are a fence opener under CommonMark (a thematic break is
+      // ---, *** or ___); every heading after it is code until a closer at
+      // least as long. The block names the fence rather than a heading the
+      // draft contains verbatim.
+      const rule = '~'.repeat(20);
+      const r = judge(
+        nineBodied({ [PROMISED[1]!]: `${PROMISED[1]}${NL}${NL}Body.${NL}${NL}${rule}${NL}` }),
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(`is missing heading ${PROMISED[2]}`);
+      expect(r.stdout).toContain('it appears only inside a fenced code block opened at line');
+    },
+  );
+
+  it.skipIf(!shellOk)('#### inside a fence is code, and code is body', () => {
+    const r = judge(
+      nineBodied({
+        [EDGE_CASES]: `${EDGE_CASES}${NL}${FENCE}${NL}####${NL}#####${NL}${FENCE}${NL}`,
+      }),
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('BLOCKED');
+  });
+
+  it.skipIf(!shellOk)('seven hashes are a bare hash line, not a heading and not a body', () => {
+    const r = judge(nineBodied({ [EDGE_CASES]: `${EDGE_CASES}${NL}#######${NL}` }));
     expect(r.status).toBe(1);
-    expect(r.stdout).toContain(`is missing heading ${PROMISED[0]}`);
+    expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
+  });
+
+  it.skipIf(!shellOk)('a fenced promised heading is not body for the section above it', () => {
+    // Zero authored words: the only content under Edge Cases is the next
+    // promised heading, quoted. Not a written section.
+    const r = judge(
+      nineBodied({
+        [EDGE_CASES]: `${EDGE_CASES}${NL}${FENCE}${NL}${PROMISED[PROMISED.indexOf(EDGE_CASES) + 1]}${NL}${FENCE}${NL}`,
+      }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
+  });
+
+  // ── The DOCUMENT arm (overridden prompt, bound record) under fences ──
+
+  function judgeDocument(content: string): { status: number | null; stdout: string } {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'draft.json'),
+      JSON.stringify(
+        specEvidenceArtifact({
+          admission: { runMetadata: { caller: 'spec', promptSource: PROMPT_SOURCE_OVERRIDE } },
+          output: { content },
+        }),
+        null,
+        2,
+      ),
+    );
+    const r = spawnSync('sh', ['./pre-commit'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+    });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  it.skipIf(!shellOk)('DOCUMENT: a heading that exists only inside a fence is no heading', () => {
+    // A YAML document whose "# Problem" lines sit inside a fence has no
+    // markdown heading at all; the pre-fix reader read the comments as headings.
+    const r = judgeDocument(
+      `The spec, as YAML:${NL}${NL}${FENCE}yaml${NL}# Problem${NL}problem: the thing${NL}# Tasks${NL}tasks: [a, b]${NL}${FENCE}${NL}`,
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('has no heading with a body');
+  });
+
+  it.skipIf(!shellOk)('DOCUMENT: a real heading whose body is a code block is bodied', () => {
+    const r = judgeDocument(
+      `## The spec${NL}${NL}${FENCE}yaml${NL}problem: the thing${NL}${FENCE}${NL}`,
+    );
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('shape DOCUMENT');
   });
 });
 
