@@ -1,4 +1,31 @@
+import type { ProjectDescription } from '@mmnto/totem';
+
 export type { ProjectDescription } from '@mmnto/totem';
+
+/**
+ * The banner's rules line (mmnto-ai/totem#2765): the ACTIVE count leads — it is
+ * the number lint enforces and status reports — and the inert split renders
+ * only when it is non-trivial, so `Rules: 385 active of 485 compiled (93
+ * archived, 7 untested-against-codebase)` on this repo and `Rules: 12 active`
+ * on a repo with nothing inert. Never a bare "N compiled": that was the raw
+ * total posing as the enforced set.
+ */
+export function formatRulesLine(
+  d: Pick<
+    ProjectDescription,
+    'rules' | 'rulesCompiled' | 'rulesArchived' | 'rulesUntested' | 'rulesPendingVerification'
+  >,
+): string {
+  const inert: string[] = [];
+  if (d.rulesArchived > 0) inert.push(`${d.rulesArchived} archived`);
+  if (d.rulesUntested > 0) inert.push(`${d.rulesUntested} untested-against-codebase`);
+  if (d.rulesPendingVerification > 0) {
+    inert.push(`${d.rulesPendingVerification} pending-verification`);
+  }
+  return inert.length === 0
+    ? `Rules: ${d.rules} active`
+    : `Rules: ${d.rules} active of ${d.rulesCompiled} compiled (${inert.join(', ')})`;
+}
 
 export async function getProjectDescription(cwd: string) {
   const path = await import('node:path');
@@ -27,7 +54,7 @@ export async function describeCommand(): Promise<void> {
   log.info('[Describe]', `Project: ${result.project}`);
   if (result.description) log.info('[Describe]', `Description: ${result.description}`);
   log.info('[Describe]', `Tier: ${result.tier}`);
-  log.info('[Describe]', `Rules: ${result.rules} compiled`);
+  log.info('[Describe]', formatRulesLine(result));
   log.info('[Describe]', `Lessons: ${result.lessons}`);
   log.info('[Describe]', `Targets: ${result.targets.length}`);
   for (const t of result.targets) {

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { isActiveCompiledRule, loadCompiledRulesFile } from './compiler.js';
 import type { TotemConfig } from './config-schema.js';
 import { getConfigTier } from './config-schema.js';
 
@@ -8,7 +9,19 @@ export interface ProjectDescription {
   project: string;
   description?: string;
   tier: 'lite' | 'standard' | 'full';
+  /**
+   * The ACTIVE compiled-rule count — the set `totem lint` enforces and
+   * `totem status` reports, resolved through the same predicate as lint's
+   * loader (`isActiveCompiledRule`, mmnto-ai/totem#2765). Before that fix this
+   * was the raw file total, which no enforcement surface counts.
+   */
   rules: number;
+  /** Every entry in `compiled-rules.json`, whatever its status — the raw total the banner used to print. */
+  rulesCompiled: number;
+  /** Inert entries by status; `rules + rulesArchived + rulesUntested + rulesPendingVerification === rulesCompiled`. */
+  rulesArchived: number;
+  rulesUntested: number;
+  rulesPendingVerification: number;
   lessons: number;
   targets: string[];
   partitions: Record<string, string[]>;
@@ -38,23 +51,44 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
 
   const tier = getConfigTier(config);
 
-  // Rule count from compiled rules. `compiled-rules.json` is an object of
-  // shape `{ version, rules: CompiledRule[], nonCompilable: [...] }` — NOT
-  // an array. Reading `parsed.rules.length` is the canonical access
-  // pattern used by `loadCompiledRulesFile` and the rest of the codebase
-  // (mmnto-ai/totem#1884 R1 — prior `Array.isArray(parsed)` check always
-  // failed, reporting 0 rules in every orientation banner).
+  // Rule counts (mmnto-ai/totem#2765). `rules` is the ACTIVE set — what
+  // `totem lint` enforces and `totem status` reports — derived through the
+  // SAME predicate lint's loader applies (`isActiveCompiledRule`, the
+  // mmnto-ai/totem#1345 status filter), so the orientation banner and the
+  // enforcement surfaces agree by construction. mmnto-ai/totem#1884 R1 fixed
+  // this block's access pattern (`parsed.rules`, not a bare array) but the
+  // number it then counted was still the RAW total, which no enforcement
+  // surface counts: 485 here against lint's 385. The raw total stays, labelled,
+  // as `rulesCompiled` with the inert split beside it, so the archived mass
+  // does not vanish from the banner — it stops posing as enforced. The file is
+  // read through the schema-validating loader lint and status use; a missing
+  // or unreadable file reports zeros, and a sensor never throws.
   let rules = 0;
+  let rulesCompiled = 0;
+  let rulesArchived = 0;
+  let rulesUntested = 0;
+  let rulesPendingVerification = 0;
   try {
     const rulesPath = path.join(totemDir, 'compiled-rules.json');
     if (fs.existsSync(rulesPath)) {
-      const parsed = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
-      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.rules)) {
-        rules = parsed.rules.length;
+      const file = loadCompiledRulesFile(rulesPath);
+      rulesCompiled = file.rules.length;
+      for (const rule of file.rules) {
+        if (isActiveCompiledRule(rule)) rules += 1;
+        else if (rule.status === 'archived') rulesArchived += 1;
+        else if (rule.status === 'untested-against-codebase') rulesUntested += 1;
+        else rulesPendingVerification += 1;
       }
     }
   } catch {
-    // compiled-rules.json missing or malformed
+    // compiled-rules.json malformed or schema-invalid: the sensor reports
+    // zeros (as `totem status` falls back); lint's own loader is where a
+    // malformed file fails loud.
+    rules = 0;
+    rulesCompiled = 0;
+    rulesArchived = 0;
+    rulesUntested = 0;
+    rulesPendingVerification = 0;
   }
 
   // Lesson count
@@ -86,5 +120,18 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
     // .git/hooks unreadable
   }
 
-  return { project, description, tier, rules, lessons, targets, partitions, hooks };
+  return {
+    project,
+    description,
+    tier,
+    rules,
+    rulesCompiled,
+    rulesArchived,
+    rulesUntested,
+    rulesPendingVerification,
+    lessons,
+    targets,
+    partitions,
+    hooks,
+  };
 }

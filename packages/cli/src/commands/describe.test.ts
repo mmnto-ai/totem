@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { getProjectDescription } from './describe.js';
+import { formatRulesLine, getProjectDescription } from './describe.js';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'totem-describe-'));
@@ -17,7 +17,12 @@ function cleanTmpDir(dir: string): void {
 /** Scaffold a minimal totem project in a temp dir. */
 function scaffoldProject(
   dir: string,
-  opts: { lessons?: number; rules?: number; partitions?: Record<string, string[]> } = {},
+  opts: {
+    lessons?: number;
+    rules?: number;
+    archived?: number;
+    partitions?: Record<string, string[]>;
+  } = {},
 ) {
   // totem.config.ts
   const partitions = opts.partitions ? JSON.stringify(opts.partitions) : undefined;
@@ -47,9 +52,21 @@ function scaffoldProject(
   // (`{ version, rules: [...] }`) matching `loadCompiledRulesFile` and
   // the rest of the codebase. Prior versions of this helper wrote a bare
   // array, which masked the rule-count bug fixed in mmnto-ai/totem#1884.
+  // Entries are SCHEMA-VALID compiled rules since mmnto-ai/totem#2765: describe
+  // now counts through the same validating loader lint and status use, so a
+  // `{ id }` stub would (correctly) count as nothing. `archived` marks the
+  // first N entries inert.
   const rulesCount = opts.rules ?? 0;
   if (rulesCount > 0) {
-    const rules = Array.from({ length: rulesCount }, (_, i) => ({ id: `rule-${i}` }));
+    const rules = Array.from({ length: rulesCount }, (_, i) => ({
+      lessonHash: `hash${String(i).padStart(8, '0')}`,
+      lessonHeading: `Rule ${i}`,
+      pattern: 'dummy',
+      message: `Rule ${i} message`,
+      engine: 'regex',
+      compiledAt: '2026-05-11T00:00:00Z',
+      ...(i < (opts.archived ?? 0) ? { status: 'archived' } : {}),
+    }));
     fs.writeFileSync(
       path.join(dir, '.totem', 'compiled-rules.json'),
       JSON.stringify({ version: 1, rules, nonCompilable: [] }),
@@ -98,9 +115,53 @@ describe('getProjectDescription', () => {
       scaffoldProject(dir, { rules: 10 });
       const result = await getProjectDescription(dir);
       expect(result.rules).toBe(10);
+      expect(result.rulesCompiled).toBe(10);
     } finally {
       cleanTmpDir(dir);
     }
+  });
+
+  it('counts the ACTIVE set, not the raw total, and renders the split (mmnto-ai/totem#2765)', async () => {
+    const dir = makeTmpDir();
+    try {
+      scaffoldProject(dir, { rules: 10, archived: 3 });
+      const result = await getProjectDescription(dir);
+      expect(result.rules).toBe(7);
+      expect(result.rulesCompiled).toBe(10);
+      expect(result.rulesArchived).toBe(3);
+      expect(formatRulesLine(result)).toBe('Rules: 7 active of 10 compiled (3 archived)');
+    } finally {
+      cleanTmpDir(dir);
+    }
+  });
+
+  it('formatRulesLine: the split renders only when non-trivial, and names every inert status', () => {
+    const base = {
+      rules: 12,
+      rulesCompiled: 12,
+      rulesArchived: 0,
+      rulesUntested: 0,
+      rulesPendingVerification: 0,
+    };
+    expect(formatRulesLine(base)).toBe('Rules: 12 active');
+    expect(
+      formatRulesLine({
+        ...base,
+        rulesCompiled: 20,
+        rulesArchived: 5,
+        rulesUntested: 2,
+        rulesPendingVerification: 1,
+      }),
+    ).toBe(
+      'Rules: 12 active of 20 compiled (5 archived, 2 untested-against-codebase, 1 pending-verification)',
+    );
+    // The ACTIVE count leads; the raw total never poses as the enforced set.
+    expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).toMatch(
+      /^Rules: 12 active/,
+    );
+    expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).not.toMatch(
+      /^Rules: 20/,
+    );
   });
 
   it('returns zero counts when .totem directories are missing', async () => {

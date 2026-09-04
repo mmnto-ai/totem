@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadCompiledRules } from './compiler.js';
 import { type TotemConfig, TotemConfigSchema } from './config-schema.js';
 import { describeProject } from './describe.js';
 
@@ -28,7 +29,15 @@ function makeMinimalConfig(): TotemConfig {
   });
 }
 
-function writeRulesFile(totemDir: string, ruleCount: number): void {
+/**
+ * A schema-valid compiled-rules file. `statuses[i]` sets the i-th rule's
+ * lifecycle status (absent = legacy/active, mmnto-ai/totem#1345).
+ */
+function writeRulesFile(
+  totemDir: string,
+  ruleCount: number,
+  statuses: (string | undefined)[] = [],
+): void {
   fs.mkdirSync(totemDir, { recursive: true });
   const rules = Array.from({ length: ruleCount }, (_, i) => ({
     lessonHash: `hash${String(i).padStart(8, '0')}`,
@@ -37,6 +46,7 @@ function writeRulesFile(totemDir: string, ruleCount: number): void {
     message: `Rule ${i} message`,
     engine: 'regex',
     compiledAt: '2026-05-11T00:00:00Z',
+    ...(statuses[i] !== undefined ? { status: statuses[i] } : {}),
   }));
   fs.writeFileSync(
     path.join(totemDir, 'compiled-rules.json'),
@@ -69,6 +79,60 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     const result = describeProject(makeMinimalConfig(), tmpDir);
 
     expect(result.rules).toBe(7);
+  });
+
+  // mmnto-ai/totem#2765 — the describe half of the mmnto-ai/totem#2388 parity.
+  // On the pre-fix code `rules` is the raw length (10 here) while lint's loader
+  // returns 6; the banner quoted a number lint never enforced.
+  it('counts the ACTIVE set through the same predicate lint loads with, and reports the inert split', () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeRulesFile(totemDir, 10, [
+      undefined, // legacy, no status → active
+      'active',
+      'archived',
+      undefined,
+      'untested-against-codebase',
+      'archived',
+      'pending-verification',
+      undefined,
+      'archived',
+      'active',
+    ]);
+    const result = describeProject(makeMinimalConfig(), tmpDir);
+    expect(result.rules).toBe(5);
+    expect(result.rulesCompiled).toBe(10);
+    expect(result.rulesArchived).toBe(3);
+    expect(result.rulesUntested).toBe(1);
+    expect(result.rulesPendingVerification).toBe(1);
+    // Parity by construction: the enforcement loader's count IS the banner's count.
+    expect(result.rules).toBe(loadCompiledRules(path.join(totemDir, 'compiled-rules.json')).length);
+    expect(
+      result.rules + result.rulesArchived + result.rulesUntested + result.rulesPendingVerification,
+    ).toBe(result.rulesCompiled);
+  });
+
+  it('a file with nothing inert reports rules === rulesCompiled and a zero split', () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    writeRulesFile(totemDir, 4);
+    const result = describeProject(makeMinimalConfig(), tmpDir);
+    expect(result.rules).toBe(4);
+    expect(result.rulesCompiled).toBe(4);
+    expect(result.rulesArchived + result.rulesUntested + result.rulesPendingVerification).toBe(0);
+  });
+
+  it('reports zeros, and does not throw, when the file is valid JSON but fails the compiled-rules schema', () => {
+    const totemDir = path.join(tmpDir, '.totem');
+    // The pre-fix reader counted any `rules` array (1 here); lint's loader
+    // refuses this file, and status falls back — the banner now agrees with them.
+    fs.mkdirSync(totemDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(totemDir, 'compiled-rules.json'),
+      JSON.stringify({ version: 1, rules: [{ id: 'not-a-compiled-rule' }] }),
+      'utf-8',
+    );
+    const result = describeProject(makeMinimalConfig(), tmpDir);
+    expect(result.rules).toBe(0);
+    expect(result.rulesCompiled).toBe(0);
   });
 
   it('reports 0 when compiled-rules.json is absent (graceful fallback)', () => {

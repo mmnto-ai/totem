@@ -301,6 +301,7 @@ export {
   isMinedProvenance,
   LEDGER_RETRY_PENDING_CODES,
   LegitimacySchema,
+  isActiveCompiledRule,
   loadCompiledRules,
   loadCompiledRulesFile,
   matchesGlob,

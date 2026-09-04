@@ -151,12 +151,7 @@ export function loadCompiledRules(
     const raw = fs.readFileSync(rulesPath, 'utf-8');
     const json = JSON.parse(raw) as unknown;
     const parsed = CompiledRulesFileSchema.parse(json);
-    return parsed.rules.filter(
-      (r) =>
-        r.status !== 'archived' &&
-        r.status !== 'untested-against-codebase' &&
-        r.status !== 'pending-verification',
-    );
+    return parsed.rules.filter(isActiveCompiledRule);
   } catch (err) {
     if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'ENOENT') return [];
     if (err instanceof z.ZodError) {
@@ -168,6 +163,25 @@ export function loadCompiledRules(
     onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
+}
+
+/**
+ * The ONE predicate for "this compiled rule is enforced" — the mmnto-ai/totem#1345
+ * status filter as a named function (mmnto-ai/totem#2765). Every surface that
+ * runs or COUNTS rules resolves through it: lint's loader above, `totem status`
+ * (which counts through that loader), and `describeProject` — the orientation
+ * banner and the MCP `describe_project` tool — which counts the unfiltered
+ * file through this predicate directly so it can also report the inert split.
+ * One predicate is what makes the three numbers agree by construction; a
+ * second spelling of the status list is how the banner came to print the raw
+ * total (485) while lint enforced 385.
+ */
+export function isActiveCompiledRule(rule: Pick<CompiledRule, 'status'>): boolean {
+  return (
+    rule.status !== 'archived' &&
+    rule.status !== 'untested-against-codebase' &&
+    rule.status !== 'pending-verification'
+  );
 }
 
 /** Load the full compiled rules file (rules + non-compilable cache). */
