@@ -678,9 +678,13 @@ export interface GroundingFloorVerdict {
  * Judge the retrieval against the relevance floor (mmnto-ai/totem#2700), over
  * the spec, session and code partitions — that three-partition scoping is
  * mmnto-ai/totem#2735's decision, not mmnto-ai/totem#2700's, and the body
- * comment below says why. Mirrors the MCP tool's semantics
- * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
- * real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
+ * comment below says why. Shares the MCP tool's floor SHAPE
+ * (`packages/mcp/src/tools/search-knowledge.ts`) but not, since the bot round
+ * on mmnto-ai/totem#2761, its predicate: the MCP reader still selects relevances
+ * on a bare `typeof` and would read an out-of-range value as signal, while this
+ * gate classes it as FAULTED and refuses an all-faulted retrieval outright —
+ * the one arm here that fires with NO real signal present. Otherwise the floor
+ * fires only when a real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
  * relevance, never a per-item filter — keyword-only hits have no comparable
  * relevance and are floor-EXEMPT, so a single exempt hit from one of those
  * three partitions saves the run.
@@ -830,11 +834,22 @@ export function formatGroundingRefusal(
       lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
     }
   } else if (verdict.bestRelevance === null) {
-    // Every hit faulted: no measurement to compare, nothing usable grounds the run.
+    // Every hit faulted: no measurement to compare, nothing usable grounds the
+    // run. The CAUSE is metric-specific and the search layer already named it in
+    // its warning (`OUT_OF_RANGE_CAUSE`), so this line names the fault class, not
+    // a cause the running metric might not have (leg F3 on the bot-round fold).
     const noun = verdict.hits === 1 ? 'hit' : 'hits';
     lines.push(
-      `Retrieval returned ${verdict.hits} ${noun}, but every one carried an invalid relevance (a negative _distance under l2: an SDK or data fault the search layer warned about) — nothing usable grounds this run.`,
+      `Retrieval returned ${verdict.hits} ${noun}, but every one carried a relevance outside [0, 1] — a fault the search layer warned about, naming its cause — so nothing usable grounds this run.`,
     );
+    // The same disclosure the zero-hit arm carries (mmnto-ai/totem#2735): this
+    // line would otherwise sit under a `Found: … N lessons` line unexplained.
+    if (deliveredLessons > 0) {
+      const lessonNoun = deliveredLessons === 1 ? 'lesson was' : 'lessons were';
+      lines.push(
+        `${deliveredLessons} ${lessonNoun} retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).`,
+      );
+    }
   } else {
     const best = verdict.bestRelevance;
     lines.push(
@@ -843,7 +858,7 @@ export function formatGroundingRefusal(
     if (verdict.faulted > 0) {
       const noun = verdict.faulted === 1 ? 'hit' : 'hits';
       lines.push(
-        `${verdict.faulted} ${noun} carried an invalid relevance and did not count as signal or as exemption (a negative _distance under l2: an SDK or data fault the search layer warned about).`,
+        `${verdict.faulted} ${noun} carried a relevance outside [0, 1] (a fault the search layer warned about, naming its cause) and did not count as signal or as exemption.`,
       );
     }
   }

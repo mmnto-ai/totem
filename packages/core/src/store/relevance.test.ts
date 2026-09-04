@@ -215,3 +215,15 @@ describe('OUT_OF_RANGE_CAUSE is metric-specific (F1)', () => {
     }
   });
 });
+
+describe('DISTANCE_METRICS', () => {
+  // The allow-list `assertDistanceMetric` gates on is frozen at runtime, not only
+  // `readonly` in the type: a JS caller that pushed a spelling onto it would
+  // otherwise pass the gate and reach an undefined map entry (CodeRabbit on
+  // mmnto-ai/totem#2761). Pinned so a refactor cannot drop the freeze unnoticed.
+  it('is frozen at runtime', () => {
+    expect(Object.isFrozen(DISTANCE_METRICS)).toBe(true);
+    expect(() => (DISTANCE_METRICS as unknown as string[]).push('euclidean')).toThrow();
+    expect(DISTANCE_METRICS).toEqual(['l2', 'cosine', 'dot']);
+  });
+});

@@ -1161,9 +1161,17 @@ describe('evaluateGroundingFloor', () => {
     expect(allFaulted.refuse).toBe(true);
     const { message: allFaultedText } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 0);
     expect(allFaultedText).toContain(
-      'Retrieval returned 2 hits, but every one carried an invalid relevance',
+      'Retrieval returned 2 hits, but every one carried a relevance outside [0, 1]',
     );
     expect(allFaultedText).toContain('nothing usable grounds this run');
+    // The cause is the search layer's to name (metric-specific); the refusal must
+    // not assert an l2 fault the running metric might not have (leg F3).
+    expect(allFaultedText).not.toContain('l2');
+    // The delivered-lessons disclosure the zero-hit arm carries (mmnto-ai/totem#2735).
+    const { message: withLessons } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 3);
+    expect(withLessons).toContain(
+      '3 lessons were retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).',
+    );
     expect(allFaultedText).not.toContain('best relevance');
 
     const mixed = evaluateFloor(
@@ -1176,7 +1184,7 @@ describe('evaluateGroundingFloor', () => {
     const { message: mixedText } = formatGroundingRefusal('weak topic', mixed, FLOOR, 0);
     expect(mixedText).toContain('best relevance 0.050 is below the floor');
     expect(mixedText).toContain(
-      '1 hit carried an invalid relevance and did not count as signal or as exemption',
+      '1 hit carried a relevance outside [0, 1] (a fault the search layer warned about, naming its cause) and did not count as signal or as exemption.',
     );
     expect(mixedText).toContain('1. docs/weak.md — relevance 0.050');
   });
@@ -1226,6 +1234,7 @@ describe('evaluateGroundingFloor', () => {
   it('with NO floor, hits far below any plausible floor still PROCEED and withhold nothing', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(0.01), relevantHit(0.02)] },
+      isRelevanceInRange,
       undefined,
     );
     expect(verdict.refuse).toBe(false);
@@ -1237,18 +1246,20 @@ describe('evaluateGroundingFloor', () => {
   });
 
   it('with NO floor, the ZERO-HIT arm still refuses (it is not a floor arm)', () => {
-    expect(evaluateGroundingFloor(emptyContext(), undefined)).toEqual({
+    expect(evaluateGroundingFloor(emptyContext(), isRelevanceInRange, undefined)).toEqual({
       refuse: true,
       hits: 0,
       bestRelevance: null,
       withheld: [],
       floorExempt: 0,
+      faulted: 0,
     });
   });
 
   it('with NO floor, floorExempt is still counted for FTS-only hits', () => {
     const verdict = evaluateGroundingFloor(
       { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(0.01)] },
+      isRelevanceInRange,
       undefined,
     );
     expect(verdict.refuse).toBe(false);
@@ -1258,7 +1269,9 @@ describe('evaluateGroundingFloor', () => {
 
   it('omitting the floor argument entirely is the same as passing undefined', () => {
     const context = { ...emptyContext(), specs: [relevantHit(0.01)] };
-    expect(evaluateGroundingFloor(context)).toEqual(evaluateGroundingFloor(context, undefined));
+    expect(evaluateGroundingFloor(context, isRelevanceInRange)).toEqual(
+      evaluateGroundingFloor(context, isRelevanceInRange, undefined),
+    );
   });
 });
 
@@ -1335,7 +1348,7 @@ describe('formatGroundingRefusal', () => {
   // printing `floor 0.250` would claim a judgment no floor made.
 
   it('with NO floor the 0-hit refusal names the floor as none, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), undefined);
+    const verdict = evaluateGroundingFloor(emptyContext(), isRelevanceInRange, undefined);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, undefined, 0);
     expect(message).toBe(
       [
@@ -1348,7 +1361,7 @@ describe('formatGroundingRefusal', () => {
   });
 
   it('with a floor CONFIGURED the 0-hit refusal names the value and its place, byte for byte', () => {
-    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const verdict = evaluateGroundingFloor(emptyContext(), isRelevanceInRange, FLOOR);
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toBe(
       [
@@ -1361,7 +1374,11 @@ describe('formatGroundingRefusal', () => {
 
   it('with NO floor the lessons clause still renders, above the none line', () => {
     const lessons = [makeLesson(), makeLesson()];
-    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, undefined);
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), lessons },
+      isRelevanceInRange,
+      undefined,
+    );
     const { message } = formatGroundingRefusal(
       'an-unanchored-slug',
       verdict,
