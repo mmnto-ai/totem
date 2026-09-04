@@ -19,6 +19,7 @@
     "test:docs": "node tools/docs-transforms.test.cjs",
     "test:augment-headers": "node tools/augment-cohort-changelog-headers.test.mjs",
     "test:cut-sensor": "node --test tools/vp-pr-cut-sensor.test.mjs",
+    "test:verify-oidc": "node --test tools/verify-oidc-provenance.test.mjs",
     "test:autoclose-adapters": "node --test tools/autoclose-adapters.test.mjs"
   },
   "devDependencies": {
