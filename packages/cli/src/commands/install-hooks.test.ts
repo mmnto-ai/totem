@@ -39,7 +39,7 @@ import {
   TOTEM_PREPUSH_MARKER,
   upgradePrePushHookIfNeeded,
 } from './install-hooks.js';
-import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
+import { SPEC_REQUIRED_SECTIONS, SPEC_SYSTEM_PROMPT } from './spec-templates.js';
 
 // The default render options every pre-#2692 positional call implied
 // (mmnto-ai/totem#2692 C2 — the builders take a REQUIRED options object now, so
@@ -3430,4 +3430,317 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     );
     expect(r.stdout).not.toContain('BLOCKED');
   });
+});
+
+// ─── The frozen mutation suite (mmnto-ai/totem#2737) ─────
+//
+// Authored against the FINAL contract — all NINE promised headings — and run
+// once against the UNCHANGED reader before either predicate moved, then frozen:
+// never edited by the commits that follow it. The RED/GREEN pattern it printed
+// on the unchanged reader is what makes each case evidence of a predicate
+// rather than a transcription of whatever the implementation happened to do.
+//
+// The nine come off SPEC_SYSTEM_PROMPT, not SPEC_REQUIRED_SECTIONS: the
+// constant still named two headings when this was frozen, and reading the
+// prompt keeps the suite byte-identical across all three commits. It is also
+// how no case here ever retypes the em dash in `### Verification (MANDATORY —
+// do not skip)` (the mmnto-ai/totem#2692 authoring trap). After the extension
+// the two surfaces are the same nine strings in the same order.
+describe('buildPreCommitHook spec-gate reader — frozen mutation suite (mmnto-ai/totem#2737)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+
+  /** The nine `### ` lines of the built-in prompt, in prompt order. */
+  const PROMISED = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+
+  /** Pick a promised heading by an ASCII prefix — never retype the em dash. */
+  function promised(prefix: string): string {
+    const found = PROMISED.find((heading) => heading.startsWith(prefix));
+    if (found === undefined) throw new Error(`no promised heading starts with ${prefix}`);
+    return found;
+  }
+
+  const PROBLEM_STATEMENT = promised('### Problem Statement');
+  const FILES_TO_EXAMINE = promised('### Files to Examine');
+  const EDGE_CASES = promised('### Edge Cases');
+  const IMPLEMENTATION_TASKS = promised('### Implementation Tasks');
+  const EXECUTION_FLOW = promised('### Execution Flow');
+  const VERIFICATION = promised('### Verification');
+  const TEST_PLAN = promised('### Test Plan');
+
+  /** A TAB, built rather than escaped (the mmnto-ai/totem#2692 authoring trap). */
+  const TAB = String.fromCharCode(9);
+
+  /**
+   * All nine promised headings, each over one plain body line. An override
+   * replaces exactly ONE heading's whole block, so each case changes one thing;
+   * an empty override DROPS that heading from the draft entirely.
+   */
+  function nineBodied(overrides: Record<string, string> = {}): string {
+    return PROMISED.map((heading) => {
+      const override = overrides[heading];
+      return override === undefined
+        ? `${heading}\n\nA non-blank body under ${heading}.\n`
+        : override;
+    })
+      .filter((block) => block.length > 0)
+      .join('\n');
+  }
+
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-2737-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/frozen-suite', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(): { status: number | null; stdout: string } {
+    const r = spawnSync('sh', ['./pre-commit'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+    });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  function writeRun(name: string, artifact: Record<string, unknown>): void {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), JSON.stringify(artifact, null, 2));
+  }
+
+  /** Every BLOCKED arm must be distinguishable from the other two arms. */
+  function expectDistinctBlock(stdout: string): void {
+    expect(stdout).not.toContain('no totem spec run artifact');
+    expect(stdout).not.toContain('the spec-evidence reader could not run');
+  }
+
+  /** Judge one draft written under the BUILT-IN prompt on an ISSUE anchor. */
+  function judge(content: string): { status: number | null; stdout: string } {
+    writeRun('draft.json', specEvidenceArtifact({ output: { content } }));
+    return runHook();
+  }
+
+  // ── Positive mutations: each must PASS ──
+
+  it.skipIf(!shellOk)('a section that opens with a deeper heading is not empty', () => {
+    const r = judge(
+      nineBodied({
+        [IMPLEMENTATION_TASKS]: `${IMPLEMENTATION_TASKS}\n#### 1. Sub\nA step under the sub-heading.\n`,
+      }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+  });
+
+  it.skipIf(!shellOk)(
+    'a promised heading with its parenthetical dropped matches and is named',
+    () => {
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: '### Execution Flow\n\nA body under the shortened heading.\n',
+          [VERIFICATION]: '### Verification\n\nA body under the shortened heading.\n',
+        }),
+      );
+      expect(r.status, r.stdout).toBe(0);
+      expect(r.stdout).toContain(`· tolerated ${EXECUTION_FLOW} ~ ### Execution Flow`);
+      expect(r.stdout).toContain(`${VERIFICATION} ~ ### Verification`);
+    },
+  );
+
+  it.skipIf(!shellOk)('trailing whitespace on a heading line is tolerated silently', () => {
+    const r = judge(
+      nineBodied({
+        [PROBLEM_STATEMENT]: `${PROBLEM_STATEMENT}   ${TAB}\n\nA body under it.\n`,
+      }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+    expect(r.stdout).not.toContain('· tolerated');
+  });
+
+  it.skipIf(!shellOk)('a different trailing parenthetical matches and is named', () => {
+    const r = judge(
+      nineBodied({ [VERIFICATION]: '### Verification (required)\n\nA body under it.\n' }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· tolerated');
+    expect(r.stdout).toContain(`${VERIFICATION} ~ ### Verification (required)`);
+  });
+
+  // ── Negative mutations: each must BLOCK, by name ──
+
+  it.skipIf(!shellOk)('a genuinely absent promised heading blocks by name', () => {
+    const r = judge(nineBodied({ [TEST_PLAN]: '' }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${TEST_PLAN}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a genuinely empty section blocks by name', () => {
+    const r = judge(nineBodied({ [PROBLEM_STATEMENT]: PROBLEM_STATEMENT }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${PROBLEM_STATEMENT}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a whitespace-only body is empty', () => {
+    const r = judge(
+      nineBodied({ [FILES_TO_EXAMINE]: `${FILES_TO_EXAMINE}\n   \n${TAB}${TAB}\n\n` }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${FILES_TO_EXAMINE}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a deeper heading with nothing under it is not a body', () => {
+    const r = judge(nineBodied({ [EDGE_CASES]: `${EDGE_CASES}\n#### none` }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a shallower heading ends the section', () => {
+    const r = judge(
+      nineBodied({
+        [IMPLEMENTATION_TASKS]: `${IMPLEMENTATION_TASKS}\n## Notes\nProse under the shallower heading.\n`,
+      }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${IMPLEMENTATION_TASKS}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('the heading level is exact', () => {
+    const r = judge(
+      nineBodied({ [PROBLEM_STATEMENT]: '## Problem Statement\n\nA body under it.\n' }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${PROBLEM_STATEMENT}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  // ── The ruled falsifier (operator ruling 2026-09-03) ──
+  //
+  // The denominator is all SEVEN drafts the R3 probe actually recorded, and the
+  // claim is that none is blocked; the mutated negatives above carry the "flags
+  // the defective" half. The four schema-constrained runs carry the promised
+  // headings BYTE-IDENTICAL, em dash included, so they must match on the EXACT
+  // pass and name no tolerance — which makes this test the executed proof, on
+  // every CI OS, that the em-dash heading round-trips through JSON.stringify,
+  // the single-quoted `node -e` word, sh and node without drift.
+
+  /** The recorded R3 fixture directory, found by walking up to the repo root. */
+  function resolveR3FixtureDir(): string {
+    let dir = path.dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 8; i++) {
+      const candidate = path.join(dir, '.totem', 'fixtures', 'spec-runs-2026-09-02');
+      if (fs.existsSync(candidate)) return candidate;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return '';
+  }
+
+  /** The ORIGINAL run's draft: the artifacts.ndjson row whose id starts e5a15c9c. */
+  function readOriginalDraft(dir: string): string {
+    const ndjson = fs.readFileSync(path.join(dir, 'artifacts.ndjson'), 'utf-8');
+    for (const line of ndjson.split('\n')) {
+      if (line.trim().length === 0) continue;
+      let row: { id?: unknown; output?: { content?: unknown } };
+      try {
+        row = JSON.parse(line) as { id?: unknown; output?: { content?: unknown } };
+      } catch (err) {
+        void err;
+        continue;
+      }
+      if (typeof row.id === 'string' && row.id.startsWith('e5a15c9c')) {
+        const content = row.output?.content;
+        if (typeof content === 'string') return content;
+      }
+    }
+    return '';
+  }
+
+  it.skipIf(!shellOk)(
+    'the extended reader blocks none of the seven recorded R3 drafts and names the tolerance on the three that dropped parentheticals',
+    () => {
+      const dir = resolveR3FixtureDir();
+      expect(
+        dir,
+        'the recorded R3 drafts (.totem/fixtures/spec-runs-2026-09-02/) are not in this checkout — the ruled falsifier cannot run',
+      ).not.toBe('');
+
+      const original = readOriginalDraft(dir);
+      expect(
+        original.length,
+        'the original R3 draft (artifacts.ndjson row id e5a15c9c…) was not found',
+      ).toBeGreaterThan(0);
+
+      const read = (name: string): string => fs.readFileSync(path.join(dir, name), 'utf-8');
+      const drafts: Array<{ name: string; content: string; tolerated: boolean }> = [
+        {
+          name: 'the original artifact (artifacts.ndjson row id e5a15c9c…)',
+          content: original,
+          tolerated: true,
+        },
+        {
+          name: 'r3-unconstrained-run1.md',
+          content: read('r3-unconstrained-run1.md'),
+          tolerated: true,
+        },
+        {
+          name: 'r3-unconstrained-run2.md',
+          content: read('r3-unconstrained-run2.md'),
+          tolerated: true,
+        },
+        {
+          name: 'r3-responseSchema-run1.md',
+          content: read('r3-responseSchema-run1.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseSchema-run2.md',
+          content: read('r3-responseSchema-run2.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseJsonSchema-minLength1-run1.md',
+          content: read('r3-responseJsonSchema-minLength1-run1.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseJsonSchema-minLength1-run2.md',
+          content: read('r3-responseJsonSchema-minLength1-run2.md'),
+          tolerated: false,
+        },
+      ];
+      // The denominator is ruled: all seven, or the claim is a different one.
+      expect(drafts).toHaveLength(7);
+
+      for (const draft of drafts) {
+        const r = judge(draft.content);
+        expect(r.status, `${draft.name} was BLOCKED: ${r.stdout}`).toBe(0);
+        expect(r.stdout, `${draft.name} did not read as TEMPLATE`).toContain('· shape TEMPLATE');
+        if (draft.tolerated) {
+          expect(
+            r.stdout,
+            `${draft.name} dropped a promised parenthetical but the evidence line named no tolerance`,
+          ).toContain('· tolerated');
+        } else {
+          expect(
+            r.stdout,
+            `${draft.name} carries the promised headings verbatim but the evidence line named a tolerance`,
+          ).not.toContain('· tolerated');
+        }
+      }
+    },
+  );
 });
