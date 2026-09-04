@@ -4,6 +4,9 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
+// totem-context: the cold-start premise behind the dynamic-import rule is already false for THIS module, so the dynamic form would buy nothing. `install-hooks.js` is never on the startup graph — index.ts and index-lite.ts reach every one of its verbs through `await import('./commands/install-hooks.js')`, so `--help` never loads it. And when it IS loaded, the core barrel is already in its static graph twice over: `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js` both value-import it. `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract (mmnto-ai/totem#2753) and `installGitHook` is synchronous, so `await import` is not available to them at all; the alternative is duplicating core's `parseForkMarker` regex in the CLI, which is the divergence the shared parser exists to prevent.
+import { parseForkMarker } from '@mmnto/totem';
+
 import {
   GROUNDING_ANCHOR_ISSUE,
   GROUNDING_ANCHOR_RECORD,
@@ -1221,19 +1224,127 @@ function writeExecutableHook(hookPath: string, content: string): void {
  *     whitespace may follow the end marker).
  */
 export function isTotemOwnedWholeFile(content: string, marker: string, endMarker: string): boolean {
+  const trailerStart = ownedTrailerStart(content, marker, endMarker);
+  if (trailerStart === undefined) return false;
+  return content.slice(trailerStart).trim().length === 0;
+}
+
+/**
+ * The offset just past the totem end marker — where a trailer would begin — for a
+ * hook whose managed region OPENS the file and is BOUNDED. `undefined` when either
+ * rule fails: no start marker, user content before it (beyond a shebang + the start
+ * of the marker comment), or no end marker after it (the legacy-hook path).
+ *
+ * The one shared prefix/bound rule behind {@link isTotemOwnedWholeFile} and
+ * {@link isTotemOwnedWithAttestedTrailer} — the two differ ONLY in what they
+ * accept after this offset (mmnto-ai/totem#2753).
+ */
+function ownedTrailerStart(content: string, marker: string, endMarker: string): number | undefined {
   const idx = content.indexOf(marker);
-  if (idx === -1) return false;
+  if (idx === -1) return undefined;
   const before = content.slice(0, idx);
   if (before.trim().length !== 0 && !OWNED_WHOLE_FILE_PREAMBLE_RE.test(before)) {
-    return false;
+    return undefined;
   }
   const end = content.indexOf(endMarker, idx + marker.length);
   // Start marker present but end marker missing → region cannot be bounded →
-  // not safe to whole-file overwrite without --force (also the legacy-hook path).
-  if (end === -1) return false;
-  if (content.slice(end + endMarker.length).trim().length !== 0) return false;
-  return true;
+  // not safe to rewrite without --force (also the legacy-hook path).
+  if (end === -1) return undefined;
+  return end + endMarker.length;
 }
+
+/**
+ * A trailer (the text after a managed hook's end marker) is ATTESTED when its first
+ * non-blank line carries a full fork attestation — reason, owner and attested all
+ * present and non-empty (mmnto-ai/totem#2753).
+ *
+ * The attestation is core's `<!-- totem:fork … -->` marker (`parseForkMarker`), the
+ * same shape the parity detector reads, carried on a shell comment line:
+ *   `# <!-- totem:fork reason="…" owner="…" attested="2026-06-07" -->`
+ *
+ * A BARE `totem:fork` marker — or one missing any of the three fields — is NOT
+ * attested. That asymmetry is deliberate: for the parity detector a bare marker is
+ * enough to claim a fork, but carrying a consumer's lines through a managed-block
+ * rewrite is a maintenance promise, and the promise needs a name, a reason and a
+ * date. Only the FIRST non-blank line is read — an attestation buried below other
+ * content does not vouch for the content above it.
+ */
+export function isAttestedTrailer(trailer: string): boolean {
+  const firstNonBlank = trailer.split('\n').find((line) => line.trim().length !== 0);
+  if (firstNonBlank === undefined) return false;
+  const fork = parseForkMarker(firstNonBlank);
+  if (fork === undefined) return false;
+  return (
+    typeof fork.reason === 'string' &&
+    fork.reason.length > 0 &&
+    typeof fork.owner === 'string' &&
+    fork.owner.length > 0 &&
+    typeof fork.attested === 'string' &&
+    fork.attested.length > 0
+  );
+}
+
+/**
+ * The mmnto-ai/totem#2406 owned-whole-file shape with ONE relaxation: the trailer may
+ * be non-blank if it is attested ({@link isAttestedTrailer}).
+ *
+ * The precondition for the in-place managed-block rewrite: totem still owns
+ * everything from the top of the file through the end marker, and what follows it is
+ * a consumer extension that named itself. Everything before the end marker is
+ * regenerated; everything after it is carried through byte-for-byte.
+ */
+export function isTotemOwnedWithAttestedTrailer(
+  content: string,
+  marker: string,
+  endMarker: string,
+): boolean {
+  const trailerStart = ownedTrailerStart(content, marker, endMarker);
+  if (trailerStart === undefined) return false;
+  return isAttestedTrailer(content.slice(trailerStart));
+}
+
+/**
+ * The trailer as it must be re-attached after a regenerated managed block: the text
+ * after `endMarker` with exactly ONE leading line terminator (`\r\n` or `\n`)
+ * removed. The canonical hook text already ends with the end marker's own
+ * terminator, so re-attaching the raw slice would duplicate it (the `upgradeReflexes`
+ * seam precedent in init.ts). Everything past that one terminator is untouched.
+ */
+function trailerTailAfterEndMarker(content: string, trailerStart: number): string {
+  const trailer = content.slice(trailerStart);
+  if (trailer.startsWith('\r\n')) return trailer.slice(2);
+  if (trailer.startsWith('\n')) return trailer.slice(1);
+  return trailer;
+}
+
+/**
+ * The action {@link installGitHook} took on one git hook — the git-hook half of the
+ * vocabulary {@link ManagedSessionHookAction} carries for session hooks:
+ *   - `installed`         — no hook was there; the canonical file was created.
+ *   - `exists`            — present and already current: no write. Includes an
+ *                           attested-extension hook whose managed BLOCK already
+ *                           equals the canonical (mmnto-ai/totem#2753), and the
+ *                           declines — a legacy hook with no end marker, a user hook
+ *                           carrying an appended block, and an UNATTESTED trailer —
+ *                           each of which takes one `totem hook install --force`.
+ *   - `appended`          — a user shell hook carrying no totem marker: the block was
+ *                           appended below the user's own content.
+ *   - `overwritten`       — the WHOLE file was written: a `--force` overwrite, or the
+ *                           bare drift-repair of a totem-owned whole file
+ *                           (mmnto-ai/totem#2138).
+ *   - `block-rewritten`   — the managed block was regenerated IN PLACE and the
+ *                           attested `totem:fork` extension after its end marker was
+ *                           carried through byte-for-byte. Bare only —
+ *                           `--force` still rewrites the whole file.
+ *   - `skipped-non-shell` — a hook with a non-shell interpreter: never touched.
+ */
+export type GitHookAction =
+  | 'installed'
+  | 'exists'
+  | 'appended'
+  | 'skipped-non-shell'
+  | 'overwritten'
+  | 'block-rewritten';
 
 /**
  * Install a single git hook with idempotency and chain preservation.
@@ -1249,6 +1360,17 @@ export function isTotemOwnedWholeFile(content: string, marker: string, endMarker
  * templates now emit one. Drift-repair fires only when the caller threads the end
  * marker AND the on-disk hook carries it — a legacy pre-end-marker hook declines to
  * `exists` and takes one `totem hook install --force`.
+ *
+ * Since mmnto-ai/totem#2753 a THIRD arm sits between drift-repair and the decline: a
+ * file totem owns through its end marker whose trailer is an ATTESTED `totem:fork`
+ * extension ({@link isTotemOwnedWithAttestedTrailer}) has its managed block rewritten
+ * IN PLACE (`block-rewritten`) — the canonical text plus the existing trailer,
+ * byte-identical past the seam. That is the liquid-city shape: a consumer appending
+ * its own blocks after totem's end marker never received a managed-hook upgrade
+ * through bare `totem init` (measured at `@mmnto/cli` 1.123.0,
+ * mmnto-ai/liquid-city#1174). An UNATTESTED trailer still declines to `exists`,
+ * unchanged. `--force` is untouched by all of this: it overwrites the WHOLE file,
+ * trailer included.
  */
 export function installGitHook(
   hooksDir: string,
@@ -1257,7 +1379,7 @@ export function installGitHook(
   marker: string,
   force?: boolean,
   endMarker?: string,
-): 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten' {
+): GitHookAction {
   const hookPath = path.join(hooksDir, hookName);
 
   if (fs.existsSync(hookPath)) {
@@ -1281,6 +1403,20 @@ export function installGitHook(
       ) {
         writeExecutableHook(hookPath, hookContent);
         return 'overwritten';
+      }
+      // In-place managed-block rewrite (mmnto-ai/totem#2753): totem owns the file
+      // through its end marker and what follows is an ATTESTED `totem:fork`
+      // extension. Regenerate the block, carry the trailer through byte-for-byte.
+      // The currency compare here is the RECOMPOSED file, not the whole existing
+      // one — an attested-trailer hook whose block already equals the canonical is
+      // current (`exists`, no write), which is what makes a second bare run a no-op.
+      if (endMarker !== undefined && isTotemOwnedWithAttestedTrailer(existing, marker, endMarker)) {
+        const trailerStart =
+          existing.indexOf(endMarker, existing.indexOf(marker) + marker.length) + endMarker.length;
+        const rewritten = hookContent + trailerTailAfterEndMarker(existing, trailerStart);
+        if (rewritten === existing) return 'exists';
+        writeExecutableHook(hookPath, rewritten);
+        return 'block-rewritten';
       }
       return 'exists';
     }
@@ -1308,8 +1444,8 @@ export function installGitHook(
 }
 
 export interface EnforcementHookResult {
-  preCommit: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell' | 'overwritten';
-  prePush: 'installed' | 'exists' | 'appended' | 'skipped' | 'skipped-non-shell' | 'overwritten';
+  preCommit: GitHookAction | 'skipped';
+  prePush: GitHookAction | 'skipped';
 }
 
 /**
@@ -1444,10 +1580,10 @@ export async function installHooksCommand(): Promise<void> {
 // ─── Non-interactive hooks command ───────────────────
 
 export interface HooksCommandResult {
-  preCommit: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
-  prePush: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
-  postMerge: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
-  postCheckout: 'installed' | 'exists' | 'appended' | 'skipped-non-shell' | 'overwritten';
+  preCommit: GitHookAction;
+  prePush: GitHookAction;
+  postMerge: GitHookAction;
+  postCheckout: GitHookAction;
 }
 
 /**
@@ -1659,6 +1795,15 @@ export async function hooksCommand(opts: {
             opts.force
               ? `[Totem] Force-overwritten ${name} hook.`
               : `[Totem] Drift-repaired ${name} hook (totem-owned bounded region).`,
+          );
+          break;
+        case 'block-rewritten':
+          // Distinct from the whole-file line above: this write REGENERATED the
+          // managed block and left everything after the end marker alone. Saying so
+          // is the point — a consumer that extends its hooks needs to read, from the
+          // summary, that its extension survived (mmnto-ai/totem#2753).
+          console.error(
+            `[Totem] Drift-repaired ${name} hook (managed block rewritten in place; the attested extension after its end marker carried through unchanged).`,
           );
           break;
         case 'skipped-non-shell':

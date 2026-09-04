@@ -30,7 +30,8 @@ The hook engine. `totem hook install` installs or updates background git hooks (
 
 - **`hook install` flags:**
   - `--check`: Verifies the hooks are installed and exits non-zero if any are missing (no writes).
-  - `-f, --force`: Overwrites existing Totem hooks. Use this after a major version upgrade.
+  - `-f, --force`: Overwrites existing Totem hooks — the WHOLE file, including anything you added after the end marker. Use this after a major version upgrade, or for a legacy hook that predates the end markers.
+- **Upgrading a hook you extended:** a bare `totem hook install` (and `totem init`) rewrites the managed block in place when the content after the hook's end marker is an attested `totem:fork` extension — its first non-blank line carrying `reason`, `owner` and `attested`, e.g. `# <!-- totem:fork reason="deploy notice" owner="you" attested="2026-06-07" -->`. Your extension is carried through unchanged; only the block above it is regenerated. Trailing content that is NOT attested still declines to overwrite: delete the totem block (from its start marker through its end marker) and re-run `totem hook install` to re-append it, or take `--force` and lose the extension.
   - `--strict`: Installs the strict enforcement tier (spec-required plus a review gate).
   - `--standard`: Installs the standard enforcement tier (default).
 - **Other subcommands:** `hook run` evaluates compiled hooks against a tool-call payload (the PreToolUse runtime entrypoint); `hook test` runs hook fixtures against the compiled-hooks rules.
