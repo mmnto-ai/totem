@@ -146,7 +146,7 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     expect(result.rules).toBe(0);
   });
 
-  it('reports 0 when compiled-rules.json is malformed (does not throw)', () => {
+  it('reports 0 labelled unreadable when compiled-rules.json is not JSON (does not throw)', () => {
     const totemDir = path.join(tmpDir, '.totem');
     fs.mkdirSync(totemDir, { recursive: true });
     fs.writeFileSync(path.join(totemDir, 'compiled-rules.json'), 'not valid json {', 'utf-8');
@@ -154,6 +154,11 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     const result = describeProject(makeMinimalConfig(), tmpDir);
 
     expect(result.rules).toBe(0);
+    // The loader WARNS and returns an empty envelope for non-JSON rather than
+    // throwing, so the label is read off its warning seam; before that read
+    // this file reported `compiled-rules` with zeros (the re-armed leg's F10).
+    expect(result.rulesSource).toBe('unreadable');
+    expect(result.rulesCompiled).toBe(0);
   });
 
   it('reports 0 when compiled-rules.json is an array (defensive against schema drift)', () => {

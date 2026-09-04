@@ -21,6 +21,7 @@ function scaffoldProject(
     lessons?: number;
     rules?: number;
     archived?: number;
+    untested?: number;
     partitions?: Record<string, string[]>;
   } = {},
 ) {
@@ -65,7 +66,11 @@ function scaffoldProject(
       message: `Rule ${i} message`,
       engine: 'regex',
       compiledAt: '2026-05-11T00:00:00Z',
-      ...(i < (opts.archived ?? 0) ? { status: 'archived' } : {}),
+      ...(i < (opts.archived ?? 0)
+        ? { status: 'archived' }
+        : i < (opts.archived ?? 0) + (opts.untested ?? 0)
+          ? { status: 'untested-against-codebase' }
+          : {}),
     }));
     fs.writeFileSync(
       path.join(dir, '.totem', 'compiled-rules.json'),
@@ -168,8 +173,8 @@ describe('getProjectDescription', () => {
     expect(formatRulesLine({ ...zeros, rulesSource: 'absent' })).toBe(
       'Rules: 0 active (no compiled-rules.json)',
     );
-    expect(formatRulesLine({ ...zeros, rulesSource: 'unreadable' })).toContain(
-      'compiled-rules.json unreadable',
+    expect(formatRulesLine({ ...zeros, rulesSource: 'unreadable' })).toBe(
+      "Rules: 0 active — compiled-rules.json unreadable (run 'totem lint' for the parse error)",
     );
   });
 
@@ -181,7 +186,9 @@ describe('getProjectDescription', () => {
     const dir = makeTmpDir();
     const originalCwd = process.cwd();
     try {
-      scaffoldProject(dir, { rules: 10, archived: 4 });
+      // Archived AND untested, as the issue's clause names — untested is the
+      // status class that produced the 392-vs-385 divergence in the MCP extractor.
+      scaffoldProject(dir, { rules: 10, archived: 3, untested: 1 });
       const description = await getProjectDescription(dir);
       process.chdir(dir);
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

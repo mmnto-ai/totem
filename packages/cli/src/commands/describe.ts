@@ -23,9 +23,9 @@ export function formatRulesLine(
     | 'rulesSource'
   >,
 ): string {
-  if (d.rulesSource === 'absent') return 'Rules: 0 active (no compiled-rules.json)';
+  if (d.rulesSource === 'absent') return `Rules: ${d.rules} active (no compiled-rules.json)`;
   if (d.rulesSource === 'unreadable') {
-    return "Rules: 0 active — compiled-rules.json unreadable (run 'totem lint' for the parse error)";
+    return `Rules: ${d.rules} active — compiled-rules.json unreadable (run 'totem lint' for the parse error)`;
   }
   const inert: string[] = [];
   if (d.rulesArchived > 0) inert.push(`${d.rulesArchived} archived`);

@@ -70,9 +70,14 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
   // does not vanish from the banner — it stops posing as enforced. The file is
   // read through the schema-validating loader lint and status use; a missing
   // or unreadable file reports zeros WITH `rulesSource` saying which, and a
-  // sensor never throws. (`totem status` handles an unreadable file
-  // differently — it falls back to the manifest's `rule_count`, a raw total —
-  // and that fallback is its own and out of scope here.)
+  // sensor never throws. Two unreadable shapes reach here two ways: a file
+  // that fails the compiled-rules SCHEMA makes the loader throw; a file that
+  // is not JSON at all makes it WARN and return an empty envelope, so the
+  // warning seam is read too — without it that file would report zeros
+  // labelled as a real, empty file (the re-armed leg's F10). (`totem status`
+  // handles a schema-invalid file by falling back to the manifest's
+  // `rule_count`, a raw total, and a non-JSON file by printing 0 — both its
+  // own behaviour, out of scope here.)
   let rules = 0;
   let rulesCompiled = 0;
   let rulesArchived = 0;
@@ -82,14 +87,21 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
   try {
     const rulesPath = path.join(totemDir, 'compiled-rules.json');
     if (fs.existsSync(rulesPath)) {
-      const file = loadCompiledRulesFile(rulesPath);
-      rulesSource = 'compiled-rules';
-      rulesCompiled = file.rules.length;
-      for (const rule of file.rules) {
-        if (isActiveCompiledRule(rule)) rules += 1;
-        else if (rule.status === 'archived') rulesArchived += 1;
-        else if (rule.status === 'untested-against-codebase') rulesUntested += 1;
-        else rulesPendingVerification += 1;
+      let loadWarning: string | undefined;
+      const file = loadCompiledRulesFile(rulesPath, (msg) => {
+        loadWarning = msg;
+      });
+      if (loadWarning !== undefined) {
+        rulesSource = 'unreadable';
+      } else {
+        rulesSource = 'compiled-rules';
+        rulesCompiled = file.rules.length;
+        for (const rule of file.rules) {
+          if (isActiveCompiledRule(rule)) rules += 1;
+          else if (rule.status === 'archived') rulesArchived += 1;
+          else if (rule.status === 'untested-against-codebase') rulesUntested += 1;
+          else rulesPendingVerification += 1;
+        }
       }
     }
     // totem-context: intentional — describe is a read-only sensor: a malformed or schema-invalid compiled-rules.json reports zeros here, labelled `unreadable` so the banner never shows them as an honestly empty set, and fails LOUD in lint's own loader, which is the surface whose job that is (mmnto-ai/totem#1884, mmnto-ai/totem#2765)

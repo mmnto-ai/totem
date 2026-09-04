@@ -108,11 +108,27 @@ describe('GitStateSchema', () => {
 
 describe('RuleCountsSchema', () => {
   it('rejects negative counts', () => {
-    expect(() => RuleCountsSchema.parse({ active: -1, archived: 0, nonCompilable: 0 })).toThrow();
+    expect(() =>
+      RuleCountsSchema.parse({
+        active: -1,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      }),
+    ).toThrow();
   });
 
   it('rejects non-integer counts', () => {
-    expect(() => RuleCountsSchema.parse({ active: 1.5, archived: 0, nonCompilable: 0 })).toThrow();
+    expect(() =>
+      RuleCountsSchema.parse({
+        active: 1.5,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      }),
+    ).toThrow();
   });
 });
 
