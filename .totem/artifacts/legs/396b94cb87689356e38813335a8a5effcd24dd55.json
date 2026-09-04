@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "396b94cb87689356e38813335a8a5effcd24dd55",
+  "readAt": "2026-09-04T21:26:31Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": ".github/workflows/lint.yml",
+      "line": 53,
+      "claim": "The workflow comment, the changeset and docs/wiki/enforcement-model.md assert that `pnpm exec totem legs gate` runs the gate as a hard CI step that reddens on exit 3 or 2; `totem` is not resolvable via `pnpm exec` in CI at all.",
+      "counterexample": "EXECUTED. @mmnto/cli is a root optionalDependency whose bin target is packages/cli/dist/index.js, and dist/ is gitignored; packages/cli has no prepare script. CI order is install -> build -> the new step, and pnpm links bins only at install time, skipping a bin whose target is absent. In the review worktree node_modules/.bin holds 11 shims and no `totem`, and `pnpm exec sh -c 'command -v totem'` resolves to the machine's npm global (absent on a runner). Control under the pinned pnpm@11.2.2 with the same shape: install prints `WARN Failed to create bin ... ENOENT ... dist/index.js`, and after creating dist with no reinstall `pnpm exec totemy` -> ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL, exit 1. The step has no continue-on-error and `Totem Lint` is a required context in the active ruleset, so every PR to main goes red while the gate never executes — falsifying the issue's Done-when clause 'a PR touching none passes untouched'."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 618,
+      "claim": "The tracked deposit store is described as making 'a leg of record travel with its pull request', and install-hooks.ts still calls the strict-tier gate 'a sub-second local read'; in a squash-only repo the committed deposits are permanently stale and their cost grows without bound.",
+      "counterexample": "EXECUTED. `legs gate --advisory` on the branch printed 16 `stale deposit <sha8>: not an ancestor of head` lines — every committed exhibit. The repo is squash-only (merge_commit false, rebase false, squash true), so a deposit's diffSha is never an ancestor of a later head: each merged PR adds one more permanently-stale entry. The basis list is capped at MAX_DISCLOSED_BASIS_PAIRS = 5; the stale loop is uncapped. Timed: the 16 cat-file + merge-base --is-ancestor probes were 0.98 s of the run's 1.07 s."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": ".changeset/legs-gate-adoption-2771.md",
+      "line": 12,
+      "claim": "'Consumers who extended the hook past its end marker receive the new block through the in-place rewrite (mmnto-ai/totem#2760)' — the rewrite reaches only ATTESTED trailers.",
+      "counterexample": "LATENT (read from source). install-hooks.ts lists 'an UNATTESTED trailer' among the declines to `exists`, each taking one `totem hook install --force`, and restricts the in-place rewrite to a trailer that is an ATTESTED totem:fork extension. A consumer who appended lines past the end marker without the marker receives no new block until --force."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": "tools/pre-push",
+      "line": 114,
+      "claim": "The rewritten BLOCKED line attributes the block to 'strict mode or hooks.legsOwed.enforce: block'; a third arm can fire it with both causes false.",
+      "counterexample": "LATENT. TOTEM_HOOK_TIER=standard, no hooks.legsOwed.enforce, CLAUDE_CODE_AGENT set: the agent arm runs the bare gate, gets exit 3 and blocks — while the printed line blames strict mode or the knob, neither of which applies; the cause is is_agent=1."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 222,
+      "claim": "'A repo adopting the CI arm ... therefore leaves the knob unset or sets block' is a convention with no mechanism: enforce: 'advisory' softens the CI arm too, and the parity row cannot tell.",
+      "counterexample": "LATENT. With hooks.legsOwed.enforce: 'advisory' the CI step prints the full BLOCKED text and exits 0, so the check is green while nothing is enforced; the row's detection-method is three presence checks and still reads arm (a) as adopted. runLegsGate cannot distinguish a run that passed --advisory from one that did not, so a CI invocation cannot opt out of the softening."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 635,
+      "claim": "Two new tests assert only pre-fix behaviour and would pass unchanged on origin/main.",
+      "counterexample": "legs.test.ts 'an ABSENT knob leaves the flag in charge and prints no knob line' asserts derived 3, --advisory->0, bare->3 and the absence of a knob line — all true of origin/main. install-hooks.test.ts 'standard tier + gate exit 1 ... passes' holds on origin/main, where the standard arm never captured legs_status at all. Both are byte-identity pins; the remainder of the suite discriminates, and the composed suite executes (8 passed, 0 skipped)."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1230,
+      "claim": "Commit 605440d2 states the BLOCKED lines 'now name every cause that can fire them'; the block's fourth BLOCKED line (mirrored in tools/pre-push) still names only '(strict mode)' under the identical is_agent-or-strict guard.",
+      "counterexample": "latent — a Cursor seat (is_agent=1) on a standard-tier install with a CLI predating 'totem legs' is blocked by a line whose sole named cause is false; byte-identical on origin/main, so pre-existing and untouched by the first fold."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "commit 396b94cb (message body, F2 paragraph)",
+      "line": 5,
+      "claim": "'their cat-file + merge-base probes were 0.98 s of a 1.07 s gate'.",
+      "counterexample": "executed — the deposit-free gate on the same HEAD measures 578/564/570/562 ms (four runs), so the decomposition implies a ~0.09 s baseline; a standalone 32-git-spawn loop measures 885 ms. The two figures cannot both be parts of a 1.07 s total. The deletion's real justification (permanent non-ancestry under squash-merge) is verified independently."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 81,
+      "claim": "'its enforcement is the CI arm: `totem legs gate` is a hard step of its lint workflow' — the doc still describes this repo's step in the bin-shim form the fold removed.",
+      "counterexample": "executed — .github/workflows/lint.yml now runs 'node packages/cli/dist/index.js legs gate'; 'pnpm exec totem legs gate' fails on this repo with ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL when the global is masked. The changeset was corrected in the fold; the distributed doc carried no workspace caveat."
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": ".gitignore",
+      "line": 61,
+      "claim": "The CI arm depends on '!.totem/artifacts/legs/' re-including deposits from the artifacts ignore; after the fold nothing under that path exists and no test asserts the negation.",
+      "counterexample": "latent — verified correct today by probe (git check-ignore: deposit path rc=1, sibling artifact rc=0), but narrowing '.totem/artifacts/*' to '.totem/artifacts/' would make every future deposit unstageable and the now-required 'Totem Lint' check permanently red with no test failing first."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f6",
+    "f7",
+    "f9",
+    "f10"
+  ],
+  "verdict": "Pass 1 (origin/main...9c31871c): do not present — F1 BLOCKING (pnpm exec totem unresolvable in CI), F2 MATERIAL, four MINOR. Pass 2, re-armed on the fold (9c31871c..396b94cb): fold verified — F1's remedy proven by executed probe in both directions, F2/F3/F4/F6 confirmed against primary source, parity is full-file byte identity, 315 tests pass, prettier clean — four MINOR residues, none merge-blocking. F5 disclosed, not mechanized; F8 lives in commit history only."
+}
