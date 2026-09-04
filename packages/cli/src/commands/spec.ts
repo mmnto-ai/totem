@@ -34,8 +34,15 @@ const ANCHOR_TOPIC_JOIN = ' | ';
 const ANCHOR_ISSUE_JOIN = ', ';
 /** Decimal places every relevance and floor is disclosed at (the MCP guard's shape). */
 const RELEVANCE_DECIMALS = 3;
-/** Where the floor comes from — named in every refusal (B1: the config-vs-default bit is NOT derivable after `TotemConfigSchema.parse`). */
-const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)';
+/** Where a CONFIGURED floor comes from — named in every refusal that had one to name. */
+const FLOOR_PLACE = 'searchRelevanceFloor in totem.config.ts';
+/**
+ * The floor line when NO floor is configured (mmnto-ai/totem#2727 removed the
+ * schema default). A refusal that reached here did so on the zero-hit arm, and
+ * the line says so rather than naming a number no run was judged against.
+ */
+const FLOOR_LINE_UNSET =
+  'floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)';
 /** The two cures, named in every refusal and in the gate's BLOCKED line. */
 const ANCHOR_CURES = "run 'totem spec <issue>' or 'totem spec --from <record>'";
 export const MAX_LESSONS = 10;
@@ -664,16 +671,23 @@ export interface GroundingFloorVerdict {
  * mmnto-ai/totem#2735's decision, not mmnto-ai/totem#2700's, and the body
  * comment below says why. Mirrors the MCP tool's semantics
  * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
- * real relevance signal exists, and judges only the hits that carry one —
- * keyword-only hits have no comparable relevance and are floor-EXEMPT, so a
- * mixed batch is never withheld because its vector-leg siblings scored weak.
+ * real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
+ * relevance, never a per-item filter — keyword-only hits have no comparable
+ * relevance and are floor-EXEMPT, so a single exempt hit saves the run.
+ *
+ * `floor` is OPTIONAL since mmnto-ai/totem#2727: `searchRelevanceFloor` carries
+ * no default, and with none configured the below-floor arm cannot fire at all
+ * (`withheld` stays empty). `bestRelevance` and `floorExempt` are still
+ * measured and returned — the measurement is not conditional on a floor.
  *
  * Zero items is this command's OWN rule, not an MCP mirror: nothing retrieved
- * means nothing grounds the run, so it refuses regardless of any floor.
+ * means nothing grounds the run, so it refuses regardless of any floor. Lessons
+ * do not ground a run — ruled final on mmnto-ai/totem#2727 — so they are
+ * delivered but never judged here.
  */
 export function evaluateGroundingFloor(
   context: RetrievedContext,
-  floor: number,
+  floor?: number,
 ): GroundingFloorVerdict {
   // Lessons are DELIVERED but never judged here (mmnto-ai/totem#2735). The
   // floor was ruled and exercised over exactly these three partitions
@@ -681,10 +695,10 @@ export function evaluateGroundingFloor(
   // structurally empty. Adding a now-populated partition would silently loosen
   // the refusal arm — an FTS-only lesson carries no relevance, so it is
   // floor-EXEMPT, and `refuse` requires `floorExempt === 0`. Whether a lesson
-  // may ground a run at all is the mmnto-ai/totem#2727 floor arm's ruling, not
-  // this slice's, so the gate's inputs are held exactly as they were. Delivery
-  // is not the gate: the `Found:` line and the run artifact still count every
-  // delivered lesson.
+  // may ground a run at all was RULED on mmnto-ai/totem#2727: it may not —
+  // final — so the gate's inputs stay exactly these three. Delivery is not the
+  // gate: the `Found:` line and the run artifact still count every delivered
+  // lesson.
   const all = [...context.specs, ...context.sessions, ...context.code];
   if (all.length === 0) {
     return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0 };
@@ -713,8 +727,13 @@ export function evaluateGroundingFloor(
     if (bestRelevance === null || relevance > bestRelevance) bestRelevance = relevance;
   }
 
+  // No floor configured → the below-floor arm is unreachable by construction.
   const refuse =
-    signal.length > 0 && bestRelevance !== null && bestRelevance < floor && floorExempt === 0;
+    floor !== undefined &&
+    signal.length > 0 &&
+    bestRelevance !== null &&
+    bestRelevance < floor &&
+    floorExempt === 0;
   return {
     refuse,
     hits: all.length,
@@ -735,11 +754,16 @@ export function evaluateGroundingFloor(
  * index grounds this run" beside `Found: … 10 lessons` — so when lessons were
  * delivered the message names them and says why they did not count
  * (mmnto-ai/totem#2735). With no lessons delivered the text is byte-unchanged.
+ *
+ * The floor line has TWO forms since mmnto-ai/totem#2727. With a value
+ * configured it names the value and its place; with none it says so plainly —
+ * a refusal that reached here without a floor did so on the zero-hit arm, and
+ * printing a number would claim a judgment no floor made.
  */
 export function formatGroundingRefusal(
   topics: string,
   verdict: GroundingFloorVerdict,
-  floor: number,
+  floor: number | undefined,
   deliveredLessons: number,
 ): { message: string; recoveryHint: string } {
   const lines = [`Refusing to draft an unanchored spec for topic(s): ${topics}.`];
@@ -750,7 +774,7 @@ export function formatGroundingRefusal(
       );
       const lessonNoun = deliveredLessons === 1 ? 'lesson was' : 'lessons were';
       lines.push(
-        `${deliveredLessons} ${lessonNoun} retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).`,
+        `${deliveredLessons} ${lessonNoun} retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).`,
       );
     } else {
       lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
@@ -761,7 +785,11 @@ export function formatGroundingRefusal(
       `Retrieval returned ${verdict.hits} hits, but best relevance ${best.toFixed(RELEVANCE_DECIMALS)} is below the floor.`,
     );
   }
-  lines.push(`floor ${floor.toFixed(RELEVANCE_DECIMALS)} — ${FLOOR_PLACE}`);
+  lines.push(
+    floor !== undefined
+      ? `floor ${floor.toFixed(RELEVANCE_DECIMALS)} — ${FLOOR_PLACE}`
+      : FLOOR_LINE_UNSET,
+  );
   if (verdict.withheld.length > 0) {
     lines.push('Withheld candidates (path + relevance only, no content):');
     for (const [index, candidate] of verdict.withheld.entries()) {
@@ -983,8 +1011,9 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // ── Anchored-evidence gate (mmnto-ai/totem#2700) ──
   // The anchor is what the run is grounded ON. A run with NO issue and NO
   // record is the confabulation surface: it refuses when retrieval returned
-  // nothing, or when every signal-bearing hit is below the floor and no
-  // floor-exempt hit exists. `--raw` is EXEMPT — it makes no LLM call and
+  // nothing, or — only when a floor is CONFIGURED (mmnto-ai/totem#2727: the key
+  // carries no default, and unset means no floor) — when the best relevance is
+  // below it and no floor-exempt hit exists. `--raw` is EXEMPT — it makes no LLM call and
   // mints no artifact, so it is how a weak topic's retrieval is inspected.
   // The refusal returns BEFORE `runOrchestrator`, the only writer of a run
   // artifact, so "mints nothing" holds by control flow.

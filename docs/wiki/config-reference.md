@@ -60,23 +60,9 @@ export default {
     },
   },
 
-  // Minimum per-hit relevance (the vector-leg similarity, 0..1) below which a
-  // retrieval is treated as noise. TWO consumers read it:
-  //   1. the MCP `search_knowledge` tool, which reports
-  //      `status="no_useful_hits"` instead of returning noise-floor matches;
-  //   2. `totem spec` (mmnto-ai/totem#2700), which REFUSES an unanchored
-  //      free-text run when every signal-bearing hit is below this floor and
-  //      no keyword-only (floor-exempt) hit exists — the refusal names this
-  //      value and this key, exits non-zero, and writes no run artifact.
-  // Hits with no vector leg are floor-EXEMPT: absence of a relevance signal is
-  // never read as a weak signal. `--raw` is exempt from the spec refusal.
-  // MEASURED CAVEAT: on a gemini-embedding index (relevance =
-  // 1/(1+distance)) a deliberately nonsensical query still scores far above
-  // 0.25 — 0.36 and 0.55 measured on this repo's index at two points — so at
-  // the default the below-floor arm cannot fire and only the zero-hit arm
-  // does. Calibrating the default is filed as mmnto-ai/totem#2727; raise this
-  // value in config to make the below-floor arm reachable for your corpus.
-  searchRelevanceFloor: 0.25,
+  // OPTIONAL, and NO DEFAULT (mmnto-ai/totem#2727). Omit it and no floor
+  // applies. See "The relevance floor" below before setting one.
+  // searchRelevanceFloor: 0.57,
 
   // Command-Specific Options
   compileOptions: {
@@ -160,6 +146,30 @@ export default {
   },
 };
 ```
+
+## The Relevance Floor (`searchRelevanceFloor`)
+
+**Optional, and it ships with NO default** (mmnto-ai/totem#2727). Omit the key and no floor applies anywhere.
+
+**What it is.** A refusal threshold compared against the **best** vector-leg relevance of **one retrieval** — a whole-run gate, not a per-item filter. Nothing in Totem withholds an individual sub-floor hit while returning its siblings. Two consumers read it:
+
+1. the MCP `search_knowledge` tool: when a response's best relevance falls below the floor it answers `status="no_useful_hits"` and discloses the below-floor candidates (path + relevance, no content) instead of returning them;
+2. `totem spec` (mmnto-ai/totem#2700): an unanchored free-text run is REFUSED when the best relevance is below the floor — the refusal names the value and this key, exits non-zero, and writes no run artifact. `--raw` is exempt.
+
+**Hits with no vector leg are floor-EXEMPT.** A keyword-only (FTS) hit carries no comparable relevance, so absence of a signal is never read as a weak signal — and in `totem spec` a single exempt hit saves the run.
+
+**With the key unset there is no floor at all**: `no_useful_hits` and the spec refusal's below-floor arm cannot fire. The retrieval envelope prints `floor="none"`. `totem spec`'s zero-hit refusal is unaffected — it is a separate arm and still fires. The MCP `min_relevance` input applies per call regardless, and still overrides a configured value.
+
+**Why no default.** Relevance is `1 / (1 + squared L2)` on unit-norm vectors, so it ranges over `[0.2, 1]` and real retrievals sit high in that range. Measured on the gemini-embedding-2-preview 768-d profile over 55 recorded `totem spec` queries, the **lowest** best-relevance of any run was **0.559** (0.5687 over the runs the spec refusal was eligible to judge at all). A shipped default of 0.25 therefore could never fire on that profile — a mechanism claim with no mechanism — and any value below a repo's own measured floor is equally inert. The reachable value is a property of a corpus, its embedder and its labels, so it is yours to set, not ours to guess. The worked measurement is the R4 record at `.totem/fixtures/floor-arm-2026-09-03/` in this repo.
+
+**Choosing a value.**
+
+1. Record real runs — an `.totem/artifacts/` sweep of `totem spec` runs over queries you actually ask; each run's grounding items carry their relevance.
+2. Mark the runs whose retrieval you would want KEPT (the run produced usable grounding) and the ones you would want refused.
+3. Note the best relevance of each kept run. The floor has to sit **below the weakest run you still want kept** — set it there, or a hair under, or you will refuse work you wanted.
+4. Set `searchRelevanceFloor` to that number. Re-measure whenever the embedder or the corpus changes materially; a floor calibrated on one embedding profile says nothing about another.
+
+If no value separates the runs you would keep from the ones you would refuse, that is a real answer: leave the key unset and let the zero-hit arm and the anchor rules carry the gate.
 
 ## The Legs-Owed Floor (`hooks.legsOwed.globs`)
 

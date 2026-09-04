@@ -507,9 +507,11 @@ export interface RunArtifactRequest {
    */
   anchor?: GroundingAnchor;
   /**
-   * The relevance floor the run was judged against (`searchRelevanceFloor`,
-   * post-parse) — recorded into `grounding.floor`. Names the number, never a
-   * config-vs-default bit (which is not derivable after the schema parse).
+   * The relevance floor the run was judged against (`searchRelevanceFloor`) —
+   * recorded into `grounding.floor`. `undefined` when the repo configures no
+   * floor (mmnto-ai/totem#2727: the key carries no default), and the writer
+   * then omits the field rather than coercing a number onto a run no floor
+   * judged.
    */
   floor?: number;
   /** Deterministic diff input when the run was scoped (`lint/review --branch`, #2098). */

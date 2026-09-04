@@ -336,7 +336,7 @@ export const GroundingSchema = z.object({
   bundle: GroundingBundleSchema.optional(),
   /** What the run was anchored on (mmnto-ai/totem#2700). Optional: artifacts written before the anchored-evidence rule predate it, and the gate reads that absence as not-evidence. */
   anchor: GroundingAnchorSchema.optional(),
-  /** The relevance floor the run was judged against (`searchRelevanceFloor`, post-parse — always a number when recorded). No config-vs-default bit is stored: it is not derivable after `TotemConfigSchema.parse`. */
+  /** The relevance floor the run was judged against (`searchRelevanceFloor`) — a number when one was configured, ABSENT when none was (since mmnto-ai/totem#2727 the key carries no default, and unset means no floor). */
   floor: z.number().min(0).max(1).optional(),
 });
 

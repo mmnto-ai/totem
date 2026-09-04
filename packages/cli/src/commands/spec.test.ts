@@ -927,7 +927,10 @@ function relevantHit(relevance: number | undefined, overrides: Partial<SearchRes
 
 const FLOOR = 0.25;
 /** The floor's PLACE exactly as a refusal renders it (`FLOOR_PLACE` in spec.ts). */
-const FLOOR_PLACE_TEXT = 'searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)';
+const FLOOR_PLACE_TEXT = 'searchRelevanceFloor in totem.config.ts';
+/** The whole floor line when NO floor is configured (`FLOOR_LINE_UNSET` in spec.ts, mmnto-ai/totem#2727). */
+const FLOOR_LINE_UNSET_TEXT =
+  'floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)';
 
 describe('evaluateGroundingFloor', () => {
   it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
@@ -1095,6 +1098,50 @@ describe('evaluateGroundingFloor', () => {
       { filePath: 'doctrine/b.md', sourceRepo: 'strategy', relevance: 0.1 },
     ]);
   });
+
+  // --- No floor configured (mmnto-ai/totem#2727) ---
+  //
+  // `searchRelevanceFloor` lost its default, so `undefined` is the shape a
+  // repo that never set the key hands this function. The below-floor arm has
+  // to be unreachable then — not reachable at some fallback number.
+
+  it('with NO floor, hits far below any plausible floor still PROCEED and withhold nothing', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(0.01), relevantHit(0.02)] },
+      undefined,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.withheld).toEqual([]);
+    // The MEASUREMENT is not conditional on a floor — it is still reported.
+    expect(verdict.hits).toBe(2);
+    expect(verdict.bestRelevance).toBeCloseTo(0.02, 10);
+    expect(verdict.floorExempt).toBe(0);
+  });
+
+  it('with NO floor, the ZERO-HIT arm still refuses (it is not a floor arm)', () => {
+    expect(evaluateGroundingFloor(emptyContext(), undefined)).toEqual({
+      refuse: true,
+      hits: 0,
+      bestRelevance: null,
+      withheld: [],
+      floorExempt: 0,
+    });
+  });
+
+  it('with NO floor, floorExempt is still counted for FTS-only hits', () => {
+    const verdict = evaluateGroundingFloor(
+      { ...emptyContext(), specs: [relevantHit(undefined), relevantHit(0.01)] },
+      undefined,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.bestRelevance).toBeCloseTo(0.01, 10);
+  });
+
+  it('omitting the floor argument entirely is the same as passing undefined', () => {
+    const context = { ...emptyContext(), specs: [relevantHit(0.01)] };
+    expect(evaluateGroundingFloor(context)).toEqual(evaluateGroundingFloor(context, undefined));
+  });
 });
 
 // ─── formatGroundingRefusal (mmnto-ai/totem#2700) ────────
@@ -1105,9 +1152,7 @@ describe('formatGroundingRefusal', () => {
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toContain('an-unanchored-slug');
     expect(message).toContain('0 hits');
-    expect(message).toContain(
-      'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
-    );
+    expect(message).toContain('floor 0.250 — searchRelevanceFloor in totem.config.ts');
   });
 
   // With lessons delivered, "nothing in the index grounds this run" sits beside
@@ -1131,7 +1176,7 @@ describe('formatGroundingRefusal', () => {
       [
         'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
         'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
-        '2 lessons were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+        '2 lessons were retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).',
         `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
       ].join('\n'),
     );
@@ -1143,7 +1188,7 @@ describe('formatGroundingRefusal', () => {
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 1);
 
     expect(message).toContain(
-      '1 lesson was retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).',
+      '1 lesson was retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).',
     );
   });
 
@@ -1158,6 +1203,56 @@ describe('formatGroundingRefusal', () => {
         'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
         'Retrieval returned 0 hits — nothing in the index grounds this run.',
         `floor 0.250 — ${FLOOR_PLACE_TEXT}`,
+      ].join('\n'),
+    );
+  });
+
+  // --- The floor line's two forms (mmnto-ai/totem#2727) ---
+  //
+  // Byte-pinned in BOTH forms. The unset form must never render a number: a
+  // refusal that reached here with no floor did so on the zero-hit arm, and
+  // printing `floor 0.250` would claim a judgment no floor made.
+
+  it('with NO floor the 0-hit refusal names the floor as none, byte for byte', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), undefined);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, undefined, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 hits — nothing in the index grounds this run.',
+        FLOOR_LINE_UNSET_TEXT,
+      ].join('\n'),
+    );
+    expect(message).not.toContain('0.250');
+  });
+
+  it('with a floor CONFIGURED the 0-hit refusal names the value and its place, byte for byte', () => {
+    const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
+    const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 hits — nothing in the index grounds this run.',
+        'floor 0.250 — searchRelevanceFloor in totem.config.ts',
+      ].join('\n'),
+    );
+  });
+
+  it('with NO floor the lessons clause still renders, above the none line', () => {
+    const lessons = [makeLesson(), makeLesson()];
+    const verdict = evaluateGroundingFloor({ ...emptyContext(), lessons }, undefined);
+    const { message } = formatGroundingRefusal(
+      'an-unanchored-slug',
+      verdict,
+      undefined,
+      lessons.length,
+    );
+    expect(message).toBe(
+      [
+        'Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.',
+        'Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.',
+        '2 lessons were retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).',
+        FLOOR_LINE_UNSET_TEXT,
       ].join('\n'),
     );
   });
@@ -1928,9 +2023,7 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     const message = String((thrown as Error).message);
     expect(message).toContain('weak slug');
     expect(message).toContain('best relevance 0.100');
-    expect(message).toContain(
-      'floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)',
-    );
+    expect(message).toContain('floor 0.250 — searchRelevanceFloor in totem.config.ts');
     expect(message).toContain('docs/a.md — relevance 0.100');
     expect(harness.orchestratorArgs).toEqual([]);
   });
@@ -1957,5 +2050,52 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     harness.searchResults = { spec: [relevantHit(0.9)] };
     await specCommand(['2700'], { stdout: true });
     expect(artifactRequest()['floor']).toBe(0.6);
+  });
+
+  // --- No floor configured (mmnto-ai/totem#2727) ---
+
+  it('with NO floor configured, a weak free-text run PROCEEDS instead of being refused', async () => {
+    const { searchRelevanceFloor: _dropped, ...unfloored } = harness.config as Record<
+      string,
+      unknown
+    >;
+    harness.config = unfloored;
+    // 0.1 is far below the 0.25 this suite otherwise configures — the sibling
+    // test 'a free-text run entirely below the floor REFUSES' uses this exact
+    // fixture WITH a floor and gets a GATE_INVALID. Same retrieval, no floor,
+    // no refusal: that contrast is the invariant.
+    harness.searchResults = { spec: [relevantHit(0.1, { filePath: 'docs/a.md' })] };
+    await specCommand(['weak slug'], { stdout: true });
+    expect(harness.orchestratorArgs.length).toBe(1);
+  });
+
+  it('with NO floor configured, the artifact OMITS grounding.floor rather than inventing one', async () => {
+    const { searchRelevanceFloor: _dropped, ...unfloored } = harness.config as Record<
+      string,
+      unknown
+    >;
+    harness.config = unfloored;
+    harness.searchResults = { spec: [relevantHit(0.9)] };
+    await specCommand(['2700'], { stdout: true });
+    expect(artifactRequest()['floor']).toBeUndefined();
+  });
+
+  it('with NO floor configured, a ZERO-HIT free-text run still refuses — with the none form', async () => {
+    const { searchRelevanceFloor: _dropped, ...unfloored } = harness.config as Record<
+      string,
+      unknown
+    >;
+    harness.config = unfloored;
+    let thrown: unknown;
+    try {
+      await specCommand(['nonsense slug'], { stdout: true });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toMatchObject({ code: 'GATE_INVALID' });
+    const message = String((thrown as Error).message);
+    expect(message).toContain('Retrieval returned 0 hits');
+    expect(message).toContain(FLOOR_LINE_UNSET_TEXT);
+    expect(harness.orchestratorArgs).toEqual([]);
   });
 });

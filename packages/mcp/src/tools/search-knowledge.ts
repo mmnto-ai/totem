@@ -9,11 +9,7 @@ import type {
   SearchResult,
   SelectionCandidate,
 } from '@mmnto/totem';
-import {
-  buildMeasuredCandidate,
-  ContentTypeSchema,
-  DEFAULT_SEARCH_RELEVANCE_FLOOR,
-} from '@mmnto/totem';
+import { buildMeasuredCandidate, ContentTypeSchema } from '@mmnto/totem';
 
 import { getContext, reconnectStore } from '../context.js';
 import { logCorpusQuery, logMcpCall, logSelectionManifest } from '../ledger-writer.js';
@@ -428,18 +424,25 @@ function deriveSearchMethod(results: SearchResult[]): 'hybrid' | 'vector' | 'fts
  * escaping is required. `hits` counts RETURNED hits: 0 for `no_useful_hits`
  * (candidates are disclosed, not returned) and the floor-exempt subset for a
  * mixed below-floor batch.
+ *
+ * `floor` is `null` when NO floor applies — neither a configured
+ * `searchRelevanceFloor` (which carries no default since
+ * mmnto-ai/totem#2727) nor a per-call `min_relevance`. It renders as
+ * `floor="none"`, a closed token like every other attribute value, and the
+ * status can then never be `no_useful_hits`.
  */
 export function formatRetrievalEnvelope(params: {
   status: 'ok' | 'no_useful_hits' | 'empty';
   method: 'hybrid' | 'vector' | 'fts';
   bestRelevance: number | null;
-  floor: number;
+  floor: number | null;
   hits: number;
 }): string {
   const best = params.bestRelevance !== null ? params.bestRelevance.toFixed(3) : 'n/a';
+  const floor = params.floor !== null ? params.floor.toFixed(3) : 'none';
   return (
     `<retrieval-envelope status="${params.status}" method="${params.method}" ` +
-    `bestRelevance="${best}" floor="${params.floor.toFixed(3)}" hits="${params.hits}" />`
+    `bestRelevance="${best}" floor="${floor}" hits="${params.hits}" />`
   );
 }
 
@@ -693,10 +696,13 @@ async function performSearch(
   // construction in hybrid/federated modes), so a floor over it would classify
   // every fused hit as noise. The envelope discloses the outcome machine-
   // readably beside the existing <index-meta> line.
+  //
+  // `undefined` = NO FLOOR (mmnto-ai/totem#2727): `searchRelevanceFloor`
+  // carries no default, so an unconfigured repo runs unfloored and this tool
+  // can never answer `no_useful_hits`. The per-call `min_relevance` still
+  // overrides, in both directions.
   const configuredFloor =
-    typeof config.searchRelevanceFloor === 'number'
-      ? config.searchRelevanceFloor
-      : DEFAULT_SEARCH_RELEVANCE_FLOOR;
+    typeof config.searchRelevanceFloor === 'number' ? config.searchRelevanceFloor : undefined;
   const effectiveFloor = minRelevance !== undefined ? minRelevance : configuredFloor;
   // A zero-row fallback leaves nothing fts-stamped — the callback flag keeps
   // the envelope method honest for an empty keyword-only result set
@@ -781,7 +787,9 @@ async function performSearch(
           query,
           boundary: boundary ?? null,
           typeFilter: typeFilter ?? null,
-          floor: effectiveFloor,
+          // `null` records "no floor applied" — the manifest never invents a
+          // number for a selection no floor judged (mmnto-ai/totem#2727).
+          floor: effectiveFloor ?? null,
           finalLimit,
           method,
           status,
@@ -835,7 +843,7 @@ async function performSearch(
       status: 'empty',
       method,
       bestRelevance,
-      floor: effectiveFloor,
+      floor: effectiveFloor ?? null,
       hits: 0,
     });
     const body = formatXmlResponse('knowledge', 'No results found.');
@@ -851,13 +859,20 @@ async function performSearch(
     return { content: [{ type: 'text' as const, text }] };
   }
 
-  // Floor fires ONLY when a real relevance signal exists — a pure-FTS corpus
-  // (no vector relevance to report) is never demoted to no_useful_hits. And it
-  // judges ONLY the hits that carry a signal: keyword-only hits have no
-  // comparable relevance and are floor-EXEMPT — a mixed batch must never
-  // withhold them because their vector-leg siblings scored weak (greptile P1,
-  // mmnto-ai/totem#2494 round 2).
-  if (hasRelevanceSignal && bestRelevance !== null && bestRelevance < effectiveFloor) {
+  // Floor fires ONLY when a floor APPLIES (mmnto-ai/totem#2727: neither a
+  // configured `searchRelevanceFloor` nor a per-call `min_relevance` leaves
+  // `effectiveFloor` undefined, and this whole branch is then unreachable) and
+  // a real relevance signal exists — a pure-FTS corpus (no vector relevance to
+  // report) is never demoted to no_useful_hits. And it judges ONLY the hits
+  // that carry a signal: keyword-only hits have no comparable relevance and are
+  // floor-EXEMPT — a mixed batch must never withhold them because their
+  // vector-leg siblings scored weak (greptile P1, mmnto-ai/totem#2494 round 2).
+  if (
+    effectiveFloor !== undefined &&
+    hasRelevanceSignal &&
+    bestRelevance !== null &&
+    bestRelevance < effectiveFloor
+  ) {
     const floorExempt = results.filter((r) => typeof r.relevance !== 'number');
     const withheld = results.filter((r) => typeof r.relevance === 'number');
     // Disclose every withheld below-floor candidate compactly (path +
@@ -943,7 +958,7 @@ async function performSearch(
     status: 'ok',
     method,
     bestRelevance,
-    floor: effectiveFloor,
+    floor: effectiveFloor ?? null,
     hits: results.length,
   });
   const formatted = results.map((r, i) => formatResult(r, i)).join('\n\n---\n\n');
@@ -1089,14 +1104,15 @@ export function registerSearchKnowledge(server: McpServer): void {
         // it, the tool reports status="no_useful_hits" and discloses the
         // below-floor candidates instead of returning noise. Overrides the
         // config `searchRelevanceFloor`; the retrieval-envelope always reports
-        // the effective floor.
+        // the effective floor, or `none` when neither is set
+        // (mmnto-ai/totem#2727 removed the config key's default).
         min_relevance: z
           .number()
           .min(0)
           .max(1)
           .optional()
           .describe(
-            'Minimum per-hit relevance (0..1, vector-leg similarity) to treat results as useful. Overrides the configured searchRelevanceFloor. Below it, status is "no_useful_hits" with the below-floor candidates disclosed.',
+            'Minimum per-hit relevance (0..1, vector-leg similarity). Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is never `no_useful_hits`.',
           ),
       },
       annotations: {

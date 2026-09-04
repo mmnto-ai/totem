@@ -439,14 +439,6 @@ export const ReviewConfigSchema = z
   .default({});
 
 /**
- * Default `searchRelevanceFloor` (mmnto-ai/totem#2463). Exported as the single
- * source shared by the schema default below and the MCP guard that re-applies
- * it for unvalidated configs — retuning one can never silently strand the
- * other on a stale floor.
- */
-export const DEFAULT_SEARCH_RELEVANCE_FLOOR = 0.25;
-
-/**
  * Whether `value` carries a character that cannot be rendered SAFELY into the
  * managed git hooks (mmnto-ai/totem#2692 C4): a single quote (breaks the `sh`
  * single-quoted word AND the single-quoted `node -e '…'` spec-evidence reader),
@@ -564,14 +556,40 @@ export const TotemConfigSchema = z.object({
   contextWarningThreshold: z.number().int().positive().default(40_000),
 
   /**
-   * Minimum per-hit relevance (vector-leg similarity, 0..1) below which the
-   * `search_knowledge` tool reports `status="no_useful_hits"` rather than
-   * returning noise-floor matches (mmnto-ai/totem#2463). Floors on the true
-   * relevance signal, NOT the RRF rank artifact in the displayed `score`. The
-   * per-call `min_relevance` MCP input overrides this; the retrieval-envelope
-   * always discloses the effective floor. Default 0.25 (pilot-calibrated).
+   * Optional relevance floor (0..1). A REFUSAL THRESHOLD compared against the
+   * BEST vector-leg relevance of ONE retrieval — never a per-item filter.
+   * Nothing in the product withholds an individual sub-floor hit while keeping
+   * its siblings. Two consumers:
+   *
+   *   1. the MCP `search_knowledge` tool (mmnto-ai/totem#2463): when a
+   *      response's best relevance is below the floor it answers
+   *      `status="no_useful_hits"` and DISCLOSES the below-floor candidates
+   *      (path + relevance, no content) instead of returning them;
+   *   2. `totem spec` (mmnto-ai/totem#2700): an unanchored free-text run is
+   *      REFUSED when the best relevance is below the floor.
+   *
+   * Floors the true relevance signal, NOT the RRF rank artifact in the
+   * displayed `score`. Hits with no vector leg (keyword-only/FTS) carry no
+   * comparable relevance: they are floor-EXEMPT, and in `totem spec` a single
+   * exempt hit saves the run.
+   *
+   * NO DEFAULT since mmnto-ai/totem#2727. Relevance is `1 / (1 + squared L2)`
+   * on unit-norm vectors, so it ranges over [0.2, 1]; on the
+   * gemini-embedding-2-preview 768-d profile the LOWEST best-relevance over 55
+   * recorded `totem spec` queries was 0.559 (0.5687 over the runs the spec
+   * refusal was even eligible to judge), so the former default of 0.25 could
+   * never fire — and any value below a repo's own measured floor is equally
+   * inert. A repo that wants weak free-text runs refused sets a value just
+   * above the best-relevance of the weakest run it still wants kept; the recipe
+   * is in `docs/wiki/config-reference.md` and the worked measurement is the R4
+   * record at `.totem/fixtures/floor-arm-2026-09-03/`.
+   *
+   * UNSET = NO FLOOR: `no_useful_hits` and the spec refusal's below-floor arm
+   * can never fire (the spec zero-hit arm still can). The per-call
+   * `min_relevance` MCP input still applies, and still overrides this value;
+   * the retrieval-envelope always discloses the effective floor, or `none`.
    */
-  searchRelevanceFloor: z.number().min(0).max(1).default(DEFAULT_SEARCH_RELEVANCE_FLOOR),
+  searchRelevanceFloor: z.number().min(0).max(1).optional(),
 
   /** Optional: documents to auto-update via `totem docs` */
   docs: z.array(DocTargetSchema).optional(),

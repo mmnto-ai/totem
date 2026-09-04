@@ -1291,3 +1291,44 @@ describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem
     ).toBe(false);
   });
 });
+
+describe('searchRelevanceFloor — optional, NO default (mmnto-ai/totem#2727)', () => {
+  // The whole point of the slice: an unconfigured repo must come out of the
+  // parse with NO floor, so the below-floor arms are unreachable rather than
+  // reachable-but-inert at a number no index ever crosses.
+  // `{ targets }` is the minimal PARSEABLE config — `targets` is required — so
+  // this is a config that simply does not mention the key.
+  it('a config that does not set the key leaves searchRelevanceFloor undefined — no default', () => {
+    const parsed = TotemConfigSchema.parse({ targets: BASE_TARGETS });
+    expect(parsed.searchRelevanceFloor).toBeUndefined();
+    expect('searchRelevanceFloor' in parsed).toBe(false);
+  });
+
+  it('a configured value round-trips unchanged', () => {
+    expect(
+      TotemConfigSchema.parse({ targets: BASE_TARGETS, searchRelevanceFloor: 0.57 })
+        .searchRelevanceFloor,
+    ).toBe(0.57);
+    // The bounds still hold — optional loosened the default, not the range.
+    expect(
+      TotemConfigSchema.parse({ targets: BASE_TARGETS, searchRelevanceFloor: 0 })
+        .searchRelevanceFloor,
+    ).toBe(0);
+    expect(
+      TotemConfigSchema.parse({ targets: BASE_TARGETS, searchRelevanceFloor: 1 })
+        .searchRelevanceFloor,
+    ).toBe(1);
+  });
+
+  it('rejects a value outside [0, 1] and a non-number', () => {
+    expect(
+      TotemConfigSchema.safeParse({ targets: BASE_TARGETS, searchRelevanceFloor: -0.1 }).success,
+    ).toBe(false);
+    expect(
+      TotemConfigSchema.safeParse({ targets: BASE_TARGETS, searchRelevanceFloor: 1.1 }).success,
+    ).toBe(false);
+    expect(
+      TotemConfigSchema.safeParse({ targets: BASE_TARGETS, searchRelevanceFloor: '0.5' }).success,
+    ).toBe(false);
+  });
+});

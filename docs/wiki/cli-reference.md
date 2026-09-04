@@ -392,24 +392,26 @@ Inputs are OPTIONAL because `--from <record>` is an alternative subject. Running
 
 Every run publishes what it was ANCHORED on, in `grounding.anchor.kind` of the run artifact: `issue` (every input resolved to an issue), `record` (`--from`), `free-text` (every input was a topic), or `mixed` (issues and topics together).
 
-A run with **no issue and no record** refuses when retrieval returns zero items, or when every hit carrying a relevance signal is below `searchRelevanceFloor` and no floor-exempt (keyword-only) hit exists. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate:
+A run with **no issue and no record** refuses when retrieval returns zero items, or — only when `searchRelevanceFloor` is configured — when the best relevance of the retrieval is below it and no floor-exempt (keyword-only) hit exists. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate.
+
+`searchRelevanceFloor` carries **no default** (mmnto-ai/totem#2727), so with the key unset only the zero-hit arm can fire, and the floor line says so rather than naming a number no run was judged against:
 
 ```text
 [Totem Error] Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.
 Retrieval returned 0 hits — nothing in the index grounds this run.
-floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)
+floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)
 ```
 
-Lessons are retrieved but do not ground a run, so a topic that matched only lessons still refuses. When that happens the refusal names them, so the count line above it (`Found: … N lessons`) does not read as a contradiction:
+Lessons are retrieved but do not ground a run, so a topic that matched only lessons still refuses. When that happens the refusal names them, so the count line above it (`Found: … N lessons`) does not read as a contradiction. Here with a floor configured:
 
 ```text
 [Totem Error] Refusing to draft an unanchored spec for topic(s): an-unanchored-slug.
 Retrieval returned 0 grounding hits (specs, sessions, code) — nothing in the index grounds this run.
-3 lessons were retrieved, but lessons do not ground a run (mmnto-ai/totem#2727 rules whether they may).
-floor 0.250 — searchRelevanceFloor in totem.config.ts (schema default 0.25 when unset)
+3 lessons were retrieved, but lessons do not ground a run (ruled mmnto-ai/totem#2727).
+floor 0.570 — searchRelevanceFloor in totem.config.ts
 ```
 
-The first form renders when no lessons were retrieved, the second when some were. It exits non-zero and writes **no run artifact**. A free-text or mixed run that proceeds prints one warning that it is not gate evidence.
+The first form of the lessons clause renders when no lessons were retrieved, the second when some were; the floor line takes its `none` form or its value form independently. It exits non-zero and writes **no run artifact** — and the artifact of a run that PROCEEDS records `grounding.floor` only when a floor was configured. A free-text or mixed run that proceeds prints one warning that it is not gate evidence.
 
 `--raw` is **exempt**: it makes no LLM call and mints nothing, so it stays the way to inspect a weak topic's retrieval before deciding how to anchor it.
 
