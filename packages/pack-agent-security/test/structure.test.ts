@@ -3,7 +3,13 @@ import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { CompiledRulesFileSchema, readJsonSafe } from '@mmnto/totem';
+import {
+  CompiledRulesFileSchema,
+  loadInstalledPacks,
+  readJsonSafe,
+  resolveEngineVersion,
+  type LoadedPack,
+} from '@mmnto/totem';
 
 const PACK_ROOT = path.resolve(__dirname, '..');
 
@@ -81,5 +87,43 @@ describe('@mmnto/pack-agent-security structure', () => {
     const range = pkg.engines?.['@mmnto/totem'];
     expect(typeof range).toBe('string');
     expect(range).not.toBe('');
+  });
+
+  it('the declared engine range admits the engine this workspace ships — the boot cross-check run for real (mmnto-ai/totem#2727)', () => {
+    // ADR-097 § 11 makes `engines['@mmnto/totem']` deliberately immune to the
+    // changesets fixed-group bump — which is exactly how a MAJOR cut carries
+    // the engine past a caret range nobody rewrote. The presence assertion
+    // above stays green while `pack-discovery.ts:assertEngineRangeSatisfied`
+    // throws at boot for every consumer with this pack installed (the
+    // mmnto-ai/totem#2758 leg's F1). So run the production predicate itself,
+    // through the same `loadInstalledPacks` path `bootstrap-engine.ts` takes,
+    // against the version the workspace resolves (`resolveEngineVersion()`
+    // reads packages/core/package.json — the file the cut bumps). A Version
+    // Packages PR re-runs this at the bumped version: a range the cut walks out
+    // of goes red there, not in a consumer's terminal.
+    const pkg = readJsonSafe<{ name: string; engines?: Record<string, string> }>(
+      path.join(PACK_ROOT, 'package.json'),
+    );
+    const range = pkg.engines?.['@mmnto/totem'];
+    expect(typeof range).toBe('string');
+    const pack: LoadedPack = {
+      name: pkg.name,
+      resolvedPath: PACK_ROOT,
+      declaredEngineRange: range as string,
+    };
+    const inMemoryPacks = [{ pack, callback: () => {} }];
+
+    // Negative control first: the predicate is live and names the mismatch in
+    // the production message. A range violation throws BEFORE the engine
+    // seals, so the positive call below still runs in this process.
+    expect(() => loadInstalledPacks({ inMemoryPacks, engineVersion: '0.0.1' })).toThrow(
+      `Pack '${pkg.name}' requires @mmnto/totem '${range}' but the running engine is 0.0.1`,
+    );
+
+    // Positive: the range admits the engine version this workspace ships.
+    const engineVersion = resolveEngineVersion();
+    expect(engineVersion).not.toBe('0.0.0'); // the resolver's own could-not-read sentinel
+    const loaded = loadInstalledPacks({ inMemoryPacks });
+    expect(loaded.map((p) => p.name)).toEqual([pkg.name]);
   });
 });

@@ -1463,9 +1463,11 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
 
   it('a floor of 0 is PERSISTED, not dropped as falsy (mmnto-ai/totem#2700)', async () => {
     // The writer spreads `floor` on `!== undefined`, not on truthiness. Zero is
-    // a legal `searchRelevanceFloor` — it is the value that disables the
-    // refusal — and it is the one number a falsy guard would silently discard,
-    // leaving an artifact that claims no floor was applied when one was.
+    // a legal `searchRelevanceFloor` and it is the one number a falsy guard
+    // would silently discard, leaving an artifact that claims no floor was
+    // applied when one was. Since mmnto-ai/totem#2727 that distinction carries
+    // real weight: `undefined` now MEANS "no floor was configured", so a zero
+    // silently collapsing into it would be a lie about the run.
     const emitted: string[] = [];
 
     await runOrchestrator({
@@ -1486,6 +1488,9 @@ describe('runOrchestrator artifact emission (#2100)', { timeout: 15_000 }, () =>
     expect(artifact.grounding.floor).toBe(0);
   });
 
+  // Also the SPEC path's shape since mmnto-ai/totem#2727: with no
+  // `searchRelevanceFloor` configured, `spec` passes `floor: undefined` and the
+  // artifact must omit the key rather than record a number no floor judged.
   it('a request WITHOUT an anchor or a floor writes NEITHER key (a review artifact is unchanged)', async () => {
     const emitted: string[] = [];
 

@@ -71,13 +71,16 @@ Each result therefore also carries a `Relevance:` field: the true per-hit signal
 Every `search_knowledge` response also emits a machine-parsable `<retrieval-envelope>` line directly below the `<index-meta>` line, e.g.:
 
 ```
-<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.250" hits="5" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.570" hits="5" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="none" hits="5" />
 ```
+
+The first line is a repo that configured `searchRelevanceFloor`; the second is the default state, with no floor configured and none passed per call.
 
 - `status` is `ok`, `no_useful_hits`, or `empty`. `no_useful_hits` means results exist but the best relevance fell below the floor — the below-floor candidates are still disclosed (path + relevance, no content) rather than silently dropped; `empty` means zero rows. The two are kept programmatically distinct.
 - `method` is `hybrid`, `vector`, or `fts` (the last indicating the embedder was unavailable and search degraded to keyword-only — a loud system warning accompanies it).
 - `bestRelevance` is the max per-hit relevance (or `n/a` when no hit carried a relevance signal — in which case the floor does not fire).
-- `floor` is the effective relevance floor for the call: the config `searchRelevanceFloor` (default `0.25`), overridable per call via the `min_relevance` input.
+- `floor` is the effective relevance floor for the call: the config `searchRelevanceFloor`, overridable per call via the `min_relevance` input. That key carries **no default** (mmnto-ai/totem#2727) — with neither set the attribute reads `floor="none"`, no floor applies, and `status` can never be `no_useful_hits`.
 
 The envelope parses with a single regular expression, so wrapper agents can route on retrieval confidence without scraping the prose body.
 

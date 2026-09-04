@@ -45,6 +45,16 @@ let mockReconnectCalled = false;
  */
 let mockSimulateFtsFallback = false;
 /**
+ * mmnto-ai/totem#2727: the config's `searchRelevanceFloor`, or `undefined` for
+ * a repo that configures NO floor (the shipped shape since the key lost its
+ * default). `undefined` OMITS the key from the mocked config, so the
+ * production read of `config.searchRelevanceFloor` sees exactly what a real
+ * unset key gives it (the field is schema-typed `number | undefined`; there is
+ * no runtime guard to exercise). Default 0.4 — every pre-existing test in this suite was written
+ * against a configured floor and keeps it.
+ */
+let mockSearchRelevanceFloor: number | undefined = 0.4;
+/**
  * mmnto/totem#1295 CR minor: number of upcoming `getContext()` calls
  * that should throw before getContext starts returning normally.
  * Decremented on each throw. The test for the one-shot flag fix sets
@@ -142,7 +152,9 @@ vi.mock('../context.js', () => ({
         totemDir: '.totem',
         lanceDir: '.totem/.lance',
         contextWarningThreshold: 50_000,
-        searchRelevanceFloor: 0.4,
+        ...(mockSearchRelevanceFloor !== undefined
+          ? { searchRelevanceFloor: mockSearchRelevanceFloor }
+          : {}),
         partitions: { core: ['packages/core/'] },
       },
       store: {
@@ -257,6 +269,7 @@ describe('search_knowledge', () => {
     mockSearchThrowsOnce = false;
     mockReconnectCalled = false;
     mockSimulateFtsFallback = false;
+    mockSearchRelevanceFloor = 0.4;
     mockGetContextFailuresRemaining = 0;
     mockLinkedStores = new Map();
     mockLinkedStoreInitErrors = new Map();
@@ -292,7 +305,9 @@ describe('search_knowledge', () => {
             totemDir: '.totem',
             lanceDir: '.totem/.lance',
             contextWarningThreshold: 50_000,
-            searchRelevanceFloor: 0.4,
+            ...(mockSearchRelevanceFloor !== undefined
+              ? { searchRelevanceFloor: mockSearchRelevanceFloor }
+              : {}),
             partitions: { core: ['packages/core/'] },
           },
           store: {
@@ -2174,6 +2189,140 @@ describe('search_knowledge', () => {
       expect(ml![1]).toBe('ok');
       expect(ml![4]).toBe('0.100');
       expect(loose.content[0]!.text).toContain('mid body');
+    });
+
+    // A zero override is a REAL override, not an absent one. `minRelevance ??
+    // configuredFloor` honours it; a `minRelevance || configuredFloor`
+    // refactor would silently fall back to the configured 0.4 and re-withhold
+    // the hit (mmnto-ai/totem#2727 fold, F5).
+    it('min_relevance: 0 overrides a configured floor — the effective floor is 0, not the config value', async () => {
+      mockSearchResults = [
+        {
+          label: 'Weak',
+          type: 'code',
+          filePath: 'src/w.ts',
+          score: 0.016,
+          relevance: 0.05,
+          searchMethod: 'hybrid',
+          content: 'weak body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', min_relevance: 0 })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('ok'); // 0.05 clears a floor of 0
+      expect(m![4]).toBe('0.000'); // NOT "0.400" — the override won
+      expect(text).toContain('weak body');
+      const call = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+      };
+      expect(call.context['floor']).toBe(0);
+    });
+
+    // --- No floor at all (mmnto-ai/totem#2727) ---
+    //
+    // `searchRelevanceFloor` lost its default: an unconfigured repo runs
+    // UNFLOORED. The measurement behind it — on the gemini-embedding-2-preview
+    // 768-d profile the lowest best-relevance over 55 recorded `totem spec`
+    // queries was 0.559 — is what made the old default of 0.25 a mechanism
+    // claim with no mechanism.
+
+    it('no configured floor and no min_relevance: floor="none", and a batch of WEAK hits is still status="ok"', async () => {
+      mockSearchRelevanceFloor = undefined;
+      // Every hit far below the floor this suite otherwise configures (0.4).
+      mockSearchResults = [
+        {
+          label: 'Weak A',
+          type: 'code',
+          filePath: 'src/a.ts',
+          score: 0.016,
+          relevance: 0.05,
+          searchMethod: 'hybrid',
+          content: 'WEAK_BODY_A',
+        },
+        {
+          label: 'Weak B',
+          type: 'code',
+          filePath: 'src/b.ts',
+          score: 0.016,
+          relevance: 0.02,
+          searchMethod: 'hybrid',
+          content: 'WEAK_BODY_B',
+        },
+      ];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('ok'); // NOT no_useful_hits — no floor means no arm to fire
+      expect(m![4]).toBe('none');
+      expect(m![5]).toBe('2'); // both RETURNED, not disclosed-and-withheld
+      // Content is delivered, not withheld behind a disclosure.
+      expect(text).toContain('WEAK_BODY_A');
+      expect(text).toContain('WEAK_BODY_B');
+      expect(text).not.toContain('Below-floor candidates');
+
+      // The manifest records the absence as null — never a number no
+      // selection was judged against.
+      const call = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+      };
+      expect(call.context['floor']).toBeNull();
+      expect(call.context['status']).toBe('ok');
+    });
+
+    it('no configured floor: an EMPTY result still reports floor="none"', async () => {
+      mockSearchRelevanceFloor = undefined;
+      mockSearchResults = [];
+
+      const result = (await handle({ query: 'test' })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const m = result.content[0]!.text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('empty');
+      expect(m![4]).toBe('none');
+      const call = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+      };
+      expect(call.context['floor']).toBeNull();
+    });
+
+    it('no configured floor, but min_relevance given: the below-floor arm fires on the override alone', async () => {
+      mockSearchRelevanceFloor = undefined;
+      mockSearchResults = [
+        {
+          label: 'Weak',
+          type: 'code',
+          filePath: 'src/w.ts',
+          score: 0.016,
+          relevance: 0.2,
+          searchMethod: 'hybrid',
+          content: 'SECRET_WEAK_BODY',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', min_relevance: 0.5 })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('no_useful_hits');
+      expect(m![4]).toBe('0.500');
+      expect(m![5]).toBe('0');
+      expect(text).toContain('relevance 0.200'); // disclosed
+      expect(text).not.toContain('SECRET_WEAK_BODY'); // but not returned
+      const call = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+      };
+      expect(call.context['floor']).toBe(0.5);
     });
 
     it('preserves relevance through the federation RRF merge (second fusion site)', async () => {
