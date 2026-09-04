@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
-// totem-context: mmnto-ai/totem#2753 — the rule's startup-cost premise does not apply to THIS module, because `install-hooks.js` is reached only through `await import` from index.ts and index-lite.ts (so it is never on the `--help` graph) and the core barrel is already in its static graph via `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js`. The dynamic form is also unavailable: `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract and `installGitHook` is synchronous, so the only alternative would be duplicating core's `parseForkMarker` regex in the CLI — the divergence the shared parser exists to prevent.
+// totem-context: mmnto-ai/totem#2753 — the rule's startup-cost premise does not apply to THIS module, because `install-hooks.js` is reached only through `await import` (index.ts, index-lite.ts, doctor.ts, doctor-parity.ts, eject.ts, init.ts, shield.ts), so it is never on the `--help` graph, and the core barrel is already in its static graph via `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js`. The dynamic form is also unavailable: `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract and `installGitHook` is synchronous, so the only alternative would be duplicating core's `parseForkMarker` regex in the CLI — the divergence the shared parser exists to prevent.
 import { parseForkMarker } from '@mmnto/totem';
 
 import {
@@ -173,6 +173,13 @@ export interface HookRenderOptions {
 
 /** {@link HookRenderOptions} plus the config file they were derived from. */
 export interface ResolvedHookRenderOptions extends HookRenderOptions {
+  /** Set when `tier` was PINNED by an explicit flag or by `hooks.tier` in config,
+   *  rather than falling through to the `'standard'` default. Callers that rewrite
+   *  an EXISTING hook use this to tell "the repo asked for standard" apart from
+   *  "nobody said" — only in the second case may the installed hook's own declared
+   *  tier decide, which is what stops a bare install from silently downgrading a
+   *  `--strict` hook (mmnto-ai/totem#2753 fold F4). */
+  tierPinned?: true;
   /** The config that supplied the values; undefined when none resolved. */
   configPath?: string;
   /** Set when a config RESOLVED but would not load: the values are the defaults
@@ -364,12 +371,68 @@ export async function resolveHookRenderOptions(
       'Set `totemDir` to a plain relative directory inside the repo and re-run `totem hook install --force`.',
     );
   }
+  const pinned = flags?.tier ?? config.hooks?.tier;
   return {
-    tier: flags?.tier ?? config.hooks?.tier ?? 'standard',
+    tier: pinned ?? 'standard',
+    ...(pinned === undefined ? {} : { tierPinned: true as const }),
     totemDir,
     fallbackCmd,
     configPath,
   };
+}
+
+/**
+ * The enforcement tier an INSTALLED hook declares (`TOTEM_HOOK_TIER="…"`), read from
+ * the TOTEM-OWNED BLOCK only — never from the whole file, so a user's own line
+ * carrying that assignment above an appended block cannot steer the render (the
+ * mmnto-ai/totem#2692 pass-2 F3 lesson, applied on the install side).
+ *
+ * `undefined` when the hook is absent, carries no marker, or predates the tier line.
+ */
+export function declaredHookTier(
+  content: string,
+  marker: string,
+  endMarker: string,
+): 'strict' | 'standard' | undefined {
+  const start = content.indexOf(marker);
+  if (start === -1) return undefined;
+  const end = content.indexOf(endMarker, start + marker.length);
+  const block = end === -1 ? content.slice(start) : content.slice(start, end + endMarker.length);
+  return /TOTEM_HOOK_TIER="(strict|standard)"/.exec(block)?.[1] as
+    | 'strict'
+    | 'standard'
+    | undefined;
+}
+
+/**
+ * The tier to RENDER one hook at: an explicit flag or a configured `hooks.tier`
+ * (both carried as `render.tierPinned`) wins; otherwise the tier the hook already
+ * on disk declares; otherwise `render.tier` (the `'standard'` default).
+ *
+ * Without this last-but-one rung a bare `totem hook install` or `totem init` on a
+ * repo that pins no tier re-renders a `--strict` hook at standard — a SILENT
+ * enforcement downgrade performed by a command the user ran to stay current
+ * (mmnto-ai/totem#2753 fold F4). doctor already refuses to call a tier difference
+ * drift for exactly this reason (mmnto-ai/totem#2692 amendment A10); this is the
+ * writer-side half of that ruling.
+ */
+function tierForHook(
+  hooksDir: string,
+  hookName: string,
+  marker: string,
+  endMarker: string,
+  render: ResolvedHookRenderOptions,
+): 'strict' | 'standard' {
+  if (render.tierPinned === true) return render.tier;
+  const hookPath = path.join(hooksDir, hookName);
+  let existing: string;
+  try {
+    existing = fs.readFileSync(hookPath, 'utf-8');
+    // totem-context: an unreadable/absent hook simply has no declared tier to honor — the caller falls back to the resolved default, which is the pre-#2753 behavior, never a crash of the install.
+  } catch {
+    return render.tier;
+  }
+  return declaredHookTier(existing, marker, endMarker) ?? render.tier;
 }
 
 /**
@@ -1254,34 +1317,61 @@ function ownedTrailerStart(content: string, marker: string, endMarker: string): 
 }
 
 /**
- * A trailer (the text after a managed hook's end marker) is ATTESTED when its first
- * non-blank line carries a full fork attestation — reason, owner and attested all
- * present and non-empty (mmnto-ai/totem#2753).
+ * A trailer (the text after a managed hook's end marker) is ATTESTED when its
+ * LEADING COMMENT RUN carries a full fork attestation — reason, owner and attested
+ * all present and non-empty (mmnto-ai/totem#2753).
  *
- * The attestation is core's `<!-- totem:fork … -->` marker (`parseForkMarker`), the
- * same shape the parity detector reads, carried on a shell comment line:
- *   `# <!-- totem:fork reason="…" owner="…" attested="2026-06-07" -->`
+ * The leading comment run is every line up to the first line that is neither blank
+ * nor a shell comment — i.e. up to the extension's first COMMAND. Blank lines inside
+ * the run are skipped. The attestation is core's `<!-- totem:fork … -->` marker
+ * (`parseForkMarker`), the same shape the parity detector reads, on a comment line:
  *
- * A BARE `totem:fork` marker — or one missing any of the three fields — is NOT
- * attested. That asymmetry is deliberate: for the parity detector a bare marker is
- * enough to claim a fork, but carrying a consumer's lines through a managed-block
- * rewrite is a maintenance promise, and the promise needs a name, a reason and a
- * date. Only the FIRST non-blank line is read — an attestation buried below other
- * content does not vouch for the content above it.
+ *     (blank)
+ *     # [lc] docs-inject extension
+ *     # <!-- totem:fork reason="…" owner="satur8d" attested="2026-06-07" -->
+ *     sh "tools/git-hooks/pre-commit-docs-inject.sh"
+ *
+ * The run, not the first line: a real consumer labels its block before it signs it.
+ * That is the measured liquid-city shape — `tools/git-hooks/install.cjs` emits a
+ * `# [lc] <name> extension` line FIRST and the fork marker SECOND — and a
+ * first-line-only rule declined the very datum this slice was built from
+ * (mmnto-ai/liquid-city#1174).
+ *
+ * Two things do NOT attest, and both matter:
+ *   - A marker below the first command. An attestation buried under code vouches
+ *     for nothing above it, so the run ends at that command.
+ *   - A marker on a NON-comment line. `rm -rf / # <!-- totem:fork … -->` is a
+ *     command, not a signature; only a line whose trimmed text STARTS with `#` can
+ *     carry one.
+ *
+ * A BARE `totem:fork` marker — or one missing any of the three fields — is not
+ * attested either. That asymmetry with the parity detector (where a bare marker is
+ * enough to CLAIM a fork) is deliberate: carrying a consumer's lines through a
+ * managed-block rewrite is a maintenance promise, and a promise needs a name, a
+ * reason and a date.
  */
 export function isAttestedTrailer(trailer: string): boolean {
-  const firstNonBlank = trailer.split('\n').find((line) => line.trim().length !== 0);
-  if (firstNonBlank === undefined) return false;
-  const fork = parseForkMarker(firstNonBlank);
-  if (fork === undefined) return false;
-  return (
-    typeof fork.reason === 'string' &&
-    fork.reason.length > 0 &&
-    typeof fork.owner === 'string' &&
-    fork.owner.length > 0 &&
-    typeof fork.attested === 'string' &&
-    fork.attested.length > 0
-  );
+  for (const line of trailer.split('\n')) {
+    const trimmed = line.trim();
+    // Blank lines sit inside the run — the measured shape opens with one.
+    if (trimmed.length === 0) continue;
+    // The first command ends the run: nothing below it can vouch for it.
+    if (!trimmed.startsWith('#')) return false;
+    const fork = parseForkMarker(line);
+    if (
+      fork !== undefined &&
+      typeof fork.reason === 'string' &&
+      fork.reason.length > 0 &&
+      typeof fork.owner === 'string' &&
+      fork.owner.length > 0 &&
+      typeof fork.attested === 'string' &&
+      fork.attested.length > 0
+    ) {
+      return true;
+    }
+  }
+  // Blank/whitespace-only, or a comment run with no full marker in it.
+  return false;
 }
 
 /**
@@ -1411,12 +1501,17 @@ export function installGitHook(
       // one — an attested-trailer hook whose block already equals the canonical is
       // current (`exists`, no write), which is what makes a second bare run a no-op.
       if (endMarker !== undefined && isTotemOwnedWithAttestedTrailer(existing, marker, endMarker)) {
-        const trailerStart =
-          existing.indexOf(endMarker, existing.indexOf(marker) + marker.length) + endMarker.length;
-        const rewritten = hookContent + trailerTailAfterEndMarker(existing, trailerStart);
-        if (rewritten === existing) return 'exists';
-        writeExecutableHook(hookPath, rewritten);
-        return 'block-rewritten';
+        // The predicate above IS `ownedTrailerStart(…) !== undefined` plus the
+        // attestation, so this reuses the offset it already proved rather than
+        // recomputing the marker scan by hand (fold F11). A defensive `undefined`
+        // falls through to the conservative decline; it never writes on a guess.
+        const trailerStart = ownedTrailerStart(existing, marker, endMarker);
+        if (trailerStart !== undefined) {
+          const rewritten = hookContent + trailerTailAfterEndMarker(existing, trailerStart);
+          if (rewritten === existing) return 'exists';
+          writeExecutableHook(hookPath, rewritten);
+          return 'block-rewritten';
+        }
       }
       return 'exists';
     }
@@ -1510,10 +1605,22 @@ export async function installEnforcementHooks(
   // slice names and does not close.
   const render = await resolveHookRenderOptions(gitRoot, { tier: options?.tier });
 
+  // Render each hook at the tier it is entitled to keep (mmnto-ai/totem#2753 fold
+  // F4): nothing pinned + an installed `--strict` hook → strict, not a silent
+  // downgrade to standard.
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(render),
+    buildPreCommitHook({
+      ...render,
+      tier: tierForHook(
+        hooksDir,
+        'pre-commit',
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+        render,
+      ),
+    }),
     TOTEM_PRECOMMIT_MARKER,
     undefined,
     TOTEM_PRECOMMIT_END,
@@ -1522,7 +1629,10 @@ export async function installEnforcementHooks(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(render),
+    buildPrePushHook({
+      ...render,
+      tier: tierForHook(hooksDir, 'pre-push', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END, render),
+    }),
     TOTEM_PREPUSH_MARKER,
     undefined,
     TOTEM_PREPUSH_END,
@@ -1628,10 +1738,22 @@ export async function installHooksNonInteractive(
     return null;
   }
 
+  // Same entitlement rule as the init path (mmnto-ai/totem#2753 fold F4) — and it
+  // has to hold HERE above all, because `totem hook install` is the bare command
+  // the doctor's own stale-block remedy sends people to.
   const preCommit = installGitHook(
     hooksDir,
     'pre-commit',
-    buildPreCommitHook(render),
+    buildPreCommitHook({
+      ...render,
+      tier: tierForHook(
+        hooksDir,
+        'pre-commit',
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+        render,
+      ),
+    }),
     TOTEM_PRECOMMIT_MARKER,
     force,
     TOTEM_PRECOMMIT_END,
@@ -1640,7 +1762,10 @@ export async function installHooksNonInteractive(
   const prePush = installGitHook(
     hooksDir,
     'pre-push',
-    buildPrePushHook(render),
+    buildPrePushHook({
+      ...render,
+      tier: tierForHook(hooksDir, 'pre-push', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END, render),
+    }),
     TOTEM_PREPUSH_MARKER,
     force,
     TOTEM_PREPUSH_END,

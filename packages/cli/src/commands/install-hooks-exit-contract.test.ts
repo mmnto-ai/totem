@@ -281,9 +281,20 @@ describe('hooksCommand exit-code contract', () => {
     const prePush = path.join(hooksDir(), 'pre-push');
     const canonical = fs.readFileSync(prePush, 'utf-8');
     // A stale managed block with an ATTESTED extension after its end marker — the
-    // measured liquid-city shape (mmnto-ai/liquid-city#1174).
-    const trailer =
-      '# <!-- totem:fork reason="lc pre-push extension" owner="satur8d" attested="2026-06-07" -->\necho "[lc] extension"\n';
+    // measured liquid-city shape, transcribed from `tools/git-hooks/install.cjs`
+    // (EXTENSIONS block 2) and joined the way that file joins it
+    // (mmnto-ai/liquid-city#1174). The `# [lc] …` label opens the block and the
+    // attestation is the SECOND comment line, which is why the predicate reads the
+    // trailer's whole leading comment run rather than only its first line.
+    const trailer = [
+      '',
+      '# [lc] validate-fixtures extension',
+      '# <!-- totem:fork reason="lc fail-closed fixture-contract validator pre-push extension (ADR-025 A2; divergence-census justified fork)" owner="satur8d" attested="2026-06-20" -->',
+      'LC_STDIN=$(cat)',
+      'lc_feed() { if [ -n "$LC_STDIN" ]; then printf \'%s\\n\' "$LC_STDIN"; fi; }',
+      'lc_feed | sh "tools/git-hooks/pre-push-validate-fixtures.sh" || exit 1',
+      '',
+    ].join('\n');
     fs.writeFileSync(
       prePush,
       `#!/bin/sh\n# ${TOTEM_PREPUSH_MARKER}\nstale\n# ${TOTEM_PREPUSH_END}\n${trailer}`,

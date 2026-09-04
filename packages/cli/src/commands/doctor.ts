@@ -266,13 +266,20 @@ export async function checkGitHooks(
       const forceable = stale
         .filter((row) => row.kind === 'owned-whole' || row.kind === 'legacy')
         .map((r) => r.file);
-      const legacyNote =
-        legacy.length === 0
-          ? ''
-          : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
       // One clause per shape present, each naming its own files unless it covers
       // every stale hook (then the bare command reads cleaner).
       const clauses: string[] = [];
+      // The `--force` clause names its files whenever it does not cover all of them.
+      // When it does name them, the legacy note must NOT repeat the same filename —
+      // "…--force for pre-commit (pre-commit: a legacy hook…)" reads as two hooks
+      // (fold F6). The note keeps its names only when the clause carried none.
+      const forceClauseNamesFiles = forceable.length !== files.length;
+      const legacyNote =
+        legacy.length === 0
+          ? ''
+          : forceClauseNamesFiles
+            ? ' (a legacy hook with no end marker — back up any lines of your own first)'
+            : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
       if (appended.length > 0) {
         clauses.push(
           `delete the totem block (from its start marker through its end marker) in ${appended.join(', ')} and re-run \`totem hook install\` to re-append it`,
