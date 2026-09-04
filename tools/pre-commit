@@ -135,32 +135,66 @@ if (kind !== KIND_RECORD) {
 if ([65279].indexOf(subject.charCodeAt(0)) > -1) subject = subject.slice(1);
 const lines = subject.split("\n");
 const tolerated = [];
+// Fences (mmnto-ai/totem#2769): a line whose trimmed start is three backticks
+// or three tildes opens a fence, and the same marker closes it. A fence
+// DELIMITER line is neither a heading, a match candidate, nor body; a line
+// INSIDE a fence is neither a heading nor a match candidate, but it IS body
+// when non-blank — a section whose content is one code block is a written
+// section, while a promised heading quoted inside a fence (the skeleton pasted
+// as an example) is not the section it names.
+const TICK3 = String.fromCharCode(96, 96, 96);
+const TILDE3 = "~~~";
+const fenceLine = [];
+const inFence = [];
+let fenceOpen = "";
+for (let i = 0; i < lines.length; i++) {
+  const lead = lines[i].trimStart().slice(0, 3);
+  const marker = [TICK3, TILDE3].indexOf(lead) > -1 ? lead : "";
+  if (fenceOpen.length < 1 && marker.length > 0) { fenceOpen = marker; fenceLine.push(true); inFence.push(false); continue; }
+  if (fenceOpen.length > 0 && marker.length > 0 && [fenceOpen].indexOf(marker) > -1) { fenceOpen = ""; fenceLine.push(true); inFence.push(false); continue; }
+  fenceLine.push(false);
+  inFence.push(fenceOpen.length > 0);
+}
+// A line of only # characters and whitespace (mmnto-ai/totem#2769): not a
+// heading (no text) and not body either — it is the skeleton of one.
+function bareHashes(line) {
+  const t = line.trim();
+  return t.length > 0 && t.split("#").join("").length < 1;
+}
+function levelAt(i) {
+  if (fenceLine[i] || inFence[i]) return 0;
+  return headingLevel(lines[i]);
+}
 function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
-    const n = headingLevel(lines[i]);
+    const n = levelAt(i);
     if (n > 0 && n <= level) return false;
     if (n > 0) continue;
+    if (fenceLine[i] || bareHashes(lines[i])) continue;
     if (lines[i].trim().length > 0) return true;
   }
   return false;
 }
+function candidate(i) {
+  return !fenceLine[i] && !inFence[i];
+}
 if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
-    for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    for (let i = 0; i < lines.length; i++) { if (candidate(i) && [heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
     let matchedAs = "";
     if (at < 0) {
       const want = stripParen(heading);
-      for (let i = 0; i < lines.length; i++) { if ([want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
+      for (let i = 0; i < lines.length; i++) { if (candidate(i) && [want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
       if (at > -1) { matchedAs = safe(lines[at].trimEnd()); tolerated.push(safe(heading) + " ~ " + matchedAs); }
     }
     if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
     const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
-    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
+    if (!hasBodyAfter(at, levelAt(at))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
   }
 } else {
   let bodied = false;
-  for (let i = 0; i < lines.length; i++) { const n = headingLevel(lines[i]); if (n > 0 && hasBodyAfter(i, n)) { bodied = true; break; } }
+  for (let i = 0; i < lines.length; i++) { const n = levelAt(i); if (n > 0 && hasBodyAfter(i, n)) { bodied = true; break; } }
   if (!bodied && kind !== KIND_RECORD) block("the draft in " + shownFile + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
   if (!bodied) block("the bound record at " + shownRef + " has no heading with a body");
 }
