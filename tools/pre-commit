@@ -63,7 +63,7 @@ function safe(text) {
   let out = "";
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    const control = code < 32 || (code >= 127 && code <= 159);
+    const control = code < 32 || (code >= 127 && code <= 159) || [8232, 8233].indexOf(code) > -1;
     out = out + (control ? "?" : text.charAt(i));
   }
   return out;
@@ -148,13 +148,15 @@ if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
     for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    let matchedAs = "";
     if (at < 0) {
       const want = stripParen(heading);
       for (let i = 0; i < lines.length; i++) { if ([want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
-      if (at > -1) tolerated.push(safe(heading) + " ~ " + safe(lines[at].trimEnd()));
+      if (at > -1) { matchedAs = safe(lines[at].trimEnd()); tolerated.push(safe(heading) + " ~ " + matchedAs); }
     }
     if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
-    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
+    const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
+    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
   }
 } else {
   let bodied = false;

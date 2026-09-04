@@ -806,10 +806,12 @@ export function buildPreCommitHook(options: {
   // The artifact is a plain JSON file a seat can hand-edit, and its NAME comes
   // off the filesystem, so nothing echoed is trusted as text: EVERY value that
   // reaches stdout — the artifact's path, its `createdAt`, `anchor.kind`,
-  // `anchor.ref` and each required heading — passes through `safe()` first. A
+  // `anchor.ref`, each required heading, and, on a tolerant match, the draft
+  // line it matched — passes through `safe()` first. A
   // newline in any of them would otherwise forge a second `[Totem]` line in the
-  // hook's own output; `safe()` collapses C0 (0x00–0x1f) AND the DEL/C1 band
-  // (0x7f–0x9f), because U+0085 (NEL) breaks a line on some terminals.
+  // hook's own output; `safe()` collapses C0 (0x00–0x1f), the DEL/C1 band
+  // (0x7f–0x9f), and U+2028/U+2029, because U+0085 (NEL) breaks a line on some
+  // terminals and U+2028/U+2029 are line separators for the same purpose.
   // Containment is decided by RESOLUTION, not by inspecting one segment, and
   // it is decided TWICE. Lexically first: a `record` ref that is absolute
   // (either path flavor) or whose `path.resolve` against `process.cwd()` — the
@@ -873,7 +875,7 @@ function safe(text) {
   let out = "";
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    const control = code < 32 || (code >= 127 && code <= 159);
+    const control = code < 32 || (code >= 127 && code <= 159) || [8232, 8233].indexOf(code) > -1;
     out = out + (control ? "?" : text.charAt(i));
   }
   return out;
@@ -958,13 +960,15 @@ if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
     for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    let matchedAs = "";
     if (at < 0) {
       const want = stripParen(heading);
       for (let i = 0; i < lines.length; i++) { if ([want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
-      if (at > -1) tolerated.push(safe(heading) + " ~ " + safe(lines[at].trimEnd()));
+      if (at > -1) { matchedAs = safe(lines[at].trimEnd()); tolerated.push(safe(heading) + " ~ " + matchedAs); }
     }
     if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
-    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
+    const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
+    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
   }
 } else {
   let bodied = false;

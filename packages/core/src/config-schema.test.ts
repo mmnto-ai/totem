@@ -6,6 +6,7 @@ import {
   DoctorConfigSchema,
   GarbageCollectionSchema,
   getConfigTier,
+  hasUnrenderableHeadingChar,
   hasUnrenderableHookChar,
   normalizeTotemDir,
   OrchestratorSchema,
@@ -1205,6 +1206,58 @@ describe('totemDir — normalised, then refused where the managed hooks could no
       expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(true);
     for (const ch of accepted)
       expect(hasUnrenderableHookChar(`a${ch}b`), JSON.stringify(ch)).toBe(false);
+  });
+
+  // The sibling predicate for required SPEC HEADINGS (mmnto-ai/totem#2737).
+  // Same five shell/JS-active characters and the same line-breaking bands, but
+  // printable non-ASCII is PERMITTED: a heading is rendered by JSON.stringify
+  // into the reader's JS source and compared in memory, where the path
+  // predicate's ban on everything above 0x7e exists for git's C-quoting of
+  // `diff --name-only` output that a heading never meets.
+  it('hasUnrenderableHeadingChar — the character set, pinned as a set', () => {
+    const refused = [
+      "'",
+      '"',
+      String.fromCharCode(0x5c), // backslash
+      '$',
+      '`',
+      String.fromCharCode(0x0a), // newline
+      String.fromCharCode(0x09), // tab
+      String.fromCharCode(0x00), // NUL
+      String.fromCharCode(0x1f), // the top of C0
+      String.fromCharCode(0x7f), // DEL
+      String.fromCharCode(0x85), // NEL — a line break to some terminals
+      String.fromCharCode(0x9f), // the top of C1
+      String.fromCharCode(0x2028), // LINE SEPARATOR
+      String.fromCharCode(0x2029), // PARAGRAPH SEPARATOR
+    ];
+    const accepted = [
+      '.',
+      '-',
+      '&',
+      '(',
+      ')',
+      ':',
+      ' ',
+      'é',
+      'ü',
+      String.fromCharCode(0x2014), // the em dash the Verification heading carries
+    ];
+    for (const ch of refused)
+      expect(hasUnrenderableHeadingChar(`a${ch}b`), JSON.stringify(ch)).toBe(true);
+    for (const ch of accepted)
+      expect(hasUnrenderableHeadingChar(`a${ch}b`), JSON.stringify(ch)).toBe(false);
+
+    // The whole heading, not just its bytes one at a time. Core cannot import
+    // SPEC_SYSTEM_PROMPT (it lives in @mmnto/cli, which depends on this
+    // package, not the other way round), so the em dash is BUILT rather than
+    // typed — the same guarantee against a look-alike byte. That this string is
+    // verbatim the prompt's line is locked on the CLI side, where
+    // SPEC_REQUIRED_SECTIONS is asserted to be a subset of SPEC_SYSTEM_PROMPT
+    // and every entry is run through this predicate.
+    const verification = `### Verification (MANDATORY ${String.fromCharCode(0x2014)} do not skip)`;
+    expect(hasUnrenderableHeadingChar(verification), verification).toBe(false);
+    expect(hasUnrenderableHookChar(verification), 'the PATH predicate still refuses it').toBe(true);
   });
 });
 

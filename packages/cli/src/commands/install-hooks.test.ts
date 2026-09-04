@@ -3753,3 +3753,64 @@ describe('buildPreCommitHook spec-gate reader — frozen mutation suite (mmnto-a
     },
   );
 });
+
+// A tolerantly-matched heading that then blocks for an empty body used to name
+// a string the draft does not contain: the seat reads `has an empty heading
+// ### Verification (MANDATORY — do not skip)`, searches the draft for it, finds
+// nothing, and cannot see that the reader matched `### Verification` and judged
+// THAT section. The block now carries both spellings. Outside the frozen block
+// (mmnto-ai/totem#2737 fold round) — the suite above was run against the
+// unchanged reader and is not edited after.
+describe('buildPreCommitHook spec-gate reader — tolerance disclosure on the block path (mmnto-ai/totem#2737 fold)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+
+  const PROMISED = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+  const VERIFICATION = PROMISED.find((heading) => heading.startsWith('### Verification')) ?? '';
+
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-2737-fold-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/fold', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it.skipIf(!shellOk)(
+    'an EMPTY section under a tolerantly-matched heading names both the promised and the matched line',
+    () => {
+      // Every promised heading bodied except Verification, which appears with
+      // its parenthetical dropped AND no body — so the reader must reach the
+      // empty-body block by way of the tolerant pass.
+      const content = PROMISED.map((heading) =>
+        heading === VERIFICATION
+          ? '### Verification\n'
+          : `${heading}\n\nA non-blank body under ${heading}.\n`,
+      ).join('\n');
+      const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'tolerant-empty.json'),
+        JSON.stringify(specEvidenceArtifact({ output: { content } }), null, 2),
+      );
+
+      const r = spawnSync('sh', ['./pre-commit'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        `has an empty heading ${VERIFICATION} (matched as ### Verification)`,
+      );
+      // Still distinguishable from the other two BLOCKED arms.
+      expect(r.stdout).not.toContain('no totem spec run artifact');
+      expect(r.stdout).not.toContain('the spec-evidence reader could not run');
+    },
+  );
+});

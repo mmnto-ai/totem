@@ -478,10 +478,14 @@ export function hasUnrenderableHookChar(value: string): boolean {
  * managed pre-commit hook as a required SPEC HEADING (mmnto-ai/totem#2737).
  * Forbids the same five shell/JS-active characters as
  * {@link hasUnrenderableHookChar} — a single quote, a double quote, a
- * backslash, a dollar sign, a backtick — plus every control character: C0
- * (below 0x20) and the DEL/C1 band (0x7f–0x9f), which is exactly the band the
- * reader's own `safe()` collapses, so a heading could otherwise forge a second
- * `[Totem]` line in the hook's output.
+ * backslash, a dollar sign, a backtick — plus every line-breaking or control
+ * character the reader's own `safe()` collapses: C0 (below 0x20), the DEL/C1
+ * band (0x7f–0x9f), and U+2028/U+2029 (LINE and PARAGRAPH SEPARATOR). Anything
+ * outside that set could otherwise forge a second `[Totem]` line in the hook's
+ * output. U+2028 and U+2029 are printable-plane code points that terminals and
+ * pagers still break a line on, so banning only the two classic bands would
+ * leave the forge channel open on exactly the characters this predicate exists
+ * to permit the rest of.
  *
  * It PERMITS printable non-ASCII, and that is the whole difference. The path
  * predicate bans everything above 0x7e because git C-quotes path bytes above
@@ -504,6 +508,7 @@ export function hasUnrenderableHeadingChar(value: string): boolean {
     if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
     const code = ch.codePointAt(0) ?? 0;
     if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
+    if (code === 0x2028 || code === 0x2029) return true;
   }
   return false;
 }
