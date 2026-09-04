@@ -11,7 +11,7 @@ totem hook install
 ## Supported Hooks
 
 - **`pre-commit`**: Fast checks for obvious violations.
-- **`pre-push`**: Fast, local `totem lint` execution before pushing to a remote.
+- **`pre-push`**: Fast, local `totem lint` execution before pushing to a remote, plus the review-leg floor — `totem legs gate` refuses a legs-owed push that carries no fresh falsification-leg deposit on the strict tier, on agent seats, and wherever `hooks.legsOwed.enforce` is `'block'`; the other tiers print the same lines and pass (see [Enforcement Model](enforcement-model.md)).
 - **`post-merge` / `post-checkout`**: Re-syncs the local LanceDB index if lessons or rules have changed.
 
 ## The managed block and your own extensions

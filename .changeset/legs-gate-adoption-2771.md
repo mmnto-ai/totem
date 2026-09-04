@@ -1,0 +1,16 @@
+---
+'@mmnto/totem': minor
+'@mmnto/cli': minor
+---
+
+`hooks.legsOwed.enforce` — the review-leg floor's own enforcement knob, decoupled from the hook tier (mmnto-ai/totem#2771).
+
+**What it does.** `'block'` makes `totem legs gate` exit its derived state — `3` legs-owed with no fresh deposit, `2` could not derive — at EVERY tier, so the managed pre-push hook refuses a legs-owed push on a standard-tier install too, while the spec-evidence and shield gates stay at the repo's tier: one gate armed without arming all three, the per-arm shape the cohort asked for. `'advisory'` makes every gate state exit `0` at every tier, the strict one and agent seats included. Unset keeps the tier-derived behaviour byte for byte — the strict tier and agent seats block, the other tiers print the same lines and pass — so nothing changes on upgrade.
+
+**Where it is read.** By the gate itself, at run time, like `hooks.legsOwed.globs`: setting it needs no `totem hook install --force`. Inside the gate it maps onto the existing `--advisory` option at the one place the tier was already applied, so there is still a single formatting path and the knob, like the tier, changes only the exit code. When the knob is set the gate appends one line under either flag — `[Totem] legs: hooks.legsOwed.enforce = block` — so a block on a standard-tier install names the key that caused it, and the two tiers' stdout stays identical for one config.
+
+**The managed pre-push hook** (`totem hook install`, and this repo's own `tools/pre-push`) now reads the gate's exit code on every tier instead of only the strict one: `3` and `2` block everywhere — under `--advisory` they only ever come back when the knob says block — with lines that name both causes (`strict mode or hooks.legsOwed.enforce: block`), and a status other than `0`, `2` or `3` (a failure before the derivation, an unloadable config — which is also how the knob would go unread) blocks on the strict arm only, exactly as before. Consumers who extended the hook past its end marker receive the new block through the in-place rewrite (mmnto-ai/totem#2760).
+
+**The CI arm reads the same knob.** A workflow step running the bare `totem legs gate` exits the derived state with the knob unset or `'block'`; `'advisory'` softens that step as well, so a repo adopting the CI arm of the `legs-gate` parity row leaves the knob unset or sets `'block'`. This repository adopts that arm here: a hard `totem legs gate` step in its lint workflow over deposits committed under `.totem/artifacts/legs/` (re-included from the artifacts ignore), placed before the lint step's `--depth=1` fetch because that fetch shallows the checkout and a shallow base tip has no parents for the coverage probe's merge-base to find.
+
+**Distributed surfaces.** The `totem init` reflex block (v14) names the knob beside the gate it arms; `docs/wiki/config-reference.md` § The Enforcement Knob, `enforcement-model.md`, `hook-integration.md` and `cli-reference.md` carry it.

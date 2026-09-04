@@ -149,6 +149,9 @@ export default {
     // (mmnto-ai/totem#2698). See the section below.
     legsOwed: {
       globs: ['doctrine/**', 'adr/**', 'docs/wiki/**', '.changeset/**'],
+      // The legs arm's OWN enforcement, at any tier (mmnto-ai/totem#2771):
+      // 'block' | 'advisory'; unset keeps the tier-derived behaviour.
+      enforce: 'block',
     },
   },
 };
@@ -205,6 +208,18 @@ docs/wiki/**
 **Bare patterns match by basename.** The matcher is the same dialect `ignorePatterns` uses, so a bare `README.md` matches a file of that name anywhere in the tree — which is what makes it cover every package README, i.e. the npm-public copy. A `!`-prefixed glob is an exclusion, and a file matching any exclusion is never owed whatever positives it also matched.
 
 **Read at run time.** Unlike `hooks.tier`, these globs are never rendered into the hook — the hook calls back into `totem legs gate`, which loads this config itself — so editing the list needs no `totem hook install --force`.
+
+## The Enforcement Knob (`hooks.legsOwed.enforce`)
+
+Optional; `'block'` or `'advisory'` (mmnto-ai/totem#2771). It decides what `totem legs gate` **exits** — never what it prints — and it wins over the hook tier in both directions:
+
+- **`'block'`**: the gate exits its derived state — `3` owed with no fresh deposit, `2` could not derive — at EVERY tier, so the managed pre-push hook refuses a legs-owed push on a standard-tier install too, while the spec-evidence and shield gates stay at the repo's tier. This is the per-arm shape the cohort asked for: one gate armed without arming all three.
+- **`'advisory'`**: every gate state exits `0` at every tier, the strict one included, and on agent seats.
+- **Unset**: the tier-derived behaviour — the strict tier and agent seats block, the other tiers print the same lines and pass. Nothing changes on upgrade.
+
+It is read at run time by the gate itself, like the globs, so setting it needs no `totem hook install --force`. When it is set the gate prints one extra line under either tier — `[Totem] legs: hooks.legsOwed.enforce = block` — so a block on a standard-tier install names the key that caused it, and a strict install softened to advisory says so too.
+
+**The CI arm reads the same knob.** A workflow step running `totem legs gate` exits the derived state with the knob unset or `'block'`; `'advisory'` softens that step as well. A repo adopting the CI arm of the `legs-gate` parity row (a hard `totem legs gate` step in its lint workflow over deposits committed under `.totem/artifacts/legs/`) therefore leaves the knob unset or sets `'block'` — Totem's own repository takes the CI arm with the knob unset, so its local pushes stay advisory and its pull requests are gated.
 
 **The floor sees the unfiltered diff.** The gate resolves the same branch-vs-base scope the push gate lints, but with the ignore configuration EMPTY: neither `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the floor. Those keys carry index-exclusion semantics that were merged into the review/lint diff filter for back-compat, and letting them narrow this predicate would mean a repo that keeps `README.md` out of its index silently stops owing a leg for its public copy. Every run discloses it: `[Legs] Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)`.
 
