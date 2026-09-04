@@ -700,9 +700,10 @@ async function performSearch(
   // `undefined` = NO FLOOR (mmnto-ai/totem#2727): `searchRelevanceFloor`
   // carries no default, so an unconfigured repo runs unfloored and this tool
   // can never answer `no_useful_hits`. The per-call `min_relevance` still
-  // overrides, in both directions.
-  const configuredFloor =
-    typeof config.searchRelevanceFloor === 'number' ? config.searchRelevanceFloor : undefined;
+  // overrides, in both directions. `config` only ever arrives here through
+  // `TotemConfigSchema.parse` (context.ts), so the field is `number | undefined`
+  // by construction — no runtime guard.
+  const configuredFloor = config.searchRelevanceFloor;
   const effectiveFloor = minRelevance !== undefined ? minRelevance : configuredFloor;
   // A zero-row fallback leaves nothing fts-stamped — the callback flag keeps
   // the envelope method honest for an empty keyword-only result set
@@ -1112,7 +1113,7 @@ export function registerSearchKnowledge(server: McpServer): void {
           .max(1)
           .optional()
           .describe(
-            'Minimum per-hit relevance (0..1, vector-leg similarity). Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is never `no_useful_hits`.',
+            'Relevance floor for this call (0..1, vector-leg similarity), compared against the BEST relevance of the whole retrieval — a whole-run gate, never a per-hit filter: one hit at or above it returns the full set, siblings below it included. Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is never `no_useful_hits`.',
           ),
       },
       annotations: {

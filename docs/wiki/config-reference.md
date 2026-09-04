@@ -156,7 +156,7 @@ export default {
 1. the MCP `search_knowledge` tool: when a response's best relevance falls below the floor it answers `status="no_useful_hits"` and discloses the below-floor candidates (path + relevance, no content) instead of returning them;
 2. `totem spec` (mmnto-ai/totem#2700): an unanchored free-text run is REFUSED when the best relevance is below the floor — the refusal names the value and this key, exits non-zero, and writes no run artifact. `--raw` is exempt.
 
-**Hits with no vector leg are floor-EXEMPT.** A keyword-only (FTS) hit carries no comparable relevance, so absence of a signal is never read as a weak signal — and in `totem spec` a single exempt hit saves the run.
+**Hits with no vector leg are floor-EXEMPT.** A keyword-only (FTS) hit carries no comparable relevance, so absence of a signal is never read as a weak signal — and in `totem spec` a single exempt hit **from a grounding partition** (specs, sessions, code) saves the run. Lessons are never judged by that gate — they do not ground a run (ruled final, mmnto-ai/totem#2727) — so a keyword-only lesson hit does not save it.
 
 **With the key unset there is no floor at all**: `no_useful_hits` and the spec refusal's below-floor arm cannot fire. The retrieval envelope prints `floor="none"`. `totem spec`'s zero-hit refusal is unaffected — it is a separate arm and still fires. The MCP `min_relevance` input applies per call regardless, and still overrides a configured value.
 

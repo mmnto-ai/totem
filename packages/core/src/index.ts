@@ -3,8 +3,8 @@
  *
  * This root barrel re-exports the full core module graph and makes no
  * per-symbol semver promise: consumers cannot tell which exports are stable
- * contract and which are lab surface. It is retained unchanged for backward
- * compatibility (zero removals, zero reordering).
+ * contract and which are lab surface. It is retained for backward
+ * compatibility: zero reordering, and removals only at a major.
  *
  * Prefer the curated, semver-tracked subpath entry points for new code:
  *   - `@mmnto/totem/config`    — `TotemConfig` + config-schema surface
@@ -12,8 +12,10 @@
  *   - `@mmnto/totem/lessons`   — lesson read/write + frontmatter + role/schema
  *   - `@mmnto/totem/artifacts` — Prop 302 verdict-artifact schema/loader
  *
- * Subtraction from this barrel is deferred to a future major (mmnto-ai/totem#2336,
- * ADR-084 / Proposal 294).
+ * Subtraction from this barrel is a major-version event (mmnto-ai/totem#2336,
+ * ADR-084 / Proposal 294). The first subtraction — `DEFAULT_SEARCH_RELEVANCE_FLOOR`,
+ * mmnto-ai/totem#2727 — rides the 2.0.0 cut with no shim (mmnto-ai/totem#2691:
+ * no legacy carried while every consumer is a repo we operate).
  */
 
 // Unified findings model (ADR-071)
