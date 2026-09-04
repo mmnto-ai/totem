@@ -27,7 +27,7 @@
   },
   "engines": {
     "node": ">=24",
-    "@mmnto/totem": "^1.26.0"
+    "@mmnto/totem": ">=1.26.0 <3.0.0"
   },
   "devDependencies": {
     "@mmnto/totem": "workspace:*",

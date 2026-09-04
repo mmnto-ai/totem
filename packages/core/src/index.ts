@@ -13,9 +13,10 @@
  *   - `@mmnto/totem/artifacts` — Prop 302 verdict-artifact schema/loader
  *
  * Subtraction from this barrel is a major-version event (mmnto-ai/totem#2336,
- * ADR-084 / Proposal 294). The first subtraction — `DEFAULT_SEARCH_RELEVANCE_FLOOR`,
- * mmnto-ai/totem#2727 — rides the 2.0.0 cut with no shim (mmnto-ai/totem#2691:
- * no legacy carried while every consumer is a repo we operate).
+ * ADR-084 / Proposal 294). The first subtraction under this policy —
+ * `DEFAULT_SEARCH_RELEVANCE_FLOOR`, mmnto-ai/totem#2727 — rides the 2.0.0 cut
+ * with no shim (mmnto-ai/totem#2691: no legacy carried while every consumer is
+ * a repo we operate).
  */
 
 // Unified findings model (ADR-071)

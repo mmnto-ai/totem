@@ -48,8 +48,9 @@ let mockSimulateFtsFallback = false;
  * mmnto-ai/totem#2727: the config's `searchRelevanceFloor`, or `undefined` for
  * a repo that configures NO floor (the shipped shape since the key lost its
  * default). `undefined` OMITS the key from the mocked config, so the
- * production `typeof === 'number'` guard sees exactly what a real unset key
- * gives it. Default 0.4 — every pre-existing test in this suite was written
+ * production read of `config.searchRelevanceFloor` sees exactly what a real
+ * unset key gives it (the field is schema-typed `number | undefined`; there is
+ * no runtime guard to exercise). Default 0.4 — every pre-existing test in this suite was written
  * against a configured floor and keeps it.
  */
 let mockSearchRelevanceFloor: number | undefined = 0.4;

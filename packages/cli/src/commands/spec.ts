@@ -673,7 +673,8 @@ export interface GroundingFloorVerdict {
  * (`packages/mcp/src/tools/search-knowledge.ts`): the floor fires only when a
  * real relevance signal exists, and it is a WHOLE-RUN gate on the BEST
  * relevance, never a per-item filter — keyword-only hits have no comparable
- * relevance and are floor-EXEMPT, so a single exempt hit saves the run.
+ * relevance and are floor-EXEMPT, so a single exempt hit from one of those
+ * three partitions saves the run.
  *
  * `floor` is OPTIONAL since mmnto-ai/totem#2727: `searchRelevanceFloor` carries
  * no default, and with none configured the below-floor arm cannot fire at all

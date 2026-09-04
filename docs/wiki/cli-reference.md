@@ -392,7 +392,7 @@ Inputs are OPTIONAL because `--from <record>` is an alternative subject. Running
 
 Every run publishes what it was ANCHORED on, in `grounding.anchor.kind` of the run artifact: `issue` (every input resolved to an issue), `record` (`--from`), `free-text` (every input was a topic), or `mixed` (issues and topics together).
 
-A run with **no issue and no record** refuses when retrieval returns zero items, or — only when `searchRelevanceFloor` is configured — when the best relevance of the retrieval is below it and no floor-exempt (keyword-only) hit exists. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate.
+A run with **no issue and no record** refuses when retrieval returns zero items, or — only when `searchRelevanceFloor` is configured — when the best relevance of the retrieval is below it and no floor-exempt (keyword-only) hit from a grounding partition (specs, sessions, code) exists — a keyword-only lesson does not count, since lessons never ground a run. The error names the topic, the measurement, the floor's value and its place, and every withheld candidate.
 
 `searchRelevanceFloor` carries **no default** (mmnto-ai/totem#2727), so with the key unset only the zero-hit arm can fire, and the floor line says so rather than naming a number no run was judged against:
 

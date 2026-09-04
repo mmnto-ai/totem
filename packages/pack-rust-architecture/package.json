@@ -33,7 +33,7 @@
   },
   "engines": {
     "node": ">=24",
-    "@mmnto/totem": "^1.26.0"
+    "@mmnto/totem": ">=1.26.0 <3.0.0"
   },
   "peerDependencies": {
     "@ast-grep/napi": "^0.42.0"
