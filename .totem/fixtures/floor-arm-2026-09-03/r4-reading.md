@@ -1,45 +1,51 @@
-# R4 — the owner's reading of the run record (totem-claude, 2026-09-04)
+# R4 — the owner's reading of the run record (v2, totem-claude, 2026-09-04)
 
 The record is `r4-summary.md` / `r4-floor-arm.json`, generated unedited by `scripts/r4-floor-arm.mjs` from the pre-registration in commit 1. This document is the seat's reading of it; it changes no number and amends no verdict rule after the data.
+
+**v2 supersedes v1 (commit `0c656720`).** v1 claimed the A-post shape "ships"; the falsification leg refuted that at source, and two of v1's numbers were the wrong quantity. v2 states what was refuted and what stands. The generated record is unchanged.
 
 ## 1. Verdict by the letter
 
 **R4 FAILS.** The pre-registration made A-pre the deciding shape ("the arm PASSES iff at least one A-pre candidate passes"), and no A-pre candidate holds mean p@8 on the 31 at or above 0.3952 while withholding at least one item over the 55. Forty-four candidates pass, every one of them A-post.
 
-## 2. Apparatus finding: the A-pre comparator is off before any floor acts
+## 2. What the product implements — corrected
 
-At τ = 0.500 — below the pool's minimum recorded relevance of 0.5022, so the floor removes nothing anywhere — A-pre reads mean p@8 0.3911 (Δ −0.0040) with 31 baseline-delivered items already absent from its delivered set. The recorded pool re-fuses (RRF, k = 60) to the production delivered set in 65 of 110 (query, partition) pairs; 417 of 440 delivered items carry a `score` equal to the pool RRF; 107 of 5,030 pool items carry a vector or FTS rank that differs from the raw legs in `r1-retrieval.ndjson` when joined on filePath + label. So `poolItems` in `r1-rerank.ndjson` is not an exact reconstruction of the production fusion input, and every A-pre row starts 0.0040 below the threshold for a reason that is not the floor.
+Both shipped floors are whole-run gates on the BEST vector-leg relevance of one retrieval. The MCP `search_knowledge` tool answers `status="no_useful_hits"` and returns only floor-exempt hits when `bestRelevance < floor` (`packages/mcp/src/tools/search-knowledge.ts:860`); `totem spec` refuses an unanchored free-text run when `bestRelevance < floor && floorExempt === 0` (`packages/cli/src/commands/spec.ts:716`), and that gate evaluates only on free-text runs — never on the 31 issue-anchored queries the falsifier scores. No shipped path withholds a single sub-floor hit while keeping its siblings.
 
-The pre-registration's control reproduced the A-post baseline (0.3952 / 0.1097 / 0.8710, exact) and did not require the A-pre no-floor point to reproduce it. That is the apparatus fault. Its consequence is stated, not repaired: **A-pre is undetermined on this fixture, not refuted.** The verdict rule stands as written, because a rule amended after the data is no pre-registration; the honest A-pre arm is a live-index run (`VectorQuery.distanceRange` on the vector leg at the pin, scored against the production delivered set from the same run) and is filed as its own pre-registration (R5), not re-run here. The same 65-of-110 discrepancy belongs on the R1 record as a note on the pool export.
+The pre-registration's provenance sentence for A-post ("the shape the MCP `min_relevance` override implements today") is therefore false, and the generated summary's A-post heading repeats it. A-post is a MODEL of per-item post-fusion withholding that ships nowhere; the frozen text is left as written and corrected here.
 
-## 3. What the record does establish — the shipped shape
+## 3. What the record establishes, restated
 
-A-post is the shape the product implements today: the MCP `min_relevance` override and the configured `searchRelevanceFloor` compare against each delivered hit's vector-leg relevance, and an FTS-only hit is exempt. On that shape:
+- **The shipped gate.** On this fixture the lowest best-relevance over delivered specs and code is 0.559 (0.5687 among the 30 refusal-eligible runs, those with no floor-exempt hit). So no configured value below 0.559 fires on any of the 55 queries: the 0.25 default never fired, 0.5287 would not either, and the first refusal appears above 0.5687 — a whole topic run refused. The default is not a number.
+- **A-post, the per-item model.** τ_cal2 = 0.5287 (the lowest relevance of any label-2 delivered item, minus 0.0005) withholds 11 of 440 delivered items — 10 label-0, 1 label-1, 0 label-2 — none on the 31; all eleven sit on topic queries, so the 31's figures are unchanged while the topic-24's move (p@8 0.375 → 0.4154, the shrinking-denominator artifact § 3's last bullet names). The lowest DELIVERED relevance is 0.5100 (v1's 0.5022 was the pool minimum); the first withholding is at τ = 0.510. Above τ ≈ 0.56 p@8 rises while label-2 items are withheld: the delivered-denominator definition rewards a shrinking set. These are properties of the model, not of any mechanism in the product.
+- **A-pre, the pre-fusion model.** Undetermined against the production baseline: the recorded pool re-fuses (RRF, k = 60) to the production delivered SET in 81 of 110 (query, partition) pairs (65 as ordered lists; 29 pairs differ in a way precision can see), and the no-floor point sits at 0.3911 before any floor acts. Against its OWN no-floor point — a post-hoc comparator, not the pre-registered one — the arm would pass from τ = 0.510, and τ = 0.540 withholds 13 items, none label-2, p@8 unchanged, no refusal. That is evidence the live `distanceRange` arm (R5) is worth running, not a verdict.
+- **Duplicates.** Four baseline spec lists carry a duplicated chunkId (an R1 export artifact; relevances 0.5899–0.6512). The withheld count is not inflated at τ_cal2 and is inflated by 1–4 from τ ≈ 0.59 upward; the run commit's "299 items at τ = 0.655" is inflated by 2.
 
-- The shipped default of 0.25 withholds nothing. The lowest delivered relevance over the 55 is 0.5022; the first item is withheld at τ = 0.510.
-- **τ_cal2 = 0.5287** — the borderline-set calibration the synthesis borrowed (the lowest relevance of any label-2 delivered item, minus 0.0005) — withholds 11 delivered items over the 55 (10 label-0, 1 label-1, 0 label-2), none on the 31, causes no refusal, and leaves every scored figure unchanged. It satisfies the synthesis's falsifier as worded, non-trivially, on the shape that ships.
-- Above τ ≈ 0.56 the table's p@8 rises to 0.80 while withholding dozens of label-2 items. That is the delivered-denominator definition rewarding a shrinking set, not a better floor: "without dropping p@8" is a weak clause against withholding. The reading that survives is the zero-label-2 boundary, τ_cal2, not the p@8 maximum.
+## 4. Consequence for the ruling — corrected
 
-## 4. Consequence for the ruling
+The synthesis (§ 8.2.3, § 9.8) binds the owed calibrated-floor arm to `distanceRange`; nothing in this record discharges it. What the record proves is narrower: the shipped gate's default is unreachable on this profile, and so is any value below a repo's own measured best-relevance floor. So the second branch applies to the DEFAULT only:
 
-The operator's ruling was to run the arm first and code the branch it proves. The synthesis (§ 8.2.3, § 9.8) names the branches: a calibrated per-profile floor with a calibration procedure and a profile record, or the default removed with `no_useful_hits` kept for the explicit `min_relevance` override only. The record proves:
+1. `searchRelevanceFloor` loses its default. Unset means no floor: no `no_useful_hits` by floor, no spec refusal by floor; the per-call `min_relevance` override keeps its meaning.
+2. The docs say what the gate compares — a retrieval's best relevance, whole-run, never per item — the measured range on this profile, and how a repo picks a value (record its runs, note the best-relevance of the weakest run it wants kept, set the floor below that).
+3. This repo sets NO value. 0.5287 fires on nothing; a value above 0.57 would only refuse weak topic runs.
+4. The lesson pool is NOT coupled to the floor. Lesson relevances on this index sit around 0.34; any value that makes the refusal gate reachable would zero the pool. A lesson gate needs its own measurement against lesson relevances.
+5. Lessons never ground a run — final.
 
-1. **The default is not a number.** A default no index reaches is a mechanism claim without a mechanism, and a calibrated value is repo-local by construction (this repo's 0.5287 is a property of this corpus, these labels, this embedder). So the DEFAULT floor is removed: `searchRelevanceFloor` becomes an optional, un-defaulted config value; with it unset there is no floor — no `no_useful_hits` by floor, no spec refusal by floor — and the explicit `min_relevance` override keeps its meaning.
-2. **The calibration procedure is documented and this repo dogfoods it.** The wiki states what the floor is measured against (vector relevance = 1/(1 + squared L2) on unit vectors, range [0.2, 1], observed [0.50, 0.77] on this profile), that no default is shipped and why, and the τ_cal2 recipe with this record as the worked example; this repo's `totem.config.ts` sets `searchRelevanceFloor` to 0.5287 with the citation, so the envelope and the refusal arms have a reachable floor here.
-3. **The lesson pool honours the configured floor** (the ruled lesson-gate half): the same per-hit comparison, the same FTS-only exemption; with no floor configured, lessons pass ungated as today.
+The per-item floor remains R5.
 
-That code slice is the next PR under mmnto-ai/totem#2727. This PR is the record.
+## 5. Disclosures carried from the run and the leg
 
-## 5. Disclosures carried from the run
-
-- "Withheld" for A-pre was implemented as: a baseline-delivered chunkId absent from the candidate's delivered set. It therefore folds in the fusion-difference loss of § 2; that is why A-pre is undetermined rather than merely failing.
-- After a pre-fusion removal an item left in neither leg (RRF 0) is dropped as a candidate; this is a reading of the text and is immaterial below τ ≈ 0.56.
-- A-post rows are marked `exact` because A-post never re-queries the index; the backfill bound applies to the pre-fusion window only.
-- `session_log` contributes no pool (vector count 0 on all 55 rows), so the exactness bound was evaluated over spec and code.
-- Four baseline spec lists carry a duplicated chunkId (an R1 export artifact); R1's own 0.3952 counts both entries, and the withheld rule cannot inflate a count from it.
+- "Withheld" for A-pre was implemented as a baseline-delivered chunkId absent from the candidate's delivered set; it folds in the fusion-difference loss of § 3, which is why A-pre is undetermined rather than refuted.
+- After a pre-fusion removal an item left in neither leg (RRF 0) is dropped as a candidate; immaterial below τ ≈ 0.56.
+- A-post rows are marked `exact` because A-post never re-queries the index.
+- `session_log` contributes no pool on all 55 rows.
+- The `passes` predicate compares means rounded to four decimals against the rounded baseline; conservative against the FAIL here and unexercised, but a candidate in (0.39515, 0.39516) would pass on the letter while having dropped p@8.
+- B is A-pre-shaped but excluded from the arm verdict by the pre-registration's wording; unexercised (every B candidate fails).
+- Commit `0c656720`'s message claimed a re-seal its diff did not contain; `5195a9f8` cured it.
 - Deltas are rounded from unrounded means and may differ from the rounded difference by 0.0001.
 
 ## 6. Follow-ups
 
-- R5: the live-index A-pre arm (`distanceRange` at the pin), pre-registered before it runs.
-- A note on the R1 record: the pool export reproduces production fusion in 65 of 110 pairs.
+- R5: the live-index `distanceRange` arm, pre-registered before it runs; the self-consistent comparator in § 3 suggests it passes.
+- A note on the R1 record: the pool export reproduces production fusion as a set in 81 of 110 pairs.
+- A lesson-relevance measurement (distribution and labels) before any lesson-pool gate.
