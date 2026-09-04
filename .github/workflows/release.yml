@@ -76,14 +76,16 @@ jobs:
       # trusted publisher misconfigured. See tools/verify-oidc-provenance.mjs.
       # Visibility budget (mmnto-ai/totem#2748). npm makes a just-published
       # package readable minutes after publish, per package: 2 min 20 s after
-      # the old ~25 s budget gave up on the 1.123.0 cut, 6 min 57 s after the
-      # merge on the 1.124.0 cut. The script polls every still-pending package
-      # once per round, so:
+      # the old budget gave up on the 1.123.0 cut (5 attempts separated by
+      # 4 × 5 s sleeps — about 20 s of waiting; the step ran 21 s), and
+      # 6 min 57 s after the merge on the 1.124.0 cut. The script polls every
+      # still-pending package once per round, so:
       #   FLOOR   — 10 min (VISIBILITY_DEADLINE_MS): a package that stays
       #             invisible is polled for at least that long.
-      #   CEILING — worstCaseMs(4) = 10 min + 4 × 20 s ≈ 11 min 20 s for the
-      #             four published packages (one spawn timeout each in the
-      #             final round).
+      #   CEILING — worstCaseMs(4) = 10 min + 15 s + 4 × 20 s ≈ 11 min 35 s
+      #             for the four published packages: the deadline, plus the
+      #             one poll interval the final round can start past it, plus
+      #             one spawn timeout per package pending in that round.
       # timeout-minutes: 13 is the OUTER cap and must stay ≥ that ceiling;
       # tools/verify-oidc-provenance.test.mjs pins the relation, so lowering
       # this without lowering the script's budget fails CI.
@@ -100,7 +102,10 @@ jobs:
       # on the 1.123.0 and 1.124.0 cuts a propagation-lag verify failure left
       # v0 behind (mmnto-ai/totem#2748); the 1.91.0 cut hit the same class from
       # the other side (mmnto-ai/totem#2314). !cancelled() rather than always()
-      # so a cancelled run never repoints tags.
+      # so a cancelled run never repoints tags. This also lets v0 advance after
+      # a genuine provenance-regression failure, which is accepted: action.yml
+      # runs the CLI unpinned, so v0 pins only the composite action source,
+      # never the suspect package.
       - name: Push release tags
         if: ${{ !cancelled() && steps.publish.outputs.published == 'true' }}
         run: |

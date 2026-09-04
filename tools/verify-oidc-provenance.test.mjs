@@ -3,8 +3,11 @@
  * workflow contract that caps it (mmnto-ai/totem#2748).
  * Run: node --test tools/verify-oidc-provenance.test.mjs (root script test:verify-oidc).
  *
- * No npm is ever spawned here: `fetch`, `sleep` and `now` are injected, and
- * the clock is fake — `sleep` advances it by the poll interval.
+ * No npm is ever spawned here: `fetch`, `sleep`, `now`, `exit`, `env` and the
+ * spawner itself are injected, and the clock is fake — it advances inside the
+ * injected `sleep` AND inside the injected `fetch`, so elapsed time and
+ * attempt count are not collinear and a fixed-attempt poller cannot satisfy a
+ * deadline assertion by count alone.
  */
 
 import assert from 'node:assert/strict';
@@ -15,8 +18,11 @@ import { fileURLToPath } from 'node:url';
 
 import {
   assertProvenance,
+  fetchNpmView,
+  main,
   POLL_INTERVAL_MS,
   pollUntilVisible,
+  SPAWN_TIMEOUT_MS,
   VISIBILITY_DEADLINE_MS,
   worstCaseMs,
 } from './verify-oidc-provenance.mjs';
@@ -49,29 +55,64 @@ const withSilencedConsole = async (fn) => {
   }
 };
 
-/**
- * Reads the block of lines belonging to one `- name: <stepName>` step in
- * .github/workflows/release.yml (up to the next `- name:`/`- uses:`/`- run:`).
- */
-const releaseStepLines = (stepName) => {
-  const lines = readRepoFile('.github', 'workflows', 'release.yml').split(/\r?\n/);
+const releaseYamlLines = () => readRepoFile('.github', 'workflows', 'release.yml').split(/\r?\n/);
+
+const releaseStepIndex = (lines, stepName) => {
   const start = lines.findIndex((line) => line.includes(`name: ${stepName}`));
   assert.notEqual(start, -1, `release.yml has no step named ${JSON.stringify(stepName)}`);
+  return start;
+};
+
+/**
+ * The lines belonging to one `- name: <stepName>` step in release.yml (up to
+ * the next `- name:`/`- uses:`/`- run:`).
+ */
+const releaseStepLines = (stepName) => {
+  const lines = releaseYamlLines();
   const block = [];
-  for (let i = start + 1; i < lines.length; i++) {
+  for (let i = releaseStepIndex(lines, stepName) + 1; i < lines.length; i++) {
     if (/^\s*-\s+(name|uses|run):/.test(lines[i])) break;
     block.push(lines[i]);
   }
   return block;
 };
 
+/** The contiguous `#` comment block directly above a step. */
+const releaseStepComment = (stepName) => {
+  const lines = releaseYamlLines();
+  const comment = [];
+  for (let i = releaseStepIndex(lines, stepName) - 1; i >= 0; i--) {
+    if (!/^\s*#/.test(lines[i])) break;
+    comment.unshift(lines[i]);
+  }
+  return comment;
+};
+
 const SPEC_A = '@mmnto/cli@1.124.0';
 const SPEC_B = '@mmnto/totem@1.124.0';
 const SPEC_C = '@mmnto/mcp@1.124.0';
 
+const OIDC_RECORD = {
+  _npmUser: 'GitHub Actions <npm-oidc-no-reply@github.com>',
+  dist: {
+    attestations: {
+      url: 'https://registry.npmjs.org/-/npm/v1/attestations/@mmnto%2fcli@1.124.0',
+      provenance: { predicateType: 'https://slsa.dev/provenance/v1' },
+    },
+    signatures: [{ keyid: 'SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA', sig: 'MEUCIQ' }],
+  },
+};
+
+/** The same record with a human publisher and no attestations — token auth. */
+const TOKEN_AUTH_RECORD = {
+  _npmUser: 'someone <dev@example.com>',
+  dist: { signatures: OIDC_RECORD.dist.signatures },
+};
+
 /**
  * One shared three-package poll: A visible in round 1, B in round 3, C never.
- * T3 and T4 both read its call log, so it runs once and is memoised.
+ * T3 and T4 both read its call log, so it runs once and is memoised. The
+ * poller is called on its shipped defaults (no deadlineMs/intervalMs).
  */
 let threeSpecRun = null;
 const runThreeSpecPoll = () => {
@@ -81,22 +122,56 @@ const runThreeSpecPoll = () => {
     let round = 1;
     const fetch = (spec) => {
       callLog.push({ round, spec });
+      clock.advance(500);
       if (spec === SPEC_A) return { ok: true, data: { spec: SPEC_A } };
       if (spec === SPEC_B && round >= 3) return { ok: true, data: { spec: SPEC_B } };
       return { ok: false, err: `E404 ${spec}` };
     };
-    const sleep = async () => {
+    const sleep = async (ms) => {
       round += 1;
-      clock.advance(POLL_INTERVAL_MS);
+      clock.advance(ms);
     };
     const { resolved, missing } = await pollUntilVisible([SPEC_A, SPEC_B, SPEC_C], {
       fetch,
       sleep,
       now: clock.now,
     });
-    return { resolved, missing, callLog };
+    return { resolved, missing, callLog, clock };
   });
   return threeSpecRun;
+};
+
+/** Sentinel thrown by the injected `exit` so `main` stops where process.exit would. */
+const EXIT_SENTINEL = Symbol('process.exit');
+
+/** Drives `main` with an injected clock, exit and env; captures both streams. */
+const runMain = async ({ publishedPackages, fetch }) => {
+  const clock = fakeClock();
+  const exitCodes = [];
+  const stdout = [];
+  const stderr = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+  console.log = (...args) => stdout.push(args.map(String).join(' '));
+  console.error = (...args) => stderr.push(args.map(String).join(' '));
+  try {
+    await main({
+      fetch,
+      sleep: async (ms) => clock.advance(ms),
+      now: clock.now,
+      exit: (code) => {
+        exitCodes.push(code);
+        throw EXIT_SENTINEL;
+      },
+      env: { PUBLISHED_PACKAGES: publishedPackages },
+    });
+  } catch (err) {
+    if (err !== EXIT_SENTINEL) throw err;
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  return { exitCodes, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 };
 
 test('deadline covers the measured 7-minute propagation', () => {
@@ -108,6 +183,9 @@ test('deadline covers the measured 7-minute propagation', () => {
 
 test('a persistently invisible package is polled until the deadline, not a fixed attempt count', async () => {
   const clock = fakeClock();
+  // Local mirrors of the shipped defaults, for the assertions only: the
+  // poller below is called WITHOUT deadlineMs/intervalMs, so what runs is the
+  // default budget the release workflow actually gets.
   const deadlineMs = VISIBILITY_DEADLINE_MS;
   const intervalMs = POLL_INTERVAL_MS;
   let calls = 0;
@@ -116,12 +194,11 @@ test('a persistently invisible package is polled until the deadline, not a fixed
     pollUntilVisible([SPEC_B], {
       fetch: () => {
         calls += 1;
+        clock.advance(500);
         return { ok: false, err: 'E404' };
       },
-      sleep: async () => clock.advance(intervalMs),
+      sleep: async (ms) => clock.advance(ms),
       now: clock.now,
-      deadlineMs,
-      intervalMs,
     }),
   );
 
@@ -138,13 +215,20 @@ test('a persistently invisible package is polled until the deadline, not a fixed
 });
 
 test('all packages are polled before failing; one slow package does not hide the others', async () => {
-  const { resolved, missing, callLog } = await runThreeSpecPoll();
+  const { resolved, missing, callLog, clock } = await runThreeSpecPoll();
 
   assert.deepEqual([...resolved.keys()], [SPEC_A, SPEC_B]);
   assert.deepEqual(resolved.get(SPEC_A), { spec: SPEC_A });
   assert.deepEqual(resolved.get(SPEC_B), { spec: SPEC_B });
   assert.deepEqual([...missing.keys()], [SPEC_C]);
   assert.equal(missing.get(SPEC_C), `E404 ${SPEC_C}`);
+
+  // C never resolves, so a poll on the shipped defaults runs to the default
+  // deadline — the constant the workflow ships is what this exercises.
+  assert.ok(
+    clock.now() >= VISIBILITY_DEADLINE_MS,
+    `poll returned at t=${clock.now()}ms, before the default deadline ${VISIBILITY_DEADLINE_MS}ms`,
+  );
 
   // Every round fetches exactly the specs still pending when it starts, in
   // input order: A drops out after round 1, B after round 3, C never — so
@@ -196,6 +280,13 @@ test('a throwing fetch propagates (hard failures stay loud)', async () => {
 
 test("the workflow's outer cap covers the ceiling for every published package", () => {
   const block = releaseStepLines('Verify OIDC provenance on published packages');
+
+  // The cap must sit on the step that actually runs the poller.
+  assert.ok(
+    block.some((line) => line.includes('run: node tools/verify-oidc-provenance.mjs')),
+    'the located step does not run tools/verify-oidc-provenance.mjs',
+  );
+
   const timeoutLine = block.find((line) => /^\s*timeout-minutes:\s*\d+\s*$/.test(line));
   assert.ok(timeoutLine, 'the verify step has no timeout-minutes');
   const timeoutMinutes = Number(timeoutLine.match(/timeout-minutes:\s*(\d+)/)[1]);
@@ -217,17 +308,26 @@ test("the workflow's outer cap covers the ceiling for every published package", 
     timeoutMinutes * 60_000 >= worstCaseMs(publishedCount),
     `timeout-minutes: ${timeoutMinutes} (${timeoutMinutes * 60_000}ms) is below the ceiling worstCaseMs(${publishedCount}) = ${worstCaseMs(publishedCount)}ms`,
   );
+
+  // The floor is stated twice — beside the constant and in the workflow
+  // comment. Pin the workflow copy so a constant change without the prose
+  // fails CI rather than leaving a stale minute count in the release lane.
+  const floorMinutes = `${VISIBILITY_DEADLINE_MS / 60_000} min`;
+  assert.ok(
+    releaseStepComment('Verify OIDC provenance on published packages')
+      .join('\n')
+      .includes(floorMinutes),
+    `the verify step's comment block does not state the floor as ${JSON.stringify(floorMinutes)}`,
+  );
 });
 
 test('the tag push rides the publish verdict, not the verify verdict', () => {
   const block = releaseStepLines('Push release tags');
   const ifLine = block.find((line) => /^\s*if:/.test(line));
   assert.ok(ifLine, 'the Push release tags step has no if: condition');
-  assert.match(ifLine, /!cancelled\(\)/);
-  assert.ok(
-    ifLine.includes("steps.publish.outputs.published == 'true'"),
-    `the tag push must gate on the publish output; got: ${ifLine.trim()}`,
-  );
+  // Conjunction, not disjunction: an `||` mutant would still contain both
+  // operands as substrings, so match the whole relation.
+  assert.match(ifLine, /!cancelled\(\)\s*&&\s*steps\.publish\.outputs\.published\s*==\s*'true'/);
   assert.ok(
     !ifLine.includes('steps.verify'),
     `the tag push must not gate on the verify step; got: ${ifLine.trim()}`,
@@ -239,30 +339,52 @@ test('the tag push rides the publish verdict, not the verify verdict', () => {
 });
 
 test('assertProvenance accepts an OIDC-shaped record and rejects a token-auth one', () => {
-  const oidc = {
-    _npmUser: 'GitHub Actions <npm-oidc-no-reply@github.com>',
-    dist: {
-      attestations: {
-        url: 'https://registry.npmjs.org/-/npm/v1/attestations/@mmnto%2fcli@1.124.0',
-        provenance: { predicateType: 'https://slsa.dev/provenance/v1' },
-      },
-      signatures: [{ keyid: 'SHA256:jl3bwswu80PjjokCgh0o2w5c2U4LhQAE57gj9cz1kzA', sig: 'MEUCIQ' }],
-    },
-  };
-  const tokenAuth = {
-    _npmUser: 'someone <dev@example.com>',
-    dist: { signatures: oidc.dist.signatures },
-  };
-
   const originalLog = console.log;
   const originalError = console.error;
   console.log = () => {};
   console.error = () => {};
   try {
-    assert.equal(assertProvenance(SPEC_A, oidc), true);
-    assert.equal(assertProvenance(SPEC_A, tokenAuth), false);
+    assert.equal(assertProvenance(SPEC_A, OIDC_RECORD), true);
+    assert.equal(assertProvenance(SPEC_A, TOKEN_AUTH_RECORD), false);
   } finally {
     console.log = originalLog;
     console.error = originalError;
   }
+});
+
+test('main exits 1 when a package never becomes visible, exits 1 on a token-auth record, and does not exit when every package verifies', async () => {
+  const published = `${SPEC_A}\n${SPEC_B}`;
+
+  const miss = await runMain({
+    publishedPackages: published,
+    fetch: (spec) =>
+      spec === SPEC_A ? { ok: true, data: OIDC_RECORD } : { ok: false, err: 'E404' },
+  });
+  assert.deepEqual(miss.exitCodes, [1], 'a package that never becomes visible must exit 1');
+  assert.match(miss.stderr, /never became visible/);
+  assert.match(miss.stderr, /registry propagation, not a provenance verdict/);
+
+  const tokenAuth = await runMain({
+    publishedPackages: published,
+    fetch: (spec) => ({ ok: true, data: spec === SPEC_A ? OIDC_RECORD : TOKEN_AUTH_RECORD }),
+  });
+  assert.deepEqual(tokenAuth.exitCodes, [1], 'a token-auth record must exit 1');
+  assert.match(tokenAuth.stderr, /failed provenance check/);
+
+  const allVerified = await runMain({
+    publishedPackages: published,
+    fetch: () => ({ ok: true, data: OIDC_RECORD }),
+  });
+  assert.deepEqual(allVerified.exitCodes, [], 'a clean run must not exit');
+  assert.match(allVerified.stdout, /All 2 package\(s\) verified/);
+});
+
+test('a timed-out npm view keeps the package pending; a spawn failure still throws', () => {
+  const timedOut = () => ({ error: Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }) });
+  const result = fetchNpmView(SPEC_A, timedOut);
+  assert.equal(result.ok, false);
+  assert.equal(result.err, `npm view timed out after ${SPAWN_TIMEOUT_MS}ms`);
+
+  const enoent = () => ({ error: Object.assign(new Error('nope'), { code: 'ENOENT' }) });
+  assert.throws(() => fetchNpmView(SPEC_A, enoent), /npm view spawn failed/);
 });

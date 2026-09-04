@@ -23,10 +23,10 @@
  * just-published package readable on a lag that is minutes, not seconds, and
  * the lag is per-package inside a single publish. Two measured data from that
  * issue: on the 1.123.0 cut npm made `@mmnto/totem` visible 2 min 20 s AFTER
- * this step had already given up (its budget then was 5 attempts × 5 s ≈ 25 s
- * of effective polling); on the 1.124.0 cut the same package was visible
- * 6 min 57 s after the merge, with a per-package spread inside that one
- * publish of 0:56 → 6:57.
+ * this step had already given up (its budget then was 5 attempts separated by
+ * 4 × 5 s sleeps — about 20 s of waiting; the step itself ran 21 s); on the
+ * 1.124.0 cut the same package was visible 6 min 57 s after the merge, with a
+ * per-package spread inside that one publish of 0:56 → 6:57.
  *
  * So the script polls rather than retries per package: `pollUntilVisible`
  * walks every still-pending spec once per round, then sleeps
@@ -35,11 +35,17 @@
  *
  *   FLOOR   — VISIBILITY_DEADLINE_MS (10 min). A package that stays invisible
  *             is polled for AT LEAST this long from the start of polling.
- *             10 min is the 6 min 57 s datum plus margin.
- *   CEILING — worstCaseMs(n) = VISIBILITY_DEADLINE_MS + n × SPAWN_TIMEOUT_MS:
- *             the deadline plus one spawn timeout for each of the n packages
- *             still pending in the final round (a wedged registry can burn a
- *             full spawn timeout per package in that round).
+ *             The 1.124.0 datum is 6 min 57 s measured from the merge but
+ *             5 min 45 s measured from this step's start, and the poller's
+ *             clock starts at the step — so the deadline bounds the step's
+ *             clock, with margin over both figures.
+ *   CEILING — worstCaseMs(n) = VISIBILITY_DEADLINE_MS + POLL_INTERVAL_MS
+ *             + n × SPAWN_TIMEOUT_MS. The deadline is checked AFTER a round
+ *             and BEFORE the sleep, so the final round can start up to one
+ *             POLL_INTERVAL_MS past the deadline; that round can then burn a
+ *             full SPAWN_TIMEOUT_MS on each of the n packages still pending,
+ *             because a spawnSync timeout is reported as `{ ok: false }` —
+ *             the package stays pending — rather than aborting the run.
  *
  * The release workflow's `timeout-minutes` on this step is the OUTER cap and
  * must stay ≥ the ceiling for the number of published packages;
@@ -56,9 +62,13 @@ export const VISIBILITY_DEADLINE_MS = 10 * 60_000;
 // Bound the per-call npm view to defend against a wedged registry/network
 // (otherwise the CI step could hang up to the job-level timeout).
 export const SPAWN_TIMEOUT_MS = 20_000;
-/** CEILING: the deadline plus one spawn timeout per package still pending in the final round. */
+/**
+ * CEILING: the deadline, plus the one poll interval the final round can start
+ * past it (the deadline is checked after a round and before the sleep), plus
+ * one spawn timeout per package still pending in that final round.
+ */
 export const worstCaseMs = (pendingCount) =>
-  VISIBILITY_DEADLINE_MS + pendingCount * SPAWN_TIMEOUT_MS;
+  VISIBILITY_DEADLINE_MS + POLL_INTERVAL_MS + pendingCount * SPAWN_TIMEOUT_MS;
 
 // On Windows, `npm` is a `.cmd` shim, and Node ≥ 20 refuses to spawnSync
 // .bat/.cmd files without shell: true (EINVAL). The workflow runs on
@@ -74,17 +84,26 @@ const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // fetchNpmView throws on hard failures (spawn, JSON parse) — those aren't
 // recoverable by polling, so a "loud crash" via thrown Error is the right
-// shape (.gemini/styleguide.md § 120 cause-chain rule). For soft failures
-// (registry returned non-zero status, often propagation lag), returns
-// `{ ok: false, err }` so the poller can keep the spec pending.
-const fetchNpmView = (spec) => {
-  const result = spawnSync('npm', ['view', spec, '--json'], {
+// shape (.gemini/styleguide.md § 9 "Error Handling & Logging Conventions",
+// the "Error cause chains (ES2022)" bullet). For soft failures the poller can
+// ride out, returns `{ ok: false, err }` so the spec stays pending: a
+// non-zero npm view status (usually propagation lag), and a spawnSync
+// timeout — which arrives as `result.error` with `code: 'ETIMEDOUT'`
+// (measured on Node 24.16.0). Throwing on the timeout would let ONE wedged
+// `npm view` abort the whole poll, which is exactly the "one slow package
+// hides the others" failure mmnto-ai/totem#2748 removes. `spawn` is a
+// parameter so the test can drive both arms without spawning npm.
+export const fetchNpmView = (spec, spawn = spawnSync) => {
+  const result = spawn('npm', ['view', spec, '--json'], {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: SPAWN_TIMEOUT_MS,
     ...SPAWN_OPTS_BASE,
   });
   if (result.error) {
+    if (result.error.code === 'ETIMEDOUT') {
+      return { ok: false, err: `npm view timed out after ${SPAWN_TIMEOUT_MS}ms` };
+    }
     throw new Error('[Totem Error] verify-oidc: npm view spawn failed', {
       cause: result.error,
     });
@@ -214,8 +233,15 @@ export const assertProvenance = (spec, data) => {
   return true;
 };
 
-export const main = async () => {
-  const published = (process.env.PUBLISHED_PACKAGES ?? '')
+/**
+ * `exit` and `env` are parameters (not `process.exit` / `process.env` reached
+ * for inline) so the fail-loud arm below is reachable from a test — it is
+ * conditional now, and an untested exit path is how a gate goes quietly
+ * green. `fetch`/`sleep`/`now` are forwarded to `pollUntilVisible` only when
+ * given, so the shipped call `main()` runs on the poller's real defaults.
+ */
+export const main = async ({ fetch, sleep, now, exit = process.exit, env = process.env } = {}) => {
+  const published = (env.PUBLISHED_PACKAGES ?? '')
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -227,7 +253,12 @@ export const main = async () => {
 
   console.log(`[verify-oidc] Verifying ${published.length} package(s): ${published.join(', ')}`);
 
-  const { resolved, missing } = await pollUntilVisible(published);
+  const pollOptions = {};
+  if (fetch !== undefined) pollOptions.fetch = fetch;
+  if (sleep !== undefined) pollOptions.sleep = sleep;
+  if (now !== undefined) pollOptions.now = now;
+
+  const { resolved, missing } = await pollUntilVisible(published, pollOptions);
 
   const failed = [];
   for (const [spec, data] of resolved) {
@@ -253,7 +284,10 @@ export const main = async () => {
   }
 
   if (missing.size > 0 || failed.length > 0) {
-    process.exit(1);
+    exit(1);
+    // `process.exit` never returns; an injected `exit` might, and falling
+    // through would print the all-verified line over a failure.
+    return;
   }
 
   console.log(
