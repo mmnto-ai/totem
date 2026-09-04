@@ -1,0 +1,11 @@
+---
+'@mmnto/cli': minor
+---
+
+The strict pre-commit spec-gate reader tracks fenced code blocks and no longer counts a bare `####` line as body (mmnto-ai/totem#2769; the two holes the mmnto-ai/totem#2759 round declined as pre-existing).
+
+**The two holes.** A run of `#` with nothing after it was not a heading — so `hasBodyAfter` counted it as body, and a required section followed by a lone `####` line passed the empty-heading check with no content. And the reader tracked no fences, so a draft that quoted the template skeleton inside a fenced block — the shape a draft takes when it pastes the prompt's own headings as an example — read as carrying every section, and the same fenced lines then counted as those sections' bodies. Both admit an empty or quoted skeleton, the class mmnto-ai/totem#2737 measured on the recorded drafts.
+
+**What changed — two rules, one state.** A line whose trimmed start is three backticks or three tildes opens a fence and the same marker closes it (an unclosed fence runs to the end of the draft). A fence delimiter line is neither a heading, a match candidate, nor body. A line inside a fence is neither a heading nor a match candidate — a promised heading quoted there is not the section it names — but it IS body when non-blank: a section whose only content is a code block is a written section, and the issue's first draft of this rule (fenced lines are not body) would have blocked every mermaid-only `### Execution Flow`. A line consisting only of `#` characters and whitespace is neither a heading nor body. Everything else stays: same-or-shallower-level body ends, exact-then-tolerant heading match, the `· tolerated` disclosure, `safe()` on every echoed value, `printf` sinks, the mmnto-ai/totem#2737 suite frozen and green.
+
+**MIGRATION.** On the strict tier a draft that carried a promised section only as a lone `####` line, or only inside a fenced block, is now BLOCKED by name (`has an empty heading <h>` / `is missing heading <h>`); the cure is one re-run of `totem spec <issue>` (add `--fresh` if the response is cached). Hooks refresh on the next `totem init` or `totem hook install`; a totem-owned hook is drift-repaired in place. `REFLEX_VERSION` is not bumped — the reflex block does not change.
