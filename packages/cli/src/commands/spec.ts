@@ -663,6 +663,15 @@ export interface GroundingFloorVerdict {
   withheld: WithheldCandidate[];
   /** Items with no relevance at all (FTS-only) — floor-EXEMPT, never withheld for a weak sibling's sake. */
   floorExempt: number;
+  /**
+   * Items whose vector-leg relevance failed the range predicate (non-finite, or
+   * outside [0, 1] — under `l2` a negative `_distance`: an SDK or data fault).
+   * Neither signal nor exemption: a fault cannot raise `bestRelevance`, cannot
+   * be withheld as a measurement, and cannot save a run the way a keyword-only
+   * hit does. A run whose every hit is faulted refuses — nothing usable grounds
+   * it (mmnto-ai/totem#2761 bot round, Greptile P1).
+   */
+  faulted: number;
 }
 
 /**
@@ -695,6 +704,14 @@ export interface GroundingFloorVerdict {
  * the rule prescribes. Injecting a different predicate here would put the
  * refusal gate and the run artifact back into disagreement about the same hit.
  *
+ * Three classes of hit, judged by what the hit carries: a relevance IN range is
+ * SIGNAL; no relevance at all (a keyword-only hit) is EXEMPT and can save the
+ * run; a relevance that fails the predicate is FAULTED — omitted from the
+ * artifact by the same predicate, and here neither signal nor exemption, so a
+ * fault can never authorize synthesis (the mmnto-ai/totem#2761 bot round,
+ * Greptile P1, refuted the earlier "exempt" reading: an SDK fault is not
+ * evidence the way a keyword match is). A run whose hits are ALL faulted refuses.
+ *
  * `isInRange` precedes `floor` deliberately: mmnto-ai/totem#2758 (open, also on
  * this file) makes `floor` OPTIONAL, and a required parameter cannot follow an
  * optional one. This PR merges AFTER #2758 and is rebased onto it, so the order
@@ -717,38 +734,32 @@ export function evaluateGroundingFloor(
   // lesson.
   const all = [...context.specs, ...context.sessions, ...context.code];
   if (all.length === 0) {
-    return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0 };
+    return { refuse: true, hits: 0, bestRelevance: null, withheld: [], floorExempt: 0, faulted: 0 };
   }
 
   const signal: WithheldCandidate[] = [];
   let floorExempt = 0;
+  let faulted = 0;
   let bestRelevance: number | null = null;
   for (const hit of all) {
     const relevance = hit.relevance;
-    // In [0, 1] or it is not a signal — the SAME predicate the core bundle
-    // builder omits on (`isRelevanceInRange`, mmnto-ai/totem#2738 fold 2, F2).
-    // One predicate, two surfaces: whatever the artifact records as "no
-    // relevance", the floor must judge as "no signal", or the judgment and the
-    // record disagree about the same hit.
-    //
-    // Finiteness was already the rule: a NaN/Infinity hit reaches the artifact
-    // with no relevance at all — exactly an FTS-only hit's shape — and counting
-    // it as signal made `floorExempt` zero and disclosed a withheld `relevance
-    // NaN` candidate beside a genuinely weak sibling. The RANGE arm closes the
-    // remaining gap: a finite out-of-range relevance is dropped by the bundle
-    // builder too, so judging it here left the record and the judgment
-    // disagreeing about the same hit.
-    //
-    // What that does to `refuse` is a LOOSENING, and only on the fault path.
-    // `refuse` requires `bestRelevance < floor`, so a HIGH out-of-range value
-    // (say 2) could never defeat a refusal — it already made `refuse` false by
-    // raising `bestRelevance`, and it still does by being exempt. The arm that
-    // moves is the NEGATIVE one: a free-text run whose only signal hits carry a
-    // negative relevance (a negative `_distance` — an SDK or data fault under
-    // l2) used to refuse, and now proceeds. The fault is not silent: the search
-    // layer prints its warning and the artifact omits the value.
-    if (typeof relevance !== 'number' || !isInRange(relevance)) {
+    // No vector leg at all (keyword-only): EXEMPT — absence of a signal is never
+    // read as a weak signal, and one such hit saves the run.
+    if (typeof relevance !== 'number') {
       floorExempt += 1;
+      continue;
+    }
+    // A vector leg whose relevance fails the SAME predicate the core bundle
+    // builder omits on (`isRelevanceInRange`, mmnto-ai/totem#2738 fold 2, F2):
+    // FAULTED. The artifact records no relevance for it (never a clamp), and the
+    // floor counts it as neither signal nor exemption — it cannot raise
+    // `bestRelevance`, cannot be withheld as a measurement, and cannot save the
+    // run. Under `l2` the only way here is a negative `_distance`, an SDK or data
+    // fault the search layer has already warned about; a fault is not evidence
+    // (mmnto-ai/totem#2761 bot round, Greptile P1 — the earlier reading counted
+    // it exempt, which let a fault defeat a refusal on the negative arm).
+    if (!isInRange(relevance)) {
+      faulted += 1;
       continue;
     }
     signal.push({
@@ -759,19 +770,26 @@ export function evaluateGroundingFloor(
     if (bestRelevance === null || relevance > bestRelevance) bestRelevance = relevance;
   }
 
-  // No floor configured → the below-floor arm is unreachable by construction.
+  // Refuse when nothing usable grounds the run — every hit faulted — regardless
+  // of any floor (the zero-hit rule's sibling), or when the best real signal is
+  // below a CONFIGURED floor with no keyword-only hit to exempt it. No floor
+  // configured → the below-floor arm is unreachable by construction
+  // (mmnto-ai/totem#2727).
+  const nothingUsable = signal.length === 0 && floorExempt === 0;
   const refuse =
-    floor !== undefined &&
-    signal.length > 0 &&
-    bestRelevance !== null &&
-    bestRelevance < floor &&
-    floorExempt === 0;
+    nothingUsable ||
+    (floor !== undefined &&
+      signal.length > 0 &&
+      bestRelevance !== null &&
+      bestRelevance < floor &&
+      floorExempt === 0);
   return {
     refuse,
     hits: all.length,
     bestRelevance,
     withheld: refuse ? signal : [],
     floorExempt,
+    faulted,
   };
 }
 
@@ -811,11 +829,23 @@ export function formatGroundingRefusal(
     } else {
       lines.push('Retrieval returned 0 hits — nothing in the index grounds this run.');
     }
+  } else if (verdict.bestRelevance === null) {
+    // Every hit faulted: no measurement to compare, nothing usable grounds the run.
+    const noun = verdict.hits === 1 ? 'hit' : 'hits';
+    lines.push(
+      `Retrieval returned ${verdict.hits} ${noun}, but every one carried an invalid relevance (a negative _distance under l2: an SDK or data fault the search layer warned about) — nothing usable grounds this run.`,
+    );
   } else {
-    const best = verdict.bestRelevance ?? 0;
+    const best = verdict.bestRelevance;
     lines.push(
       `Retrieval returned ${verdict.hits} hits, but best relevance ${best.toFixed(RELEVANCE_DECIMALS)} is below the floor.`,
     );
+    if (verdict.faulted > 0) {
+      const noun = verdict.faulted === 1 ? 'hit' : 'hits';
+      lines.push(
+        `${verdict.faulted} ${noun} carried an invalid relevance and did not count as signal or as exemption (a negative _distance under l2: an SDK or data fault the search layer warned about).`,
+      );
+    }
   }
   lines.push(
     floor !== undefined

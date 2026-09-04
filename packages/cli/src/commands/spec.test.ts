@@ -979,6 +979,7 @@ describe('evaluateGroundingFloor', () => {
       bestRelevance: null,
       withheld: [],
       floorExempt: 0,
+      faulted: 0,
     });
   });
 
@@ -1071,34 +1072,37 @@ describe('evaluateGroundingFloor', () => {
   });
 
   // A relevance the CORE builder drops is one the floor must not read as
-  // signal: the item it writes carries no relevance at all, exactly an FTS-only
-  // hit's shape, so counting it here would make the judgment and the artifact
-  // disagree about the same hit. The predicate is literally shared —
-  // `isRelevanceInRange` from `@mmnto/totem` (mmnto-ai/totem#2738 fold 2, F2) —
-  // which covers non-finite values AND finite ones outside [0, 1]. The range
-  // arm matters: before it, a relevance of `2` (a negative `_distance` under
-  // l2) set `bestRelevance` above the floor and DEFEATED the refusal, while the
-  // artifact write threw on that same value.
+  // signal: the item it writes carries no relevance at all, so counting it as
+  // a measurement would make the judgment and the artifact disagree about the
+  // same hit. The predicate is literally shared — `isRelevanceInRange` from
+  // `@mmnto/totem` (mmnto-ai/totem#2738 fold 2, F2) — which covers non-finite
+  // values AND finite ones outside [0, 1]. The range arm matters: before it, a
+  // relevance of `2` (a negative `_distance` under l2) set `bestRelevance`
+  // above the floor and DEFEATED the refusal, while the artifact write threw
+  // on that same value.
+  //
+  // But a fault is not a keyword-only hit either (the mmnto-ai/totem#2761 bot
+  // round, Greptile P1): counting it EXEMPT let it save a run. It is FAULTED —
+  // neither signal nor exemption — and a run whose every hit is faulted has
+  // nothing usable and refuses.
   it.each([NaN, Infinity, -Infinity, 2, -1e-16])(
-    'a relevance outside [0, 1] (%s) is floor-EXEMPT, never counted as signal',
+    'a relevance outside [0, 1] (%s) is FAULTED — not signal, not exempt — and alone it REFUSES',
     (relevance) => {
       const verdict = evaluateFloor({ ...emptyContext(), specs: [relevantHit(relevance)] }, FLOOR);
-      expect(verdict.floorExempt).toBe(1);
+      expect(verdict.faulted).toBe(1);
+      expect(verdict.floorExempt).toBe(0);
       expect(verdict.bestRelevance).toBeNull();
       expect(verdict.withheld).toEqual([]);
-      expect(verdict.refuse).toBe(false);
+      expect(verdict.refuse).toBe(true);
     },
   );
 
-  it('a NEGATIVE relevance beside a weak one LOOSENS the gate — the fault path, disclosed', () => {
-    // The exemption's only effect on `refuse`, stated honestly. `refuse`
-    // requires `bestRelevance < floor`, so a HIGH out-of-range value (2) could
-    // never have defeated a refusal — it made `refuse` false before by raising
-    // `bestRelevance` and still does by being exempt. The NEGATIVE arm is what
-    // moves: this context used to refuse (best -0.5 < 0.25, nothing exempt) and
-    // now proceeds. A negative relevance means a negative `_distance`, which
-    // squared L2 cannot produce — an SDK or data fault, and the search layer
-    // has already printed its warning while the artifact omits the value.
+  it('a NEGATIVE relevance beside a weak one does NOT save the run — a fault is not evidence (Greptile P1)', () => {
+    // The build's earlier reading counted the fault as exempt, so this context
+    // proceeded into synthesis on the strength of an SDK fault. It refuses: the
+    // weak sibling is the only signal, it is below the floor, and nothing
+    // legitimately exempts it. The fault is disclosed by count, never withheld
+    // as a measurement.
     const verdict = evaluateFloor(
       {
         ...emptyContext(),
@@ -1106,14 +1110,14 @@ describe('evaluateGroundingFloor', () => {
       },
       FLOOR,
     );
-    expect(verdict.refuse).toBe(false);
-    expect(verdict.floorExempt).toBe(1);
-    // The weak sibling is still the only signal, and still below the floor.
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(0);
     expect(verdict.bestRelevance).toBeCloseTo(0.05, 10);
-    expect(verdict.withheld).toEqual([]);
+    expect(verdict.withheld).toEqual([{ filePath: 'docs/weak.md', relevance: 0.05 }]);
   });
 
-  it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate', () => {
+  it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate, and does not save the run', () => {
     const verdict = evaluateFloor(
       {
         ...emptyContext(),
@@ -1121,10 +1125,60 @@ describe('evaluateGroundingFloor', () => {
       },
       FLOOR,
     );
-    // One exempt hit is enough to proceed — and nothing is withheld.
-    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(0);
+    expect(verdict.refuse).toBe(true);
+    expect(verdict.withheld).toEqual([{ filePath: 'docs/weak.md', relevance: 0.05 }]);
+  });
+
+  it('a fault beside a hit AT or above the floor PROCEEDS on the real signal', () => {
+    const verdict = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(0.6)] },
+      FLOOR,
+    );
     expect(verdict.refuse).toBe(false);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.bestRelevance).toBeCloseTo(0.6, 10);
     expect(verdict.withheld).toEqual([]);
+  });
+
+  it('a fault beside a keyword-only hit PROCEEDS — the exemption is the keyword hit, never the fault', () => {
+    const verdict = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5)], code: [relevantHit(undefined)] },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.faulted).toBe(1);
+    expect(verdict.floorExempt).toBe(1);
+    expect(verdict.bestRelevance).toBeNull();
+  });
+
+  it('the refusal names an all-faulted retrieval and a faulted count beside a weak signal', () => {
+    const allFaulted = evaluateFloor(
+      { ...emptyContext(), specs: [relevantHit(-0.5), relevantHit(2)] },
+      FLOOR,
+    );
+    expect(allFaulted.refuse).toBe(true);
+    const { message: allFaultedText } = formatGroundingRefusal('weak topic', allFaulted, FLOOR, 0);
+    expect(allFaultedText).toContain(
+      'Retrieval returned 2 hits, but every one carried an invalid relevance',
+    );
+    expect(allFaultedText).toContain('nothing usable grounds this run');
+    expect(allFaultedText).not.toContain('best relevance');
+
+    const mixed = evaluateFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(-0.5)],
+      },
+      FLOOR,
+    );
+    const { message: mixedText } = formatGroundingRefusal('weak topic', mixed, FLOOR, 0);
+    expect(mixedText).toContain('best relevance 0.050 is below the floor');
+    expect(mixedText).toContain(
+      '1 hit carried an invalid relevance and did not count as signal or as exemption',
+    );
+    expect(mixedText).toContain('1. docs/weak.md — relevance 0.050');
   });
 
   // Was "counts hits across ALL FOUR partitions" when the lesson partition was

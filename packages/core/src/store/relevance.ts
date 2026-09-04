@@ -15,8 +15,17 @@ import { TotemError } from '../errors.js';
 /** The distance metrics the LanceDB TypeScript SDK can be asked for (`VectorQuery.distanceType`). */
 export type DistanceMetric = 'l2' | 'cosine' | 'dot';
 
-/** Every spelling the SDK accepts — the allow-list `assertDistanceMetric` gates on. */
-export const DISTANCE_METRICS: readonly DistanceMetric[] = ['l2', 'cosine', 'dot'];
+/**
+ * Every spelling the SDK accepts — the allow-list `assertDistanceMetric` gates on.
+ * Frozen at runtime as well as `readonly` in the type: a JS caller that pushed a
+ * spelling onto it would otherwise pass the gate and reach an undefined map entry
+ * (CodeRabbit on mmnto-ai/totem#2761).
+ */
+export const DISTANCE_METRICS: readonly DistanceMetric[] = Object.freeze([
+  'l2',
+  'cosine',
+  'dot',
+] as const);
 
 /**
  * The ONE metric every Totem vector query is issued with (mmnto-ai/totem#2738).

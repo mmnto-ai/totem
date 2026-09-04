@@ -96,6 +96,12 @@ function compareItems(a: GroundingItem, b: GroundingItem): number {
  * the honest record is the item WITHOUT a relevance — the same absence an
  * FTS-only hit carries, and never a clamped number that would launder a fault
  * into a plausible-looking measurement.
+ *
+ * The record loses the distinction on purpose; the JUDGMENT keeps it. The
+ * CLI's `evaluateGroundingFloor` applies this same predicate to the raw hit
+ * and counts an FTS-only absence as floor-exempt (one saves a run) but a
+ * faulted value as neither signal nor exemption — a fault never saves a run
+ * (mmnto-ai/totem#2761 bot round, CodeRabbit + Greptile P1).
  */
 export function buildGroundingBundle(items: GroundingSourceItem[]): GroundingBundle {
   const mapped: GroundingItem[] = items.map(({ sourceType, result }) => ({
