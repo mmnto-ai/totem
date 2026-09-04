@@ -1529,6 +1529,147 @@ describe('installHooksNonInteractive', () => {
     ).toBe('strict');
   });
 
+  // ── The flag wins when NO config resolves (fold 3 F1) ──
+  //
+  // The test above passes on any machine that happens to carry a global profile at
+  // `~/.totem/totem.config.ts`, because that sends `resolveHookRenderOptions` down
+  // its fully-resolved return. The two EARLY returns — no config anywhere, and a
+  // config that will not load — handed back a `defaults` object with no
+  // `tierPinned`, so the installed hook's declaration overrode the flag. These two
+  // pin those returns with the home directory controlled, so no global profile can
+  // resolve and the outcome does not depend on whose machine runs them.
+
+  /** Run `body` with `os.homedir()` pointed at an empty directory. */
+  async function withEmptyHome<T>(body: () => Promise<T>): Promise<T> {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-home-'));
+    const saved = { USERPROFILE: process.env.USERPROFILE, HOME: process.env.HOME };
+    process.env.USERPROFILE = home;
+    process.env.HOME = home;
+    try {
+      return await body();
+    } finally {
+      if (saved.USERPROFILE === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = saved.USERPROFILE;
+      if (saved.HOME === undefined) delete process.env.HOME;
+      else process.env.HOME = saved.HOME;
+      cleanTmpDir(home);
+    }
+  }
+
+  it('lets an explicit tier flag win when NO config resolves at all', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+
+    await withEmptyHome(async () => {
+      // No local config in tmpDir, no global profile under the empty home →
+      // `resolveConfigPath` throws and the config-missing early return is taken.
+      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+      expect(result!.preCommit).toBe('block-rewritten');
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('standard');
+  });
+
+  it('lets an explicit tier flag win when the config RESOLVES but will not load', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+    // A local config that resolves and then fails to parse → the LOUD-defaults
+    // early return (mmnto-ai/totem#2692 A8).
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), ':\n  not: [valid\n');
+
+    await withEmptyHome(async () => {
+      const result = await installHooksNonInteractive(tmpDir, false, { tier: 'standard' });
+      expect(result!.preCommit).toBe('block-rewritten');
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('standard');
+  });
+
+  it('renders --force at the installed tier when nothing is pinned', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    const hooksDir = path.join(tmpDir, '.git', 'hooks');
+    fs.mkdirSync(hooksDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(hooksDir, 'pre-commit'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END) + ATTESTED_TRAILER,
+    );
+
+    // `--force` rewrites the WHOLE file (the trailer is gone) but it is still not a
+    // tier decision: with no flag and no `hooks.tier`, the hook keeps the tier it
+    // declared.
+    await withEmptyHome(async () => {
+      const result = await installHooksNonInteractive(tmpDir, true);
+      expect(result!.preCommit).toBe('overwritten');
+    });
+
+    const written = fs.readFileSync(path.join(hooksDir, 'pre-commit'), 'utf-8');
+    expect(declaredHookTier(written, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('strict');
+    expect(written).not.toContain('totem:fork');
+  });
+
+  it('keeps a strict hook-manager helper strict when nothing is pinned', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    // A husky repo: `installHooksNonInteractive` takes the manager path, which
+    // regenerates `<totemDir>/hooks/*.sh` instead of writing .git/hooks.
+    fs.mkdirSync(path.join(tmpDir, '.husky'), { recursive: true });
+    const helperDir = path.join(tmpDir, '.totem', 'hooks');
+    fs.mkdirSync(helperDir, { recursive: true });
+    const strict = { ...RENDER, tier: 'strict' as const, fallbackCmd: getFallbackCommand(tmpDir) };
+    fs.writeFileSync(
+      path.join(helperDir, 'pre-push.sh'),
+      withStaleComment(buildPrePushHook(strict), TOTEM_PREPUSH_END),
+    );
+    fs.writeFileSync(
+      path.join(helperDir, 'pre-commit.sh'),
+      withStaleComment(buildPreCommitHook(strict), TOTEM_PRECOMMIT_END),
+    );
+
+    await withEmptyHome(async () => {
+      // Manager detected → null result, helpers regenerated.
+      expect(await installHooksNonInteractive(tmpDir)).toBeNull();
+    });
+
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(helperDir, 'pre-push.sh'), 'utf-8'),
+        TOTEM_PREPUSH_MARKER,
+        TOTEM_PREPUSH_END,
+      ),
+    ).toBe('strict');
+    expect(
+      declaredHookTier(
+        fs.readFileSync(path.join(helperDir, 'pre-commit.sh'), 'utf-8'),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
   it('installs all four hooks in a git repo', async () => {
     execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
     fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');

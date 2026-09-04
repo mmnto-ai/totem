@@ -328,8 +328,16 @@ export async function resolveHookRenderOptions(
   flags?: { tier?: 'strict' | 'standard' },
 ): Promise<ResolvedHookRenderOptions> {
   const fallbackCmd = getFallbackCommand(cwd);
+  // `tierPinned` belongs on the DEFAULTS, not only on the fully-resolved return:
+  // both early exits below (no config anywhere, config present but unloadable)
+  // hand `defaults` straight back, and a flag is pinned in those states exactly as
+  // it is in the resolved one. Without it `tierForHook` would let an installed
+  // hook's own declaration override an explicit `--strict` / `--standard` in every
+  // config-less repo — `totem hook install --strict` a no-op, and `--force` writing
+  // the tier the user just asked to change (mmnto-ai/totem#2753 fold 3 F1).
   const defaults: ResolvedHookRenderOptions = {
     tier: flags?.tier ?? 'standard',
+    ...(flags?.tier === undefined ? {} : { tierPinned: true as const }),
     totemDir: DEFAULT_TOTEM_DIR,
     fallbackCmd,
   };
@@ -388,6 +396,11 @@ export async function resolveHookRenderOptions(
  * mmnto-ai/totem#2692 pass-2 F3 lesson, applied on the install side).
  *
  * `undefined` when the hook is absent, carries no marker, or predates the tier line.
+ *
+ * A hook with a start marker but NO end marker (a legacy hook) is read from the
+ * marker to EOF: such a file is whole-file owned by definition — that is exactly why
+ * drift-repair cannot bound it and it takes one `--force` — so there is no appended
+ * user region below it whose lines could be mistaken for the declaration.
  */
 export function declaredHookTier(
   content: string,
@@ -584,12 +597,14 @@ fi
  * integration. These scripts contain the full guard logic (diff checks, null-SHA
  * guards) that bare inline commands would skip.
  *
- * Takes the RESOLVED {@link HookRenderOptions} rather than resolving config
+ * Takes the RESOLVED {@link ResolvedHookRenderOptions} rather than resolving config
  * itself: both callers already hold the one resolution for this invocation, and
  * a required parameter is the same compiler-enforced thread the builders use
- * (mmnto-ai/totem#2692 C1/C2).
+ * (mmnto-ai/totem#2692 C1/C2). `tierPinned` rides along so this path applies the
+ * SAME tier rule the git-hook writers do — a hook-manager repo is not a repo whose
+ * enforcement tier may be silently reset (mmnto-ai/totem#2753 fold 3 F2).
  */
-export function generateHookHelpers(gitRoot: string, render: HookRenderOptions): void {
+export function generateHookHelpers(gitRoot: string, render: ResolvedHookRenderOptions): void {
   // Refuse BEFORE the mkdir: the helper dir is joined from the value, and a
   // `..` segment would create a directory outside the checkout before any
   // builder got the chance to refuse it (mmnto-ai/totem#2692 amendment A7).
@@ -599,8 +614,23 @@ export function generateHookHelpers(gitRoot: string, render: HookRenderOptions):
 
   const postMerge = buildHookContent(render);
   const postCheckout = buildPostCheckoutHookContent(render);
-  const preCommit = buildPreCommitHook(render);
-  const prePush = buildPrePushHook(render);
+  // Only these two carry `TOTEM_HOOK_TIER`, so only these two can be downgraded.
+  // The declaration is read from the helper ALREADY on disk, exactly as the git-hook
+  // path reads it from the installed hook.
+  const preCommit = buildPreCommitHook({
+    ...render,
+    tier: tierForHook(
+      hooksDir,
+      'pre-commit.sh',
+      TOTEM_PRECOMMIT_MARKER,
+      TOTEM_PRECOMMIT_END,
+      render,
+    ),
+  });
+  const prePush = buildPrePushHook({
+    ...render,
+    tier: tierForHook(hooksDir, 'pre-push.sh', TOTEM_PREPUSH_MARKER, TOTEM_PREPUSH_END, render),
+  });
 
   fs.writeFileSync(path.join(hooksDir, 'post-merge.sh'), postMerge, { mode: 0o755 });
   fs.writeFileSync(path.join(hooksDir, 'post-checkout.sh'), postCheckout, { mode: 0o755 });
@@ -1343,6 +1373,9 @@ function ownedTrailerStart(content: string, marker: string, endMarker: string): 
  *   - A marker on a NON-comment line. `rm -rf / # <!-- totem:fork … -->` is a
  *     command, not a signature; only a line whose trimmed text STARTS with `#` can
  *     carry one.
+ *
+ * The marker must also sit on ONE line: `parseForkMarker` is applied per line here,
+ * so core's multi-line (dotAll) form of the marker is deliberately not in play.
  *
  * A BARE `totem:fork` marker — or one missing any of the three fields — is not
  * attested either. That asymmetry with the parity detector (where a bare marker is

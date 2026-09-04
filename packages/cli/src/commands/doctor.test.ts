@@ -667,14 +667,62 @@ describe('checkGitHooks', () => {
         expect(remediation).toContain('totem hook install');
         expect(remediation).toContain('carried through unchanged');
         expect(remediation).toContain('--force');
-        expect(remediation).toContain('a legacy hook with no end marker');
-        // Each filename appears exactly once across the whole remediation.
-        for (const file of ['pre-commit', 'pre-push', 'post-merge']) {
+        // The `--force` clause names BOTH forceable hooks, so the note must keep the
+        // legacy filename — otherwise the reader cannot tell which of the two is the
+        // legacy one (fold 3 F5). pre-commit therefore appears twice by design.
+        expect(remediation).toContain('`totem hook install --force` for pre-commit, pre-push');
+        expect(remediation).toContain(
+          '(pre-commit: a legacy hook with no end marker — back up any lines of your own first)',
+        );
+        expect(remediation.split('pre-commit').length - 1).toBe(2);
+        for (const file of ['pre-push', 'post-merge']) {
           expect(remediation.split(file).length - 1).toBe(1);
         }
         // No plain `appended` row, so the trailing --force warning is absent.
         expect(remediation).not.toContain('would overwrite your own hook content');
         expect(remediation).not.toContain('delete the totem block');
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // The complementary case: the `--force` clause names EXACTLY the legacy file, so
+    // repeating it in the note would read as two hooks. There the note drops names.
+    it('drops the legacy names from the note when the --force clause named exactly them', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        const hooks = await import('./install-hooks.js');
+        const render = {
+          tier: 'standard' as const,
+          totemDir: '.totem',
+          fallbackCmd: hooks.getFallbackCommand(tmpDir),
+        };
+        await installCanonical(tmpDir, '.totem');
+        const hooksDir = path.join(tmpDir, '.git', 'hooks');
+        // legacy pre-commit (the only forceable row) + attested pre-push.
+        fs.writeFileSync(
+          path.join(hooksDir, 'pre-commit'),
+          withStaleComment(hooks.buildPreCommitHook(render), hooks.TOTEM_PRECOMMIT_END)
+            .split('\n')
+            .filter((line) => !line.includes(hooks.TOTEM_PRECOMMIT_END))
+            .join('\n'),
+        );
+        fs.writeFileSync(
+          path.join(hooksDir, 'pre-push'),
+          withStaleComment(hooks.buildPrePushHook(render), hooks.TOTEM_PREPUSH_END) +
+            ATTESTED_TRAILER,
+        );
+
+        const result = await checkGitHooks(tmpDir, {});
+
+        const remediation = result.remediation ?? '';
+        expect(remediation).toContain('`totem hook install --force` for pre-commit');
+        expect(remediation).toContain(
+          '(a legacy hook with no end marker — back up any lines of your own first)',
+        );
+        expect(remediation).not.toContain('(pre-commit: a legacy hook');
+        expect(remediation.split('pre-commit').length - 1).toBe(1);
       } finally {
         cleanTmpDir(tmpDir);
       }

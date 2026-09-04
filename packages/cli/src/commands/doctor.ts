@@ -270,14 +270,18 @@ export async function checkGitHooks(
       // every stale hook (then the bare command reads cleaner).
       const clauses: string[] = [];
       // The `--force` clause names its files whenever it does not cover all of them.
-      // When it does name them, the legacy note must NOT repeat the same filename —
-      // "…--force for pre-commit (pre-commit: a legacy hook…)" reads as two hooks
-      // (fold F6). The note keeps its names only when the clause carried none.
+      // The note drops its own names ONLY when that clause named exactly the legacy
+      // files — there the repetition ("…--force for pre-commit (pre-commit: a legacy
+      // hook…)") reads as two hooks where there is one. When the clause names a
+      // WIDER set, the note must keep the names or the reader cannot tell WHICH of
+      // the listed hooks is the legacy one (fold F6, narrowed on fold 3 F5).
       const forceClauseNamesFiles = forceable.length !== files.length;
+      const forceClauseNamesOnlyLegacy =
+        forceClauseNamesFiles && forceable.length === legacy.length;
       const legacyNote =
         legacy.length === 0
           ? ''
-          : forceClauseNamesFiles
+          : forceClauseNamesOnlyLegacy
             ? ' (a legacy hook with no end marker — back up any lines of your own first)'
             : ` (${legacy.join(', ')}: a legacy hook with no end marker — back up any lines of your own first)`;
       if (appended.length > 0) {
