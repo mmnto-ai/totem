@@ -474,6 +474,41 @@ export function hasUnrenderableHookChar(value: string): boolean {
 }
 
 /**
+ * Whether `value` carries a character that cannot be rendered safely into the
+ * managed pre-commit hook as a required SPEC HEADING (mmnto-ai/totem#2737).
+ * Forbids the same five shell/JS-active characters as
+ * {@link hasUnrenderableHookChar} — a single quote, a double quote, a
+ * backslash, a dollar sign, a backtick — plus every control character: C0
+ * (below 0x20) and the DEL/C1 band (0x7f–0x9f), which is exactly the band the
+ * reader's own `safe()` collapses, so a heading could otherwise forge a second
+ * `[Totem]` line in the hook's output.
+ *
+ * It PERMITS printable non-ASCII, and that is the whole difference. The path
+ * predicate bans everything above 0x7e because git C-quotes path bytes above
+ * 0x7e in the `diff --name-only` output the hooks' `grep -q` filters read, so a
+ * non-ASCII directory name could never match. A required heading meets no such
+ * filter: it is rendered by `JSON.stringify` into the reader's JS source and
+ * compared in memory against the draft's own lines. Holding it to the path
+ * rule would ban `### Verification (MANDATORY — do not skip)` — a heading the
+ * built-in prompt has always asked for — over a hazard it cannot encounter.
+ *
+ * The round-trip is not argued, it is EXECUTED: the frozen falsifier in
+ * `install-hooks.test.ts` runs the real hook over the four schema-constrained
+ * R3 drafts, which carry that em-dash heading byte-identical, and requires them
+ * to match on the EXACT pass and name no tolerance. That test fails on any CI
+ * OS where the em dash does not survive `JSON.stringify` → the single-quoted
+ * `node -e` word → `sh` → node intact.
+ */
+export function hasUnrenderableHeadingChar(value: string): boolean {
+  for (const ch of value) {
+    if (ch === "'" || ch === '"' || ch === '\\' || ch === '$' || ch === '`') return true;
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f)) return true;
+  }
+  return false;
+}
+
+/**
  * Normalise a configured `totemDir` to the ONE spelling every consumer joins and
  * every managed hook renders (mmnto-ai/totem#2692 amendment A7): backslashes →
  * `/`, a leading `./` dropped, trailing slashes stripped. `.totem/` and `.totem`

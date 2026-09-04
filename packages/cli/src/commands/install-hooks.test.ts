@@ -2177,7 +2177,7 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
   );
 
   it.skipIf(!shellOk)(
-    'both required headings present over EMPTY bodies BLOCK, naming the empty heading',
+    'a promised heading present over an EMPTY body BLOCKS, naming the empty heading',
     () => {
       writeRun(
         'empty.json',
@@ -2192,12 +2192,21 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
     },
   );
 
-  it.skipIf(!shellOk)('a second required heading left empty BLOCKS, naming THAT heading', () => {
+  it.skipIf(!shellOk)('a LATER required heading left empty BLOCKS, naming THAT heading', () => {
+    // Every heading the promise names BEFORE `### Implementation Tasks` gets a
+    // body, so the reader reaches it rather than blocking earlier on a missing
+    // one: the assertion is about which heading is NAMED, and it can only be
+    // about that if the draft is well-formed right up to the mutation
+    // (mmnto-ai/totem#2737 extended the promise from two headings to nine).
     writeRun(
       'half.json',
       specEvidenceArtifact({
         output: {
-          content: '### Problem Statement\n\nA real body.\n\n### Implementation Tasks\n',
+          content: SPEC_REQUIRED_SECTIONS.map((heading) =>
+            heading === '### Implementation Tasks'
+              ? `${heading}\n`
+              : `${heading}\n\nA real body.\n`,
+          ).join('\n'),
         },
       }),
     );
