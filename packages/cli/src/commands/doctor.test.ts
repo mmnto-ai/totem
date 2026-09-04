@@ -562,8 +562,43 @@ describe('checkGitHooks', () => {
         expect(result.remediation).toContain(
           'totem hook install for pre-push, post-merge, post-checkout (',
         );
+        // No install clause — bare or --force — may list pre-commit (re-armed leg F17:
+        // the earlier `[^;]*` form could not match any output of the composer).
         expect(result.remediation).not.toMatch(
-          /totem hook install[^;]*pre-commit[^;]*carried through/,
+          /totem hook install(?: --force)? for [^(]*pre-commit/,
+        );
+      } finally {
+        cleanTmpDir(tmpDir);
+      }
+    });
+
+    // The predicate covers the region ABOVE the extension — shebang line included —
+    // while the staleness compare covers the managed block only, so a bad byte on
+    // the shebang line alone leaves the block current. The installer still skips
+    // such a hook, so the row must say so rather than "All 4 hooks installed"
+    // (re-armed leg F16).
+    it('senses a non-decoding shebang line above a CURRENT block and prescribes re-saving', async () => {
+      const tmpDir = makeTmpDir();
+      try {
+        execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+        await installWithTrailer(tmpDir, ATTESTED_TRAILER, { stale: false });
+        const preCommit = path.join(tmpDir, '.git', 'hooks', 'pre-commit');
+        const bytes = fs.readFileSync(preCommit);
+        const shebangEnd = bytes.indexOf(0x0a);
+        expect(bytes.subarray(0, 2).toString('utf-8')).toBe('#!');
+        fs.writeFileSync(
+          preCommit,
+          Buffer.concat([
+            bytes.subarray(0, shebangEnd),
+            Buffer.from([0x20, 0x97]), // " " + the em dash as one cp1252 byte, on the shebang line
+            bytes.subarray(shebangEnd),
+          ]),
+        );
+        const result = await checkGitHooks(tmpDir, {});
+        expect(result.status).toBe('warn');
+        expect(result.remediation).toContain('re-save pre-commit as UTF-8');
+        expect(result.remediation).not.toMatch(
+          /totem hook install(?: --force)? for [^(]*pre-commit/,
         );
       } finally {
         cleanTmpDir(tmpDir);

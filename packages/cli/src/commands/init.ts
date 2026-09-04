@@ -1842,7 +1842,7 @@ export default {
         summary.push({
           file: '.git/hooks/pre-commit',
           action:
-            'Skipped — the managed block does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
+            'Skipped — the region above the extension (shebang line and managed block) does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
         });
       }
       if (enforcement.prePush === 'installed' || enforcement.prePush === 'appended') {
@@ -1870,7 +1870,7 @@ export default {
         summary.push({
           file: '.git/hooks/pre-push',
           action:
-            'Skipped — the managed block does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
+            'Skipped — the region above the extension (shebang line and managed block) does not decode as UTF-8; left byte-identical (re-save as UTF-8 and re-run, or `totem hook install --force`)',
         });
       }
 

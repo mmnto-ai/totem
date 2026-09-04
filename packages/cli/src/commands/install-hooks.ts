@@ -1598,27 +1598,24 @@ export function installGitHook(
       // one — an attested-trailer hook whose block already equals the canonical is
       // current (`exists`, no write), which is what makes a second bare run a no-op.
       if (endMarker !== undefined && isTotemOwnedWithAttestedTrailer(existing, marker, endMarker)) {
-        // The predicate above IS `ownedTrailerStart(…) !== undefined` plus the
-        // attestation, so this reuses the offset it already proved rather than
-        // recomputing the marker scan by hand (fold F11). A defensive `undefined`
-        // falls through to the conservative decline; it never writes on a guess.
-        if (ownedTrailerStart(existing, marker, endMarker) !== undefined) {
-          // "Byte-for-byte" is literal: the trailer is sliced from the RAW file at
-          // the byte offset `ownedTrailerByteStart` PROVES (the managed region
-          // re-encodes to its own bytes). A region that does not round-trip is not
-          // ours to rewrite — and not something to stay silent about either: the
-          // decline is REPORTED, so `totem doctor`'s remedy and this command's
-          // summary never disagree (leg F13). The trailer's bytes are never decoded.
-          const trailerByteStart = ownedTrailerByteStart(raw, marker, endMarker);
-          if (trailerByteStart === undefined) return 'skipped-non-utf8';
-          const rewritten = Buffer.concat([
-            Buffer.from(hookContent, 'utf-8'),
-            trailerTailAfterEndMarker(raw, trailerByteStart),
-          ]);
-          if (rewritten.equals(raw)) return 'exists';
-          writeExecutableHook(hookPath, rewritten);
-          return 'block-rewritten';
-        }
+        // "Byte-for-byte" is literal: the trailer is sliced from the RAW file at the
+        // byte offset `ownedTrailerByteStart` PROVES — the region above the
+        // extension (shebang line and managed block) re-encodes to its own bytes.
+        // That is the ONE marker scan, shared with doctor (fold F11's rule, one
+        // implementation); the predicate above ran it too, and a second run on the
+        // same string is cheaper than a second implementation. A region that does
+        // not round-trip is not ours to rewrite — and not something to stay silent
+        // about: the skip is REPORTED, and doctor senses the same shape with the
+        // same predicate (legs F13, F16). The trailer's bytes are never decoded.
+        const trailerByteStart = ownedTrailerByteStart(raw, marker, endMarker);
+        if (trailerByteStart === undefined) return 'skipped-non-utf8';
+        const rewritten = Buffer.concat([
+          Buffer.from(hookContent, 'utf-8'),
+          trailerTailAfterEndMarker(raw, trailerByteStart),
+        ]);
+        if (rewritten.equals(raw)) return 'exists';
+        writeExecutableHook(hookPath, rewritten);
+        return 'block-rewritten';
       }
       return 'exists';
     }
@@ -1770,7 +1767,7 @@ export async function installEnforcementHooks(
   ] as const) {
     if (action === 'skipped-non-utf8') {
       console.error(
-        `[Totem] Skipped ${name} hook: its managed block does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take \`totem hook install --force\` (rewrites the whole file and drops your extension).`,
+        `[Totem] Skipped ${name} hook: the region above its extension (shebang line and managed block) does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take \`totem hook install --force\` (rewrites the whole file and drops your extension).`,
       );
     }
   }
@@ -2065,7 +2062,7 @@ export async function hooksCommand(opts: {
           // The eject precedent (mmnto-ai/totem#2620): a skip is reported with its
           // reason and the file is left byte-identical — never "already installed".
           console.error(
-            `[Totem] Skipped ${name} hook: its managed block does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take --force (rewrites the whole file and drops your extension).`,
+            `[Totem] Skipped ${name} hook: the region above its extension (shebang line and managed block) does not decode as UTF-8, so it was left byte-identical. Re-save the hook as UTF-8 and re-run, or take --force (rewrites the whole file and drops your extension).`,
           );
           break;
       }

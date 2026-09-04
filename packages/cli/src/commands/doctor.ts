@@ -306,18 +306,21 @@ export async function checkGitHooks(
           } (the managed block is rewritten in place; your attested extension after the end marker is carried through unchanged)`,
         );
       }
+      // The re-save clause sits BEFORE the --force clause and keeps its own tail
+      // inside its parenthetical, so a mixed set never renders two stacked em-dash
+      // tails about `--force` (re-armed leg F19).
+      if (nonUtf8.length > 0) {
+        clauses.push(
+          `re-save ${nonUtf8.join(', ')} as UTF-8 and re-run \`totem hook install\` (the region above the extension — shebang line and managed block — does not decode as UTF-8, so a bare install reports it and leaves the file byte-identical), or take \`totem hook install --force\` for ${
+            nonUtf8.length === 1 ? 'it' : 'them'
+          } (rewrites the whole file and drops your extension)`,
+        );
+      }
       if (forceable.length > 0) {
         clauses.push(
           `${clauses.length === 0 ? 'totem hook install --force' : '`totem hook install --force`'}${
             forceable.length === files.length ? '' : ` for ${forceable.join(', ')}`
           }${legacyNote}`,
-        );
-      }
-      if (nonUtf8.length > 0) {
-        clauses.push(
-          `re-save ${nonUtf8.join(', ')} as UTF-8 and re-run \`totem hook install\` (the managed block does not decode as UTF-8, so a bare install reports it and leaves the file byte-identical), or take \`totem hook install --force\` for ${
-            nonUtf8.length === 1 ? 'it' : 'them'
-          } — it rewrites the whole file and drops your extension`,
         );
       }
       const remediation =
@@ -486,12 +489,6 @@ async function hooksStaleAgainstCanonical(
       // round 1, leg F3).
       const installedTier = hooks.declaredHookTier(existing, marker, endMarker);
       const content = build({ ...base, tier: installedTier ?? base.tier });
-      if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
-        continue;
-      }
-      const startIdx = existing.indexOf(marker);
-      const boundedAfterStart =
-        startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
       // An attested `totem:fork` extension after the end marker is the one trailing
       // shape a BARE install can now cure, so it must be told apart from the general
       // appended case BEFORE it — the remedies are opposites (mmnto-ai/totem#2753).
@@ -504,19 +501,30 @@ async function hooksStaleAgainstCanonical(
       // inert instruction (mmnto-ai/totem#2532); such a file stays `appended` and
       // takes the delete-and-re-append line, which does work on it.
       const attestedTrailer = hooks.isTotemOwnedWithAttestedTrailer(existing, marker, endMarker);
-      // The same byte-offset proof the installer's rewrite arm runs: when the
-      // managed region does not decode as UTF-8 the installer SKIPS (reported), so
-      // this row must not prescribe the bare install — the one-predicate rule
-      // above, applied to the newest shape (mmnto-ai/totem#2760 leg F13).
-      const managedRegionDecodes =
-        !attestedTrailer ||
-        hooks.ownedTrailerByteStart(rawExisting, marker, endMarker) !== undefined;
+      // The same byte-offset proof the installer's rewrite arm runs, BEFORE the
+      // staleness compare: the proof covers the region above the extension (shebang
+      // line and managed block) while the compare covers the block alone, so a bad
+      // byte on the shebang line leaves the block current yet makes the installer
+      // skip — the row must say so rather than "All hooks installed" (the
+      // one-predicate rule above, applied to the newest shape; mmnto-ai/totem#2760
+      // legs F13 and F16).
+      if (
+        attestedTrailer &&
+        hooks.ownedTrailerByteStart(rawExisting, marker, endMarker) === undefined
+      ) {
+        stale.push({ file, kind: 'non-utf8' });
+        continue;
+      }
+      if (existingBlock === totemOwnedBlock(content, marker, endMarker)) {
+        continue;
+      }
+      const startIdx = existing.indexOf(marker);
+      const boundedAfterStart =
+        startIdx !== -1 && existing.indexOf(endMarker, startIdx + marker.length) !== -1;
       const kind: StaleHookRow['kind'] = hooks.isTotemOwnedWholeFile(existing, marker, endMarker)
         ? 'owned-whole'
         : attestedTrailer
-          ? managedRegionDecodes
-            ? 'appended-attested'
-            : 'non-utf8'
+          ? 'appended-attested'
           : boundedAfterStart
             ? 'appended'
             : 'legacy';
