@@ -1396,6 +1396,101 @@ describe('isAttestedTrailer', () => {
       isAttestedTrailer('\n# [lc] docs-inject extension\n# <!-- totem:fork -->\nsh "x.sh"\n'),
     ).toBe(false);
   });
+
+  // Core's parser captures the quoted value raw; a field that is only whitespace
+  // is present to a length check and absent to a reader (Greptile P2, round 1).
+  it('is false when any of the three fields is whitespace-only', () => {
+    const blankReason = '# <!-- totem:fork reason=" " owner="satur8d" attested="2026-06-07" -->';
+    const blankOwner =
+      '# <!-- totem:fork reason="deploy notice" owner="   " attested="2026-06-07" -->';
+    const blankAttested =
+      '# <!-- totem:fork reason="deploy notice" owner="satur8d" attested="\t" -->';
+    const allBlank = '# <!-- totem:fork reason=" " owner=" " attested=" " -->';
+    for (const line of [blankReason, blankOwner, blankAttested, allBlank]) {
+      expect(isAttestedTrailer(`\n${line}\nsh "x.sh"\n`), line).toBe(false);
+    }
+  });
+});
+
+// ─── declaredHookTier (mmnto-ai/totem#2753) ────────
+
+describe('declaredHookTier', () => {
+  const block = (lines: readonly string[]): string =>
+    ['#!/bin/sh', `# ${TOTEM_PRECOMMIT_MARKER}`, ...lines, `# ${TOTEM_PRECOMMIT_END}`, ''].join(
+      '\n',
+    );
+
+  it('reads the assignment the template emits', () => {
+    expect(
+      declaredHookTier(
+        block(['TOTEM_HOOK_TIER="strict"']),
+        TOTEM_PRECOMMIT_MARKER,
+        TOTEM_PRECOMMIT_END,
+      ),
+    ).toBe('strict');
+  });
+
+  // Gemini, round 1: an unanchored match would have read the COMMENT first and
+  // re-rendered a standard hook as strict — or, mirrored, a strict one as standard.
+  it('ignores a comment inside the block that quotes the assignment', () => {
+    const content = block([
+      '# TOTEM_HOOK_TIER="strict" turns on the spec-evidence gate below',
+      'TOTEM_HOOK_TIER="standard"',
+    ]);
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('standard');
+  });
+
+  it('is undefined when the only mention is a comment — a quoted assignment is not a declaration', () => {
+    const content = block(['# TOTEM_HOOK_TIER="strict" was the old default']);
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBeUndefined();
+  });
+
+  it('still reads a CRLF block', () => {
+    const content = block(['TOTEM_HOOK_TIER="strict"']).replace(/\n/g, '\r\n');
+    expect(declaredHookTier(content, TOTEM_PRECOMMIT_MARKER, TOTEM_PRECOMMIT_END)).toBe('strict');
+  });
+});
+
+// ─── the hook write is atomic (Greptile P1, mmnto-ai/totem#2760 round 1) ────────
+
+describe('installGitHook writes atomically', () => {
+  // The attested-extension rewrite carries the consumer's own lines, which no
+  // template can regenerate — so the write must leave the old file or the new one,
+  // never a truncated hook. `writeExecutableHook` routes through core's
+  // `writeFileAtomicSync`: a same-directory temp, mode on the temp, rename last.
+  it('leaves no temp sibling behind and the rewritten hook is executable', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-atomic-'));
+    try {
+      const hooksDir = path.join(tmpDir, 'hooks');
+      fs.mkdirSync(hooksDir);
+      const hookPath = path.join(hooksDir, 'pre-commit');
+      const canonical = buildPreCommitHook(RENDER);
+      fs.writeFileSync(
+        hookPath,
+        `#!/bin/sh\n# ${TOTEM_PRECOMMIT_MARKER}\nstale body\n# ${TOTEM_PRECOMMIT_END}\n${ATTESTED_TRAILER}`,
+      );
+
+      const action = installGitHook(
+        hooksDir,
+        'pre-commit',
+        canonical,
+        TOTEM_PRECOMMIT_MARKER,
+        false,
+        TOTEM_PRECOMMIT_END,
+      );
+
+      expect(action).toBe('block-rewritten');
+      expect(fs.readFileSync(hookPath, 'utf-8')).toBe(canonical + ATTESTED_TRAILER);
+      // The helper's temp is `<target>.<pid>-<uuid8>.tmp` beside the target; after a
+      // completed write the directory holds the hook alone.
+      expect(fs.readdirSync(hooksDir)).toEqual(['pre-commit']);
+      if (process.platform !== 'win32') {
+        expect(fs.statSync(hookPath).mode & 0o777).toBe(0o755);
+      }
+    } finally {
+      cleanTmpDir(tmpDir);
+    }
+  });
 });
 
 // ─── generateHookHelpers ────────────────────────────

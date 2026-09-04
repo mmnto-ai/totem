@@ -206,7 +206,6 @@ describe('checkGitHooks', () => {
   it('returns warn when hooks are missing in a git repo', async () => {
     const tmpDir = makeTmpDir();
     try {
-      const { execSync } = require('node:child_process');
       execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
       const result = await checkGitHooks(tmpDir);
       expect(result.status).toBe('warn');
@@ -220,7 +219,6 @@ describe('checkGitHooks', () => {
   it('returns pass when all four managed blocks are the current canonical', async () => {
     const tmpDir = makeTmpDir();
     try {
-      const { execSync } = require('node:child_process');
       execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
       await installCanonical(tmpDir, '.totem');
       const result = await checkGitHooks(tmpDir);
@@ -238,7 +236,6 @@ describe('checkGitHooks', () => {
   it('WARNs on marker-headed hooks whose managed block is not the canonical (default totemDir)', async () => {
     const tmpDir = makeTmpDir();
     try {
-      const { execSync } = require('node:child_process');
       execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
       const hooksDir = path.join(tmpDir, '.git', 'hooks');
       fs.mkdirSync(hooksDir, { recursive: true });

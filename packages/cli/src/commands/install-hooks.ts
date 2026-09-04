@@ -5,7 +5,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import * as readline from 'node:readline/promises';
 
 // totem-context: mmnto-ai/totem#2753 — the rule's startup-cost premise does not apply to THIS module, because `install-hooks.js` is reached only through `await import` (index.ts, index-lite.ts, doctor.ts, doctor-parity.ts, eject.ts, init.ts, shield.ts), so it is never on the `--help` graph, and the core barrel is already in its static graph via `../git.js` (`import { safeExec } from '@mmnto/totem'`) and `../artifact-vocabulary.js`. The dynamic form is also unavailable: `isAttestedTrailer` is a SYNCHRONOUS exported predicate by contract and `installGitHook` is synchronous, so the only alternative would be duplicating core's `parseForkMarker` regex in the CLI — the divergence the shared parser exists to prevent.
-import { parseForkMarker } from '@mmnto/totem';
+import { parseForkMarker, writeFileAtomicSync } from '@mmnto/totem';
 
 import {
   GROUNDING_ANCHOR_ISSUE,
@@ -397,6 +397,11 @@ export async function resolveHookRenderOptions(
  *
  * `undefined` when the hook is absent, carries no marker, or predates the tier line.
  *
+ * Only an ASSIGNMENT at the start of a line counts — the templates emit
+ * `TOTEM_HOOK_TIER="…"` unindented — so a comment inside the block that quotes the
+ * assignment (`# TOTEM_HOOK_TIER="strict" …`) cannot steer the render (Gemini,
+ * mmnto-ai/totem#2760 round 1).
+ *
  * A hook with a start marker but NO end marker is read from the marker to EOF. That
  * is a POLICY, not an observation about such files: everything below an unbounded
  * start marker is TREATED as ours, because that file's one cure is `--force`, which
@@ -412,7 +417,7 @@ export function declaredHookTier(
   if (start === -1) return undefined;
   const end = content.indexOf(endMarker, start + marker.length);
   const block = end === -1 ? content.slice(start) : content.slice(start, end + endMarker.length);
-  return /TOTEM_HOOK_TIER="(strict|standard)"/.exec(block)?.[1] as
+  return /^TOTEM_HOOK_TIER="(strict|standard)"/m.exec(block)?.[1] as
     | 'strict'
     | 'standard'
     | undefined;
@@ -1286,16 +1291,22 @@ const OWNED_WHOLE_FILE_PREAMBLE_RE = /^#![^\n]*\n#[ \t]*$/;
 const HOOK_EXECUTABLE_MODE = 0o755;
 
 /**
- * Write a hook file and mark it executable. On POSIX the chmod failure propagates
- * (Tenet 4 — a hook git cannot execute must fail loud, never silently report
- * `installed`). On Windows the exec bit is skipped explicitly: git-bash owns the
- * executable bit there, and NTFS has no POSIX mode to set.
+ * Write a hook file and mark it executable — ATOMICALLY (core's
+ * `writeFileAtomicSync`, the Tenet 4 user-file mutation helper, mmnto-ai/totem#2620):
+ * the bytes land in a same-directory temp, the mode is applied to the temp, and
+ * the rename comes last, so an interrupted install leaves the old hook or the new
+ * one and never a truncated file. That matters most on the attested-extension
+ * rewrite (mmnto-ai/totem#2753): the trailer is the consumer's own lines, which no
+ * template can regenerate (Greptile P1, mmnto-ai/totem#2760 round 1).
+ *
+ * On POSIX a mode failure propagates from the helper (a hook git cannot execute
+ * must fail loud, never silently report `installed`). On Windows the exec bit is
+ * skipped by the helper's own boundary: git-bash owns the executable bit there,
+ * and NTFS has no POSIX mode to set. Symlinked hooks keep their link identity
+ * (the helper writes through to the real path).
  */
 function writeExecutableHook(hookPath: string, content: string): void {
-  fs.writeFileSync(hookPath, content);
-  if (process.platform !== 'win32') {
-    fs.chmodSync(hookPath, HOOK_EXECUTABLE_MODE);
-  }
+  writeFileAtomicSync(hookPath, content, { mode: HOOK_EXECUTABLE_MODE });
 }
 
 /**
@@ -1392,14 +1403,17 @@ export function isAttestedTrailer(trailer: string): boolean {
     // The first command ends the run: nothing below it can vouch for it.
     if (!trimmed.startsWith('#')) return false;
     const fork = parseForkMarker(line);
+    // Trimmed: core's parser captures the quoted value raw, so `reason=" "` would
+    // otherwise pass a length check — a promise with no name is not a promise
+    // (Greptile P2, mmnto-ai/totem#2760 round 1).
     if (
       fork !== undefined &&
       typeof fork.reason === 'string' &&
-      fork.reason.length > 0 &&
+      fork.reason.trim().length > 0 &&
       typeof fork.owner === 'string' &&
-      fork.owner.length > 0 &&
+      fork.owner.trim().length > 0 &&
       typeof fork.attested === 'string' &&
-      fork.attested.length > 0
+      fork.attested.trim().length > 0
     ) {
       return true;
     }
