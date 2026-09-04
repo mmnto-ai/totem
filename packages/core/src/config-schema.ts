@@ -571,7 +571,9 @@ export const TotemConfigSchema = z.object({
    * Floors the true relevance signal, NOT the RRF rank artifact in the
    * displayed `score`. Hits with no vector leg (keyword-only/FTS) carry no
    * comparable relevance: they are floor-EXEMPT, and in `totem spec` a single
-   * exempt hit saves the run.
+   * exempt hit from a grounding partition (specs, sessions, code) saves the
+   * run — a keyword-only lesson does not; lessons never ground a run (ruled
+   * final, mmnto-ai/totem#2727).
    *
    * NO DEFAULT since mmnto-ai/totem#2727. Relevance is `1 / (1 + squared L2)`
    * on unit-norm vectors, so it ranges over [0.2, 1] — 0.25 is INSIDE that
