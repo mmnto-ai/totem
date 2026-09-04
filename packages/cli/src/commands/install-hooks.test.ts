@@ -39,7 +39,7 @@ import {
   TOTEM_PREPUSH_MARKER,
   upgradePrePushHookIfNeeded,
 } from './install-hooks.js';
-import { SPEC_REQUIRED_SECTIONS } from './spec-templates.js';
+import { SPEC_REQUIRED_SECTIONS, SPEC_SYSTEM_PROMPT } from './spec-templates.js';
 
 // The default render options every pre-#2692 positional call implied
 // (mmnto-ai/totem#2692 C2 — the builders take a REQUIRED options object now, so
@@ -1853,9 +1853,17 @@ describe('buildPreCommitHook with strict tier', () => {
   it('carries the exit-3 arm distinctly from the exit-2 and reader-failure arms', () => {
     const hook = buildPreCommitHook({ ...RENDER, tier: 'strict' });
     expect(hook).toContain('elif [ "$reader_status" = "3" ]; then');
+    // printf, not echo (mmnto-ai/totem#2737 fold 3): `dash` — /bin/sh on Debian
+    // and Ubuntu — expands backslash escapes in `echo`, so a literal `\n` in an
+    // artifact value forged a second [Totem] line there while staying inert
+    // under bash. The two sinks that carry $spec_evidence print literally.
+    const bs = String.fromCharCode(0x5c);
     expect(hook).toContain(
-      `echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"`,
+      `printf '%s${bs}n' "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"`,
     );
+    expect(hook).toContain(`printf '%s${bs}n' "[Totem] spec evidence: $spec_evidence"`);
+    expect(hook).not.toContain('echo "[Totem] spec evidence:');
+    expect(hook).not.toContain('echo "[Totem] BLOCKED: $spec_evidence');
     // The two pre-existing arms keep their exact text.
     expect(hook).toContain('no totem spec run artifact under .totem/artifacts/runs/');
     expect(hook).toContain('the spec-evidence reader could not run (node exit status');
@@ -2177,7 +2185,7 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
   );
 
   it.skipIf(!shellOk)(
-    'both required headings present over EMPTY bodies BLOCK, naming the empty heading',
+    'a promised heading present over an EMPTY body BLOCKS, naming the empty heading',
     () => {
       writeRun(
         'empty.json',
@@ -2192,12 +2200,21 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
     },
   );
 
-  it.skipIf(!shellOk)('a second required heading left empty BLOCKS, naming THAT heading', () => {
+  it.skipIf(!shellOk)('a LATER required heading left empty BLOCKS, naming THAT heading', () => {
+    // Every heading the promise names BEFORE `### Implementation Tasks` gets a
+    // body, so the reader reaches it rather than blocking earlier on a missing
+    // one: the assertion is about which heading is NAMED, and it can only be
+    // about that if the draft is well-formed right up to the mutation
+    // (mmnto-ai/totem#2737 extended the promise from two headings to nine).
     writeRun(
       'half.json',
       specEvidenceArtifact({
         output: {
-          content: '### Problem Statement\n\nA real body.\n\n### Implementation Tasks\n',
+          content: SPEC_REQUIRED_SECTIONS.map((heading) =>
+            heading === '### Implementation Tasks'
+              ? `${heading}\n`
+              : `${heading}\n\nA real body.\n`,
+          ).join('\n'),
         },
       }),
     );
@@ -2437,6 +2454,89 @@ describe('buildPreCommitHook anchored evidence — executed under sh (mmnto-ai/t
     expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
     expect(r.stdout).not.toContain(String.fromCharCode(0x85));
   });
+
+  it.skipIf(!shellOk)(
+    'a U+2028 in anchor.ref is collapsed and cannot forge a second [Totem] line',
+    () => {
+      // The third member of the newline family: U+2028 LINE SEPARATOR is a
+      // PRINTABLE-plane code point that terminals and pagers still break on, so
+      // a `safe()` stopping at the C1 band left it through (mmnto-ai/totem#2737).
+      const ls = String.fromCharCode(0x2028);
+      const forged = `slug${ls}[Totem] spec evidence: forged`;
+      writeRun(
+        'ls.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('slug?[Totem] spec evidence: forged');
+      expect(r.stdout).not.toContain(ls);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+    },
+  );
+
+  // ── The forge that lives in PRINTABLE bytes (mmnto-ai/totem#2737 fold 3) ──
+  //
+  // `safe()` cannot close this one: a literal backslash followed by `n` is two
+  // printable characters (0x5c, 0x6e), so it passes every control-character
+  // predicate untouched. The expansion happens at the SHELL, wherever `/bin/sh`
+  // expands backslash escapes in `echo` — `dash` on Debian and Ubuntu, and
+  // macOS's `/bin/sh`, a bash built with `xpg_echo` on — where the pair becomes
+  // a real newline and forges the second `[Totem]` line. The cure is the sink,
+  // not the sanitizer: both values print through `printf '%s\n'`, which treats
+  // its argument as literal text on every POSIX shell.
+  //
+  // NOTE ON REACH: `sh` on this machine is Git Bash's bash, whose `echo` does
+  // NOT expand the escape, so these two tests pass here even against the
+  // unfixed hook. Git Bash and a plain bash are the only shells that leave it
+  // inert; these are real falsifiers on the Ubuntu and macOS CI legs. Measured
+  // directly against `/usr/bin/dash` before the fix: TWO [Totem] lines; after:
+  // one.
+
+  it.skipIf(!shellOk)(
+    'a literal backslash-n in anchor.ref cannot forge a second [Totem] line under any /bin/sh',
+    () => {
+      const bs = String.fromCharCode(0x5c);
+      const forged = `2737${bs}n[Totem] spec evidence: FORGED`;
+      writeRun(
+        'backslash-n.json',
+        specEvidenceArtifact({
+          grounding: { anchor: { kind: GROUNDING_ANCHOR_FREE_TEXT, ref: forged } },
+        }),
+      );
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      // The two characters survive as themselves — not expanded, not stripped.
+      expect(r.stdout).toContain(`2737${bs}n[Totem] spec evidence: FORGED`);
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a literal backslash-n in a tolerantly-matched heading cannot forge a second [Totem] line',
+    () => {
+      // The same payload on the fold's newest sink: the `(matched as …)` clause
+      // echoes a line taken from the DRAFT, which is attacker-shaped text.
+      const bs = String.fromCharCode(0x5c);
+      const promised = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+      const verification = promised.find((h) => h.startsWith('### Verification')) ?? '';
+      const forgedHeading = `### Verification (${bs}n[Totem] spec evidence: FORGED)`;
+      const content = promised
+        .map((heading) =>
+          heading === verification
+            ? `${forgedHeading}\n`
+            : `${heading}\n\nA non-blank body under ${heading}.\n`,
+        )
+        .join('\n');
+      writeRun('tolerant-forge.json', specEvidenceArtifact({ output: { content } }));
+      const r = runHook();
+      expect(r.status).toBe(1);
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+      expect(r.stdout).toContain(`(matched as ${forgedHeading})`);
+    },
+  );
 
   it.skipIf(!shellOk)(
     'a newline in createdAt cannot forge a second [Totem] line on the PASS path',
@@ -3430,4 +3530,408 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
     );
     expect(r.stdout).not.toContain('BLOCKED');
   });
+});
+
+// ─── The frozen mutation suite (mmnto-ai/totem#2737) ─────
+//
+// Authored against the FINAL contract — all NINE promised headings — and run
+// once against the UNCHANGED reader before either predicate moved, then frozen:
+// never edited by the commits that follow it. The RED/GREEN pattern it printed
+// on the unchanged reader is what makes each case evidence of a predicate
+// rather than a transcription of whatever the implementation happened to do.
+//
+// The nine come off SPEC_SYSTEM_PROMPT, not SPEC_REQUIRED_SECTIONS: the
+// constant still named two headings when this was frozen, and reading the
+// prompt keeps the suite byte-identical across all three commits. It is also
+// how no case here ever retypes the em dash in `### Verification (MANDATORY —
+// do not skip)` (the mmnto-ai/totem#2692 authoring trap). After the extension
+// the two surfaces are the same nine strings in the same order.
+describe('buildPreCommitHook spec-gate reader — frozen mutation suite (mmnto-ai/totem#2737)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+
+  /** The nine `### ` lines of the built-in prompt, in prompt order. */
+  const PROMISED = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+
+  /** Pick a promised heading by an ASCII prefix — never retype the em dash. */
+  function promised(prefix: string): string {
+    const found = PROMISED.find((heading) => heading.startsWith(prefix));
+    if (found === undefined) throw new Error(`no promised heading starts with ${prefix}`);
+    return found;
+  }
+
+  const PROBLEM_STATEMENT = promised('### Problem Statement');
+  const FILES_TO_EXAMINE = promised('### Files to Examine');
+  const EDGE_CASES = promised('### Edge Cases');
+  const IMPLEMENTATION_TASKS = promised('### Implementation Tasks');
+  const EXECUTION_FLOW = promised('### Execution Flow');
+  const VERIFICATION = promised('### Verification');
+  const TEST_PLAN = promised('### Test Plan');
+
+  /** A TAB, built rather than escaped (the mmnto-ai/totem#2692 authoring trap). */
+  const TAB = String.fromCharCode(9);
+
+  /**
+   * All nine promised headings, each over one plain body line. An override
+   * replaces exactly ONE heading's whole block, so each case changes one thing;
+   * an empty override DROPS that heading from the draft entirely.
+   */
+  function nineBodied(overrides: Record<string, string> = {}): string {
+    return PROMISED.map((heading) => {
+      const override = overrides[heading];
+      return override === undefined
+        ? `${heading}\n\nA non-blank body under ${heading}.\n`
+        : override;
+    })
+      .filter((block) => block.length > 0)
+      .join('\n');
+  }
+
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-2737-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/frozen-suite', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function runHook(): { status: number | null; stdout: string } {
+    const r = spawnSync('sh', ['./pre-commit'], {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+      env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+    });
+    return { status: r.status, stdout: r.stdout };
+  }
+
+  function writeRun(name: string, artifact: Record<string, unknown>): void {
+    const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, name), JSON.stringify(artifact, null, 2));
+  }
+
+  /** Every BLOCKED arm must be distinguishable from the other two arms. */
+  function expectDistinctBlock(stdout: string): void {
+    expect(stdout).not.toContain('no totem spec run artifact');
+    expect(stdout).not.toContain('the spec-evidence reader could not run');
+  }
+
+  /** Judge one draft written under the BUILT-IN prompt on an ISSUE anchor. */
+  function judge(content: string): { status: number | null; stdout: string } {
+    writeRun('draft.json', specEvidenceArtifact({ output: { content } }));
+    return runHook();
+  }
+
+  // ── Positive mutations: each must PASS ──
+
+  it.skipIf(!shellOk)('a section that opens with a deeper heading is not empty', () => {
+    const r = judge(
+      nineBodied({
+        [IMPLEMENTATION_TASKS]: `${IMPLEMENTATION_TASKS}\n#### 1. Sub\nA step under the sub-heading.\n`,
+      }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+  });
+
+  it.skipIf(!shellOk)(
+    'a promised heading with its parenthetical dropped matches and is named',
+    () => {
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: '### Execution Flow\n\nA body under the shortened heading.\n',
+          [VERIFICATION]: '### Verification\n\nA body under the shortened heading.\n',
+        }),
+      );
+      expect(r.status, r.stdout).toBe(0);
+      expect(r.stdout).toContain(`· tolerated ${EXECUTION_FLOW} ~ ### Execution Flow`);
+      expect(r.stdout).toContain(`${VERIFICATION} ~ ### Verification`);
+    },
+  );
+
+  it.skipIf(!shellOk)('trailing whitespace on a heading line is tolerated silently', () => {
+    const r = judge(
+      nineBodied({
+        [PROBLEM_STATEMENT]: `${PROBLEM_STATEMENT}   ${TAB}\n\nA body under it.\n`,
+      }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· shape TEMPLATE');
+    expect(r.stdout).not.toContain('· tolerated');
+  });
+
+  it.skipIf(!shellOk)('a different trailing parenthetical matches and is named', () => {
+    const r = judge(
+      nineBodied({ [VERIFICATION]: '### Verification (required)\n\nA body under it.\n' }),
+    );
+    expect(r.status, r.stdout).toBe(0);
+    expect(r.stdout).toContain('· tolerated');
+    expect(r.stdout).toContain(`${VERIFICATION} ~ ### Verification (required)`);
+  });
+
+  // ── Negative mutations: each must BLOCK, by name ──
+
+  it.skipIf(!shellOk)('a genuinely absent promised heading blocks by name', () => {
+    const r = judge(nineBodied({ [TEST_PLAN]: '' }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${TEST_PLAN}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a genuinely empty section blocks by name', () => {
+    const r = judge(nineBodied({ [PROBLEM_STATEMENT]: PROBLEM_STATEMENT }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${PROBLEM_STATEMENT}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a whitespace-only body is empty', () => {
+    const r = judge(
+      nineBodied({ [FILES_TO_EXAMINE]: `${FILES_TO_EXAMINE}\n   \n${TAB}${TAB}\n\n` }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${FILES_TO_EXAMINE}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a deeper heading with nothing under it is not a body', () => {
+    const r = judge(nineBodied({ [EDGE_CASES]: `${EDGE_CASES}\n#### none` }));
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('a shallower heading ends the section', () => {
+    const r = judge(
+      nineBodied({
+        [IMPLEMENTATION_TASKS]: `${IMPLEMENTATION_TASKS}\n## Notes\nProse under the shallower heading.\n`,
+      }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`has an empty heading ${IMPLEMENTATION_TASKS}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  it.skipIf(!shellOk)('the heading level is exact', () => {
+    const r = judge(
+      nineBodied({ [PROBLEM_STATEMENT]: '## Problem Statement\n\nA body under it.\n' }),
+    );
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${PROBLEM_STATEMENT}`);
+    expectDistinctBlock(r.stdout);
+  });
+
+  // ── The ruled falsifier (operator ruling 2026-09-03) ──
+  //
+  // The denominator is all SEVEN drafts the R3 probe actually recorded, and the
+  // claim is that none is blocked; the mutated negatives above carry the "flags
+  // the defective" half. The four schema-constrained runs carry the promised
+  // headings BYTE-IDENTICAL, em dash included, so they must match on the EXACT
+  // pass and name no tolerance — which makes this test the executed proof, on
+  // every CI OS, that the em-dash heading round-trips through JSON.stringify,
+  // the single-quoted `node -e` word, sh and node without drift.
+
+  /** The recorded R3 fixture directory, found by walking up to the repo root. */
+  function resolveR3FixtureDir(): string {
+    let dir = path.dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 8; i++) {
+      const candidate = path.join(dir, '.totem', 'fixtures', 'spec-runs-2026-09-02');
+      if (fs.existsSync(candidate)) return candidate;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return '';
+  }
+
+  /** The ORIGINAL run's draft: the artifacts.ndjson row whose id starts e5a15c9c. */
+  function readOriginalDraft(dir: string): string {
+    const ndjson = fs.readFileSync(path.join(dir, 'artifacts.ndjson'), 'utf-8');
+    for (const line of ndjson.split('\n')) {
+      if (line.trim().length === 0) continue;
+      let row: { id?: unknown; output?: { content?: unknown } };
+      try {
+        row = JSON.parse(line) as { id?: unknown; output?: { content?: unknown } };
+      } catch (err) {
+        void err;
+        continue;
+      }
+      if (typeof row.id === 'string' && row.id.startsWith('e5a15c9c')) {
+        const content = row.output?.content;
+        if (typeof content === 'string') return content;
+      }
+    }
+    return '';
+  }
+
+  it.skipIf(!shellOk)(
+    'the extended reader blocks none of the seven recorded R3 drafts and names the tolerance on the three that dropped parentheticals',
+    () => {
+      const dir = resolveR3FixtureDir();
+      expect(
+        dir,
+        'the recorded R3 drafts (.totem/fixtures/spec-runs-2026-09-02/) are not in this checkout — the ruled falsifier cannot run',
+      ).not.toBe('');
+
+      const original = readOriginalDraft(dir);
+      expect(
+        original.length,
+        'the original R3 draft (artifacts.ndjson row id e5a15c9c…) was not found',
+      ).toBeGreaterThan(0);
+
+      const read = (name: string): string => fs.readFileSync(path.join(dir, name), 'utf-8');
+      const drafts: Array<{ name: string; content: string; tolerated: boolean }> = [
+        {
+          name: 'the original artifact (artifacts.ndjson row id e5a15c9c…)',
+          content: original,
+          tolerated: true,
+        },
+        {
+          name: 'r3-unconstrained-run1.md',
+          content: read('r3-unconstrained-run1.md'),
+          tolerated: true,
+        },
+        {
+          name: 'r3-unconstrained-run2.md',
+          content: read('r3-unconstrained-run2.md'),
+          tolerated: true,
+        },
+        {
+          name: 'r3-responseSchema-run1.md',
+          content: read('r3-responseSchema-run1.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseSchema-run2.md',
+          content: read('r3-responseSchema-run2.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseJsonSchema-minLength1-run1.md',
+          content: read('r3-responseJsonSchema-minLength1-run1.md'),
+          tolerated: false,
+        },
+        {
+          name: 'r3-responseJsonSchema-minLength1-run2.md',
+          content: read('r3-responseJsonSchema-minLength1-run2.md'),
+          tolerated: false,
+        },
+      ];
+      // The denominator is ruled: all seven, or the claim is a different one.
+      expect(drafts).toHaveLength(7);
+
+      for (const draft of drafts) {
+        const r = judge(draft.content);
+        expect(r.status, `${draft.name} was BLOCKED: ${r.stdout}`).toBe(0);
+        expect(r.stdout, `${draft.name} did not read as TEMPLATE`).toContain('· shape TEMPLATE');
+        if (draft.tolerated) {
+          expect(
+            r.stdout,
+            `${draft.name} dropped a promised parenthetical but the evidence line named no tolerance`,
+          ).toContain('· tolerated');
+        } else {
+          expect(
+            r.stdout,
+            `${draft.name} carries the promised headings verbatim but the evidence line named a tolerance`,
+          ).not.toContain('· tolerated');
+        }
+      }
+    },
+  );
+});
+
+// A tolerantly-matched heading that then blocks for an empty body used to name
+// a string the draft does not contain: the seat reads `has an empty heading
+// ### Verification (MANDATORY — do not skip)`, searches the draft for it, finds
+// nothing, and cannot see that the reader matched `### Verification` and judged
+// THAT section. The block now carries both spellings. Outside the frozen block
+// (mmnto-ai/totem#2737 fold round) — the suite above was run against the
+// unchanged reader and is not edited after.
+describe('buildPreCommitHook spec-gate reader — tolerance disclosure on the block path (mmnto-ai/totem#2737 fold)', () => {
+  const shellOk =
+    spawnSync('sh', ['-c', 'command -v node >/dev/null 2>&1'], { encoding: 'utf-8' }).status === 0;
+
+  const PROMISED = SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### '));
+  const VERIFICATION = PROMISED.find((heading) => heading.startsWith('### Verification')) ?? '';
+
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-hook-2737-fold-'));
+    execSync('git init -q', { cwd: tmpDir, stdio: 'ignore' });
+    execSync('git checkout -q -b feat/fold', { cwd: tmpDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(tmpDir, 'pre-commit'), buildPreCommitHook(RENDER));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it.skipIf(!shellOk)(
+    'an EMPTY section under a tolerantly-matched heading names both the promised and the matched line',
+    () => {
+      // Every promised heading bodied except Verification, which appears with
+      // its parenthetical dropped AND no body — so the reader must reach the
+      // empty-body block by way of the tolerant pass.
+      const content = PROMISED.map((heading) =>
+        heading === VERIFICATION
+          ? '### Verification\n'
+          : `${heading}\n\nA non-blank body under ${heading}.\n`,
+      ).join('\n');
+      const dir = path.join(tmpDir, '.totem', 'artifacts', 'runs');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'tolerant-empty.json'),
+        JSON.stringify(specEvidenceArtifact({ output: { content } }), null, 2),
+      );
+
+      const r = spawnSync('sh', ['./pre-commit'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+      });
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(
+        `has an empty heading ${VERIFICATION} (matched as ### Verification)`,
+      );
+      // Still distinguishable from the other two BLOCKED arms.
+      expect(r.stdout).not.toContain('no totem spec run artifact');
+      expect(r.stdout).not.toContain('the spec-evidence reader could not run');
+      // The new clause echoes a DRAFT line, so it is a forged-line sink like
+      // every other value that reaches stdout.
+      expect(r.stdout.split('\n').filter((line) => line.startsWith('[Totem]'))).toHaveLength(1);
+
+      // …and the matched line passes through `safe()`: a C1 control inside the
+      // heading is collapsed rather than echoed into the block message.
+      const nel = String.fromCharCode(0x85);
+      const forgedHeading = `### Verification (a${nel}b)`;
+      const forgedContent = PROMISED.map((heading) =>
+        heading === VERIFICATION
+          ? `${forgedHeading}\n`
+          : `${heading}\n\nA non-blank body under ${heading}.\n`,
+      ).join('\n');
+      fs.writeFileSync(
+        path.join(dir, 'tolerant-empty.json'),
+        JSON.stringify(specEvidenceArtifact({ output: { content: forgedContent } }), null, 2),
+      );
+      const forgedRun = spawnSync('sh', ['./pre-commit'], {
+        cwd: tmpDir,
+        encoding: 'utf-8',
+        env: { ...process.env, CLAUDE_CODE_AGENT: '1' },
+      });
+      expect(forgedRun.status).toBe(1);
+      expect(forgedRun.stdout).toContain(
+        `has an empty heading ${VERIFICATION} (matched as ### Verification (a?b))`,
+      );
+      expect(forgedRun.stdout).not.toContain(nel);
+      expect(
+        forgedRun.stdout.split('\n').filter((line) => line.startsWith('[Totem]')),
+      ).toHaveLength(1);
+    },
+  );
 });

@@ -112,6 +112,7 @@ export {
   GeminiOrchestratorSchema,
   GeminiProviderSchema,
   getConfigTier,
+  hasUnrenderableHeadingChar,
   hasUnrenderableHookChar,
   IngestTargetSchema,
   normalizeTotemDir,

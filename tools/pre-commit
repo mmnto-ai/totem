@@ -22,8 +22,10 @@ fi
 # top-level admission.runMetadata.caller of "spec"), read JSON-aware — a
 # substring match would accept a review artifact that merely quotes the key —
 # that is ANCHORED on an issue or a bound design record, and whose subject
-# carries a real shape: the required headings each with a body (an issue run
-# drafted by the built-in prompt), or at least one heading with a body (a
+# carries a real shape: every promised heading (level-exact; a trailing
+# parenthetical may differ or be dropped, and the evidence line names it) each
+# with a non-blank body before the next heading of the same or shallower level
+# (an issue run drafted by the built-in prompt), or at least one heading with a body (a
 # record run, or an issue run drafted under a custom prompt). A record run is
 # judged on the bytes of the record at grounding.anchor.ref, re-read here from
 # the worktree top; its sha256 is REPORTED, never enforced.
@@ -34,7 +36,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const nodePath = require("path");
 const dir = ".totem/artifacts/runs";
-const REQUIRED = ["### Problem Statement","### Implementation Tasks"];
+const REQUIRED = ["### Problem Statement","### Architectural Context","### Files to Examine","### Technical Approach & Contracts","### Edge Cases & Traps","### Implementation Tasks","### Execution Flow (structural constraint)","### Verification (MANDATORY — do not skip)","### Test Plan"];
 const KIND_ISSUE = "issue";
 const KIND_RECORD = "record";
 const PROMPT_OVERRIDE = "override";
@@ -61,19 +63,26 @@ function safe(text) {
   let out = "";
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
-    const control = code < 32 || (code >= 127 && code <= 159);
+    const control = code < 32 || (code >= 127 && code <= 159) || [8232, 8233].indexOf(code) > -1;
     out = out + (control ? "?" : text.charAt(i));
   }
   return out;
 }
 const shownFile = safe(file);
 const shownAt = safe(best.at);
-function isHeading(line) {
+function headingLevel(line) {
   let n = 0;
   while (n < line.length && ["#"].indexOf(line.charAt(n)) > -1) n = n + 1;
-  if (n < 1 || n > 6) return false;
-  if ([" ", "\t"].indexOf(line.charAt(n)) < 0) return false;
-  return line.slice(n + 1).trim().length > 0;
+  if (n < 1 || n > 6) return 0;
+  if ([" ", "\t"].indexOf(line.charAt(n)) < 0) return 0;
+  return line.slice(n + 1).trim().length > 0 ? n : 0;
+}
+function stripParen(s) {
+  const t = s.trimEnd();
+  if (t.charAt(t.length - 1) !== ")") return t;
+  const open = t.lastIndexOf("(");
+  if (open < 1) return t;
+  return t.slice(0, open).trimEnd();
 }
 function escapesTop(rel) {
   const norm = rel.split("\\").join("/");
@@ -125,9 +134,12 @@ if (kind !== KIND_RECORD) {
 }
 if ([65279].indexOf(subject.charCodeAt(0)) > -1) subject = subject.slice(1);
 const lines = subject.split("\n");
-function hasBodyAfter(start) {
+const tolerated = [];
+function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
-    if (isHeading(lines[i])) return false;
+    const n = headingLevel(lines[i]);
+    if (n > 0 && n <= level) return false;
+    if (n > 0) continue;
     if (lines[i].trim().length > 0) return true;
   }
   return false;
@@ -136,12 +148,19 @@ if (shape !== "DOCUMENT") {
   for (const heading of REQUIRED) {
     let at = -1;
     for (let i = 0; i < lines.length; i++) { if ([heading].indexOf(lines[i].trimEnd()) > -1) { at = i; break; } }
+    let matchedAs = "";
+    if (at < 0) {
+      const want = stripParen(heading);
+      for (let i = 0; i < lines.length; i++) { if ([want].indexOf(stripParen(lines[i].trimEnd())) > -1) { at = i; break; } }
+      if (at > -1) { matchedAs = safe(lines[at].trimEnd()); tolerated.push(safe(heading) + " ~ " + matchedAs); }
+    }
     if (at < 0) block("the draft in " + shownFile + " is missing heading " + safe(heading));
-    if (!hasBodyAfter(at)) block("the draft in " + shownFile + " has an empty heading " + safe(heading));
+    const shownHeading = safe(heading) + (matchedAs.length > 0 ? " (matched as " + matchedAs + ")" : "");
+    if (!hasBodyAfter(at, headingLevel(lines[at]))) block("the draft in " + shownFile + " has an empty heading " + shownHeading);
   }
 } else {
   let bodied = false;
-  for (let i = 0; i < lines.length; i++) { if (isHeading(lines[i]) && hasBodyAfter(i)) { bodied = true; break; } }
+  for (let i = 0; i < lines.length; i++) { const n = headingLevel(lines[i]); if (n > 0 && hasBodyAfter(i, n)) { bodied = true; break; } }
   if (!bodied && kind !== KIND_RECORD) block("the draft in " + shownFile + " has no heading with a body (custom prompt: the built-in template skeleton is not required)");
   if (!bodied) block("the bound record at " + shownRef + " has no heading with a body");
 }
@@ -149,6 +168,7 @@ const stamp = best.at ? Date.parse(best.at) : NaN;
 const days = Number.isNaN(stamp) ? -1 : Math.floor((Date.now() - stamp) / 86400000);
 let out = shownFile + " (" + (shownAt || "undated") + (days >= 0 ? ", " + days + " days old" : "") + ")";
 out = out + " · anchor " + shownKind + " " + shownRef + " · shape " + shape;
+if (tolerated.length > 0) out = out + " · tolerated " + tolerated.join("; ");
 if (recordStatus.length > 0) out = out + " · " + recordStatus;
 emit(out);
 ' 2>/dev/null)
@@ -158,9 +178,9 @@ emit(out);
   # each reported distinctly, never as "no evidence", and all fail-closed.
   reader_status=$?
   if [ "$reader_status" = "0" ] && [ -n "$spec_evidence" ]; then
-    echo "[Totem] spec evidence: $spec_evidence"
+    printf '%s\n' "[Totem] spec evidence: $spec_evidence"
   elif [ "$reader_status" = "3" ]; then
-    echo "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
+    printf '%s\n' "[Totem] BLOCKED: $spec_evidence — run 'totem spec <issue>' or 'totem spec --from <record>' (add --fresh if the response is cached) (strict mode)"
     exit 1
   elif [ "$reader_status" != "2" ]; then
     echo "[Totem] BLOCKED: the spec-evidence reader could not run (node exit status $reader_status — node missing from PATH, or .totem/artifacts/runs/ unreadable); fix the runtime and retry (strict mode)"

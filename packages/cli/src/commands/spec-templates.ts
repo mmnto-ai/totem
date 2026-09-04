@@ -84,17 +84,37 @@ export { SYSTEM_PROMPT as SPEC_SYSTEM_PROMPT };
  * single-quoted `node -e '…'` body via `JSON.stringify` (the `runsDir`
  * precedent) and checks the draft carries each heading with a non-blank body.
  *
+ * Since mmnto-ai/totem#2737 the promise is the FULL skeleton: all nine `### `
+ * lines of {@link SYSTEM_PROMPT}, in prompt order. It named two of them before,
+ * which made the gate weaker than the command's own ask — the seven drafts
+ * recorded in `.totem/fixtures/spec-runs-2026-09-02/` all passed it while three
+ * carried an empty or an unmatched promised section.
+ *
  * Two invariants keep the two halves honest, both unit-tested:
  * 1. every entry is a VERBATIM line of {@link SYSTEM_PROMPT} — the gate can
  *    only require what the command actually asks for;
- * 2. every entry is RENDERABLE into the reader (no quote, backslash, dollar,
- *    backtick, newline or control character — the mmnto-ai/totem#2692 C4
- *    predicate), so a new heading can never break the hook silently.
+ * 2. every entry is RENDERABLE into the reader as a HEADING — no quote,
+ *    backslash, dollar, backtick, or line-breaking character from the set the
+ *    reader's `safe()` collapses: C0, the DEL/C1 band, and U+2028/U+2029
+ *    (`hasUnrenderableHeadingChar`).
+ *    Printable non-ASCII is permitted, unlike the path predicate that bans
+ *    everything above 0x7e for git's C-quoting of `diff --name-only` output: a
+ *    heading meets no path filter. That the em dash in the Verification heading
+ *    really does survive `JSON.stringify` → the single-quoted `node -e` word →
+ *    `sh` → node is not argued but EXECUTED, by the frozen falsifier in
+ *    `install-hooks.test.ts` over the four schema-constrained R3 drafts.
  *
  * The skeleton is only applied to a draft written under the BUILT-IN prompt;
  * an override prompt is held to the looser DOCUMENT shape instead.
  */
 export const SPEC_REQUIRED_SECTIONS = [
   '### Problem Statement',
+  '### Architectural Context',
+  '### Files to Examine',
+  '### Technical Approach & Contracts',
+  '### Edge Cases & Traps',
   '### Implementation Tasks',
+  '### Execution Flow (structural constraint)',
+  '### Verification (MANDATORY — do not skip)',
+  '### Test Plan',
 ] as const;

@@ -11,7 +11,7 @@ import {
   GROUNDING_ANCHOR_MIXED,
   GROUNDING_ANCHOR_RECORD,
   GroundingAnchorSchema,
-  hasUnrenderableHookChar,
+  hasUnrenderableHeadingChar,
   type LanceStore,
   PROMPT_SOURCE_BUILTIN,
   PROMPT_SOURCE_OVERRIDE,
@@ -752,20 +752,29 @@ describe('SPEC_REQUIRED_SECTIONS', () => {
     }
   });
 
-  it('every entry is renderable into the single-quoted node -e reader (the mmnto-ai/totem#2692 C4 predicate)', () => {
+  it('every entry is renderable into the single-quoted node -e reader as a HEADING (mmnto-ai/totem#2737)', () => {
     for (const section of SPEC_REQUIRED_SECTIONS) {
-      // A quote, backslash, dollar, backtick, control character or non-ASCII
-      // byte would break the `sh` single-quoted word, the JS string literal
-      // inside it, or both — and could forge hook lines.
-      expect(hasUnrenderableHookChar(section), `${section} cannot be rendered`).toBe(false);
+      // A quote, backslash, dollar, backtick or control character would break
+      // the `sh` single-quoted word, the JS string literal inside it, or both —
+      // and could forge hook lines. Printable non-ASCII could not: the heading
+      // predicate permits it where the PATH predicate cannot, because git
+      // C-quotes path bytes above 0x7e in the `diff --name-only` output the
+      // hooks' `grep -q` filters read and a heading meets no such filter. The
+      // executed proof that the em dash survives the render is the frozen
+      // falsifier in install-hooks.test.ts, over the four schema-constrained R3
+      // drafts that carry the Verification heading byte-identical.
+      expect(hasUnrenderableHeadingChar(section), `${section} cannot be rendered`).toBe(false);
     }
   });
 
-  it('names both promised sections, in prompt order', () => {
-    expect([...SPEC_REQUIRED_SECTIONS]).toEqual([
-      '### Problem Statement',
-      '### Implementation Tasks',
-    ]);
+  it('names all nine promised sections, in prompt order', () => {
+    // Copied from SPEC_SYSTEM_PROMPT rather than retyped, so the em dash in the
+    // Verification heading can never enter this file as a look-alike byte
+    // (the mmnto-ai/totem#2692 authoring trap).
+    expect([...SPEC_REQUIRED_SECTIONS]).toEqual(
+      SPEC_SYSTEM_PROMPT.split('\n').filter((line) => line.startsWith('### ')),
+    );
+    expect(SPEC_REQUIRED_SECTIONS).toHaveLength(9);
   });
 });
 

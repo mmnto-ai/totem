@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { hasUnrenderableHookChar } from '@mmnto/totem';
+import { hasUnrenderableHeadingChar, hasUnrenderableHookChar } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -230,6 +230,61 @@ describe('an unrenderable totemDir is refused loudly (C4)', () => {
       expect(hasUnrenderableTotemDirChar(sample), JSON.stringify(sample)).toBe(
         hasUnrenderableHookChar(sample),
       );
+    }
+  });
+
+  it('hasUnrenderableHeadingChar refuses exactly what the rendered safe() collapses, plus the five shell/JS characters (mmnto-ai/totem#2737)', () => {
+    // The build-time predicate and the RUNTIME sanitizer are two spellings of
+    // one rule, written in two languages in two files: the predicate decides
+    // which headings may be promised, `safe()` decides what survives to stdout.
+    // If they drift, a heading passes the gate and then forges a line — so the
+    // relation is pinned against the rendered text itself, not a transcription.
+    //
+    // The relation is NOT equality. The five shell/JS-active characters are
+    // refused by the predicate for a different reason (they would break the
+    // `sh` word or the JS string literal at RENDER time, before any output
+    // exists) and are passed through unharmed by `safe()`, which only collapses
+    // line-breaking controls. Outside those five, the two must agree exactly.
+    const hook = buildPreCommitHook({ ...DEFAULT_RENDER, tier: 'strict' });
+    const marker = 'function safe(text) {';
+    const start = hook.indexOf(marker);
+    expect(start, 'the rendered reader no longer declares safe()').toBeGreaterThan(-1);
+    const end = hook.indexOf('\n}', start);
+    expect(end, 'safe() has no closing brace at column 0').toBeGreaterThan(start);
+    const body = hook.slice(start + marker.length, end);
+    // Test-only: instantiate the REAL rendered body, so a drift in the hook
+    // text fails here rather than in production. The alternative — a
+    // transcription of safe() into this file — is exactly the thing that can
+    // drift silently, which is what this test exists to prevent.
+    const safe = new Function('text', body) as (text: string) => string;
+
+    const SHELL_ACTIVE = [
+      String.fromCharCode(0x27), // '
+      String.fromCharCode(0x22), // "
+      String.fromCharCode(0x5c), // backslash
+      String.fromCharCode(0x24), // $
+      String.fromCharCode(0x60), // backtick
+    ];
+    const codes: number[] = [];
+    for (let code = 0x00; code <= 0x9f; code++) codes.push(code);
+    codes.push(0x2028, 0x2029, 0x2014, 0xe9, 0xfc, 0x20, 0x23);
+
+    for (const code of codes) {
+      const ch = String.fromCharCode(code);
+      const label = `U+${code.toString(16).toUpperCase().padStart(4, '0')}`;
+      const out = safe(ch);
+      // Collapse is "the byte CHANGED", not "the output is ?" — U+003F is
+      // already `?`, and reading it as collapsed would make the sentinel its
+      // own false positive.
+      const collapsed = out !== ch;
+      if (collapsed) expect(out, label).toBe('?');
+      const refused = hasUnrenderableHeadingChar(ch) && SHELL_ACTIVE.indexOf(ch) < 0;
+      expect(collapsed, label).toBe(refused);
+    }
+    // The five, stated positively: refused by the predicate, untouched by safe().
+    for (const ch of SHELL_ACTIVE) {
+      expect(hasUnrenderableHeadingChar(ch), JSON.stringify(ch)).toBe(true);
+      expect(safe(ch), JSON.stringify(ch)).toBe(ch);
     }
   });
 });
