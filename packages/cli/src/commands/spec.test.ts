@@ -932,6 +932,19 @@ const FLOOR_PLACE_TEXT = 'searchRelevanceFloor in totem.config.ts';
 const FLOOR_LINE_UNSET_TEXT =
   'floor none — searchRelevanceFloor unset in totem.config.ts (no default; calibrate per repo — see config-reference)';
 
+/**
+ * The refusal's floor LINE, whole. A `toContain` of the value-and-place text
+ * alone is satisfied by a line that appends MORE after it — which is exactly
+ * the retired "(schema default 0.25 when unset)" suffix — so the pins that
+ * guard that suffix's removal compare the entire line, not a prefix of it
+ * (mmnto-ai/totem#2727 fold, F3).
+ */
+function floorLineOf(message: string): string {
+  const line = message.split('\n').find((candidate) => candidate.startsWith('floor '));
+  if (line === undefined) throw new Error(`no floor line in refusal message:\n${message}`);
+  return line;
+}
+
 describe('evaluateGroundingFloor', () => {
   it('0 retrieved items REFUSES — nothing grounds the run (the charter rule, not an MCP mirror)', () => {
     const verdict = evaluateGroundingFloor(emptyContext(), FLOOR);
@@ -1152,7 +1165,10 @@ describe('formatGroundingRefusal', () => {
     const { message } = formatGroundingRefusal('an-unanchored-slug', verdict, FLOOR, 0);
     expect(message).toContain('an-unanchored-slug');
     expect(message).toContain('0 hits');
-    expect(message).toContain('floor 0.250 — searchRelevanceFloor in totem.config.ts');
+    // The WHOLE line, not a prefix of it: a `toContain` of the value-and-place
+    // text alone still passes if the retired "(schema default 0.25 when unset)"
+    // suffix is restored after it (mmnto-ai/totem#2727 fold, F3).
+    expect(floorLineOf(message)).toBe('floor 0.250 — searchRelevanceFloor in totem.config.ts');
   });
 
   // With lessons delivered, "nothing in the index grounds this run" sits beside
@@ -2023,7 +2039,8 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     const message = String((thrown as Error).message);
     expect(message).toContain('weak slug');
     expect(message).toContain('best relevance 0.100');
-    expect(message).toContain('floor 0.250 — searchRelevanceFloor in totem.config.ts');
+    // Full-line pin — see `floorLineOf` (mmnto-ai/totem#2727 fold, F3).
+    expect(floorLineOf(message)).toBe('floor 0.250 — searchRelevanceFloor in totem.config.ts');
     expect(message).toContain('docs/a.md — relevance 0.100');
     expect(harness.orchestratorArgs).toEqual([]);
   });

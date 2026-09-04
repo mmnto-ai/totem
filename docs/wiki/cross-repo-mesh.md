@@ -71,8 +71,11 @@ Each result therefore also carries a `Relevance:` field: the true per-hit signal
 Every `search_knowledge` response also emits a machine-parsable `<retrieval-envelope>` line directly below the `<index-meta>` line, e.g.:
 
 ```
-<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.250" hits="5" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.570" hits="5" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="none" hits="5" />
 ```
+
+The first line is a repo that configured `searchRelevanceFloor`; the second is the default state, with no floor configured and none passed per call.
 
 - `status` is `ok`, `no_useful_hits`, or `empty`. `no_useful_hits` means results exist but the best relevance fell below the floor — the below-floor candidates are still disclosed (path + relevance, no content) rather than silently dropped; `empty` means zero rows. The two are kept programmatically distinct.
 - `method` is `hybrid`, `vector`, or `fts` (the last indicating the embedder was unavailable and search degraded to keyword-only — a loud system warning accompanies it).

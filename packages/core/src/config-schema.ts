@@ -574,15 +574,18 @@ export const TotemConfigSchema = z.object({
    * exempt hit saves the run.
    *
    * NO DEFAULT since mmnto-ai/totem#2727. Relevance is `1 / (1 + squared L2)`
-   * on unit-norm vectors, so it ranges over [0.2, 1]; on the
-   * gemini-embedding-2-preview 768-d profile the LOWEST best-relevance over 55
-   * recorded `totem spec` queries was 0.559 (0.5687 over the runs the spec
-   * refusal was even eligible to judge), so the former default of 0.25 could
-   * never fire — and any value below a repo's own measured floor is equally
-   * inert. A repo that wants weak free-text runs refused sets a value just
-   * above the best-relevance of the weakest run it still wants kept; the recipe
-   * is in `docs/wiki/config-reference.md` and the worked measurement is the R4
-   * record at `.totem/fixtures/floor-arm-2026-09-03/`.
+   * on unit-norm vectors, so it ranges over [0.2, 1] — 0.25 is INSIDE that
+   * range, but on the gemini-embedding-2-preview 768-d profile the LOWEST
+   * best-relevance over 55 recorded `totem spec` queries was 0.559 (0.5687 over
+   * the runs the spec refusal was even eligible to judge), so the former
+   * default fired on none of those 55, and any value below a repo's own
+   * measured floor is inert. An embedder returning UNNORMALIZED vectors
+   * (custom, some Ollama models) is not bounded that way and can produce
+   * relevances under 0.25, so on such a profile the old default could fire.
+   * A repo that wants weak free-text runs refused sets a value just above the
+   * best-relevance of the weakest run it still wants kept; the recipe is in
+   * `docs/wiki/config-reference.md` and the worked measurement is the R4 record
+   * at `.totem/fixtures/floor-arm-2026-09-03/`.
    *
    * UNSET = NO FLOOR: `no_useful_hits` and the spec refusal's below-floor arm
    * can never fire (the spec zero-hit arm still can). The per-call

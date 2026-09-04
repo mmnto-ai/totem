@@ -160,16 +160,18 @@ export default {
 
 **With the key unset there is no floor at all**: `no_useful_hits` and the spec refusal's below-floor arm cannot fire. The retrieval envelope prints `floor="none"`. `totem spec`'s zero-hit refusal is unaffected — it is a separate arm and still fires. The MCP `min_relevance` input applies per call regardless, and still overrides a configured value.
 
-**Why no default.** Relevance is `1 / (1 + squared L2)` on unit-norm vectors, so it ranges over `[0.2, 1]` and real retrievals sit high in that range. Measured on the gemini-embedding-2-preview 768-d profile over 55 recorded `totem spec` queries, the **lowest** best-relevance of any run was **0.559** (0.5687 over the runs the spec refusal was eligible to judge at all). A shipped default of 0.25 therefore could never fire on that profile — a mechanism claim with no mechanism — and any value below a repo's own measured floor is equally inert. The reachable value is a property of a corpus, its embedder and its labels, so it is yours to set, not ours to guess. The worked measurement is the R4 record at `.totem/fixtures/floor-arm-2026-09-03/` in this repo.
+**Why no default.** Relevance is `1 / (1 + squared L2)` on unit-norm vectors, so it ranges over `[0.2, 1]` and real retrievals sit high in that range. Measured on the gemini-embedding-2-preview 768-d profile over 55 recorded `totem spec` queries, the **lowest** best-relevance of any run was **0.559** (0.5687 over the runs the spec refusal was eligible to judge at all). `0.25` sits inside the reachable range, but it **fired on none of those 55** — a mechanism claim with no mechanism — and any value below a repo's own measured floor is inert the same way. The reachable value is a property of a corpus, its embedder and its labels, so it is yours to set, not ours to guess. The worked measurement is the R4 record at `.totem/fixtures/floor-arm-2026-09-03/` in this repo.
 
-**Choosing a value.**
+**If your embedder does not return unit-norm vectors** (some custom providers, some Ollama models), the `[0.2, 1]` bound does not hold and relevances below `0.25` are reachable — so on that profile the old default could fire, and removing it may mean **fewer** refusals and fewer `no_useful_hits` than before. Set a value to restore them; calibrate it the same way.
 
-1. Record real runs — an `.totem/artifacts/` sweep of `totem spec` runs over queries you actually ask; each run's grounding items carry their relevance.
-2. Mark the runs whose retrieval you would want KEPT (the run produced usable grounding) and the ones you would want refused.
-3. Note the best relevance of each kept run. The floor has to sit **below the weakest run you still want kept** — set it there, or a hair under, or you will refuse work you wanted.
+**Choosing a value — one key, two consumers.** The number you pick governs `totem spec`'s refusal AND every `search_knowledge` answer, and those two do not see the same relevances. `search_knowledge` retrieves over every content type, including the **lesson** pool, and lessons score markedly lower than specs and code: on this repo's profile they sit around `0.34`, and an issue-anchored MCP retrieval starts being withheld from about `0.638`. So a value chosen only to refuse weak `totem spec` runs can quietly empty MCP answers over lessons. Calibrate with both in view.
+
+1. Record real runs — an `.totem/artifacts/` sweep of `totem spec` runs over queries you actually ask; each run's grounding items carry their relevance. Beside them, record the `bestRelevance` from the `<retrieval-envelope>` of real `search_knowledge` calls, including ones that should return lessons.
+2. Mark the runs and the MCP calls whose retrieval you would want KEPT (it produced usable grounding) and the ones you would want refused.
+3. Note the best relevance of each kept run and each kept MCP call. The floor has to sit **below the weakest thing you still want kept across BOTH** — set it there, or a hair under, or you will refuse work you wanted, or answer a legitimate `search_knowledge` call with `no_useful_hits`.
 4. Set `searchRelevanceFloor` to that number. Re-measure whenever the embedder or the corpus changes materially; a floor calibrated on one embedding profile says nothing about another.
 
-If no value separates the runs you would keep from the ones you would refuse, that is a real answer: leave the key unset and let the zero-hit arm and the anchor rules carry the gate.
+If no single value separates what you would keep from what you would refuse — which is the likely outcome when the spec runs and the lesson pool sit far apart — that is a real answer: leave the key unset and let the zero-hit arm and the anchor rules carry the gate, and use the per-call `min_relevance` where you want a floor for one query.
 
 ## The Legs-Owed Floor (`hooks.legsOwed.globs`)
 

@@ -2190,6 +2190,38 @@ describe('search_knowledge', () => {
       expect(loose.content[0]!.text).toContain('mid body');
     });
 
+    // A zero override is a REAL override, not an absent one. `minRelevance ??
+    // configuredFloor` honours it; a `minRelevance || configuredFloor`
+    // refactor would silently fall back to the configured 0.4 and re-withhold
+    // the hit (mmnto-ai/totem#2727 fold, F5).
+    it('min_relevance: 0 overrides a configured floor — the effective floor is 0, not the config value', async () => {
+      mockSearchResults = [
+        {
+          label: 'Weak',
+          type: 'code',
+          filePath: 'src/w.ts',
+          score: 0.016,
+          relevance: 0.05,
+          searchMethod: 'hybrid',
+          content: 'weak body',
+        },
+      ];
+
+      const result = (await handle({ query: 'test', min_relevance: 0 })) as {
+        content: Array<{ type: string; text: string }>;
+      };
+      const text = result.content[0]!.text;
+
+      const m = text.match(ENVELOPE_RE);
+      expect(m![1]).toBe('ok'); // 0.05 clears a floor of 0
+      expect(m![4]).toBe('0.000'); // NOT "0.400" — the override won
+      expect(text).toContain('weak body');
+      const call = mockLogSelectionManifest.mock.calls[0]![0] as {
+        context: Record<string, unknown>;
+      };
+      expect(call.context['floor']).toBe(0);
+    });
+
     // --- No floor at all (mmnto-ai/totem#2727) ---
     //
     // `searchRelevanceFloor` lost its default: an unconfigured repo runs
