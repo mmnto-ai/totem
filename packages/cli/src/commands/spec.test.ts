@@ -962,9 +962,12 @@ function floorLineOf(message: string): string {
  * production because a static value import from `@mmnto/totem` inside
  * `commands/**` pulls LanceDB into every CLI startup (mmnto-ai/totem#2339);
  * tests may import it statically — that rule excludes `**\/*.test.ts`.
+ *
+ * The predicate precedes `floor` in the real signature so mmnto-ai/totem#2758
+ * can make `floor` optional without a required-after-optional parameter.
  */
 function evaluateFloor(context: RetrievedContext, floor: number) {
-  return evaluateGroundingFloor(context, floor, isRelevanceInRange);
+  return evaluateGroundingFloor(context, isRelevanceInRange, floor);
 }
 
 describe('evaluateGroundingFloor', () => {
@@ -1086,6 +1089,29 @@ describe('evaluateGroundingFloor', () => {
       expect(verdict.refuse).toBe(false);
     },
   );
+
+  it('a NEGATIVE relevance beside a weak one LOOSENS the gate — the fault path, disclosed', () => {
+    // The exemption's only effect on `refuse`, stated honestly. `refuse`
+    // requires `bestRelevance < floor`, so a HIGH out-of-range value (2) could
+    // never have defeated a refusal — it made `refuse` false before by raising
+    // `bestRelevance` and still does by being exempt. The NEGATIVE arm is what
+    // moves: this context used to refuse (best -0.5 < 0.25, nothing exempt) and
+    // now proceeds. A negative relevance means a negative `_distance`, which
+    // squared L2 cannot produce — an SDK or data fault, and the search layer
+    // has already printed its warning while the artifact omits the value.
+    const verdict = evaluateFloor(
+      {
+        ...emptyContext(),
+        specs: [relevantHit(0.05, { filePath: 'docs/weak.md' }), relevantHit(-0.5)],
+      },
+      FLOOR,
+    );
+    expect(verdict.refuse).toBe(false);
+    expect(verdict.floorExempt).toBe(1);
+    // The weak sibling is still the only signal, and still below the floor.
+    expect(verdict.bestRelevance).toBeCloseTo(0.05, 10);
+    expect(verdict.withheld).toEqual([]);
+  });
 
   it('a NaN hit beside a genuinely weak one is not disclosed as a withheld candidate', () => {
     const verdict = evaluateFloor(

@@ -694,6 +694,11 @@ export interface GroundingFloorVerdict {
  * production caller supplies it from the dynamic `await import('@mmnto/totem')`
  * the rule prescribes. Injecting a different predicate here would put the
  * refusal gate and the run artifact back into disagreement about the same hit.
+ *
+ * `isInRange` precedes `floor` deliberately: mmnto-ai/totem#2758 (open, also on
+ * this file) makes `floor` OPTIONAL, and a required parameter cannot follow an
+ * optional one. This PR merges AFTER #2758 and is rebased onto it, so the order
+ * is chosen to let that change land without another signature churn.
  */
 export function evaluateGroundingFloor(
   context: RetrievedContext,
@@ -730,10 +735,18 @@ export function evaluateGroundingFloor(
     // with no relevance at all — exactly an FTS-only hit's shape — and counting
     // it as signal made `floorExempt` zero and disclosed a withheld `relevance
     // NaN` candidate beside a genuinely weak sibling. The RANGE arm closes the
-    // remaining gap: a finite out-of-range relevance (say 2, from a negative
-    // `_distance`) is dropped by the bundle builder too, so before this it
-    // could set `bestRelevance` above the floor and defeat the refusal for a
-    // run whose artifact carried no relevance for that hit at all.
+    // remaining gap: a finite out-of-range relevance is dropped by the bundle
+    // builder too, so judging it here left the record and the judgment
+    // disagreeing about the same hit.
+    //
+    // What that does to `refuse` is a LOOSENING, and only on the fault path.
+    // `refuse` requires `bestRelevance < floor`, so a HIGH out-of-range value
+    // (say 2) could never defeat a refusal — it already made `refuse` false by
+    // raising `bestRelevance`, and it still does by being exempt. The arm that
+    // moves is the NEGATIVE one: a free-text run whose only signal hits carry a
+    // negative relevance (a negative `_distance` — an SDK or data fault under
+    // l2) used to refuse, and now proceeds. The fault is not silent: the search
+    // layer prints its warning and the artifact omits the value.
     if (typeof relevance !== 'number' || !isInRange(relevance)) {
       floorExempt += 1;
       continue;
@@ -1042,7 +1055,7 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     // Dynamic, per mmnto-ai/totem#2339: a static value import from the core
     // barrel here would pull LanceDB into every CLI startup, `--help` included.
     const { isRelevanceInRange } = await import('@mmnto/totem');
-    const verdict = evaluateGroundingFloor(context, floor, isRelevanceInRange);
+    const verdict = evaluateGroundingFloor(context, isRelevanceInRange, floor);
     if (verdict.refuse) {
       const refusal = formatGroundingRefusal(anchor.ref, verdict, floor, context.lessons.length);
       throw new TotemError('GATE_INVALID', refusal.message, refusal.recoveryHint);
