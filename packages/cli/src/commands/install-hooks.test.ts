@@ -4923,7 +4923,7 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
       // is left open at the end of the draft. The cure must not blame that one.
       const r = judge(
         `${nineBodied({
-          [EDGE_CASES]: `${EDGE_CASES}${NL}${FENCE}${NL}${TEST_PLAN}${NL}${FENCE}${NL}`,
+          [EDGE_CASES]: `${EDGE_CASES}${NL}${NL}A real body line.${NL}${NL}${FENCE}${NL}${TEST_PLAN}${NL}${FENCE}${NL}`,
           [TEST_PLAN]: '',
         })}${NL}${FENCE}${NL}stray, never closed${NL}`,
       );
