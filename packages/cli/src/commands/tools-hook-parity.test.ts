@@ -78,6 +78,15 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     },
   );
 
+  it("this repo's config never softens the CI arm: hooks.legsOwed.enforce is not 'advisory' here", () => {
+    // The gate reads the knob in CI too, so `enforce: 'advisory'` would turn the
+    // hard step into a green no-op while the row's presence checks still read
+    // arm (a) as adopted (the leg's F5; Greptile on mmnto-ai/totem#2772). A repo
+    // adopting the CI arm leaves the knob unset or sets 'block'; this pins ours.
+    const config = fs.readFileSync(path.join(REPO_ROOT, 'totem.config.ts'), 'utf-8');
+    expect(config).not.toMatch(/enforce\s*:\s*['"]advisory['"]/);
+  });
+
   it('the lint workflow runs the built gate as a hard step before the --depth=1 fetch', () => {
     const workflow = fs.readFileSync(
       path.join(REPO_ROOT, '.github', 'workflows', 'lint.yml'),
