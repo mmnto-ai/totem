@@ -438,6 +438,35 @@ describe('gh-project-vocabulary', () => {
     );
     expect(lines[0]?.verdict.status).toBe('unknown');
     expect(lines[0]?.verdict.message).toContain('cannot derive the expected option sets');
+    expect(lines[0]?.verdict.message).toContain('expected-value-or-derivation text');
+  });
+
+  it('prefers the STRUCTURED expected-option-sets field over the prose, and names which canon it read', () => {
+    // The prose says one thing, the structured field another: the field wins
+    // (strategy's 2026-09-05 ruling — the field is the contract, the prose the
+    // pinned interim), and the line discloses the source it read.
+    const structured: ParityContract = {
+      ...mkContract('gh-project-vocabulary', 'Status = Todo | Done; Priority = Now | Next'),
+      expectedOptionSets: { Status: STATUS, Priority: PRIORITY },
+    };
+    const lines = detectNetworkPostureContract(
+      structured,
+      vocabCtx([
+        vocabSnapshot('mmnto-ai/totem', 'totem', BOUND, { outcome: 'ok', data: canonicalFields }),
+      ]),
+    );
+    expect(lines[0]?.verdict.status).toBe('pass');
+    expect(lines[0]?.verdict.message).toContain('Status 7/7, Priority 4/4');
+    expect(lines[0]?.verdict.message).toContain('(canon: expected-option-sets)');
+
+    // Prose-only rows say so too.
+    const prose = detectNetworkPostureContract(
+      vocabContract,
+      vocabCtx([
+        vocabSnapshot('mmnto-ai/totem', 'totem', BOUND, { outcome: 'ok', data: canonicalFields }),
+      ]),
+    );
+    expect(prose[0]?.verdict.message).toContain('(canon: expected-value-or-derivation text)');
   });
 
   it('is unknown when the project is null / inaccessible, when the fields overflow one page, or when the body is unshaped', () => {

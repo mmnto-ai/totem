@@ -168,6 +168,15 @@ const RawParityContractSchema = z.object({
   // row, never a dark manifest). Routing keys PRIMARILY on the contract-id
   // registry; this rides as metadata, never a verdict input.
   'probe-class': z.unknown().optional(),
+  // `expected-option-sets` (mmnto-ai/totem#2791) — the STRUCTURED canonical
+  // option sets of a `gh-project-vocabulary` row, `{ Status: [...], Priority: [...] }`,
+  // ruled the field's contract by strategy (2026-09-05; lands in the 0.1.44
+  // batch) with the `expected-value-or-derivation` prose grammar as the pinned
+  // interim. Max-tolerance boundary (`z.unknown()`) for the same manifest-wide-
+  // outage reason as the fields above; narrowed per-row in `mapContract`
+  // (mis-shaped → absent on that row, so the detector falls back to the prose
+  // parse, never a dark manifest).
+  'expected-option-sets': z.unknown().optional(),
 });
 
 /**
@@ -257,6 +266,15 @@ export interface ParityContract {
    * registry (CLI edge), not on this field.
    */
   probeClass?: string;
+  /**
+   * Optional STRUCTURED canonical option sets on a `gh-project-vocabulary` row
+   * (mmnto-ai/totem#2791): field name → its canonical option names, e.g.
+   * `{ Status: [...], Priority: [...] }`. When present the detector reads the
+   * canon from here; when absent it parses `expectedValueOrDerivation`'s prose
+   * (`Field = a | b; …`). Narrowed per-row: every key non-empty, every value a
+   * non-empty list of non-empty strings, else absent on that row.
+   */
+  expectedOptionSets?: Record<string, string[]>;
 }
 
 /** A fully parsed + validated parity manifest. */
@@ -439,6 +457,26 @@ function narrowStringArray(value: unknown): string[] | undefined {
   return undefined;
 }
 
+/**
+ * Narrow a structured `expected-option-sets` value to `{ field: [options] }`:
+ * a plain object whose every key is a non-empty string and every value a
+ * non-empty array of non-empty strings (members trimmed). Anything else — an
+ * array, an empty object, a field with an empty or non-string list — is absent
+ * on that row (the detector then falls back to the prose parse).
+ */
+function narrowOptionSets(value: unknown): Record<string, string[]> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const sets: Record<string, string[]> = {};
+  for (const [rawField, rawOptions] of Object.entries(value as Record<string, unknown>)) {
+    const field = rawField.trim();
+    if (field.length === 0) return undefined;
+    const options = narrowStringArray(rawOptions);
+    if (options === undefined) return undefined;
+    sets[field] = options;
+  }
+  return Object.keys(sets).length > 0 ? sets : undefined;
+}
+
 /** Map one validated raw contract to the camelCase public `ParityContract`. */
 function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContract {
   const manifestation = narrowString(raw.manifestation);
@@ -446,6 +484,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
   const vendorAdapter = narrowStringArray(raw['vendor-adapter']);
   const repoRoleVariance = narrowString(raw['repo-role-variance']);
   const probeClass = narrowString(raw['probe-class']);
+  const expectedOptionSets = narrowOptionSets(raw['expected-option-sets']);
   return {
     id: raw.id,
     dimension: raw.dimension,
@@ -465,6 +504,7 @@ function mapContract(raw: z.infer<typeof RawParityContractSchema>): ParityContra
     ...(vendorAdapter !== undefined ? { vendorAdapter } : {}),
     ...(repoRoleVariance !== undefined ? { repoRoleVariance } : {}),
     ...(probeClass !== undefined ? { probeClass } : {}),
+    ...(expectedOptionSets !== undefined ? { expectedOptionSets } : {}),
   };
 }
 

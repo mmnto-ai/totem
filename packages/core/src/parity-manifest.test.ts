@@ -341,6 +341,47 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
     for (const row of valid.manifest.contracts) expect('probeClass' in row).toBe(false);
   });
 
+  it('parses a structured expected-option-sets field into expectedOptionSets (mmnto-ai/totem#2791)', () => {
+    const withSets = PROMOTED_FIELDS_YAML.replace(
+      'probe-class: network-read-only',
+      'probe-class: network-read-only\n    expected-option-sets:\n      Status: [Todo, In Progress, Done]\n      Priority: [ Now , Next ]',
+    );
+    const result = parseParityManifest(withSets);
+    expect(result.status).toBe('ok');
+    if (result.status !== 'ok') return;
+    expect(result.manifest.contracts[0]!.expectedOptionSets).toEqual({
+      Status: ['Todo', 'In Progress', 'Done'],
+      Priority: ['Now', 'Next'],
+    });
+  });
+
+  it('narrows a mis-shaped expected-option-sets to absent (never a dark manifest), and omits it when unset', () => {
+    // An array where an object is expected, an empty list, and a non-string
+    // member each drop the field on that row so the detector falls back to the
+    // prose grammar; the manifest itself stays parseable.
+    for (const bad of [
+      'expected-option-sets: [Status, Priority]',
+      'expected-option-sets:\n      Status: []',
+      'expected-option-sets:\n      Status: [Todo, 42]',
+      'expected-option-sets: {}',
+    ]) {
+      const result = parseParityManifest(
+        PROMOTED_FIELDS_YAML.replace(
+          'probe-class: network-read-only',
+          `probe-class: network-read-only\n    ${bad}`,
+        ),
+      );
+      expect(result.status, bad).toBe('ok');
+      if (result.status !== 'ok') return;
+      expect('expectedOptionSets' in result.manifest.contracts[0]!, bad).toBe(false);
+    }
+
+    const valid = parseParityManifest(VALID_MANIFEST_YAML);
+    expect(valid.status).toBe('ok');
+    if (valid.status !== 'ok') return;
+    for (const row of valid.manifest.contracts) expect('expectedOptionSets' in row).toBe(false);
+  });
+
   it('respects honest-absent mapping for promoted optional fields (no keys, no defaults)', () => {
     const result = parseParityManifest(VALID_MANIFEST_YAML);
     expect(result.status).toBe('ok');

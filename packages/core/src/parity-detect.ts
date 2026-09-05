@@ -3719,10 +3719,20 @@ function projectVocabularyLines(
   contract: ParityContract,
   inScope: NetworkProbeRepoSnapshot[],
 ): LockContentLine[] {
-  const expected = parseExpectedOptionSets(contract.expectedValueOrDerivation);
+  // The canon's two homes, in order of preference (strategy's 2026-09-05
+  // ruling on mmnto-ai/totem#2791): the STRUCTURED `expected-option-sets` field
+  // is the contract; the `expected-value-or-derivation` prose grammar is the
+  // pinned interim while the field is absent. The line names which one it read.
+  const structured = contract.expectedOptionSets;
+  const expected: ReadonlyMap<string, readonly string[]> =
+    structured !== undefined
+      ? new Map(Object.entries(structured))
+      : parseExpectedOptionSets(contract.expectedValueOrDerivation);
+  const canonSource =
+    structured !== undefined ? 'expected-option-sets' : 'expected-value-or-derivation text';
   return inScope.map((repo) => ({
     lineName: `Parity: ${contract.id} [${repo.repoSlug}]`,
-    verdict: projectVocabularyVerdict(repo, expected),
+    verdict: projectVocabularyVerdict(repo, expected, canonSource),
   }));
 }
 
@@ -3730,6 +3740,7 @@ function projectVocabularyLines(
 function projectVocabularyVerdict(
   repo: NetworkProbeRepoSnapshot,
   expected: ReadonlyMap<string, readonly string[]>,
+  canonSource: string,
 ): ParityContractVerdict {
   const binding = repo.project;
   if (binding === undefined) {
@@ -3755,7 +3766,7 @@ function projectVocabularyVerdict(
   if (expected.size === 0) {
     return {
       status: 'unknown',
-      message: `${projectLabel}: cannot derive the expected option sets from the row's expected-value-or-derivation — cannot verify`,
+      message: `${projectLabel}: cannot derive the expected option sets from the row's ${canonSource} — cannot verify`,
     };
   }
   const surface = repo.surfaces.projectFields;
@@ -3796,7 +3807,7 @@ function projectVocabularyVerdict(
       `option order differs on ${drift.orderDiffers.join(', ')} (order is not governed)`,
     );
   }
-  const trailer = reported.length > 0 ? `; ${reported.join('; ')}` : '';
+  const trailer = `${reported.length > 0 ? `; ${reported.join('; ')}` : ''} (canon: ${canonSource})`;
   if (drift.conforming) {
     const sets = [...expected.entries()]
       .map(([field, options]) => `${field} ${options.length}/${options.length}`)
