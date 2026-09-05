@@ -12,6 +12,18 @@ jobs:
   lint:
     name: Totem Lint
     runs-on: ubuntu-latest
+    # The release train (mmnto-ai/totem#2779): TRUE only for the Version Packages
+    # PR that `changesets/action` rebuilds on every push to main. Both halves are
+    # load-bearing — the EXACT branch name (a prefix test is widenable by any
+    # author; GitHub compares strings case-insensitively for `==` and
+    # `startsWith` alike, so case is not what separates the two) AND the SAME
+    # repository (a fork's `head_ref` is the bare branch name, so a fork could
+    # name it too). This SELECTS the branch; it does not exempt it — the
+    # release-train check step below exempts only a diff with the release-train
+    # shape, so a writer who pushes anything else onto that branch meets the
+    # gate. Defined once, read by that one step.
+    env:
+      LEGS_GATE_RELEASE_TRAIN: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'changeset-release/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,6 +40,63 @@ jobs:
 
       - run: pnpm build
 
+      # The release train is OUTSIDE the legs-gate arm (mmnto-ai/totem#2779): the
+      # Version Packages PR that `changesets/action` rebuilds on every push to
+      # main (`changeset-release/<ref_name of that push>`, so `changeset-release/
+      # main` here — the action's default; release.yml passes no `branch:`)
+      # deletes the consumed `.changeset/**` files — an owed glob — and authors
+      # nothing: its text is the already-merged, already-legged changesets
+      # rendered into CHANGELOG.md and package.json. There is no judgment for a
+      # leg to falsify, no seat authored the diff, and no deposit can ride a
+      # branch the action force-pushes; unguarded, every VP-PR is red at the
+      # gate step and the cut cannot execute (2.1.0, mmnto-ai/totem#2778).
+      #
+      # Identity is NOT the branch name alone. The job-level
+      # LEGS_GATE_RELEASE_TRAIN (exact name AND same repository) only selects
+      # the branch; this step then runs tools/release-train-shape.sh, which
+      # writes `exempt=true` only when HEAD's diff against the base is EXACTLY
+      # the release train's work: every changed path is what the action writes
+      # (a deleted `.changeset/*.md`, an added or modified
+      # `packages/<pkg>/CHANGELOG.md` — a new package's first release ADDS one,
+      # PR mmnto-ai/totem#2514 — a modified `packages/<pkg>/package.json`;
+      # `packages/*` is the workspace glob, so the private root package.json is
+      # out of shape), the deleted changesets are exactly the pending set at the
+      # MERGE BASE (never a subset, never its README — the bypass Greptile named
+      # on mmnto-ai/totem#2780: deleting one pending changeset and nothing
+      # else), a CHANGELOG was rendered whenever changesets were consumed, and
+      # with nothing pending only an empty diff is exempt. What it proves is
+      # that the OWED changes (the changeset deletions) are precisely the
+      # train's consumption; the CONTENT of CHANGELOG.md and package.json is not
+      # an owed path and is not checked — the cut sensor's remit. That is
+      # the shape of every Version Packages PR to date: 259 by head ref, 2,646
+      # file entries, zero out of shape (the leg's census; this seat's own
+      # read: 252 PRs, 2,572 entries, the same). The release PR is PAT-actored
+      # by design (release.yml), so no actor test could authenticate it; the
+      # diff can. The trust boundary is the arm's own: the deposit a feature PR
+      # commits is author-written too, so the floor was never a defence against
+      # a writer forging evidence — it is the sensor that a leg read the head.
+      # The script's whole-line anchors keep a path carrying whitespace out of
+      # shape; `shell: bash` gives `-o pipefail` and `set -euo pipefail` in both
+      # the step and the script: a fetch or diff that FAILS aborts this step and
+      # the job — fail-closed. An EMPTY diff with nothing pending is exempt, as
+      # the gate itself would derive not-owed on it. Every filter consumes its
+      # whole input (`grep`, never `grep -q` under pipefail — a `-q` early exit
+      # SIGPIPEs the echo on a large diff and the condition reads false). Either
+      # outcome is announced with a STATIC annotation (never-skip-silently, as
+      # the advisory annotation below; no derived text rides an annotation) and
+      # the reasons print to the log. The cases are executed, not asserted:
+      # packages/cli/src/commands/release-train-shape.test.ts. The `totem lint`
+      # step still runs either way.
+      - name: release-train check (the legs gate is skipped on the Version Packages PR only when its diff has the release-train shape)
+        id: release_train
+        if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch origin "$BASE_REF"
+          bash tools/release-train-shape.sh "origin/$BASE_REF"
       # HARD gate — the review-leg floor (mmnto-ai/totem#2771; doctrine
       # `model-tiering.md` § The gate; the `legs-gate` parity row, arm (a)).
       # A pull request whose diff touches a path in `hooks.legsOwed.globs` must
@@ -37,7 +106,10 @@ jobs:
       # unanswered) and exit 2 (could not derive) fail the check; not owed and
       # evidence exit 0. It holds whatever the local hook tier is, and
       # `--no-verify` never reaches it. `Totem Lint` is a required check on main
-      # (ruleset `main-required-checks`), so red blocks the merge.
+      # (ruleset `main-required-checks`), so red blocks the merge. The only
+      # skip is the release train above, and only when the check step derived
+      # the release-train shape: a skipped check step writes no output, and
+      # `'' != 'true'` runs the gate — fail-closed.
       #
       # Placed BEFORE the lint step's `--depth=1` fetch on purpose: that fetch
       # SHALLOWS the full checkout (`.git/shallow` appears — measured on a local
@@ -53,6 +125,7 @@ jobs:
       # only where a global totem masks the miss (measured; the leg's F1 on
       # mmnto-ai/totem#2771). On a runner it would fail every pull request.
       - name: totem legs gate (HARD — the review-leg floor)
+        if: ${{ steps.release_train.outputs.exempt != 'true' }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |

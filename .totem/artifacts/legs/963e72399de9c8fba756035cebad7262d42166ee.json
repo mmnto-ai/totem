@@ -1,0 +1,215 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "963e72399de9c8fba756035cebad7262d42166ee",
+  "readAt": "2026-09-05T08:11:41Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 68,
+      "claim": "The pass-1 guard `if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}` keyed the exemption on a value the PR author chooses: any PR from a branch named `changeset-release/<anything>` (GitHub's startsWith is case-insensitive) skipped the hard floor, and a fork's head_ref is the bare branch name, so a fork could name it too.",
+      "counterexample": "Open a PR to main from branch `changeset-release/tweak` touching doctrine/** with no deposit: the step is skipped, `Totem Lint` is green, ruleset `main-required-checks` is satisfied. FOLDED (f8a1a109): a job-level `LEGS_GATE_RELEASE_TRAIN` predicate — exact name `changeset-release/main` AND `github.event.pull_request.head.repo.full_name == github.repository` — defined once and read by the notice step (== 'true') and the gate step (!= 'true')."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 90,
+      "claim": "The parity test that keeps the gate step hard asserted only `not.toContain('continue-on-error')` and `not.toContain('--depth=1')` on the step slice, so any `if:` on the step — a prefix match, `if: false`, an author-controlled value — passed the suite while softening the floor.",
+      "counterexample": "Replace the guard with `if: false`: the full suite still passes. FOLDED (f8a1a109): `readLintWorkflow()` / `gateStepOf()` helpers and a new test that asserts the exact env definition, exactly one `if:` on the gate step equal to the predicate's negation, no `startsWith(`, the notice step preceding the gate on the same predicate, and the notice title. The new test fails on both the pre-fold workflow and main's (no env definition, a different or absent `if:`)."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 98,
+      "claim": "The skip was silent, against this file's own never-skip-silently posture (the advisory annotation step exists for exactly that): a green `Totem Lint` on a release-train PR was indistinguishable from one where the floor ran.",
+      "counterexample": "FOLDED (f8a1a109): a `release-train notice` step gated on the same predicate echoes `::notice title=totem legs gate SKIPPED::…` before the gate step."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 83,
+      "claim": "The Reach disclosure said the CI arm is totem's enforcement without naming the one branch now outside it; `docs/wiki/**` is itself an owed glob.",
+      "counterexample": "FOLDED (f8a1a109): one sentence appended to the Reach bullet naming the release train (same repository, exact name), the notice, and that `totem lint` still runs there (mmnto-ai/totem#2779)."
+    },
+    {
+      "id": "p2-f1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 83,
+      "claim": "The fold made this PR legs-owed (docs/wiki/**) and it carried no deposit: its own gate step reds `Totem Lint` (observed: run 33952349797, exit 3, head 25981722 = the merge ref of f8a1a109).",
+      "counterexample": "ANSWERED by this deposit, keyed to f8a1a109 (the head pass 2 read); the pass-2 fold and the deposit commit follow it as descendants."
+    },
+    {
+      "id": "p2-f2",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 17,
+      "claim": "The comment's rationale for the exact-name half was false at source: GitHub compares strings case-insensitively for `==` and `startsWith` alike (expressions reference), so case-insensitivity does not distinguish the exact test from the prefix test; only prefix-widening does.",
+      "counterexample": "FOLDED (pass-2 fold): the job-env comment and the test comment say `==` and `startsWith` are both case-insensitive and that case is not the distinction."
+    },
+    {
+      "id": "p2-f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 139,
+      "claim": "The env-predicate assertion read the whole workflow text, comments included: a `#` decoy carrying the exact string above a prefix predicate passed the new test (constructed and verified by the leg).",
+      "counterexample": "FOLDED: `lintJobHeaderOf()` slices the `lint` job header to its `steps:` key with comment lines dropped (shared `dropComments`), and the assertion reads that slice."
+    },
+    {
+      "id": "p2-f4",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 16,
+      "claim": "A residual skip path remains: a writer with push access to this repository who names a branch exactly `changeset-release/main` (any case) skips the hard step; the comment implied closure.",
+      "counterexample": "DISCLOSED in the job-env comment as the residual, with its trust boundary (the same trust that lets that writer merge). Not closed: a title or actor predicate is author-controlled too (the VP-PR's author is the PAT owner, the same identity as human seats)."
+    },
+    {
+      "id": "p2-f5",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 67,
+      "claim": "The comment said `changeset-release/<base>` is the action's default; at the pinned SHA it is `changeset-release/${github.ref_name}` of the RELEASE workflow's push (main), which coincides with the PR base here.",
+      "counterexample": "FOLDED: the comment now reads `changeset-release/<ref_name of that push>`, so `changeset-release/main` here."
+    },
+    {
+      "id": "p2-f6",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 40,
+      "claim": "The 38-line HARD-gate comment block sat above the notice step and read as that step's leading comment.",
+      "counterexample": "FOLDED: the release-train paragraph sits above the notice step; the HARD-gate block sits directly above the gate step, with one added clause naming the release train as its only skip."
+    },
+    {
+      "id": "p2-f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 90,
+      "claim": "Pre-existing blind spot: `node … legs gate || true` appended to the gate's run line passed every assertion; only `continue-on-error` was pinned.",
+      "counterexample": "FOLDED: the hard-step test now asserts the run block is exactly the base fetch and the bare gate line."
+    },
+    {
+      "id": "p3-f1",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 59,
+      "claim": "Pass 3 (on 5b271cb5, the shape-check fold that answered Greptile's P1): an M-only CHANGELOG arm judges a legitimate Version Packages diff out of shape — a new package's first release ADDS its CHANGELOG (PR mmnto-ai/totem#2514 in history), so the next cut that adds a package would red exactly as mmnto-ai/totem#2778 did.",
+      "counterexample": "FOLDED (963e7239): the CHANGELOG arm admits A and M; executed over VP + `A packages/newpkg/CHANGELOG.md` → exempt."
+    },
+    {
+      "id": "p3-f2",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 65,
+      "claim": "The comment claimed a diff that cannot be derived fails the step, but the step had no `shell: bash` and so no pipefail: a failed `git diff` piped into the filter yielded an empty list, `exempt=true`, gate skipped — fail-open.",
+      "counterexample": "FOLDED (963e7239): `shell: bash` plus `set -euo pipefail`, the diff captured in its own assignment before filtering; a failed diff in a fresh bash process exits 128 before the next line (executed)."
+    },
+    {
+      "id": "p3-f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 212,
+      "claim": "The test asserted the presence of both `exempt=` writes and both annotations but not which branch writes which: swapping the branches passed every assertion while the gate would then be skipped exactly when the diff is out of shape.",
+      "counterexample": "FOLDED (963e7239): `runLinesOf()` pins the check step's run block exactly, in order."
+    },
+    {
+      "id": "p3-f4",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 84,
+      "claim": "awk's default field splitting exempted `M sub/CHANGELOG.md more` (a whitespace-carrying path), so an owed path named with a space could be exempted.",
+      "counterexample": "FOLDED (963e7239): whole-line anchored grep -E patterns; executed: `M sub/CHANGELOG.md more` and `M doctrine/package.json rules.md` are kept."
+    },
+    {
+      "id": "p3-f5",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 84,
+      "claim": "`D .changeset/README.md` matched the deleted-changeset pattern and was exempted; the action never deletes it and it is an owed path.",
+      "counterexample": "FOLDED (963e7239, re-folded in the post-convergence commit): a README-deletion line is appended to the out-of-shape list; executed: kept, including under a 560 KB diff."
+    },
+    {
+      "id": "p3-f6",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 90,
+      "claim": "The `::warning` interpolated a multi-line list; only the first line lands in the annotation.",
+      "counterexample": "FOLDED (963e7239): the list is flattened to one line with `paste`."
+    },
+    {
+      "id": "p3-f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 57,
+      "claim": "`stepNamed` located the step before dropping comments, so a `#` line carrying `- name: release-train check` earlier in the file could anchor the slice.",
+      "counterexample": "FOLDED (963e7239): comments are dropped first in `stepNamed` and `lintJobHeaderOf`."
+    },
+    {
+      "id": "p3-f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/tools-hook-parity.test.ts",
+      "line": 96,
+      "claim": "`dropComments` would silently delete a `#`-leading line inside a `run:` block scalar.",
+      "counterexample": "DISCLOSED, no change: no asserted line and no line of either run block begins with `#`; the exact run-line pin would surface one."
+    },
+    {
+      "id": "p4-f1",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 84,
+      "claim": "Pass 4 (on 963e7239): the README guard used `echo \"$diff\" | grep -q` under pipefail; once the diff exceeds the pipe buffer, grep -q exits on the match, echo takes SIGPIPE, the pipeline reads 141 and the condition false — the README deletion is dropped as in-shape (measured at 20,000 lines; latent, the largest VP diff has 16).",
+      "counterexample": "FOLDED (post-convergence commit): a `grep -E` that consumes its whole input captures README lines into a variable appended to the list; executed at 560,023 bytes: kept."
+    },
+    {
+      "id": "p4-f2",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 60,
+      "claim": "The comment quantified the shape over 60 Version Packages PRs; the population selected by the predicate is 259 by head ref (2,646 file entries, statuses A/D/M only, zero out of shape — the leg's census).",
+      "counterexample": "FOLDED: the comment names the leg's census and this seat's own read (252 PRs, 2,572 entries, the same)."
+    },
+    {
+      "id": "p4-f3",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 69,
+      "claim": "'never an empty list read as in shape' overstated: an EMPTY diff is exempt (the failed derivation is what aborts).",
+      "counterexample": "FOLDED: the comment says a failing fetch or diff aborts and an empty diff is exempt, as the gate itself would derive not-owed."
+    },
+    {
+      "id": "p4-f4",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 84,
+      "claim": "The package.json arm admitted six tracked paths the action never writes (services/, spikes/, examples/, two fixtures, the private root package.json).",
+      "counterexample": "FOLDED: both arms narrow to `packages/<one segment>/` (the workspace glob); a census of every merged VP-PR from the release branch shows every CHANGELOG and package.json path under it; executed: the six paths and the root CHANGELOG are kept."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "p2-f1",
+    "p2-f2",
+    "p2-f3",
+    "p2-f5",
+    "p2-f6",
+    "p2-f7",
+    "p3-f1",
+    "p3-f2",
+    "p3-f3",
+    "p3-f4",
+    "p3-f5",
+    "p3-f6",
+    "p3-f7",
+    "p4-f1",
+    "p4-f2",
+    "p4-f3",
+    "p4-f4"
+  ],
+  "verdict": "Pass 1 (origin/main...bcfc26b5): no BLOCKING; F1 and F2 MATERIAL, F3 and F4 MINOR; the five assertions of the diff held under attack (head_ref always set on pull_request-only triggers and fail-closed if a trigger is added; changeset-release/<ref_name> is changesets/action's default at the pinned SHA and release.yml passes no branch:; the skipped fetch is not load-bearing, the lint step fetches for itself; a feature PR still fails; prepareBranch resets the version branch to the new main sha so the regenerated VP-PR re-runs under the amended workflow); `Totem Lint` is the only red check on mmnto-ai/totem#2778 and it turned red exactly at the gate's introduction. Convergence NOT named on pass 1. Pass 2, re-armed on the fold (bcfc26b5..f8a1a109): no BLOCKING; pass-1 F1–F4 all CLOSED; the Actions semantics verified against primary docs (env available in step if:, github in job env, boolean casts to exactly 'true'/'false', null degrades fail-closed, a fork's head.repo.full_name is the fork so the gate runs, the new test fails on both prior workflows: 6 and 5 assertions); seven items, two MATERIAL (the missing deposit; a false case-insensitivity rationale), the rest text and test scoping — six folded, one disclosed as a residual (p2-f4). Pass 2 named convergence, but its disclosed residual (a repo writer pushing owed changes onto the release branch) was named reachable by Greptile's P1 and answered by a mechanism: the release train is identified by its diff SHAPE (5b271cb5), so the leg re-armed. Pass 3 (5b271cb5..): no BLOCKING; three MATERIAL (an ADDED CHANGELOG in history, mmnto-ai/totem#2514; fail-open without pipefail; the branch order unpinned) and five MINOR, all folded (963e7239); convergence NOT named. Pass 4 (963e7239, the head this deposit is keyed to): no BLOCKING; CONVERGENCE NAMED on the CI mechanism, the shape validated against the full population of release-branch VP-PRs (259 by head ref, 2,646 file entries, zero out of shape); one latent MATERIAL (grep -q SIGPIPE under pipefail, unreachable at today's diff sizes) and three accuracy items, folded in the post-convergence commit with executed probes in a fresh bash process (real VP diff exempt; ADDED CHANGELOG exempt; deleted README kept, including at 560 KB; non-workspace and root package.json/CHANGELOG kept; whitespace path kept; empty diff exempt; failed diff aborts), no re-arm. Bookkeeping (bot round on 4f197868): p3-f8 removed from folded — it is disclosed, not folded."
+}
