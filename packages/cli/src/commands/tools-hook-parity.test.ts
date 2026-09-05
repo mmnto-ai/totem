@@ -207,16 +207,19 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     );
     // The selector only picks the branch. The check step, gated on it, derives
     // the diff's SHAPE and exempts only what the action writes — a deleted
-    // .changeset/*.md (never its README), an added or modified CHANGELOG.md (a
-    // new package's first release ADDS one: mmnto-ai/totem#2514), a modified
-    // package.json — so a writer who pushes anything else onto the release
-    // branch meets the gate (Greptile's P1 on mmnto-ai/totem#2780). Every
-    // assertion reads the check step's own slice, and the run block is pinned
-    // EXACTLY, in order: which branch writes `exempt=true` is the mechanism
-    // (swapping the branches passed a looser test — the leg's F3), `set -euo
-    // pipefail` under `shell: bash` is what makes a failed diff abort instead
-    // of reading as an empty, in-shape list (F2), and the whole-line anchors
-    // are what keep a whitespace-carrying path out of shape (F4).
+    // .changeset/*.md (never its README), an added or modified
+    // packages/<pkg>/CHANGELOG.md (a new package's first release ADDS one:
+    // mmnto-ai/totem#2514), a modified packages/<pkg>/package.json — so a
+    // writer who pushes anything else onto the release branch meets the gate
+    // (Greptile's P1 on mmnto-ai/totem#2780). Every assertion reads the check
+    // step's own slice, and the run block is pinned EXACTLY, in order: which
+    // branch writes `exempt=true` is the mechanism (swapping the branches
+    // passed a looser test — the leg's F3), `set -euo pipefail` under
+    // `shell: bash` is what makes a failed diff abort instead of reading as
+    // an empty, in-shape list (F2), the whole-line anchors are what keep a
+    // whitespace-carrying path out of shape (F4), and every filter consumes
+    // its whole input — a `grep -q` under pipefail SIGPIPEs the echo on a
+    // large diff and the README guard reads false (pass-4 F1).
     const check = stepNamed(workflow, RELEASE_TRAIN_STEP_NAME);
     expect(check).not.toBe('');
     expect(check).toContain('id: release_train');
@@ -226,9 +229,9 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
       'set -euo pipefail',
       'git fetch origin "$BASE_REF"',
       'diff=$(git diff --name-status "origin/$BASE_REF...HEAD")',
-      `other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+([^[:space:]]*/)?CHANGELOG[.]md$|^M[[:space:]]+([^[:space:]]*/)?package[.]json$' || true)`,
-      `if echo "$diff" | grep -q -E '^D[[:space:]]+[.]changeset/README[.]md$'; then other="$other D .changeset/README.md"; fi`,
-      `other=$(echo "$other" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)`,
+      `other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' || true)`,
+      `readme=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/README[.]md$' || true)`,
+      `other=$(echo "$other" "$readme" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)`,
       'if [ -n "$other" ]; then',
       'echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"',
       'echo "exempt=false" >> "$GITHUB_OUTPUT"',

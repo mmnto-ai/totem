@@ -56,20 +56,27 @@ jobs:
       # the branch; this step then derives the diff's SHAPE, and the gate is
       # skipped only when every changed path is what the action writes — a
       # deleted `.changeset/*.md` (never its README), an added or modified
-      # `CHANGELOG.md` (a new package's first release ADDS one: PR
-      # mmnto-ai/totem#2514), a modified `package.json` — the shape of all 60
-      # Version Packages PRs to date. A repo writer who pushes anything else
-      # onto the release branch — an owed doctrine file, a source file, an
-      # ADDED changeset — meets the gate (Greptile's P1 on mmnto-ai/totem#2780).
-      # The release PR is PAT-actored by design (release.yml), so no actor test
-      # could authenticate it; the diff shape can. The patterns are anchored on
-      # the WHOLE `name-status` line, so a path carrying whitespace never
-      # matches and meets the gate; `shell: bash` gives `-o pipefail` and
-      # `set -euo pipefail` says so in the script, so a fetch or diff that
-      # fails aborts this step and the job — fail-closed, never an empty list
-      # read as "in shape". Either outcome is announced (never-skip-silently,
-      # as the advisory annotation below). The `totem lint` step still runs
-      # either way.
+      # `packages/<pkg>/CHANGELOG.md` (a new package's first release ADDS one:
+      # PR mmnto-ai/totem#2514), a modified `packages/<pkg>/package.json` —
+      # `packages/*` being the workspace glob, so the private root package.json
+      # and every non-workspace package.json are out of shape. That is the shape
+      # of every Version Packages PR to date: 259 by head ref, 2,646 file
+      # entries, zero out of shape (the leg's census on mmnto-ai/totem#2780;
+      # this seat's own read: 252 PRs, 2,572 entries, the same). A repo writer
+      # who pushes anything else onto the release branch — an owed doctrine
+      # file, a source file, an ADDED changeset — meets the gate (Greptile's P1
+      # on mmnto-ai/totem#2780). The release PR is PAT-actored by design
+      # (release.yml), so no actor test could authenticate it; the diff shape
+      # can. The patterns are anchored on the WHOLE `name-status` line, so a
+      # path carrying whitespace never matches and meets the gate. `shell: bash`
+      # gives `-o pipefail` and `set -euo pipefail` says so in the script: a
+      # fetch or diff that FAILS aborts this step and the job — fail-closed. An
+      # EMPTY diff is exempt, as the gate itself would derive not-owed on it.
+      # Every filter consumes its whole input (`grep`, never `grep -q`, under
+      # pipefail — a `-q` early exit SIGPIPEs the echo on a large diff and the
+      # condition reads false). Either outcome is announced (never-skip-
+      # silently, as the advisory annotation below). The `totem lint` step
+      # still runs either way.
       - name: release-train check (the legs gate is skipped on the Version Packages PR only when its diff has the release-train shape)
         id: release_train
         if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}
@@ -80,9 +87,9 @@ jobs:
           set -euo pipefail
           git fetch origin "$BASE_REF"
           diff=$(git diff --name-status "origin/$BASE_REF...HEAD")
-          other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+([^[:space:]]*/)?CHANGELOG[.]md$|^M[[:space:]]+([^[:space:]]*/)?package[.]json$' || true)
-          if echo "$diff" | grep -q -E '^D[[:space:]]+[.]changeset/README[.]md$'; then other="$other D .changeset/README.md"; fi
-          other=$(echo "$other" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)
+          other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' || true)
+          readme=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/README[.]md$' || true)
+          other=$(echo "$other" "$readme" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)
           if [ -n "$other" ]; then
             echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"
             echo "exempt=false" >> "$GITHUB_OUTPUT"
