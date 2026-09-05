@@ -12,6 +12,15 @@ jobs:
   lint:
     name: Totem Lint
     runs-on: ubuntu-latest
+    # The release train (mmnto-ai/totem#2779): TRUE only for the Version Packages
+    # PR that `changesets/action` rebuilds on every push to main. Both halves are
+    # load-bearing — the EXACT branch name (a prefix test is widenable by any
+    # author, and `startsWith` is case-insensitive) AND the SAME repository (a
+    # fork's `head_ref` is the bare branch name, so a fork could name it too).
+    # Defined once and read by two steps below, so the skip and its notice
+    # cannot drift apart.
+    env:
+      LEGS_GATE_RELEASE_TRAIN: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'changeset-release/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,17 +64,23 @@ jobs:
       #
       # The release train is OUTSIDE the arm (mmnto-ai/totem#2779): the Version
       # Packages PR that `changesets/action` rebuilds on every push to main
-      # (`changeset-release/<base>`) deletes the consumed `.changeset/**` files —
-      # an owed glob — and authors nothing: its text is the already-merged,
-      # already-legged changesets rendered into CHANGELOG.md and package.json.
-      # There is no judgment for a leg to falsify, no seat authored the diff,
-      # and no deposit can ride a branch the action force-pushes; unguarded,
-      # every VP-PR is red at this step and the cut cannot execute (2.1.0,
-      # mmnto-ai/totem#2778). `github.head_ref` is always set here — this
-      # workflow triggers on pull_request only. The `totem lint` step below
+      # (`changeset-release/<base>`, the action's default — release.yml passes no
+      # `branch:`) deletes the consumed `.changeset/**` files — an owed glob —
+      # and authors nothing: its text is the already-merged, already-legged
+      # changesets rendered into CHANGELOG.md and package.json. There is no
+      # judgment for a leg to falsify, no seat authored the diff, and no deposit
+      # can ride a branch the action force-pushes; unguarded, every VP-PR is red
+      # at this step and the cut cannot execute (2.1.0, mmnto-ai/totem#2778).
+      # The guard is the job-level LEGS_GATE_RELEASE_TRAIN (exact name AND same
+      # repository); the notice step makes the skip legible (never-skip-
+      # silently, as the advisory annotation below). The `totem lint` step
       # still runs on the release train.
+      - name: release-train notice (the legs gate is skipped on the Version Packages PR)
+        if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}
+        run: |
+          echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — it deletes consumed changesets and authors nothing, so the review-leg floor does not apply to it (mmnto-ai/totem#2779). The totem lint step still runs."
       - name: totem legs gate (HARD — the review-leg floor)
-        if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+        if: ${{ env.LEGS_GATE_RELEASE_TRAIN != 'true' }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
