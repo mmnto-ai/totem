@@ -16,21 +16,34 @@
 #      what `changesets/action` writes (`packages/*` is the workspace glob), the
 #      patterns anchored on the WHOLE name-status line so a path carrying
 #      whitespace never matches;
-#   2. the deleted changesets are EXACTLY the pending changesets on <base-ref>
-#      (README excluded from pending, so deleting it is a mismatch) — the train
-#      consumes all of them, never a subset, and it deletes nothing else;
-#   3. when changesets were pending, at least one CHANGELOG was rendered.
+#   2. the deleted changesets are EXACTLY the pending changesets at the merge
+#      base (README excluded from pending, so deleting it is a mismatch) — the
+#      train consumes all of them, never a subset, and it deletes nothing else;
+#   3. when changesets were pending, at least one CHANGELOG was rendered; when
+#      nothing was pending, the diff is empty — the train writes nothing when it
+#      has nothing to consume.
+# What is NOT checked, by design: the CONTENT of the rendered CHANGELOG.md and
+# package.json. Neither is an owed path (hooks.legsOwed.globs), so the legs floor
+# never judged them; their correctness is the cut sensor's remit at the cut word.
+# What this script proves is that the OWED changes in the diff — the changeset
+# deletions — are precisely the train's consumption of the pending set.
 # An empty diff with no pending changesets is exempt: there is nothing to judge,
 # and the gate itself derives not-owed on it. Every filter consumes its whole
 # input (`grep`, never `grep -q`): a `-q` early exit SIGPIPEs the echo on a large
-# diff under pipefail and the condition reads false.
+# diff under pipefail and the condition reads false. Rename detection is OFF so a
+# deleted changeset whose text resembles an added CHANGELOG is never paired into
+# an R line the shape would reject.
 set -euo pipefail
 
 base="${1:?usage: release-train-shape.sh <base-ref>}"
 out="${GITHUB_OUTPUT:-/dev/stdout}"
 
-diff=$(git diff --name-status "$base...HEAD")
-pending=$(git ls-tree --name-only "$base" .changeset/ | grep -E '^[.]changeset/[^/]+[.]md$' | grep -v -E '^[.]changeset/README[.]md$' | sort || true)
+# The pending set is read at the MERGE BASE — the commit the diff is taken
+# against — so a changeset merged to main after the action regenerated the
+# branch cannot appear in one list and not the other.
+mergeBase=$(git merge-base "$base" HEAD)
+diff=$(git diff --name-status --no-renames "$mergeBase" HEAD)
+pending=$(git ls-tree --name-only "$mergeBase" .changeset/ | grep -E '^[.]changeset/[^/]+[.]md$' | grep -v -E '^[.]changeset/README[.]md$' | sort || true)
 deleted=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$' | sed -E 's/^D[[:space:]]+//' | sort || true)
 other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' | grep -v -E '^[[:space:]]*$' || true)
 changelogs=$(echo "$diff" | grep -c -E '^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$' || true)
@@ -42,13 +55,17 @@ if [ -n "$other" ]; then
   bad=1
 fi
 if [ "$deleted" != "$pending" ]; then
-  echo "release-train check: the deleted changesets are not exactly the pending set on $base"
-  echo "  pending on $base: $(echo "$pending" | paste -sd ' ' -)"
-  echo "  deleted in HEAD:  $(echo "$deleted" | paste -sd ' ' -)"
+  echo "release-train check: the deleted changesets are not exactly the pending set at the merge base $mergeBase"
+  echo "  pending at the merge base: $(echo "$pending" | paste -sd ' ' -)"
+  echo "  deleted in HEAD:           $(echo "$deleted" | paste -sd ' ' -)"
   bad=1
 fi
 if [ -n "$pending" ] && [ "$changelogs" -eq 0 ]; then
   echo "release-train check: changesets consumed but no CHANGELOG rendered"
+  bad=1
+fi
+if [ -z "$pending" ] && [ -n "$diff" ]; then
+  echo "release-train check: nothing pending at the merge base, yet the diff is not empty — the train writes nothing when it has nothing to consume"
   bad=1
 fi
 

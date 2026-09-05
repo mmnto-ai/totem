@@ -16,6 +16,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const SCRIPT = path.join(REPO_ROOT, 'tools', 'release-train-shape.sh');
+// A changeset body long enough that git's rename detection would pair its
+// deletion with an ADDED file of the same text (the first-release case below
+// reuses it verbatim): the script disables rename detection, so the pair must
+// still read as D + A and stay exempt (the leg's F3 on mmnto-ai/totem#2780).
+const CHANGESET_A = [
+  '---',
+  '"@example/y": minor',
+  '---',
+  '',
+  'Add the first feature of package y, with enough prose that a rename',
+  'heuristic would call the deleted changeset and the new CHANGELOG the same file.',
+  '',
+].join(String.fromCharCode(10));
 
 // A POSIX bash that is not WSL (a WSL bash cannot run against a Windows temp
 // path; the ubuntu and macos legs of the matrix run these cases regardless).
@@ -76,7 +89,7 @@ describe.skipIf(!BASH_OK)('tools/release-train-shape.sh (mmnto-ai/totem#2779)', 
     // carrying whitespace.
     write(repo, '.changeset/README.md', 'readme');
     write(repo, '.changeset/config.json', '{}');
-    write(repo, '.changeset/a.md', 'a');
+    write(repo, '.changeset/a.md', CHANGESET_A);
     write(repo, '.changeset/b.md', 'b');
     write(repo, 'packages/x/package.json', '{"version":"1.0.0"}');
     write(repo, 'packages/x/CHANGELOG.md', '# x');
@@ -129,14 +142,30 @@ describe.skipIf(!BASH_OK)('tools/release-train-shape.sh (mmnto-ai/totem#2779)', 
     expect(r.log).toContain('::notice title=totem legs gate SKIPPED::');
   });
 
-  it("a new package's first release ADDS its CHANGELOG (mmnto-ai/totem#2514) — exempt", () => {
+  it("a new package's first release ADDS its CHANGELOG (mmnto-ai/totem#2514), even one rename detection would pair with the deleted changeset — exempt", () => {
     const r = scenario('base', () => {
       consumeAll();
-      write(repo, 'packages/y/CHANGELOG.md', '# y\n\n## 0.1.0');
+      write(repo, 'packages/y/CHANGELOG.md', CHANGESET_A);
       write(repo, 'packages/y/package.json', '{"version":"0.1.0"}');
     });
     expect(r.status).toBe(0);
     expect(r.exempt).toBe('exempt=true');
+    expect(r.log).not.toContain('paths outside the shape');
+  });
+
+  it('nothing pending at the merge base, yet CHANGELOG and package.json rewritten — not exempt (the train writes nothing when it has nothing to consume)', () => {
+    const r = scenario('base-empty', () => {
+      write(repo, 'packages/x/CHANGELOG.md', '# TOTALLY FABRICATED');
+      write(repo, 'packages/x/package.json', '{"version":"9.9.9"}');
+    });
+    expect(r.status).toBe(0);
+    expect(r.exempt).toBe('exempt=false');
+    expect(r.log).toContain('nothing pending at the merge base');
+  });
+
+  it('the script parses (bash -n) — the only shell gate this repo runs on it', () => {
+    const r = spawnSync('bash', ['-n', SCRIPT], { encoding: 'utf-8' });
+    expect(r.status).toBe(0);
   });
 
   it('deleting a SUBSET of the pending changesets (the bypass Greptile named) — not exempt', () => {
@@ -162,7 +191,10 @@ describe.skipIf(!BASH_OK)('tools/release-train-shape.sh (mmnto-ai/totem#2779)', 
       renderX();
       fs.rmSync(path.join(repo, '.changeset/README.md'));
     });
+    expect(r.status).toBe(0);
     expect(r.exempt).toBe('exempt=false');
+    // README is never pending, so its deletion is a mismatch of rule 2.
+    expect(r.log).toContain('not exactly the pending set');
   });
 
   it('the train plus an added owed doctrine file — not exempt', () => {
@@ -181,7 +213,10 @@ describe.skipIf(!BASH_OK)('tools/release-train-shape.sh (mmnto-ai/totem#2779)', 
       renderX();
       write(repo, 'package.json', '{"private":true,"x":1}');
     });
+    expect(r.status).toBe(0);
     expect(r.exempt).toBe('exempt=false');
+    expect(r.log).toContain('paths outside the shape');
+    expect(r.log).toMatch(/^M\s+package\.json$/m);
   });
 
   it('the train plus a path carrying whitespace — not exempt', () => {
@@ -190,12 +225,17 @@ describe.skipIf(!BASH_OK)('tools/release-train-shape.sh (mmnto-ai/totem#2779)', 
       renderX();
       write(repo, 'packages/x/CHANGELOG.md more', 'changed');
     });
+    expect(r.status).toBe(0);
     expect(r.exempt).toBe('exempt=false');
+    expect(r.log).toContain('paths outside the shape');
+    expect(r.log).toContain('packages/x/CHANGELOG.md more');
   });
 
   it('an empty diff while changesets are pending — not exempt', () => {
     const r = scenario('base', () => undefined);
+    expect(r.status).toBe(0);
     expect(r.exempt).toBe('exempt=false');
+    expect(r.log).toContain('not exactly the pending set');
   });
 
   it('an empty diff with nothing pending — exempt (nothing to judge)', () => {
