@@ -38,6 +38,11 @@ describe('DescribeProjectOutputSchema backward compatibility', () => {
     project: 'test',
     tier: 'standard' as const,
     rules: 10,
+    rulesCompiled: 12,
+    rulesArchived: 2,
+    rulesUntested: 0,
+    rulesPendingVerification: 0,
+    rulesSource: 'compiled-rules' as const,
     lessons: 5,
     targets: ['**/*.ts (code/typescript-ast)'],
     partitions: { core: ['packages/core/'] },
@@ -58,7 +63,13 @@ describe('DescribeProjectOutputSchema backward compatibility', () => {
       },
       gitState: { branch: 'main', uncommittedFiles: [], truncated: false },
       packageVersions: { '@mmnto/cli': '1.14.10' },
-      ruleCounts: { active: 10, archived: 2, nonCompilable: 3 },
+      ruleCounts: {
+        active: 10,
+        archived: 2,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 3,
+      },
       lessonCount: 5,
       testCount: null,
       milestone: { name: '1.15.0', gateTickets: ['#1479'], bestEffort: true as const },
@@ -97,11 +108,27 @@ describe('GitStateSchema', () => {
 
 describe('RuleCountsSchema', () => {
   it('rejects negative counts', () => {
-    expect(() => RuleCountsSchema.parse({ active: -1, archived: 0, nonCompilable: 0 })).toThrow();
+    expect(() =>
+      RuleCountsSchema.parse({
+        active: -1,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      }),
+    ).toThrow();
   });
 
   it('rejects non-integer counts', () => {
-    expect(() => RuleCountsSchema.parse({ active: 1.5, archived: 0, nonCompilable: 0 })).toThrow();
+    expect(() =>
+      RuleCountsSchema.parse({
+        active: 1.5,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      }),
+    ).toThrow();
   });
 });
 
@@ -208,7 +235,7 @@ describe('RichProjectStateSchema', () => {
       strategyPointer: { resolved: true, sha: null, latestJournal: null },
       gitState: { branch: null, uncommittedFiles: [], truncated: false },
       packageVersions: {},
-      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      ruleCounts: { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 },
       lessonCount: 0,
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },
@@ -223,7 +250,7 @@ describe('RichProjectStateSchema', () => {
       strategyPointer: { resolved: false, reason: 'no sibling, no submodule' },
       gitState: { branch: 'main', uncommittedFiles: [], truncated: false },
       packageVersions: {},
-      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      ruleCounts: { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 },
       lessonCount: 0,
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },
@@ -240,7 +267,7 @@ describe('RichProjectStateSchema', () => {
       strategyPointer: { resolved: true, sha: null, latestJournal: null },
       gitState: { branch: null, uncommittedFiles: [], truncated: false },
       packageVersions: {},
-      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      ruleCounts: { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 },
       lessonCount: 0,
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },
@@ -256,7 +283,7 @@ describe('RichProjectStateSchema', () => {
       strategyPointer: { resolved: true, sha: null, latestJournal: null },
       gitState: { branch: null, uncommittedFiles: [], truncated: false },
       packageVersions: {},
-      ruleCounts: { active: 0, archived: 0, nonCompilable: 0 },
+      ruleCounts: { active: 0, archived: 0, untested: 0, pendingVerification: 0, nonCompilable: 0 },
       lessonCount: 0,
       testCount: null,
       milestone: { name: null, gateTickets: [], bestEffort: true },

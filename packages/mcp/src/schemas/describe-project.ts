@@ -100,8 +100,13 @@ export const RecentPrSchema = z.object({
 export type RecentPr = z.infer<typeof RecentPrSchema>;
 
 export const RuleCountsSchema = z.object({
+  /** Rules `totem lint` enforces — through core's `isActiveCompiledRule`, the same predicate as `legacy.rules` (mmnto-ai/totem#2765). */
   active: z.number().int().nonnegative(),
   archived: z.number().int().nonnegative(),
+  /** `untested-against-codebase` — inert; counted as active before mmnto-ai/totem#2765. */
+  untested: z.number().int().nonnegative(),
+  /** `pending-verification` — inert until the first-lint promotion runs. */
+  pendingVerification: z.number().int().nonnegative(),
   nonCompilable: z.number().int().nonnegative(),
 });
 export type RuleCounts = z.infer<typeof RuleCountsSchema>;
@@ -173,7 +178,13 @@ export const LegacyProjectDescriptionSchema = z.object({
   project: z.string(),
   description: z.string().optional(),
   tier: z.enum(['lite', 'standard', 'full']),
+  /** The ACTIVE count since mmnto-ai/totem#2765 (the raw total before). */
   rules: z.number(),
+  rulesCompiled: z.number(),
+  rulesArchived: z.number(),
+  rulesUntested: z.number(),
+  rulesPendingVerification: z.number(),
+  rulesSource: z.enum(['compiled-rules', 'absent', 'unreadable']),
   lessons: z.number(),
   targets: z.array(z.string()),
   partitions: z.record(z.array(z.string())),

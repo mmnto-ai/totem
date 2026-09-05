@@ -297,6 +297,7 @@ export {
   extractJustification,
   fileMatchesGlobs,
   hashLesson,
+  isActiveCompiledRule,
   isAuthoredProvenance,
   isMinedProvenance,
   LEDGER_RETRY_PENDING_CODES,

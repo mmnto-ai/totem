@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { isActiveCompiledRule, loadCompiledRulesFile } from './compiler.js';
 import type { TotemConfig } from './config-schema.js';
 import { getConfigTier } from './config-schema.js';
 
@@ -8,7 +9,26 @@ export interface ProjectDescription {
   project: string;
   description?: string;
   tier: 'lite' | 'standard' | 'full';
+  /**
+   * The ACTIVE compiled-rule count — the set `totem lint` enforces and
+   * `totem status` reports, resolved through the same predicate as lint's
+   * loader (`isActiveCompiledRule`, mmnto-ai/totem#2765). Before that fix this
+   * was the raw file total, which no enforcement surface counts.
+   */
   rules: number;
+  /** Every entry in `compiled-rules.json`, whatever its status — the raw total the banner used to print. */
+  rulesCompiled: number;
+  /** Inert entries by status; `rules + rulesArchived + rulesUntested + rulesPendingVerification === rulesCompiled`. */
+  rulesArchived: number;
+  rulesUntested: number;
+  rulesPendingVerification: number;
+  /**
+   * Where the rule counts came from: the parsed `compiled-rules.json`, no such
+   * file (`absent`), or a file the schema-validating loader refused
+   * (`unreadable` — zeros above, and the banner says so rather than showing
+   * an honestly-empty-looking 0; lint's loader names the fault).
+   */
+  rulesSource: 'compiled-rules' | 'absent' | 'unreadable';
   lessons: number;
   targets: string[];
   partitions: Record<string, string[]>;
@@ -38,23 +58,71 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
 
   const tier = getConfigTier(config);
 
-  // Rule count from compiled rules. `compiled-rules.json` is an object of
-  // shape `{ version, rules: CompiledRule[], nonCompilable: [...] }` — NOT
-  // an array. Reading `parsed.rules.length` is the canonical access
-  // pattern used by `loadCompiledRulesFile` and the rest of the codebase
-  // (mmnto-ai/totem#1884 R1 — prior `Array.isArray(parsed)` check always
-  // failed, reporting 0 rules in every orientation banner).
+  // Rule counts (mmnto-ai/totem#2765). `rules` is the ACTIVE set — what
+  // `totem lint` enforces and `totem status` reports — derived through the
+  // SAME predicate lint's loader applies (`isActiveCompiledRule`, the
+  // mmnto-ai/totem#1345 status filter), so the orientation banner and the
+  // enforcement surfaces agree by construction. mmnto-ai/totem#1884 R1 fixed
+  // this block's access pattern (`parsed.rules`, not a bare array) but the
+  // number it then counted was still the RAW total, which no enforcement
+  // surface counts: 485 here against lint's 385. The raw total stays, labelled,
+  // as `rulesCompiled` with the inert split beside it, so the archived mass
+  // does not vanish from the banner — it stops posing as enforced. The file is
+  // read through the schema-validating loader lint and status use; a missing
+  // or unreadable file reports zeros WITH `rulesSource` saying which, and a
+  // sensor never throws. Two unreadable shapes reach here two ways: a file
+  // that fails the compiled-rules SCHEMA makes the loader throw; a file that
+  // is not JSON at all makes it WARN and return an empty envelope, so the
+  // warning seam is read too — without it that file would report zeros
+  // labelled as a real, empty file (the re-armed leg's F10). (`totem status`
+  // handles a schema-invalid file by falling back to the manifest's
+  // `rule_count`, a raw total, and a non-JSON file by printing 0 — both its
+  // own behaviour, out of scope here.)
   let rules = 0;
+  let rulesCompiled = 0;
+  let rulesArchived = 0;
+  let rulesUntested = 0;
+  let rulesPendingVerification = 0;
+  let rulesSource: ProjectDescription['rulesSource'] = 'absent';
   try {
     const rulesPath = path.join(totemDir, 'compiled-rules.json');
-    if (fs.existsSync(rulesPath)) {
-      const parsed = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
-      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.rules)) {
-        rules = parsed.rules.length;
+    // A throwing stat, not existsSync: existsSync answers false for a file that
+    // exists behind an unreadable directory, which would label an unreadable
+    // store `absent`. ENOENT is absent; any other failure is unreadable.
+    let present = true;
+    try {
+      fs.statSync(rulesPath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') throw err;
+      present = false;
+    }
+    if (present) {
+      let loadWarning: string | undefined;
+      const file = loadCompiledRulesFile(rulesPath, (msg) => {
+        loadWarning = msg;
+      });
+      if (loadWarning !== undefined) {
+        rulesSource = 'unreadable';
+      } else {
+        rulesSource = 'compiled-rules';
+        rulesCompiled = file.rules.length;
+        for (const rule of file.rules) {
+          if (isActiveCompiledRule(rule)) rules += 1;
+          else if (rule.status === 'archived') rulesArchived += 1;
+          else if (rule.status === 'untested-against-codebase') rulesUntested += 1;
+          else rulesPendingVerification += 1;
+        }
       }
     }
+    // totem-context: intentional — describe is a read-only sensor: a malformed or schema-invalid compiled-rules.json reports zeros here, labelled `unreadable` so the banner never shows them as an honestly empty set, and fails LOUD in lint's own loader, which is the surface whose job that is (mmnto-ai/totem#1884, mmnto-ai/totem#2765)
   } catch {
-    // compiled-rules.json missing or malformed
+    rulesSource = 'unreadable';
+    rules = 0;
+    rulesCompiled = 0;
+    rulesArchived = 0;
+    rulesUntested = 0;
+    rulesPendingVerification = 0;
   }
 
   // Lesson count
@@ -82,9 +150,24 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
         if (stat.isFile()) hooks.push(file);
       }
     }
+    // totem-context: intentional — the hooks list is a best-effort read of .git/hooks for the orientation banner; an unreadable hooks dir leaves the list empty rather than failing a read-only sensor
   } catch {
     // .git/hooks unreadable
   }
 
-  return { project, description, tier, rules, lessons, targets, partitions, hooks };
+  return {
+    project,
+    description,
+    tier,
+    rules,
+    rulesCompiled,
+    rulesArchived,
+    rulesUntested,
+    rulesPendingVerification,
+    rulesSource,
+    lessons,
+    targets,
+    partitions,
+    hooks,
+  };
 }

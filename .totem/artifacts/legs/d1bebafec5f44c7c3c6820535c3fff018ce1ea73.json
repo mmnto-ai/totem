@@ -1,0 +1,153 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "d1bebafec5f44c7c3c6820535c3fff018ce1ea73",
+  "readAt": "2026-09-04T22:46:09Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".changeset/describe-active-rules-2765.md",
+      "line": 12,
+      "claim": "A schema-invalid compiled-rules.json reporting zeros from describe is 'what status already reports for that file' (restated in describe.ts, describe.test.ts and cli describe.ts).",
+      "counterexample": "Executed: temp project with a schema-invalid compiled-rules.json plus compile-manifest.json rule_count=42 -> built CLI prints '[Status] Rules: 42 compiled' and '[Describe] Rules: 0 active'. status.ts falls back to manifest.rule_count when the compiled file is unreadable; this repo's own .totem/compile-manifest.json carries rule_count=485, so status would print the raw total the fix exists to suppress."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/describe.test.ts",
+      "line": 96,
+      "claim": "The parity test satisfies the issue's Proposed item 3.",
+      "counterexample": "The clause reads 'asserting describeProject(...).rules equals loadCompiledRules(...).length AND equals what status reports'. Only the first conjunct was asserted; no test coupled describe to statusCommand. The untested conjunct is the one that fails (f1) — a weaker-than-contract assertion that passes."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/schemas/describe-project.ts",
+      "line": 172,
+      "claim": "LegacyProjectDescriptionSchema mirrors ProjectDescription ('the source of truth is the ProjectDescription interface in @mmnto/totem') and the payload is 'preserved byte-identical'.",
+      "counterexample": "Executed: DescribeProjectOutputSchema.parse(describeProject(worktree)) returned only the seven old keys — the new members were stripped. The schema was not updated; DescribeProjectOutput was narrower than what registerDescribeProject emits."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": ".changeset/describe-active-rules-2765.md",
+      "line": 1,
+      "claim": "The changeset names the packages whose surface changed ('@mmnto/totem', '@mmnto/cli').",
+      "counterexample": "The same file states the MCP describe_project legacy block changes; @mmnto/mcp was unnamed, so changesets would have written only 'Updated dependencies' into packages/mcp/CHANGELOG.md. Precedent: the mmnto-ai/totem#2738 changeset listed @mmnto/mcp for a search_knowledge envelope change."
+    },
+    {
+      "id": "f5",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/compiler.ts",
+      "line": 170,
+      "claim": "'Every surface that runs or COUNTS rules resolves through it' — and a second spelling of the status list is the defect class.",
+      "counterexample": "Executed: packages/mcp/src/state-extractors.ts counted active as `status !== 'archived'`, folding untested-against-codebase and pending-verification into active. extractRuleCounts on the worktree returned {active:392, archived:93, nonCompilable:1120} while legacy.rules was 385 — both returned by one describe_project call with includeRichState:true."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": ".changeset/describe-active-rules-2765.md",
+      "line": 10,
+      "claim": "'never a bare \"N compiled\" again'.",
+      "counterexample": "Executed: totem status still prints 'Rules: 385 compiled', where 'compiled' denotes the ACTIVE set, while describe's new line uses 'compiled' for the raw 485. Status's wording is reserved by the issue's scope note; the sentence overclaimed its reach."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/core/src/describe.test.ts",
+      "line": 114,
+      "claim": "'a file with nothing inert…' is a regression test for the issue.",
+      "counterexample": "Executed against origin/main's describe.ts: result.rules is already 4; the only failure is 'expected undefined to be 4' on rulesCompiled. A characterization test for the new field."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/core/src/describe.ts",
+      "line": 19,
+      "claim": "The new ProjectDescription fields are 'additive'.",
+      "counterexample": "Additive for readers only: new REQUIRED interface members are a compile break for any TypeScript consumer constructing a ProjectDescription. In-repo the sole double is an untyped vi.mock literal; no cohort code reads the field at all."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/core/src/describe.ts",
+      "line": 83,
+      "claim": "A schema-invalid file reporting zeros is a safe sensor degradation.",
+      "counterexample": "Latent: it rendered 'Rules: 0 active' indistinguishable from an honestly empty rule set, with no unreadability signal. Not live — all six cohort manifests parse. Reachable at the next schema version bump (version: z.literal(1) rejects version 2 -> describe 0)."
+    },
+    {
+      "id": "f10",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/describe.ts",
+      "line": 86,
+      "claim": "describe labels a malformed or schema-invalid compiled-rules.json `unreadable` so the banner never shows a 0 a reader could mistake for an honestly empty set.",
+      "counterexample": "EXECUTED: built CLI in a temp project whose compiled-rules.json is `not valid json {` printed `Rules: 0 active` with rulesSource `compiled-rules`. loadCompiledRulesFile throws only on ZodError; invalid JSON returns an empty envelope after calling onWarn, so the catch never fired. `totem lint` DOES print the real parse error for exactly this file."
+    },
+    {
+      "id": "f11",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/schemas/describe-project.test.ts",
+      "line": 111,
+      "claim": "'rejects negative counts' / 'rejects non-integer counts' assert RuleCountsSchema's nonnegative() and int() guards.",
+      "counterexample": "EXECUTED: the fold added required untested/pendingVerification but left these two literals three-key, so safeParse also reported the missing members; both tests would still pass with .nonnegative() and .int() deleted from active."
+    },
+    {
+      "id": "f12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/describe.test.ts",
+      "line": 171,
+      "claim": "The new assertions pin both ambiguous-zero banner forms.",
+      "counterexample": "LATENT: the absent form was pinned exactly; the unreadable form used toContain, leaving the advice clause about `totem lint` unasserted."
+    },
+    {
+      "id": "f13",
+      "severity": "MINOR",
+      "file": "packages/core/src/describe.ts",
+      "line": 73,
+      "claim": "'`totem status` handles an unreadable file differently — it falls back to the manifest's rule_count'.",
+      "counterexample": "EXECUTED with a manifest carrying rule_count 42: schema-invalid -> status prints 42 (fallback); non-JSON -> status prints 0 (no fallback). True only under describe's private label vocabulary."
+    },
+    {
+      "id": "f14",
+      "severity": "MINOR",
+      "file": ".changeset/describe-active-rules-2765.md",
+      "line": 2,
+      "claim": "'@mmnto/totem': minor for five required members added to the publicly exported ProjectDescription interface.",
+      "counterexample": "LATENT / judgment: AGENTS.md says breaking changes need migration paths. The changeset named the constructor burden without a migration line. Cohort scan found no downstream constructor."
+    },
+    {
+      "id": "f15",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/describe.test.ts",
+      "line": 184,
+      "claim": "The parity test satisfies the issue's Proposed clause 3.",
+      "counterexample": "LATENT: the clause names a fixture with archived AND untested entries; the fixture was archived-only, and untested is the status class behind the 392-vs-385 divergence."
+    },
+    {
+      "id": "f16",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/describe.ts",
+      "line": 26,
+      "claim": "The absent/unreadable branches render the description they are given.",
+      "counterexample": "LATENT: both returned a literal 'Rules: 0 active ...' ignoring d.rules; formatRulesLine is exported, so a caller passing rules 42 with rulesSource unreadable got a line asserting 0."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "f13",
+    "f15",
+    "f16"
+  ],
+  "verdict": "Pass 1 (origin/main...b0fe73fc): holds on the arithmetic — nine findings on claims and mirrors, all folded. Pass 2 (re-armed on b0fe73fc..d1bebafe): F1-F8 remedies complete by execution; one MATERIAL (F10, F9's remedy covered only the schema-invalid path) and six MINOR, folded in the second fold except F14 (a bump-level judgment, kept minor with the migration line disclosed). All named suites pass; prettier clean."
+}

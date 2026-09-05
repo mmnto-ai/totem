@@ -5,6 +5,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { loadCompiledRules } from '@mmnto/totem';
+
 // packages/mcp/src -> packages/mcp -> packages -> repo root
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
@@ -555,7 +557,13 @@ describe('extractRuleCounts', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-norules-'));
     try {
       const counts = extractRuleCounts(tmp, '.totem');
-      expect(counts).toEqual({ active: 0, archived: 0, nonCompilable: 0 });
+      expect(counts).toEqual({
+        active: 0,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      });
     } finally {
       fs.rmSync(tmp, RM_OPTS);
     }
@@ -567,17 +575,69 @@ describe('extractRuleCounts', () => {
       fs.mkdirSync(path.join(tmp, '.totem'));
       fs.writeFileSync(path.join(tmp, '.totem', 'compiled-rules.json'), '{ broken json');
       const counts = extractRuleCounts(tmp, '.totem');
-      expect(counts).toEqual({ active: 0, archived: 0, nonCompilable: 0 });
+      expect(counts).toEqual({
+        active: 0,
+        archived: 0,
+        untested: 0,
+        pendingVerification: 0,
+        nonCompilable: 0,
+      });
     } finally {
       fs.rmSync(tmp, RM_OPTS);
     }
   });
 
-  it('splits active from archived on the live repo', () => {
+  it('splits active from archived on the live repo, and active is what lint loads', () => {
     const counts = extractRuleCounts(REPO_ROOT, '.totem');
     expect(counts.active).toBeGreaterThan(0);
-    expect(counts.archived).toBeGreaterThanOrEqual(0);
-    expect(counts.nonCompilable).toBeGreaterThanOrEqual(0);
+    // Parity with the enforcement loader, on the real file (mmnto-ai/totem#2765).
+    expect(counts.active).toBe(
+      loadCompiledRules(path.join(REPO_ROOT, '.totem', 'compiled-rules.json')).length,
+    );
+  });
+
+  it('counts untested and pending-verification as inert, not active (mmnto-ai/totem#2765)', () => {
+    // Pre-fix the extractor counted `status !== 'archived'` as active: 4 here.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-inert-'));
+    try {
+      fs.mkdirSync(path.join(tmp, '.totem'));
+      const rule = (i: number, status?: string) => ({
+        lessonHash: `hash${String(i).padStart(8, '0')}`,
+        lessonHeading: `Rule ${i}`,
+        pattern: 'dummy',
+        message: `Rule ${i} message`,
+        engine: 'regex',
+        compiledAt: '2026-05-11T00:00:00Z',
+        ...(status !== undefined ? { status } : {}),
+      });
+      fs.writeFileSync(
+        path.join(tmp, '.totem', 'compiled-rules.json'),
+        JSON.stringify({
+          version: 1,
+          rules: [
+            rule(0),
+            rule(1, 'active'),
+            rule(2, 'archived'),
+            rule(3, 'untested-against-codebase'),
+            rule(4, 'pending-verification'),
+          ],
+          nonCompilable: [{ hash: 'x', title: 'no pattern', reasonCode: 'no-pattern-generated' }],
+        }),
+      );
+      const counts = extractRuleCounts(tmp, '.totem');
+      expect(counts).toEqual({
+        active: 2,
+        archived: 1,
+        untested: 1,
+        pendingVerification: 1,
+        nonCompilable: 1,
+      });
+      expect(counts.active).toBe(
+        loadCompiledRules(path.join(tmp, '.totem', 'compiled-rules.json')).length,
+      );
+    } finally {
+      fs.rmSync(tmp, RM_OPTS);
+    }
   });
 });
 
