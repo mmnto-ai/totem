@@ -568,6 +568,84 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     expect(advisoryBroken.stdout).toEqual(strictBroken.stdout);
   });
 
+  it("hooks.legsOwed.enforce: 'block' exits the derived state under --advisory too, and names the key (mmnto-ai/totem#2771)", async () => {
+    const owedDeps = makeDeps({ enforce: 'block' });
+    const flagged = await runLegsGate({ advisory: true }, owedDeps);
+    const bare = await runLegsGate({}, owedDeps);
+    expect(flagged.derived).toBe(3);
+    expect(flagged.status).toBe(3);
+    expect(bare.status).toBe(3);
+    // One formatting path: the flag changes nothing in the text.
+    expect(flagged.stdout).toEqual(bare.stdout);
+    // The knob line is APPENDED, so every verdict line keeps its index.
+    expect(flagged.stdout[0]).toContain('[Totem] BLOCKED: this push is legs-owed');
+    expect(flagged.stdout.at(-1)).toBe('[Totem] legs: hooks.legsOwed.enforce = block');
+    // NOT DERIVED follows the knob the same way.
+    const broken = await runLegsGate(
+      { advisory: true },
+      makeDeps({
+        enforce: 'block',
+        changedFiles: async () => {
+          throw new Error('fatal: not a git repository');
+        },
+      }),
+    );
+    expect(broken.derived).toBe(2);
+    expect(broken.status).toBe(2);
+    expect(broken.stdout.at(-1)).toBe('[Totem] legs: hooks.legsOwed.enforce = block');
+  });
+
+  it("hooks.legsOwed.enforce: 'advisory' exits 0 for every gate state, the bare (strict) run included", async () => {
+    const owedDeps = makeDeps({ enforce: 'advisory' });
+    const bare = await runLegsGate({}, owedDeps);
+    const flagged = await runLegsGate({ advisory: true }, owedDeps);
+    expect(bare.derived).toBe(3);
+    expect(bare.status).toBe(0);
+    expect(flagged.status).toBe(0);
+    expect(bare.stdout).toEqual(flagged.stdout);
+    expect(bare.stdout.at(-1)).toBe('[Totem] legs: hooks.legsOwed.enforce = advisory');
+    const broken = await runLegsGate(
+      {},
+      makeDeps({
+        enforce: 'advisory',
+        changedFiles: async () => {
+          throw new Error('fatal: not a git repository');
+        },
+      }),
+    );
+    expect(broken.derived).toBe(2);
+    expect(broken.status).toBe(0);
+    // Not owed with the knob set: the verdict line first, the knob line after.
+    storeCorrupt(ABSENT_SHA, 'not json at all');
+    const notOwed = await runLegsGate(
+      {},
+      makeDeps({
+        enforce: 'advisory',
+        changedFiles: async () => ({ files: ['packages/cli/src/index.ts'], base: BASE }),
+      }),
+    );
+    expect(notOwed.derived).toBe(0);
+    expect(notOwed.stdout).toHaveLength(2);
+    expect(notOwed.stdout[0]).toContain('[Totem] legs: not owed');
+    expect(notOwed.stdout[1]).toBe('[Totem] legs: hooks.legsOwed.enforce = advisory');
+    // …and the store is still never consulted when nothing is owed.
+    expect(notOwed.stderr).toEqual([]);
+  });
+
+  // A PIN, not a falsifier: every assertion here is true of the pre-knob gate.
+  // It sits beside the two knob cases so the unchanged default is asserted in
+  // the same file that asserts the change.
+  it('an ABSENT knob leaves the flag in charge and prints no knob line', async () => {
+    const flagged = await runLegsGate({ advisory: true }, makeDeps());
+    const bare = await runLegsGate({}, makeDeps());
+    expect(flagged.derived).toBe(3);
+    expect(flagged.status).toBe(0);
+    expect(bare.status).toBe(3);
+    for (const outcome of [flagged, bare]) {
+      expect(outcome.stdout.some((line) => line.includes('hooks.legsOwed.enforce ='))).toBe(false);
+    }
+  });
+
   it('every echoed value is control-character sanitized', async () => {
     // A changed path carrying a CSI sequence — built, never authored.
     const hostile = `docs/wiki/${ESC}[31mred.md`;
@@ -658,6 +736,28 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
     const outcome = await runLegsGate({}, deps);
     expect(outcome.derived).toBe(3);
     expect(outcome.stdout[0]).toContain('README.md → README.md');
+  });
+
+  it('the real seam carries hooks.legsOwed.enforce from the loaded config, and omits it when unset (mmnto-ai/totem#2771)', async () => {
+    const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+    // Unset: the key is ABSENT from the seam, not undefined-valued, so a
+    // consumer of the seam cannot mistake "not declared" for "declared empty".
+    const unset = await buildLegsGateDeps();
+    expect('enforce' in unset).toBe(false);
+    // Declared: it rides the seam and governs the exit end to end — an
+    // --advisory run of an OWED head exits 3, and the line names the key.
+    loadConfigMock.mockResolvedValue({
+      totemDir: '.totem',
+      ignorePatterns: ['README.md'],
+      shieldIgnorePatterns: ['README.md'],
+      hooks: { legsOwed: { globs: ['README.md', 'docs/wiki/**'], enforce: 'block' } },
+    } as unknown as TotemConfig);
+    const deps = await buildLegsGateDeps();
+    expect(deps.enforce).toBe('block');
+    const outcome = await runLegsGate({ advisory: true }, deps);
+    expect(outcome.derived).toBe(3);
+    expect(outcome.status).toBe(3);
+    expect(outcome.stdout.at(-1)).toBe('[Totem] legs: hooks.legsOwed.enforce = block');
   });
 
   it('discloses that the floor judged an unfiltered diff', async () => {

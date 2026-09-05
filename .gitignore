@@ -54,8 +54,12 @@ packages/pack-rust-architecture/tree-sitter-rust.wasm
 .totem/drafts/
 .totem/cache/
 # Grounded run artifacts (mmnto-ai/totem#2100) — machine-local run records,
-# content-addressed, carry prompt content; never tracked.
-.totem/artifacts/
+# content-addressed, carry prompt content; never tracked — EXCEPT the
+# falsification-leg deposits: `.totem/artifacts/legs/<diffSha>.json` is the
+# evidence the CI legs gate reads (mmnto-ai/totem#2771, the `legs-gate` parity
+# row's arm (a)), so a leg of record travels with its pull request.
+.totem/artifacts/*
+!.totem/artifacts/legs/
 .totem/secrets.json
 .totem/*.log
 .totem/*.jsonl

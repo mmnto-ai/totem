@@ -1155,14 +1155,24 @@ export function buildPrePushHook(options: {
   const { fallbackCmd, totemDir } = options;
   const effectiveTier = options.tier;
   assertRenderableTotemDir(totemDir);
-  // The strict-tier review-leg floor (mmnto-ai/totem#2698; doctrine
-  // `model-tiering.md` § Review legs — a self-authored judgment-dense diff owes
-  // one falsification leg before it is presented). The gate itself derives
-  // everything: whether the push is legs-owed (the changed-file set against
-  // `hooks.legsOwed.globs`, read at RUN time so a glob edit needs no hook
-  // re-install) and whether a deposit ancestor-or-equal of HEAD answers for it.
-  // The hook maps that derivation onto exit codes and NOTHING else — the tier
-  // changes only which code blocks, never a line of the text.
+  // The review-leg floor (mmnto-ai/totem#2698; doctrine `model-tiering.md`
+  // § Review legs — a self-authored judgment-dense diff owes one falsification
+  // leg before it is presented). The gate itself derives everything: whether
+  // the push is legs-owed (the changed-file set against `hooks.legsOwed.globs`,
+  // read at RUN time so a glob edit needs no hook re-install) and whether a
+  // deposit ancestor-or-equal of HEAD answers for it. The hook maps that
+  // derivation onto exit codes and NOTHING else — the tier changes only which
+  // code blocks, never a line of the text.
+  //
+  // Since mmnto-ai/totem#2771 the repo's `hooks.legsOwed.enforce` (read at run
+  // time by the gate, like the globs) can arm this ONE gate at any tier
+  // (`'block'`) or soften it at every tier (`'advisory'`) without touching the
+  // spec-evidence and shield arms. The hook never reads the knob: it reads the
+  // EXIT CODE the gate has already mapped through it. So 3 and 2 block on
+  // every tier — under the advisory flag they only ever come back when the
+  // knob says block — and only a failure before the derivation (an unloadable
+  // config, which is also how the knob would go unread) stays strict-only,
+  // which keeps a knob-less install byte-for-byte on its old behaviour.
   //
   // Slotted BEFORE the shield block deliberately: on strict this is a sub-second
   // local read, and paying for the slow review gate before discovering the push
@@ -1184,29 +1194,40 @@ export function buildPrePushHook(options: {
   // `legs gate` at all. `--advisory` is specific to this verb, so its presence
   // in that output means the verb itself answered.
   const legsBlock = `
-  # Strict mode: require a fresh falsification-leg deposit for legs-owed pushes
-  # (mmnto-ai/totem#2698, doctrine/model-tiering.md § Review legs).
+  # The review-leg floor: require a fresh falsification-leg deposit for
+  # legs-owed pushes (mmnto-ai/totem#2698, doctrine/model-tiering.md § Review legs).
   # Exit vocabulary of \`totem legs gate\`: 0 = not owed, or a deposit answers for
   # this head · 3 = owed with no fresh deposit · 2 = the gate could not derive
-  # (not a git repo, HEAD or the branch diff unresolvable). Advisory tiers print
-  # the SAME lines and exit 0.
+  # (not a git repo, HEAD or the branch diff unresolvable). The strict tier and
+  # agent seats run the bare gate; the other tiers pass --advisory, under which
+  # the gate prints the SAME lines and exits 0 — unless the repo's
+  # hooks.legsOwed.enforce says 'block', in which case the gate exits 3 or 2 at
+  # any tier and this hook blocks on it (mmnto-ai/totem#2771); 'advisory' makes
+  # it exit 0 at any tier. A status other than 0, 2 or 3 is a failure before
+  # the derivation (an unloadable config) and blocks only on the strict arm.
   if $TOTEM_CMD legs gate --help 2>/dev/null | grep -q -- '--advisory'; then
+    legs_strict=0
     if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
+      legs_strict=1
       $TOTEM_CMD legs gate
       legs_status=$?
-      if [ "$legs_status" = "3" ]; then
-        echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698, strict mode)"
-        exit 1
-      elif [ "$legs_status" != "0" ]; then
-        echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status $legs_status) — fix the checkout and retry (strict mode)"
-        exit 1
-      fi
     else
       $TOTEM_CMD legs gate --advisory
+      legs_status=$?
+    fi
+    if [ "$legs_status" = "3" ]; then
+      echo "[Totem] BLOCKED: this push is legs-owed and carries no fresh falsification-leg deposit — run the leg, then 'totem legs deposit --sha HEAD --from <findings.json>' (mmnto-ai/totem#2698; strict mode, an agent seat, or hooks.legsOwed.enforce: block)"
+      exit 1
+    elif [ "$legs_status" = "2" ]; then
+      echo "[Totem] BLOCKED: the legs gate could not derive (totem legs gate exit status 2) — fix the checkout and retry (strict mode, an agent seat, or hooks.legsOwed.enforce: block)"
+      exit 1
+    elif [ "$legs_status" != "0" ] && [ "$legs_strict" = "1" ]; then
+      echo "[Totem] BLOCKED: the legs gate failed before deriving (totem legs gate exit status $legs_status) — fix the config or the CLI and retry (strict mode or an agent seat)"
+      exit 1
     fi
   else
     if [ "$is_agent" = "1" ] || [ "$TOTEM_HOOK_TIER" = "strict" ]; then
-      echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode)" >&2
+      echo "[Totem] BLOCKED: this hook expects 'totem legs gate' (mmnto-ai/totem#2698) but the resolved CLI lacks it — 'npm i -g @mmnto/cli@latest' (strict mode or an agent seat)" >&2
       exit 1
     else
       echo "[totem] Hook running without the legs gate (CLI predates 'totem legs'); 'npm i -g @mmnto/cli@latest' enables it." >&2

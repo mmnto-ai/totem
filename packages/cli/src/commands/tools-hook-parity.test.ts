@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,5 +52,74 @@ describe('tools/ hook scripts match the CLI template builders (mmnto-ai/totem#24
 
   it('tools/post-merge is byte-identical to buildHookContent output', () => {
     expect(readTool('post-merge')).toBe(buildHookContent(RENDER));
+  });
+});
+
+// The repo's own legs-gate CI arm (mmnto-ai/totem#2771; the `legs-gate` parity
+// row, arm (a)). Two things the arm depends on that nothing else asserts: the
+// artifacts ignore must RE-INCLUDE the deposit directory, or every deposit is
+// unstageable and the required `Totem Lint` check goes permanently red; and
+// the workflow step must invoke the BUILT entry before the lint step's
+// `--depth=1` fetch, which shallows the checkout. Both are read from the repo's
+// files, so an edit that narrows the ignore or moves the step fails here first.
+describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => {
+  const gitOk = spawnSync('git', ['--version'], { encoding: 'utf-8' }).status === 0;
+  const checkIgnore = (relPath: string): number | null =>
+    spawnSync('git', ['check-ignore', '-q', relPath], { cwd: REPO_ROOT, encoding: 'utf-8' }).status;
+
+  it.skipIf(!gitOk)(
+    '.gitignore re-includes .totem/artifacts/legs/ and keeps its siblings ignored',
+    () => {
+      // check-ignore: 0 = ignored, 1 = not ignored. A deposit path must be stageable.
+      expect(checkIgnore('.totem/artifacts/legs/' + 'a'.repeat(40) + '.json')).toBe(1);
+      expect(checkIgnore('.totem/artifacts/runs/x.json')).toBe(0);
+      expect(checkIgnore('.totem/artifacts/panels/x.json')).toBe(0);
+      expect(checkIgnore('.totem/artifacts/verdicts/x.json')).toBe(0);
+    },
+  );
+
+  it("this repo's config never softens the CI arm: hooks.legsOwed.enforce is not 'advisory' here", () => {
+    // The gate reads the knob in CI too, so `enforce: 'advisory'` would turn the
+    // hard step into a green no-op while the row's presence checks still read
+    // arm (a) as adopted (the leg's F5; Greptile on mmnto-ai/totem#2772). A repo
+    // adopting the CI arm leaves the knob unset or sets 'block'; this pins ours.
+    const config = fs.readFileSync(path.join(REPO_ROOT, 'totem.config.ts'), 'utf-8');
+    expect(config).not.toMatch(/enforce\s*:\s*['"]advisory['"]/);
+  });
+
+  it('the lint workflow runs the built gate as a hard step before the --depth=1 fetch', () => {
+    const workflow = fs.readFileSync(
+      path.join(REPO_ROOT, '.github', 'workflows', 'lint.yml'),
+      'utf-8',
+    );
+    const gateIdx = workflow.indexOf('node packages/cli/dist/index.js legs gate');
+    // The fetch COMMAND, not the flag: the gate step's own comment names
+    // `--depth=1` while explaining why it runs first.
+    const shallowIdx = workflow.indexOf('git fetch origin "$BASE_REF" --depth=1');
+    expect(gateIdx).toBeGreaterThan(-1);
+    expect(shallowIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeLessThan(shallowIdx);
+    // The bin-shim form cannot resolve in a job that builds the CLI it calls.
+    expect(workflow).not.toContain('pnpm exec totem legs gate');
+    // The WHOLE step, from its name to the next step's: the base fetch precedes
+    // the gate inside it, and no continue-on-error sits anywhere in it — a
+    // trailing one after `run:` would soften the step just as well.
+    const stepStart = workflow.lastIndexOf('- name:', gateIdx);
+    const nextStep = workflow.indexOf('- name:', gateIdx);
+    // Comment lines are dropped before the negative assertions: the NEXT step's
+    // leading comment sits inside this slice and legitimately discusses
+    // `continue-on-error`; only YAML keys count. (The newline is built, never
+    // authored as an escape — the banked heredoc decode trap.)
+    const LF = String.fromCharCode(10);
+    const step = workflow
+      .slice(stepStart, nextStep === -1 ? workflow.length : nextStep)
+      .split(LF)
+      .filter((line) => !line.trim().startsWith('#'))
+      .join(LF);
+    const baseFetchIdx = step.indexOf('git fetch origin "$BASE_REF"');
+    expect(baseFetchIdx).toBeGreaterThan(-1);
+    expect(baseFetchIdx).toBeLessThan(step.indexOf('node packages/cli/dist/index.js legs gate'));
+    expect(step).not.toContain('--depth=1');
+    expect(step).not.toContain('continue-on-error');
   });
 });
