@@ -5042,6 +5042,20 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
     expect(ok.status).toBe(0);
   });
 
+  it.skipIf(!shellOk)('a matching delimiter indented four spaces does not close the fence', () => {
+    // CommonMark: a closing fence may be indented at most three spaces. The
+    // reader counts the run only when the indent is under four, so a
+    // four-space delimiter is text inside the fence and the skeleton after it
+    // stays fenced (Greptile follow-up on mmnto-ai/totem#2769).
+    const r = judge(`Intro.${NL}${FENCE}${NL}quoted${NL}    ${FENCE}${NL}${nineBodied()}`);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${PROMISED[0]}`);
+    expect(r.stdout).toContain('that fence is never closed');
+    // Three spaces still close.
+    const ok = judge(`Intro.${NL}${FENCE}${NL}quoted${NL}   ${FENCE}${NL}${NL}${nineBodied()}`);
+    expect(ok.status).toBe(0);
+  });
+
   // ── The DOCUMENT arm (overridden prompt, bound record) under fences ──
 
   function judgeDocument(content: string): { status: number | null; stdout: string } {
