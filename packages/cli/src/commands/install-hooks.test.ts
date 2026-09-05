@@ -5025,6 +5025,23 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
     expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
   });
 
+  it.skipIf(!shellOk)('a closer followed by a non-breaking space does not close the fence', () => {
+    // CommonMark permits only spaces and tabs after a closing fence; JS trim()
+    // would accept U+00A0 and close a fence Markdown keeps open, letting the
+    // skeleton after it reach the gate.
+    const NBSP = String.fromCharCode(160);
+    const r = judge(`Intro.${NL}${FENCE}${NL}quoted${NL}${FENCE}${NBSP}${NL}${nineBodied()}`);
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain(`is missing heading ${PROMISED[0]}`);
+    expect(r.stdout).toContain('that fence is never closed');
+    // A closer followed by ordinary spaces and a tab still closes.
+    const TAB = String.fromCharCode(9);
+    const ok = judge(
+      `Intro.${NL}${FENCE}${NL}quoted${NL}${FENCE}  ${TAB}${NL}${NL}${nineBodied()}`,
+    );
+    expect(ok.status).toBe(0);
+  });
+
   // ── The DOCUMENT arm (overridden prompt, bound record) under fences ──
 
   function judgeDocument(content: string): { status: number | null; stdout: string } {

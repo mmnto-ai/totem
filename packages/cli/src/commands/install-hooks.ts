@@ -1105,7 +1105,11 @@ for (let i = 0; i < lines.length; i++) {
     fenceLine.push(false); inFence.push(false); fenceOpenedAt.push(0);
     continue;
   }
-  const closes = run >= fenceLen && [fenceChar].indexOf(ch) > -1 && rest.trim().length < 1;
+  // Only spaces and tabs may follow a closer (CommonMark); JS trim() would also
+  // strip Unicode spaces such as U+00A0, so a closer that Markdown keeps open
+  // would read as closed here and a fenced skeleton after it would reach the
+  // gate (Greptile P1 on mmnto-ai/totem#2769).
+  const closes = run >= fenceLen && [fenceChar].indexOf(ch) > -1 && rest.split(" ").join("").split("	").join("").length < 1;
   if (closes) { fenceChar = ""; fenceLen = 0; fenceLine.push(true); inFence.push(false); fenceOpenedAt.push(0); continue; }
   fenceLine.push(false); inFence.push(true); fenceOpenedAt.push(openedAt);
 }
