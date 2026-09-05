@@ -59,12 +59,24 @@ function readLintWorkflow(): string {
  * on mmnto-ai/totem#2780).
  */
 function stepNamed(workflow: string, namePrefix: string): string {
-  const stepStart = workflow.indexOf('- name: ' + namePrefix);
+  // Comments go FIRST, so a `#` line carrying `- name: …` earlier in the file
+  // cannot anchor the slice (the leg's F7 on mmnto-ai/totem#2780).
+  const clean = dropComments(workflow);
+  const stepStart = clean.indexOf('- name: ' + namePrefix);
   if (stepStart === NOT_FOUND) return '';
-  const nextStep = workflow.indexOf('- name:', stepStart + 1);
-  return dropComments(
-    workflow.slice(stepStart, nextStep === NOT_FOUND ? workflow.length : nextStep),
-  );
+  const nextStep = clean.indexOf('- name:', stepStart + 1);
+  return clean.slice(stepStart, nextStep === NOT_FOUND ? clean.length : nextStep);
+}
+
+/** The non-empty, trimmed lines of a step's `run: |` block, in order. */
+function runLinesOf(step: string): string[] {
+  const runIdx = step.indexOf('run: |');
+  if (runIdx === NOT_FOUND) return [];
+  return step
+    .slice(runIdx + 'run: |'.length)
+    .split(LF)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 function gateStepOf(workflow: string): string {
@@ -86,11 +98,12 @@ function ifLinesOf(step: string): string[] {
  * mmnto-ai/totem#2780). Empty when the job or its steps key is missing.
  */
 function lintJobHeaderOf(workflow: string): string {
-  const jobIdx = workflow.indexOf(LF + '  lint:' + LF);
+  const clean = dropComments(workflow);
+  const jobIdx = clean.indexOf(LF + '  lint:' + LF);
   if (jobIdx === NOT_FOUND) return '';
-  const stepsIdx = workflow.indexOf(LF + '    steps:', jobIdx);
+  const stepsIdx = clean.indexOf(LF + '    steps:', jobIdx);
   if (stepsIdx === NOT_FOUND) return '';
-  return dropComments(workflow.slice(jobIdx, stepsIdx));
+  return clean.slice(jobIdx, stepsIdx);
 }
 
 function dropComments(yaml: string): string {
@@ -173,14 +186,7 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     // The run block is EXACTLY the base fetch and the bare gate: a `|| true`, a
     // `;` or a trailing `&&` on the gate line would neuter it while every
     // assertion above still passes (the leg's F7 on mmnto-ai/totem#2780).
-    const runIdx = step.indexOf('run: |');
-    expect(runIdx).toBeGreaterThan(NOT_FOUND);
-    const runLines = step
-      .slice(runIdx + 'run: |'.length)
-      .split(LF)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    expect(runLines).toEqual([
+    expect(runLinesOf(step)).toEqual([
       'git fetch origin "$BASE_REF"',
       'node packages/cli/dist/index.js legs gate',
     ]);
@@ -201,24 +207,36 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     );
     // The selector only picks the branch. The check step, gated on it, derives
     // the diff's SHAPE and exempts only what the action writes — a deleted
-    // .changeset/*.md, a modified CHANGELOG.md, a modified package.json — so a
-    // writer who pushes anything else onto the release branch meets the gate
-    // (Greptile's P1 on mmnto-ai/totem#2780). Every assertion reads the check
-    // step's own slice.
+    // .changeset/*.md (never its README), an added or modified CHANGELOG.md (a
+    // new package's first release ADDS one: mmnto-ai/totem#2514), a modified
+    // package.json — so a writer who pushes anything else onto the release
+    // branch meets the gate (Greptile's P1 on mmnto-ai/totem#2780). Every
+    // assertion reads the check step's own slice, and the run block is pinned
+    // EXACTLY, in order: which branch writes `exempt=true` is the mechanism
+    // (swapping the branches passed a looser test — the leg's F3), `set -euo
+    // pipefail` under `shell: bash` is what makes a failed diff abort instead
+    // of reading as an empty, in-shape list (F2), and the whole-line anchors
+    // are what keep a whitespace-carrying path out of shape (F4).
     const check = stepNamed(workflow, RELEASE_TRAIN_STEP_NAME);
     expect(check).not.toBe('');
     expect(check).toContain('id: release_train');
+    expect(check).toContain('shell: bash');
     expect(ifLinesOf(check)).toEqual(["if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}"]);
-    expect(check).toContain('git diff --name-status "origin/$BASE_REF...HEAD"');
-    expect(check).toContain('$1 == "D" && $2 ~ "^[.]changeset/[^/]+[.]md$"');
-    expect(check).toContain(
-      '$1 == "M" && ($2 ~ "(^|/)CHANGELOG[.]md$" || $2 ~ "(^|/)package[.]json$")',
-    );
-    // Both outcomes are written and both are announced (never-skip-silently).
-    expect(check).toContain('echo "exempt=true" >> "$GITHUB_OUTPUT"');
-    expect(check).toContain('echo "exempt=false" >> "$GITHUB_OUTPUT"');
-    expect(check).toContain('::notice title=totem legs gate SKIPPED::');
-    expect(check).toContain('::warning title=totem legs gate NOT skipped::');
+    expect(runLinesOf(check)).toEqual([
+      'set -euo pipefail',
+      'git fetch origin "$BASE_REF"',
+      'diff=$(git diff --name-status "origin/$BASE_REF...HEAD")',
+      `other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+([^[:space:]]*/)?CHANGELOG[.]md$|^M[[:space:]]+([^[:space:]]*/)?package[.]json$' || true)`,
+      `if echo "$diff" | grep -q -E '^D[[:space:]]+[.]changeset/README[.]md$'; then other="$other D .changeset/README.md"; fi`,
+      `other=$(echo "$other" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)`,
+      'if [ -n "$other" ]; then',
+      'echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"',
+      'echo "exempt=false" >> "$GITHUB_OUTPUT"',
+      'else',
+      'echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — its diff is only consumed changesets, CHANGELOG.md and package.json, and it authors nothing, so the review-leg floor does not apply (mmnto-ai/totem#2779). The totem lint step still runs."',
+      'echo "exempt=true" >> "$GITHUB_OUTPUT"',
+      'fi',
+    ]);
     expect(check).not.toContain('continue-on-error');
     // The gate reads the check's OUTPUT, and exactly that: a skipped check
     // writes no output and '' != 'true' runs the gate — fail-closed. Any other
