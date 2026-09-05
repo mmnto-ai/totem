@@ -180,7 +180,7 @@ export const SELECTION_CONTEXT_KEYS = [
   'status',
   'storesFailed',
   'storesUnavailable',
-  /** Hits whose relevance failed `isRelevanceInRange` (mmnto-ai/totem#2770). */
+  /** Hits in the RETURNED pool whose relevance failed `isRelevanceInRange` (mmnto-ai/totem#2770) — the envelope's count; an overflow exclusion names its own fault in its reason. */
   'faulted',
   // orient
   'render',

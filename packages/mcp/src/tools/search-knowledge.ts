@@ -828,7 +828,19 @@ async function performSearch(
     };
     for (const { hit, reason } of parts.selected ?? []) add(hit, 'selected', reason);
     for (const { hit, reason } of parts.excluded ?? []) add(hit, 'excluded', reason);
-    for (const hit of federationOverflow) add(hit, 'excluded', 'federation-final-limit overflow');
+    // An overflow hit keeps its relevance, so a faulted one is named as such in
+    // its reason; the context's `faulted` count is scoped to the returned pool
+    // (`results`), which is what the envelope reports (Greptile P2 on
+    // mmnto-ai/totem#2770).
+    for (const hit of federationOverflow) {
+      add(
+        hit,
+        'excluded',
+        hitClass(hit) === 'faulted'
+          ? 'federation-final-limit overflow (relevance faulted)'
+          : 'federation-final-limit overflow',
+      );
+    }
     const federated = boundary === undefined && linkedStores.size > 0;
     // Store outages are part of the observable-pool accounting (leg round 1,
     // D-3): without them a query where stores errored reads as a FULL pool.

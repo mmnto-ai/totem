@@ -571,6 +571,51 @@ describe('search_knowledge', () => {
       expect(overflow).toHaveLength(2);
     });
 
+    it('a FAULTED hit cut by the federation final limit names its fault in the overflow reason; the context count stays scoped to the returned pool (mmnto-ai/totem#2770)', async () => {
+      mockSearchResults = [
+        { label: 'P1', type: 'code', filePath: 'p1.ts', score: 0.9, content: 'p1', relevance: 0.9 },
+        { label: 'P2', type: 'code', filePath: 'p2.ts', score: 0.8, content: 'p2', relevance: 0.8 },
+      ];
+      // RRF fuses per-store RANKS, so the faulted hit must be the linked store's
+      // second result to fall past the final limit rather than be returned.
+      mockLinkedStores.set('strategy', {
+        search: async () => [
+          {
+            label: 'L1',
+            type: 'spec',
+            filePath: 'l1.md',
+            score: 0.7,
+            content: 'l1',
+            relevance: 0.9,
+            sourceRepo: 'strategy',
+          },
+          {
+            label: 'L2',
+            type: 'spec',
+            filePath: 'l2.md',
+            score: 0.6,
+            content: 'l2',
+            relevance: Number.NaN,
+            sourceRepo: 'strategy',
+          },
+        ],
+        reconnect: async () => {},
+      });
+      await handle({ query: 'test', max_results: 2 });
+      const call = manifestCall();
+      const byId = Object.fromEntries(call.candidates.map((c) => [c.id, c]));
+      expect(byId['l2.md']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'federation-final-limit overflow (relevance faulted)',
+      });
+      expect(byId['p2.ts']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'federation-final-limit overflow',
+      });
+      // The returned pool carried no fault: the context says 0, the reason says where the fault went.
+      expect(call.context).toMatchObject({ status: 'ok', faulted: 0 });
+    });
+
     it('does NOT emit a manifest when the search fails to an isError outcome', async () => {
       mockSearchThrows = true;
       const result = (await handle({ query: 'test' })) as { isError?: boolean };
