@@ -162,11 +162,8 @@ describe('getProjectDescription', () => {
       'Rules: 12 active of 20 compiled (5 archived, 2 untested-against-codebase, 1 pending-verification)',
     );
     // The ACTIVE count leads; the raw total never poses as the enforced set.
-    expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).toMatch(
-      /^Rules: 12 active/,
-    );
-    expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).not.toMatch(
-      /^Rules: 20/,
+    expect(formatRulesLine({ ...base, rulesCompiled: 20, rulesArchived: 8 })).toBe(
+      'Rules: 12 active of 20 compiled (8 archived)',
     );
     // A zero is never left ambiguous: absent and unreadable each say so.
     const zeros = { ...base, rules: 0, rulesCompiled: 0 };

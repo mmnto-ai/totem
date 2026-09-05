@@ -86,7 +86,18 @@ export function describeProject(config: TotemConfig, configRoot: string): Projec
   let rulesSource: ProjectDescription['rulesSource'] = 'absent';
   try {
     const rulesPath = path.join(totemDir, 'compiled-rules.json');
-    if (fs.existsSync(rulesPath)) {
+    // A throwing stat, not existsSync: existsSync answers false for a file that
+    // exists behind an unreadable directory, which would label an unreadable
+    // store `absent`. ENOENT is absent; any other failure is unreadable.
+    let present = true;
+    try {
+      fs.statSync(rulesPath);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT') throw err;
+      present = false;
+    }
+    if (present) {
       let loadWarning: string | undefined;
       const file = loadCompiledRulesFile(rulesPath, (msg) => {
         loadWarning = msg;

@@ -590,8 +590,6 @@ describe('extractRuleCounts', () => {
   it('splits active from archived on the live repo, and active is what lint loads', () => {
     const counts = extractRuleCounts(REPO_ROOT, '.totem');
     expect(counts.active).toBeGreaterThan(0);
-    expect(counts.archived).toBeGreaterThanOrEqual(0);
-    expect(counts.nonCompilable).toBeGreaterThanOrEqual(0);
     // Parity with the enforcement loader, on the real file (mmnto-ai/totem#2765).
     expect(counts.active).toBe(
       loadCompiledRules(path.join(REPO_ROOT, '.totem', 'compiled-rules.json')).length,

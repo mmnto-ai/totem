@@ -140,6 +140,13 @@ describe('describeProject — rules count (mmnto-ai/totem#1884 R1)', () => {
     expect(result.rulesSource).toBe('unreadable');
   });
 
+  it('reports zeros labelled absent when compiled-rules.json is missing, never unreadable', () => {
+    const result = describeProject(makeMinimalConfig(), tmpDir);
+    expect(result.rules).toBe(0);
+    expect(result.rulesCompiled).toBe(0);
+    expect(result.rulesSource).toBe('absent');
+  });
+
   it('reports 0 when compiled-rules.json is absent (graceful fallback)', () => {
     fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
     const result = describeProject(makeMinimalConfig(), tmpDir);
