@@ -59,13 +59,31 @@ function readLintWorkflow(): string {
  * on mmnto-ai/totem#2780).
  */
 function stepNamed(workflow: string, namePrefix: string): string {
-  // Comments go FIRST, so a `#` line carrying `- name: …` earlier in the file
-  // cannot anchor the slice (the leg's F7 on mmnto-ai/totem#2780).
-  const clean = dropComments(workflow);
-  const stepStart = clean.indexOf('- name: ' + namePrefix);
+  // Scoped to the `lint` job and comments dropped FIRST, so neither a `#` line
+  // carrying `- name: …` (the leg's F7 on mmnto-ai/totem#2780) nor a decoy step
+  // in another job (CodeRabbit, same PR) can anchor the slice; and EXACTLY one
+  // step may carry the name — a second one would let the wrong step satisfy
+  // every assertion below.
+  const job = lintJobOf(workflow);
+  const marker = '- name: ' + namePrefix;
+  const stepStart = job.indexOf(marker);
   if (stepStart === NOT_FOUND) return '';
-  const nextStep = clean.indexOf('- name:', stepStart + 1);
-  return clean.slice(stepStart, nextStep === NOT_FOUND ? clean.length : nextStep);
+  if (job.indexOf(marker, stepStart + 1) !== NOT_FOUND) return '';
+  const nextStep = job.indexOf('- name:', stepStart + 1);
+  return job.slice(stepStart, nextStep === NOT_FOUND ? job.length : nextStep);
+}
+
+/**
+ * The `lint` job's YAML — from its key to the next top-level job key (two-space
+ * indent) or the end of the file — comment lines dropped. Empty when the job is
+ * missing. Every step and header lookup reads this slice, never the file.
+ */
+function lintJobOf(workflow: string): string {
+  const clean = dropComments(workflow);
+  const jobIdx = clean.indexOf(LF + '  lint:' + LF);
+  if (jobIdx === NOT_FOUND) return '';
+  const nextJob = clean.slice(jobIdx + 1).search(/\n {2}[A-Za-z0-9_-]+:\n/);
+  return clean.slice(jobIdx, nextJob === NOT_FOUND ? clean.length : jobIdx + 1 + nextJob);
 }
 
 /** The non-empty, trimmed lines of a step's `run: |` block, in order. */
@@ -98,12 +116,10 @@ function ifLinesOf(step: string): string[] {
  * mmnto-ai/totem#2780). Empty when the job or its steps key is missing.
  */
 function lintJobHeaderOf(workflow: string): string {
-  const clean = dropComments(workflow);
-  const jobIdx = clean.indexOf(LF + '  lint:' + LF);
-  if (jobIdx === NOT_FOUND) return '';
-  const stepsIdx = clean.indexOf(LF + '    steps:', jobIdx);
+  const job = lintJobOf(workflow);
+  const stepsIdx = job.indexOf(LF + '    steps:');
   if (stepsIdx === NOT_FOUND) return '';
-  return clean.slice(jobIdx, stepsIdx);
+  return job.slice(0, stepsIdx);
 }
 
 function dropComments(yaml: string): string {

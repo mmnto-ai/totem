@@ -41,12 +41,23 @@ out="${GITHUB_OUTPUT:-/dev/stdout}"
 # The pending set is read at the MERGE BASE — the commit the diff is taken
 # against — so a changeset merged to main after the action regenerated the
 # branch cannot appear in one list and not the other.
+# Derivations fail LOUD and filters fail QUIET, kept in separate stages: every
+# git call and every sort/sed stage runs without a `|| true`, so an unexpected
+# failure aborts under `set -euo pipefail`; a `|| true` sits only on a single
+# grep stage, where exit 1 is the expected "no line matched" state and nothing
+# else can fail. `printf '%s\n'`, never `echo`: the text is git output and must
+# reach the filters byte-for-byte whatever the shell's echo does with escapes.
 mergeBase=$(git merge-base "$base" HEAD)
 diff=$(git diff --name-status --no-renames "$mergeBase" HEAD)
-pending=$(git ls-tree --name-only "$mergeBase" .changeset/ | grep -E '^[.]changeset/[^/]+[.]md$' | grep -v -E '^[.]changeset/README[.]md$' | sort || true)
-deleted=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$' | sed -E 's/^D[[:space:]]+//' | sort || true)
-other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' | grep -v -E '^[[:space:]]*$' || true)
-changelogs=$(echo "$diff" | grep -c -E '^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$' || true)
+changesetTree=$(git ls-tree --name-only "$mergeBase" .changeset/)
+pendingRaw=$(printf '%s\n' "$changesetTree" | grep -E '^[.]changeset/[^/]+[.]md$' || true)
+pendingRaw=$(printf '%s\n' "$pendingRaw" | grep -v -E '^[.]changeset/README[.]md$' || true)
+pending=$(printf '%s\n' "$pendingRaw" | sort)
+deletedRaw=$(printf '%s\n' "$diff" | grep -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$' || true)
+deleted=$(printf '%s\n' "$deletedRaw" | sed -E 's/^D[[:space:]]+//' | sort)
+otherRaw=$(printf '%s\n' "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' || true)
+other=$(printf '%s\n' "$otherRaw" | grep -v -E '^[[:space:]]*$' || true)
+changelogs=$(printf '%s\n' "$diff" | grep -c -E '^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$' || true)
 
 bad=0
 if [ -n "$other" ]; then
