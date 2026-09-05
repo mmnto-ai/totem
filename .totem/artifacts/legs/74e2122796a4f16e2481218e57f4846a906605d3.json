@@ -1,0 +1,253 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "74e2122796a4f16e2481218e57f4846a906605d3",
+  "readAt": "2026-09-04T23:52:28Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1088,
+      "claim": "A promised heading quoted inside a fence is not the section it names.",
+      "counterexample": "EXECUTED: slice(0,3) collapsed fence length, so a three-backtick line closed a four-backtick opener; a draft whose entire body sat inside a four-backtick fence with one nested example passed as 'shape TEMPLATE'. Under CommonMark it is one code block with zero headings."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": ".changeset/spec-gate-fences-2769.md",
+      "line": 11,
+      "claim": "MIGRATION named only tightenings; the cure was one re-run of totem spec.",
+      "counterexample": "EXECUTED: a twenty-tilde divider went main pass -> branch block 'is missing heading <h>' for a heading present verbatim; a four-space-indented fence line and a backtick opener with a backtick info string opened fences CommonMark does not."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1134,
+      "claim": "Only the strict TEMPLATE arm moves; the DOCUMENT shape is unchanged.",
+      "counterexample": "EXECUTED with promptSource override: a fenced YAML document with '# Problem' comments went main pass -> branch 'has no heading with a body'; the record arm shares the predicate and its cure is editing the record."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 38,
+      "claim": "Scope is the reader only; no doc update owed.",
+      "counterexample": "The TEMPLATE and DOCUMENT rows stated rules with no fence or bare-hash clause; the immediately preceding reader change (mmnto-ai/totem#2737) updated this file in lockstep."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1078,
+      "claim": "A line inside a fence IS body when non-blank.",
+      "counterexample": "EXECUTED: bareHashes was applied before the in-fence check, so a fence holding '####' read as empty."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4731,
+      "claim": "'a heading that appears fenced first and real later is found at the real line'.",
+      "counterexample": "EXECUTED: the draft passed on origin/main too (the fenced copy matched); the discriminating shape (exact fenced, tolerant real) yields '· tolerated' only on the branch."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4603,
+      "claim": "Nine cases pin the fence state.",
+      "counterexample": "Unpinned: unequal fence lengths, indented fence, tilde rule, DOCUMENT arm under fences, '####' inside a fence, the tolerated discriminator, seven hashes."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1110,
+      "claim": "A written code block is a written section, so fenced lines are body.",
+      "counterexample": "EXECUTED: a section whose only content was a fence containing the next promised heading passed with zero authored words."
+    },
+    {
+      "id": "f9",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1126,
+      "claim": "isBody excluded only an EXACT promised heading inside a fence while the matcher treats the parenthetical-stripped spelling as the same heading.",
+      "counterexample": "EXECUTED: a section whose only content was a fence containing '### Execution Flow' (tolerant spelling) passed; the exact spelling blocked."
+    },
+    {
+      "id": "f10",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4788,
+      "claim": "The indent-4 pin pinned the indent rule.",
+      "counterexample": "EXECUTED: the draft passed identically on origin/main, fold 1 and fold 2 — bodied by a plain indented line under any fence semantics; the discriminating draft (indented opener, skeleton after, no closer) fails on fold 1 only."
+    },
+    {
+      "id": "f11",
+      "severity": "MATERIAL",
+      "file": ".changeset/spec-gate-fences-2769.md",
+      "line": 13,
+      "claim": "MIGRATION names only the divider class; a fence closed by repeating the info string is a new block class with the wrong stated cure.",
+      "counterexample": "EXECUTED: '```mermaid / A --> B / ```mermaid' went main pass, fold 1 pass, fold 2 block; a re-run of totem spec may reproduce it; the cure is a bare closing fence."
+    },
+    {
+      "id": "f12",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1146,
+      "claim": "fencedCopyOf compared trimEnd()'d lines, so an indented fenced skeleton escaped the hint and an indented fenced promised heading counted as body.",
+      "counterexample": "EXECUTED: the skeleton quoted inside a fence with two-space indentation blocked with the bare 'is missing heading' and no fence hint; '  ### Execution Flow (structural constraint)' inside a fence passed as body."
+    },
+    {
+      "id": "f13",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 38,
+      "claim": "The TEMPLATE row stated the bare-hash rule unqualified.",
+      "counterexample": "EXECUTED: a fence holding '####' and '#####' passes; the row's rule would read it empty."
+    },
+    {
+      "id": "f14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1162,
+      "claim": "The message offered 'close the fence' for a closed, intentional fence.",
+      "counterexample": "EXECUTED: a draft quoting a never-written heading inside a correctly closed fence got '(close the fence, or write the section outside it)'."
+    },
+    {
+      "id": "f15",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4862,
+      "claim": "The record arm's fence behaviour was claimed but pinned by no test.",
+      "counterexample": "Both DOCUMENT tests used an issue anchor with promptSource override; a direct probe confirmed the record behaviour, uncontrolled."
+    },
+    {
+      "id": "f16",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1166,
+      "claim": "The empty-heading message disclosed nothing about the fenced-promised-heading rule.",
+      "counterexample": "EXECUTED: the F8 draft blocked with the bare 'has an empty heading'; a seat grepping the draft finds the heading with a line under it and cannot see why it read as empty."
+    },
+    {
+      "id": "f17",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4816,
+      "claim": "The tilde-divider test pinned the opener line.",
+      "counterexample": "LATENT: it asserted only the message prefix; the hook reports 9 and the leg computed 9 independently."
+    },
+    {
+      "id": "f18",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 40,
+      "claim": "The record row carried no fence note and the changeset said 'every Markdown renderer'.",
+      "counterexample": "Prose comparison against the changeset's own DOCUMENT paragraph; tilde fences are CommonMark/GFM, not original Markdown.pl."
+    },
+    {
+      "id": "f19",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1150,
+      "claim": "The empty-heading suffix said 'its only content is X' and returned on the first rule.",
+      "counterexample": "EXECUTED: a section with BOTH a #### line and a fenced promised heading printed only the fenced-heading reason; 'only' was false."
+    },
+    {
+      "id": "f20",
+      "severity": "MATERIAL",
+      "file": ".changeset/spec-gate-fences-2769.md",
+      "line": 9,
+      "claim": "'A section emptied by the new rules says which one … never a line the seat can see and not explain'.",
+      "counterexample": "EXECUTED: a section whose only content is an empty fence pair passed on main and blocked on HEAD with NO suffix; the emptying rule (a delimiter line is not body) is new in this PR."
+    },
+    {
+      "id": "f21",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 42,
+      "claim": "A fenced line 'is body when non-blank unless it is a promised heading quoted verbatim'.",
+      "counterexample": "EXECUTED: a fence whose only line is '  ### Execution Flow' (indented, parenthetical dropped) is not body — promisedHeading trims and strips one parenthetical; the wiki mis-stated the fold's headline rule."
+    },
+    {
+      "id": "f22",
+      "severity": "MINOR",
+      "file": ".changeset/spec-gate-fences-2769.md",
+      "line": 13,
+      "claim": "'the cure the message gives is the right one: a bare closing fence'.",
+      "counterexample": "EXECUTED on ```mermaid closed by ```mermaid: the message said 'close it, or write the section outside it' — never 'bare', never the info string."
+    },
+    {
+      "id": "f23",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1108,
+      "claim": "A closer with an info string does not close the fence (the class the MIGRATION documents).",
+      "counterexample": "LATENT: no fence test used a closer carrying text; deleting the rest.trim() guard left the suite green while the documented class inverted."
+    },
+    {
+      "id": "f24",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1179,
+      "claim": "The never-closed cure fires only for the fence the copy sits in.",
+      "counterexample": "EXECUTED and correct in code, but unpinned: no test had a copy in a closed fence beside an unrelated unclosed one, so weakening the guard passed all fence tests."
+    },
+    {
+      "id": "f25",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 40,
+      "claim": "A fenced-only record 'is cured by editing the record, not by re-running totem spec'.",
+      "counterexample": "EXECUTED: the hook's own BLOCKED line tells the seat to run totem spec --from <record>, which re-binds the same bytes and blocks again (a pre-existing tail)."
+    },
+    {
+      "id": "f26",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 1125,
+      "claim": "promisedHeading extends 'the same tolerance the matcher extends'.",
+      "counterexample": "EXECUTED: a fenced '### Verification (of the sha256)' — a different heading sharing the stripped form — is not body; fail-closed, symmetric, undocumented."
+    },
+    {
+      "id": "f27",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 4789,
+      "claim": "'a fence line indented four spaces is an indented code block'.",
+      "counterexample": "LATENT: after a paragraph the indented line is a lazy continuation under CommonMark 4.4, not an indented code block; reader behaviour identical."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12",
+    "f13",
+    "f14",
+    "f15",
+    "f16",
+    "f17",
+    "f18",
+    "f19",
+    "f20",
+    "f21",
+    "f22",
+    "f23",
+    "f24",
+    "f25",
+    "f26",
+    "f27"
+  ],
+  "verdict": "Pass 1 (origin/main...1008f71e): the fix real and byte-parity clean, the fence state under-specified — four MATERIAL (fence length, an undisclosed false-block class, the DOCUMENT arm moved undisclosed, the wiki stale) and four MINOR, all folded. Pass 2 (8a4574ef): 13 CommonMark edges held; four MATERIAL (tolerant fenced heading as body, a vacuous pin, the info-string closer class, leading whitespace) and six MINOR, all folded. Pass 3 (74e21227): no behavioural defect, every probe unchanged or strictly more fail-closed; two MATERIAL prose residues and seven MINOR, folded in a wording-and-pins fold the leg is not re-armed on — convergence named."
+}
