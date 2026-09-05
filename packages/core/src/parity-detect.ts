@@ -43,6 +43,15 @@ import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 
+import {
+  type LabelCanon,
+  labelCanonDrift,
+  optionSetsOfProjectFields,
+  parseExpectedOptionSets,
+  parseLabelCanon,
+  type ProjectSingleSelectField,
+  projectVocabularyDrift,
+} from './parity-label-canon.js';
 import { PARITY_SENSES, type ParityContract, type ParitySense } from './parity-manifest.js';
 import { escapeRegex } from './regex-utils.js';
 import { sanitize } from './sanitize.js';
@@ -2787,36 +2796,62 @@ export interface NetworkSurfaceSnapshot {
 }
 
 /**
- * The three externally-hosted surfaces a network-read-only probe reads for one
+ * The externally-hosted surfaces a network-read-only probe reads for one
  * repo. Each is present only when the CLI edge attempted it (the fetch step
  * fetches per repo the union of surfaces the in-scope rows need):
  *   - `repoSettings`     — `GET /repos/{owner}/{repo}` (row-1 merge posture).
  *   - `rulesets`         — the repo's ruleset DETAILS (rows 2 + 3).
  *   - `branchProtection` — classic `GET …/branches/{branch}/protection` (row-3).
+ *   - `labels`           — `GET /repos/{owner}/{repo}/labels`, EVERY page
+ *                          concatenated (`gh-issue-label-canon`); a page cap
+ *                          degrades the whole surface, never an undercount.
+ *   - `projectFields`    — the bound project's field config, one GraphQL read
+ *                          (`gh-project-vocabulary`); the raw response body.
  */
 export interface NetworkRepoSurfaces {
   repoSettings?: NetworkSurfaceSnapshot;
   rulesets?: NetworkSurfaceSnapshot;
   branchProtection?: NetworkSurfaceSnapshot;
+  labels?: NetworkSurfaceSnapshot;
+  projectFields?: NetworkSurfaceSnapshot;
 }
+
+/**
+ * Which GH Project a roster repo binds for the `gh-project-vocabulary` row
+ * (mmnto-ai/totem#2791). Only the CURRENT repo's binding is derivable locally
+ * (`orient.projectNumber`); a sibling's `totem.config.ts` is not a network
+ * surface this checkout reads, so a sibling is honest-absent by construction.
+ */
+export type ProjectBinding =
+  | { kind: 'bound'; owner: string; number: number }
+  | { kind: 'unbound' }
+  | { kind: 'sibling' };
 
 /**
  * One repo's pre-fetched network snapshot. `repoSlug` is the `owner/repo`
  * addressed on the API; `repoId` is the cohort id used for `consumers`
  * applicability (the repo segment / {@link deriveCohortRepoId} result). §14
  * clause 3: one verdict LINE is emitted per repo, never one blended verdict.
+ * `project` is present only when the vocabulary row is in scope for the repo.
  */
 export interface NetworkProbeRepoSnapshot {
   repoSlug: string;
   repoId: string;
   surfaces: NetworkRepoSurfaces;
+  project?: ProjectBinding;
 }
 
-/** The posture rows the network-read-only family senses (routing key = the contract id). */
+/**
+ * The rows the network-read-only family senses (routing key = the contract
+ * id): the three Prop 296 §14 posture rows plus the two 472-charter
+ * orientation rows (mmnto-ai/totem#2791).
+ */
 export type NetworkPostureRow =
   | 'repo-merge-posture'
   | 'repo-required-checks-posture'
-  | 'repo-branch-protection-posture';
+  | 'repo-branch-protection-posture'
+  | 'gh-issue-label-canon'
+  | 'gh-project-vocabulary';
 
 /** Inputs + test seams for {@link detectNetworkPostureContract}. */
 export interface DetectNetworkPostureContext {
@@ -2835,6 +2870,14 @@ export interface DetectNetworkPostureContext {
    * committed"), never an error.
    */
   declarationPath?: string;
+  /**
+   * `gh-issue-label-canon` only: the label canon as a ROSTER-WIDE surface — the
+   * TEXT of `mmnto-ai/totem:scripts/sync-labels.ps1` (`data`), resolved at the
+   * CLI edge from the local checkout or the canonical fetch, with `detail`
+   * naming which. Parsed here (Tenet 20). Absent or non-`ok` → cannot-verify
+   * for every in-scope repo, never a conformance verdict.
+   */
+  labelCanon?: NetworkSurfaceSnapshot;
   /** Test seam — override the declaration read. Production callers omit it (reads UTF-8 on disk). */
   readFile?: (absPath: string) => string | undefined;
 }
@@ -2952,7 +2995,8 @@ const RulesetDeclarationSchema = z.object({
 });
 
 /**
- * Sense the three Prop 296 §14 network-read-only posture rows against pre-fetched
+ * Sense the network-read-only rows — the three Prop 296 §14 posture rows and the
+ * two 472-charter orientation rows (mmnto-ai/totem#2791) — against pre-fetched
  * snapshots. Returns an ARRAY of per-repo verdict lines (the {@link LockContentLine}
  * pattern — the CLI's flatMap render + R2 contract-counting already support
  * multi-line rows). NEVER networks (the fetches ran at the CLI edge), NEVER
@@ -2992,6 +3036,10 @@ export function detectNetworkPostureContract(
       return requiredChecksLines(contract, ctx, inScope);
     case 'repo-branch-protection-posture':
       return inScope.flatMap((repo) => branchProtectionLines(contract, repo));
+    case 'gh-issue-label-canon':
+      return labelCanonLines(contract, ctx, inScope);
+    case 'gh-project-vocabulary':
+      return projectVocabularyLines(contract, inScope);
     default:
       // Defensive: an unrecognized row degrades to a single honest-absent skip
       // rather than darking the sensor (mirrors the manifestation fail-loud).
@@ -3504,6 +3552,266 @@ function strictPolicy(ruleset: z.infer<typeof RulesetSchema>): boolean | undefin
     if (params.success) return params.data.strict_required_status_checks_policy;
   }
   return undefined;
+}
+
+// ── The two 472-charter orientation rows (mmnto-ai/totem#2791) ──────────────
+
+/** A repo's live label list as `GET /repos/{owner}/{repo}/labels` returns it — the fields the row reads. */
+const LabelsArraySchema = z.array(
+  z.object({
+    name: z.string(),
+    color: z.string().nullish(),
+    description: z.string().nullish(),
+  }),
+);
+
+/** A single-select field node of a Projects v2 `fields` connection; other field kinds arrive as `{}`. */
+const ProjectSingleSelectFieldSchema = z.object({
+  name: z.string(),
+  options: z.array(z.object({ name: z.string() })),
+});
+
+/** The raw `gh api graphql` response body the vocabulary row reads. */
+const ProjectFieldsResponseSchema = z.object({
+  data: z
+    .object({
+      organization: z
+        .object({
+          projectV2: z
+            .object({
+              fields: z.object({
+                pageInfo: z.object({ hasNextPage: z.boolean() }).optional(),
+                nodes: z.array(z.unknown()),
+              }),
+            })
+            .nullable(),
+        })
+        .nullable(),
+    })
+    .optional(),
+});
+
+/** One-line verdicts stay bounded: the first eight names, then a count. */
+const LISTED_NAMES_MAX = 8;
+
+/** Render a name list for a one-line message, bounded by {@link LISTED_NAMES_MAX}. */
+function listNames(names: readonly string[]): string {
+  if (names.length === 0) return 'none';
+  if (names.length <= LISTED_NAMES_MAX) return names.join(', ');
+  return `${names.slice(0, LISTED_NAMES_MAX).join(', ')} +${names.length - LISTED_NAMES_MAX} more`;
+}
+
+/**
+ * `gh-issue-label-canon` (charter § 4c). The canon is the SCRIPT TEXT handed in
+ * as a roster-wide surface (`ctx.labelCanon`; `detail` names whether it came
+ * from the local checkout or the canonical fetch), parsed here — Tenet 20,
+ * derived, never mirrored. One line per in-scope roster repo. A canon that
+ * cannot be read, is not text, or parses to nothing is cannot-verify for
+ * EVERY repo: never a conformance verdict against an empty canon.
+ */
+function labelCanonLines(
+  contract: ParityContract,
+  ctx: DetectNetworkPostureContext,
+  inScope: NetworkProbeRepoSnapshot[],
+): LockContentLine[] {
+  const lineName = (repo: NetworkProbeRepoSnapshot): string =>
+    `Parity: ${contract.id} [${repo.repoSlug}]`;
+  const everyRepo = (verdict: ParityContractVerdict): LockContentLine[] =>
+    inScope.map((repo) => ({ lineName: lineName(repo), verdict }));
+
+  const canonSurface = ctx.labelCanon;
+  // The canon is not a probe: an absent surface means the CLI edge never
+  // resolved it (a wiring gap), which the line names as such rather than as
+  // "not probed".
+  if (canonSurface === undefined) {
+    return everyRepo({
+      status: 'unknown',
+      message:
+        'label canon (scripts/sync-labels.ps1): not resolved by the CLI edge — cannot verify',
+    });
+  }
+  const cannot = surfaceCannotVerify(canonSurface, 'label canon (scripts/sync-labels.ps1)');
+  if (cannot !== undefined) return everyRepo(cannot);
+  const provenance = canonSurface.detail ?? 'scripts/sync-labels.ps1';
+  if (typeof canonSurface.data !== 'string') {
+    return everyRepo({
+      status: 'unknown',
+      message: `label canon (${provenance}): payload is not text — cannot verify`,
+    });
+  }
+  const canon = parseLabelCanon(canonSurface.data);
+  if (canon.labels.length === 0) {
+    return everyRepo({
+      status: 'unknown',
+      message: `label canon (${provenance}): parsed no gh label edit definitions — refusing to judge against an empty canon`,
+    });
+  }
+  return inScope.map((repo) => ({
+    lineName: lineName(repo),
+    verdict: labelCanonVerdict(repo, canon, provenance),
+  }));
+}
+
+/** One repo's label verdict against a parsed canon (the cannot-verify ladder, then the § 4c facts). */
+function labelCanonVerdict(
+  repo: NetworkProbeRepoSnapshot,
+  canon: LabelCanon,
+  provenance: string,
+): ParityContractVerdict {
+  const surface = repo.surfaces.labels;
+  const cannot = surfaceCannotVerify(surface, 'labels');
+  if (cannot !== undefined) return cannot;
+  const parsed = LabelsArraySchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    return { status: 'unknown', message: 'labels: payload is not a label list — cannot verify' };
+  }
+  const drift = labelCanonDrift(parsed.data, canon);
+  const total = canon.labels.length;
+  const reported: string[] = [];
+  if (drift.extra.length > 0) {
+    reported.push(`${drift.extra.length} extra outside the canonical namespaces permitted`);
+  }
+  if (drift.retiredPresent.length > 0) {
+    reported.push(`retired name(s) still present: ${listNames(drift.retiredPresent)}`);
+  }
+  const trailer = `${reported.length > 0 ? `; ${reported.join('; ')}` : ''} (canon: ${provenance})`;
+  if (drift.conforming) {
+    return {
+      status: 'pass',
+      message: `${total}/${total} canonical labels present with canonical color + description; nothing outside the canon in the ${canon.namespaces.length} canonical namespaces${trailer}`,
+    };
+  }
+  const faults: string[] = [];
+  if (drift.missing.length > 0) faults.push(`missing [${listNames(drift.missing)}]`);
+  if (drift.redefined.length > 0) {
+    const entries = drift.redefined.map((entry) => {
+      const parts: string[] = [];
+      if (entry.color !== undefined) {
+        parts.push(`color ${entry.color.actual} vs canon ${entry.color.expected}`);
+      }
+      if (entry.description === true) parts.push('description');
+      return `${entry.name} (${parts.join(', ')})`;
+    });
+    faults.push(`redefined [${listNames(entries)}]`);
+  }
+  if (drift.squatters.length > 0) {
+    faults.push(
+      `in a canonical namespace but not in the canon [${listNames(
+        drift.squatters.map((entry) => entry.name),
+      )}]`,
+    );
+  }
+  return {
+    status: 'warn',
+    message: `${total - drift.missing.length}/${total} canonical labels present; ${faults.join('; ')}${trailer}`,
+  };
+}
+
+/**
+ * `gh-project-vocabulary` (charter § 4b). The canonical option sets are parsed
+ * from the ROW's own `expected-value-or-derivation` text — Tenet 20: a doctrine
+ * bump moves the canon, and a text the grammar cannot read renders
+ * cannot-verify, never a hardcoded pass. One line per in-scope roster repo: the
+ * current repo's bound project is judged; a repo with no binding, or a sibling
+ * whose binding this checkout cannot derive, is honest-absent.
+ */
+function projectVocabularyLines(
+  contract: ParityContract,
+  inScope: NetworkProbeRepoSnapshot[],
+): LockContentLine[] {
+  const expected = parseExpectedOptionSets(contract.expectedValueOrDerivation);
+  return inScope.map((repo) => ({
+    lineName: `Parity: ${contract.id} [${repo.repoSlug}]`,
+    verdict: projectVocabularyVerdict(repo, expected),
+  }));
+}
+
+/** One repo's vocabulary verdict (binding, then the cannot-verify ladder, then the § 4b facts). */
+function projectVocabularyVerdict(
+  repo: NetworkProbeRepoSnapshot,
+  expected: ReadonlyMap<string, readonly string[]>,
+): ParityContractVerdict {
+  const binding = repo.project;
+  if (binding === undefined) {
+    return {
+      status: 'skip',
+      message: 'project binding not resolved for this repo — honest-absent',
+    };
+  }
+  if (binding.kind === 'unbound') {
+    return {
+      status: 'skip',
+      message: 'no project bound (orient.projectNumber unset) — honest-absent',
+    };
+  }
+  if (binding.kind === 'sibling') {
+    return {
+      status: 'skip',
+      message:
+        'bound project not derivable for a sibling repo (its totem.config.ts is not a network surface) — run the doctor there',
+    };
+  }
+  const projectLabel = `${binding.owner}/projects/${binding.number}`;
+  if (expected.size === 0) {
+    return {
+      status: 'unknown',
+      message: `${projectLabel}: cannot derive the expected option sets from the row's expected-value-or-derivation — cannot verify`,
+    };
+  }
+  const surface = repo.surfaces.projectFields;
+  const cannot = surfaceCannotVerify(surface, `${projectLabel} fields`);
+  if (cannot !== undefined) return cannot;
+  const parsed = ProjectFieldsResponseSchema.safeParse(surface?.data);
+  if (!parsed.success) {
+    return {
+      status: 'unknown',
+      message: `${projectLabel} fields: payload is not a project field list — cannot verify`,
+    };
+  }
+  const project = parsed.data.data?.organization?.projectV2;
+  if (project === undefined || project === null) {
+    return {
+      status: 'unknown',
+      message: `${projectLabel}: not found or not accessible to this token — cannot verify (never posture-false)`,
+    };
+  }
+  if (project.fields.pageInfo?.hasNextPage === true) {
+    return {
+      status: 'unknown',
+      message: `${projectLabel}: more fields than one page — cannot certify the option sets`,
+    };
+  }
+  const singleSelect: ProjectSingleSelectField[] = [];
+  for (const node of project.fields.nodes) {
+    const field = ProjectSingleSelectFieldSchema.safeParse(node);
+    if (field.success) singleSelect.push(field.data);
+  }
+  const drift = projectVocabularyDrift(optionSetsOfProjectFields(singleSelect), expected);
+  const reported: string[] = [];
+  if (drift.added.length > 0) {
+    reported.push(`${drift.added.length} extra field(s) permitted: ${listNames(drift.added)}`);
+  }
+  if (drift.orderDiffers.length > 0) {
+    reported.push(
+      `option order differs on ${drift.orderDiffers.join(', ')} (order is not governed)`,
+    );
+  }
+  const trailer = reported.length > 0 ? `; ${reported.join('; ')}` : '';
+  if (drift.conforming) {
+    const sets = [...expected.entries()]
+      .map(([field, options]) => `${field} ${options.length}/${options.length}`)
+      .join(', ');
+    return {
+      status: 'pass',
+      message: `${projectLabel}: ${sets} option sets equal the canon${trailer}`,
+    };
+  }
+  const faults = drift.faults.map((fault) =>
+    fault.kind === 'field-missing'
+      ? `${fault.field}: field absent`
+      : `${fault.field}: option set differs — missing [${listNames(fault.missing)}], extra [${listNames(fault.extra)}]`,
+  );
+  return { status: 'warn', message: `${projectLabel}: ${faults.join('; ')}${trailer}` };
 }
 
 /** Read a file through the injected seam, swallowing a throwing reader to undefined (honest-absent). */

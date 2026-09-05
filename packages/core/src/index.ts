@@ -1107,10 +1107,12 @@ export type {
   NetworkSurfaceSnapshot,
   PackageJsonShape,
   ParityContractVerdict,
+  ProjectBinding,
   StrategyDoctrineLock,
   ValueEqualityField,
   ValueEqualityFormat,
 } from './parity-detect.js';
+// The two 472-charter orientation rows' pure derivations (mmnto-ai/totem#2791).
 export {
   deriveCohortRepoId,
   detectCapabilityProbeContract,
@@ -1135,6 +1137,27 @@ export {
   SUPPORTED_LOCK_SCHEMA_VERSION,
   TOOLCHAIN_DIMENSION,
 } from './parity-detect.js';
+export type {
+  CanonicalLabel,
+  LabelCanon,
+  LabelCanonDrift,
+  LabelMerge,
+  LabelRedefinition,
+  LiveLabel,
+  NamespaceSquatter,
+  ProjectSingleSelectField,
+  ProjectVocabularyDrift,
+  ProjectVocabularyFault,
+} from './parity-label-canon.js';
+export {
+  labelCanonDrift,
+  namespaceTokensOf,
+  normalizeLabelColor,
+  optionSetsOfProjectFields,
+  parseExpectedOptionSets,
+  parseLabelCanon,
+  projectVocabularyDrift,
+} from './parity-label-canon.js';
 
 // Semgrep adapter (Pipeline 4 — import rules from Semgrep YAML)
 export type { SemgrepImportResult } from './semgrep-adapter.js';
