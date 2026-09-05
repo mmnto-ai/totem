@@ -8,14 +8,23 @@
  * opt-in cross-repo, dedup), per-repo surface selection under consumers scoping,
  * the rulesets list→detail assembly, branch-protection default-branch resolution,
  * and the no-remote / no-transport degradations.
+ *
+ * The two 472-charter orientation rows (mmnto-ai/totem#2791) are covered on the
+ * same terms: the label pagination walk, the project BINDING (bound / unbound /
+ * sibling) and its GraphQL read behind an injected {@link GhGraphql}, the
+ * roster-wide canon resolution (local read vs the canonical contents fetch), and
+ * the GraphQL body classifier. No test spawns `gh` for these either.
  */
 
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyGraphqlBody,
   type GhFetch,
   type GhFetchResult,
+  type GhGraphql,
   networkPostureRowFor,
+  resolveLabelCanon,
   resolveNetworkSnapshots,
   slugFromRemoteUrl,
 } from './doctor-parity-fetch.js';
@@ -31,6 +40,29 @@ function cannedFetch(routes: Record<string, GhFetchResult>): {
     return routes[apiPath] ?? { outcome: 'not-found', detail: 'unrouted' };
   };
   return { ghFetch, calls };
+}
+
+/** Build a canned GraphQL transport returning one result, recording each call. */
+function cannedGraphql(result: GhFetchResult): {
+  ghGraphql: GhGraphql;
+  calls: { query: string; variables: Record<string, string | number> }[];
+} {
+  const calls: { query: string; variables: Record<string, string | number> }[] = [];
+  const ghGraphql: GhGraphql = (query, variables) => {
+    calls.push({ query, variables });
+    return result;
+  };
+  return { ghGraphql, calls };
+}
+
+/** The labels page path for one page number (mirrors the walk's exact query string). */
+function labelsPath(page: number): string {
+  return `/repos/mmnto-ai/totem/labels?per_page=100&page=${page}`;
+}
+
+/** `count` distinct canned label objects. */
+function labelPage(count: number, prefix: string): { name: string }[] {
+  return Array.from({ length: count }, (_, i) => ({ name: `${prefix}-${i}` }));
 }
 
 const remoteOrigin = () => 'git@github.com:mmnto-ai/totem.git';
@@ -296,5 +328,304 @@ describe('resolveNetworkSnapshots', () => {
       readRemote: remoteOrigin,
     });
     expect(snaps.map((s) => s.repoId).sort()).toEqual(['totem', 'totem-status']);
+  });
+});
+
+// === The two 472-charter orientation rows (mmnto-ai/totem#2791) ===
+
+describe('networkPostureRowFor — orientation rows', () => {
+  it('maps the label-canon and project-vocabulary ids to their row kinds', () => {
+    expect(networkPostureRowFor('gh-issue-label-canon')).toBe('gh-issue-label-canon');
+    expect(networkPostureRowFor('gh-project-vocabulary')).toBe('gh-project-vocabulary');
+  });
+});
+
+describe('resolveNetworkSnapshots — the labels surface', () => {
+  it('concatenates every page and stops on the first short page', async () => {
+    const { ghFetch, calls } = cannedFetch({
+      [labelsPath(1)]: { outcome: 'ok', data: labelPage(100, 'p1') },
+      [labelsPath(2)]: { outcome: 'ok', data: labelPage(12, 'p2') },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-issue-label-canon' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    const labels = snaps[0]?.surfaces.labels;
+    expect(labels?.outcome).toBe('ok');
+    expect(Array.isArray(labels?.data)).toBe(true);
+    expect(labels?.data as unknown[]).toHaveLength(112);
+    // Both pages were read, in order, and the walk stopped at the short page.
+    expect(calls).toEqual([labelsPath(1), labelsPath(2)]);
+  });
+
+  it('degrades the WHOLE surface at the page cap — never a partial list', async () => {
+    const routes: Record<string, GhFetchResult> = {};
+    for (let page = 1; page <= 11; page += 1) {
+      routes[labelsPath(page)] = { outcome: 'ok', data: labelPage(100, `p${page}`) };
+    }
+    const { ghFetch, calls } = cannedFetch(routes);
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-issue-label-canon' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.labels?.outcome).toBe('error');
+    expect(snaps[0]?.surfaces.labels?.detail).toContain('cannot certify');
+    // The cap bounds the walk: the 11th page is never requested.
+    expect(calls).toHaveLength(10);
+    expect(calls).not.toContain(labelsPath(11));
+  });
+
+  it('propagates a non-ok page outcome (auth is never a drift verdict)', async () => {
+    const { ghFetch } = cannedFetch({
+      [labelsPath(1)]: { outcome: 'ok', data: labelPage(100, 'p1') },
+      [labelsPath(2)]: { outcome: 'auth', detail: 'HTTP 403 — under-privileged token' },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-issue-label-canon' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.labels?.outcome).toBe('auth');
+    expect(snaps[0]?.surfaces.labels?.data).toBeUndefined();
+  });
+
+  it('degrades a NON-ARRAY labels page to error', async () => {
+    const { ghFetch } = cannedFetch({
+      [labelsPath(1)]: { outcome: 'ok', data: { message: 'not a list' } },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-issue-label-canon' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.surfaces.labels?.outcome).toBe('error');
+    expect(snaps[0]?.surfaces.labels?.detail).toContain('unparseable labels page');
+  });
+});
+
+describe('resolveNetworkSnapshots — the project binding', () => {
+  const projectBody = {
+    data: {
+      organization: {
+        projectV2: {
+          title: 'Convergent Spine',
+          fields: { pageInfo: { hasNextPage: false }, nodes: [{ name: 'Status', options: [] }] },
+        },
+      },
+    },
+  };
+
+  it('binds the CURRENT repo to orient.projectNumber and reads its fields once', async () => {
+    const { ghFetch } = cannedFetch({});
+    const { ghGraphql, calls } = cannedGraphql({ outcome: 'ok', data: projectBody });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-project-vocabulary' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      projectNumber: 1,
+      ghFetch,
+      ghGraphql,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps[0]?.project).toEqual({ kind: 'bound', owner: 'mmnto-ai', number: 1 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.variables).toEqual({ org: 'mmnto-ai', number: 1 });
+    expect(calls[0]?.query).toContain('ProjectV2SingleSelectField');
+    expect(snaps[0]?.surfaces.projectFields?.outcome).toBe('ok');
+    expect(snaps[0]?.surfaces.projectFields?.data).toEqual(projectBody);
+  });
+
+  it('renders an UNBOUND current repo without reading anything', async () => {
+    const { ghFetch, calls } = cannedFetch({});
+    const { ghGraphql, calls: gqlCalls } = cannedGraphql({ outcome: 'ok', data: projectBody });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-project-vocabulary' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      ghFetch,
+      ghGraphql,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]?.project).toEqual({ kind: 'unbound' });
+    expect(snaps[0]?.surfaces.projectFields).toBeUndefined();
+    expect(gqlCalls).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+
+  it('marks a cross-repo probe a SIBLING and never reads a project for it', async () => {
+    const { ghGraphql, calls } = cannedGraphql({ outcome: 'ok', data: projectBody });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [{ row: 'gh-project-vocabulary' }],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      probeRepos: ['other-org/widget'],
+      projectNumber: 1,
+      ghFetch: cannedFetch({}).ghFetch,
+      ghGraphql,
+      readRemote: remoteOrigin,
+    });
+    const widget = snaps.find((s) => s.repoId === 'widget');
+    expect(widget?.project).toEqual({ kind: 'sibling' });
+    expect(widget?.surfaces.projectFields).toBeUndefined();
+    // Only the current repo's bound project is read.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.variables).toEqual({ org: 'mmnto-ai', number: 1 });
+  });
+
+  it('omits `project` entirely when the vocabulary row is not in scope for the repo', async () => {
+    const { ghGraphql, calls } = cannedGraphql({ outcome: 'ok', data: projectBody });
+    const { ghFetch } = cannedFetch({
+      '/repos/mmnto-ai/totem': { outcome: 'ok', data: { allow_squash_merge: true } },
+    });
+    const snaps = await resolveNetworkSnapshots({
+      rows: [
+        { row: 'repo-merge-posture' },
+        { row: 'gh-project-vocabulary', consumers: ['some-other-repo'] },
+      ],
+      repoId: 'totem',
+      gitRoot: '/repo',
+      projectNumber: 1,
+      ghFetch,
+      ghGraphql,
+      readRemote: remoteOrigin,
+    });
+    expect(snaps).toHaveLength(1);
+    expect(snaps[0]?.project).toBeUndefined();
+    expect(Object.hasOwn(snaps[0] ?? {}, 'project')).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe('resolveLabelCanon', () => {
+  const script = 'gh label edit "tier-1" --color "0e8a16" --description "First tier"\r\n';
+
+  it('reads the canon from the local checkout in the totem repo', () => {
+    const reads: string[] = [];
+    const canon = resolveLabelCanon({
+      gitRoot: '/repo',
+      repoId: 'totem',
+      readFile: (absPath) => {
+        reads.push(absPath);
+        return script;
+      },
+    });
+    expect(canon.outcome).toBe('ok');
+    expect(canon.data).toBe(script);
+    expect(canon.detail).toBe('local checkout scripts/sync-labels.ps1');
+    expect(reads[0]).toContain('sync-labels.ps1');
+  });
+
+  it('degrades to error when the local canon is unreadable', () => {
+    const canon = resolveLabelCanon({
+      gitRoot: '/repo',
+      repoId: 'totem',
+      readFile: () => {
+        throw new Error('ENOENT');
+      },
+    });
+    expect(canon.outcome).toBe('error');
+    expect(canon.detail).toContain('unreadable');
+    expect(canon.data).toBeUndefined();
+  });
+
+  it('decodes the canonical contents payload and discloses the blob sha', () => {
+    // GitHub wraps the base64 payload in newlines and the script itself is CRLF
+    // — both must survive the decode.
+    const wrapped = (
+      Buffer.from(script, 'utf8')
+        .toString('base64')
+        .match(/.{1,4}/g) ?? []
+    ).join('\n');
+    const { ghFetch, calls } = cannedFetch({
+      '/repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1': {
+        outcome: 'ok',
+        data: { content: `${wrapped}\n`, encoding: 'base64', sha: 'abcdef1234567890' },
+      },
+    });
+    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    expect(canon.outcome).toBe('ok');
+    expect(canon.data).toBe(script);
+    expect(canon.detail).toBe('mmnto-ai/totem:scripts/sync-labels.ps1@abcdef1');
+    expect(calls).toEqual(['/repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1']);
+  });
+
+  it('propagates a non-ok canonical fetch with a provenance-prefixed detail', () => {
+    const { ghFetch } = cannedFetch({
+      '/repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1': {
+        outcome: 'auth',
+        detail: 'HTTP 403 — under-privileged token',
+      },
+    });
+    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    expect(canon.outcome).toBe('auth');
+    expect(canon.detail).toBe(
+      'canonical fetch mmnto-ai/totem:scripts/sync-labels.ps1: HTTP 403 — under-privileged token',
+    );
+    expect(canon.data).toBeUndefined();
+  });
+
+  it('degrades an unshaped contents 200 to error (never a decoded garbage canon)', () => {
+    const { ghFetch } = cannedFetch({
+      '/repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1': {
+        outcome: 'ok',
+        data: { content: 'aGk=', encoding: 'none' },
+      },
+    });
+    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    expect(canon.outcome).toBe('error');
+    expect(canon.detail).toBe('unparseable contents response');
+  });
+
+  it('reports no-transport when a non-totem repo has no transport to fetch with', () => {
+    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city' });
+    expect(canon.outcome).toBe('no-transport');
+    expect(canon.detail).toContain('no transport');
+  });
+});
+
+describe('classifyGraphqlBody', () => {
+  it('classifies a permission / scope error as auth', () => {
+    const result = classifyGraphqlBody({
+      data: { organization: null },
+      errors: [{ type: 'FORBIDDEN', message: 'Resource not accessible by integration' }],
+    });
+    expect(result.outcome).toBe('auth');
+    expect(result.detail).toContain('not accessible');
+  });
+
+  it('classifies a NOT_FOUND error as not-found', () => {
+    const result = classifyGraphqlBody({
+      data: { organization: { projectV2: null } },
+      errors: [
+        { type: 'NOT_FOUND', message: 'Could not resolve to a ProjectV2 with the number 9' },
+      ],
+    });
+    expect(result.outcome).toBe('not-found');
+  });
+
+  it('classifies any other error as error, carrying the first message', () => {
+    const result = classifyGraphqlBody({
+      errors: [{ message: 'Something went wrong while executing your query' }],
+    });
+    expect(result.outcome).toBe('error');
+    expect(result.detail).toBe('Something went wrong while executing your query');
+  });
+
+  it('treats a body that resolved the project as ok', () => {
+    const body = { data: { organization: { projectV2: { title: 'Convergent Spine' } } } };
+    const result = classifyGraphqlBody(body);
+    expect(result.outcome).toBe('ok');
+    expect(result.data).toEqual(body);
   });
 });
