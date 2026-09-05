@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "104ddad228f88d38f040903e6ca4c39ed39afafd",
+  "readAt": "2026-09-04T21:53:14Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 632,
+      "claim": "The diff amended every mirror of the 'key unset => no_useful_hits can never fire' sentence; the shipped searchRelevanceFloor JSDoc still says 'UNSET = NO FLOOR: `no_useful_hits` and the spec refusal's below-floor arm can never fire', and the consumer list enumerates only the below-floor cause.",
+      "counterexample": "Executed: floor unset, one NaN hit => <retrieval-envelope status=\"no_useful_hits\" method=\"hybrid\" bestRelevance=\"n/a\" floor=\"none\" hits=\"0\" faulted=\"1\" />. The identical sentence at docs/wiki/config-reference.md WAS amended by this diff; the JSDoc in the package this changeset bumps was not."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/cross-repo-mesh.md",
+      "line": 88,
+      "claim": "Bumping @mmnto/mcp minor on the grounds that no cohort code parses the envelope; the envelope is a documented published contract ('parses with a single regular expression, so wrapper agents can route on retrieval confidence').",
+      "counterexample": "Measured: the repo's OWN wrapper regex in search-knowledge.test.ts (anchored hits=\"(\\d+)\" \\/>) stops matching — 13 of the 24 old-reader failures are exactly this. packages/mcp/CHANGELOG.md records that the last change to this line (mmnto-ai/totem#2727) deliberately preserved the shape 'so the wrapper-agent single-regex contract holds'. @mmnto/mcp publishes to npm, so consumers outside the cohort exist by construction."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/search-knowledge.ts",
+      "line": 937,
+      "claim": "The all-faulted arm carries 'the CLI refusal's sentence' (singular), mirroring formatGroundingRefusal.",
+      "counterexample": "Executed: the body stated the cause TWICE — the first sentence then faultedDisclosure()'s 'did not count as signal or as exemption' line. In the CLI that second line lives only in the else/below-floor arm, never on the bestRelevance === null arm. It is also vacuous when every hit is faulted."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": ".changeset/mcp-faulted-relevance-2770.md",
+      "line": 8,
+      "claim": "'With no floor ... a negative or above-1 value was rendered as a measurement in the per-hit field, the envelope and the selection manifest.'",
+      "counterexample": "Executed against origin/main's reader: floor unset, hits [-0.1, 0.8] => the emitted manifest row's candidate reason is 'returned rank=1' and context carries no relevance. The manifest renders a relevance only inside 'below-relevance-floor ... relevance=...', which requires a floor. Inherited verbatim from the issue's Consequences."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 166,
+      "claim": "A faulted hit 'is disclosed by path with `relevance faulted` rather than a number'.",
+      "counterexample": "Executed: exempt + faulted with no floor => status=\"ok\" hits=\"2\" faulted=\"1\" and the faulted hit is RETURNED IN FULL with its content, field reading 'faulted (not a finite number in [0, 1])'. cross-repo-mesh.md states it correctly; the two docs disagreed."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/search-knowledge.test.ts",
+      "line": 2432,
+      "claim": "Comment: 'Never rendered as a number a reader could compare' — the assertion is not.toMatch(/relevance (NaN|-0\\.100|1\\.500|Infinity)/).",
+      "counterexample": "Latent: the pattern is case-sensitive and space-delimited, so it cannot match the per-hit rendering '**Relevance:** 1.500'. No mutant escapes (the formatResult-prints-the-number mutant is killed by two other tests), so this is assertion hygiene, not a hole."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/search-knowledge.test.ts",
+      "line": 2409,
+      "claim": "The it.each plus inner floor loop covers the invalid-value domain and both floor states.",
+      "counterexample": "Latent: Number.NEGATIVE_INFINITY is pinned only in core, and the all-faulted arm reached via min_relevance rather than a config floor is untested — it works (executed: min_relevance 0.7 with a lone NaN => no_useful_hits, floor=\"0.700\", faulted=\"1\"), but nothing pins it. The inner for-loop also does not name which iteration failed."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7"
+  ],
+  "verdict": "No BLOCKING defect: the three-class classification, the all-faulted arm's placement and gating, the manifest schema coupling and the floor semantics survived every constructed and executed counterexample, fault-free batches are byte-identical apart from faulted=\"0\", 11 of the 12 new tests fail on origin/main's reader for the issue's own semantic reasons (13 pre-existing failures are attribute-only), and all 9 mutants were killed. Two MATERIAL items for the seat: a stale contract sentence left in shipped @mmnto/totem JSDoc (F1, folded) and a bump-level ruling on breaking the documented single-regex envelope contract as a minor (F2, put to the operator)."
+}

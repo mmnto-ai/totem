@@ -133,11 +133,23 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
 }));
 
+/**
+ * The range predicate the reader classifies on (mmnto-ai/totem#2770) — a
+ * byte-for-byte mirror of core's `isRelevanceInRange`
+ * (packages/core/src/store/relevance.ts). The module mock exists to keep
+ * LanceDB out of this suite, not to substitute a different rule, and it is
+ * applied TWICE (the hoisted `vi.mock` and the per-test `vi.doMock` after
+ * `vi.resetModules()`), so both sites share this one definition.
+ */
+const fakeIsRelevanceInRange = (relevance: number): boolean =>
+  Number.isFinite(relevance) && relevance >= 0 && relevance <= 1;
+
 vi.mock('@mmnto/totem', () => ({
   ContentTypeSchema: {
     options: ['code', 'session_log', 'spec', 'lesson'],
   },
   buildMeasuredCandidate: fakeBuildMeasuredCandidate,
+  isRelevanceInRange: fakeIsRelevanceInRange,
 }));
 
 vi.mock('../context.js', () => ({
@@ -291,6 +303,7 @@ describe('search_knowledge', () => {
         options: ['code', 'session_log', 'spec', 'lesson'],
       },
       buildMeasuredCandidate: fakeBuildMeasuredCandidate,
+      isRelevanceInRange: fakeIsRelevanceInRange,
     }));
 
     vi.doMock('../context.js', () => ({
@@ -467,6 +480,47 @@ describe('search_knowledge', () => {
       expect(byId['a.ts']).toMatchObject({ disposition: 'excluded' });
     });
 
+    it('records a faulted hit as excluded with the fault reason, and the context carries the count (mmnto-ai/totem#2770)', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.1 },
+        {
+          label: 'F',
+          type: 'code',
+          filePath: 'f.ts',
+          score: 0.8,
+          content: 'ffff',
+          relevance: Number.NaN,
+        },
+      ];
+      await handle({ query: 'test' });
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ status: 'no_useful_hits', faulted: 1 });
+      const byId = Object.fromEntries(call.candidates.map((c) => [c.id, c]));
+      expect(byId['a.ts']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'below-relevance-floor floor=0.400 relevance=0.100',
+      });
+      expect(byId['f.ts']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'relevance-faulted (not a finite number in [0, 1])',
+      });
+    });
+
+    it('records a faulted hit on the ok path as selected with the fault named in its reason', async () => {
+      mockSearchResults = [
+        { label: 'A', type: 'code', filePath: 'a.ts', score: 0.9, content: 'aaaa', relevance: 0.9 },
+        { label: 'F', type: 'code', filePath: 'f.ts', score: 0.8, content: 'ffff', relevance: 7 },
+      ];
+      await handle({ query: 'test' });
+      const call = manifestCall();
+      expect(call.context).toMatchObject({ status: 'ok', faulted: 1 });
+      expect(call.candidates[1]).toMatchObject({
+        id: 'f.ts',
+        disposition: 'selected',
+        reason: 'returned rank=2 (relevance faulted)',
+      });
+    });
+
     it('emits a zero-candidate manifest on an empty result set', async () => {
       mockSearchResults = [];
       await handle({ query: 'test' });
@@ -515,6 +569,51 @@ describe('search_knowledge', () => {
       );
       expect(selected).toHaveLength(2);
       expect(overflow).toHaveLength(2);
+    });
+
+    it('a FAULTED hit cut by the federation final limit names its fault in the overflow reason; the context count stays scoped to the returned pool (mmnto-ai/totem#2770)', async () => {
+      mockSearchResults = [
+        { label: 'P1', type: 'code', filePath: 'p1.ts', score: 0.9, content: 'p1', relevance: 0.9 },
+        { label: 'P2', type: 'code', filePath: 'p2.ts', score: 0.8, content: 'p2', relevance: 0.8 },
+      ];
+      // RRF fuses per-store RANKS, so the faulted hit must be the linked store's
+      // second result to fall past the final limit rather than be returned.
+      mockLinkedStores.set('strategy', {
+        search: async () => [
+          {
+            label: 'L1',
+            type: 'spec',
+            filePath: 'l1.md',
+            score: 0.7,
+            content: 'l1',
+            relevance: 0.9,
+            sourceRepo: 'strategy',
+          },
+          {
+            label: 'L2',
+            type: 'spec',
+            filePath: 'l2.md',
+            score: 0.6,
+            content: 'l2',
+            relevance: Number.NaN,
+            sourceRepo: 'strategy',
+          },
+        ],
+        reconnect: async () => {},
+      });
+      await handle({ query: 'test', max_results: 2 });
+      const call = manifestCall();
+      const byId = Object.fromEntries(call.candidates.map((c) => [c.id, c]));
+      expect(byId['l2.md']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'federation-final-limit overflow (relevance faulted)',
+      });
+      expect(byId['p2.ts']).toMatchObject({
+        disposition: 'excluded',
+        reason: 'federation-final-limit overflow',
+      });
+      // The returned pool carried no fault: the context says 0, the reason says where the fault went.
+      expect(call.context).toMatchObject({ status: 'ok', faulted: 0 });
     });
 
     it('does NOT emit a manifest when the search fails to an isError outcome', async () => {
@@ -1961,7 +2060,7 @@ describe('search_knowledge', () => {
     // The whole outcome must parse from the response text with ONE regex
     // (the wrapper-agent contract).
     const ENVELOPE_RE =
-      /<retrieval-envelope status="(\w+)" method="(\w+)" bestRelevance="([^"]+)" floor="([^"]+)" hits="(\d+)" \/>/;
+      /<retrieval-envelope status="(\w+)" method="(\w+)" bestRelevance="([^"]+)" floor="([^"]+)" hits="(\d+)" faulted="(\d+)" \/>/;
 
     it('emits status="ok" with bestRelevance, floor, and per-hit Relevance', async () => {
       mockSearchResults = [
@@ -2323,6 +2422,168 @@ describe('search_knowledge', () => {
         context: Record<string, unknown>;
       };
       expect(call.context['floor']).toBe(0.5);
+    });
+
+    // ─── FAULTED relevances (mmnto-ai/totem#2770) ──
+    //
+    // The CLI's five shapes (mmnto-ai/totem#2761, Greptile P1) on the MCP
+    // surface. Before this change the reader selected relevances on a bare
+    // `typeof`, so a NaN poisoned `Math.max` (NaN < floor is false → the floor
+    // never fired → `status="ok"` with the noise) and an out-of-range value
+    // printed as a measurement. Every case here fails on that code.
+    describe('faulted relevances — neither signal nor exemption (mmnto-ai/totem#2770)', () => {
+      const hit = (label: string, relevance: number | undefined, content: string, fts = false) => ({
+        label,
+        type: 'code' as const,
+        filePath: `src/${label}.ts`,
+        score: 0.016,
+        ...(relevance !== undefined ? { relevance } : {}),
+        searchMethod: fts ? ('fts' as const) : ('hybrid' as const),
+        content,
+      });
+      const run = async (args: Record<string, unknown> = {}) => {
+        const result = (await handle({ query: 'test', ...args })) as {
+          content: Array<{ type: string; text: string }>;
+        };
+        const text = result.content[0]!.text;
+        const m = text.match(ENVELOPE_RE);
+        expect(m, text).not.toBeNull();
+        return { text, m: m! };
+      };
+
+      const INVALID: Array<[string, number]> = [
+        ['NaN', Number.NaN],
+        ['negative', -0.1],
+        ['above one', 1.5],
+        ['Infinity', Number.POSITIVE_INFINITY],
+        ['-Infinity', Number.NEGATIVE_INFINITY],
+      ];
+      const FLOORS: Array<[string, number | undefined]> = [
+        ['a configured floor', 0.4],
+        ['no floor', undefined],
+      ];
+      /** Both renderings a number could take — the per-hit field and the disclosure line. */
+      const RENDERED_AS_NUMBER = /(relevance|Relevance:\*\*) (NaN|-?0\.100|1\.500|-?Infinity)/;
+
+      it.each(
+        INVALID.flatMap(([name, value]) =>
+          FLOORS.map(([floorName, floor]): [string, number, string, number | undefined] => [
+            name,
+            value,
+            floorName,
+            floor,
+          ]),
+        ),
+      )(
+        'a lone %s relevance under %s answers no_useful_hits with the fault disclosed',
+        async (_name, value, _floorName, floor) => {
+          mockSearchRelevanceFloor = floor;
+          mockSearchResults = [hit('f', value, 'FAULTED_BODY')];
+          const { text, m } = await run();
+          expect(m[1]).toBe('no_useful_hits');
+          expect(m[3]).toBe('n/a'); // a fault never raises bestRelevance
+          expect(m[4]).toBe(floor === undefined ? 'none' : '0.400');
+          expect(m[5]).toBe('0');
+          expect(m[6]).toBe('1');
+          expect(text).toContain(
+            'Retrieval returned 1 hit, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — nothing usable to return.',
+          );
+          expect(text).toContain('/fake/project/src/f.ts — relevance faulted');
+          // The cause is stated ONCE — the "did not count as" sentence belongs
+          // to a fault beside real hits, not to a batch with nothing else.
+          expect(text).not.toContain('did not count as signal or as exemption');
+          expect(text).not.toContain('FAULTED_BODY');
+          expect(text).not.toMatch(RENDERED_AS_NUMBER);
+        },
+      );
+
+      it('the all-faulted arm is reached through min_relevance as well as the config floor', async () => {
+        mockSearchRelevanceFloor = undefined;
+        mockSearchResults = [hit('f', Number.NaN, 'FAULTED_BODY')];
+        for (const minRelevance of [0.7, 0]) {
+          const { text, m } = await run({ min_relevance: minRelevance });
+          expect(m[1]).toBe('no_useful_hits');
+          expect(m[4]).toBe(minRelevance.toFixed(3));
+          expect(m[6]).toBe('1');
+          expect(text).not.toContain('FAULTED_BODY');
+        }
+      });
+
+      it('a negative relevance beside a WEAK sibling under a floor: withheld, not proceeded', async () => {
+        mockSearchRelevanceFloor = 0.4;
+        mockSearchResults = [hit('neg', -0.1, 'NEG_BODY'), hit('weak', 0.2, 'WEAK_BODY')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('no_useful_hits');
+        expect(m[3]).toBe('0.200'); // the weak sibling's REAL signal, not the fault
+        expect(m[6]).toBe('1');
+        expect(text).toContain('relevance 0.200');
+        expect(text).toContain(
+          '1 hit carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) and did not count as signal or as exemption.',
+        );
+        expect(text).toContain('/fake/project/src/neg.ts — relevance faulted');
+        expect(text).not.toMatch(RENDERED_AS_NUMBER);
+        expect(text).not.toContain('NEG_BODY');
+        expect(text).not.toContain('WEAK_BODY');
+      });
+
+      it('a NaN beside a WEAK sibling under a floor: the floor still fires (NaN can no longer poison Math.max)', async () => {
+        mockSearchRelevanceFloor = 0.4;
+        mockSearchResults = [hit('nan', Number.NaN, 'NAN_BODY'), hit('weak', 0.2, 'WEAK_BODY')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('no_useful_hits');
+        expect(m[3]).toBe('0.200');
+        expect(m[6]).toBe('1');
+        expect(text).not.toContain('WEAK_BODY');
+        expect(text).not.toContain('NAN_BODY');
+      });
+
+      it('a fault beside an at-or-above-floor hit: proceeds on the real signal; the fault is returned but labelled', async () => {
+        mockSearchRelevanceFloor = 0.4;
+        mockSearchResults = [hit('good', 0.83, 'GOOD_BODY'), hit('nan', Number.NaN, 'NAN_BODY')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('ok');
+        expect(m[3]).toBe('0.830');
+        expect(m[5]).toBe('2');
+        expect(m[6]).toBe('1');
+        expect(text).toContain('**Relevance:** 0.830');
+        expect(text).toContain('**Relevance:** faulted (not a finite number in [0, 1])');
+        expect(text).toContain('GOOD_BODY');
+        expect(text).toContain('NAN_BODY');
+      });
+
+      it('a fault beside a keyword-only hit under a floor: proceeds on the exemption, bestRelevance n/a', async () => {
+        mockSearchRelevanceFloor = 0.4;
+        mockSearchResults = [hit('kw', undefined, 'KW_BODY', true), hit('neg', -2, 'NEG_BODY')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('ok');
+        expect(m[3]).toBe('n/a'); // no usable signal; the exemption carries the batch
+        expect(m[5]).toBe('2');
+        expect(m[6]).toBe('1');
+        expect(text).toContain('KW_BODY');
+        expect(text).toContain('**Relevance:** n/a (keyword match)');
+        expect(text).toContain('**Relevance:** faulted (not a finite number in [0, 1])');
+      });
+
+      it('with NO floor, a fault beside a weak hit proceeds — the all-faulted arm needs every hit faulted', async () => {
+        mockSearchRelevanceFloor = undefined;
+        mockSearchResults = [hit('weak', 0.05, 'WEAK_BODY'), hit('nan', Number.NaN, 'NAN_BODY')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('ok');
+        expect(m[3]).toBe('0.050');
+        expect(m[4]).toBe('none');
+        expect(m[6]).toBe('1');
+        expect(text).toContain('WEAK_BODY');
+      });
+
+      it('a batch with no faults reports faulted="0" and is byte-unchanged otherwise', async () => {
+        mockSearchRelevanceFloor = 0.4;
+        mockSearchResults = [hit('a', 0.83, 'alpha body')];
+        const { text, m } = await run();
+        expect(m[1]).toBe('ok');
+        expect(m[6]).toBe('0');
+        expect(text).not.toContain('faulted (');
+        expect(text).not.toContain('Faulted candidates');
+      });
     });
 
     it('preserves relevance through the federation RRF merge (second fusion site)', async () => {

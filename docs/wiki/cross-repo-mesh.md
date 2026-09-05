@@ -73,16 +73,17 @@ The relevance is **metric-bound** (mmnto-ai/totem#2738): it is `relevanceFromDis
 Every `search_knowledge` response also emits a machine-parsable `<retrieval-envelope>` line directly below the `<index-meta>` line, e.g.:
 
 ```
-<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.570" hits="5" />
-<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="none" hits="5" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="0.570" hits="5" faulted="0" />
+<retrieval-envelope status="ok" method="hybrid" bestRelevance="0.831" floor="none" hits="5" faulted="0" />
 ```
 
 The first line is a repo that configured `searchRelevanceFloor`; the second is the default state, with no floor configured and none passed per call.
 
-- `status` is `ok`, `no_useful_hits`, or `empty`. `no_useful_hits` means results exist but the best relevance fell below the floor — the below-floor candidates are still disclosed (path + relevance, no content) rather than silently dropped; `empty` means zero rows. The two are kept programmatically distinct.
+- `status` is `ok`, `no_useful_hits`, or `empty`. `no_useful_hits` means results exist but the best relevance fell below the floor — the below-floor candidates are still disclosed (path + relevance, no content) rather than silently dropped — or that every hit carried a faulted relevance (below); `empty` means zero rows. The two are kept programmatically distinct.
 - `method` is `hybrid`, `vector`, or `fts` (the last indicating the embedder was unavailable and search degraded to keyword-only — a loud system warning accompanies it).
 - `bestRelevance` is the max per-hit relevance (or `n/a` when no hit carried a relevance signal — in which case the floor does not fire). It is the same metric-bound quantity as the `Relevance:` field above: `relevanceFromDistance('l2', _distance)` over LanceDB's squared-L2 distance, so on unit-norm vectors it lives in `[0.2, 1]` — read every floor against that range, not against a nominal `[0, 1]`.
-- `floor` is the effective relevance floor for the call: the config `searchRelevanceFloor`, overridable per call via the `min_relevance` input. That key carries **no default** (mmnto-ai/totem#2727) — with neither set the attribute reads `floor="none"`, no floor applies, and `status` can never be `no_useful_hits`.
+- `floor` is the effective relevance floor for the call: the config `searchRelevanceFloor`, overridable per call via the `min_relevance` input. That key carries **no default** (mmnto-ai/totem#2727) — with neither set the attribute reads `floor="none"`, no floor applies, and the below-floor arm can never answer `no_useful_hits`.
+- `faulted` (mmnto-ai/totem#2770) counts hits whose relevance failed the range predicate (`isRelevanceInRange`: NaN, infinite, or outside [0, 1]). A faulted hit is neither signal nor exemption: it never raises `bestRelevance`, is never withheld as a measurement (its per-hit field and its disclosure read `faulted`, not a number), and cannot carry a batch. A retrieval whose every hit is faulted answers `no_useful_hits` with `bestRelevance="n/a"` whatever the floor — the one way that status arises with `floor="none"`. The attribute is always present, so the line keeps one closed shape; a wrapper regex anchored on `hits="N" />` must admit the new trailing attribute.
 
 The envelope parses with a single regular expression, so wrapper agents can route on retrieval confidence without scraping the prose body.
 
