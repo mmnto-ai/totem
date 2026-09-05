@@ -225,22 +225,18 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     expect(check).toContain('id: release_train');
     expect(check).toContain('shell: bash');
     expect(ifLinesOf(check)).toEqual(["if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}"]);
+    // The run block is EXACTLY the base fetch and the script, in that order,
+    // under `set -euo pipefail`; the script's own rules are executed case by
+    // case in release-train-shape.test.ts, and its whole text is a tracked
+    // file, so what this pin buys is that the step runs THAT script and nothing
+    // softens or bypasses it here.
     expect(runLinesOf(check)).toEqual([
       'set -euo pipefail',
       'git fetch origin "$BASE_REF"',
-      'diff=$(git diff --name-status "origin/$BASE_REF...HEAD")',
-      `other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' || true)`,
-      `readme=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/README[.]md$' || true)`,
-      `other=$(echo "$other" "$readme" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)`,
-      'if [ -n "$other" ]; then',
-      'echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"',
-      'echo "exempt=false" >> "$GITHUB_OUTPUT"',
-      'else',
-      'echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — its diff is only consumed changesets, CHANGELOG.md and package.json, and it authors nothing, so the review-leg floor does not apply (mmnto-ai/totem#2779). The totem lint step still runs."',
-      'echo "exempt=true" >> "$GITHUB_OUTPUT"',
-      'fi',
+      'bash tools/release-train-shape.sh "origin/$BASE_REF"',
     ]);
     expect(check).not.toContain('continue-on-error');
+    expect(fs.existsSync(path.join(REPO_ROOT, 'tools', 'release-train-shape.sh'))).toBe(true);
     // The gate reads the check's OUTPUT, and exactly that: a skipped check
     // writes no output and '' != 'true' runs the gate — fail-closed. Any other
     // condition — a prefix match, `if: false`, a value the PR author controls —

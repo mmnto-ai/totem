@@ -53,30 +53,36 @@ jobs:
       #
       # Identity is NOT the branch name alone. The job-level
       # LEGS_GATE_RELEASE_TRAIN (exact name AND same repository) only selects
-      # the branch; this step then derives the diff's SHAPE, and the gate is
-      # skipped only when every changed path is what the action writes — a
-      # deleted `.changeset/*.md` (never its README), an added or modified
-      # `packages/<pkg>/CHANGELOG.md` (a new package's first release ADDS one:
-      # PR mmnto-ai/totem#2514), a modified `packages/<pkg>/package.json` —
-      # `packages/*` being the workspace glob, so the private root package.json
-      # and every non-workspace package.json are out of shape. That is the shape
-      # of every Version Packages PR to date: 259 by head ref, 2,646 file
-      # entries, zero out of shape (the leg's census on mmnto-ai/totem#2780;
-      # this seat's own read: 252 PRs, 2,572 entries, the same). A repo writer
-      # who pushes anything else onto the release branch — an owed doctrine
-      # file, a source file, an ADDED changeset — meets the gate (Greptile's P1
-      # on mmnto-ai/totem#2780). The release PR is PAT-actored by design
-      # (release.yml), so no actor test could authenticate it; the diff shape
-      # can. The patterns are anchored on the WHOLE `name-status` line, so a
-      # path carrying whitespace never matches and meets the gate. `shell: bash`
-      # gives `-o pipefail` and `set -euo pipefail` says so in the script: a
-      # fetch or diff that FAILS aborts this step and the job — fail-closed. An
-      # EMPTY diff is exempt, as the gate itself would derive not-owed on it.
-      # Every filter consumes its whole input (`grep`, never `grep -q`, under
-      # pipefail — a `-q` early exit SIGPIPEs the echo on a large diff and the
-      # condition reads false). Either outcome is announced (never-skip-
-      # silently, as the advisory annotation below). The `totem lint` step
-      # still runs either way.
+      # the branch; this step then runs tools/release-train-shape.sh, which
+      # writes `exempt=true` only when HEAD's diff against the base is EXACTLY
+      # the release train's work: every changed path is what the action writes
+      # (a deleted `.changeset/*.md`, an added or modified
+      # `packages/<pkg>/CHANGELOG.md` — a new package's first release ADDS one,
+      # PR mmnto-ai/totem#2514 — a modified `packages/<pkg>/package.json`;
+      # `packages/*` is the workspace glob, so the private root package.json is
+      # out of shape), the deleted changesets are exactly the pending set on the
+      # base (never a subset, never its README — the bypass Greptile named on
+      # mmnto-ai/totem#2780: deleting one pending changeset and nothing else),
+      # and a CHANGELOG was rendered whenever changesets were consumed. That is
+      # the shape of every Version Packages PR to date: 259 by head ref, 2,646
+      # file entries, zero out of shape (the leg's census; this seat's own
+      # read: 252 PRs, 2,572 entries, the same). The release PR is PAT-actored
+      # by design (release.yml), so no actor test could authenticate it; the
+      # diff can. The trust boundary is the arm's own: the deposit a feature PR
+      # commits is author-written too, so the floor was never a defence against
+      # a writer forging evidence — it is the sensor that a leg read the head.
+      # The script's whole-line anchors keep a path carrying whitespace out of
+      # shape; `shell: bash` gives `-o pipefail` and `set -euo pipefail` in both
+      # the step and the script: a fetch or diff that FAILS aborts this step and
+      # the job — fail-closed. An EMPTY diff with nothing pending is exempt, as
+      # the gate itself would derive not-owed on it. Every filter consumes its
+      # whole input (`grep`, never `grep -q` under pipefail — a `-q` early exit
+      # SIGPIPEs the echo on a large diff and the condition reads false). Either
+      # outcome is announced with a STATIC annotation (never-skip-silently, as
+      # the advisory annotation below; no derived text rides an annotation) and
+      # the reasons print to the log. The cases are executed, not asserted:
+      # packages/cli/src/commands/release-train-shape.test.ts. The `totem lint`
+      # step still runs either way.
       - name: release-train check (the legs gate is skipped on the Version Packages PR only when its diff has the release-train shape)
         id: release_train
         if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}
@@ -86,17 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin "$BASE_REF"
-          diff=$(git diff --name-status "origin/$BASE_REF...HEAD")
-          other=$(echo "$diff" | grep -v -E '^D[[:space:]]+[.]changeset/[^/]+[.]md$|^[AM][[:space:]]+packages/[^/[:space:]]+/CHANGELOG[.]md$|^M[[:space:]]+packages/[^/[:space:]]+/package[.]json$' || true)
-          readme=$(echo "$diff" | grep -E '^D[[:space:]]+[.]changeset/README[.]md$' || true)
-          other=$(echo "$other" "$readme" | grep -v -E '^[[:space:]]*$' | paste -sd ' ' - || true)
-          if [ -n "$other" ]; then
-            echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"
-            echo "exempt=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — its diff is only consumed changesets, CHANGELOG.md and package.json, and it authors nothing, so the review-leg floor does not apply (mmnto-ai/totem#2779). The totem lint step still runs."
-            echo "exempt=true" >> "$GITHUB_OUTPUT"
-          fi
+          bash tools/release-train-shape.sh "origin/$BASE_REF"
       # HARD gate — the review-leg floor (mmnto-ai/totem#2771; doctrine
       # `model-tiering.md` § The gate; the `legs-gate` parity row, arm (a)).
       # A pull request whose diff touches a path in `hooks.legsOwed.globs` must
