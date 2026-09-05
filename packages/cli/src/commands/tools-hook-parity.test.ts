@@ -53,9 +53,27 @@ function gateStepOf(workflow: string): string {
   if (gateIdx === -1) return '';
   const stepStart = workflow.lastIndexOf('- name:', gateIdx);
   const nextStep = workflow.indexOf('- name:', gateIdx);
+  return dropComments(workflow.slice(stepStart, nextStep === -1 ? workflow.length : nextStep));
+}
+
+/**
+ * The `lint` job's header — from its key to its `steps:` — comment lines
+ * dropped, so an assertion on the job-level env predicate reads YAML keys and
+ * never a `#` decoy carrying the same text (the leg's F3 on
+ * mmnto-ai/totem#2780). Empty when the job or its steps key is missing.
+ */
+function lintJobHeaderOf(workflow: string): string {
   const LF = String.fromCharCode(10);
-  return workflow
-    .slice(stepStart, nextStep === -1 ? workflow.length : nextStep)
+  const jobIdx = workflow.indexOf(LF + '  lint:' + LF);
+  if (jobIdx === -1) return '';
+  const stepsIdx = workflow.indexOf(LF + '    steps:', jobIdx);
+  if (stepsIdx === -1) return '';
+  return dropComments(workflow.slice(jobIdx, stepsIdx));
+}
+
+function dropComments(yaml: string): string {
+  const LF = String.fromCharCode(10);
+  return yaml
     .split(LF)
     .filter((line) => !line.trim().startsWith('#'))
     .join(LF);
@@ -131,15 +149,34 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     expect(baseFetchIdx).toBeLessThan(step.indexOf('node packages/cli/dist/index.js legs gate'));
     expect(step).not.toContain('--depth=1');
     expect(step).not.toContain('continue-on-error');
+    // The run block is EXACTLY the base fetch and the bare gate: a `|| true`, a
+    // `;` or a trailing `&&` on the gate line would neuter it while every
+    // assertion above still passes (the leg's F7 on mmnto-ai/totem#2780).
+    const LF = String.fromCharCode(10);
+    const runIdx = step.indexOf('run: |');
+    expect(runIdx).toBeGreaterThan(-1);
+    const runLines = step
+      .slice(runIdx + 'run: |'.length)
+      .split(LF)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    expect(runLines).toEqual([
+      'git fetch origin "$BASE_REF"',
+      'node packages/cli/dist/index.js legs gate',
+    ]);
   });
 
   it('the gate step is skipped ONLY for the release train — exact branch name AND same repository — and the skip is announced (mmnto-ai/totem#2779)', () => {
     const workflow = readLintWorkflow();
-    // The predicate is defined ONCE, at job level. Both halves are load-bearing:
-    // the exact name (a prefix test is widenable by any author, and GitHub's
-    // `startsWith` is case-insensitive) and the same repository (a fork's
-    // `head_ref` is the bare branch name, so a fork could name it too).
-    expect(workflow).toContain(
+    // The predicate is defined ONCE, at job level, and the assertion reads the
+    // job header with comments dropped — a `#` decoy carrying the same text
+    // must not satisfy it. Both halves are load-bearing: the exact name (a
+    // prefix test is widenable by any author; GitHub's `==` and `startsWith`
+    // are both case-insensitive, so case is not the distinction) and the same
+    // repository (a fork's `head_ref` is the bare branch name).
+    const header = lintJobHeaderOf(workflow);
+    expect(header).not.toBe('');
+    expect(header).toContain(
       "LEGS_GATE_RELEASE_TRAIN: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'changeset-release/main' }}",
     );
     const step = gateStepOf(workflow);
