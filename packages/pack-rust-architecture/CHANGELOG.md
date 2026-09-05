@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.1.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 2.0.0
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
