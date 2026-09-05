@@ -106,7 +106,16 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     // trailing one after `run:` would soften the step just as well.
     const stepStart = workflow.lastIndexOf('- name:', gateIdx);
     const nextStep = workflow.indexOf('- name:', gateIdx);
-    const step = workflow.slice(stepStart, nextStep === -1 ? workflow.length : nextStep);
+    // Comment lines are dropped before the negative assertions: the NEXT step's
+    // leading comment sits inside this slice and legitimately discusses
+    // `continue-on-error`; only YAML keys count. (The newline is built, never
+    // authored as an escape — the banked heredoc decode trap.)
+    const LF = String.fromCharCode(10);
+    const step = workflow
+      .slice(stepStart, nextStep === -1 ? workflow.length : nextStep)
+      .split(LF)
+      .filter((line) => !line.trim().startsWith('#'))
+      .join(LF);
     const baseFetchIdx = step.indexOf('git fetch origin "$BASE_REF"');
     expect(baseFetchIdx).toBeGreaterThan(-1);
     expect(baseFetchIdx).toBeLessThan(step.indexOf('node packages/cli/dist/index.js legs gate'));
