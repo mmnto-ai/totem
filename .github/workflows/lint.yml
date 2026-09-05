@@ -18,10 +18,10 @@ jobs:
     # author; GitHub compares strings case-insensitively for `==` and
     # `startsWith` alike, so case is not what separates the two) AND the SAME
     # repository (a fork's `head_ref` is the bare branch name, so a fork could
-    # name it too). Residual, disclosed: a writer with push access to THIS
-    # repository who names a branch exactly `changeset-release/main` also skips
-    # the step — the same trust that lets that writer merge. Defined once and
-    # read by two steps below, so the skip and its notice cannot drift apart.
+    # name it too). This SELECTS the branch; it does not exempt it — the
+    # release-train check step below exempts only a diff with the release-train
+    # shape, so a writer who pushes anything else onto that branch meets the
+    # gate. Defined once, read by that one step.
     env:
       LEGS_GATE_RELEASE_TRAIN: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'changeset-release/main' }}
     steps:
@@ -49,15 +49,36 @@ jobs:
       # rendered into CHANGELOG.md and package.json. There is no judgment for a
       # leg to falsify, no seat authored the diff, and no deposit can ride a
       # branch the action force-pushes; unguarded, every VP-PR is red at the
-      # gate step and the cut cannot execute (2.1.0, mmnto-ai/totem#2778). The
-      # guard is the job-level LEGS_GATE_RELEASE_TRAIN (exact name AND same
-      # repository); this notice step makes the skip legible (never-skip-
-      # silently, as the advisory annotation below). The `totem lint` step
-      # still runs on the release train.
-      - name: release-train notice (the legs gate is skipped on the Version Packages PR)
+      # gate step and the cut cannot execute (2.1.0, mmnto-ai/totem#2778).
+      #
+      # Identity is NOT the branch name alone. The job-level
+      # LEGS_GATE_RELEASE_TRAIN (exact name AND same repository) only selects
+      # the branch; this step then derives the diff's SHAPE, and the gate is
+      # skipped only when every changed path is what the action writes — a
+      # deleted `.changeset/*.md`, a modified `CHANGELOG.md`, a modified
+      # `package.json` (the shape of every Version Packages PR to date). A repo
+      # writer who pushes anything else onto the release branch — an owed
+      # doctrine file, a source file, an ADDED changeset — meets the gate
+      # (Greptile's P1 on mmnto-ai/totem#2780). The release PR is PAT-actored
+      # by design (release.yml), so no actor test could authenticate it; the
+      # diff shape can. Either outcome is announced (never-skip-silently, as
+      # the advisory annotation below), and a diff that cannot be derived fails
+      # this step — fail-closed. The `totem lint` step still runs either way.
+      - name: release-train check (the legs gate is skipped on the Version Packages PR only when its diff has the release-train shape)
+        id: release_train
         if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — it deletes consumed changesets and authors nothing, so the review-leg floor does not apply to it (mmnto-ai/totem#2779). The totem lint step still runs."
+          git fetch origin "$BASE_REF"
+          other=$(git diff --name-status "origin/$BASE_REF...HEAD" | awk '!(($1 == "D" && $2 ~ "^[.]changeset/[^/]+[.]md$") || ($1 == "M" && ($2 ~ "(^|/)CHANGELOG[.]md$" || $2 ~ "(^|/)package[.]json$")))')
+          if [ -n "$other" ]; then
+            echo "::warning title=totem legs gate NOT skipped::changeset-release/main carries paths outside the release-train shape, so the review-leg floor applies (mmnto-ai/totem#2779): $other"
+            echo "exempt=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=totem legs gate SKIPPED::changeset-release/main is the release train — its diff is only consumed changesets, CHANGELOG.md and package.json, and it authors nothing, so the review-leg floor does not apply (mmnto-ai/totem#2779). The totem lint step still runs."
+            echo "exempt=true" >> "$GITHUB_OUTPUT"
+          fi
       # HARD gate — the review-leg floor (mmnto-ai/totem#2771; doctrine
       # `model-tiering.md` § The gate; the `legs-gate` parity row, arm (a)).
       # A pull request whose diff touches a path in `hooks.legsOwed.globs` must
@@ -68,7 +89,9 @@ jobs:
       # evidence exit 0. It holds whatever the local hook tier is, and
       # `--no-verify` never reaches it. `Totem Lint` is a required check on main
       # (ruleset `main-required-checks`), so red blocks the merge. The only
-      # skip is the release train above.
+      # skip is the release train above, and only when the check step derived
+      # the release-train shape: a skipped check step writes no output, and
+      # `'' != 'true'` runs the gate — fail-closed.
       #
       # Placed BEFORE the lint step's `--depth=1` fetch on purpose: that fetch
       # SHALLOWS the full checkout (`.git/shallow` appears — measured on a local
@@ -84,7 +107,7 @@ jobs:
       # only where a global totem masks the miss (measured; the leg's F1 on
       # mmnto-ai/totem#2771). On a runner it would fail every pull request.
       - name: totem legs gate (HARD — the review-leg floor)
-        if: ${{ env.LEGS_GATE_RELEASE_TRAIN != 'true' }}
+        if: ${{ steps.release_train.outputs.exempt != 'true' }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |

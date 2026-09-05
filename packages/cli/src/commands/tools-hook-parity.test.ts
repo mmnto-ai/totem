@@ -37,23 +37,46 @@ function readTool(hook: string): string {
   return fs.readFileSync(path.join(TOOLS_DIR, hook), 'utf-8');
 }
 
+// Named once: the newline is BUILT, never authored as an escape (the banked
+// heredoc decode trap), and `indexOf`'s -1 reads as a sentinel only by
+// convention (CodeRabbit on mmnto-ai/totem#2780).
+const LF = String.fromCharCode(10);
+const NOT_FOUND = -1;
+const GATE_STEP_NAME = 'totem legs gate (HARD';
+const RELEASE_TRAIN_STEP_NAME = 'release-train check';
+
 function readLintWorkflow(): string {
   return fs.readFileSync(path.join(REPO_ROOT, '.github', 'workflows', 'lint.yml'), 'utf-8');
 }
 
 /**
- * The legs-gate step's YAML, from its `- name:` to the next step's, comment
- * lines dropped: the NEXT step's leading comment sits inside the slice and
- * legitimately discusses `continue-on-error`; only YAML keys count. (The
- * newline is built, never authored as an escape — the banked heredoc decode
- * trap.) Empty when the workflow carries no gate step at all.
+ * ONE step's YAML — from the `- name:` line whose name starts with `namePrefix`
+ * to the next step's `- name:` — comment lines dropped: the NEXT step's leading
+ * comment sits inside the slice and legitimately discusses `continue-on-error`;
+ * only YAML keys count. Empty when no step carries that name. Every assertion
+ * on a step's own `if:` / `id:` / `run:` reads its slice, never the whole
+ * workflow, so a decoy elsewhere cannot satisfy it (Greptile P2 and CodeRabbit
+ * on mmnto-ai/totem#2780).
  */
+function stepNamed(workflow: string, namePrefix: string): string {
+  const stepStart = workflow.indexOf('- name: ' + namePrefix);
+  if (stepStart === NOT_FOUND) return '';
+  const nextStep = workflow.indexOf('- name:', stepStart + 1);
+  return dropComments(
+    workflow.slice(stepStart, nextStep === NOT_FOUND ? workflow.length : nextStep),
+  );
+}
+
 function gateStepOf(workflow: string): string {
-  const gateIdx = workflow.indexOf('node packages/cli/dist/index.js legs gate');
-  if (gateIdx === -1) return '';
-  const stepStart = workflow.lastIndexOf('- name:', gateIdx);
-  const nextStep = workflow.indexOf('- name:', gateIdx);
-  return dropComments(workflow.slice(stepStart, nextStep === -1 ? workflow.length : nextStep));
+  return stepNamed(workflow, GATE_STEP_NAME);
+}
+
+/** The `if:` lines of one step slice, trimmed — exactly one is the contract. */
+function ifLinesOf(step: string): string[] {
+  return step
+    .split(LF)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('if:'));
 }
 
 /**
@@ -63,16 +86,14 @@ function gateStepOf(workflow: string): string {
  * mmnto-ai/totem#2780). Empty when the job or its steps key is missing.
  */
 function lintJobHeaderOf(workflow: string): string {
-  const LF = String.fromCharCode(10);
   const jobIdx = workflow.indexOf(LF + '  lint:' + LF);
-  if (jobIdx === -1) return '';
+  if (jobIdx === NOT_FOUND) return '';
   const stepsIdx = workflow.indexOf(LF + '    steps:', jobIdx);
-  if (stepsIdx === -1) return '';
+  if (stepsIdx === NOT_FOUND) return '';
   return dropComments(workflow.slice(jobIdx, stepsIdx));
 }
 
 function dropComments(yaml: string): string {
-  const LF = String.fromCharCode(10);
   return yaml
     .split(LF)
     .filter((line) => !line.trim().startsWith('#'))
@@ -135,8 +156,8 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     // The fetch COMMAND, not the flag: the gate step's own comment names
     // `--depth=1` while explaining why it runs first.
     const shallowIdx = workflow.indexOf('git fetch origin "$BASE_REF" --depth=1');
-    expect(gateIdx).toBeGreaterThan(-1);
-    expect(shallowIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeGreaterThan(NOT_FOUND);
+    expect(shallowIdx).toBeGreaterThan(NOT_FOUND);
     expect(gateIdx).toBeLessThan(shallowIdx);
     // The bin-shim form cannot resolve in a job that builds the CLI it calls.
     expect(workflow).not.toContain('pnpm exec totem legs gate');
@@ -145,16 +166,15 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     // trailing one after `run:` would soften the step just as well.
     const step = gateStepOf(workflow);
     const baseFetchIdx = step.indexOf('git fetch origin "$BASE_REF"');
-    expect(baseFetchIdx).toBeGreaterThan(-1);
+    expect(baseFetchIdx).toBeGreaterThan(NOT_FOUND);
     expect(baseFetchIdx).toBeLessThan(step.indexOf('node packages/cli/dist/index.js legs gate'));
     expect(step).not.toContain('--depth=1');
     expect(step).not.toContain('continue-on-error');
     // The run block is EXACTLY the base fetch and the bare gate: a `|| true`, a
     // `;` or a trailing `&&` on the gate line would neuter it while every
     // assertion above still passes (the leg's F7 on mmnto-ai/totem#2780).
-    const LF = String.fromCharCode(10);
     const runIdx = step.indexOf('run: |');
-    expect(runIdx).toBeGreaterThan(-1);
+    expect(runIdx).toBeGreaterThan(NOT_FOUND);
     const runLines = step
       .slice(runIdx + 'run: |'.length)
       .split(LF)
@@ -166,10 +186,10 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     ]);
   });
 
-  it('the gate step is skipped ONLY for the release train — exact branch name AND same repository — and the skip is announced (mmnto-ai/totem#2779)', () => {
+  it('the gate step is skipped ONLY for the release train — exact branch name AND same repository AND the release-train diff shape — and either outcome is announced (mmnto-ai/totem#2779)', () => {
     const workflow = readLintWorkflow();
-    // The predicate is defined ONCE, at job level, and the assertion reads the
-    // job header with comments dropped — a `#` decoy carrying the same text
+    // The branch SELECTOR is defined ONCE, at job level, and the assertion reads
+    // the job header with comments dropped — a `#` decoy carrying the same text
     // must not satisfy it. Both halves are load-bearing: the exact name (a
     // prefix test is widenable by any author; GitHub's `==` and `startsWith`
     // are both case-insensitive, so case is not the distinction) and the same
@@ -179,25 +199,39 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
     expect(header).toContain(
       "LEGS_GATE_RELEASE_TRAIN: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'changeset-release/main' }}",
     );
+    // The selector only picks the branch. The check step, gated on it, derives
+    // the diff's SHAPE and exempts only what the action writes — a deleted
+    // .changeset/*.md, a modified CHANGELOG.md, a modified package.json — so a
+    // writer who pushes anything else onto the release branch meets the gate
+    // (Greptile's P1 on mmnto-ai/totem#2780). Every assertion reads the check
+    // step's own slice.
+    const check = stepNamed(workflow, RELEASE_TRAIN_STEP_NAME);
+    expect(check).not.toBe('');
+    expect(check).toContain('id: release_train');
+    expect(ifLinesOf(check)).toEqual(["if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}"]);
+    expect(check).toContain('git diff --name-status "origin/$BASE_REF...HEAD"');
+    expect(check).toContain('$1 == "D" && $2 ~ "^[.]changeset/[^/]+[.]md$"');
+    expect(check).toContain(
+      '$1 == "M" && ($2 ~ "(^|/)CHANGELOG[.]md$" || $2 ~ "(^|/)package[.]json$")',
+    );
+    // Both outcomes are written and both are announced (never-skip-silently).
+    expect(check).toContain('echo "exempt=true" >> "$GITHUB_OUTPUT"');
+    expect(check).toContain('echo "exempt=false" >> "$GITHUB_OUTPUT"');
+    expect(check).toContain('::notice title=totem legs gate SKIPPED::');
+    expect(check).toContain('::warning title=totem legs gate NOT skipped::');
+    expect(check).not.toContain('continue-on-error');
+    // The gate reads the check's OUTPUT, and exactly that: a skipped check
+    // writes no output and '' != 'true' runs the gate — fail-closed. Any other
+    // condition — a prefix match, `if: false`, a value the PR author controls —
+    // softens the floor while `Totem Lint` stays green, which the
+    // `continue-on-error` assertion above cannot see.
     const step = gateStepOf(workflow);
     expect(step).not.toBe('');
-    const LF = String.fromCharCode(10);
-    const ifLines = step.split(LF).filter((line) => line.trim().startsWith('if:'));
-    // Exactly one `if:` on the gate step, and it is the predicate's negation.
-    // Any other condition — a prefix match, `if: false`, a value the PR author
-    // controls — softens the floor while `Totem Lint` stays green, which the
-    // `continue-on-error` assertion above cannot see.
-    expect(ifLines.map((line) => line.trim())).toEqual([
-      "if: ${{ env.LEGS_GATE_RELEASE_TRAIN != 'true' }}",
-    ]);
+    expect(ifLinesOf(step)).toEqual(["if: ${{ steps.release_train.outputs.exempt != 'true' }}"]);
     expect(step).not.toContain('startsWith(');
-    // Never-skip-silently: a notice step gated on the SAME predicate precedes
-    // the gate, so a green job on the release train says why the floor did not
-    // run.
-    const noticeIdx = workflow.indexOf('- name: release-train notice');
-    expect(noticeIdx).toBeGreaterThan(-1);
-    expect(noticeIdx).toBeLessThan(workflow.indexOf('node packages/cli/dist/index.js legs gate'));
-    expect(workflow).toContain("if: ${{ env.LEGS_GATE_RELEASE_TRAIN == 'true' }}");
-    expect(workflow).toContain('::notice title=totem legs gate SKIPPED::');
+    // The check precedes the gate — an output read before it is written is ''.
+    const checkIdx = workflow.indexOf('- name: ' + RELEASE_TRAIN_STEP_NAME);
+    expect(checkIdx).toBeGreaterThan(NOT_FOUND);
+    expect(checkIdx).toBeLessThan(workflow.indexOf('- name: ' + GATE_STEP_NAME));
   });
 });
