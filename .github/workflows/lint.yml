@@ -52,7 +52,20 @@ jobs:
       # which exists only after the build step — so `pnpm exec totem` resolves
       # only where a global totem masks the miss (measured; the leg's F1 on
       # mmnto-ai/totem#2771). On a runner it would fail every pull request.
+      #
+      # The release train is OUTSIDE the arm (mmnto-ai/totem#2779): the Version
+      # Packages PR that `changesets/action` rebuilds on every push to main
+      # (`changeset-release/<base>`) deletes the consumed `.changeset/**` files —
+      # an owed glob — and authors nothing: its text is the already-merged,
+      # already-legged changesets rendered into CHANGELOG.md and package.json.
+      # There is no judgment for a leg to falsify, no seat authored the diff,
+      # and no deposit can ride a branch the action force-pushes; unguarded,
+      # every VP-PR is red at this step and the cut cannot execute (2.1.0,
+      # mmnto-ai/totem#2778). `github.head_ref` is always set here — this
+      # workflow triggers on pull_request only. The `totem lint` step below
+      # still runs on the release train.
       - name: totem legs gate (HARD — the review-leg floor)
+        if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
