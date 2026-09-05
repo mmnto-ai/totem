@@ -356,14 +356,18 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
   });
 
   it('narrows a mis-shaped expected-option-sets to absent (never a dark manifest), and omits it when unset', () => {
-    // An array where an object is expected, an empty list, and a non-string
-    // member each drop the field on that row so the detector falls back to the
-    // prose grammar; the manifest itself stays parseable.
+    // An array where an object is expected, an empty list, a non-string member,
+    // an empty object, and a SCALAR where a list belongs (the prose sentence
+    // mirrored into the field — one option, a false drift on a conforming
+    // board; falsification pass 1, F2) each drop the field on that row so the
+    // detector falls back to the prose grammar; the manifest itself stays
+    // parseable.
     for (const bad of [
       'expected-option-sets: [Status, Priority]',
       'expected-option-sets:\n      Status: []',
       'expected-option-sets:\n      Status: [Todo, 42]',
       'expected-option-sets: {}',
+      "expected-option-sets:\n      Status: 'Todo | In Progress | Done'\n      Priority: [Now, Next]",
     ]) {
       const result = parseParityManifest(
         PROMOTED_FIELDS_YAML.replace(

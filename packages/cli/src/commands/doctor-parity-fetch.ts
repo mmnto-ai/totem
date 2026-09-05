@@ -716,13 +716,16 @@ function makeDefaultGhGraphql(safeExec: SafeExecFn): GhGraphql {
 
 /**
  * Classify a GraphQL 200 BODY (GraphQL reports authorization + not-found in the
- * body, not the HTTP status). Errors are decisive only when the body carries no
- * usable project data — a partial-error body that still resolved the project is
- * `ok` and the detector verdicts the payload. Pure: no I/O, exported for test.
+ * body, not the HTTP status). ANY `errors` entry is decisive: GraphQL returns
+ * partial data beside its errors (a nested FORBIDDEN, a node-limit hit, a
+ * SERVICE_UNAVAILABLE on one field), and a partial field list verdicted as if
+ * complete is a drift verdict on a cannot-verify read — the one outcome §14
+ * clause 2 forbids (falsification pass 1, F1: a FORBIDDEN body with a half-read
+ * project rendered "Priority: field absent"). Pure: no I/O, exported for test.
  */
 export function classifyGraphqlBody(body: unknown): GhFetchResult {
   const errors = graphqlErrorsOf(body);
-  if (errors.length === 0 || hasUsableProjectData(body)) {
+  if (errors.length === 0) {
     return { outcome: 'ok', data: body };
   }
   const haystack = errors
@@ -753,21 +756,6 @@ function graphqlErrorsOf(body: unknown): { message?: unknown; type?: unknown }[]
   return errors.filter((e): e is { message?: unknown; type?: unknown } => {
     return typeof e === 'object' && e !== null;
   });
-}
-
-/**
- * True when the body resolved the project despite carrying errors. Absent is
- * treated exactly like `null` here: an unresolvable field is what makes the
- * errors decisive, however the server encoded it.
- */
-function hasUsableProjectData(body: unknown): boolean {
-  if (typeof body !== 'object' || body === null) return false;
-  const data = (body as { data?: unknown }).data;
-  if (typeof data !== 'object' || data === null) return false;
-  const organization = (data as { organization?: unknown }).organization;
-  if (typeof organization !== 'object' || organization === null) return false;
-  const project = (organization as { projectV2?: unknown }).projectV2;
-  return typeof project === 'object' && project !== null;
 }
 
 /** Fields a `safeExec` throw carries (status/stderr) — mirrors core's `SafeExecErrorFields`. */

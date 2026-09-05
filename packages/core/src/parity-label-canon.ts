@@ -17,9 +17,13 @@
  * with the strategy-local twin (`mmnto-ai/totem-strategy:tools/gh-parity-twins.cjs`,
  * rung 1 of mmnto-ai/totem-strategy#472) so the two readers agree on every
  * cohort repo: colour compares without `#` and case-insensitively, description
- * compares exactly, the namespace token keeps its trailing space, option ORDER
- * is information and never a fault, and a governed field that is absent IS a
- * fault (its option set is empty, which is not the canonical set).
+ * compares exactly (untrimmed), the namespace token keeps its trailing space,
+ * option ORDER is information and never a fault, and a governed field that is
+ * absent IS a fault (its option set is empty, which is not the canonical set).
+ * One disclosed asymmetry: this module normalizes the CANON's colour too (a
+ * `#`-prefixed hex in the script would still match), where the twin normalizes
+ * only the live side — identical readings while the script writes bare hex, as
+ * every one of its eighteen calls does today.
  */
 
 /** One canonical label as the script defines it (`gh label edit "<name>" --color "<hex>" --description "<text>"`). */

@@ -622,10 +622,34 @@ describe('classifyGraphqlBody', () => {
     expect(result.detail).toBe('Something went wrong while executing your query');
   });
 
-  it('treats a body that resolved the project as ok', () => {
+  it('treats a body WITHOUT errors as ok, carrying the body verbatim', () => {
     const body = { data: { organization: { projectV2: { title: 'Convergent Spine' } } } };
     const result = classifyGraphqlBody(body);
     expect(result.outcome).toBe('ok');
     expect(result.data).toEqual(body);
+  });
+
+  it('never classifies an errors-bearing body as ok, even when it also resolved the project (partial data)', () => {
+    // GraphQL returns partial data beside its errors. A half-read field list
+    // verdicted as complete would be a drift verdict on a cannot-verify read
+    // (falsification pass 1, F1) — so the presence of ANY error is decisive.
+    const partial = {
+      data: {
+        organization: {
+          projectV2: {
+            title: 'Convergent Spine',
+            fields: {
+              pageInfo: { hasNextPage: false },
+              nodes: [{ name: 'Status', options: [] }, null],
+            },
+          },
+        },
+      },
+      errors: [{ type: 'FORBIDDEN', message: 'Resource not accessible by integration' }],
+    };
+    expect(classifyGraphqlBody(partial).outcome).toBe('auth');
+
+    const transient = { ...partial, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'timeout' }] };
+    expect(classifyGraphqlBody(transient).outcome).toBe('error');
   });
 });

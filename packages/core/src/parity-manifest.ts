@@ -460,9 +460,13 @@ function narrowStringArray(value: unknown): string[] | undefined {
 /**
  * Narrow a structured `expected-option-sets` value to `{ field: [options] }`:
  * a plain object whose every key is a non-empty string and every value a
- * non-empty array of non-empty strings (members trimmed). Anything else — an
- * array, an empty object, a field with an empty or non-string list — is absent
- * on that row (the detector then falls back to the prose parse).
+ * non-empty ARRAY of non-empty strings (members trimmed). Anything else — an
+ * array, an empty object, a field with an empty or non-string list, or a SCALAR
+ * where a list belongs — is absent on that row (the detector then falls back to
+ * the prose parse). The scalar case is refused on purpose: `narrowStringArray`
+ * would normalize `'Todo | In Progress | Done'` to ONE option and a conforming
+ * board would render as drift (falsification pass 1, F2); a list is the field's
+ * shape, and a mirror of the prose sentence is not a list.
  */
 function narrowOptionSets(value: unknown): Record<string, string[]> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
@@ -470,6 +474,7 @@ function narrowOptionSets(value: unknown): Record<string, string[]> | undefined 
   for (const [rawField, rawOptions] of Object.entries(value as Record<string, unknown>)) {
     const field = rawField.trim();
     if (field.length === 0) return undefined;
+    if (!Array.isArray(rawOptions)) return undefined;
     const options = narrowStringArray(rawOptions);
     if (options === undefined) return undefined;
     sets[field] = options;

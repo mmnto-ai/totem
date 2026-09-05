@@ -908,16 +908,23 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
             })
           : [];
       // The label canon is ROSTER-WIDE (one canon, many repos), so it resolves
-      // once here — and ONLY when the label row is present AND some repo will
-      // actually be verdicted, so an empty roster reads nothing (no `gh`).
-      const labelCanon =
-        networkRowSpecs.some((s) => s.row === 'gh-issue-label-canon') && networkSnapshots.length > 0
-          ? resolveLabelCanon({
-              gitRoot,
-              ...(repoId !== undefined ? { repoId } : {}),
-              ghFetch: await defaultGhFetch(),
-            })
-          : undefined;
+      // once here — and ONLY when the label row is present AND some roster repo
+      // is inside ITS consumers scope, so an empty roster, or a row scoped away
+      // from every roster repo, reads nothing (no `gh`; falsification pass 1, F7).
+      const labelRowSpec = networkRowSpecs.find((s) => s.row === 'gh-issue-label-canon');
+      const labelRowHasScopedRepo =
+        labelRowSpec !== undefined &&
+        networkSnapshots.some(
+          (snap) =>
+            labelRowSpec.consumers === undefined || labelRowSpec.consumers.includes(snap.repoId),
+        );
+      const labelCanon = labelRowHasScopedRepo
+        ? resolveLabelCanon({
+            gitRoot,
+            ...(repoId !== undefined ? { repoId } : {}),
+            ghFetch: await defaultGhFetch(),
+          })
+        : undefined;
 
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
       // line PER distributed skill, so the per-contract count can exceed the

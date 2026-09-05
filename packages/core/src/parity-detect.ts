@@ -3675,10 +3675,13 @@ function labelCanonVerdict(
     reported.push(`retired name(s) still present: ${listNames(drift.retiredPresent)}`);
   }
   const trailer = `${reported.length > 0 ? `; ${reported.join('; ')}` : ''} (canon: ${provenance})`;
+  // The message names the repo: the `--json` readout carries the row id and the
+  // message but not the per-repo line name, so a multi-repo roster would
+  // otherwise emit indistinguishable rows (falsification pass 1, F5).
   if (drift.conforming) {
     return {
       status: 'pass',
-      message: `${total}/${total} canonical labels present with canonical color + description; nothing outside the canon in the ${canon.namespaces.length} canonical namespaces${trailer}`,
+      message: `${repo.repoSlug}: ${total}/${total} canonical labels present with canonical color + description; nothing outside the canon in the ${canon.namespaces.length} canonical namespaces${trailer}`,
     };
   }
   const faults: string[] = [];
@@ -3703,17 +3706,21 @@ function labelCanonVerdict(
   }
   return {
     status: 'warn',
-    message: `${total - drift.missing.length}/${total} canonical labels present; ${faults.join('; ')}${trailer}`,
+    message: `${repo.repoSlug}: ${total - drift.missing.length}/${total} canonical labels present; ${faults.join('; ')}${trailer}`,
   };
 }
 
 /**
- * `gh-project-vocabulary` (charter § 4b). The canonical option sets are parsed
- * from the ROW's own `expected-value-or-derivation` text — Tenet 20: a doctrine
- * bump moves the canon, and a text the grammar cannot read renders
- * cannot-verify, never a hardcoded pass. One line per in-scope roster repo: the
- * current repo's bound project is judged; a repo with no binding, or a sibling
- * whose binding this checkout cannot derive, is honest-absent.
+ * `gh-project-vocabulary` (charter § 4b). The canonical option sets come from
+ * the ROW itself — its structured `expected-option-sets` field when present,
+ * else its `expected-value-or-derivation` text — Tenet 20: a doctrine bump
+ * moves the canon. A text that yields NO clause renders cannot-verify, never a
+ * hardcoded pass; a reworded clause the grammar still reads (a `,`-separated
+ * list becomes one option) renders drift, which is exactly why the structured
+ * field is the field's contract and the prose only its pinned interim. One line
+ * per in-scope roster repo: the current repo's bound project is judged; a repo
+ * with no binding, or a sibling whose binding this checkout cannot derive, is
+ * honest-absent.
  */
 function projectVocabularyLines(
   contract: ParityContract,

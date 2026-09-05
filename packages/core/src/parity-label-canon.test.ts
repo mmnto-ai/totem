@@ -8,7 +8,7 @@
  * Zero I/O beyond the one in-repo script read; no network; no spawns.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,7 @@ import {
   parseLabelCanon,
   projectVocabularyDrift,
 } from './parity-label-canon.js';
+import { parseParityManifest } from './parity-manifest.js';
 
 /** The canon of record, read from this repository (packages/core/src → the repo root). */
 const REAL_SCRIPT_PATH = path.resolve(
@@ -243,6 +244,34 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
     expect(sets.get('Status')).toEqual(STATUS);
     expect(sets.get('Priority')).toEqual(PRIORITY);
   });
+
+  // The PINNED doctrine row, not a mirrored literal (falsification pass 1, F4):
+  // a doctrine reword that the grammar reads differently fails HERE instead of
+  // darkening the sensor with a green suite. The pack is an optionalDependency
+  // that never materializes on an unauthenticated install (mmnto-ai/totem#2289),
+  // so the case is skipped, loudly by name, when the manifest is absent.
+  const PINNED_MANIFEST = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml',
+  );
+  it.skipIf(!existsSync(PINNED_MANIFEST))(
+    'reads the PINNED gh-project-vocabulary row (the installed doctrine manifest) into the two governed sets',
+    () => {
+      const parsed = parseParityManifest(readFileSync(PINNED_MANIFEST, 'utf8'));
+      expect(parsed.status).toBe('ok');
+      if (parsed.status !== 'ok') return;
+      const row = parsed.manifest.contracts.find((c) => c.id === 'gh-project-vocabulary');
+      expect(row).toBeDefined();
+      if (row === undefined) return;
+      const sets =
+        row.expectedOptionSets !== undefined
+          ? new Map(Object.entries(row.expectedOptionSets))
+          : parseExpectedOptionSets(row.expectedValueOrDerivation);
+      expect([...sets.keys()]).toEqual(['Status', 'Priority']);
+      expect(sets.get('Status')).toEqual(STATUS);
+      expect(sets.get('Priority')).toEqual(PRIORITY);
+    },
+  );
 
   it('yields an EMPTY map from text without a Field = a | b clause (never a hardcoded set)', () => {
     expect(parseExpectedOptionSets('').size).toBe(0);

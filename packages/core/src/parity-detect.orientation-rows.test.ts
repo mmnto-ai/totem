@@ -162,7 +162,8 @@ describe('gh-issue-label-canon', () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]?.lineName).toBe('Parity: gh-issue-label-canon [mmnto-ai/totem]');
     expect(lines[0]?.verdict.status).toBe('pass');
-    expect(lines[0]?.verdict.message).toContain('3/3 canonical labels present');
+    // The message names the repo (the `--json` readout has no per-repo line name).
+    expect(lines[0]?.verdict.message).toContain('mmnto-ai/totem: 3/3 canonical labels present');
     expect(lines[0]?.verdict.message).toContain('3 canonical namespaces');
     expect(lines[0]?.verdict.message).toContain(`canon: ${LOCAL_PROVENANCE}`);
   });
@@ -182,7 +183,7 @@ describe('gh-issue-label-canon', () => {
       ]),
     );
     expect(lines[0]?.verdict.status).toBe('warn');
-    expect(lines[0]?.verdict.message).toContain('2/3 canonical labels present');
+    expect(lines[0]?.verdict.message).toContain('mmnto-ai/totem: 2/3 canonical labels present');
     expect(lines[0]?.verdict.message).toContain('missing [type: bug]');
   });
 
