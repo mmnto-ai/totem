@@ -1,5 +1,40 @@
 # @mmnto/mcp
 
+## 2.1.0
+
+### Minor Changes
+
+- b8fe7ed: `describeProject` counts the ACTIVE compiled-rule set — the set `totem lint` enforces and `totem status` reports — instead of the raw file total, and reports the inert split beside it (mmnto-ai/totem#2765; the describe half of the mmnto-ai/totem#2388 parity).
+
+  **What was wrong.** `totem describe` (and so the SessionStart banner every session opens on) and the MCP `describe_project` tool's `legacy` block printed `parsed.rules.length` — every entry in `compiled-rules.json`, archived and untested ones included — while `totem status` and `totem lint` count through the loader that applies the mmnto-ai/totem#1345 status filter. On this repository that read `Rules: 485 compiled` at session start against a lint that enforces 385: the 100-rule gap is exactly the archived-plus-untested set lint deliberately does not run, and no surface reconciled the two.
+
+  **What changed.** The status filter is now a named predicate, `isActiveCompiledRule` (exported from `@mmnto/totem`), and lint's loader filters through it. `describeProject` reads the file through the same schema-validating loader lint and status use and counts through that predicate, so on a present, schema-valid `compiled-rules.json` the three surfaces agree by construction (and a test now asserts describe's number against what `totem status` prints). `ProjectDescription.rules` is the active count; five new fields carry the rest — `rulesCompiled` (the raw total), `rulesArchived`, `rulesUntested`, `rulesPendingVerification`, with `rules + the three inert counts === rulesCompiled`, and `rulesSource` (`compiled-rules` | `absent` | `unreadable`). The new members are required on the interface: readers gain them for free, and a TypeScript consumer that CONSTRUCTS a `ProjectDescription` (a test double, an adapter) must supply them — the migration is to add the five fields, or to build the object through `describeProject`, which always fills them (no downstream constructor exists in the cohort; this is disclosed rather than shimmed, per the no-legacy ruling). The `totem describe` line reads `Rules: 385 active of 485 compiled (93 archived, 7 untested-against-codebase)` where the split is non-trivial, `Rules: 12 active` where nothing is inert, `Rules: 0 active (no compiled-rules.json)` for a missing file, and `Rules: 0 active — compiled-rules.json unreadable (…)` for one the loader refused — describe never prints a bare "N compiled" again, and never a 0 a reader could mistake for an honestly empty set. (`totem status` keeps its own `Rules: N compiled` wording, where N is the active set; its wording is out of scope here.)
+
+  **The MCP surface moves with it.** `describe_project`'s `legacy` block carries the new fields (its output schema mirrors `ProjectDescription` and gained the same members), and its rich state's `ruleCounts.active` now counts through the same predicate — before this it counted `status !== 'archived'`, so one call answered `legacy.rules` 385 beside `ruleCounts.active` 392 on this repository. `ruleCounts` gains `untested` and `pendingVerification` so its parts still sum to the file total.
+
+  **One consequence to know.** A `compiled-rules.json` the loader cannot use — valid JSON that fails the compiled-rules schema, or a file that is not JSON at all — now reports zeros from describe, labelled `unreadable` (it previously counted any `rules` array, or reported an unlabelled 0) — what lint refuses outright. `totem status` handles those files its own way: for a schema-invalid file it falls back to the compile manifest's `rule_count`, a raw total; for a non-JSON file it prints 0. Both are pre-existing and untouched here. A missing file still reports zeros, labelled `absent`; the sensor still never throws.
+
+  **Unchanged.** What "active" means (mmnto-ai/totem#1345), status's manifest fallback and wording, and the shape of everything else `describe_project` returns.
+
+- 1924baf: `search_knowledge` classifies a faulted relevance as FAULTED — neither signal nor exemption — on the same predicate the CLI gate and the grounding-bundle builder use (mmnto-ai/totem#2770).
+
+  **What was wrong.** The MCP reader selected relevances with a bare `typeof === 'number'`, so a `NaN` or an out-of-range value from the store read as signal: a `NaN` among the hits poisoned `Math.max`, `NaN < floor` was false, the floor never fired, and the tool answered `status="ok"` with the noise it should have withheld — a fault defeating the refusal, the class the mmnto-ai/totem#2761 bot round refuted in the CLI. With no floor (the default since mmnto-ai/totem#2758) a negative or above-1 value was rendered as a measurement in the per-hit field and the envelope (and, under a floor, in the selection manifest's exclusion reason). The mmnto-ai/totem#2738 changeset disclosed this reader as the surface not touched.
+
+  **Three classes of hit, one predicate.** Core's `isRelevanceInRange` (finite, in [0, 1]) decides: in range → SIGNAL; no relevance at all (keyword-only) → EXEMPT; a number failing it → FAULTED. `bestRelevance` is the max over signal only; the below-floor arm judges signal only; exempt hits carry a batch as before; a faulted hit never raises `bestRelevance`, is never withheld as a measurement, and cannot carry a batch.
+
+  **A new arm.** A retrieval whose EVERY hit is faulted answers `status="no_useful_hits"` — with or without a floor — with the CLI refusal's sentence (`Retrieval returned N hits, but every one carried a relevance that is not a finite number in [0, 1] (tallied out of range by the search layer) — nothing usable to return.`), content withheld and every candidate disclosed by path as `relevance faulted`. This is the one way that status now arises with `floor="none"`; the `min_relevance` description and the docs say so.
+
+  **What a reader sees.** The per-hit field prints `**Relevance:** faulted (not a finite number in [0, 1])` instead of a number. The `<retrieval-envelope>` gains a trailing `faulted="N"` attribute, always present so the line keeps one closed shape — a wrapper regex anchored on `hits="N" />` must admit it (no cohort code parses the envelope today; the only readers are prose and this package's own log line, which matches `bestRelevance` by name). Under a floor, the disclosure adds `N hit(s) carried a relevance … and did not count as signal or as exemption.` and a `Faulted candidates` list. The selection manifest records a faulted hit as `excluded` with reason `relevance-faulted (not a finite number in [0, 1])` on the withheld arms and as `selected` with `returned rank=N (relevance faulted)` on the ok arm; its context carries a `faulted` count, which is why `@mmnto/totem` moves too — `faulted` joins the CLOSED `SELECTION_CONTEXT_KEYS` set (a deliberate schema change by that set's own rule).
+
+  **Unchanged.** The floor semantics: a whole-run gate on the best in-range relevance, exempt hits unchanged, `min_relevance` overriding both ways. A batch with no faults renders byte-identically apart from `faulted="0"`.
+
+### Patch Changes
+
+- Updated dependencies [b8fe7ed]
+- Updated dependencies [8b8ee20]
+- Updated dependencies [1924baf]
+  - @mmnto/totem@2.1.0
+
 ## 2.0.0
 
 ### Major Changes
