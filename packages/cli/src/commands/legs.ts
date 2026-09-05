@@ -882,7 +882,7 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     root,
     totemDirAbs: path.join(root, config.totemDir),
     globs: await legsOwedGlobs(config),
-    ...(config.hooks?.legsOwed?.enforce === undefined
+    ...(config.hooks?.legsOwed.enforce === undefined
       ? {}
       : { enforce: config.hooks.legsOwed.enforce }),
     git,

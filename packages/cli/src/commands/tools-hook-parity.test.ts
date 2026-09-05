@@ -92,17 +92,25 @@ describe("the repo's own legs-gate CI arm posture (mmnto-ai/totem#2771)", () => 
       path.join(REPO_ROOT, '.github', 'workflows', 'lint.yml'),
       'utf-8',
     );
-    const stepIdx = workflow.indexOf('node packages/cli/dist/index.js legs gate');
+    const gateIdx = workflow.indexOf('node packages/cli/dist/index.js legs gate');
     // The fetch COMMAND, not the flag: the gate step's own comment names
     // `--depth=1` while explaining why it runs first.
     const shallowIdx = workflow.indexOf('git fetch origin "$BASE_REF" --depth=1');
-    expect(stepIdx).toBeGreaterThan(-1);
+    expect(gateIdx).toBeGreaterThan(-1);
     expect(shallowIdx).toBeGreaterThan(-1);
-    expect(stepIdx).toBeLessThan(shallowIdx);
+    expect(gateIdx).toBeLessThan(shallowIdx);
     // The bin-shim form cannot resolve in a job that builds the CLI it calls.
     expect(workflow).not.toContain('pnpm exec totem legs gate');
-    // Hard: the step carries no continue-on-error between its name and its run.
-    const stepStart = workflow.lastIndexOf('- name:', stepIdx);
-    expect(workflow.slice(stepStart, stepIdx)).not.toContain('continue-on-error');
+    // The WHOLE step, from its name to the next step's: the base fetch precedes
+    // the gate inside it, and no continue-on-error sits anywhere in it — a
+    // trailing one after `run:` would soften the step just as well.
+    const stepStart = workflow.lastIndexOf('- name:', gateIdx);
+    const nextStep = workflow.indexOf('- name:', gateIdx);
+    const step = workflow.slice(stepStart, nextStep === -1 ? workflow.length : nextStep);
+    const baseFetchIdx = step.indexOf('git fetch origin "$BASE_REF"');
+    expect(baseFetchIdx).toBeGreaterThan(-1);
+    expect(baseFetchIdx).toBeLessThan(step.indexOf('node packages/cli/dist/index.js legs gate'));
+    expect(step).not.toContain('--depth=1');
+    expect(step).not.toContain('continue-on-error');
   });
 });
