@@ -1138,18 +1138,19 @@ function isBody(i) {
 // Why a section read as empty when it was not blank: the reader says which
 // rule emptied it, so the cure is never a line the seat can see and not explain.
 function emptyReason(start, level) {
-  let quoted = false;
-  let hashes = false;
+  const found = [];
+  let fences = 0;
   for (let i = start + 1; i < lines.length; i++) {
     const n = levelAt(i);
     if (n > 0 && n <= level) break;
     if (n > 0) continue;
-    if (inFence[i] && lines[i].trim().length > 0) quoted = true;
-    else if (!fenceLine[i] && bareHashes(lines[i])) hashes = true;
+    if (fenceLine[i]) fences = fences + 1;
+    else if (inFence[i] && lines[i].trim().length > 0) { if (found.indexOf("a promised heading quoted inside a fenced code block") < 0) found.push("a promised heading quoted inside a fenced code block"); }
+    else if (bareHashes(lines[i])) { if (found.indexOf("a line of # characters") < 0) found.push("a line of # characters"); }
   }
-  if (quoted) return " — its only content is a promised heading quoted inside a fenced code block";
-  if (hashes) return " — its only content is a line of # characters";
-  return "";
+  if (fences > 0 && found.indexOf("a promised heading quoted inside a fenced code block") < 0) found.push("an empty fenced code block");
+  if (found.length < 1) return "";
+  return " — nothing under it counts as body: " + found.join("; ");
 }
 function hasBodyAfter(start, level) {
   for (let i = start + 1; i < lines.length; i++) {
@@ -1176,7 +1177,7 @@ function fencedCopyOf(heading) {
 // gets the cure that fits (close it) rather than the one that does not.
 const unclosedAt = fenceChar.length > 0 ? openedAt : 0;
 function fenceCure(openLine) {
-  if (unclosedAt > 0 && [unclosedAt].indexOf(openLine) > -1) return " (that fence is never closed — close it, or write the section outside it)";
+  if (unclosedAt > 0 && [unclosedAt].indexOf(openLine) > -1) return " (that fence is never closed — close it with a bare closing fence: the same character, at least as long, nothing else on the line — or write the section outside it)";
   return " (write the section outside the fence)";
 }
 if (shape !== "DOCUMENT") {

@@ -4786,7 +4786,7 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
   });
 
   it.skipIf(!shellOk)(
-    'a fence line indented four spaces is an indented code block, not a fence',
+    'a fence line indented four spaces is not a fence (an indented code block, or a lazy continuation after a paragraph)',
     () => {
       // CommonMark: up to three spaces of indentation keeps a fence a fence; four
       // makes it an indented code block. The DISCRIMINATING shape: an indented
@@ -4847,7 +4847,7 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
       expect(r.status).toBe(1);
       expect(r.stdout).toContain(`has an empty heading ${EDGE_CASES}`);
       expect(r.stdout).toContain(
-        'its only content is a promised heading quoted inside a fenced code block',
+        'nothing under it counts as body: a promised heading quoted inside a fenced code block',
       );
     },
   );
@@ -4873,9 +4873,66 @@ describe('buildPreCommitHook spec-gate reader — fences and bare hash lines (mm
     const r = judge(nineBodied({ [EDGE_CASES]: `${EDGE_CASES}${NL}####${NL}` }));
     expect(r.status).toBe(1);
     expect(r.stdout).toContain(
-      `has an empty heading ${EDGE_CASES} — its only content is a line of # characters`,
+      `has an empty heading ${EDGE_CASES} — nothing under it counts as body: a line of # characters`,
     );
   });
+
+  it.skipIf(!shellOk)(
+    'every rule that emptied a section is named, and an empty fence pair is one of them',
+    () => {
+      // Both rules at once: a bare hash line and a fenced promised heading.
+      const both = judge(
+        nineBodied({
+          [EDGE_CASES]: `${EDGE_CASES}${NL}####${NL}${FENCE}${NL}${TEST_PLAN}${NL}${FENCE}${NL}`,
+        }),
+      );
+      expect(both.status).toBe(1);
+      expect(both.stdout).toContain(
+        'nothing under it counts as body: a promised heading quoted inside a fenced code block; a line of # characters',
+      );
+      // An empty fence pair is a rule this slice introduced; it names itself too.
+      const empty = judge(
+        nineBodied({ [EDGE_CASES]: `${EDGE_CASES}${NL}${FENCE}${NL}${FENCE}${NL}` }),
+      );
+      expect(empty.status).toBe(1);
+      expect(empty.stdout).toContain('nothing under it counts as body: an empty fenced code block');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'a closing fence that repeats the info string does not close (the cure names a bare closer)',
+    () => {
+      // A common model output error: ```mermaid … ```mermaid. Under CommonMark the
+      // second line is not a closer, so every heading after it is fenced.
+      const idx = PROMISED.indexOf(EXECUTION_FLOW);
+      const r = judge(
+        nineBodied({
+          [EXECUTION_FLOW]: `${EXECUTION_FLOW}${NL}${FENCE}mermaid${NL}A --> B${NL}${FENCE}mermaid${NL}`,
+        }),
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(`is missing heading ${PROMISED[idx + 1]}`);
+      expect(r.stdout).toContain('close it with a bare closing fence');
+    },
+  );
+
+  it.skipIf(!shellOk)(
+    'the never-closed cure is offered only for the fence the copy sits in',
+    () => {
+      // Test Plan exists only as a copy inside a CLOSED fence; an unrelated fence
+      // is left open at the end of the draft. The cure must not blame that one.
+      const r = judge(
+        `${nineBodied({
+          [EDGE_CASES]: `${EDGE_CASES}${NL}${FENCE}${NL}${TEST_PLAN}${NL}${FENCE}${NL}`,
+          [TEST_PLAN]: '',
+        })}${NL}${FENCE}${NL}stray, never closed${NL}`,
+      );
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain(`is missing heading ${TEST_PLAN}`);
+      expect(r.stdout).toContain('write the section outside the fence');
+      expect(r.stdout).not.toContain('never closed');
+    },
+  );
 
   it.skipIf(!shellOk)(
     'RECORD: a bound record whose only headings sit inside a fence has no heading with a body',
