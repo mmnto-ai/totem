@@ -263,13 +263,16 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
       const row = parsed.manifest.contracts.find((c) => c.id === 'gh-project-vocabulary');
       expect(row).toBeDefined();
       if (row === undefined) return;
-      const sets =
-        row.expectedOptionSets !== undefined
-          ? new Map(Object.entries(row.expectedOptionSets))
-          : parseExpectedOptionSets(row.expectedValueOrDerivation);
-      expect([...sets.keys()]).toEqual(['Status', 'Priority']);
-      expect(sets.get('Status')).toEqual(STATUS);
-      expect(sets.get('Priority')).toEqual(PRIORITY);
+      // The PROSE is always parsed — it stays a pinned contract even after the
+      // structured field lands (pass 2, p2-F1) — and when the structured field
+      // is present the two must agree, or the doctrine row contradicts itself.
+      const prose = parseExpectedOptionSets(row.expectedValueOrDerivation);
+      expect([...prose.keys()]).toEqual(['Status', 'Priority']);
+      expect(prose.get('Status')).toEqual(STATUS);
+      expect(prose.get('Priority')).toEqual(PRIORITY);
+      if (row.expectedOptionSets !== undefined) {
+        expect(new Map(Object.entries(row.expectedOptionSets))).toEqual(prose);
+      }
     },
   );
 

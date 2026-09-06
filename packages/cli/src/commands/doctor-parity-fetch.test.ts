@@ -23,6 +23,7 @@ import {
   type GhFetch,
   type GhFetchResult,
   type GhGraphql,
+  labelCanonNeeded,
   networkPostureRowFor,
   resolveLabelCanon,
   resolveNetworkSnapshots,
@@ -651,5 +652,38 @@ describe('classifyGraphqlBody', () => {
 
     const transient = { ...partial, errors: [{ type: 'SERVICE_UNAVAILABLE', message: 'timeout' }] };
     expect(classifyGraphqlBody(transient).outcome).toBe('error');
+  });
+
+  it('is decisive on the PRESENCE of errors whatever their shape (a string, a null entry, a bare object), never ok', () => {
+    // A conforming server sends a non-empty list of maps; a non-conforming one
+    // must not read as "no errors" (falsification pass 2, p2-F3).
+    const data = { organization: { projectV2: { title: 'x' } } };
+    expect(
+      classifyGraphqlBody({ data, errors: ['Resource not accessible by integration'] }).outcome,
+    ).toBe('auth');
+    expect(classifyGraphqlBody({ data, errors: [null] }).outcome).toBe('error');
+    expect(classifyGraphqlBody({ data, errors: 'FORBIDDEN' }).outcome).toBe('auth');
+    expect(classifyGraphqlBody({ data, errors: { message: 'boom' } }).outcome).toBe('error');
+    // An EMPTY list is the one shape that means no errors.
+    expect(classifyGraphqlBody({ data, errors: [] }).outcome).toBe('ok');
+  });
+});
+
+describe('labelCanonNeeded', () => {
+  const snap = (repoId: string) => ({ repoSlug: `mmnto-ai/${repoId}`, repoId, surfaces: {} });
+
+  it('is false without the label row, or with an empty roster', () => {
+    expect(labelCanonNeeded([{ row: 'repo-merge-posture' }], [snap('totem')])).toBe(false);
+    expect(labelCanonNeeded([{ row: 'gh-issue-label-canon' }], [])).toBe(false);
+  });
+
+  it('is true when the row applies to every repo (consumers undefined) and a snapshot exists', () => {
+    expect(labelCanonNeeded([{ row: 'gh-issue-label-canon' }], [snap('liquid-city')])).toBe(true);
+  });
+
+  it('follows the row`s consumers scope exactly — the canon is read only when some line will use it', () => {
+    const scoped = [{ row: 'gh-issue-label-canon' as const, consumers: ['totem'] }];
+    expect(labelCanonNeeded(scoped, [snap('liquid-city')])).toBe(false);
+    expect(labelCanonNeeded(scoped, [snap('liquid-city'), snap('totem')])).toBe(true);
   });
 });

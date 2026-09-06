@@ -3659,11 +3659,17 @@ function labelCanonVerdict(
   provenance: string,
 ): ParityContractVerdict {
   const surface = repo.surfaces.labels;
-  const cannot = surfaceCannotVerify(surface, 'labels');
+  // Every message names the repo (pass 2, p2-F4): the `--json` readout carries
+  // no per-repo line name, so cannot-verify rows need the slug as much as
+  // verdict rows do to stay distinguishable across a multi-repo roster.
+  const cannot = surfaceCannotVerify(surface, `${repo.repoSlug} labels`);
   if (cannot !== undefined) return cannot;
   const parsed = LabelsArraySchema.safeParse(surface?.data);
   if (!parsed.success) {
-    return { status: 'unknown', message: 'labels: payload is not a label list — cannot verify' };
+    return {
+      status: 'unknown',
+      message: `${repo.repoSlug} labels: payload is not a label list — cannot verify`,
+    };
   }
   const drift = labelCanonDrift(parsed.data, canon);
   const total = canon.labels.length;
@@ -3750,23 +3756,23 @@ function projectVocabularyVerdict(
   canonSource: string,
 ): ParityContractVerdict {
   const binding = repo.project;
+  // The skip messages name the repo too (pass 2, p2-F4) — see labelCanonVerdict.
   if (binding === undefined) {
     return {
       status: 'skip',
-      message: 'project binding not resolved for this repo — honest-absent',
+      message: `${repo.repoSlug}: project binding not resolved for this repo — honest-absent`,
     };
   }
   if (binding.kind === 'unbound') {
     return {
       status: 'skip',
-      message: 'no project bound (orient.projectNumber unset) — honest-absent',
+      message: `${repo.repoSlug}: no project bound (orient.projectNumber unset) — honest-absent`,
     };
   }
   if (binding.kind === 'sibling') {
     return {
       status: 'skip',
-      message:
-        'bound project not derivable for a sibling repo (its totem.config.ts is not a network surface) — run the doctor there',
+      message: `${repo.repoSlug}: bound project not derivable for a sibling repo (its totem.config.ts is not a network surface) — run the doctor there`,
     };
   }
   const projectLabel = `${binding.owner}/projects/${binding.number}`;

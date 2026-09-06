@@ -20,10 +20,14 @@
  * compares exactly (untrimmed), the namespace token keeps its trailing space,
  * option ORDER is information and never a fault, and a governed field that is
  * absent IS a fault (its option set is empty, which is not the canonical set).
- * One disclosed asymmetry: this module normalizes the CANON's colour too (a
- * `#`-prefixed hex in the script would still match), where the twin normalizes
- * only the live side — identical readings while the script writes bare hex, as
- * every one of its eighteen calls does today.
+ * One disclosed asymmetry: this module strips a leading `#` from the CANON's
+ * colour too (the twin lower-cases both sides but strips `#` on the live side
+ * only), so a `#`-prefixed hex in the script would still match here — identical
+ * readings while the script writes bare hex, as every one of its eighteen calls
+ * does today. Option NAMES are compared exactly on the live side; the canon's
+ * authoring whitespace is trimmed (the prose grammar cannot avoid it, and a
+ * quoted YAML member may carry it), so a padded live option name is a real
+ * difference the board shows, never smoothed away.
  */
 
 /** One canonical label as the script defines it (`gh label edit "<name>" --color "<hex>" --description "<text>"`). */
@@ -237,7 +241,11 @@ export interface ProjectSingleSelectField {
   options: readonly { name: string }[];
 }
 
-/** `{ Status: [...], Priority: [...] }` for every single-select field on the project. */
+/**
+ * `{ Status: [...], Priority: [...] }` for every single-select field on the
+ * project. Option names are kept RAW: the live side is what the board shows, and
+ * the canon side is the one that carries authoring whitespace (trimmed there).
+ */
 export function optionSetsOfProjectFields(
   fields: readonly ProjectSingleSelectField[],
 ): Map<string, string[]> {
@@ -293,7 +301,7 @@ export function projectVocabularyDrift(
     const extra = actualOptions.filter((option) => !expectedSet.has(option));
     if (missing.length > 0 || extra.length > 0) {
       faults.push({ field, kind: 'option-set-differs', missing, extra });
-    } else if (expectedOptions.join(' ') !== actualOptions.join(' ')) {
+    } else if (expectedOptions.some((option, index) => option !== actualOptions[index])) {
       orderDiffers.push(field);
     }
   }

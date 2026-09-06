@@ -459,27 +459,34 @@ function narrowStringArray(value: unknown): string[] | undefined {
 
 /**
  * Narrow a structured `expected-option-sets` value to `{ field: [options] }`:
- * a plain object whose every key is a non-empty string and every value a
- * non-empty ARRAY of non-empty strings (members trimmed). Anything else — an
- * array, an empty object, a field with an empty or non-string list, or a SCALAR
- * where a list belongs — is absent on that row (the detector then falls back to
- * the prose parse). The scalar case is refused on purpose: `narrowStringArray`
- * would normalize `'Todo | In Progress | Done'` to ONE option and a conforming
- * board would render as drift (falsification pass 1, F2); a list is the field's
- * shape, and a mirror of the prose sentence is not a list.
+ * a plain object whose every key is a non-empty string (trimmed, distinct after
+ * trimming) and every value a non-empty ARRAY whose every member is a non-empty
+ * string (members trimmed). The narrowing REFUSES rather than repairs: anything
+ * else — an array, an empty object, a scalar where a list belongs, a list with
+ * an empty or non-string member, two keys that collide once trimmed — makes the
+ * field absent on that row, and the detector falls back to the prose parse. The
+ * scalar refusal is the load-bearing one: `narrowStringArray` would normalize
+ * `'Todo | In Progress | Done'` to ONE option and a conforming board would
+ * render as drift (falsification pass 1, F2); a list is the field's shape, and a
+ * mirror of the prose sentence is not a list. Silent member-dropping was the
+ * pass-2 residual (p2-F5): a list with an empty member is an authoring error the
+ * fallback should surface, not a list to quietly shorten.
  */
 function narrowOptionSets(value: unknown): Record<string, string[]> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
-  const sets: Record<string, string[]> = {};
+  const entries: [string, string[]][] = [];
+  const seen = new Set<string>();
   for (const [rawField, rawOptions] of Object.entries(value as Record<string, unknown>)) {
     const field = rawField.trim();
-    if (field.length === 0) return undefined;
-    if (!Array.isArray(rawOptions)) return undefined;
-    const options = narrowStringArray(rawOptions);
-    if (options === undefined) return undefined;
-    sets[field] = options;
+    if (field.length === 0 || seen.has(field)) return undefined;
+    seen.add(field);
+    if (!Array.isArray(rawOptions) || rawOptions.length === 0) return undefined;
+    if (!rawOptions.every((option) => typeof option === 'string' && option.trim().length > 0)) {
+      return undefined;
+    }
+    entries.push([field, rawOptions.map((option) => (option as string).trim())]);
   }
-  return Object.keys(sets).length > 0 ? sets : undefined;
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 /** Map one validated raw contract to the camelCase public `ParityContract`. */

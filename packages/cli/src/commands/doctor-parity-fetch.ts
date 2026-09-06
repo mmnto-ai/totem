@@ -724,21 +724,30 @@ function makeDefaultGhGraphql(safeExec: SafeExecFn): GhGraphql {
  * project rendered "Priority: field absent"). Pure: no I/O, exported for test.
  */
 export function classifyGraphqlBody(body: unknown): GhFetchResult {
-  const errors = graphqlErrorsOf(body);
-  if (errors.length === 0) {
+  // Decisive on PRESENCE, whatever the shape: a conforming server sends a
+  // non-empty list of maps, but a string entry, a null entry, or a bare object
+  // must still never read as "no errors" (falsification pass 2, p2-F3).
+  if (!graphqlBodyHasErrors(body)) {
     return { outcome: 'ok', data: body };
   }
+  const errors = graphqlErrorsOf(body);
   const haystack = errors
-    .map(
-      (e) =>
-        `${typeof e.message === 'string' ? e.message : ''} ${typeof e.type === 'string' ? e.type : ''}`,
+    .map((e) =>
+      typeof e === 'string'
+        ? e
+        : `${typeof e.message === 'string' ? e.message : ''} ${typeof e.type === 'string' ? e.type : ''}`,
     )
     .join(' ');
-  const first = errors.find((e) => typeof e.message === 'string' && e.message.length > 0);
-  const detail = (typeof first?.message === 'string' ? first.message : 'graphql error').slice(
-    0,
-    GRAPHQL_DETAIL_MAX,
+  const first = errors.find(
+    (e) => typeof e === 'string' || (typeof e.message === 'string' && e.message.length > 0),
   );
+  const firstMessage =
+    typeof first === 'string'
+      ? first
+      : typeof first?.message === 'string'
+        ? first.message
+        : 'graphql error';
+  const detail = firstMessage.slice(0, GRAPHQL_DETAIL_MAX);
   if (/permission|scope|not accessible|FORBIDDEN|INSUFFICIENT_SCOPES/i.test(haystack)) {
     return { outcome: 'auth', detail };
   }
@@ -748,14 +757,39 @@ export function classifyGraphqlBody(body: unknown): GhFetchResult {
   return { outcome: 'error', detail };
 }
 
-/** The `errors` array of a GraphQL body (empty when absent / mis-shaped). */
-function graphqlErrorsOf(body: unknown): { message?: unknown; type?: unknown }[] {
+/** True when the body carries an `errors` member that is not an empty list — any shape counts. */
+function graphqlBodyHasErrors(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  const errors = (body as { errors?: unknown }).errors;
+  if (errors === undefined || errors === null) return false;
+  return !Array.isArray(errors) || errors.length > 0;
+}
+
+/** The readable `errors` entries of a GraphQL body: maps and bare strings (anything else contributes nothing). */
+function graphqlErrorsOf(body: unknown): (string | { message?: unknown; type?: unknown })[] {
   if (typeof body !== 'object' || body === null) return [];
   const errors = (body as { errors?: unknown }).errors;
-  if (!Array.isArray(errors)) return [];
-  return errors.filter((e): e is { message?: unknown; type?: unknown } => {
-    return typeof e === 'object' && e !== null;
+  const list = Array.isArray(errors) ? errors : [errors];
+  return list.filter((e): e is string | { message?: unknown; type?: unknown } => {
+    return typeof e === 'string' || (typeof e === 'object' && e !== null);
   });
+}
+
+/**
+ * True when the label-canon row will verdict at least one roster repo — the
+ * gate on the roster-wide canon read (falsification pass 1, F7; pass 2, p2-F7).
+ * The SAME predicate core applies per repo (`consumers` undefined = every repo),
+ * so the canon is read exactly when some line will use it. Pure, exported for test.
+ */
+export function labelCanonNeeded(
+  rows: readonly NetworkRowSpec[],
+  snapshots: readonly NetworkProbeRepoSnapshot[],
+): boolean {
+  const labelRow = rows.find((s) => s.row === 'gh-issue-label-canon');
+  if (labelRow === undefined) return false;
+  return snapshots.some(
+    (snap) => labelRow.consumers === undefined || labelRow.consumers.includes(snap.repoId),
+  );
 }
 
 /** Fields a `safeExec` throw carries (status/stderr) — mirrors core's `SafeExecErrorFields`. */

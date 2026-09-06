@@ -888,8 +888,13 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // the manifest ONCE, up front, so the pure detector only verdicts. An empty
       // roster / absent rows → no fetch. The default transport spawns `gh api`;
       // gh-absent degrades every surface to a skip (§14 clause 4). NEVER throws.
-      const { defaultGhFetch, networkPostureRowFor, resolveLabelCanon, resolveNetworkSnapshots } =
-        await import('./doctor-parity-fetch.js');
+      const {
+        defaultGhFetch,
+        labelCanonNeeded,
+        networkPostureRowFor,
+        resolveLabelCanon,
+        resolveNetworkSnapshots,
+      } = await import('./doctor-parity-fetch.js');
       const networkRowSpecs = contracts.flatMap((c) => {
         if (c.manifestation !== 'capability-probe') return [];
         const row = networkPostureRowFor(c.id);
@@ -911,14 +916,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // once here — and ONLY when the label row is present AND some roster repo
       // is inside ITS consumers scope, so an empty roster, or a row scoped away
       // from every roster repo, reads nothing (no `gh`; falsification pass 1, F7).
-      const labelRowSpec = networkRowSpecs.find((s) => s.row === 'gh-issue-label-canon');
-      const labelRowHasScopedRepo =
-        labelRowSpec !== undefined &&
-        networkSnapshots.some(
-          (snap) =>
-            labelRowSpec.consumers === undefined || labelRowSpec.consumers.includes(snap.repoId),
-        );
-      const labelCanon = labelRowHasScopedRepo
+      const labelCanon = labelCanonNeeded(networkRowSpecs, networkSnapshots)
         ? resolveLabelCanon({
             gitRoot,
             ...(repoId !== undefined ? { repoId } : {}),

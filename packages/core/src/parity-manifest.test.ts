@@ -344,7 +344,9 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
   it('parses a structured expected-option-sets field into expectedOptionSets (mmnto-ai/totem#2791)', () => {
     const withSets = PROMOTED_FIELDS_YAML.replace(
       'probe-class: network-read-only',
-      'probe-class: network-read-only\n    expected-option-sets:\n      Status: [Todo, In Progress, Done]\n      Priority: [ Now , Next ]',
+      // Quoted members carry their padding through YAML (plain scalars are
+      // already stripped by the parser), so this is what exercises the trim.
+      'probe-class: network-read-only\n    expected-option-sets:\n      Status: [Todo, In Progress, Done]\n      Priority: [" Now ", "Next"]',
     );
     const result = parseParityManifest(withSets);
     expect(result.status).toBe('ok');
@@ -368,6 +370,10 @@ describe('parseParityManifest — promoted 296 fields (mmnto-ai/totem#2140)', ()
       'expected-option-sets:\n      Status: [Todo, 42]',
       'expected-option-sets: {}',
       "expected-option-sets:\n      Status: 'Todo | In Progress | Done'\n      Priority: [Now, Next]",
+      // A list with an EMPTY member is refused, never quietly shortened (p2-F5).
+      'expected-option-sets:\n      Status: [Todo, "", Done]',
+      // Two keys that collide once trimmed are refused, never silently merged (p2-F5).
+      'expected-option-sets:\n      "Status ": [A]\n      Status: [B]',
     ]) {
       const result = parseParityManifest(
         PROMOTED_FIELDS_YAML.replace(
