@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "diffSha": "01351eddeb90cb9e6f28624b284865399c0a3bc7",
-  "readAt": "2026-09-06T20:25:00Z",
+  "readAt": "2026-09-06T19:51:36Z",
   "passes": [
     {
       "pass": "3",
@@ -9,7 +9,10 @@
       "readAt": "2026-09-06T18:25:09Z",
       "model": "claude-opus-5[1m]",
       "priorFoldsVerified": "23 of 23 HELD (F1-F13, P2-F14..P2-F23), each counterexample re-run against the source; F15's pre-existing core failure did not reproduce (core 4454/4454)",
-      "suites": { "core": "157 files / 4454 passed / 5 skipped", "cli": "174 files / 4718 passed / 20 skipped" },
+      "suites": {
+        "core": "157 files / 4454 passed / 5 skipped",
+        "cli": "174 files / 4718 passed / 20 skipped"
+      },
       "foldedIn": "400bac3a8bde4470e1221ccbeadbdcd71126d184",
       "verdict": "NOT CONVERGED — 13 new findings: BLOCKING 2, MATERIAL 4, MINOR 7"
     },
@@ -20,7 +23,10 @@
       "model": "claude-opus-5[1m]",
       "priorFoldsVerified": "11 of 11 in-diff pass-3 folds HELD; P3-F6 measured end to end on win32 (a 40,047-byte payload returns a verdict on stdin, ENAMETOOLONG on argv); the bus's RED claim (10 of 26 fold tests fail on the pre-fold evaluator) reproduced independently through a vitest alias to the 3b4edec8 source",
       "regressionAttempts": "20 over the new rules; 3 broke something (P3b-F1, P3b-F3 fold-introduced; the dotted-delimiter over-scan pre-existing and folded with them)",
-      "suites": { "core": "157 files / 4462 passed / 5 skipped", "cli": "174 files / 4721 passed / 20 skipped" },
+      "suites": {
+        "core": "157 files / 4462 passed / 5 skipped",
+        "cli": "174 files / 4721 passed / 20 skipped"
+      },
       "foldedIn": "f0eb6f12bfaaf0d737f73f95f4f9b469c66c62be",
       "verdict": "NOT CONVERGED — no charter positive, no benign-corpus row and no wrapper defect survives, but two MATERIAL items stand: the fold's own `#` invariant false of the source (a fold-introduced heredoc miss behind it) and one non-discriminating new CLI test"
     },
@@ -31,7 +37,10 @@
       "model": "claude-opus-5[1m]",
       "priorFoldsVerified": "8 of 9 re-armed folds HELD in source, P3b-F9 half held (the PowerShell half true, the subshell-paren half false — P3c-F1); the bus's RED claim (5 of 29) confirmed by reasoning from the 400bac3a source; load-bearing counterexamples run through GNU bash 5.3.15",
       "regressionAttempts": "23 over the changed lines; 3 broke something, all one class (an operator `)` followed by `#`); the blankSingleQuoted backslash branch survived 7 attempts and the delimiter charset 8",
-      "suites": { "core": "157 files / 4465 passed / 5 skipped", "cli": "174 files / 4721 passed / 20 skipped" },
+      "suites": {
+        "core": "157 files / 4465 passed / 5 skipped",
+        "cli": "174 files / 4721 passed / 20 skipped"
+      },
       "foldedIn": "30466dcc2ef37dd38a323a3f2706e4d6d412cda0",
       "verdict": "NOT CONVERGED — two MATERIAL claims introduced by the fold are false against bash and POSIX: a `#` after a subshell's `)` is a comment (the fold's boundary change turned a 400bac3a deny into an allow), and the `<<1` gap is a miss, not an over-scan"
     },
@@ -42,45 +51,283 @@
       "model": "claude-opus-5[1m]",
       "priorFoldsVerified": "all 13 counterexamples of the narrow pass HELD in source (P3c-F1 seven, P3c-F2 six, P3c-F3 the rule numbers); a differential harness ran the f0eb6f12 source, the HEAD source and the rebuilt dist side by side; every shell-semantics claim checked against GNU bash 5.3.15 scripts",
       "regressionAttempts": "37 over the changed lines plus a 270-combination charter-positive sweep (9 positives × 15 wrapper shapes × 2 platforms: 0 deny→allow, 16 allow→deny — positives newly caught inside `( … )`) and a 64-combination benign sweep (0 allow→deny)",
-      "suites": { "core": "157 files / 4467 passed / 5 skipped", "cli": "174 files / 4721 passed / 20 skipped" },
+      "suites": {
+        "core": "157 files / 4467 passed / 5 skipped",
+        "cli": "174 files / 4721 passed / 20 skipped"
+      },
       "foldedIn": "01351eddeb90cb9e6f28624b284865399c0a3bc7 (prose only: P3d-F1, P3d-F2)",
       "verdict": "CONVERGED — only three MINOR disclosure/citation/test-strength items remain; the leg flagged that P3d-F1, a prose claim false in source, could be read as MATERIAL under a strict rubric and ranked it MINOR because the error runs in the safe direction — the bus folded it regardless"
     }
   ],
   "findings": [
-    { "id": "P3-F1", "severity": "BLOCKING", "file": "packages/core/src/transport-shield.ts", "line": 218, "claim": "Neither findHeredocs nor tokenizeShell recognized a `#` comment, so an apostrophe inside a comment opened a single-quoted region to the end of the command and hid every later heredoc and program position — the charter's flagship positive control slipped through (POSIX 2.3 rule 10; bash §3.1.3: a comment is discarded without quote processing).", "counterexample": "`# don't clobber the file\\ncat > f.mjs <<'EOF'\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape) per the mmnto-ai/totem#2799 positive control; actual allow, 0 spans. Same carrier blinded sed-i-escape and msys-body-slash; a trailing comment (`echo hi # don't`) did the same." },
-    { "id": "P3-F2", "severity": "BLOCKING", "file": "packages/core/src/transport-shield.ts", "line": 575, "claim": "sed-i-escape's newline test read seg.raw, which still held an unquoted backslash-newline continuation, so a benign wrapped `sed -i` was denied against the tokenizer's own comment, bash §3.1.2.1, the changeset's 'quoted newline' scope and the ADR-109 zero budget.", "counterexample": "`grep -q x f && \\\\\\n  sed -i 's/foo/bar/' file.ts` — expected allow; actual deny 'a sed -i invocation spans a newline'. The one-line and newline-separated forms allowed, so the continuation alone caused it." },
-    { "id": "P3-F3", "severity": "MATERIAL", "file": "packages/core/src/transport-shield.ts", "line": 232, "claim": "`<<` inside an arithmetic expansion was read as a heredoc operator whenever its right operand was an identifier, creating a phantom heredoc whose body was every later line — blanked for the other rows (fail-open) and scanned for escapes (spurious deny).", "counterexample": "`mask=$((1 << n))\\ngh pr comment 5 -b /gemini` (win32) — expected deny(msys-body-slash); actual allow. `mask=$((1 << n))\\nsed -i 's/a/b/' 'C:\\\\x\\\\y.txt'` — expected allow; actual deny(heredoc-escape)." },
-    { "id": "P3-F4", "severity": "MATERIAL", "file": "packages/core/src/transport-shield.ts", "line": 141, "claim": "HEREDOC_AT accepted only quote characters around the delimiter, so the backslash-quoted spelling `<<\\EOF` (POSIX 2.7.4: any quoted character in the word quotes the delimiter) was not a heredoc — its body missed by heredoc-escape and scanned as shell text.", "counterexample": "`cat > f <<\\EOF\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape); actual allow. `cat > f <<\\EOF\\ngh pr comment 5 -b /some/path\\nEOF` (win32) — expected allow; actual deny(msys-body-slash)." },
-    { "id": "P3-F5", "severity": "MATERIAL", "file": "packages/core/src/transport-shield.ts", "line": 375, "claim": "tokenizeShell treated a word-initial `#` as an ordinary character, so comment text was tokenized as arguments and could satisfy a deny row (ADR-109 budget: zero denies over benign commands).", "counterexample": "`gh pr comment 5 --body-file notes.md # was --body /gemini review` (win32) — expected allow; actual deny(msys-body-slash). `sed -i -e 's/a/b/' f.txt # -e 's/c/d/'` — expected allow; actual deny (2 -e expressions)." },
-    { "id": "P3-F6", "severity": "MATERIAL", "file": "packages/cli/src/commands/init-templates.ts", "line": 1534, "claim": "The wrapper passed the whole Bash command as one argv element, so on win32 a command past the 32,767-character limit failed the spawn with ENAMETOOLONG and landed in the fail-closed arm ('source broken or unavailable') with nothing broken and no cure — the spec's failure-mode table reserves that arm for a broken source.", "counterexample": "Measured on win32 (node v24): spawnSync with a 40,000-character argument → error.code ENAMETOOLONG; 32,000 → ok. Expected per the table: a verdict or a not-applicable exit 0; actual exit 2." },
-    { "id": "P3-F7", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 414, "claim": "programIndex skipped assignments before wrappers only, so the canonical `env VAR=VALUE prog` never reached the program; a `&`-backgrounded first command hid the second; wrappers with operands (`sudo -u me`, `timeout 30`, `npx`) defeat the anchor.", "counterexample": "`env GH_TOKEN=x gh pr comment 5 -b /x` (win32) — expected deny(msys-body-slash); actual allow. `sleep 1 & gh pr comment 5 -b /x` — the same." },
-    { "id": "P3-F8", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 434, "claim": "optionAsWritten returned on the FIRST `--body`/`-b` token even when it was another option's value, so a later real `--body` was never examined.", "counterexample": "`gh issue create --title -b --body /x` (win32) — expected deny(msys-body-slash); actual allow." },
-    { "id": "P3-F9", "severity": "MINOR", "file": "PR body", "line": 0, "claim": "The PR body said the wrapper keeps freeze-check 'byte for byte as before'; the guardrail lines moved inside the event branch and were re-indented — behavioural identity only (F10, folded in the changeset and spec but not the PR body).", "counterexample": "`git diff origin/main...HEAD -- packages/cli/src/commands/init-templates.ts` shows the re-indented lines." },
-    { "id": "P3-F10", "severity": "MINOR", "file": "packages/core/src/transport-shield.fold.test.ts", "line": 149, "claim": "The legitimacy record on mmnto-ai/totem#2799 stated the benign-corpus size as 37 and as 44; the fixture had 43 rows.", "counterexample": "A count of the BENIGN table rows: 43 (now 54 after the pass-3 folds)." },
-    { "id": "P3-F11", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 631, "claim": "msys-rev-path-subshell located `$(` with a quote-blind indexOf, so a literal `$( … )` inside single quotes was scanned as a subshell (warn only).", "counterexample": "`grep -n '$(git show origin/main:.totem/x.md)' notes.md` (win32) — expected allow; actual warn." },
-    { "id": "P3-F12", "severity": "MINOR", "file": "packages/cli/src/commands/init.ts", "line": 1970, "claim": "A comment still named the removed identifier `resolveGateEvents` (renamed `resolveGates`).", "counterexample": "`grep -rn resolveGateEvents packages/cli/src` → init.ts:1970 plus two intentional historical references in test docblocks." },
-    { "id": "P3-F13", "severity": "MINOR", "file": "packages/core/src/transport-shield.test.ts", "line": 281, "claim": "The cure-suffix test asserted the suffix for two of six rows and `cure.length > 0` for the rest, weaker than its name and the spec invariant ('denied with its cure in reason', one assertion per row).", "counterexample": "Reading the block: only HEREDOC_WITH_ESCAPE and one sed -i were checked with endsWith." },
-    { "id": "P3b-F1", "severity": "MATERIAL", "file": ".totem/specs/2799-transport-shield.md", "line": 233, "claim": "The pass-3 fold's own invariant ('a `#` that begins a word is a comment') was false of the source: `)` sat in WORD_BOUNDARY, so findHeredocs treated a `#` that CONTINUES a word after a `$( … )` as a comment (POSIX 2.3 rule 9 precedes rule 10) — a fold-introduced heredoc miss.", "counterexample": "`cat $(echo f)#1 <<'EOF'\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape); actual at 400bac3a allow/no-match; at 3b4edec8 deny." },
-    { "id": "P3b-F2", "severity": "MATERIAL", "file": "packages/cli/src/commands/gate.test.ts", "line": 109, "claim": "The new test '--payload - with malformed stdin JSON throws GATE_INVALID' passed unchanged on the pre-fold gate.ts: `JSON.parse('-')` throws the byte-identical GATE_INVALID without reading stdin, so the injected reader was never exercised.", "counterexample": "The test body against 3b4edec8's gateCheckCommand (which ignores the second argument): expected FAIL; actual PASS." },
-    { "id": "P3b-F3", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 569, "claim": "blankSingleQuoted had no backslash-escape branch, so an unquoted `\\'` opened a phantom single-quoted region and blanked the rest (POSIX 2.2.1) — a lost warn, never a deny.", "counterexample": "`awk -F\\\\' '{print $2}' f; echo $(git show origin/main:x.md)` (win32) — expected warn(msys-rev-path-subshell); actual at 400bac3a allow." },
-    { "id": "P3b-F4", "severity": "MINOR", "file": ".changeset/transport-shield-gate-2799.md", "line": 12, "claim": "Only one direction of the stdin channel change was disclosed: a wrapper written by this cut against a repo-local CLI from before it fails closed on every event, freeze-check included (`JSON.parse('-')` → GATE_INVALID → exit 2) — contractually correct, undisclosed.", "counterexample": "Install with the new CLI, downgrade node_modules/@mmnto/cli: every Bash/PowerShell PreToolUse call and every declared-subsystem write exits 2." },
-    { "id": "P3b-F5", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 708, "claim": "The comment justifying the P3-F2 fold claimed 'the only newline that reaches a token is one inside quotes'; a newline inside an unquoted `$( … )` also reaches a token (the substitution is copied verbatim), and the detail string called it 'quoted'. The check also reads the file operand, while the changeset scoped the row to the expression.", "counterexample": "`sed -i s/a/$(echo\\nx)/ f` — denied 'spans a quoted newline' though the newline is unquoted; `sed -i 's/a/b/' \"f\\ng\"` denied on a newline in the FILENAME." },
-    { "id": "P3b-F6", "severity": "MINOR", "file": "PR body and mmnto-ai/totem#2799", "line": 0, "claim": "The fold commit said P3-F9 and P3-F10 were corrected out of band; at read time neither correction existed (the PR body still read 'byte for byte'; the issue's legitimacy record still said 37 and 44 rows against 52 in the fixture).", "counterexample": "PR body and issue comments read 2026-09-06T19:00Z vs the BENIGN table count." },
-    { "id": "P3b-F7", "severity": "MINOR", "file": ".totem/specs/2799-transport-shield.md", "line": 198, "claim": "The spec's design bullet was the pre-build draft: sed-i-escape described as a `\\bsed\\s+-i\\b` regex with 'a newline anywhere in the command' (HEAD anchors on the program position and reads a newline inside an operand), and msys-rev-path-subshell as 'win32 only' (HEAD also requires the Bash tool).", "counterexample": "`cd x\\nsed -i 's/foo/bar/' f` — a newline IS anywhere in the command; per the spec deny, actual allow (correct code, stale spec)." },
-    { "id": "P3b-F8", "severity": "MINOR", "file": "packages/cli/src/commands/gate-install.test.ts", "line": 730, "claim": "The 40,000-character wrapper test discriminates the fold only on the windows-latest CI leg; linux (128 KB per argument) and darwin admit a 40 KB argv.", "counterexample": "The test body against the 3b4edec8 wrapper: FAIL on win32 (measured), PASS on linux/darwin." },
-    { "id": "P3b-F9", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 38, "claim": "The header's comment rule cites bash, but the evaluator also runs for tool PowerShell, whose block comment `<# … #>` is not recognized — an apostrophe inside one can still desynchronize the quote scan for that tool; pre-existing and undisclosed.", "counterexample": "tool PowerShell, `<# don't #>\\nsed -i 's/\\t/ /' f` — expected deny(sed-i-escape); actual allow." },
-    { "id": "P3c-F1", "severity": "MATERIAL", "file": "packages/core/src/transport-shield.ts", "line": 44, "claim": "The re-armed fold's disclosure 'a `#` directly after a subshell's closing `)` is over-scan, never a miss' was false: dropping `)` from WORD_BOUNDARY made findHeredocs read a `#` after an OPERATOR `)` (a subshell's, a case pattern's) as word text, where POSIX 2.3 rule 6 delimits the `)` as an operator and rule 9 makes the `#` a comment — an apostrophe in that comment then desynchronized the quote scan and hid a later heredoc (a fold-introduced miss with a false-deny mirror). Only the `)` closing a `$( … )` is part of a word (rule 5).", "counterexample": "`(echo a)#it's a note\\ncat <<'EOF'\\nx\\d\\nEOF` — bash 5.3.15 prints `a` then `x\\d` (comment discarded, heredoc runs); expected deny(heredoc-escape), 400bac3a denied, f0eb6f12 allowed. Mirror: `(echo a)#see <<'EOF'\\nx\\d\\nEOF` — bash has no heredoc; f0eb6f12 denied." },
-    { "id": "P3c-F2", "severity": "MATERIAL", "file": "packages/core/src/transport-shield.ts", "line": 162, "claim": "The new HEREDOC_AT comment claimed an unread delimiter (`<<1`, `<<$X`) was 'a disclosed gap, over-scan direction only'; an unread heredoc operator leaves its BODY to be scanned as shell text, so an apostrophe there opens a quote region and hides a later, real heredoc — the miss direction. The pre-existing behaviour was out of scope; the claim was new.", "counterexample": "`cat <<1EOF\\nit's\\n1EOF\\ncat <<'EOF'\\nx\\d\\nEOF` — bash prints `it's` then `x\\d`; expected deny(heredoc-escape); actual at f0eb6f12 allow, 0 spans." },
-    { "id": "P3c-F3", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 169, "claim": "The WORD_BOUNDARY comment cited POSIX 2.3 rule 10 for the comment rule and rule 9 for word continuation; the comment rule is 9 and word continuation is 8.", "counterexample": "POSIX.1-2017 XCU 2.3: rule 8 appends to an open word, rule 9 discards a `#` comment, rule 10 starts a new word." },
-    { "id": "P3c-F4", "severity": "MINOR", "file": "packages/core/src/transport-shield.fold.test.ts", "line": 244, "claim": "Three new sub-assertions do not discriminate the re-armed fold (the tokenizer `$(true)#x` shape, the `echo 'a' $( … )` warn row, the `awk -F\\'` benign row); each parent test still discriminates, so no false green.", "counterexample": "Measured against a byte-verified reconstruction of the 400bac3a evaluator: identical results on both shas for those three sub-assertions." },
-    { "id": "P3d-F1", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 165, "claim": "The HEREDOC_AT comment disclosed a literal `$X` delimiter as 'the over-scan direction' — bash does not expand a heredoc delimiter word either, so the scanner and bash terminate at the same literal line and there was no divergence to disclose (echoed in the changeset and the spec). Safe-direction over-disclosure.", "counterexample": "`cat <<$X\\nb\\nEOF\\n$X\\nz` — the comment expected an unterminated body; findHeredocs terminated at the literal `$X` line and bash (script s1.sh) printed `b`, `EOF`, `done` — the same." },
-    { "id": "P3d-F2", "severity": "MINOR", "file": "packages/core/src/transport-shield.ts", "line": 177, "claim": "POSIX 2.3 rule 5 was cited to justify `<( … )` continuing a word; rule 5 enumerates only the `$` and backquote introducers — process substitution is a bash extension (§3.5.6). The behaviour is correct; the citation over-reached.", "counterexample": "`echo <(echo a)#y` — bash prints `/dev/fd/63#y`, one word (script b1.sh); the grounding is bash's own behaviour, not rule 5." },
-    { "id": "P3d-F3", "severity": "MINOR", "file": "packages/core/src/transport-shield.fold.test.ts", "line": 258, "claim": "Five of the thirteen new sub-assertions and two of the three new budget rows do not discriminate against the f0eb6f12 evaluator (guards, not falsifiers); both new parent tests and both budget tests still fail on the pre-fold code.", "counterexample": "Identical results on both shas for the `$(a)# it's` and `<(…)#it's` span checks, the `1EOF … sed` allow, the `x=$(cat <<EOF)` and `cat <<EOF;` delimiter reads, and the last two budget rows." }
+    {
+      "id": "P3-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 218,
+      "claim": "Neither findHeredocs nor tokenizeShell recognized a `#` comment, so an apostrophe inside a comment opened a single-quoted region to the end of the command and hid every later heredoc and program position — the charter's flagship positive control slipped through (POSIX 2.3 rule 10; bash §3.1.3: a comment is discarded without quote processing).",
+      "counterexample": "`# don't clobber the file\\ncat > f.mjs <<'EOF'\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape) per the mmnto-ai/totem#2799 positive control; actual allow, 0 spans. Same carrier blinded sed-i-escape and msys-body-slash; a trailing comment (`echo hi # don't`) did the same."
+    },
+    {
+      "id": "P3-F2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 575,
+      "claim": "sed-i-escape's newline test read seg.raw, which still held an unquoted backslash-newline continuation, so a benign wrapped `sed -i` was denied against the tokenizer's own comment, bash §3.1.2.1, the changeset's 'quoted newline' scope and the ADR-109 zero budget.",
+      "counterexample": "`grep -q x f && \\\\\\n  sed -i 's/foo/bar/' file.ts` — expected allow; actual deny 'a sed -i invocation spans a newline'. The one-line and newline-separated forms allowed, so the continuation alone caused it."
+    },
+    {
+      "id": "P3-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 232,
+      "claim": "`<<` inside an arithmetic expansion was read as a heredoc operator whenever its right operand was an identifier, creating a phantom heredoc whose body was every later line — blanked for the other rows (fail-open) and scanned for escapes (spurious deny).",
+      "counterexample": "`mask=$((1 << n))\\ngh pr comment 5 -b /gemini` (win32) — expected deny(msys-body-slash); actual allow. `mask=$((1 << n))\\nsed -i 's/a/b/' 'C:\\\\x\\\\y.txt'` — expected allow; actual deny(heredoc-escape)."
+    },
+    {
+      "id": "P3-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 141,
+      "claim": "HEREDOC_AT accepted only quote characters around the delimiter, so the backslash-quoted spelling `<<\\EOF` (POSIX 2.7.4: any quoted character in the word quotes the delimiter) was not a heredoc — its body missed by heredoc-escape and scanned as shell text.",
+      "counterexample": "`cat > f <<\\EOF\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape); actual allow. `cat > f <<\\EOF\\ngh pr comment 5 -b /some/path\\nEOF` (win32) — expected allow; actual deny(msys-body-slash)."
+    },
+    {
+      "id": "P3-F5",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 375,
+      "claim": "tokenizeShell treated a word-initial `#` as an ordinary character, so comment text was tokenized as arguments and could satisfy a deny row (ADR-109 budget: zero denies over benign commands).",
+      "counterexample": "`gh pr comment 5 --body-file notes.md # was --body /gemini review` (win32) — expected allow; actual deny(msys-body-slash). `sed -i -e 's/a/b/' f.txt # -e 's/c/d/'` — expected allow; actual deny (2 -e expressions)."
+    },
+    {
+      "id": "P3-F6",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1534,
+      "claim": "The wrapper passed the whole Bash command as one argv element, so on win32 a command past the 32,767-character limit failed the spawn with ENAMETOOLONG and landed in the fail-closed arm ('source broken or unavailable') with nothing broken and no cure — the spec's failure-mode table reserves that arm for a broken source.",
+      "counterexample": "Measured on win32 (node v24): spawnSync with a 40,000-character argument → error.code ENAMETOOLONG; 32,000 → ok. Expected per the table: a verdict or a not-applicable exit 0; actual exit 2."
+    },
+    {
+      "id": "P3-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 414,
+      "claim": "programIndex skipped assignments before wrappers only, so the canonical `env VAR=VALUE prog` never reached the program; a `&`-backgrounded first command hid the second; wrappers with operands (`sudo -u me`, `timeout 30`, `npx`) defeat the anchor.",
+      "counterexample": "`env GH_TOKEN=x gh pr comment 5 -b /x` (win32) — expected deny(msys-body-slash); actual allow. `sleep 1 & gh pr comment 5 -b /x` — the same."
+    },
+    {
+      "id": "P3-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 434,
+      "claim": "optionAsWritten returned on the FIRST `--body`/`-b` token even when it was another option's value, so a later real `--body` was never examined.",
+      "counterexample": "`gh issue create --title -b --body /x` (win32) — expected deny(msys-body-slash); actual allow."
+    },
+    {
+      "id": "P3-F9",
+      "severity": "MINOR",
+      "file": "PR body",
+      "line": 0,
+      "claim": "The PR body said the wrapper keeps freeze-check 'byte for byte as before'; the guardrail lines moved inside the event branch and were re-indented — behavioural identity only (F10, folded in the changeset and spec but not the PR body).",
+      "counterexample": "`git diff origin/main...HEAD -- packages/cli/src/commands/init-templates.ts` shows the re-indented lines."
+    },
+    {
+      "id": "P3-F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 149,
+      "claim": "The legitimacy record on mmnto-ai/totem#2799 stated the benign-corpus size as 37 and as 44; the fixture had 43 rows.",
+      "counterexample": "A count of the BENIGN table rows: 43 (now 54 after the pass-3 folds)."
+    },
+    {
+      "id": "P3-F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 631,
+      "claim": "msys-rev-path-subshell located `$(` with a quote-blind indexOf, so a literal `$( … )` inside single quotes was scanned as a subshell (warn only).",
+      "counterexample": "`grep -n '$(git show origin/main:.totem/x.md)' notes.md` (win32) — expected allow; actual warn."
+    },
+    {
+      "id": "P3-F12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1970,
+      "claim": "A comment still named the removed identifier `resolveGateEvents` (renamed `resolveGates`).",
+      "counterexample": "`grep -rn resolveGateEvents packages/cli/src` → init.ts:1970 plus two intentional historical references in test docblocks."
+    },
+    {
+      "id": "P3-F13",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.test.ts",
+      "line": 281,
+      "claim": "The cure-suffix test asserted the suffix for two of six rows and `cure.length > 0` for the rest, weaker than its name and the spec invariant ('denied with its cure in reason', one assertion per row).",
+      "counterexample": "Reading the block: only HEREDOC_WITH_ESCAPE and one sed -i were checked with endsWith."
+    },
+    {
+      "id": "P3b-F1",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 233,
+      "claim": "The pass-3 fold's own invariant ('a `#` that begins a word is a comment') was false of the source: `)` sat in WORD_BOUNDARY, so findHeredocs treated a `#` that CONTINUES a word after a `$( … )` as a comment (POSIX 2.3 rule 9 precedes rule 10) — a fold-introduced heredoc miss.",
+      "counterexample": "`cat $(echo f)#1 <<'EOF'\\nconst re = /\\d+/;\\nEOF` — expected deny(heredoc-escape); actual at 400bac3a allow/no-match; at 3b4edec8 deny."
+    },
+    {
+      "id": "P3b-F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/gate.test.ts",
+      "line": 109,
+      "claim": "The new test '--payload - with malformed stdin JSON throws GATE_INVALID' passed unchanged on the pre-fold gate.ts: `JSON.parse('-')` throws the byte-identical GATE_INVALID without reading stdin, so the injected reader was never exercised.",
+      "counterexample": "The test body against 3b4edec8's gateCheckCommand (which ignores the second argument): expected FAIL; actual PASS."
+    },
+    {
+      "id": "P3b-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 569,
+      "claim": "blankSingleQuoted had no backslash-escape branch, so an unquoted `\\'` opened a phantom single-quoted region and blanked the rest (POSIX 2.2.1) — a lost warn, never a deny.",
+      "counterexample": "`awk -F\\\\' '{print $2}' f; echo $(git show origin/main:x.md)` (win32) — expected warn(msys-rev-path-subshell); actual at 400bac3a allow."
+    },
+    {
+      "id": "P3b-F4",
+      "severity": "MINOR",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 12,
+      "claim": "Only one direction of the stdin channel change was disclosed: a wrapper written by this cut against a repo-local CLI from before it fails closed on every event, freeze-check included (`JSON.parse('-')` → GATE_INVALID → exit 2) — contractually correct, undisclosed.",
+      "counterexample": "Install with the new CLI, downgrade node_modules/@mmnto/cli: every Bash/PowerShell PreToolUse call and every declared-subsystem write exits 2."
+    },
+    {
+      "id": "P3b-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 708,
+      "claim": "The comment justifying the P3-F2 fold claimed 'the only newline that reaches a token is one inside quotes'; a newline inside an unquoted `$( … )` also reaches a token (the substitution is copied verbatim), and the detail string called it 'quoted'. The check also reads the file operand, while the changeset scoped the row to the expression.",
+      "counterexample": "`sed -i s/a/$(echo\\nx)/ f` — denied 'spans a quoted newline' though the newline is unquoted; `sed -i 's/a/b/' \"f\\ng\"` denied on a newline in the FILENAME."
+    },
+    {
+      "id": "P3b-F6",
+      "severity": "MINOR",
+      "file": "PR body and mmnto-ai/totem#2799",
+      "line": 0,
+      "claim": "The fold commit said P3-F9 and P3-F10 were corrected out of band; at read time neither correction existed (the PR body still read 'byte for byte'; the issue's legitimacy record still said 37 and 44 rows against 52 in the fixture).",
+      "counterexample": "PR body and issue comments read 2026-09-06T19:00Z vs the BENIGN table count."
+    },
+    {
+      "id": "P3b-F7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 198,
+      "claim": "The spec's design bullet was the pre-build draft: sed-i-escape described as a `\\bsed\\s+-i\\b` regex with 'a newline anywhere in the command' (HEAD anchors on the program position and reads a newline inside an operand), and msys-rev-path-subshell as 'win32 only' (HEAD also requires the Bash tool).",
+      "counterexample": "`cd x\\nsed -i 's/foo/bar/' f` — a newline IS anywhere in the command; per the spec deny, actual allow (correct code, stale spec)."
+    },
+    {
+      "id": "P3b-F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 730,
+      "claim": "The 40,000-character wrapper test discriminates the fold only on the windows-latest CI leg; linux (128 KB per argument) and darwin admit a 40 KB argv.",
+      "counterexample": "The test body against the 3b4edec8 wrapper: FAIL on win32 (measured), PASS on linux/darwin."
+    },
+    {
+      "id": "P3b-F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 38,
+      "claim": "The header's comment rule cites bash, but the evaluator also runs for tool PowerShell, whose block comment `<# … #>` is not recognized — an apostrophe inside one can still desynchronize the quote scan for that tool; pre-existing and undisclosed.",
+      "counterexample": "tool PowerShell, `<# don't #>\\nsed -i 's/\\t/ /' f` — expected deny(sed-i-escape); actual allow."
+    },
+    {
+      "id": "P3c-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 44,
+      "claim": "The re-armed fold's disclosure 'a `#` directly after a subshell's closing `)` is over-scan, never a miss' was false: dropping `)` from WORD_BOUNDARY made findHeredocs read a `#` after an OPERATOR `)` (a subshell's, a case pattern's) as word text, where POSIX 2.3 rule 6 delimits the `)` as an operator and rule 9 makes the `#` a comment — an apostrophe in that comment then desynchronized the quote scan and hid a later heredoc (a fold-introduced miss with a false-deny mirror). Only the `)` closing a `$( … )` is part of a word (rule 5).",
+      "counterexample": "`(echo a)#it's a note\\ncat <<'EOF'\\nx\\d\\nEOF` — bash 5.3.15 prints `a` then `x\\d` (comment discarded, heredoc runs); expected deny(heredoc-escape), 400bac3a denied, f0eb6f12 allowed. Mirror: `(echo a)#see <<'EOF'\\nx\\d\\nEOF` — bash has no heredoc; f0eb6f12 denied."
+    },
+    {
+      "id": "P3c-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 162,
+      "claim": "The new HEREDOC_AT comment claimed an unread delimiter (`<<1`, `<<$X`) was 'a disclosed gap, over-scan direction only'; an unread heredoc operator leaves its BODY to be scanned as shell text, so an apostrophe there opens a quote region and hides a later, real heredoc — the miss direction. The pre-existing behaviour was out of scope; the claim was new.",
+      "counterexample": "`cat <<1EOF\\nit's\\n1EOF\\ncat <<'EOF'\\nx\\d\\nEOF` — bash prints `it's` then `x\\d`; expected deny(heredoc-escape); actual at f0eb6f12 allow, 0 spans."
+    },
+    {
+      "id": "P3c-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 169,
+      "claim": "The WORD_BOUNDARY comment cited POSIX 2.3 rule 10 for the comment rule and rule 9 for word continuation; the comment rule is 9 and word continuation is 8.",
+      "counterexample": "POSIX.1-2017 XCU 2.3: rule 8 appends to an open word, rule 9 discards a `#` comment, rule 10 starts a new word."
+    },
+    {
+      "id": "P3c-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 244,
+      "claim": "Three new sub-assertions do not discriminate the re-armed fold (the tokenizer `$(true)#x` shape, the `echo 'a' $( … )` warn row, the `awk -F\\'` benign row); each parent test still discriminates, so no false green.",
+      "counterexample": "Measured against a byte-verified reconstruction of the 400bac3a evaluator: identical results on both shas for those three sub-assertions."
+    },
+    {
+      "id": "P3d-F1",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 165,
+      "claim": "The HEREDOC_AT comment disclosed a literal `$X` delimiter as 'the over-scan direction' — bash does not expand a heredoc delimiter word either, so the scanner and bash terminate at the same literal line and there was no divergence to disclose (echoed in the changeset and the spec). Safe-direction over-disclosure.",
+      "counterexample": "`cat <<$X\\nb\\nEOF\\n$X\\nz` — the comment expected an unterminated body; findHeredocs terminated at the literal `$X` line and bash (script s1.sh) printed `b`, `EOF`, `done` — the same."
+    },
+    {
+      "id": "P3d-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 177,
+      "claim": "POSIX 2.3 rule 5 was cited to justify `<( … )` continuing a word; rule 5 enumerates only the `$` and backquote introducers — process substitution is a bash extension (§3.5.6). The behaviour is correct; the citation over-reached.",
+      "counterexample": "`echo <(echo a)#y` — bash prints `/dev/fd/63#y`, one word (script b1.sh); the grounding is bash's own behaviour, not rule 5."
+    },
+    {
+      "id": "P3d-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 258,
+      "claim": "Five of the thirteen new sub-assertions and two of the three new budget rows do not discriminate against the f0eb6f12 evaluator (guards, not falsifiers); both new parent tests and both budget tests still fail on the pre-fold code.",
+      "counterexample": "Identical results on both shas for the `$(a)# it's` and `<(…)#it's` span checks, the `1EOF … sed` allow, the `x=$(cat <<EOF)` and `cat <<EOF;` delimiter reads, and the last two budget rows."
+    }
   ],
-  "folded": ["P3-F1", "P3-F2", "P3-F3", "P3-F4", "P3-F5", "P3-F6", "P3-F7", "P3-F8", "P3-F11", "P3-F12", "P3-F13", "P3b-F1", "P3b-F2", "P3b-F3", "P3b-F4", "P3b-F5", "P3b-F7", "P3b-F8", "P3b-F9", "P3c-F1", "P3c-F2", "P3c-F3", "P3d-F1", "P3d-F2"],
-  "notFolded": { "P3c-F4": "the parent tests discriminate; the sub-assertions stay as sanity checks, named here", "P3d-F3": "the same class — guards beside discriminating parents, named here" },
-  "foldedOutOfBand": { "P3-F9": "PR body corrected with this push", "P3-F10": "corrected on mmnto-ai/totem#2799 with this push (54 rows at f0eb6f12)", "P3b-F6": "the same two corrections" },
+  "folded": [
+    "P3-F1",
+    "P3-F2",
+    "P3-F3",
+    "P3-F4",
+    "P3-F5",
+    "P3-F6",
+    "P3-F7",
+    "P3-F8",
+    "P3-F11",
+    "P3-F12",
+    "P3-F13",
+    "P3b-F1",
+    "P3b-F2",
+    "P3b-F3",
+    "P3b-F4",
+    "P3b-F5",
+    "P3b-F7",
+    "P3b-F8",
+    "P3b-F9",
+    "P3c-F1",
+    "P3c-F2",
+    "P3c-F3",
+    "P3d-F1",
+    "P3d-F2"
+  ],
+  "notFolded": {
+    "P3c-F4": "the parent tests discriminate; the sub-assertions stay as sanity checks, named here",
+    "P3d-F3": "the same class — guards beside discriminating parents, named here"
+  },
+  "foldedOutOfBand": {
+    "P3-F9": "PR body corrected with this push",
+    "P3-F10": "corrected on mmnto-ai/totem#2799 with this push (54 rows at f0eb6f12)",
+    "P3b-F6": "the same two corrections"
+  },
   "disclosedNotFolded": [
     "a wrapper that takes operands of its own before the program (sudo -u me, timeout N, npx) hides the program from the position anchor — the same class as bash -c (header comment)",
     "a `#` directly after a subshell's closing `)` is over-scanned as word text, never a miss (header comment)",
