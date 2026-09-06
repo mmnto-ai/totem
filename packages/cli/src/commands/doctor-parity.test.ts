@@ -2070,7 +2070,7 @@ describe('checkParity — orientation network rows (mmnto-ai/totem#2791)', () =>
     // The recorder is live (the local-remote probe ran) and no `gh` was spawned:
     // an empty roster reads nothing — not the labels, not the project, and not
     // the canonical label script.
-    expect(spawnedCommands.length).toBeGreaterThan(0);
+    expect(spawnedCommands).toContain('git');
     expect(spawnedCommands).not.toContain('gh');
   });
 });

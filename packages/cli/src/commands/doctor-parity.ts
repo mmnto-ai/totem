@@ -889,6 +889,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // roster / absent rows → no fetch. The default transport spawns `gh api`;
       // gh-absent degrades every surface to a skip (§14 clause 4). NEVER throws.
       const {
+        defaultCurrentSlug,
         defaultGhFetch,
         labelCanonNeeded,
         networkPostureRowFor,
@@ -916,13 +917,19 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // once here — and ONLY when the label row is present AND some roster repo
       // is inside ITS consumers scope, so an empty roster, or a row scoped away
       // from every roster repo, reads nothing (no `gh`; falsification pass 1, F7).
-      const labelCanon = labelCanonNeeded(networkRowSpecs, networkSnapshots)
-        ? resolveLabelCanon({
-            gitRoot,
-            ...(repoId !== undefined ? { repoId } : {}),
-            ghFetch: await defaultGhFetch(),
-          })
-        : undefined;
+      // The local read is keyed to the current ORIGIN slug being the canon's
+      // own repository, never to the cohort id (a fork whose id derives to
+      // `totem` from its package name or directory must take the fetch —
+      // Greptile P1 on mmnto-ai/totem#2797).
+      let labelCanon: ReturnType<typeof resolveLabelCanon> | undefined;
+      if (labelCanonNeeded(networkRowSpecs, networkSnapshots)) {
+        const currentSlug = await defaultCurrentSlug(gitRoot);
+        labelCanon = resolveLabelCanon({
+          gitRoot,
+          ...(currentSlug !== undefined ? { currentSlug } : {}),
+          ghFetch: await defaultGhFetch(),
+        });
+      }
 
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
       // line PER distributed skill, so the per-contract count can exceed the

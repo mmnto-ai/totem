@@ -515,7 +515,7 @@ describe('resolveLabelCanon', () => {
     const reads: string[] = [];
     const canon = resolveLabelCanon({
       gitRoot: '/repo',
-      repoId: 'totem',
+      currentSlug: 'mmnto-ai/totem',
       readFile: (absPath) => {
         reads.push(absPath);
         return script;
@@ -530,7 +530,7 @@ describe('resolveLabelCanon', () => {
   it('degrades to error when the local canon is unreadable', () => {
     const canon = resolveLabelCanon({
       gitRoot: '/repo',
-      repoId: 'totem',
+      currentSlug: 'mmnto-ai/totem',
       readFile: () => {
         throw new Error('ENOENT');
       },
@@ -538,6 +538,45 @@ describe('resolveLabelCanon', () => {
     expect(canon.outcome).toBe('error');
     expect(canon.detail).toContain('unreadable');
     expect(canon.data).toBeUndefined();
+  });
+
+  it('never reads the local script for a fork, a differently owned checkout, or an unresolved remote — the canonical fetch is the source (Greptile P1, mmnto-ai/totem#2797)', () => {
+    // A checkout whose cohort id derives to `totem` (package name, directory)
+    // is not thereby the canon: only origin === mmnto-ai/totem selects the
+    // local read. The owner compare is exact, so an odd-cased remote also takes
+    // the fetch — the safe direction (never a local read that is not the canon).
+    const reads: string[] = [];
+    const { ghFetch, calls } = cannedFetch({
+      '/repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1': {
+        outcome: 'ok',
+        data: {
+          content: Buffer.from(script, 'utf8').toString('base64'),
+          encoding: 'base64',
+          sha: '0123456789abcdef',
+        },
+      },
+    });
+    const slugs: (string | undefined)[] = [
+      'someone/totem',
+      'mmnto-ai/totem-fork',
+      'MMNTO-AI/totem',
+      undefined,
+    ];
+    for (const slug of slugs) {
+      const canon = resolveLabelCanon({
+        gitRoot: '/repo',
+        ...(slug !== undefined ? { currentSlug: slug } : {}),
+        ghFetch,
+        readFile: (absPath) => {
+          reads.push(absPath);
+          return script;
+        },
+      });
+      expect(canon.outcome, String(slug)).toBe('ok');
+      expect(canon.detail, String(slug)).toBe('mmnto-ai/totem:scripts/sync-labels.ps1@0123456');
+    }
+    expect(reads).toEqual([]);
+    expect(calls).toHaveLength(slugs.length);
   });
 
   it('decodes the canonical contents payload and discloses the blob sha', () => {
@@ -554,7 +593,11 @@ describe('resolveLabelCanon', () => {
         data: { content: `${wrapped}\n`, encoding: 'base64', sha: 'abcdef1234567890' },
       },
     });
-    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    const canon = resolveLabelCanon({
+      gitRoot: '/repo',
+      currentSlug: 'mmnto-ai/liquid-city',
+      ghFetch,
+    });
     expect(canon.outcome).toBe('ok');
     expect(canon.data).toBe(script);
     expect(canon.detail).toBe('mmnto-ai/totem:scripts/sync-labels.ps1@abcdef1');
@@ -568,7 +611,11 @@ describe('resolveLabelCanon', () => {
         detail: 'HTTP 403 — under-privileged token',
       },
     });
-    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    const canon = resolveLabelCanon({
+      gitRoot: '/repo',
+      currentSlug: 'mmnto-ai/liquid-city',
+      ghFetch,
+    });
     expect(canon.outcome).toBe('auth');
     expect(canon.detail).toBe(
       'canonical fetch mmnto-ai/totem:scripts/sync-labels.ps1: HTTP 403 — under-privileged token',
@@ -583,13 +630,17 @@ describe('resolveLabelCanon', () => {
         data: { content: 'aGk=', encoding: 'none' },
       },
     });
-    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city', ghFetch });
+    const canon = resolveLabelCanon({
+      gitRoot: '/repo',
+      currentSlug: 'mmnto-ai/liquid-city',
+      ghFetch,
+    });
     expect(canon.outcome).toBe('error');
     expect(canon.detail).toBe('unparseable contents response');
   });
 
-  it('reports no-transport when a non-totem repo has no transport to fetch with', () => {
-    const canon = resolveLabelCanon({ gitRoot: '/repo', repoId: 'liquid-city' });
+  it('reports no-transport when a non-canon repo has no transport to fetch with', () => {
+    const canon = resolveLabelCanon({ gitRoot: '/repo', currentSlug: 'mmnto-ai/liquid-city' });
     expect(canon.outcome).toBe('no-transport');
     expect(canon.detail).toContain('no transport');
   });

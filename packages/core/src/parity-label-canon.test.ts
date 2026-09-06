@@ -90,7 +90,9 @@ describe('parseLabelCanon — the real scripts/sync-labels.ps1', () => {
   });
 
   it('records the Merge-Label retirements (the strays the script folds into canonical names)', () => {
-    expect(canon.merges.length).toBeGreaterThanOrEqual(20);
+    // Exact, on purpose (Tenet 20): the script performs 22 retirements today,
+    // and a script change moves this number — that is the test doing its job.
+    expect(canon.merges).toHaveLength(22);
     expect(canon.merges).toContainEqual({ from: 'bug', to: 'type: bug' });
   });
 });

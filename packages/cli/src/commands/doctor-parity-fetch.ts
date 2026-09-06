@@ -559,9 +559,17 @@ function fetchProjectFieldsSurface(
 export interface ResolveLabelCanonOptions {
   /** The git root the local read is anchored at + `gh` runs in. */
   gitRoot: string;
-  /** Current repo's cohort id — `totem` reads the canon from this checkout. */
-  repoId?: string;
-  /** Transport for the canonical (non-totem) read. Tests inject; production builds one. */
+  /**
+   * The current repo's `owner/repo` slug from its LOCAL `origin` remote (no
+   * network; {@link defaultCurrentSlug}). The local read is selected only when
+   * this is EXACTLY the canon's own repository ({@link LABEL_CANON_REPO}). A
+   * fork or a differently owned checkout — even one whose cohort id derives to
+   * `totem` from its package name or its directory — takes the canonical
+   * contents fetch, so a stale or edited local script can never pose as the
+   * canon (Greptile P1 on mmnto-ai/totem#2797). Absent ⇒ the fetch.
+   */
+  currentSlug?: string;
+  /** Transport for the canonical (non-canon-repo) read. Tests inject; production builds one. */
   ghFetch?: GhFetch;
   /** Test seam for the local read (default: UTF-8 `readFileSync`). */
   readFile?: (absPath: string) => string;
@@ -570,13 +578,15 @@ export interface ResolveLabelCanonOptions {
 /**
  * Resolve the ROSTER-WIDE label canon: the TEXT of
  * `mmnto-ai/totem:scripts/sync-labels.ps1`, plus a `detail` naming its
- * provenance. In the totem checkout the file is local (no network, no rate
- * limit); every other repo reads the canonical blob over the contents API and
- * discloses the blob sha. Parsing happens in core (Tenet 20) — this only
- * resolves TEXT. Never throws: an unreadable canon is a cannot-verify outcome.
+ * provenance. In the canon repository's own checkout (origin exactly
+ * `mmnto-ai/totem`) the file is local (no network, no rate limit); every other
+ * checkout — every other cohort repo AND every fork — reads the canonical blob
+ * over the contents API and discloses the blob sha. Parsing happens in core
+ * (Tenet 20) — this only resolves TEXT. Never throws: an unreadable canon is a
+ * cannot-verify outcome.
  */
 export function resolveLabelCanon(options: ResolveLabelCanonOptions): NetworkSurfaceSnapshot {
-  if (options.repoId === 'totem') {
+  if (options.currentSlug === LABEL_CANON_REPO) {
     const readFile = options.readFile ?? ((absPath: string) => fs.readFileSync(absPath, 'utf-8'));
     try {
       const text = readFile(path.join(options.gitRoot, ...LABEL_CANON_PATH.split('/')));
@@ -673,6 +683,18 @@ function makeDefaultGhFetch(safeExec: SafeExecFn): GhFetch {
 export async function defaultGhFetch(): Promise<GhFetch> {
   const { safeExec } = await import('@mmnto/totem');
   return makeDefaultGhFetch(safeExec);
+}
+
+/**
+ * The current repo's `owner/repo` slug from its LOCAL `origin` remote, for
+ * callers outside {@link resolveNetworkSnapshots} (the label-canon source
+ * selection in `doctor-parity.ts`). No network: one `git remote get-url`
+ * read, degraded to `undefined` when there is no remote, no git, or no
+ * parseable `owner/repo`. Async only for the lazy `safeExec` import.
+ */
+export async function defaultCurrentSlug(gitRoot: string): Promise<string | undefined> {
+  const { safeExec } = await import('@mmnto/totem');
+  return slugFromRemoteUrl(makeDefaultReadRemote(safeExec)(gitRoot));
 }
 
 /**
