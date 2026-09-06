@@ -18,6 +18,14 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * allowed — the gate enumerates known shapes (the charter's positive corpus),
  * and a miss is a corpus gap counted by the charter's metric, never a fail-open
  * of an applicable gate.
+ *
+ * False-positive budget (ADR-109: a non-exact-match gate ships a stated budget
+ * and the fixture that measures it): ZERO denies over the benign corpus in
+ * `transport-shield.fold.test.ts` (everyday commands that share a token with a
+ * row — `diff -b`, `curl -b`, a Windows path as a sed operand, `<<` inside a
+ * quoted argument, a here-string). A deny on a benign command in the field is
+ * a corpus row plus a fix, never a hand-carved exemption; the `--pilot` tier
+ * exists for a measurement week.
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -49,7 +57,7 @@ export type TransportPatternId =
   | 'msys-rev-path-subshell';
 
 export interface TransportMatch {
-  /** The offending fragment, raw; the evaluator bounds and sanitizes it for provenance. */
+  /** The offending fragment, raw and as written; the evaluator bounds and sanitizes it for provenance. */
   fragment: string;
   /** One clause naming what matched, for the reason text. */
   detail: string;
@@ -78,28 +86,81 @@ export function parseTransportShieldPayload(payload: unknown): TransportShieldPa
   const tool = rec && typeof rec.tool === 'string' ? rec.tool : '';
   const command = rec && typeof rec.command === 'string' ? rec.command : undefined;
   const platform = rec && typeof rec.platform === 'string' ? rec.platform.trim() : '';
+  const hint = 'Pass --payload \'{"tool":"Bash","command":"<the command>","platform":"win32"}\'.';
   if (!TOOLS.has(tool)) {
     throw new TotemError(
       'GATE_INVALID',
       'transport-shield payload requires "tool" to be "Bash" or "PowerShell".',
-      'Pass --payload \'{"tool":"Bash","command":"<the command>","platform":"win32"}\'.',
+      hint,
     );
   }
   if (command === undefined || command.trim() === '') {
     throw new TotemError(
       'GATE_INVALID',
       'transport-shield payload requires a non-empty "command" string.',
-      'Pass --payload \'{"tool":"Bash","command":"<the command>","platform":"win32"}\'.',
+      hint,
     );
   }
   if (platform === '') {
     throw new TotemError(
       'GATE_INVALID',
       'transport-shield payload requires a non-empty "platform" string (the host\'s process.platform).',
-      'Pass --payload \'{"tool":"Bash","command":"<the command>","platform":"win32"}\'.',
+      hint,
     );
   }
   return { tool: tool as TransportTool, command, platform };
+}
+
+// ─── Quote regions ─────────────────────────────────────────────────────────
+
+/**
+ * The offsets of every quoted region in a command (single- and double-quoted),
+ * so a scanner can tell an operator in the open from the same characters inside
+ * an argument. A bare backslash escapes the next character outside quotes;
+ * inside double quotes only the POSIX set (`$`, backtick, `"`, `\`, newline).
+ * An unterminated quote runs to the end.
+ */
+function quotedRegions(command: string): Array<[number, number]> {
+  const regions: Array<[number, number]> = [];
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === "'") {
+      const close = command.indexOf("'", i + 1);
+      const end = close === -1 ? command.length : close + 1;
+      regions.push([i, end]);
+      i = end;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < command.length && command[j] !== '"') {
+        if (
+          command[j] === '\\' &&
+          j + 1 < command.length &&
+          DQ_ESCAPABLE.has(command[j + 1] as string)
+        )
+          j += 2;
+        else j += 1;
+      }
+      const end = j < command.length ? j + 1 : command.length;
+      regions.push([i, end]);
+      i = end;
+      continue;
+    }
+    i += 1;
+  }
+  return regions;
+}
+
+const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
+
+function insideQuotes(regions: ReadonlyArray<[number, number]>, offset: number): boolean {
+  return regions.some(([start, end]) => offset > start && offset < end);
 }
 
 // ─── Heredocs ──────────────────────────────────────────────────────────────
@@ -109,6 +170,8 @@ export interface HeredocSpan {
   delimiter: string;
   /** Whether the delimiter was quoted (`<<'EOF'` / `<<"EOF"`). */
   quoted: boolean;
+  /** Whether the operator was `<<-` (bash strips leading TABS from body and terminator lines). */
+  stripTabs: boolean;
   /** The body text between the operator line and the terminator line (or the end). */
   body: string;
   /** True when no terminator line was found — the body runs to the end of the command. */
@@ -118,24 +181,28 @@ export interface HeredocSpan {
   bodyEnd: number;
 }
 
-const HEREDOC_OPERATOR = /<<-?[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+const HEREDOC_OPERATOR = /(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
 
 /**
- * Locate every heredoc in a command: `<<`, `<<-`, quoted or bare delimiter. The
- * body starts after the newline that ends the operator's line and runs to the
- * first line whose trimmed text equals the delimiter (bash strips leading tabs
- * for `<<-`; trimming both sides is the conservative superset), or to the end
- * of the command when no such line exists. A shape the shell would not accept
- * (no newline after the operator) yields a body of the remaining text, which is
- * the conservative reading — a truncated command still refuses on its escapes.
+ * Locate every heredoc in a command: `<<`, `<<-`, quoted or bare delimiter, in
+ * the OPEN (an operator inside a quoted argument is text, and `<<<` is a
+ * here-string, not a heredoc). The body starts after the newline that ends the
+ * operator's line and runs to the first line that IS the delimiter — an exact
+ * line match, as bash reads it; for `<<-` leading tabs are stripped first — or
+ * to the end of the command when no such line exists. An operator with no
+ * newline after it yields a body of the remaining text: the conservative
+ * reading, so a truncated command still refuses on its escapes.
  */
 export function findHeredocs(command: string): HeredocSpan[] {
   const spans: HeredocSpan[] = [];
+  const regions = quotedRegions(command);
   HEREDOC_OPERATOR.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = HEREDOC_OPERATOR.exec(command)) !== null) {
-    const delimiter = match[2] ?? '';
-    const quoted = (match[1] ?? '') !== '';
+    if (insideQuotes(regions, match.index)) continue;
+    const stripTabs = (match[1] ?? '') === '-';
+    const quoted = (match[2] ?? '') !== '';
+    const delimiter = match[3] ?? '';
     const lineEnd = command.indexOf('\n', match.index + match[0].length);
     const bodyStart = lineEnd === -1 ? command.length : lineEnd + 1;
     let bodyEnd = command.length;
@@ -144,8 +211,10 @@ export function findHeredocs(command: string): HeredocSpan[] {
     while (cursor <= command.length) {
       const nextNewline = command.indexOf('\n', cursor);
       const lineStop = nextNewline === -1 ? command.length : nextNewline;
-      const line = command.slice(cursor, lineStop);
-      if (line.trim() === delimiter) {
+      let line = command.slice(cursor, lineStop);
+      if (line.endsWith('\r')) line = line.slice(0, -1);
+      if (stripTabs) line = line.replace(/^\t+/, '');
+      if (line === delimiter) {
         bodyEnd = cursor;
         unterminated = false;
         // Resume scanning for further heredocs after the terminator line.
@@ -159,6 +228,7 @@ export function findHeredocs(command: string): HeredocSpan[] {
     spans.push({
       delimiter,
       quoted,
+      stripTabs,
       body: command.slice(bodyStart, bodyEnd),
       unterminated,
       bodyStart,
@@ -180,7 +250,12 @@ function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): str
 // ─── Shell tokens ──────────────────────────────────────────────────────────
 
 export interface ShellSegment {
-  /** Tokens with quotes resolved (single-quoted literal; double-quoted with `\"` and `\\` escapes; bare backslash escapes the next char). */
+  /**
+   * Tokens with quotes resolved: single-quoted text literal; inside double
+   * quotes a backslash escapes only `$`, backtick, `"`, `\` and newline (POSIX)
+   * and is otherwise kept; outside quotes a backslash escapes the next character
+   * and backslash-newline is a line continuation (dropped).
+   */
   tokens: string[];
   /** The raw text of the segment, for newline and substring checks. */
   raw: string;
@@ -214,6 +289,17 @@ export function tokenizeShell(command: string): ShellSegment[] {
   };
   while (i < command.length) {
     const ch = command[i] as string;
+    // A line continuation is whitespace, never an operator or a word character.
+    if (ch === '\\' && command[i + 1] === '\n') {
+      flushWord();
+      i += 2;
+      continue;
+    }
+    if (ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
+      flushWord();
+      i += 3;
+      continue;
+    }
     const op = CONTROL_OPERATORS.find((o) => command.startsWith(o, i));
     if (op !== undefined) {
       flushSegment(i);
@@ -233,8 +319,12 @@ export function tokenizeShell(command: string): ShellSegment[] {
       i += 1;
       inWord = true;
       while (i < command.length && command[i] !== '"') {
-        if (command[i] === '\\' && i + 1 < command.length) {
-          word += command[i + 1];
+        if (
+          command[i] === '\\' &&
+          i + 1 < command.length &&
+          DQ_ESCAPABLE.has(command[i + 1] as string)
+        ) {
+          if (command[i + 1] !== '\n') word += command[i + 1];
           i += 2;
         } else {
           word += command[i];
@@ -293,19 +383,43 @@ function firstEscapedLine(text: string): string {
   return text;
 }
 
-/** Everything after the option name in a segment: `--body X`, `--body=X`, `-b X`. */
-function optionValue(tokens: readonly string[], long: string, short: string | null): string | null {
+/** The index of the first token equal to `program` (a bare name or a path ending in it). */
+function indexOfProgram(tokens: readonly string[], program: string): number {
+  return tokens.findIndex((t) => t === program || t.endsWith('/' + program));
+}
+
+/**
+ * An option's value and the flag AS WRITTEN: `--long X`, `--long=X`, `-s X`.
+ * Returns null when the option is absent.
+ */
+function optionAsWritten(
+  tokens: readonly string[],
+  long: string,
+  short: string | null,
+): { flag: string; value: string } | null {
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i] as string;
-    if (t === long || (short !== null && t === short)) return tokens[i + 1] ?? null;
-    if (t.startsWith(long + '=')) return t.slice(long.length + 1);
+    if (t === long || (short !== null && t === short)) {
+      const value = tokens[i + 1];
+      return value === undefined ? null : { flag: t, value };
+    }
+    if (t.startsWith(long + '=')) return { flag: long + '=', value: t.slice(long.length + 1) };
   }
   return null;
 }
 
-/** The index of the first token equal to `program` (a bare name or a path ending in it). */
-function indexOfProgram(tokens: readonly string[], program: string): number {
-  return tokens.findIndex((t) => t === program || t.endsWith('/' + program));
+/** The values of every `-e` / `--expression` / `--expression=` operand in a sed argv. */
+function sedExpressions(args: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i] as string;
+    if (a === '-e' || a === '--expression') {
+      if (args[i + 1] !== undefined) out.push(args[i + 1] as string);
+    } else if (a.startsWith('--expression=')) {
+      out.push(a.slice('--expression='.length));
+    }
+  }
+  return out;
 }
 
 const INLINE_BODIES: ReadonlyArray<{ program: string; flags: readonly string[] }> = [
@@ -313,6 +427,25 @@ const INLINE_BODIES: ReadonlyArray<{ program: string; flags: readonly string[] }
   { program: 'python', flags: ['-c'] },
   { program: 'python3', flags: ['-c'] },
 ];
+
+/** The inline body of `node -e X`, `node --eval=X`, `python -c X`, … as written, or null. */
+function inlineBody(
+  args: readonly string[],
+  flags: readonly string[],
+): { flag: string; body: string } | null {
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i] as string;
+    if (flags.includes(a)) {
+      const body = args[i + 1];
+      return body === undefined ? null : { flag: a, body };
+    }
+    for (const f of flags) {
+      if (f.startsWith('--') && a.startsWith(f + '='))
+        return { flag: f + '=', body: a.slice(f.length + 1) };
+    }
+  }
+  return null;
+}
 
 const REV_PATH_TOKEN = /(^|[\s(])([A-Za-z0-9_./~^-]+:[A-Za-z0-9_./-]+)(?=$|[\s)])/;
 
@@ -346,15 +479,22 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'deny',
     cure: 'use --body-file <path>, or the PowerShell tool, or prefix MSYS_NO_PATHCONV=1',
     find(p) {
+      // Scoped to `gh`, the one program whose --body / -b takes a free-text body
+      // that MSYS path-converts; `-b` means something else on diff, curl, cp, sort, du, grep.
       if (p.platform !== 'win32' || p.tool !== 'Bash') return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of tokenizeShell(blanked)) {
-        const value = optionValue(seg.tokens, '--body', '-b');
-        if (value !== null && value.startsWith('/')) {
+        const at = indexOfProgram(seg.tokens, 'gh');
+        if (at === -1) continue;
+        const hit = optionAsWritten(seg.tokens.slice(at + 1), '--body', '-b');
+        if (hit !== null && hit.value.startsWith('/')) {
+          const written = hit.flag.endsWith('=')
+            ? `${hit.flag}${hit.value}`
+            : `${hit.flag} ${hit.value}`;
           return {
-            fragment: `--body ${value}`,
+            fragment: written,
             detail:
-              'a --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
+              'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
           };
         }
       }
@@ -376,17 +516,20 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             a === '-i' || /^-i\S*$/.test(a) || a === '--in-place' || a.startsWith('--in-place='),
         );
         if (!inPlace) continue;
-        const expressionCount = args.filter(
-          (a) => a === '-e' || a === '--expression' || a.startsWith('--expression='),
-        ).length;
-        const escaped = args.find((a) => a.includes('\\'));
+        // The EXPRESSION operands only — never a filename (a Windows path carries backslashes).
+        let expressions = sedExpressions(args);
+        if (expressions.length === 0) {
+          const first = args.find((a) => !a.startsWith('-'));
+          if (first !== undefined) expressions = [first];
+        }
+        const escaped = expressions.find((e) => e.includes('\\'));
         if (escaped !== undefined) {
           return { fragment: escaped, detail: 'a sed -i expression carries a backslash' };
         }
-        if (expressionCount > 1) {
+        if (sedExpressions(args).length > 1) {
           return {
             fragment: seg.raw.trim(),
-            detail: `a sed -i invocation carries ${expressionCount} -e expressions`,
+            detail: `a sed -i invocation carries ${sedExpressions(args).length} -e expressions`,
           };
         }
         if (seg.raw.includes('\n')) {
@@ -407,14 +550,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         for (const { program, flags } of INLINE_BODIES) {
           const at = indexOfProgram(seg.tokens, program);
           if (at === -1) continue;
-          const args = seg.tokens.slice(at + 1);
-          const flagAt = args.findIndex((a) => flags.includes(a));
-          if (flagAt === -1) continue;
-          const body = args[flagAt + 1];
-          if (body !== undefined && hasEscape(body)) {
+          const hit = inlineBody(seg.tokens.slice(at + 1), flags);
+          if (hit !== null && hasEscape(hit.body)) {
             return {
-              fragment: body,
-              detail: `an inline ${program} ${args[flagAt]} body carries a backslash or a backtick`,
+              fragment: hit.body,
+              detail: `an inline ${program} ${hit.flag} body carries a backslash or a backtick`,
             };
           }
         }

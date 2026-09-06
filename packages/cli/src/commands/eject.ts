@@ -508,12 +508,13 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
   // entry (one per installed gate — PR-C eject parity, mmnto-ai/totem#2048).
   //
   // The two needles are scoped DIFFERENTLY on purpose:
-  //   - `gate-wrapper.cjs` → matcher-INDEPENDENT. Since mmnto-ai/totem#2799 a
-  //     gate installs under its own matcher (`Write|Edit` for freeze-check,
-  //     `Bash|PowerShell` for transport-shield), and the wrapper path is a
-  //     Totem-authored string no user command carries, so the needle alone
-  //     identifies our entry. Binding it to a matcher would strand every
-  //     non-`Write|Edit` gate entry behind an eject.
+  //   - the installed gate command shape (`gate-wrapper.cjs --event `) →
+  //     matcher-INDEPENDENT. Since mmnto-ai/totem#2799 a gate installs under
+  //     its own matcher (`Write|Edit` for freeze-check, `Bash|PowerShell` for
+  //     transport-shield), so binding the needle to a matcher would strand
+  //     every non-`Write|Edit` gate entry behind an eject. The needle is the
+  //     wrapper path PLUS its `--event` flag — the shape `gateCommand()` bakes —
+  //     so a user hook that merely mentions the wrapper's basename survives.
   //   - `PreWriteShield` → still bound to `Write|Edit`, the only matcher that
   //     install ever writes it under (unchanged, deliberately narrow).
   // A user-authored `Bash` (or any other) entry carries neither needle and
@@ -525,7 +526,7 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
     const filtered = preToolUse.filter(
       (entry) =>
         !(
-          commandIncludes(entry, 'gate-wrapper.cjs') ||
+          commandIncludes(entry, 'gate-wrapper.cjs --event ') ||
           (entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield'))
         ),
     );
