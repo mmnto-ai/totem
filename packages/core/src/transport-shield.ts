@@ -422,16 +422,18 @@ function programIndex(tokens: readonly string[], program: string): number {
 
 /**
  * An option's value and the flag AS WRITTEN: `--long X`, `--long=X`, `-s X`.
- * Returns null when the option is absent.
+ * Returns null when the option is absent. The short flag is required: the one
+ * caller always has one, and a nullable parameter with no null caller is dead
+ * code (the github-code-quality inline on mmnto-ai/totem#2804 at ac867140).
  */
 function optionAsWritten(
   tokens: readonly string[],
   long: string,
-  short: string | null,
+  short: string,
 ): { flag: string; value: string } | null {
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i] as string;
-    if (t === long || (short !== null && t === short)) {
+    if (t === long || t === short) {
       const value = tokens[i + 1];
       return value === undefined ? null : { flag: t, value };
     }
