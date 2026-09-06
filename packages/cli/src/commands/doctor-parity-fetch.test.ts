@@ -74,6 +74,8 @@ describe('slugFromRemoteUrl', () => {
     expect(slugFromRemoteUrl('https://github.com/mmnto-ai/totem.git')).toBe('mmnto-ai/totem');
     expect(slugFromRemoteUrl('https://github.com/mmnto-ai/totem')).toBe('mmnto-ai/totem');
     expect(slugFromRemoteUrl('https://github.com/mmnto-ai/totem/')).toBe('mmnto-ai/totem');
+    // `.git` then a trailing slash, in that order (pass 5, p5-F5).
+    expect(slugFromRemoteUrl('https://github.com/mmnto-ai/totem.git/')).toBe('mmnto-ai/totem');
   });
 
   it('returns undefined on an unparseable / empty remote', () => {
@@ -511,7 +513,7 @@ describe('resolveNetworkSnapshots — the project binding', () => {
 describe('resolveLabelCanon', () => {
   const script = 'gh label edit "tier-1" --color "0e8a16" --description "First tier"\r\n';
 
-  it('reads the canon from the local checkout in the totem repo', () => {
+  it('reads the canon from the local checkout when origin is the canon repository', () => {
     const reads: string[] = [];
     const canon = resolveLabelCanon({
       gitRoot: '/repo',

@@ -341,12 +341,16 @@ function ownerSegment(slug: string): string {
 /**
  * Extract `owner/repo` from an ssh (`git@host:owner/repo.git`) or https
  * (`https://host/owner/repo.git`) remote URL, tolerating a trailing `.git` and
- * slashes. Returns undefined when no `owner/repo` pair resolves.
+ * slashes in either order (`…/totem.git/` too — falsification pass 5, p5-F5).
+ * The HOST is not part of the result: a mirror at the same `owner/repo` path
+ * yields the same slug, the same host-blindness the cohort-id derivation has.
+ * Returns undefined when no `owner/repo` pair resolves.
  */
 export function slugFromRemoteUrl(remoteUrl: string | undefined): string | undefined {
   if (typeof remoteUrl !== 'string' || remoteUrl.trim().length === 0) return undefined;
   const trimmed = remoteUrl
     .trim()
+    .replace(/\/+$/, '')
     .replace(/\.git$/i, '')
     .replace(/\/+$/, '');
   const match = /[/:]([^/:]+)\/([^/]+)$/.exec(trimmed);
@@ -562,7 +566,9 @@ export interface ResolveLabelCanonOptions {
   /**
    * The current repo's `owner/repo` slug from its LOCAL `origin` remote (no
    * network; {@link defaultCurrentSlug}). The local read is selected only when
-   * this is EXACTLY the canon's own repository ({@link LABEL_CANON_REPO}). A
+   * this is exactly the canon's `owner/repo` PATH ({@link LABEL_CANON_REPO};
+   * the host is not compared — a mirror at the same path reads locally, the
+   * same host-blindness the cohort-id derivation has, disclosed). A
    * fork or a differently owned checkout — even one whose cohort id derives to
    * `totem` from its package name or its directory — takes the canonical
    * contents fetch, so a stale or edited local script can never pose as the

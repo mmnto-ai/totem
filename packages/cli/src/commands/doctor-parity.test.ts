@@ -2067,9 +2067,11 @@ describe('checkParity — orientation network rows (mmnto-ai/totem#2791)', () =>
     expect(labelLine?.message).not.toContain('not yet implemented');
     expect(vocabLine?.message).not.toContain('not yet implemented');
 
-    // The recorder is live (the local-remote probe ran) and no `gh` was spawned:
-    // an empty roster reads nothing — not the labels, not the project, and not
-    // the canonical label script.
+    // The recorder is live — a `git` spawn is recorded (the cohort-id
+    // derivation's remote read runs before the network step; this pins
+    // liveness, not which probe) — and no `gh` was spawned: an empty roster
+    // reads nothing — not the labels, not the project, and not the canonical
+    // label script.
     expect(spawnedCommands).toContain('git');
     expect(spawnedCommands).not.toContain('gh');
   });
