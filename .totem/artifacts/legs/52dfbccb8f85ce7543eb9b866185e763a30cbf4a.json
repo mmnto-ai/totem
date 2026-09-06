@@ -1,0 +1,280 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "52dfbccb8f85ce7543eb9b866185e763a30cbf4a",
+  "readAt": "2026-09-06T00:25:28.995Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 725,
+      "claim": "classifyGraphqlBody returned `ok` for a GraphQL body carrying `errors` whenever data.organization.projectV2 was non-null, so a partial-data read under a nested FORBIDDEN reached the detector as a complete field list and rendered a drift `warn` (\"Priority: field absent\") — the one outcome Prop 296 §14 clause 2 forbids on a cannot-verify read. The covering test passed a body with no errors key and was satisfied by the errors.length === 0 arm alone.",
+      "counterexample": "Body { data: { organization: { projectV2: { fields: { nodes: [Status…, null] } } } }, errors: [{ type: 'FORBIDDEN', message: 'Resource not accessible by integration' }] } → executed against packages/core/dist: status warn. FOLDED (pass-1 fold commit): any errors entry is decisive (auth / not-found / error), hasUsableProjectData deleted; a new test feeds an errors-bearing body WITH a resolved project and asserts auth, and a SERVICE_UNAVAILABLE variant asserts error."
+    },
+    {
+      "id": "f2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/parity-manifest.ts",
+      "line": 473,
+      "claim": "narrowOptionSets delegated each field's value to narrowStringArray, whose string branch NORMALIZES a scalar to a one-element list, so `expected-option-sets: { Status: 'Todo | In Progress | Done' }` (the prose sentence mirrored into the new field — the natural authoring slip for a row that carries the same canon as pipe-delimited prose one line above) parsed to one option, and because the detector prefers the structured field a CONFORMING Project 1 rendered `warn` with no fallback and no unknown.",
+      "counterexample": "Parsed manifest with the scalar Status → {Status: ['Todo | In Progress | Done']}; detectNetworkPostureContract against the live Project 1 payload → warn 'Status: option set differs — missing [Todo | In Progress | …], extra [Todo, In Progress, …]'. FOLDED: Array.isArray(rawOptions) required before narrowing (a scalar drops the field on that row → prose fallback); the scalar case added to the mis-shape test list."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2791.md",
+      "line": 255,
+      "claim": "The ruled design doc at HEAD still specified `unknown` for an absent governed field (the failure-modes table row and the open question's recommendation), while the shipped code and tests render `warn` per the twin — the deviation was recorded only in an issue comment, not in the artifact a future reader of the diff will read.",
+      "counterexample": "spec line 255: '| an expected field absent from the project | runtime | unknown naming the field |' vs parity-detect.ts's warn branch and orientation-rows.test.ts asserting warn. FOLDED: the table row now says warn with the twin's reading; a **Resolved** block under the open question records the ruling and what unknown still covers."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-label-canon.test.ts",
+      "line": 36,
+      "claim": "The vocabulary grammar control asserted against a hand-copied ROW_TEXT literal (byte-identical to the pinned row today) rather than the pinned manifest, so a doctrine reword the grammar reads differently would break the sensor with a green suite — while the label half correctly reads the REAL scripts/sync-labels.ps1.",
+      "counterexample": "grep 'strategy-doctrine' across packages/core/src/*.test.ts → no test loads the installed manifest for this row. FOLDED: a test parses node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml through parseParityManifest, finds the gh-project-vocabulary row and asserts the two sets (structured field preferred when present, else the prose); skipIf the optional pack is absent (mmnto-ai/totem#2289), named loudly."
+    },
+    {
+      "id": "f5",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2791.md",
+      "line": 271,
+      "claim": "The design invariant '`--json` carries both rows' lines under the same names as the rendered output' was untested and false as worded: toReadoutArtifact emits id / verdict / message and no per-repo line name (doctor-parity.ts:1372 'human render only — not a --json field'), and the label row's message never named the repo, so N roster repos would produce N indistinguishable JSON rows. Pre-existing family shape (mergePostureLine is equally repo-less); the new rows followed precedent, the invariant statement overclaimed.",
+      "counterexample": "orient.parityProbeRepos with two repos → two rows id gh-issue-label-canon with identical messages. FOLDED: the label pass/warn messages are prefixed with the repo slug; the invariant reworded to what is true (id + message, the message names the repo / project)."
+    },
+    {
+      "id": "f6",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2791.md",
+      "line": 1,
+      "claim": "The branch moved mid-leg (five commits at 18:33, six at 18:38 with 00d6541e), and the run of record predated HEAD: 00d6541e appends '(canon: …)' to the vocabulary line, which the saved run did not carry.",
+      "counterexample": "scratchpad/doctor-parity-live.txt line 4 lacked the '(canon: expected-value-or-derivation text)' suffix HEAD renders. FOLDED: the live run re-captured at the fold head; both lines quoted in the PR body from that run."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 914,
+      "claim": "The label canon was resolved whenever the label row was present and ANY row had produced a snapshot, so on a non-totem repo with a consumers-scoped label row excluding it, a needless GET of the canonical blob fired for a canon no line would use. Unreachable at the 0.1.42 pin (the row has no consumers), reachable on any doctrine scoping change.",
+      "counterexample": "consumers: [totem] on the label row, cwd = liquid-city with a posture row in scope → resolveLabelCanon fetches /repos/mmnto-ai/totem/contents/scripts/sync-labels.ps1. FOLDED: the canon resolves only when some snapshot repo is inside the label row's own consumers scope (undefined = all)."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2791.md",
+      "line": 267,
+      "claim": "The design said description compares 'exactly after trim'; neither the code (`(found.description ?? '') !== canonical.description`, the canon regex capturing untrimmed) nor the twin trims, and the test deliberately asserts a trailing-space description IS a redefinition. The code is right and twin-aligned; the sentence was wrong.",
+      "counterexample": "parity-label-canon.test.ts asserts live('tier-1', 'd73a4a', 'Immediate priority ') → redefined. FOLDED: reworded to 'exactly, untrimmed, as the twin does'."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": ".changeset/orientation-parity-row-detectors-2791.md",
+      "line": 10,
+      "claim": "'A text the grammar cannot read renders unknown' held only for the zero-clause case: a doctrine reword to 'Status = Todo, In Progress, Done' yields one option and renders drift `warn`, not `unknown` — the same class as F2 on the prose path.",
+      "counterexample": "parseExpectedOptionSets('Status = Todo, In Progress, Done') → Map { Status → ['Todo, In Progress, Done'] } → option-set-differs. FOLDED: the claim narrowed in the changeset, the design invariants and the parity-detect.ts header — a row yielding no clause renders unknown; a reworded clause the grammar still reads renders drift, which is why the structured field is the contract and the prose only its pinned interim (and F4's pinned-row test now fails the suite on such a reword)."
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 14,
+      "claim": "Question: this module normalizes the CANON's colour (a #-prefixed hex in the script would still match) while the twin normalizes only the live side, so the header's 'agree on every cohort repo' is scoped to the current canon text (all 18 calls are bare hex), not to any canon text.",
+      "counterexample": "A future `--color \"#d73a4a\"` in the script: ours passes, the twin faults. FOLDED as a disclosure: the module header names the asymmetry and its scope."
+    },
+    {
+      "id": "p2-f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-label-canon.test.ts",
+      "line": 257,
+      "claim": "The pass-1 F4 fold (a test parsing the PINNED doctrine row) is skipIf'd on the optional @mmnto/strategy-doctrine pack, which CI never installs (no registry read auth on the runner, mmnto-ai/totem#2289; an unauthenticated GET of the package is a 404), so the design's 'a doctrine reword fails the suite' held only in an authenticated checkout, and the surviving CI control was the mirrored ROW_TEXT literal — F4's original complaint restored where merges are gated. Second leg: the test's ternary stopped calling the prose grammar once a structured field exists, retiring a contract strategy's ruling keeps pinned.",
+      "counterexample": ".github/workflows/ci.yml installs with pnpm install --frozen-lockfile and no @mmnto scope auth; the optional dep is skipped ('downloaded 0'). FOLDED: the test always parses the PROSE and asserts the two sets, and asserts a structured field, when present, EQUALS the prose (the row must agree with itself); the design sentence bounded to the authenticated checkout with the CI skip disclosed by name until mmnto-ai/totem#2289 lands."
+    },
+    {
+      "id": "p2-f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 296,
+      "claim": "Two raw NUL (U+0000) bytes were committed inside the order-comparison string literals (the editing tool decoded an authored escape to raw bytes before the file landed — the repo's banked decode trap); prettier, tsc, eslint and the suite all passed, behaviour was unchanged, but ripgrep declared the file binary and could not find anything after the offset (a search for orderDiffers.push returned no matches) — in a codebase whose thesis is a grep-able canon. Landed in 9ebd0c85, outside pass 1's range and missed there.",
+      "counterexample": "git cat-file -p HEAD:packages/core/src/parity-label-canon.ts → NUL count 2 at offsets 12145 and 12173. FOLDED: the join-with-separator comparison replaced by a separator-free index comparison (expectedOptions.some((option, index) => option !== actualOptions[index])); a byte-count sweep over every file the branch touches reads zero control bytes."
+    },
+    {
+      "id": "p2-f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 752,
+      "claim": "'ANY errors entry is decisive' overstated the predicate: graphqlErrorsOf filtered non-object entries, so errors: ['string'], [null], 'FORBIDDEN' or a bare object still read as no errors → ok. Unreachable from a conforming GraphQL server (errors is a non-empty list of maps) but the same doc-vs-code class the fold had just corrected.",
+      "counterexample": "classifyGraphqlBody({ data: {…projectV2…}, errors: ['Resource not accessible by integration'] }) → ok. FOLDED: decisive on PRESENCE whatever the shape (graphqlBodyHasErrors: any errors member that is not an empty list); string entries feed the haystack; a test pins string / null / scalar / bare-object shapes and the empty list as the one 'no errors' shape."
+    },
+    {
+      "id": "p2-f4",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-detect.ts",
+      "line": 3666,
+      "claim": "The F5 fold prefixed only the label pass/warn messages; the label 'not a label list' unknown, every surfaceCannotVerify return for the labels surface, and the vocabulary row's three skip messages still carried no repo identifier, so an N-repo roster's --json rows for those states stayed indistinguishable (the readout carries id + message, never the per-repo line name).",
+      "counterexample": "Two roster repos both no-transport on labels → two identical --json rows. FOLDED: the labels surface label is '<slug> labels' so the ladder's messages carry the slug; the unshaped-payload unknown and the three vocabulary skips are prefixed with the slug; the design invariant names every message."
+    },
+    {
+      "id": "p2-f5",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-manifest.ts",
+      "line": 473,
+      "claim": "narrowOptionSets's doc said a list with a non-empty-string member is refused, but narrowStringArray silently DROPPED empty members (['Todo', '', 'Done'] → two options) and two keys colliding after trim silently merged; the trim assertion in the test was vacuous because YAML strips plain-scalar whitespace before the narrowing runs.",
+      "counterexample": "{ Status: ['Todo', '', 'Done'] } → {Status: ['Todo','Done']}; { 'Status ': ['A'], Status: ['B'] } → {Status: ['B']}; the fixture Priority: [ Now , Next ] parses to ['Now','Next'] before trim. FOLDED: every member must be a non-empty string BEFORE trimming (else the field is absent on the row), trimmed keys must be distinct, the result is built with Object.fromEntries; fixtures use quoted padded members (\" Now \") so the trim is exercised, plus the empty-member and colliding-key refusals."
+    },
+    {
+      "id": "p2-f6",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 246,
+      "claim": "Question: both canon readers trim option names (the structured field's members and the prose grammar's), the live side keeps project option names raw, so a padded canonical member compares equal to a clean board option while a padded board option compares unequal to a clean canon.",
+      "counterexample": "Canon \" Todo \" (quoted YAML) vs board 'Todo' → equal; canon 'Todo' vs board ' Todo ' → missing/extra warn. DECIDED and recorded in the module header and optionSetsOfProjectFields's doc: canon trimmed (authoring whitespace; the prose grammar cannot avoid it), live raw (a padded board option is a real difference the board shows, never smoothed away)."
+    },
+    {
+      "id": "p2-f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 914,
+      "claim": "The F7 gate (canon read only when some roster repo is inside the label row's consumers scope) is provably the same predicate core applies (repoInConsumerScope), but had zero coverage: the wiring test's no-spawn assertion covers an empty roster, not the gate, and the pinned rows carry no consumers so the scoped branch is dead in practice until a doctrine change.",
+      "counterexample": "Delete the consumers clause: no test fails. FOLDED: the predicate extracted as the exported pure labelCanonNeeded(rows, snapshots) in doctor-parity-fetch.ts, wired into checkParity, and unit-tested (no label row; empty roster; consumers undefined; consumers excluding then including a roster repo)."
+    },
+    {
+      "id": "p2-f8",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 23,
+      "claim": "The F10 disclosure said the twin normalizes only the live side; the twin lower-cases the canon too (deriveLabelCanon: m[2].toLowerCase()) and strips '#' on the live side only, so the actual divergence is the '#' strip alone.",
+      "counterexample": "gh-parity-twins.cjs:148 vs :184. FOLDED: the header now says the twin lower-cases both sides and strips '#' on the live side only; the eighteen-bare-hex-calls fact re-verified (grep -c '--color \"#' = 0)."
+    },
+    {
+      "id": "p3-f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-detect.ts",
+      "line": 3620,
+      "claim": "The pass-2 slug fold (p2-F4) did not reach the four roster-wide label-canon message sites rendered through everyRepo — canon not resolved by the CLI edge, the canon cannot-verify ladder (six rungs), canon payload not text, canon parsed no definitions — which emit one identical line per roster repo with no slug, while the spec sentence the same commit added declared every label message names its repo; the --json readout carries id + message and no per-repo line name, so an N-repo roster's rows for those states were indistinguishable.",
+      "counterexample": "Two roster repos with the canon fetch failing → two --json rows, id gh-issue-label-canon, identical message. FOLDED: everyRepo prefixes each per-repo line's message with the repo slug; controls pin the prefix on the canon-absent case for both repos."
+    },
+    {
+      "id": "p3-f2",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 304,
+      "claim": "The NUL-free index comparison walked expectedOptions only, so an equal-SET live list that is longer (a duplicated option name) with a matching prefix read as fully conforming with no order note, where the pre-fold join comparison had flagged it — the sensor got quieter, undisclosed (the set contract at spec:268 still held).",
+      "counterexample": "expected ['Todo','Done'] vs actual ['Todo','Done','Done'] → orderDiffers [] (pre-fold: flagged). FOLDED: a length check precedes the index walk; the orderDiffers doc says 'in a different order or multiplicity'."
+    },
+    {
+      "id": "p3-f3",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-detect.orientation-rows.test.ts",
+      "line": 275,
+      "claim": "None of the pass-2 slug prefixes on cannot-verify and skip messages was pinned by a control: reverting every prefix left all suites green (Invariant 2 — a passing suite was not evidence for the fold).",
+      "counterexample": "Delete the p2-F4 prefixes: 105/105 core tests still pass. FOLDED: assertions pin the slug on the label not-probed case, the roster-wide canon-absent case for both repos, and the three vocabulary skips."
+    },
+    {
+      "id": "p3-f5",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.test.ts",
+      "line": 273,
+      "claim": "The pinned-row agreement assertion compared the structured field's Map to the prose Map with toEqual, which compares the option arrays order-sensitively, while the contract says option order is ungoverned — a doctrine row authoring Priority: [Next, Now] beside prose 'Now | Next' would have failed the suite on a conforming board.",
+      "counterexample": "toEqual(Map{Priority:[Next,Now]}, Map{Priority:[Now,Next]}) → fails. FOLDED: the keys are compared as sorted sets and each field's options as a Set."
+    },
+    {
+      "id": "p3-f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 741,
+      "claim": "After p2-F3 the string branch of the detail finder accepted an empty string, so { errors: ['', { message: 'Resource not accessible…' }] } classified auth (right) with detail '' (the readable message dropped; detailSuffix suppresses empty details).",
+      "counterexample": "As stated. FOLDED: a string entry must be non-empty to be the detail, and e.message is read only on non-string entries."
+    },
+    {
+      "id": "p3-f7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2791.md",
+      "line": 267,
+      "claim": "The option-name trimming decision (canon trimmed, live raw) was recorded in the module header and in optionSetsOfProjectFields's doc but not in the design's asymmetry bullet where the sibling colour/description asymmetries live; and the comment 'skipped, loudly by name' overstated vitest's default reporter, which prints a skip count, not names (Q1).",
+      "counterexample": "grep trim|whitespace over the spec → one line covering colour and description only. FOLDED: the asymmetry bullet carries the option-name sentence and the twin's '#' scope; the skip wording in the test comment and the spec says vitest reports the skip in its counts and the case title names the reason."
+    },
+    {
+      "id": "p4-f1",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.test.ts",
+      "line": 281,
+      "claim": "The p3-F5 rewrite compared each field's options as Sets, which cured the order false-positive but lost multiplicity: a duplicated member in the structured canon passed where the old Map comparison caught it (Invariant 2 — a strictly stronger form existed).",
+      "counterexample": "prose ['Todo','Done'] vs structured ['Todo','Done','Done']: Set form passes; sorted-array form catches. FOLDED: sorted arrays per field."
+    },
+    {
+      "id": "p4-f2",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 304,
+      "claim": "The p3-F2 length check had no control: deleting it again left every test green (the exact check the NUL removal had dropped once already).",
+      "counterexample": "Executed against a length-check-stripped build: only a duplicated-option case distinguishes the two; no test covered it. FOLDED: a test pins orderDiffers ['Status'] on an equal-set longer live list."
+    },
+    {
+      "id": "p4-f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.test.ts",
+      "line": 668,
+      "claim": "The p3-F6 empty-string guard had no control: no fixture carried an empty string entry, so reverting the guard left the suite green.",
+      "counterexample": "errors: ['', { message: 'Resource not accessible by integration' }] → pre-fold detail ''; post-fold the message. FOLDED: a test pins auth with the readable detail."
+    },
+    {
+      "id": "p4-f4",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-detect.ts",
+      "line": 3826,
+      "claim": "p3-F2 widened orderDiffers to cover multiplicity but the rendered sentence still said 'option order differs … (order is not governed)', so a duplicated board option was described as an order difference the board does not have.",
+      "counterexample": "canon Status = Todo | Done, board ['Todo','Done','Done'] → 'option order differs on Status'. FOLDED: 'option order or multiplicity differs on … (neither is governed)'; the control updated."
+    },
+    {
+      "id": "p4-f5",
+      "severity": "MINOR",
+      "file": ".totem/specs/2791.md",
+      "line": 270,
+      "claim": "The Q1 rewording still overstated in one clause: the skipped case's title names the artifact whose absence skips it (the installed doctrine manifest), not the reason (the pack is uninstallable on CI).",
+      "counterexample": "Title: 'reads the PINNED gh-project-vocabulary row (the installed doctrine manifest) into the two governed sets'. FOLDED: the comment and the spec say the title names the artifact whose absence skips it."
+    },
+    {
+      "id": "p4-f6",
+      "severity": "MINOR",
+      "file": "packages/core/src/parity-label-canon.test.ts",
+      "line": 274,
+      "claim": "Question: the p3-F5 agreement branch does not execute anywhere today (the pinned row carries no structured field) and the disclosure was only implicit ('even after the structured field lands').",
+      "counterexample": "grep expected-option-sets over the installed manifest → nothing. FOLDED as a disclosure: the test comment and the spec state the branch is inert at the 0.1.42 pin and arms when 0.1.44 lands the field."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "p2-f1",
+    "p2-f2",
+    "p2-f3",
+    "p2-f4",
+    "p2-f5",
+    "p2-f6",
+    "p2-f7",
+    "p2-f8",
+    "p3-f1",
+    "p3-f2",
+    "p3-f3",
+    "p3-f5",
+    "p3-f6",
+    "p3-f7",
+    "p4-f1",
+    "p4-f2",
+    "p4-f3",
+    "p4-f4",
+    "p4-f5",
+    "p4-f6"
+  ],
+  "verdict": "Pass 1 (origin/main...00d6541e, findings keyed to 00d6541e after the branch moved mid-leg): two BLOCKING (a partial-data GraphQL body reached a drift verdict; a scalar expected-option-sets value normalized to one option and faulted a conforming board), four MATERIAL (a ruled deviation the design still contradicted; a mirrored rather than derived grammar control; an untested and false --json invariant; a stale run of record), four MINOR / question. All ten folded in 7eb9f2e5. Survived under attack: the never-partial pagination, twin agreement byte-for-byte on the live 52-label totem list and the real script, unknown-on-empty, the binding logic, the cross-spawn choke point (non-vacuous no-gh assertion), the Zod schemas against live shapes, the would-have-failed-on-main claims, bounded messages. Pass 2 (re-armed on the fold diff 5d9fc0a9..7eb9f2e5): no BLOCKING; both pass-1 blockers confirmed folded by executing the pre-fold predicates against the new tests; convergence not named — two MATERIAL (the pinned-row control inert in CI; two committed NUL bytes no gate saw) and six MINOR, all folded in the pass-2 fold commit. Pass 3 (re-armed on the pass-2 fold diff 1c7b37b2..eee74d2b): no BLOCKING; seven of eight pass-2 folds confirmed complete by execution (the NUL sweep byte-read at zero, the YAML fixtures parsed and shown on the contract row, the canon-read predicate shown identical to core's with its consumers clause load-bearing); one MATERIAL (the slug fold missed the four roster-wide canon messages the spec sentence declared covered) and five MINOR, all folded in 52dfbccb. Pass 4 (re-armed on the pass-3 fold diff eee74d2b..52dfbccb): no BLOCKING, no MATERIAL — CONVERGENCE NAMED. All six pass-3 folds real (27 label-canon message paths swept, every one slug-prefixed; the six new slug controls shown non-vacuous by stripping the prefix; the length check shown total for equal sets; the empty-string trace correct; sixteen error shapes, nothing throws; the fromEntries prototype claim verified end-to-end through the manifest parser). Six MINOR — one assertion-strength item (Set → sorted arrays), two unpinned folds (the length check, the empty-string guard), three wording/disclosure items — folded after convergence without a re-arm, on the leg's own statement that none changes a verdict class, is reachable as a false gate, or rewires semantics. Non-findings recorded: the U+200B zero-width spaces in two files are pre-existing, intentional comment guards identical on main; the missing-sdk test failure is an npx-invocation artifact (passes under pnpm)."
+}
