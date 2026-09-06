@@ -22,10 +22,16 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * False-positive budget (ADR-109: a non-exact-match gate ships a stated budget
  * and the fixture that measures it): ZERO denies over the benign corpus in
  * `transport-shield.fold.test.ts` (everyday commands that share a token with a
- * row — `diff -b`, `curl -b`, a Windows path as a sed operand, `<<` inside a
- * quoted argument, a here-string). A deny on a benign command in the field is
- * a corpus row plus a fix, never a hand-carved exemption; the `--pilot` tier
- * exists for a measurement week.
+ * row — `diff -b`, `curl -b`, `grep gh -b`, a Windows path as a sed operand,
+ * `<<` inside a quoted argument, a here-string). A deny on a benign command in
+ * the field is a corpus row plus a fix, never a hand-carved exemption; the
+ * `--pilot` tier exists for a measurement week.
+ *
+ * Out of scope by design, disclosed: a bare backslash outside the four named
+ * contexts (a heredoc body, a sed -i expression, an inline node/python body, a
+ * gh --body) is not a shape this gate reads; a heredoc inside a `bash -c "…"`
+ * or `sh -c '…'` operand is quoted text to this scanner and is not recursed
+ * into (a corpus gap, not a fail-open of an applicable row).
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -111,58 +117,6 @@ export function parseTransportShieldPayload(payload: unknown): TransportShieldPa
   return { tool: tool as TransportTool, command, platform };
 }
 
-// ─── Quote regions ─────────────────────────────────────────────────────────
-
-/**
- * The offsets of every quoted region in a command (single- and double-quoted),
- * so a scanner can tell an operator in the open from the same characters inside
- * an argument. A bare backslash escapes the next character outside quotes;
- * inside double quotes only the POSIX set (`$`, backtick, `"`, `\`, newline).
- * An unterminated quote runs to the end.
- */
-function quotedRegions(command: string): Array<[number, number]> {
-  const regions: Array<[number, number]> = [];
-  let i = 0;
-  while (i < command.length) {
-    const ch = command[i];
-    if (ch === '\\') {
-      i += 2;
-      continue;
-    }
-    if (ch === "'") {
-      const close = command.indexOf("'", i + 1);
-      const end = close === -1 ? command.length : close + 1;
-      regions.push([i, end]);
-      i = end;
-      continue;
-    }
-    if (ch === '"') {
-      let j = i + 1;
-      while (j < command.length && command[j] !== '"') {
-        if (
-          command[j] === '\\' &&
-          j + 1 < command.length &&
-          DQ_ESCAPABLE.has(command[j + 1] as string)
-        )
-          j += 2;
-        else j += 1;
-      }
-      const end = j < command.length ? j + 1 : command.length;
-      regions.push([i, end]);
-      i = end;
-      continue;
-    }
-    i += 1;
-  }
-  return regions;
-}
-
-const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
-
-function insideQuotes(regions: ReadonlyArray<[number, number]>, offset: number): boolean {
-  return regions.some(([start, end]) => offset > start && offset < end);
-}
-
 // ─── Heredocs ──────────────────────────────────────────────────────────────
 
 export interface HeredocSpan {
@@ -181,60 +135,115 @@ export interface HeredocSpan {
   bodyEnd: number;
 }
 
-const HEREDOC_OPERATOR = /(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+/** Inside double quotes a backslash escapes only these (POSIX); elsewhere it is kept. */
+const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
+
+const HEREDOC_AT = /^<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/;
 
 /**
- * Locate every heredoc in a command: `<<`, `<<-`, quoted or bare delimiter, in
- * the OPEN (an operator inside a quoted argument is text, and `<<<` is a
- * here-string, not a heredoc). The body starts after the newline that ends the
- * operator's line and runs to the first line that IS the delimiter — an exact
- * line match, as bash reads it; for `<<-` leading tabs are stripped first — or
- * to the end of the command when no such line exists. An operator with no
- * newline after it yields a body of the remaining text: the conservative
- * reading, so a truncated command still refuses on its escapes.
+ * Locate every heredoc in a command in ONE pass that tracks shell quoting and
+ * SKIPS heredoc bodies: an operator inside a quoted argument is text, `<<<` is
+ * a here-string, and an apostrophe inside a body never opens a quote (the
+ * fold's own regression, mmnto-ai/totem#2799 pass 2). A body starts after the
+ * newline that ends the operator's line and runs to the first line that IS the
+ * delimiter — an exact line match, as bash reads it (a `EOF ` with trailing
+ * space or a CRLF `EOF\r` does not terminate); for `<<-` leading tabs are
+ * stripped first — or to the end of the command when no such line exists. An
+ * operator with no newline after it yields a body of the remaining text: the
+ * conservative reading, so a truncated command still refuses on its escapes.
  */
 export function findHeredocs(command: string): HeredocSpan[] {
   const spans: HeredocSpan[] = [];
-  const regions = quotedRegions(command);
-  HEREDOC_OPERATOR.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = HEREDOC_OPERATOR.exec(command)) !== null) {
-    if (insideQuotes(regions, match.index)) continue;
-    const stripTabs = (match[1] ?? '') === '-';
-    const quoted = (match[2] ?? '') !== '';
-    const delimiter = match[3] ?? '';
-    const lineEnd = command.indexOf('\n', match.index + match[0].length);
-    const bodyStart = lineEnd === -1 ? command.length : lineEnd + 1;
-    let bodyEnd = command.length;
-    let unterminated = true;
-    let cursor = bodyStart;
-    while (cursor <= command.length) {
-      const nextNewline = command.indexOf('\n', cursor);
-      const lineStop = nextNewline === -1 ? command.length : nextNewline;
-      let line = command.slice(cursor, lineStop);
-      if (line.endsWith('\r')) line = line.slice(0, -1);
-      if (stripTabs) line = line.replace(/^\t+/, '');
-      if (line === delimiter) {
-        bodyEnd = cursor;
-        unterminated = false;
-        // Resume scanning for further heredocs after the terminator line.
-        HEREDOC_OPERATOR.lastIndex = lineStop;
-        break;
+  const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
+  let inSingle = false;
+  let inDouble = false;
+  let i = 0;
+  const consumeBodies = (from: number): number => {
+    let cursor = from;
+    for (const h of pending) {
+      const bodyStart = cursor;
+      let bodyEnd = command.length;
+      let unterminated = true;
+      let resume = command.length;
+      let at = bodyStart;
+      while (at <= command.length) {
+        const nl = command.indexOf('\n', at);
+        const stop = nl === -1 ? command.length : nl;
+        let line = command.slice(at, stop);
+        if (h.stripTabs) line = line.replace(/^\t+/, '');
+        if (line === h.delimiter) {
+          bodyEnd = at;
+          unterminated = false;
+          resume = nl === -1 ? command.length : nl + 1;
+          break;
+        }
+        if (nl === -1) break;
+        at = nl + 1;
       }
-      if (nextNewline === -1) break;
-      cursor = nextNewline + 1;
+      spans.push({
+        delimiter: h.delimiter,
+        quoted: h.quoted,
+        stripTabs: h.stripTabs,
+        body: command.slice(bodyStart, bodyEnd),
+        unterminated,
+        bodyStart,
+        bodyEnd,
+      });
+      cursor = resume;
+      if (unterminated) break;
     }
-    if (unterminated) HEREDOC_OPERATOR.lastIndex = command.length;
-    spans.push({
-      delimiter,
-      quoted,
-      stripTabs,
-      body: command.slice(bodyStart, bodyEnd),
-      unterminated,
-      bodyStart,
-      bodyEnd,
-    });
+    pending.length = 0;
+    return cursor;
+  };
+  while (i < command.length) {
+    const ch = command[i] as string;
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      i += 1;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '\\' && i + 1 < command.length && DQ_ESCAPABLE.has(command[i + 1] as string))
+        i += 2;
+      else {
+        if (ch === '"') inDouble = false;
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      i += 1;
+      continue;
+    }
+    if (ch === '\n') {
+      i = pending.length > 0 ? consumeBodies(i + 1) : i + 1;
+      continue;
+    }
+    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
+      const m = HEREDOC_AT.exec(command.slice(i));
+      if (m !== null) {
+        pending.push({
+          stripTabs: (m[1] ?? '') === '-',
+          quoted: (m[2] ?? '') !== '',
+          delimiter: m[3] ?? '',
+        });
+        i += m[0].length;
+        continue;
+      }
+    }
+    i += 1;
   }
+  if (pending.length > 0) consumeBodies(command.length);
   return spans;
 }
 
@@ -383,9 +392,32 @@ function firstEscapedLine(text: string): string {
   return text;
 }
 
-/** The index of the first token equal to `program` (a bare name or a path ending in it). */
-function indexOfProgram(tokens: readonly string[], program: string): number {
-  return tokens.findIndex((t) => t === program || t.endsWith('/' + program));
+/** Prefix words a shell runs THROUGH: the real program follows them. */
+const WRAPPERS: ReadonlySet<string> = new Set([
+  'env',
+  'time',
+  'sudo',
+  'nice',
+  'nohup',
+  'command',
+  'exec',
+  'builtin',
+  'xargs',
+]);
+
+/**
+ * The index of the segment's PROGRAM when it is `program` (a bare name or a
+ * path ending in it), after any `VAR=VALUE` assignments and known wrappers;
+ * -1 when the program is something else — a later mention of the name (`grep
+ * gh …`, `git log --grep sed …`) is an argument, never an invocation.
+ */
+function programIndex(tokens: readonly string[], program: string): number {
+  let i = 0;
+  while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i] as string)) i += 1;
+  while (i < tokens.length && WRAPPERS.has(tokens[i] as string)) i += 1;
+  const t = tokens[i];
+  if (t === undefined) return -1;
+  return t === program || t.endsWith('/' + program) ? i : -1;
 }
 
 /**
@@ -449,6 +481,10 @@ function inlineBody(
 
 const REV_PATH_TOKEN = /(^|[\s(])([A-Za-z0-9_./~^-]+:[A-Za-z0-9_./-]+)(?=$|[\s)])/;
 
+/** Bash + win32 + the MSYS opt-out absent: the precondition both MSYS rows share. */
+const msysApplies = (p: TransportShieldPayload): boolean =>
+  p.platform === 'win32' && p.tool === 'Bash' && !p.command.includes('MSYS_NO_PATHCONV=1');
+
 // ─── The table ─────────────────────────────────────────────────────────────
 
 /**
@@ -479,12 +515,13 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'deny',
     cure: 'use --body-file <path>, or the PowerShell tool, or prefix MSYS_NO_PATHCONV=1',
     find(p) {
-      // Scoped to `gh`, the one program whose --body / -b takes a free-text body
-      // that MSYS path-converts; `-b` means something else on diff, curl, cp, sort, du, grep.
-      if (p.platform !== 'win32' || p.tool !== 'Bash') return null;
+      // Scoped to segments whose PROGRAM is `gh`, the one program whose --body / -b
+      // takes a free-text body that MSYS path-converts (`-b` means something else on
+      // diff, curl, cp, sort, du, grep); the cure's MSYS_NO_PATHCONV=1 is honoured.
+      if (!msysApplies(p)) return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of tokenizeShell(blanked)) {
-        const at = indexOfProgram(seg.tokens, 'gh');
+        const at = programIndex(seg.tokens, 'gh');
         if (at === -1) continue;
         const hit = optionAsWritten(seg.tokens.slice(at + 1), '--body', '-b');
         if (hit !== null && hit.value.startsWith('/')) {
@@ -508,7 +545,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of tokenizeShell(blanked)) {
-        const at = indexOfProgram(seg.tokens, 'sed');
+        const at = programIndex(seg.tokens, 'sed');
         if (at === -1) continue;
         const args = seg.tokens.slice(at + 1);
         const inPlace = args.some(
@@ -516,10 +553,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             a === '-i' || /^-i\S*$/.test(a) || a === '--in-place' || a.startsWith('--in-place='),
         );
         if (!inPlace) continue;
-        // The EXPRESSION operands only — never a filename (a Windows path carries backslashes).
+        // The EXPRESSION operands only — never a filename (a Windows path carries
+        // backslashes) and never BSD sed's empty backup-suffix operand (`-i ''`).
         let expressions = sedExpressions(args);
         if (expressions.length === 0) {
-          const first = args.find((a) => !a.startsWith('-'));
+          const first = args.find((a) => a !== '' && !a.startsWith('-'));
           if (first !== undefined) expressions = [first];
         }
         const escaped = expressions.find((e) => e.includes('\\'));
@@ -548,7 +586,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of tokenizeShell(blanked)) {
         for (const { program, flags } of INLINE_BODIES) {
-          const at = indexOfProgram(seg.tokens, program);
+          const at = programIndex(seg.tokens, program);
           if (at === -1) continue;
           const hit = inlineBody(seg.tokens.slice(at + 1), flags);
           if (hit !== null && hasEscape(hit.body)) {
@@ -584,8 +622,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'warn',
     cure: 'prefix the command with MSYS_NO_PATHCONV=1',
     find(p) {
-      if (p.platform !== 'win32' || p.tool !== 'Bash') return null;
-      if (p.command.includes('MSYS_NO_PATHCONV=1')) return null;
+      if (!msysApplies(p)) return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       let cursor = 0;
       while (cursor < blanked.length) {

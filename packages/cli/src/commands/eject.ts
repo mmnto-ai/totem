@@ -9,6 +9,19 @@ import { writeFileAtomicSync } from '@mmnto/totem/fs-atomic';
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
+
+/**
+ * True iff `command` is a Totem-installed gate entry: a whitespace-split token
+ * carrying the wrapper basename (quoted or bare, any path form) AND a following
+ * `--event` token — the shape `gateCommand()` bakes and `commandInstallsGate`
+ * probes (mmnto-ai/totem#2799). A user hook that merely mentions the wrapper's
+ * basename, with no `--event`, is not ours and survives an eject.
+ */
+export function isInstalledGateCommand(command: string): boolean {
+  const tokens = command.split(/\s+/).filter((t) => t.length > 0);
+  const at = tokens.findIndex((t) => t.replace(/^['"]|['"]$/g, '').endsWith('gate-wrapper.cjs'));
+  return at !== -1 && tokens.slice(at + 1).includes('--event');
+}
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
@@ -526,7 +539,11 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
     const filtered = preToolUse.filter(
       (entry) =>
         !(
-          commandIncludes(entry, 'gate-wrapper.cjs --event ') ||
+          (entry.hooks ?? []).some((h) =>
+            isInstalledGateCommand(
+              typeof h === 'string' ? h : ((h as { command?: string } | null)?.command ?? ''),
+            ),
+          ) ||
           (entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield'))
         ),
     );

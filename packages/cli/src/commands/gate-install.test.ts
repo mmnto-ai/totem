@@ -319,7 +319,7 @@ describe('installGates per-gate matcher (mmnto-ai/totem#2799)', () => {
     expect(cmd).not.toContain('--pilot');
   });
 
-  it('after ANY install sequence, no gate appears under two matchers', () => {
+  it('after any sequence of INSTALLER writes, no gate appears under two matchers (hand edits are not enforced)', () => {
     // Interleave tiers and selections — the upsert must converge on exactly one
     // entry per gate, always under that gate's registry matcher.
     installGates(cwd, [FREEZE_CHECK], 'pilot');

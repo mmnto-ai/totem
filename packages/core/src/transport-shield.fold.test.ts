@@ -86,9 +86,51 @@ describe('transport-shield fold — the terminator is an exact line, tabs stripp
     expect(run(cmd).provenance.ref).toBe('heredoc-escape');
   });
 
-  it('a tab-indented delimiter ends a <<- heredoc and a CRLF terminator is read', () => {
+  it('a tab-indented delimiter ends a <<- heredoc; a CRLF or trailing-space terminator does not, as in bash', () => {
     expect(findHeredocs("cat <<-'EOF'\n\tbody\n\tEOF\nafter")[0]?.body).toBe('\tbody\n');
-    expect(findHeredocs("cat <<'EOF'\r\nbody\r\nEOF\r\n")[0]?.unterminated).toBe(false);
+    expect(findHeredocs("cat <<'EOF'\r\nbody\r\nEOF\r\n")[0]?.unterminated).toBe(true);
+    expect(findHeredocs("cat <<'EOF'\nbody\nEOF \nafter")[0]?.unterminated).toBe(true);
+  });
+});
+
+describe('transport-shield fold pass 2 — quotes never span heredoc bodies; rows read the program position; the MSYS cure is honoured', () => {
+  it('an apostrophe inside a heredoc body does not hide a later heredoc (P2-F14) or expose its text as a command (P2-F15)', () => {
+    const two =
+      "gh pr comment 2799 --body-file - <<PRBODY\nThe fold doesn't break it.\nPRBODY\ncat > .totem/note.md <<NOTE\npath C:\\Users\\me\nNOTE";
+    expect(findHeredocs(two)).toHaveLength(2);
+    expect(run(two, 'win32').provenance.ref).toBe('heredoc-escape');
+    const hidden = "cat <<EOF\ndon't\nEOF\ncat <<EOF2\ngh pr comment 5 -b /some/path\nEOF2";
+    expect(run(hidden, 'win32').disposition).toBe('allow');
+  });
+
+  it('a heredoc after a double-quoted argument carrying an apostrophe or an escaped quote is still found', () => {
+    expect(findHeredocs('echo "it\'s fine" && cat <<EOF\nx\\d\nEOF')).toHaveLength(1);
+    expect(findHeredocs('echo "a \\" b" && cat <<EOF\nx\\d\nEOF')).toHaveLength(1);
+  });
+
+  it('MSYS_NO_PATHCONV=1 is honoured by msys-body-slash, as its own cure says (P2-F16)', () => {
+    expect(run('MSYS_NO_PATHCONV=1 gh pr comment 5 -b /x', 'win32').disposition).toBe('allow');
+    expect(run('gh pr comment 5 -b /x', 'win32').disposition).toBe('deny');
+  });
+
+  it('a program name mentioned as an argument is not an invocation (P2-F17); wrappers and assignments are skipped', () => {
+    expect(run('grep gh -b /usr/local n.txt', 'win32').disposition).toBe('allow');
+    expect(run('echo gh -b /x', 'win32').disposition).toBe('allow');
+    expect(run("git log --grep sed -i 's/a\\t/b/'").disposition).toBe('allow');
+    expect(run("which node -e 'a\\d'").disposition).toBe('allow');
+    expect(run('GH_TOKEN=x gh pr comment 5 -b /x', 'win32').provenance.ref).toBe('msys-body-slash');
+    expect(run('sudo /usr/bin/gh pr comment 5 --body /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run("time sed -i 's/\\t/ /' f").provenance.ref).toBe('sed-i-escape');
+  });
+
+  it("BSD sed's empty backup-suffix operand is not the expression (P2-F21)", () => {
+    expect(run("sed -i '' 's/a\\t/b/' f", 'darwin').provenance.ref).toBe('sed-i-escape');
+  });
+
+  it('a heredoc inside a bash -c operand is quoted text to the scanner — a disclosed corpus gap, not a row (P2-F19)', () => {
+    expect(run('bash -c "cat <<EOF\nx\\\\d\nEOF"').disposition).toBe('allow');
   });
 });
 
@@ -117,6 +159,12 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ['sort -b /tmp/list.txt', 'win32'],
     ['du -b /d/Dev/totem', 'win32'],
     ['grep -b /usr/local notes.txt', 'win32'],
+    ['grep gh -b /usr/local n.txt', 'win32'],
+    ['echo gh -b /x', 'win32'],
+    ["git log --grep sed -i 's/a\\t/b/'", 'win32'],
+    ["which node -e 'a\\d'", 'win32'],
+    ['MSYS_NO_PATHCONV=1 gh pr comment 5 -b /x', 'win32'],
+    ["cat <<EOF\ndon't\nEOF\ncat <<EOF2\ngh pr comment 5 -b /some/path\nEOF2", 'win32'],
     ["grep -rn 'gate-wrapper' packages/cli/src --include=*.ts", 'win32'],
     ["grep '<<EOF' notes.md", 'win32'],
     ['bash <<< "hello world"', 'win32'],
