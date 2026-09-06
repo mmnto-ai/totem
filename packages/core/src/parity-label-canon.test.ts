@@ -250,7 +250,7 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
   // darkening the sensor with a green suite. The pack is an optionalDependency
   // that never materializes on an unauthenticated install (mmnto-ai/totem#2289),
   // so the case is skipped when the manifest is absent (vitest reports the skip
-  // in its counts; this case's title names the reason).
+  // in its counts; this case's title names the artifact whose absence skips it).
   const PINNED_MANIFEST = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../../../node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml',
@@ -272,13 +272,16 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
       expect(prose.get('Status')).toEqual(STATUS);
       expect(prose.get('Priority')).toEqual(PRIORITY);
       if (row.expectedOptionSets !== undefined) {
-        // Same fields, same SETS: option order is ungoverned (the design's
-        // invariants), so the canon's two homes must agree as sets, not as
-        // sequences (pass 3, p3-F5).
+        // Same fields, same members with the same multiplicity, order ignored
+        // (option order is ungoverned — the design's invariants; pass 3 p3-F5,
+        // strengthened pass 4 p4-F1: sorted arrays, so a duplicated member is
+        // caught where a Set would have collapsed it). DISCLOSED: at the 0.1.42
+        // pin the row carries no structured field, so this branch is inert until
+        // doctrine 0.1.44 lands the field (pass 4, p4-F6).
         const structured = row.expectedOptionSets;
         expect(Object.keys(structured).sort()).toEqual([...prose.keys()].sort());
         for (const [field, options] of prose) {
-          expect(new Set(structured[field])).toEqual(new Set(options));
+          expect([...(structured[field] ?? [])].sort()).toEqual([...options].sort());
         }
       }
     },
@@ -319,6 +322,18 @@ describe('projectVocabularyDrift (§ 4b)', () => {
       orderDiffers: [],
       added: ['M'],
     });
+  });
+
+  it('treats a duplicated live option (equal set, longer list) as information, never a fault — the length check (pass 3, p3-F2)', () => {
+    const actual = optionSetsOfProjectFields([
+      field('Status', [...STATUS, 'Done']),
+      field('Priority', PRIORITY),
+    ]);
+    const drift = projectVocabularyDrift(actual, expected);
+    expect(drift.conforming).toBe(true);
+    expect(drift.faults).toEqual([]);
+    // Pinned so the length check cannot be dropped again silently (pass 4, p4-F2).
+    expect(drift.orderDiffers).toEqual(['Status']);
   });
 
   it('treats a different option ORDER as information, never a fault', () => {

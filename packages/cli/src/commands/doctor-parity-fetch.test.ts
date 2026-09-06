@@ -667,6 +667,15 @@ describe('classifyGraphqlBody', () => {
     // An EMPTY list is the one shape that means no errors.
     expect(classifyGraphqlBody({ data, errors: [] }).outcome).toBe('ok');
   });
+
+  it('never lets an empty string be the detail when a readable message follows it (pass 3 p3-F6, pinned pass 4 p4-F3)', () => {
+    const result = classifyGraphqlBody({
+      data: { organization: { projectV2: { title: 'x' } } },
+      errors: ['', { message: 'Resource not accessible by integration' }],
+    });
+    expect(result.outcome).toBe('auth');
+    expect(result.detail).toBe('Resource not accessible by integration');
+  });
 });
 
 describe('labelCanonNeeded', () => {

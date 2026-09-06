@@ -3823,7 +3823,7 @@ function projectVocabularyVerdict(
   }
   if (drift.orderDiffers.length > 0) {
     reported.push(
-      `option order differs on ${drift.orderDiffers.join(', ')} (order is not governed)`,
+      `option order or multiplicity differs on ${drift.orderDiffers.join(', ')} (neither is governed)`,
     );
   }
   const trailer = `${reported.length > 0 ? `; ${reported.join('; ')}` : ''} (canon: ${canonSource})`;

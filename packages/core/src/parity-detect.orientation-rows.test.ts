@@ -387,7 +387,7 @@ describe('gh-project-vocabulary', () => {
     expect(lines[0]?.verdict.status).toBe('pass');
     expect(lines[0]?.verdict.message).toContain('mmnto-ai/projects/2');
     expect(lines[0]?.verdict.message).toContain('1 extra field(s) permitted: M');
-    expect(lines[0]?.verdict.message).toContain('option order differs on Status');
+    expect(lines[0]?.verdict.message).toContain('option order or multiplicity differs on Status');
   });
 
   it('warns naming a missing and an extra option on a governed field', () => {
