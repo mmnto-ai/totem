@@ -236,6 +236,36 @@ describe('transport-shield fold pass 3 — comments, arithmetic, backslash-quote
   });
 });
 
+describe('transport-shield fold pass 3, re-armed — a # that continues a word, an escaped quote, a dotted delimiter', () => {
+  it('a # right after a $( … ) continues the word and is not a comment (P3b-F1)', () => {
+    const cmd = "cat $(echo f)#1 <<'EOF'\nconst re = /\\d+/;\nEOF";
+    expect(findHeredocs(cmd)).toHaveLength(1);
+    expect(run(cmd).provenance.ref).toBe('heredoc-escape');
+    expect(tokenizeShell('echo $(true)#x; gh pr view 1').map((s) => s.tokens)).toEqual([
+      ['echo', '$(true)#x'],
+      ['gh', 'pr', 'view', '1'],
+    ]);
+  });
+
+  it("an unquoted \\' opens no single-quoted region for the warn row (P3b-F3)", () => {
+    expect(
+      run("awk -F\\' '{print $2}' f; echo $(git show origin/main:x.md)", 'win32').disposition,
+    ).toBe('warn');
+    expect(run("echo \\' $(git show origin/main:x.md)", 'win32').disposition).toBe('warn');
+    expect(run("echo 'a' $(git show origin/main:x.md)", 'win32').disposition).toBe('warn');
+  });
+
+  it('a delimiter word may carry . and - (EOF.TXT, EOF-1), so the body terminates where bash terminates it', () => {
+    const spans = findHeredocs("cat <<EOF.TXT\nplain\nEOF.TXT\ncat <<'EOF-1'\nx\nEOF-1\nafter");
+    expect(spans.map((s) => [s.delimiter, s.quoted, s.unterminated])).toEqual([
+      ['EOF.TXT', false, false],
+      ['EOF-1', true, false],
+    ]);
+    expect(run("cat <<EOF.TXT\nplain\nEOF.TXT\nsed -i 's/a/b/' 'C:\\x'").disposition).toBe('allow');
+    expect(run('cat <<EOF.TXT\nx\\d\nEOF.TXT').provenance.ref).toBe('heredoc-escape');
+  });
+});
+
 describe('transport-shield — the false-positive budget fixture (ADR-109; F6)', () => {
   // Everyday commands that share a token with a row. Budget: ZERO denies. A deny
   // here is a defect in a row, never a reason to widen the corpus by hand.
@@ -293,6 +323,8 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ["grep -n '$(git show origin/main:.totem/x.md)' notes.md", 'win32'],
     ['cmd 2>&1 | tee log', 'win32'],
     ['gh issue create --title -b --body-file notes.md', 'win32'],
+    ["cat <<EOF.TXT\nplain\nEOF.TXT\nsed -i 's/a/b/' 'C:\\x'", 'win32'],
+    ["awk -F\\' '{print $2}' f", 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {

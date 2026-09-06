@@ -731,6 +731,9 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     // 40,000 characters: past win32's 32,767-character argv cap, where an argv
     // payload failed the spawn with ENAMETOOLONG and fell into the fail-closed
     // arm with nothing broken. On stdin the verdict comes back and maps to exit 0.
+    // Discriminates the fold on the windows-latest CI leg only: linux (128 KB per
+    // argument) and darwin admit a 40 KB argv, so there the pre-fold wrapper also
+    // exits 0; the stdin record assertion below is what holds on every platform.
     writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
     const long = 'x'.repeat(40_000);
     const { status, stderr } = runWrapper(

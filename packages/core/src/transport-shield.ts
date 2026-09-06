@@ -35,10 +35,16 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * takes operands of its own before the program (`sudo -u me gh …`, `timeout
  * 30 gh …`, `npx …`) hides the program from the position anchor — the same
  * class. The scanners read the shell's own grammar where a mis-read would
- * desynchronize them: a `#` that begins a word is a comment to the end of the
- * line, discarded WITHOUT quote processing (bash §3.1.3), and `$(( … ))` /
- * `(( … ))` arithmetic is skipped, so neither an apostrophe in a comment nor
- * a `<<` shift can hide a later heredoc or expose comment text as arguments.
+ * desynchronize them: a `#` after an unquoted blank, newline, `;`, `|`, `&`
+ * or `(` is a comment to the end of the line, discarded WITHOUT quote
+ * processing (bash §3.1.3; a `#` that continues a word — `a#b`, `$(x)#1` — is
+ * not one), and `$(( … ))` / `(( … ))` arithmetic is skipped, so neither an
+ * apostrophe in a comment nor a `<<` shift can hide a later heredoc or expose
+ * comment text as arguments. Not read, disclosed: a `#` directly after a
+ * subshell's closing `)` is taken as word text (over-scan, never a miss), and
+ * PowerShell's block comment `<# … #>` is not a comment to this scanner — an
+ * apostrophe inside one can still desynchronize the quote scan for that tool
+ * (its line comment `#` is handled by the same rule as bash's).
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -149,23 +155,22 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  * `<<` or `<<-`, optional blanks, then the delimiter word: quoted (`'EOF'`,
  * `"EOF"`), backslash-quoted (`\EOF` — bash: any quoted character in the word
  * quotes the whole delimiter, POSIX 2.7.4), or bare. Groups: 1 the dash, 2+3
- * a quote and its word, 4 the backslash-quoted word, 5 the bare word.
+ * a quote and its word, 4 the backslash-quoted word, 5 the bare word. A
+ * delimiter word may carry `.` and `-` after its first character (`EOF.TXT`,
+ * `EOF-1`): reading only `EOF` of it left the body unterminated and over-scanned
+ * everything after it. A delimiter beginning with a digit or `$` is not read
+ * (`<<1`, `<<$X` — a disclosed gap, over-scan direction only).
  */
 const HEREDOC_AT =
-  /^<<(-?)[ \t]*(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\2|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))/;
+  /^<<(-?)[ \t]*(?:(['"])([A-Za-z_][A-Za-z0-9_.-]*)\2|\\([A-Za-z_][A-Za-z0-9_.-]*)|([A-Za-z_][A-Za-z0-9_.-]*))/;
 
-/** Characters after which the next character begins a word (where `#` starts a comment). */
-const WORD_BOUNDARY: ReadonlySet<string> = new Set([
-  ' ',
-  '\t',
-  '\r',
-  '\n',
-  ';',
-  '|',
-  '&',
-  '(',
-  ')',
-]);
+/**
+ * Characters after which the next character begins a word — where a `#` starts
+ * a comment (POSIX 2.3 rule 10). Not `)`: it closes a `$( … )` that is PART of
+ * a word (rule 9 — `$(x)#1` is one word), and a `#` after a subshell's `)` is
+ * then over-scanned as text rather than mis-read as a comment.
+ */
+const WORD_BOUNDARY: ReadonlySet<string> = new Set([' ', '\t', '\r', '\n', ';', '|', '&', '(']);
 
 /**
  * The index just past the `))` that closes an arithmetic expansion or command
@@ -548,7 +553,9 @@ function optionsAsWritten(
 
 /**
  * The text with every single-quoted region (outside double quotes) replaced by
- * spaces, length preserved: a `$(` inside one is a literal, not a subshell.
+ * spaces, length preserved: a `$(` inside one is a literal, not a subshell. An
+ * unquoted backslash keeps the next character literal (POSIX 2.2.1), so `\'`
+ * opens no region and `\"` closes none.
  */
 function blankSingleQuoted(text: string): string {
   let out = '';
@@ -561,8 +568,13 @@ function blankSingleQuoted(text: string): string {
       out += ch === "'" ? ch : ' ';
       continue;
     }
+    if (ch === '\\' && i + 1 < text.length) {
+      out += ch + (text[i + 1] as string);
+      i += 1;
+      continue;
+    }
     if (inDouble) {
-      if (ch === '"' && text[i - 1] !== '\\') inDouble = false;
+      if (ch === '"') inDouble = false;
       out += ch;
       continue;
     }
@@ -705,11 +717,16 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             detail: `a sed -i invocation carries ${sedExpressions(args).length} -e expressions`,
           };
         }
-        // A QUOTED newline only: a bare newline ends the segment and an unquoted
-        // backslash-newline is a continuation the tokenizer drops, so the only
-        // newline that reaches a token is one inside quotes — the shape that mangles.
+        // A newline INSIDE an operand only: a bare newline ends the segment and an
+        // unquoted backslash-newline is a continuation the tokenizer drops, so a
+        // newline reaches a token only inside quotes (the shape that mangles) or
+        // inside a `$( … )` the tokenizer copies whole (over-scan, disclosed). Every
+        // operand of the segment is read, the file operand included.
         if (seg.tokens.some((t) => t.includes('\n'))) {
-          return { fragment: seg.raw.trim(), detail: 'a sed -i invocation spans a quoted newline' };
+          return {
+            fragment: seg.raw.trim(),
+            detail: 'a sed -i operand carries a newline inside quotes or a substitution',
+          };
         }
       }
       return null;

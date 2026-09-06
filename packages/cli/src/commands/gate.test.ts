@@ -106,10 +106,17 @@ describe('gateCheckCommand', () => {
     expect(verdict.disposition).toBe('allow');
   });
 
-  it('--payload - with malformed stdin JSON throws GATE_INVALID like the argv form', async () => {
+  it('--payload - with malformed stdin JSON throws GATE_INVALID like the argv form, and the reader was consulted', async () => {
+    // The reader count is what discriminates: on the pre-fold code `JSON.parse('-')`
+    // throws the same GATE_INVALID without ever reading stdin (re-armed pass, P3b-F2).
+    let reads = 0;
     await expect(
-      gateCheckCommand({ event: 'freeze-check', payload: '-' }, () => '{ not valid json'),
+      gateCheckCommand({ event: 'freeze-check', payload: '-' }, () => {
+        reads += 1;
+        return '{ not valid json';
+      }),
     ).rejects.toThrow(/invalid --payload json/i);
+    expect(reads).toBe(1);
   });
 
   it('emits a raw GateVerdict to stdout and does NOT map disposition to an exit code', async () => {
