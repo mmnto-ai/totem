@@ -1,0 +1,423 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "45cbce223f75d11ccbaa682d6e4164cbf40b60c8",
+  "readAt": "2026-09-06T23:41:21Z",
+  "lineage": "The bot round on mmnto-ai/totem#2804 at d97cd484 (the operator invoked Gemini, Greptile and CodeRabbit): 17 findings, folded in b0f8c901 (15 in full, one in part, two declined on the disposition). The earlier deposits at ac867140 (passes 1–2) and 01351edd (pass 3 and its three re-arms, CONVERGED) carry the falsification record before the round.",
+  "passes": [
+    {
+      "pass": "re-armed over the bot-round fold b0f8c901",
+      "readSha": "b0f8c901bacb2b4e4110ac308db69379887efd2a",
+      "readAt": "2026-09-06T20:47:06Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "all six code folds HELD against their bot counterexamples (substitutionEnd; the PowerShell blanker; per-segment MSYS; sed -f; the eject needle; the per-hook scrub), every eject edge case behaved (missing / non-array / empty hooks, a hook with no command); the needle agrees with commandInstallsGate on every shape gateCommand() writes; a 288-combination pre/post sweep (8 charter positives × 9 prefixes × 2 tools × 2 platforms) found 16 deny→allow transitions, all one class (BRb-F1), and 28 allow→deny transitions that are the fold working",
+      "suites": {
+        "core": "157 files / 4475 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "daae514b1b55d08aa8b58339dec05f3652c374b5",
+      "verdict": "NOT CONVERGED — the new PowerShell block-comment blanker was quote-blind (a string-borne `<#` silenced the shield for the rest of the payload), and two prose claims the fold authored were false against source"
+    },
+    {
+      "pass": "termination check over daae514b",
+      "readSha": "daae514b1b55d08aa8b58339dec05f3652c374b5",
+      "readAt": "2026-09-06T21:10:57Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "six of six re-arm folds HELD against ground truth (GNU bash 5.3.15 for the eight MSYS forms, GNU sed 4.9 for -fFILE / -f- / -file / --follow-symlinks, powershell.exe for the string-borne <#); the backtick-with-its-character blanking judged sound; <# inside a here-string now correctly text (an improvement the fold did not claim)",
+      "regressionAttempts": "37 over the changed lines plus a 150-payload prefix×middle×tail sweep against the b0f8c901 evaluator: 14 transitions — 6 new misses and 2 new false denies, all keyed on an odd quote in a PowerShell # line comment, and 6 improvements",
+      "suites": {
+        "core": "157 files / 4478 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "65332be1b603faf8cdae13889c0599c7fdf5293b",
+      "verdict": "NOT CONVERGED — the fold's PowerShell string tracking did not model PowerShell's # line comment while the scanners do, so an apostrophe in a comment left a later block unblanked (a charter positive through) or exposed a block's body (a benign command denied)"
+    },
+    {
+      "pass": "termination check over 65332be1",
+      "readSha": "65332be1b603faf8cdae13889c0599c7fdf5293b",
+      "readAt": "2026-09-06T21:35:52Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "five of six termination-check folds HELD against ground truth (powershell.exe for the # comment shapes and `a#b`; GNU sed 4.9 --help for the argument-less short options {n,b,E,r,s,u,z}, `-if` producing a `t.txtf` backup); BRc-F2's header sentence not held (BRd-F2)",
+      "regressionAttempts": "15 over the changed lines; the blanker's comment-start set `/[\\s;|(){}&,]/` diverged from the scanners' WORD_BOUNDARY on `{`, `}`, `,`, `\\f`, `\\v` and a substitution-closing `)`, in both directions (BRd-F1); the `--` rationale falsified against GNU sed 4.9, which edits ./-file in place (BRd-F3)",
+      "suites": {
+        "core": "157 files / 4480 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "20e0ca20e35a47abe6ad43a88a85ec500572d868 — the pre-pass DELETED; the scanners read PowerShell's grammar in their own walk",
+      "verdict": "NOT CONVERGED — the new boundary rule was wider than the scanners' comment rule it claimed to reuse, dropping a charter positive PowerShell actually executes and denying a command PowerShell never runs"
+    },
+    {
+      "pass": "termination check over 20e0ca20 (the unified scanners)",
+      "readSha": "20e0ca20e35a47abe6ad43a88a85ec500572d868",
+      "readAt": "2026-09-06T21:57:11Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "BRd-F1 (three payloads) and BRd-F3 HELD; all 12 earlier PowerShell cases held on the unified walk; the Bash floor held — 19 charter positives and 11 negatives unchanged, a 612-payload differential sweep whose only transitions were the intended `sed -i -- … -file` deny; BRd-F2's rationale clause not held (BRe-F4)",
+      "regressionAttempts": "a 27-head-shape PowerShell sweep adjudicated with PSParser and powershell.exe: 11 transitions — 4 correct fixes, 7 misses, all from the two new comment-start rules firing in their sibling shapes; substitutionEnd blind to `<#`",
+      "suites": {
+        "core": "157 files / 4482 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "97c33663fee7a9a031cd1f19e6f7a097348a169b",
+      "verdict": "NOT CONVERGED — the two new comment-start rules were unconditional where PowerShell's tokenizer is conditional (a string ends its token only when it began it; an `=` only as the assignment operator), and substitutionEnd carried a second model of `<#`"
+    },
+    {
+      "pass": "termination check over 97c33663 (the precise rules)",
+      "readSha": "97c33663fee7a9a031cd1f19e6f7a097348a169b",
+      "readAt": "2026-09-06T23:09:19Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "BRe-F1/F2/F3 and their controls HELD (PSParser and powershell.exe agreeing on 61 probes); BRe-F5 held; BRe-F4's rationale clause not held; the Bash floor held — 1,064 payloads, 0 transitions",
+      "regressionAttempts": "the argument-position `=` (`Write-Output $x=#c`, `$(1)=#c`, `=#c`, `$x==#c`) still read as a comment; bash's word used as a proxy for PowerShell's token moved eight benign assignments (`$x='a'#c` …) to deny; `'a''b'#c` one token; the scanners disagreed on 7 of 18 shapes; a stale word head in findHeredocs",
+      "suites": {
+        "core": "157 files / 4483 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "9bb34073f37c381d602f5df5a1e34bae5708982d — the two comment-start rules WITHDRAWN and disclosed",
+      "verdict": "NOT CONVERGED — the clause the fold added still called a `#` a comment in argument position, where PowerShell has no assignment operator"
+    },
+    {
+      "pass": "termination check over 9bb34073 (the withdrawal)",
+      "readSha": "9bb34073f37c381d602f5df5a1e34bae5708982d",
+      "readAt": "2026-09-06T23:35:20Z",
+      "model": "claude-opus-5[1m]",
+      "priorFoldsVerified": "the withdrawal complete in source and in the rebuilt bundle (no trace of the six withdrawn identifiers); the two surviving PowerShell rules present in all three walks and all 12 earlier block-comment / string-borne cases matching PowerShell execution; the Bash floor zero over 1,640 payloads; 25 verdict transitions from 97c33663 each classified against PSParser and powershell.exe with a sed shim — 4 correct fixes, 6 over-scans on tails PowerShell never runs, 3 correct allows on commands PowerShell refuses to parse, 12 misses in the disclosed class",
+      "suites": {
+        "core": "157 files / 4483 passed / 5 skipped",
+        "cli": "174 files / 4723 passed / 20 skipped"
+      },
+      "foldedIn": "45cbce223f75d11ccbaa682d6e4164cbf40b60c8 (prose and pinned carriers only; no scanner line changed, no re-arm)",
+      "verdict": "NOT CONVERGED on one MATERIAL prose item — the disclosure named only the odd-quote carrier of the miss class while a `<#`, a trailing backslash and an unterminated `$(` in the same comment produce the same execution-confirmed miss — plus three MINOR prose items; the leg's own reading: the cure is prose plus pinned carriers, not a code change. Termination taken on that reading after the prose fold."
+    }
+  ],
+  "findings": [
+    {
+      "id": "BRb-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 412,
+      "claim": "blankPowerShellBlockComments was quote-blind: a `<#` inside a PowerShell string literal blanked everything to the next `#>` or the end of the command, so charter positives (heredoc-escape, sed-i-escape) slipped through under the PowerShell tool; the docblock asserted the opposite direction.",
+      "counterexample": "`Write-Output '<#' ; sed -i 's/a\\t/b/' f` (PowerShell) — expected deny(sed-i-escape); actual at b0f8c901 allow; at 01351edd deny. PowerShell ground truth (powershell.exe): `Write-Output '<#'` / `Write-Output 'MIDDLE-RAN'` / `Write-Output '#>'` prints all three lines — the middle command runs."
+    },
+    {
+      "id": "BRb-F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 8,
+      "claim": "The changeset still described the warn row with the substring semantics the fold removed ('with no `MSYS_NO_PATHCONV=1` in the command'); source judges per segment.",
+      "counterexample": "`MSYS_NO_PATHCONV=1 gh pr view 1; git show $(echo origin/main:a.md)` (win32) — per the sentence no warn; actual warn(msys-rev-path-subshell)."
+    },
+    {
+      "id": "BRb-F3",
+      "severity": "MATERIAL",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 8,
+      "claim": "The new sed-scope claim ('a `-f` / `--file` script path is never the expression') was false for GNU's attached `-fFILE` form, which sedHasScriptFile did not recognize.",
+      "counterexample": "`sed -i -fscript.sed 'C:\\temp\\f.txt'` — expected allow (GNU sed 4.9 accepts `-fscript.sed`); actual deny(sed-i-escape) with the FILENAME as the fragment."
+    },
+    {
+      "id": "BRb-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 761,
+      "claim": "Narrowing the opt-out to `VAR=` prefixes and `export` denied shell forms that DO export the variable — a new false-positive class.",
+      "counterexample": "`declare -x MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x` (win32) — expected allow (bash exports it: `/x` unconverted, ground-truthed); actual deny. Same for `typeset -x` and `set -a; MSYS_NO_PATHCONV=1; set +a`."
+    },
+    {
+      "id": "BRb-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 53,
+      "claim": "The header's 'honoured ONLY as an assignment the shell would apply' over-claimed in the honoured-too-widely direction: the `exported` latch is monotone and scope-blind (a subshell `( export … )`, an `unset` after an export, an export in a pipeline element).",
+      "counterexample": "`( export MSYS_NO_PATHCONV=1 ); gh pr comment 5 -b /x` → allow, though bash applies nothing (ground truth: converted)."
+    },
+    {
+      "id": "BRb-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 373,
+      "claim": "The commit message's RED evidence undercounted: 8 core tests, not 6, fail against 01351edd — the new benign row `sed -i -f 'C:\\tmp\\script.sed' file` reddens both budget tests too.",
+      "counterexample": "Measured by transpiling the 01351edd sources and replaying each touched block: 8 RED of 12."
+    },
+    {
+      "id": "BRb-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.test.ts",
+      "line": 185,
+      "claim": "Five new or changed blocks do not discriminate against 01351edd: the two PowerShell coverage tests, the exact-oversize-boundary and matched-length strengthenings, and the needle's accept-side control. None claims a behaviour change; no false green.",
+      "counterexample": "Measured pre=true head=true for all five."
+    },
+    {
+      "id": "BRb-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 760,
+      "claim": "The opt-out constant pinned the value `=1`; MSYS honours the variable's presence with any value.",
+      "counterexample": "`MSYS_NO_PATHCONV=0 gh pr comment 5 -b /x` — expected allow (ground truth: no conversion for `=0`, `=1x`, empty); actual deny."
+    },
+    {
+      "id": "BRb-F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 22,
+      "claim": "The eject needle is now strictly narrower than the installer's ownership probe: a shape the installer would rewrite in place (`NODE_OPTIONS=x node …`, Debian's `nodejs …`) is one eject leaves behind. Unreachable from gateCommand(); the direction is a Totem hook surviving, never a user hook deleted.",
+      "counterexample": "`nodejs .claude/hooks/gate-wrapper.cjs --event freeze-check`: commandInstallsGate → true, isInstalledGateCommand → false."
+    },
+    {
+      "id": "BRc-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 456,
+      "claim": "The blanker's string tracking modelled PowerShell's `'…'` and `\"…\"` but not its `#` line comment, while the scanners discard `#` comments — an odd quote inside a `# …` line desynchronized the blanker, a later real `<# … #>` block stayed unblanked, and the BRb-F1 class returned in both directions.",
+      "counterexample": "MISS: `# don't edit generated files\\n<# the reviewer's note #>\\nsed -i 's/\\r$//' file.txt` (PowerShell) — expected deny(sed-i-escape), b0f8c901 denied, daae514b allowed. FALSE DENY: `# don't edit generated files\\n<#\\n  sed -i 's/\\r$//' file.txt\\n#>\\nWrite-Output ok` — expected allow, daae514b denied. The controls without the apostrophe behaved correctly in both directions."
+    },
+    {
+      "id": "BRc-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 46,
+      "claim": "The header's standing claim ('neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc or expose comment text as arguments'; PowerShell's 'line comment is handled by the same rule as bash's') was false for the PowerShell tool while the blanker ran without that rule.",
+      "counterexample": "The BRc-F1 payloads, in both directions."
+    },
+    {
+      "id": "BRc-F3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 198,
+      "claim": "BRb-F2's correction reached the changeset but not the spec: the warn-row clause and the failure-mode table row still read `MSYS_NO_PATHCONV=1`, contradicting the corrected clause on the same line.",
+      "counterexample": "`MSYS_NO_PATHCONV=0 echo $(git show a/b:c)` (win32) — per the two clauses warn; actual allow (the code matches presence, any value; bash ground truth agrees)."
+    },
+    {
+      "id": "BRc-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 377,
+      "claim": "Six of the eighteen new sub-assertions do not discriminate against b0f8c901 (budget guards; two MSYS benign rows are vacuous under the PowerShell arm, where msysApplies requires Bash). Every containing `it` still fails pre-fold on its other assertions.",
+      "counterexample": "Measured pre=head for the six."
+    },
+    {
+      "id": "BRc-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 747,
+      "claim": "`sedHasScriptFile` read `-f` only as a token's first character, so a clustered short option (`-nf`, `-Enf`) was not a script file — a pre-existing false positive the widened doc line did not disclose.",
+      "counterexample": "`sed -i -nf 'C:\\t.sed' file` — GNU 4.9 reads `-n` + `-f C:\\t.sed`, no expression operand; expected allow; actual deny with the script path as the fragment (both daae514b and b0f8c901)."
+    },
+    {
+      "id": "BRc-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 747,
+      "claim": "An operand after `--` that begins with `-f` is read as a script file though `--` ended option parsing — an undisclosed over-allow (the leg's 'GNU rejects it' rationale was itself wrong: BRd-F3).",
+      "counterexample": "`sed -i -- -fx` — the scanner returns no expressions → allow."
+    },
+    {
+      "id": "BRd-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 485,
+      "claim": "The blanker's new comment-start set `/[\\s;|(){}&,]/` was strictly wider than the scanners' rule it claimed to reuse (WORD_BOUNDARY plus paren provenance), so on `{`, `}`, `,`, `\\f`, `\\v` and a substitution-closing `)` the blanker declared a comment where the scanners read code, left a same-line `<# … #>` block unblanked, and handed it to the scanners as code — a charter positive PowerShell executes was dropped and a command PowerShell never runs was denied.",
+      "counterexample": "MISS: `Write-Output $(1)#c <# it's #>` + newline + `sed -i 's/\\r$//' f` (PowerShell) — powershell.exe prints `1` then runs the sed; daae514b denied, 65332be1 allowed. FALSE DENY: `Write-Output $(1)#c <# ; sed -i 's/\\r$//' f #>` — powershell.exe prints `1` and the tail, the sed never runs; 65332be1 denied."
+    },
+    {
+      "id": "BRd-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 50,
+      "claim": "The header's sentence 'skips its `#` line comments by the same token-start rule the scanners apply, so the two never disagree about which text is code' was false in both halves: the sets differed in source, and PowerShell itself begins a comment after a closing quote or an `=` where neither model did.",
+      "counterexample": "The BRd-F1 payloads; `Write-Output 'a'#b; Write-Output TAIL` prints only `a` under powershell.exe; `$x=#c` swallows the next line."
+    },
+    {
+      "id": "BRd-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 771,
+      "claim": "The `--` disclosure's safety rationale ('a command GNU sed itself rejects') was false: GNU sed 4.9 edits `./-file` in place, and the widened regex extended the over-allow to `-nfile`, `-zfile`, `-Enfile` after `--`, each of which the previous head denied.",
+      "counterexample": "`printf 'aXb\\n' > ./-file; sed -i -- 's/X/Q/' -file` → rc=0, `aQb`. `sed -i -- 's/a\\t/b/' -nfile` — daae514b deny, 65332be1 allow."
+    },
+    {
+      "id": "BRd-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 424,
+      "claim": "Two sub-assertions inside the two termination-check `it` blocks do not discriminate against daae514b (the `a#b` guard; the `-if` guard); whole-block discrimination intact at 4 of 42.",
+      "counterexample": "Measured pre=head for both."
+    },
+    {
+      "id": "BRe-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 533,
+      "claim": "The unification's `=` comment-start rule was unconditional; PowerShell begins a comment after `=` only for the assignment operator, so an argument token carrying `=#` was discarded as a comment and the statement PowerShell executes was hidden.",
+      "counterexample": "`Write-Output a=#b ; sed -i 's/\\d/x/' f` (PowerShell) — PSParser: CommandArgument(a=#b) then Command(sed); powershell.exe prints `a=#b` then runs the sed; expected deny, 20e0ca20 allowed, 65332be1 denied. Same for `http://h/p?a=#t`, `--define=#fff`."
+    },
+    {
+      "id": "BRe-F2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 533,
+      "claim": "The closing-quote comment-start rule fired after ANY closing quote; PowerShell starts a comment there only when the quote BEGAN the token.",
+      "counterexample": "`x='a'#c ; sed -i 's/\\d/x/' f` — PSParser: Command(x=a#c) StatementSeparator(;) Command(sed); the sed runs; expected deny, 20e0ca20 allowed. Control `Write-Output 'a'#c ; sed …` — PSParser: String(a) Comment(…); allow is correct."
+    },
+    {
+      "id": "BRe-F3",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 611,
+      "claim": "`substitutionEnd` counted parens over quotes only and knew nothing about `<# … #>`, so a `)` inside a block comment closed a `$( … )` early and the orphaned `#>` started a line comment that swallowed the rest — a second model of `<#` inside the unified walk.",
+      "counterexample": "`Write-Output $(1 <# ) #>) ; sed -i 's/\\d/x/' f` — PSParser: GroupStart Number Comment(<# ) #>) GroupEnd then Command(sed); powershell.exe prints `1` and runs the sed; expected deny, 20e0ca20 allowed."
+    },
+    {
+      "id": "BRe-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 53,
+      "claim": "The header's rationale 'PowerShell ends a token at a string or an `=`; bash does not' (restated in the ScanOptions docblock, the changeset, the spec and the test comment) was false against PSParser: only a token-starting string and the assignment operator end a token.",
+      "counterexample": "PSParser on `Write-Output a=#b` → CommandArgument(a=#b); on `x='a'#c` → Command(x=a#c)."
+    },
+    {
+      "id": "BRe-F5",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 440,
+      "claim": "The unification's new test pinned only the two shapes where PowerShell agrees with the over-broad rules and none from the sibling class where it disagrees, so the suite was green while the contract clause was false.",
+      "counterexample": "Adding `run(\"x='a'#c ; sed …\")` or `run('Write-Output a=#b ; sed …')` to the block failed at 20e0ca20 while its five assertions passed."
+    },
+    {
+      "id": "BRe-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 524,
+      "claim": "On `<<#` the tokenizer's `<#` branch matches at the second `<` while findHeredocs takes the `<<` heredoc branch and reads `#` as a bare delimiter — an intra-fold disagreement on a command PowerShell refuses to parse (`The terminator '#>' is missing`).",
+      "counterexample": "`cat <<#\\nx\\d\\nEOF` (PowerShell): HEAD deny/heredoc-escape, 65332be1 allow; nothing runnable is denied."
+    },
+    {
+      "id": "BRf-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 556,
+      "claim": "The precise `=` rule still fired in argument position, where PowerShell has no assignment operator and `=` is an ordinary character of a CommandArgument, so a `#` PowerShell does not read as a comment hid a real `sed -i`.",
+      "counterexample": "`Write-Output $x=#c ; sed -i 's/\\d/x/' f` — PSParser: CommandArgument($x=#c) StatementSeparator(;) Command(sed); powershell.exe runs the sed; expected deny, 97c33663 allowed. Same for `Write-Output $(1)=#c`, `Write-Output =#c`, `$x==#c`."
+    },
+    {
+      "id": "BRf-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 595,
+      "claim": "The token-start proxy was bash's word, not PowerShell's token: after `$x=` the following string IS its own token and adjacent strings are separate tokens, so eight everyday PowerShell assignments with a trailing comment moved from allow to deny.",
+      "counterexample": "`$x='a'#c ; sed -i 's/\\d/x/' f` — PSParser: Variable(x) Operator(=) String(a) Comment(…); the sed never runs; expected allow, 97c33663 denied. Same for `$x=\"a\"#c`, `$x+='a'#c`, `$env:X='a'#c`, `$x[0]='a'#c`, `Write-Output \"a\"'b'#c`."
+    },
+    {
+      "id": "BRf-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 178,
+      "claim": "The ScanOptions docblock's '`''` and `\"\"` read as two adjacent strings under both grammars' was false for PowerShell, where they are one token with an embedded quote, and the fold had made that sentence load-bearing.",
+      "counterexample": "`Write-Output 'a''b'#c ; sed …` — PSParser: String(a'b) Comment(…); expected allow, 97c33663 denied."
+    },
+    {
+      "id": "BRf-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 47,
+      "claim": "The two scanners carried different predicates for the same rules and disagreed on 7 of 18 probed shapes; findHeredocs read a stale word head from the previous word.",
+      "counterexample": "`Write-Output \"a\"=#c ; cat > f <<'EOF'\\nre /\\d/\\nEOF` → allow (findHeredocs) while the sed sibling denied; `$x \\a=#c ; cat …` vs `Write-Output \\a=#c ; cat …` differed only in the previous word's head."
+    },
+    {
+      "id": "BRf-F5",
+      "severity": "MINOR",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 198,
+      "claim": "The spec's 'the same rules apply inside a `$( … )`' overstated substitutionEnd, which implements only the block-comment skip and the backtick escape.",
+      "counterexample": "`Write-Output $(Write-Output 'a'#) ; sed …` — a command PowerShell refuses to parse; the scanner closes the substitution and denies; the clause is what was wrong."
+    },
+    {
+      "id": "BRf-F6",
+      "severity": "MINOR",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 10,
+      "claim": "PowerShell also ends a token at the `)` closing a `$( … )`, so `$(1)#c` is a comment there while the scanners apply bash's rule; unchanged since the unification and fail-closed.",
+      "counterexample": "`Write-Output $(1)#c ; sed …` — PSParser: GroupEnd Comment; the sed never runs; the scanner denies."
+    },
+    {
+      "id": "BRg-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 56,
+      "claim": "The withdrawal's disclosure bounded the miss direction to one carrier ('an odd quote') while a `<#`, a trailing backslash and an unterminated `$(` in the same-line comment produce the same execution-confirmed miss; six of those moved from deny to allow at the withdrawal and the pinned test covered only the odd-quote carrier.",
+      "counterexample": "`Write-Output 'a'#note <#` + newline + `sed -i 's/\\d/x/' f` — PSParser: String(a) Comment(#note <#) NewLine Command(sed); powershell.exe prints `a` then runs the sed; 97c33663 denied, 9bb34073 allowed. A 4-arm × 8-carrier sweep: 15 misses over 5 carriers."
+    },
+    {
+      "id": "BRg-F2",
+      "severity": "MINOR",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 10,
+      "claim": "A doubled conjunction ('and and') survived the rewrite in the changeset and the spec.",
+      "counterexample": "Verbatim at both sites."
+    },
+    {
+      "id": "BRg-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 58,
+      "claim": "The header's illustrative pair was mis-matched: `a=#b` reads the same in both statement positions; the pair that differs only by statement position is `$x=#c` (an assignment plus a comment) versus `Write-Output $x=#c` (one argument).",
+      "counterexample": "PSParser: `a=#b ; sed …` → Command(a=#b); `Write-Output a=#c ; sed …` → CommandArgument(a=#c) — the same reading."
+    },
+    {
+      "id": "BRg-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 59,
+      "claim": "'five successive attempts to model them [token boundaries]' held only under the broad reading 'which text is code': the pre-pass and its string tracking carried no token-boundary rule; the strict count is three.",
+      "counterexample": "git log: b0f8c901 and daae514b (the pre-pass and its string tracking), then 65332be1, 20e0ca20, 97c33663 (the three token-boundary models)."
+    }
+  ],
+  "folded": [
+    "BRb-F1",
+    "BRb-F2",
+    "BRb-F3",
+    "BRb-F4",
+    "BRb-F5",
+    "BRb-F8",
+    "BRc-F1",
+    "BRc-F2",
+    "BRc-F3",
+    "BRc-F5",
+    "BRd-F1",
+    "BRd-F2",
+    "BRd-F3",
+    "BRe-F1",
+    "BRe-F2",
+    "BRe-F3",
+    "BRe-F4",
+    "BRe-F5",
+    "BRf-F1",
+    "BRf-F2",
+    "BRf-F3",
+    "BRf-F4",
+    "BRf-F5",
+    "BRf-F6",
+    "BRg-F1",
+    "BRg-F2",
+    "BRg-F3",
+    "BRg-F4"
+  ],
+  "withdrawn": "The two PowerShell comment-start rules (a string that began its token; the assignment operator) were withdrawn at 9bb34073 rather than refined a sixth time: PowerShell's token boundaries are not derivable from a character walk (`a=#b` and `$x=#c` differ only by statement position; `'a'#b` and `x='a'#c` only by where the token began), and each of five successive models opened a sibling shape. A `#` is read by bash's word-boundary rule for both tools; the residual — a `#` after a token-ending string, an assignment operator or a `)` — is word text to the scanners, the over-scan direction, except a same-line comment carrying an odd quote before a later positive, the one miss, disclosed in the header and pinned as a test.",
+  "foldedOutOfBand": {
+    "BRb-F6": "the RED count corrected on the PR body and the disposition"
+  },
+  "notFolded": {
+    "BRb-F7": "coverage and strengthening tests beside discriminating siblings, named",
+    "BRb-F9": "the asymmetry runs in the safe direction and is unreachable from the installer; named for the next reader",
+    "BRc-F4": "the same class as BRb-F7, named",
+    "BRc-F6": "superseded by BRd-F3's fold — option parsing now stops at `--`",
+    "BRd-F4": "the same class as BRb-F7, named",
+    "BRe-F6": "a command PowerShell refuses to parse; nothing runnable is denied; named"
+  },
+  "designNote": "Three BLOCKING faults in three successive folds of one pre-pass, each a disagreement between the pre-pass and the scanners about which text is code, were taken as the evidence that a second model cannot be kept in agreement with the first. The fold at 20e0ca20 deletes the pre-pass: ScanOptions.powershell threads from payload.tool through findHeredocs and tokenizeShell, which read PowerShell's grammar where it differs (block comments, the backtick escape, a comment after a closing quote or an `=`) in the same walk that tracks quotes and comments. The Bash-tool verdicts are unchanged by construction: the flag is off.",
+  "disclosedNotFolded": [
+    "PowerShell here-strings (`@\" … \"@`, `@' … '@`) are not parsed (header comment)",
+    "an export inside a subshell `( … )` or a pipeline element is taken as reaching later segments though the shell would not apply it — the over-allow direction (header comment, changeset, spec)",
+    "a wrapper that takes operands of its own before the program (sudo -u me, timeout N, npx) hides the program from the position anchor (header comment)",
+    "a heredoc inside a `bash -c \"…\"` / `sh -c '…'` operand is not recursed into (header comment)",
+    "a partly quoted heredoc delimiter (`E'O'F`) is read to its first quote — over-scan (HEREDOC_AT comment)"
+  ],
+  "verdict": "TERMINATED at 45cbce223f75d11ccbaa682d6e4164cbf40b60c8 (claude-opus-5[1m], six legs on the bot round): re-armed over b0f8c901 — BLOCKING 1 · MATERIAL 3 · MINOR 5, folded in daae514b; termination check over daae514b — BLOCKING 1 · MATERIAL 2 · MINOR 3, folded in 65332be1; over 65332be1 — BLOCKING 1 · MATERIAL 2 · MINOR 1, the pre-pass deleted in 20e0ca20; over 20e0ca20 — BLOCKING 3 · MATERIAL 2 · MINOR 1, folded in 97c33663; over 97c33663 — BLOCKING 1 · MATERIAL 3 · MINOR 2, the two comment-start rules withdrawn in 9bb34073; over 9bb34073 — MATERIAL 1 · MINOR 3, prose only, folded at the head this deposit names. 35 findings: 28 folded in code or prose, 1 corrected out of band, 6 named. The Bash-tool verdicts were unchanged through every pass (differential sweeps of 612, 1,064 and 1,640 payloads, zero transitions beyond the one intended sed fix). What the bot round leaves the gate with: Gemini's two quote-aware scans, Greptile's block-comment bypass closed and its eject ownership fixed, CodeRabbit's eleven folds; and one design decision on the record — PowerShell's token boundaries are disclosed, not modelled. The PR is presented for the merge word on this record."
+}

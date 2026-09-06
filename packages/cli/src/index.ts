@@ -1962,10 +1962,10 @@ gateCmd
   .command('check')
   .description('Evaluate a gate predicate; emit a GateVerdict (allow|warn|deny) as JSON to stdout')
   .requiredOption('--event <type>', 'Gate event type (e.g. freeze-check)')
-  .requiredOption('--payload <json>', 'Gate-specific JSON payload')
+  .requiredOption('--payload <json>', 'Gate-specific JSON payload, or - to read it from stdin')
   .addHelpText(
     'after',
-    `\nExample:\n  $ totem gate check --event freeze-check --payload '{"subsystem":"rule-compilation"}'\n`,
+    `\nExamples:\n  $ totem gate check --event freeze-check --payload '{"subsystem":"rule-compilation"}'\n  $ echo '{"tool":"Bash","command":"git status","platform":"win32"}' | totem gate check --event transport-shield --payload -\n`,
   )
   .action(async (opts: { event: string; payload: string }) => {
     try {

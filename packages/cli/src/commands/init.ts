@@ -5,6 +5,9 @@ import { z } from 'zod';
 
 import type { IngestTarget } from '@mmnto/totem';
 
+// Type-only (fully erased): the `--gates=` path still loads `gate-install.js`
+// lazily inside the handler, so ADR-072 §3's no-eager-core-load shape holds.
+import type { GateInstallSpec } from './gate-install.js';
 import {
   type HookCommandSchema,
   mergeClaudeHooksKey,
@@ -1941,18 +1944,22 @@ export default {
     // --- Always run: action-gate install (--gates=, PR-C mmnto-ai/totem#2048) ---
     // Thin sugar that is INTENTIONALLY outside the bare-mode branch: gate
     // opt-in is an independent, explicit flag (it works in bare repos too).
-    // Parses the comma-list (or `all`), validates each member against
-    // knownGateEvents() (fail loud on unknown), and routes through the SAME
-    // installGates() path the `gate install` verb uses — no second copy of
-    // the merge logic.
+    // Parses the comma-list (or `all`), resolves each member against the core
+    // registry via resolveGates() (fail loud on unknown; the gate's PreToolUse
+    // matcher comes back with it), and routes through the SAME installGates()
+    // path the `gate install` verb uses — no second copy of the merge logic.
     if (options?.gates) {
-      const { resolveGateEvents } = await import('./gate.js');
+      const { resolveGates } = await import('./gate.js');
       const { installGates } = await import('./gate-install.js');
       const { TotemError, knownGateEvents } = await import('@mmnto/totem');
       const requested = options.gates.trim();
-      let gateEvents: string[];
+      // `{ event, matcher }` pairs, resolved through the core registry by
+      // `resolveGates` — the same source `gate install` reads, so init can never
+      // install a gate under a matcher the registry does not declare
+      // (mmnto-ai/totem#2799).
+      let gates: GateInstallSpec[];
       if (requested.toLowerCase() === 'all') {
-        gateEvents = await resolveGateEvents({ all: true });
+        gates = [...(await resolveGates({ all: true }))];
       } else {
         const names = requested
           .split(',')
@@ -1960,8 +1967,8 @@ export default {
           .filter((n) => n.length > 0);
         // Empty after parse/trim/filter (e.g. `--gates=,` or whitespace-only):
         // fail loud rather than scaffolding an orphan wrapper with no entry.
-        // Restores parity with the verb's resolveGateEvents no-selection
-        // fail-loud (no default-install).
+        // Restores parity with the verb's resolveGates no-selection fail-loud
+        // (no default-install).
         if (names.length === 0) {
           throw new TotemError(
             'GATE_INVALID',
@@ -1969,12 +1976,12 @@ export default {
             `Pass --gates=all or one of: ${knownGateEvents().join(', ')}.`,
           );
         }
-        gateEvents = [];
+        gates = [];
         for (const name of names) {
-          // resolveGateEvents validates a single name against the registry
-          // and throws (fail-loud) on unknown — no default-install.
-          const [validated] = await resolveGateEvents({ name });
-          // resolveGateEvents returns a non-empty array or throws, so this
+          // resolveGates validates a single name against the registry and
+          // throws (fail-loud) on unknown — no default-install.
+          const [validated] = await resolveGates({ name });
+          // resolveGates returns a non-empty array or throws, so this
           // never fires today — but guard explicitly (no fragile `!`): fail
           // loud rather than push `undefined` if it ever returns empty.
           if (!validated) {
@@ -1984,7 +1991,7 @@ export default {
               'This is an internal error — the gate registry returned no event for a validated name.',
             );
           }
-          gateEvents.push(validated);
+          gates.push(validated);
         }
       }
 
@@ -1992,7 +1999,7 @@ export default {
       // BAKED into the installed command at install time (the wrapper reads it
       // ONLY from argv — no env override). Default install bakes --strict.
       const gateTier = options?.pilot ? 'pilot' : 'strict';
-      const gateResults = installGates(cwd, gateEvents, gateTier);
+      const gateResults = installGates(cwd, gates, gateTier);
       for (const result of gateResults) {
         if (result.err) {
           log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`);

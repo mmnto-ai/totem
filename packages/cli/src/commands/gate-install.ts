@@ -20,16 +20,27 @@ import {
  * Tier-AWARE upsert keyed on the per-gate `--event <name>` identity (which is
  * tier-independent): installing freeze-check twice at the SAME tier is a no-op,
  * installing it at a DIFFERENT tier rewrites the one existing entry's command
- * in place (never a duplicate), and freeze-check + a future second gate produce
- * two distinct entries under the shared `Write|Edit` matcher.
+ * in place (never a duplicate), and each gate lands as its own entry under ITS
+ * OWN matcher (mmnto-ai/totem#2799) — freeze-check under `Write|Edit`,
+ * transport-shield under `Bash|PowerShell`.
  *
- * `--all` / unknown-gate validation is done by the CALLER against
- * `knownGateEvents()` (the registry is the single source of truth) — this
- * function trusts that `events` are already-validated known events.
+ * `--all` / unknown-gate validation AND matcher resolution are done by the
+ * CALLER against the core registry (`knownGates()`, the single source of truth)
+ * — this function trusts that `gates` are already-validated `{event, matcher}`
+ * pairs. Resolving them caller-side is what keeps this module free of any
+ * `@mmnto/totem` import (ADR-072 §3: core loads lazily, inside the handler).
  */
 
-/** The PreToolUse matcher every gate entry installs under. */
-const GATE_MATCHER = 'Write|Edit';
+/**
+ * A validated gate to install: its event name plus the PreToolUse matcher its
+ * entry installs under. Structurally core's `GateMatcher`, spelled as a literal
+ * union here so this module imports nothing from `@mmnto/totem` (ADR-072 §3);
+ * the CALLER reads the real value from `knownGates()` and never guesses.
+ */
+export interface GateInstallSpec {
+  event: string;
+  matcher: 'Write|Edit' | 'Bash|PowerShell';
+}
 
 /** The wrapper script's repo-relative install path. */
 export const GATE_WRAPPER_REL = '.claude/hooks/gate-wrapper.cjs';
@@ -66,14 +77,19 @@ function gateCommand(event: string, tier: GateTier): string {
   return `node ${GATE_WRAPPER_REL} --event ${event} --${tier}`;
 }
 
-/** Build the PreToolUse entry for a single gate (one wrapper, N gates). */
-function gateEntry(event: string, tier: GateTier): HostHookEntry {
+/**
+ * Build the PreToolUse entry for a single gate (one wrapper, N gates). The
+ * matcher comes from the GATE (resolved caller-side from the core registry);
+ * `CLAUDE_GATE_WRAPPER_ENTRY` supplies only the canonical hook `type` — its own
+ * `matcher` is the freeze-check exemplar, not a default for every gate.
+ */
+function gateEntry(gate: GateInstallSpec, tier: GateTier): HostHookEntry {
   return {
-    matcher: CLAUDE_GATE_WRAPPER_ENTRY.matcher,
+    matcher: gate.matcher,
     hooks: [
       {
         type: CLAUDE_GATE_WRAPPER_ENTRY.hooks[0]!.type,
-        command: gateCommand(event, tier),
+        command: gateCommand(gate.event, tier),
       },
     ],
   };
@@ -108,7 +124,7 @@ export interface GateInstallResult {
 }
 
 /**
- * Install the gate wrapper script + one PreToolUse entry per `event` into the
+ * Install the gate wrapper script + one PreToolUse entry per gate into the
  * given repo `cwd`. Returns one result per filesystem operation (the wrapper
  * scaffold, then one entry merge per gate) for caller-side summary reporting.
  *
@@ -117,13 +133,14 @@ export interface GateInstallResult {
  * a default install is enforcement-immune to a consumer's environment. `pilot`
  * is an explicit install-time opt-in.
  *
- * `events` MUST already be validated against `knownGateEvents()` by the
- * caller (the verb / `--gates=` parser) — no default-install, fail-loud on
- * unknown happens upstream.
+ * `gates` MUST already be resolved against the core registry by the caller
+ * (the verb / `--gates=` parser, through `knownGates()`) — both the
+ * fail-loud-on-unknown and the matcher lookup happen upstream, so this function
+ * never guesses a matcher and never default-installs.
  */
 export function installGates(
   cwd: string,
-  events: string[],
+  gates: ReadonlyArray<GateInstallSpec>,
   tier: GateTier = 'strict',
 ): GateInstallResult[] {
   const results: GateInstallResult[] = [];
@@ -157,23 +174,25 @@ export function installGates(
     err: wrapperResult.err,
   });
 
-  // 2. Tier-AWARE upsert of one PreToolUse entry per gate. The gate-identity
-  //    probe matches the EXACT --event token (collision-safe and
-  //    tier-independent), so the upsert keeps EXACTLY ONE entry per gate:
-  //    a same-tier re-run is a no-op (`skipped`), a different-tier re-install
-  //    rewrites that entry's command in place (`updated`), and a NEW gate adds
-  //    a second distinct entry (`merged`).
-  for (const event of events) {
+  // 2. Tier-AWARE upsert of one PreToolUse entry per gate, under THAT GATE'S
+  //    matcher. The gate-identity probe matches the EXACT --event token
+  //    (collision-safe and tier-independent), so the upsert keeps EXACTLY ONE
+  //    entry per gate: a same-tier re-run is a no-op (`skipped`), a
+  //    different-tier re-install rewrites that entry's command in place
+  //    (`updated`), and a NEW gate adds a second distinct entry (`merged`).
+  //    Because a gate's matcher is a registry fact, not a caller choice, a gate
+  //    can never end up installed under two different matchers.
+  for (const gate of gates) {
     const entryResult = upsertClaudeHookCommand(
       settingsPath,
-      GATE_MATCHER,
-      gateEntry(event, tier),
-      (cmd) => commandInstallsGate(cmd, event),
+      gate.matcher,
+      gateEntry(gate, tier),
+      (cmd) => commandInstallsGate(cmd, gate.event),
     );
     results.push({
       file: '.claude/settings.json',
       action: entryResult.action,
-      event,
+      event: gate.event,
       err: entryResult.err,
     });
   }

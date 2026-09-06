@@ -9,6 +9,27 @@ import { writeFileAtomicSync } from '@mmnto/totem/fs-atomic';
 // ─── Constants ──────────────────────────────────────────
 
 const TAG = 'Eject';
+
+/**
+ * True iff `command` is a Totem-installed gate entry, in the exact grammar
+ * `gateCommand()` bakes: the Node executable (`node`, or a path ending in it),
+ * then the wrapper at its install path `.claude/hooks/gate-wrapper.cjs` (bare
+ * or quoted, an absolute or `./` prefix allowed), then `--event`
+ * (mmnto-ai/totem#2799). Anything else is not ours and survives an eject: a
+ * user hook that mentions the wrapper's basename, one that runs a wrapper of
+ * the same name from another directory, or one whose program is not node.
+ */
+export function isInstalledGateCommand(command: string): boolean {
+  const tokens = command
+    .split(/\s+/)
+    .filter((t) => t.length > 0)
+    .map((t) => t.replace(/^['"]|['"]$/g, ''));
+  const [program, wrapper, flag] = tokens;
+  if (program === undefined || wrapper === undefined || flag !== '--event') return false;
+  const isNode = /(^|[\\/])node(\.exe)?$/.test(program);
+  const isWrapper = /(^|[\\/])\.claude[\\/]hooks[\\/]gate-wrapper\.cjs$/.test(wrapper);
+  return isNode && isWrapper;
+}
 const TOTEM_HOOK_MARKER = '[totem] post-merge hook';
 const TOTEM_HOOK_END = '[totem] end post-merge';
 const TOTEM_CHECKOUT_MARKER = '[totem] post-checkout hook';
@@ -448,9 +469,13 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
  *     left over from when Phase B added the install side).
  *   - `hooks.SessionStart` entries whose command references `SessionStart.cjs`
  *     (Phase C slice 1 install — mmnto-ai/totem#1845).
- *   - `hooks.PreToolUse` Write|Edit entries whose command references
- *     `gate-wrapper.cjs` (PR-C action-gate install — mmnto-ai/totem#2048;
- *     one per installed gate). Parity with `gate install` / `init --gates=`.
+ *   - `hooks.PreToolUse` entries whose command references `gate-wrapper.cjs`
+ *     under ANY matcher (PR-C action-gate install — mmnto-ai/totem#2048; one
+ *     per installed gate). Since mmnto-ai/totem#2799 each gate installs under
+ *     its OWN matcher (`Write|Edit` for freeze-check, `Bash|PowerShell` for
+ *     transport-shield), so the scrub keys on the wrapper needle — which only
+ *     Totem writes — and never on the matcher. Parity with `gate install` /
+ *     `init --gates=`.
  *
  * User-defined entries (other matchers, other commands) are preserved.
  * Empty arrays/objects/files are pruned bottom-up to leave a clean
@@ -500,23 +525,50 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 
   let mutated = false;
 
-  // PreToolUse → drop the PreWriteShield entry AND every action-gate
-  // wrapper entry (matcher Write|Edit, command references gate-wrapper.cjs;
-  // one per installed gate — PR-C eject parity, mmnto-ai/totem#2048). Other
-  // matchers (Bash legacy, user-defined Write|Edit) preserved. Array guard
-  // so a malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is
-  // skipped instead of crashing the eject best-effort cleanup.
+  // PreToolUse → drop the PreWriteShield entry AND every action-gate wrapper
+  // entry (one per installed gate — PR-C eject parity, mmnto-ai/totem#2048).
+  //
+  // The two needles are scoped DIFFERENTLY on purpose:
+  //   - the installed gate command (the exact grammar `gateCommand()` bakes:
+  //     `node <…/>.claude/hooks/gate-wrapper.cjs --event …`) →
+  //     matcher-INDEPENDENT. Since mmnto-ai/totem#2799 a gate installs under
+  //     its own matcher (`Write|Edit` for freeze-check, `Bash|PowerShell` for
+  //     transport-shield), so binding the needle to a matcher would strand
+  //     every non-`Write|Edit` gate entry behind an eject. A user hook that
+  //     merely mentions the wrapper's basename, runs a same-named wrapper from
+  //     another directory, or passes `--event` to another program survives.
+  //   - `PreWriteShield` → still bound to `Write|Edit`, the only matcher that
+  //     install ever writes it under (unchanged, deliberately narrow).
+  // The scrub is per HOOK, not per entry: a user command that shares an entry
+  // with a Totem hook survives, and the entry goes only when nothing of it
+  // remains (the bot round on mmnto-ai/totem#2804). A user-authored `Bash` (or
+  // any other) entry carries neither needle and survives. Array guard so a
+  // malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is skipped
+  // instead of crashing the best-effort cleanup.
   const preToolUseRaw = hooks.PreToolUse;
   if (Array.isArray(preToolUseRaw)) {
     const preToolUse = preToolUseRaw as Array<{ matcher?: string; hooks?: Array<unknown> }>;
-    const filtered = preToolUse.filter(
-      (entry) =>
-        !(
-          entry.matcher === 'Write|Edit' &&
-          (commandIncludes(entry, 'PreWriteShield') || commandIncludes(entry, 'gate-wrapper.cjs'))
-        ),
-    );
-    if (filtered.length !== preToolUse.length) {
+    const commandOf = (h: unknown): string =>
+      typeof h === 'string' ? h : ((h as { command?: string } | null)?.command ?? '');
+    let changed = false;
+    const filtered: typeof preToolUse = [];
+    for (const entry of preToolUse) {
+      const own = Array.isArray(entry.hooks) ? entry.hooks : [];
+      const kept = own.filter((h) => {
+        const cmd = commandOf(h);
+        return !(
+          isInstalledGateCommand(cmd) ||
+          (entry.matcher === 'Write|Edit' && cmd.includes('PreWriteShield'))
+        );
+      });
+      if (kept.length === own.length) {
+        filtered.push(entry);
+        continue;
+      }
+      changed = true;
+      if (kept.length > 0) filtered.push({ ...entry, hooks: kept });
+    }
+    if (changed) {
       mutated = true;
       if (filtered.length === 0) {
         delete hooks.PreToolUse;

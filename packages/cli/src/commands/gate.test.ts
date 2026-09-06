@@ -4,12 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TotemError } from '@mmnto/totem';
+import { knownGateEvents, knownGates, TotemError } from '@mmnto/totem';
 
-import { gateCheckCommand } from './gate.js';
+import { gateCheckCommand, resolveGates } from './gate.js';
 
 /**
- * CLI-boundary tests for `totem gate check`.
+ * CLI-boundary tests for `totem gate check` and the `gate install` selection
+ * resolver `resolveGates`.
  *
  * The engine itself (allow/deny/no-file/fail-closed/side-effect-free) is
  * covered by `@mmnto/totem`'s gate-engine.test.ts. This file covers the
@@ -85,6 +86,39 @@ describe('gateCheckCommand', () => {
     );
   });
 
+  it('--payload - reads the JSON from stdin (the wrapper channel; no argv limit) and evaluates it', async () => {
+    // The stdin reader is the injectable seam; the CLI default reads fd 0. A
+    // 40,000-character command — past win32's 32,767-character argv cap — is the
+    // shape the argv form could not carry (mmnto-ai/totem#2799, pass 3).
+    const long = 'x'.repeat(40_000);
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    let reads = 0;
+    const readStdin = (): string => {
+      reads += 1;
+      return JSON.stringify({ tool: 'Bash', command: long, platform: 'win32' });
+    };
+
+    await gateCheckCommand({ event: 'transport-shield', payload: '-' }, readStdin);
+
+    expect(reads).toBe(1);
+    expect(spy.mock.calls).toHaveLength(1);
+    const verdict = JSON.parse(spy.mock.calls[0]![0] as string) as { disposition: string };
+    expect(verdict.disposition).toBe('allow');
+  });
+
+  it('--payload - with malformed stdin JSON throws GATE_INVALID like the argv form, and the reader was consulted', async () => {
+    // The reader count is what discriminates: on the pre-fold code `JSON.parse('-')`
+    // throws the same GATE_INVALID without ever reading stdin (re-armed pass, P3b-F2).
+    let reads = 0;
+    await expect(
+      gateCheckCommand({ event: 'freeze-check', payload: '-' }, () => {
+        reads += 1;
+        return '{ not valid json';
+      }),
+    ).rejects.toThrow(/invalid --payload json/i);
+    expect(reads).toBe(1);
+  });
+
   it('emits a raw GateVerdict to stdout and does NOT map disposition to an exit code', async () => {
     fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), FROZEN);
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -120,5 +154,55 @@ describe('gateCheckCommand', () => {
     expect(verdict.disposition).toBe('allow');
     expect(verdict.provenance.matched).toBeNull();
     expect(process.exitCode).toBeFalsy();
+  });
+});
+
+/**
+ * `resolveGates` (registry-driven selection, mmnto-ai/totem#2799).
+ *
+ * Successor to `resolveGateEvents`, which returned bare event strings; it now
+ * returns `{event, matcher}` pairs read from `knownGates()` so `installGates`
+ * never has to guess a matcher — and so `gate-install.ts` can stay free of any
+ * `@mmnto/totem` import (ADR-072 §3). The fail-loud messages are unchanged.
+ * (These four validation arms moved here from gate-install.test.ts, where they
+ * sat beside the installer they no longer call directly.)
+ */
+describe('resolveGates (registry-driven validation)', () => {
+  it('--all enumerates knownGates() — both gates, in registry order, with matchers', async () => {
+    const resolved = await resolveGates({ all: true });
+    expect(resolved).toEqual(knownGates());
+    // Spelled out, so a registry edit that moved a gate to another matcher
+    // fails here instead of being followed silently.
+    expect(resolved).toEqual([
+      { event: 'freeze-check', matcher: 'Write|Edit' },
+      { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+    ]);
+    // Order is the registry's, and it is what `--all` installs in.
+    expect(resolved.map((g) => g.event)).toEqual(knownGateEvents());
+  });
+
+  it('a known --<name> resolves to its own pair (freeze-check → Write|Edit)', async () => {
+    expect(await resolveGates({ name: 'freeze-check' })).toEqual([
+      { event: 'freeze-check', matcher: 'Write|Edit' },
+    ]);
+  });
+
+  it('transport-shield resolves to the Bash|PowerShell pair', async () => {
+    expect(await resolveGates({ name: 'transport-shield' })).toEqual([
+      { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+    ]);
+  });
+
+  it('an unknown --<name> fails loud (never default-install)', async () => {
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toBeInstanceOf(TotemError);
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toThrow(/unknown gate/i);
+    // The message still enumerates the known EVENT names, unchanged wording.
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toThrow(
+      `Unknown gate "made-up-gate". Known gates: ${knownGateEvents().join(', ')}.`,
+    );
+  });
+
+  it('no --all and no --<name> fails loud (no default-install)', async () => {
+    await expect(resolveGates({})).rejects.toThrow(/no gate selected/i);
   });
 });
