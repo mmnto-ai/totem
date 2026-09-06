@@ -46,8 +46,10 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc
  * or expose comment text as arguments. For the PowerShell tool a `<# … #>`
  * block comment is blanked before the scanners run (PowerShell discards it
- * without quote processing, as bash discards a `#` line comment; the line
- * comment is handled by the same rule as bash's). Not read, disclosed:
+ * without quote processing, as bash discards a `#` line comment); the blanker
+ * tracks PowerShell's string literals and skips its `#` line comments by the
+ * same token-start rule the scanners apply, so the two never disagree about
+ * which text is code. Not read, disclosed:
  * PowerShell here-strings (`@" … "@`, `@' … '@`) are not parsed — a quote
  * inside one can still desynchronize the quote scan for that tool, the miss
  * direction. The MSYS opt-out is honoured through the shell forms that export
@@ -424,6 +426,11 @@ function blankPowerShellBlockComments(command: string): string {
   let i = 0;
   let inSingle = false;
   let inDouble = false;
+  // At the start of a token — where PowerShell's `#` begins a line comment. The
+  // scanners discard that comment by the same rule, so the blanker must skip it
+  // too: a quote inside it would otherwise open a phantom string here and leave
+  // a later real block unblanked (the termination check on mmnto-ai/totem#2804).
+  let boundary = true;
   while (i < command.length) {
     const ch = command[i] as string;
     if (inSingle) {
@@ -453,14 +460,29 @@ function blankPowerShellBlockComments(command: string): string {
       i += 1;
       continue;
     }
-    if (ch === "'") inSingle = true;
-    else if (ch === '"') inDouble = true;
-    else if (command.startsWith('<#', i)) {
+    if (ch === "'") {
+      inSingle = true;
+      boundary = false;
+    } else if (ch === '"') {
+      inDouble = true;
+      boundary = false;
+    } else if (command.startsWith('<#', i)) {
       const close = command.indexOf('#>', i + 2);
       const end = close === -1 ? command.length : close + 2;
       out += command.slice(i, end).replace(/[^\n]/g, ' ');
       i = end;
+      boundary = true;
       continue;
+    } else if (ch === '#' && boundary) {
+      // A line comment: copied verbatim to the end of the line (the scanners
+      // discard it); its quotes are text to this tracker.
+      const nl = command.indexOf('\n', i);
+      const end = nl === -1 ? command.length : nl;
+      out += command.slice(i, end);
+      i = end;
+      continue;
+    } else {
+      boundary = /[\s;|(){}&,]/.test(ch);
     }
     out += ch;
     i += 1;
@@ -742,9 +764,15 @@ function sedExpressions(args: readonly string[]): string[] {
   return out;
 }
 
-/** True when sed takes its script from a FILE (`-f X`, GNU's attached `-fX` and `-f-`, `--file X`, `--file=X`): then no positional operand is an expression. */
+/**
+ * True when sed takes its script from a FILE — `-f X`, GNU's attached `-fX` and
+ * `-f-`, `-f` clustered after argument-less short options (`-nf X`, `-Enf X`),
+ * `--file X`, `--file=X`: then no positional operand is an expression. An
+ * operand after `--` that begins with `-f` is read as a script file too, an
+ * over-allow on a command GNU sed itself rejects.
+ */
 function sedHasScriptFile(args: readonly string[]): boolean {
-  return args.some((a) => a.startsWith('-f') || a === '--file' || a.startsWith('--file='));
+  return args.some((a) => /^-[nsErzub]*f/.test(a) || a === '--file' || a.startsWith('--file='));
 }
 
 /**

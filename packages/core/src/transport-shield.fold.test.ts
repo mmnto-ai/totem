@@ -405,6 +405,32 @@ describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Gre
     );
   });
 
+  it("a PowerShell # line comment carrying a quote leaves a later block blanked and a block's body unexposed (termination check, BRc-F1)", () => {
+    const miss =
+      "# don't edit generated files\n<# the reviewer's note #>\nsed -i 's/\\r$//' file.txt";
+    expect(run(miss, 'win32', 'PowerShell').provenance.ref).toBe('sed-i-escape');
+    expect(
+      run(
+        "# don't edit generated files\n<# reviewer's note #>\ncat > f <<'EOF'\nx\\y\nEOF",
+        'win32',
+        'PowerShell',
+      ).provenance.ref,
+    ).toBe('heredoc-escape');
+    const benign =
+      "# don't edit generated files\n<#\n  sed -i 's/\\r$//' file.txt\n#>\nWrite-Output ok";
+    expect(run(benign, 'win32', 'PowerShell').disposition).toBe('allow');
+    expect(
+      run("Write-Output a#b ; <# it's #> ; sed -i 's/\\t/ /' f", 'win32', 'PowerShell').provenance
+        .ref,
+    ).toBe('sed-i-escape');
+  });
+
+  it('a clustered -nf is a script file too (termination check, BRc-F5)', () => {
+    expect(run("sed -i -nf 'C:\\t.sed' file").disposition).toBe('allow');
+    expect(run("sed -i -Enf 'C:\\t.sed' file").disposition).toBe('allow');
+    expect(run("sed -i -if 's/a\\t/b/' file").provenance.ref).toBe('sed-i-escape');
+  });
+
   it("GNU's attached -fFILE and -f- are script files too (re-arm, BRb-F3)", () => {
     expect(run("sed -i -fscript.sed 'C:\\temp\\f.txt'").disposition).toBe('allow');
     expect(run("sed -i -f- 'C:\\temp\\f.txt'").disposition).toBe('allow');
@@ -496,6 +522,7 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ['declare -x MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32'],
     ['MSYS_NO_PATHCONV=0 gh pr comment 5 -b /x', 'win32'],
     ["sed -i -fscript.sed 'C:\\temp\\f.txt'", 'win32'],
+    ["sed -i -nf 'C:\\t.sed' file", 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {
