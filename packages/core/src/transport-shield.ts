@@ -53,12 +53,17 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * rule as bash's. Not read, disclosed: PowerShell also begins a comment after a
  * token-ending string, an assignment operator or a `)` (`'a'#b`, `$x=#c`,
  * `$(1)#c`), which the scanners read as word text — the over-scan direction,
- * except when such a comment carries an odd quote on the same line as a later
- * positive, the miss direction. PowerShell's token boundaries are not derivable
- * from a character walk (`a=#b` and `$x=#c` differ only by statement position;
- * `'a'#b` and `x='a'#c` only by where the token began), and five successive
- * attempts to model them each opened a sibling shape (the bot-round record on
- * mmnto-ai/totem#2804), so they stay disclosed rather than modelled. PowerShell
+ * except when such a comment carries text the scanners read as shell syntax
+ * (an odd `'` or `"`, a `<#`, a trailing backslash, an unterminated `$(`) on
+ * the line before a later positive: those five carriers, each confirmed by
+ * execution, are the miss direction. PowerShell's token boundaries are not
+ * derivable from a character walk (`$x=#c` is an assignment and a comment at
+ * statement position but one argument after a command; `'a'#b` and `x='a'#c`
+ * differ only by where the token began), and five successive folds of the
+ * PowerShell reading — a pre-pass, its string tracking, its comment rule, then
+ * two token-boundary models inside the scanners — each opened a sibling shape
+ * (the bot-round record on mmnto-ai/totem#2804), so they stay disclosed rather
+ * than modelled. PowerShell
  * here-strings (`@" … "@`, `@' … '@`) are not parsed either — a quote inside
  * one can desynchronize the quote scan for that tool, the miss direction. The
  * MSYS opt-out is honoured through the shell forms that export

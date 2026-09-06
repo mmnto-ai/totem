@@ -466,9 +466,14 @@ describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Gre
     expect(run('Write-Output $(1)#c' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
       'sed-i-escape',
     );
-    // The one miss direction of that class: such a comment carrying an odd quote on
-    // the same line as a LATER positive desynchronizes the quote scan. Disclosed in
-    // the header; pinned here so a future model of it shows up as a change.
+    // The miss direction of that class: such a comment carrying text the scanners
+    // read as shell syntax on the line before a LATER positive — five carriers,
+    // each confirmed by execution (PowerShell runs the sed in every one). Disclosed
+    // in the header; pinned here so a future model of it shows up as a change.
+    for (const carrier of ["don't", 'say "', 'note <#', 'note \\', 'note $(']) {
+      const cmd = `Write-Output 'a'#${carrier}\nsed -i 's/\\r$//' f`;
+      expect(run(cmd, 'win32', 'PowerShell').disposition, carrier).toBe('allow');
+    }
     expect(
       run("Write-Output 'a'#don't\n<# note #>\nsed -i 's/\\r$//' f", 'win32', 'PowerShell')
         .disposition,
