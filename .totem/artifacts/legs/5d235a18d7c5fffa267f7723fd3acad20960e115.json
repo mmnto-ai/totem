@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "5d235a18d7c5fffa267f7723fd3acad20960e115",
+  "readAt": "2026-09-06T02:12:26.601Z",
+  "findings": [
+    {
+      "id": "p5-f1",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2791.md",
+      "line": 1,
+      "claim": "The PR body's Verification counts were false at HEAD: '72 new core tests' vs 47 measured per file against main (26 + 19 + 2), '20 new CLI tests' vs 27 (26 + 1); the bot-round fold had made the CLI number staler by one and the core number was already wrong.",
+      "counterexample": "vitest per file at HEAD vs `it(` counts on origin/main. FOLDED: the PR body states 47 core / 27 CLI with the per-file split."
+    },
+    {
+      "id": "p5-f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-detect.ts",
+      "line": 180,
+      "claim": "The PR body's sentence 'a fork checked out as a directory named totem read its own script as the canon' overclaimed the old bug's reach: deriveCohortRepoId's rule 2 (package-name basename) returns before rule 3, and this monorepo's root name is @mmnto/totem-monorepo, so a fork of THIS repo derived totem-monorepo and already took the fetch. The shapes the old predicate misjudged: a repo whose root package name basename is exactly totem, or one with no readable root package name under a directory named totem, with an origin outside mmnto-ai/. The code comments and the spec were conditional and accurate; only the PR sentence was unconditional.",
+      "counterexample": "Built core dist with the remoteUrl seam: someone/totem https, ssh, and no remote all → 'totem-monorepo'; only …/mmnto-ai/totem → 'totem'. FOLDED: the PR body states the reachable shapes."
+    },
+    {
+      "id": "p5-f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.test.ts",
+      "line": 2073,
+      "claim": "The `git` control's comment said 'the local-remote probe ran'; the git spawn it observes is the cohort-id derivation's remote read (before the network step), so the assertion pins liveness, not which probe — the test would still pass with resolveNetworkSnapshots's readRemote deleted. The load-bearing half (no gh) is intact.",
+      "counterexample": "Positive control: a scratch repo with origin probe-marker → deriveCohortRepoId returns 'probe-marker' only by shelling out. FOLDED: the comment says what the assertion pins."
+    },
+    {
+      "id": "p5-f4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 346,
+      "claim": "Residual: slugFromRemoteUrl matches only the last owner/repo pair and never the host, so a mirror at the path mmnto-ai/totem (another host, a file:// remote, a local mirror dir) still selects the local read — 'exactly the canon's own repository' is really 'exactly the canon's owner/repo path'. Not a regression: the cohort-id derivation's rule-1 regex is equally host-blind.",
+      "counterexample": "https://mirror.example/mmnto-ai/totem, file:///d/repos/mmnto-ai/totem.git → 'mmnto-ai/totem' → LOCAL (14 shapes executed). DISCLOSED in the option doc, the normalizer doc and the PR body."
+    },
+    {
+      "id": "p5-f5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 350,
+      "claim": "slugFromRemoteUrl stripped .git before trailing slashes, so https://github.com/mmnto-ai/totem.git/ yielded 'mmnto-ai/totem.git' (the canon read took the fetch — safe — but the roster's /repos/mmnto-ai/totem.git/labels would 404 → unknown); pre-existing, shared with the roster, outside the fold.",
+      "counterexample": "Executed: '…/totem.git/' → 'mmnto-ai/totem.git' vs deriveCohortRepoId → 'totem'. FOLDED: trailing slashes are stripped before and after the .git strip; the slug test pins the .git/ form."
+    },
+    {
+      "id": "p5-f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 924,
+      "claim": "The caller half of the Greptile fix (defaultCurrentSlug wired into checkParity) has no unit control: the only checkParity-level label test runs on an empty roster so the gated block never executes, and reverting the caller to pass the cohort id would leave all CLI tests green. Mitigation: a mis-wire fails safe toward the fetch, and the live run of record catches it on this repository.",
+      "counterexample": "grep defaultCurrentSlug over packages/cli/src/**/*.test.ts → no matches. DISCLOSED in the PR body; a real control needs a readRemote seam threaded through checkParity (not in this slice)."
+    },
+    {
+      "id": "p5-f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 850,
+      "claim": "Three `git remote get-url origin` spawns per parity run when the label row is in scope (the cohort-id derivation, the roster, defaultCurrentSlug); the current entry's slug is already on its snapshot. Cost only, the derivations cannot disagree.",
+      "counterexample": "Source-derived. DISCLOSED as cosmetic; not folded."
+    },
+    {
+      "id": "p5-f8",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/legs/52dfbccb8f85ce7543eb9b866185e763a30cbf4a.json",
+      "line": 1,
+      "claim": "The PR body said the gate credits the deposit with 'the two commits since'; at HEAD the gate printed +3 (13c0e284, d5e2b413, 5d235a18).",
+      "counterexample": "legs gate at 5d235a18: '+3 commits since the leg read'. FOLDED: the PR body names both deposits and says the gate discloses the commits since, without a count."
+    },
+    {
+      "id": "p5-f9",
+      "severity": "MINOR",
+      "file": ".changeset/orientation-parity-row-detectors-2791.md",
+      "line": 8,
+      "claim": "The changeset and the PR body described the selector by repository ('on this repository the local checkout is read') while after the fold it is decided by origin — a fork is 'this repository' to its owner and now fetches.",
+      "counterexample": "Wording. FOLDED: 'in the canon repository's own checkout (origin mmnto-ai/totem) the local script is read, in every other checkout … fetched'."
+    },
+    {
+      "id": "p5-f10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.test.ts",
+      "line": 514,
+      "claim": "Stale test title 'reads the canon from the local checkout in the totem repo' while the body pins currentSlug mmnto-ai/totem.",
+      "counterexample": "FOLDED: retitled 'when origin is the canon repository'."
+    }
+  ],
+  "folded": [
+    "p5-f1",
+    "p5-f2",
+    "p5-f3",
+    "p5-f5",
+    "p5-f8",
+    "p5-f9",
+    "p5-f10"
+  ],
+  "verdict": "Pass 5 (re-armed on the bot-round fold d5e2b413..5d235a18 — the canon-source predicate moved on Greptile's P1): no BLOCKING; convergence on the CODE — the fold survived every executed attack (the four-slug fork test shown non-vacuous by mutating the shipped predicate through node's module hooks; no stale cohort-id reader; no 'totem' literal on the path; git absent or no remote takes the fetch; the 22 retirements verified two ways; the run of record re-derived identical). Two MATERIAL narration corrections to the PR body (test counts; the old bug's reachable shapes) and eight MINOR: five folded (URL normalizer order with a test, the git-control comment, the stale title, the changeset wording, the commits-since count), three disclosed and not folded (the host-blind path compare, the untested caller wiring, three git spawns per run). The one code change in this fold — the normalizer strips trailing slashes before and after the .git strip — is a tolerance-only fix shared with the roster, made after convergence without a re-arm."
+}

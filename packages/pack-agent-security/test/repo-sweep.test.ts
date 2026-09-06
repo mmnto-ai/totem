@@ -215,6 +215,13 @@ const ALLOWLIST: AllowEntry[] = [
       'legReachPaths builds the NUL delimiter for `git diff --name-only -z` via String.fromCharCode(0) — the same git output-parsing delimiter as git.ts above, not runtime string/command assembly. -z is what keeps the legs gate reading owed and reached paths RAW (a quote, a backslash or a non-ASCII byte in a path is otherwise C-quoted and the coverage intersection misses it); the separator is built rather than escaped because this repo has a banked editing-tool decode trap for `\\u`/`\\x` escapes (mmnto-ai/totem#2698).',
   },
   {
+    hash: 'dd24f87f46e65812',
+    file: 'packages/cli/src/commands/doctor-parity-fetch.ts',
+    expectedCount: 1,
+    reason:
+      'resolveLabelCanon decodes the GitHub contents API`s base64 `content` field — the API`s only encoding for a file body — into the TEXT of mmnto-ai/totem:scripts/sync-labels.ps1, which core`s parseLabelCanon reads with a regex for its `gh label edit` definitions (the `gh-issue-label-canon` parity row, mmnto-ai/totem#2791). The decoded bytes are never executed and never joined into a command or URL; the blob sha they came from is disclosed on the verdict line. A raw-media-type fetch would avoid the decode, but the family`s GhFetch seam is JSON-only by contract (Prop 296 §14: one read-only `gh api` GET, parsed as JSON), so the decode is the boundary`s honest shape.',
+  },
+  {
     hash: 'c2c09301bb56a02b',
     file: 'packages/core/src/sys/exec.ts',
     expectedCount: 1,

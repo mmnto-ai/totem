@@ -24,7 +24,17 @@
  * JSON and NEVER spawn `gh`. The default spawns `gh api` via `safeExec` (arg
  * arrays, no `shell: true`, bounded timeout) — the git-subprocess pattern the
  * core detectors already use.
+ *
+ * The two 472-charter orientation rows (mmnto-ai/totem#2791) join the same
+ * family here: `gh-issue-label-canon` adds a paginated REST label walk plus the
+ * roster-wide canon text ({@link resolveLabelCanon}), and
+ * `gh-project-vocabulary` adds a second read-only transport ({@link GhGraphql})
+ * for the bound project's single-select fields. Both keep the §14 edges above:
+ * read-only, per-surface honest degradation, no retries, never partial.
  */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import type {
   NetworkPostureRow,
@@ -32,10 +42,39 @@ import type {
   NetworkRepoSurfaces,
   NetworkSurfaceOutcome,
   NetworkSurfaceSnapshot,
+  ProjectBinding,
 } from '@mmnto/totem';
 
 /** Bounded per-request `gh api` timeout (mirrors orient's GH adapters). */
 const GH_TIMEOUT_MS = 15_000;
+
+/** Page size for the labels REST walk (the API max). */
+const LABELS_PER_PAGE = 100;
+
+/**
+ * Hard ceiling on the labels walk. Beyond it the WHOLE surface degrades to
+ * `error` — never a partial list (the rulesets-boundary precedent: an
+ * undercount would let the detector certify conformance from a truncated read).
+ */
+const LABELS_MAX_PAGES = 10;
+
+/** `first:` page size for the project single-select field read. */
+const PROJECT_FIELDS_FIRST = 50;
+
+/** The repo owning the canonical label script. */
+const LABEL_CANON_REPO = 'mmnto-ai/totem';
+
+/** The canonical label script's repo-relative path. */
+const LABEL_CANON_PATH = 'scripts/sync-labels.ps1';
+
+/** Detail prefix for a failed canonical (non-local) canon fetch. */
+const LABEL_CANON_FETCH_PREFIX = `canonical fetch ${LABEL_CANON_REPO}:${LABEL_CANON_PATH}: `;
+
+/** Short-sha length used in the canon's provenance detail. */
+const CANON_SHA_LENGTH = 7;
+
+/** Max chars of a GraphQL error message carried into a surface detail. */
+const GRAPHQL_DETAIL_MAX = 120;
 
 /**
  * The registry mapping a capability-probe contract id to its network-posture
@@ -48,6 +87,8 @@ const NETWORK_POSTURE_ROW_IDS: Record<string, NetworkPostureRow> = {
   'repo-merge-posture': 'repo-merge-posture',
   'repo-required-checks-posture': 'repo-required-checks-posture',
   'repo-branch-protection-posture': 'repo-branch-protection-posture',
+  'gh-issue-label-canon': 'gh-issue-label-canon',
+  'gh-project-vocabulary': 'gh-project-vocabulary',
 };
 
 /** Resolve a contract id to its network-posture row kind, or undefined when unregistered. */
@@ -71,6 +112,19 @@ export interface GhFetchResult {
  */
 export type GhFetch = (apiPath: string, cwd: string) => GhFetchResult;
 
+/**
+ * Injectable GraphQL transport seam: issue one read-only `gh api graphql` query
+ * from `cwd`. Same degradation contract as {@link GhFetch} — a transport throw
+ * classifies through {@link classifyGhError}, and a 200 body carrying `errors`
+ * classifies through {@link classifyGraphqlBody} (GraphQL reports authorization
+ * and not-found failures in the BODY, not the HTTP status).
+ */
+export type GhGraphql = (
+  query: string,
+  variables: Record<string, string | number>,
+  cwd: string,
+) => GhFetchResult;
+
 /** Injectable local-remote reader (default `git remote get-url origin`). */
 export type ReadRemote = (cwd: string) => string | undefined;
 
@@ -90,8 +144,16 @@ export interface ResolveNetworkSnapshotsOptions {
   gitRoot: string;
   /** Optional cross-repo read set (`orient.parityProbeRepos`), each an `owner/repo` slug. */
   probeRepos?: string[];
+  /**
+   * The CURRENT repo's bound GH Project number (`orient.projectNumber`). Only
+   * the current repo's binding is locally derivable — a sibling's config is not
+   * a surface this checkout reads (mmnto-ai/totem#2791).
+   */
+  projectNumber?: number;
   /** Injectable transport (default spawns `gh api`). */
   ghFetch?: GhFetch;
+  /** Injectable GraphQL transport (default spawns `gh api graphql`). */
+  ghGraphql?: GhGraphql;
   /** Injectable local-remote reader (default reads `git remote get-url origin`). */
   readRemote?: ReadRemote;
 }
@@ -101,19 +163,44 @@ interface SurfaceNeed {
   repoSettings: boolean;
   rulesets: boolean;
   branchProtection: boolean;
+  labels: boolean;
+  projectFields: boolean;
+}
+
+/** A zero need — the per-repo accumulator's starting point. */
+function noSurfaceNeed(): SurfaceNeed {
+  return {
+    repoSettings: false,
+    rulesets: false,
+    branchProtection: false,
+    labels: false,
+    projectFields: false,
+  };
+}
+
+/** True when at least one surface is needed. */
+function anySurfaceNeeded(need: SurfaceNeed): boolean {
+  return (
+    need.repoSettings || need.rulesets || need.branchProtection || need.labels || need.projectFields
+  );
 }
 
 /** Per-row surface requirements. */
 function surfaceNeedsFor(row: NetworkPostureRow): SurfaceNeed {
+  const need = noSurfaceNeed();
   switch (row) {
     case 'repo-merge-posture':
-      return { repoSettings: true, rulesets: false, branchProtection: false };
+      return { ...need, repoSettings: true };
     case 'repo-required-checks-posture':
-      return { repoSettings: false, rulesets: true, branchProtection: false };
+      return { ...need, rulesets: true };
     case 'repo-branch-protection-posture':
-      return { repoSettings: false, rulesets: true, branchProtection: true };
+      return { ...need, rulesets: true, branchProtection: true };
+    case 'gh-issue-label-canon':
+      return { ...need, labels: true };
+    case 'gh-project-vocabulary':
+      return { ...need, projectFields: true };
     default:
-      return { repoSettings: false, rulesets: false, branchProtection: false };
+      return need;
   }
 }
 
@@ -121,6 +208,8 @@ function surfaceNeedsFor(row: NetworkPostureRow): SurfaceNeed {
 interface RosterEntry {
   repoSlug: string;
   repoId: string;
+  /** True ONLY for the local-remote-derived entry (cross-repo probes are false). */
+  current: boolean;
 }
 
 /**
@@ -142,6 +231,7 @@ export async function resolveNetworkSnapshots(
   // never invoked, so no `gh`/`git` subprocess runs.
   const { safeExec } = await import('@mmnto/totem');
   const ghFetch = options.ghFetch ?? makeDefaultGhFetch(safeExec);
+  const ghGraphql = options.ghGraphql ?? makeDefaultGhGraphql(safeExec);
   const readRemote = options.readRemote ?? makeDefaultReadRemote(safeExec);
   const roster = resolveRoster(options, readRemote);
 
@@ -149,23 +239,48 @@ export async function resolveNetworkSnapshots(
   for (const entry of roster) {
     // Per-repo needed surfaces = union over the rows in scope for THIS repo
     // (a `consumers: [totem]` row contributes its surfaces only to totem).
-    const need: SurfaceNeed = { repoSettings: false, rulesets: false, branchProtection: false };
+    const need = noSurfaceNeed();
+    let vocabularyInScope = false;
     for (const spec of options.rows) {
       if (spec.consumers !== undefined && !spec.consumers.includes(entry.repoId)) continue;
+      if (spec.row === 'gh-project-vocabulary') vocabularyInScope = true;
       const rowNeed = surfaceNeedsFor(spec.row);
       need.repoSettings ||= rowNeed.repoSettings;
       need.rulesets ||= rowNeed.rulesets;
       need.branchProtection ||= rowNeed.branchProtection;
+      need.labels ||= rowNeed.labels;
+      need.projectFields ||= rowNeed.projectFields;
     }
-    if (!need.repoSettings && !need.rulesets && !need.branchProtection) continue;
+    // The project BINDING is part of the snapshot only when the vocabulary row
+    // is in scope here — every other snapshot keeps its exact prior shape.
+    const project = vocabularyInScope ? projectBindingFor(entry, options.projectNumber) : undefined;
+    // Only a BOUND project is addressable: an unbound current repo / a sibling
+    // renders honest-absent in the detector, so nothing is read for it.
+    if (project?.kind !== 'bound') need.projectFields = false;
+    // A repo whose only in-scope row is the vocabulary row still gets a
+    // snapshot (binding, no surfaces) so the detector can render its line.
+    if (!anySurfaceNeeded(need) && project === undefined) continue;
 
     snapshots.push({
       repoSlug: entry.repoSlug,
       repoId: entry.repoId,
-      surfaces: fetchSurfaces(entry.repoSlug, need, ghFetch, options.gitRoot),
+      surfaces: fetchSurfaces(entry.repoSlug, need, ghFetch, ghGraphql, options.gitRoot, project),
+      ...(project !== undefined ? { project } : {}),
     });
   }
   return snapshots;
+}
+
+/**
+ * The project binding for one roster repo: the current repo binds
+ * `orient.projectNumber` under its own owner; an unset number is `unbound`; a
+ * cross-repo probe is `sibling` (its binding lives in ITS checkout's config,
+ * which this doctor does not read).
+ */
+function projectBindingFor(entry: RosterEntry, projectNumber: number | undefined): ProjectBinding {
+  if (!entry.current) return { kind: 'sibling' };
+  if (projectNumber === undefined) return { kind: 'unbound' };
+  return { kind: 'bound', owner: ownerSegment(entry.repoSlug), number: projectNumber };
 }
 
 /** Build the roster: the current repo (local-remote-derived) plus any opt-in cross-repo slugs. */
@@ -178,7 +293,11 @@ function resolveRoster(
 
   const currentSlug = deriveCurrentSlug(options, readRemote);
   if (currentSlug !== undefined) {
-    entries.push({ repoSlug: currentSlug, repoId: options.repoId ?? repoSegment(currentSlug) });
+    entries.push({
+      repoSlug: currentSlug,
+      repoId: options.repoId ?? repoSegment(currentSlug),
+      current: true,
+    });
     seen.add(currentSlug);
   }
 
@@ -186,7 +305,7 @@ function resolveRoster(
     const slug = raw.trim();
     if (slug.length === 0 || seen.has(slug)) continue;
     // A cross-repo entry's cohort id is the repo segment of its own slug.
-    entries.push({ repoSlug: slug, repoId: repoSegment(slug) });
+    entries.push({ repoSlug: slug, repoId: repoSegment(slug), current: false });
     seen.add(slug);
   }
   return entries;
@@ -213,15 +332,25 @@ function repoSegment(slug: string): string {
   return parts[parts.length - 1] ?? slug;
 }
 
+/** The owner segment of an `owner/repo` slug (the GH Project's org login). */
+function ownerSegment(slug: string): string {
+  const parts = slug.split('/');
+  return parts[0] ?? slug;
+}
+
 /**
  * Extract `owner/repo` from an ssh (`git@host:owner/repo.git`) or https
  * (`https://host/owner/repo.git`) remote URL, tolerating a trailing `.git` and
- * slashes. Returns undefined when no `owner/repo` pair resolves.
+ * slashes in either order (`…/totem.git/` too — falsification pass 5, p5-F5).
+ * The HOST is not part of the result: a mirror at the same `owner/repo` path
+ * yields the same slug, the same host-blindness the cohort-id derivation has.
+ * Returns undefined when no `owner/repo` pair resolves.
  */
 export function slugFromRemoteUrl(remoteUrl: string | undefined): string | undefined {
   if (typeof remoteUrl !== 'string' || remoteUrl.trim().length === 0) return undefined;
   const trimmed = remoteUrl
     .trim()
+    .replace(/\/+$/, '')
     .replace(/\.git$/i, '')
     .replace(/\/+$/, '');
   const match = /[/:]([^/:]+)\/([^/]+)$/.exec(trimmed);
@@ -239,7 +368,9 @@ function fetchSurfaces(
   slug: string,
   need: SurfaceNeed,
   ghFetch: GhFetch,
+  ghGraphql: GhGraphql,
   cwd: string,
+  project: ProjectBinding | undefined,
 ): NetworkRepoSurfaces {
   const surfaces: NetworkRepoSurfaces = {};
 
@@ -259,6 +390,21 @@ function fetchSurfaces(
 
   if (need.branchProtection) {
     surfaces.branchProtection = fetchBranchProtectionSurface(slug, repoResult, ghFetch, cwd);
+  }
+
+  if (need.labels) {
+    surfaces.labels = fetchLabelsSurface(slug, ghFetch, cwd);
+  }
+
+  // `need.projectFields` is already gated on a BOUND binding by the caller; the
+  // narrowing here is what carries owner/number into the query.
+  if (need.projectFields && project !== undefined && project.kind === 'bound') {
+    surfaces.projectFields = fetchProjectFieldsSurface(
+      project.owner,
+      project.number,
+      ghGraphql,
+      cwd,
+    );
   }
   return surfaces;
 }
@@ -372,6 +518,130 @@ function defaultBranchOf(data: unknown): string | undefined {
   return typeof branch === 'string' && branch.length > 0 ? branch : undefined;
 }
 
+/**
+ * The labels surface: walk `GET /repos/<slug>/labels?per_page=100&page=N` until
+ * a page returns fewer than a full page. NEVER partial — a non-ok page
+ * propagates its outcome, a non-array page degrades, and a walk that reaches the
+ * page cap degrades the WHOLE surface (an undercount would let the detector
+ * certify canon-conformance from a truncated list).
+ */
+function fetchLabelsSurface(slug: string, ghFetch: GhFetch, cwd: string): NetworkSurfaceSnapshot {
+  const all: unknown[] = [];
+  for (let page = 1; page <= LABELS_MAX_PAGES; page += 1) {
+    const result = ghFetch(`/repos/${slug}/labels?per_page=${LABELS_PER_PAGE}&page=${page}`, cwd);
+    if (result.outcome !== 'ok') return toSnapshot(result);
+    if (!Array.isArray(result.data)) {
+      return { outcome: 'error', detail: 'unparseable labels page' };
+    }
+    all.push(...result.data);
+    if (result.data.length < LABELS_PER_PAGE) return { outcome: 'ok', data: all };
+  }
+  return {
+    outcome: 'error',
+    detail: `label list exceeds ${LABELS_MAX_PAGES * LABELS_PER_PAGE} — cannot certify`,
+  };
+}
+
+/**
+ * The bound project's single-select vocabulary. `hasNextPage` rides in the body
+ * so the detector (not this edge) decides that an overflowed field list cannot
+ * certify — the edge stays a transport.
+ */
+const PROJECT_FIELDS_QUERY = `query($org: String!, $number: Int!) { organization(login: $org) { projectV2(number: $number) { title fields(first: ${PROJECT_FIELDS_FIRST}) { pageInfo { hasNextPage } nodes { ... on ProjectV2SingleSelectField { name options { name } } } } } } }`;
+
+/** Read the bound project's single-select fields (one GraphQL query). */
+function fetchProjectFieldsSurface(
+  owner: string,
+  number: number,
+  ghGraphql: GhGraphql,
+  cwd: string,
+): NetworkSurfaceSnapshot {
+  return toSnapshot(ghGraphql(PROJECT_FIELDS_QUERY, { org: owner, number }, cwd));
+}
+
+/** Seams + anchor for {@link resolveLabelCanon}. */
+export interface ResolveLabelCanonOptions {
+  /** The git root the local read is anchored at + `gh` runs in. */
+  gitRoot: string;
+  /**
+   * The current repo's `owner/repo` slug from its LOCAL `origin` remote (no
+   * network; {@link defaultCurrentSlug}). The local read is selected only when
+   * this is exactly the canon's `owner/repo` PATH ({@link LABEL_CANON_REPO};
+   * the host is not compared — a mirror at the same path reads locally, the
+   * same host-blindness the cohort-id derivation has, disclosed). A
+   * fork or a differently owned checkout — even one whose cohort id derives to
+   * `totem` from its package name or its directory — takes the canonical
+   * contents fetch, so a stale or edited local script can never pose as the
+   * canon (Greptile P1 on mmnto-ai/totem#2797). Absent ⇒ the fetch.
+   */
+  currentSlug?: string;
+  /** Transport for the canonical (non-canon-repo) read. Tests inject; production builds one. */
+  ghFetch?: GhFetch;
+  /** Test seam for the local read (default: UTF-8 `readFileSync`). */
+  readFile?: (absPath: string) => string;
+}
+
+/**
+ * Resolve the ROSTER-WIDE label canon: the TEXT of
+ * `mmnto-ai/totem:scripts/sync-labels.ps1`, plus a `detail` naming its
+ * provenance. In the canon repository's own checkout (origin exactly
+ * `mmnto-ai/totem`) the file is local (no network, no rate limit); every other
+ * checkout — every other cohort repo AND every fork — reads the canonical blob
+ * over the contents API and discloses the blob sha. Parsing happens in core
+ * (Tenet 20) — this only resolves TEXT. Never throws: an unreadable canon is a
+ * cannot-verify outcome.
+ */
+export function resolveLabelCanon(options: ResolveLabelCanonOptions): NetworkSurfaceSnapshot {
+  if (options.currentSlug === LABEL_CANON_REPO) {
+    const readFile = options.readFile ?? ((absPath: string) => fs.readFileSync(absPath, 'utf-8'));
+    try {
+      const text = readFile(path.join(options.gitRoot, ...LABEL_CANON_PATH.split('/')));
+      return { outcome: 'ok', data: text, detail: `local checkout ${LABEL_CANON_PATH}` };
+      // totem-context: an absent/unreadable script in this checkout is a cannot-verify outcome for the canon (the detector renders `unknown`), never a throw and never a conformance verdict.
+    } catch (err) {
+      void err;
+      return { outcome: 'error', detail: `local checkout ${LABEL_CANON_PATH} unreadable` };
+    }
+  }
+
+  const ghFetch = options.ghFetch;
+  if (ghFetch === undefined) {
+    return { outcome: 'no-transport', detail: `${LABEL_CANON_FETCH_PREFIX}no transport` };
+  }
+  const result = ghFetch(
+    `/repos/${LABEL_CANON_REPO}/contents/${LABEL_CANON_PATH}`,
+    options.gitRoot,
+  );
+  if (result.outcome !== 'ok') {
+    return {
+      outcome: result.outcome,
+      detail: `${LABEL_CANON_FETCH_PREFIX}${result.detail ?? result.outcome}`,
+    };
+  }
+  const contents = narrowContentsResponse(result.data);
+  if (contents === undefined) {
+    return { outcome: 'error', detail: 'unparseable contents response' };
+  }
+  // The API wraps the base64 payload at 60 columns and the script itself is
+  // CRLF — `Buffer.from(…, 'base64')` skips the wrapping newlines and the
+  // decoded bytes keep their own line endings verbatim.
+  const text = Buffer.from(contents.content, 'base64').toString('utf8');
+  return {
+    outcome: 'ok',
+    data: text,
+    detail: `${LABEL_CANON_REPO}:${LABEL_CANON_PATH}@${contents.sha.slice(0, CANON_SHA_LENGTH)}`,
+  };
+}
+
+/** Narrow a contents-API 200 to the base64 payload we can decode, else undefined. */
+function narrowContentsResponse(data: unknown): { content: string; sha: string } | undefined {
+  if (typeof data !== 'object' || data === null) return undefined;
+  const body = data as { content?: unknown; encoding?: unknown; sha?: unknown };
+  if (body.encoding !== 'base64') return undefined;
+  if (typeof body.content !== 'string' || typeof body.sha !== 'string') return undefined;
+  return { content: body.content, sha: body.sha };
+}
+
 // ─── Default transport (spawns `gh api`; never used in tests) ─────────────────
 
 /** The `safeExec` signature the default seams close over (subset of core's export). */
@@ -407,6 +677,149 @@ function makeDefaultGhFetch(safeExec: SafeExecFn): GhFetch {
       return { outcome: 'error', detail: 'unparseable gh api response' };
     }
   };
+}
+
+/**
+ * Build the production {@link GhFetch} for callers OUTSIDE
+ * {@link resolveNetworkSnapshots} (e.g. the label-canon resolution in
+ * `doctor-parity.ts`). Async only because `safeExec` is lazily imported — the
+ * returned transport is synchronous, and NOTHING spawns until it is called, so
+ * a test that never calls it never touches `gh`.
+ */
+export async function defaultGhFetch(): Promise<GhFetch> {
+  const { safeExec } = await import('@mmnto/totem');
+  return makeDefaultGhFetch(safeExec);
+}
+
+/**
+ * The current repo's `owner/repo` slug from its LOCAL `origin` remote, for
+ * callers outside {@link resolveNetworkSnapshots} (the label-canon source
+ * selection in `doctor-parity.ts`). No network: one `git remote get-url`
+ * read, degraded to `undefined` when there is no remote, no git, or no
+ * parseable `owner/repo`. Async only for the lazy `safeExec` import.
+ */
+export async function defaultCurrentSlug(gitRoot: string): Promise<string | undefined> {
+  const { safeExec } = await import('@mmnto/totem');
+  return slugFromRemoteUrl(makeDefaultReadRemote(safeExec)(gitRoot));
+}
+
+/**
+ * Build the default {@link GhGraphql}: `gh api graphql -f query=… -f/-F k=v`
+ * (a `-F` variable is sent typed, which the `$number: Int!` argument requires).
+ * Read-only like the REST default; a spawn/HTTP failure classifies through
+ * {@link classifyGhError}, and a 200 body classifies through
+ * {@link classifyGraphqlBody}.
+ */
+function makeDefaultGhGraphql(safeExec: SafeExecFn): GhGraphql {
+  return (
+    query: string,
+    variables: Record<string, string | number>,
+    cwd: string,
+  ): GhFetchResult => {
+    const args = ['api', 'graphql', '-f', `query=${query}`];
+    for (const [key, value] of Object.entries(variables)) {
+      args.push(typeof value === 'number' ? '-F' : '-f', `${key}=${value}`);
+    }
+    let raw: string;
+    try {
+      raw = safeExec('gh', args, {
+        cwd,
+        timeout: GH_TIMEOUT_MS,
+        env: { ...process.env, GH_PROMPT_DISABLED: '1' },
+      });
+      // totem-context: a gh failure (no token, 4xx/5xx, offline, gh absent) is classified into a per-surface outcome (§14 clause 2/4), never rethrown — the sensor must degrade honestly, not crash.
+    } catch (err) {
+      return classifyGhError(err);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+      // totem-context: an unparseable 200 body is a transient `error` outcome (→ unknown), not a throw.
+    } catch {
+      return { outcome: 'error', detail: 'unparseable gh api graphql response' };
+    }
+    return classifyGraphqlBody(body);
+  };
+}
+
+/**
+ * Classify a GraphQL 200 BODY (GraphQL reports authorization + not-found in the
+ * body, not the HTTP status). ANY `errors` entry is decisive: GraphQL returns
+ * partial data beside its errors (a nested FORBIDDEN, a node-limit hit, a
+ * SERVICE_UNAVAILABLE on one field), and a partial field list verdicted as if
+ * complete is a drift verdict on a cannot-verify read — the one outcome §14
+ * clause 2 forbids (falsification pass 1, F1: a FORBIDDEN body with a half-read
+ * project rendered "Priority: field absent"). Pure: no I/O, exported for test.
+ */
+export function classifyGraphqlBody(body: unknown): GhFetchResult {
+  // Decisive on PRESENCE, whatever the shape: a conforming server sends a
+  // non-empty list of maps, but a string entry, a null entry, or a bare object
+  // must still never read as "no errors" (falsification pass 2, p2-F3).
+  if (!graphqlBodyHasErrors(body)) {
+    return { outcome: 'ok', data: body };
+  }
+  const errors = graphqlErrorsOf(body);
+  const haystack = errors
+    .map((e) =>
+      typeof e === 'string'
+        ? e
+        : `${typeof e.message === 'string' ? e.message : ''} ${typeof e.type === 'string' ? e.type : ''}`,
+    )
+    .join(' ');
+  const first = errors.find(
+    (e) =>
+      (typeof e === 'string' && e.length > 0) ||
+      (typeof e !== 'string' && typeof e.message === 'string' && e.message.length > 0),
+  );
+  const firstMessage =
+    typeof first === 'string'
+      ? first
+      : typeof first?.message === 'string'
+        ? first.message
+        : 'graphql error';
+  const detail = firstMessage.slice(0, GRAPHQL_DETAIL_MAX);
+  if (/permission|scope|not accessible|FORBIDDEN|INSUFFICIENT_SCOPES/i.test(haystack)) {
+    return { outcome: 'auth', detail };
+  }
+  if (/NOT_FOUND|could not resolve/i.test(haystack)) {
+    return { outcome: 'not-found', detail };
+  }
+  return { outcome: 'error', detail };
+}
+
+/** True when the body carries an `errors` member that is not an empty list — any shape counts. */
+function graphqlBodyHasErrors(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false;
+  const errors = (body as { errors?: unknown }).errors;
+  if (errors === undefined || errors === null) return false;
+  return !Array.isArray(errors) || errors.length > 0;
+}
+
+/** The readable `errors` entries of a GraphQL body: maps and bare strings (anything else contributes nothing). */
+function graphqlErrorsOf(body: unknown): (string | { message?: unknown; type?: unknown })[] {
+  if (typeof body !== 'object' || body === null) return [];
+  const errors = (body as { errors?: unknown }).errors;
+  const list = Array.isArray(errors) ? errors : [errors];
+  return list.filter((e): e is string | { message?: unknown; type?: unknown } => {
+    return typeof e === 'string' || (typeof e === 'object' && e !== null);
+  });
+}
+
+/**
+ * True when the label-canon row will verdict at least one roster repo — the
+ * gate on the roster-wide canon read (falsification pass 1, F7; pass 2, p2-F7).
+ * The SAME predicate core applies per repo (`consumers` undefined = every repo),
+ * so the canon is read exactly when some line will use it. Pure, exported for test.
+ */
+export function labelCanonNeeded(
+  rows: readonly NetworkRowSpec[],
+  snapshots: readonly NetworkProbeRepoSnapshot[],
+): boolean {
+  const labelRow = rows.find((s) => s.row === 'gh-issue-label-canon');
+  if (labelRow === undefined) return false;
+  return snapshots.some(
+    (snap) => labelRow.consumers === undefined || labelRow.consumers.includes(snap.repoId),
+  );
 }
 
 /** Fields a `safeExec` throw carries (status/stderr) — mirrors core's `SafeExecErrorFields`. */

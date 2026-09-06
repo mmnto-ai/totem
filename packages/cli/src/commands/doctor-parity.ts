@@ -667,6 +667,10 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
   // is always probed; this only widens the roster). Captured from the SAME
   // repo-local config load — never leaked from the global profile.
   let probeRepos: string[] | undefined;
+  // The CURRENT repo's bound GH Project number — the one binding the
+  // `gh-project-vocabulary` row can derive locally (mmnto-ai/totem#2791).
+  // Captured from the SAME repo-local config load as `probeRepos`.
+  let projectNumber: number | undefined;
   try {
     const configPath = resolveConfigPath(cwd);
     // Repo-scoped by design: the manifest location is per-repo, so a config-less
@@ -690,6 +694,7 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       hookTotemDir =
         hookTotemDirProblem(configuredTotemDir) === null ? configuredTotemDir : '.totem';
       probeRepos = config.orient?.parityProbeRepos;
+      projectNumber = config.orient?.projectNumber;
     }
     // totem-context: a missing/corrupt totem config is the honest-absent path (treated as "no parity manifest configured"), not a sensor failure — the doctor runs against config-less repos by design.
   } catch (err) {
@@ -883,8 +888,14 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
       // the manifest ONCE, up front, so the pure detector only verdicts. An empty
       // roster / absent rows → no fetch. The default transport spawns `gh api`;
       // gh-absent degrades every surface to a skip (§14 clause 4). NEVER throws.
-      const { networkPostureRowFor, resolveNetworkSnapshots } =
-        await import('./doctor-parity-fetch.js');
+      const {
+        defaultCurrentSlug,
+        defaultGhFetch,
+        labelCanonNeeded,
+        networkPostureRowFor,
+        resolveLabelCanon,
+        resolveNetworkSnapshots,
+      } = await import('./doctor-parity-fetch.js');
       const networkRowSpecs = contracts.flatMap((c) => {
         if (c.manifestation !== 'capability-probe') return [];
         const row = networkPostureRowFor(c.id);
@@ -899,8 +910,26 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
               gitRoot,
               ...(repoId !== undefined ? { repoId } : {}),
               ...(probeRepos !== undefined ? { probeRepos } : {}),
+              ...(projectNumber !== undefined ? { projectNumber } : {}),
             })
           : [];
+      // The label canon is ROSTER-WIDE (one canon, many repos), so it resolves
+      // once here — and ONLY when the label row is present AND some roster repo
+      // is inside ITS consumers scope, so an empty roster, or a row scoped away
+      // from every roster repo, reads nothing (no `gh`; falsification pass 1, F7).
+      // The local read is keyed to the current ORIGIN slug being the canon's
+      // own repository, never to the cohort id (a fork whose id derives to
+      // `totem` from its package name or directory must take the fetch —
+      // Greptile P1 on mmnto-ai/totem#2797).
+      let labelCanon: ReturnType<typeof resolveLabelCanon> | undefined;
+      if (labelCanonNeeded(networkRowSpecs, networkSnapshots)) {
+        const currentSlug = await defaultCurrentSlug(gitRoot);
+        labelCanon = resolveLabelCanon({
+          gitRoot,
+          ...(currentSlug !== undefined ? { currentSlug } : {}),
+          ghFetch: await defaultGhFetch(),
+        });
+      }
 
       // flatMap, not map: a mechanical contract (claude-skills) expands to one
       // line PER distributed skill, so the per-contract count can exceed the
@@ -931,6 +960,9 @@ export async function checkParity(cwd: string): Promise<ParityCheckResult> {
               repos: networkSnapshots,
               ...(networkRow === 'repo-required-checks-posture'
                 ? { declarationPath: path.join(gitRoot, '.totem', 'rulesets', 'main.json') }
+                : {}),
+              ...(networkRow === 'gh-issue-label-canon' && labelCanon !== undefined
+                ? { labelCanon }
                 : {}),
             }).map((l) => {
               if (l.verdict.status === 'warn' && c.blocking === true) blockingDrift = true;
