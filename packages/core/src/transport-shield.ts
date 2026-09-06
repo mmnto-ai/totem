@@ -49,13 +49,19 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * model of which text is code and no pre-pass to disagree with it: a `<# … #>`
  * block comment outside quotes is skipped whole (a `<#` inside a string is
  * text; a quote inside a block opens nothing), the backtick is the escape
- * inside a double-quoted string, and a `#` begins a comment right after a
- * string that BEGAN its token (`'a'#b`) or after the assignment operator
- * (`$x=#c`, `$x =#c`) — as PowerShell's own tokenizer reads them; `x='a'#c`
- * and `a=#b` stay single tokens under both grammars. Not read, disclosed:
- * PowerShell here-strings (`@" … "@`, `@' … '@`) are not parsed — a quote
- * inside one can still desynchronize the quote scan for that tool, the miss
- * direction. The MSYS opt-out is honoured through the shell forms that export
+ * inside a double-quoted string, and a `#` is read by the same word-boundary
+ * rule as bash's. Not read, disclosed: PowerShell also begins a comment after a
+ * token-ending string, an assignment operator or a `)` (`'a'#b`, `$x=#c`,
+ * `$(1)#c`), which the scanners read as word text — the over-scan direction,
+ * except when such a comment carries an odd quote on the same line as a later
+ * positive, the miss direction. PowerShell's token boundaries are not derivable
+ * from a character walk (`a=#b` and `$x=#c` differ only by statement position;
+ * `'a'#b` and `x='a'#c` only by where the token began), and five successive
+ * attempts to model them each opened a sibling shape (the bot-round record on
+ * mmnto-ai/totem#2804), so they stay disclosed rather than modelled. PowerShell
+ * here-strings (`@" … "@`, `@' … '@`) are not parsed either — a quote inside
+ * one can desynchronize the quote scan for that tool, the miss direction. The
+ * MSYS opt-out is honoured through the shell forms that export
  * the variable to the judged program (MSYS reads its presence, any value): the
  * segment's own `VAR=… prog` prefix, an earlier `export` / `declare -x` /
  * `typeset -x`, a bare assignment under `set -a` or followed by `export NAME`,
@@ -172,12 +178,10 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
 /**
  * What the scanners read beyond bash's grammar. `powershell` (the PowerShell
  * tool): a `<# … #>` block comment outside quotes is skipped whole (inside a
- * `$( … )` too); the backtick is the escape inside a double-quoted string; a
- * `#` begins a comment right after a string that began its token or after the
- * assignment operator (`$x=`, a standalone `=`). Everything else is read with bash's
- * rules — `''` inside single quotes and `""` inside double quotes read as two
- * adjacent strings under both grammars, so they need no rule. Not read,
- * disclosed: PowerShell here-strings (`@" … "@`, `@' … '@`).
+ * `$( … )` too); the backtick is the escape inside a double-quoted string.
+ * Everything else — where a `#` begins a comment, what a quote or an `=` does
+ * to a token — is read with bash's rules; the shapes where PowerShell's
+ * tokenizer differs are disclosed in the module header, not modelled.
  */
 export interface ScanOptions {
   powershell?: boolean;
@@ -257,12 +261,6 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
   let inSingle = false;
   let inDouble = false;
   let boundary = true;
-  // PowerShell: a string that BEGAN its token ends it (`'a'#b` → comment), one
-  // that continues a token does not (`x='a'#c` is one token); an `=` ends a
-  // token only as the assignment operator (`$x=#c`, `$x =#c`), never inside an
-  // argument (`a=#b`). Both read from PowerShell's own tokenizer.
-  let quoteStartsToken = false;
-  let wordHead = '';
   let i = 0;
   const consumeBodies = (from: number): number => {
     let cursor = from;
@@ -304,11 +302,9 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
   while (i < command.length) {
     const ch = command[i] as string;
     if (inSingle) {
-      if (ch === "'") {
-        inSingle = false;
-        boundary = ps && quoteStartsToken;
-      } else boundary = false;
+      if (ch === "'") inSingle = false;
       i += 1;
+      boundary = false;
       continue;
     }
     if (inDouble) {
@@ -323,11 +319,9 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
         boundary = false;
         continue;
       }
-      if (ch === '"') {
-        inDouble = false;
-        boundary = ps && quoteStartsToken;
-      } else boundary = false;
+      if (ch === '"') inDouble = false;
       i += 1;
+      boundary = false;
       continue;
     }
     if (ps && command.startsWith('<#', i)) {
@@ -383,14 +377,12 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
       continue;
     }
     if (ch === "'") {
-      quoteStartsToken = boundary;
       inSingle = true;
       i += 1;
       boundary = false;
       continue;
     }
     if (ch === '"') {
-      quoteStartsToken = boundary;
       inDouble = true;
       i += 1;
       boundary = false;
@@ -414,11 +406,7 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
         continue;
       }
     }
-    const startsWord = boundary;
-    if (startsWord) wordHead = ch;
-    // PowerShell: the ASSIGNMENT operator ends a token, so a `#` after it begins a
-    // comment (`$x=#c`; `$x =#c`); an `=` inside an argument does not (`a=#b`).
-    boundary = WORD_BOUNDARY.has(ch) || (ps && ch === '=' && (startsWord || wordHead === '$'));
+    boundary = WORD_BOUNDARY.has(ch);
     i += 1;
   }
   if (pending.length > 0) consumeBodies(command.length);
@@ -512,13 +500,6 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
   let inWord = false;
   let segStart = 0;
   let i = 0;
-  // PowerShell: a string that BEGAN its token ends it, so a `#` right after that
-  // closing quote begins a comment (`'a'#b`); a string continuing a token does
-  // not (`x='a'#c`); an `=` ends a token only as the assignment operator
-  // (`$x=#c`, `$x =#c`), never inside an argument (`a=#b`). bash: the word
-  // continues in every case.
-  let afterQuote = false;
-  let wordHead = '';
   const flushWord = (): void => {
     if (inWord) tokens.push(word);
     word = '';
@@ -531,8 +512,6 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
   };
   while (i < command.length) {
     const ch = command[i] as string;
-    const quoteJustClosed = afterQuote;
-    afterQuote = false;
     // A line continuation is whitespace, never an operator or a word character.
     if (ch === '\\' && command[i + 1] === '\n') {
       flushWord();
@@ -553,12 +532,11 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i = close === -1 ? command.length : close + 2;
       continue;
     }
-    const afterAssignment = ps && command[i - 1] === '=' && (word === '=' || wordHead === '$');
-    if (ch === '#' && (!inWord || quoteJustClosed || afterAssignment)) {
+    if (ch === '#' && !inWord) {
       // A comment runs to the end of the line and is discarded without quote
-      // processing; the newline stays, a separator like any other. PowerShell
-      // also begins one right after a token-starting string or the assignment
-      // operator.
+      // processing; the newline stays, a separator like any other. Read by the
+      // same word-boundary rule for both tools (see the header for what
+      // PowerShell reads differently and why that stays disclosed).
       flushWord();
       const nl = command.indexOf('\n', i);
       i = nl === -1 ? command.length : nl;
@@ -585,19 +563,14 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       continue;
     }
     if (ch === "'") {
-      const startedToken = !inWord;
-      if (startedToken) wordHead = ch;
       const close = command.indexOf("'", i + 1);
       const end = close === -1 ? command.length : close;
       word += command.slice(i + 1, end);
       inWord = true;
       i = end + 1;
-      afterQuote = ps && startedToken;
       continue;
     }
     if (ch === '"') {
-      const startedToken = !inWord;
-      if (startedToken) wordHead = ch;
       i += 1;
       inWord = true;
       while (i < command.length && command[i] !== '"') {
@@ -618,11 +591,9 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
         }
       }
       i += 1;
-      afterQuote = ps && startedToken;
       continue;
     }
     if (ch === '\\' && i + 1 < command.length) {
-      if (!inWord) wordHead = ch;
       word += command[i + 1];
       inWord = true;
       i += 2;
@@ -638,7 +609,6 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       // parentheses balanced OUTSIDE quotes (a `)` inside `"…"` is text): it is
       // part of the word that carries it, so a `#` right after its `)` continues
       // that word.
-      if (!inWord) wordHead = ch;
       const end = substitutionEnd(command, i + 1, ps);
       word += command.slice(i, end);
       inWord = true;
@@ -652,7 +622,6 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
-    if (!inWord) wordHead = ch;
     word += ch;
     inWord = true;
     i += 1;

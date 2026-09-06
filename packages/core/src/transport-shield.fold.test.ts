@@ -436,44 +436,52 @@ describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Gre
     expect(
       run("Write-Output $(1)#c <# ; sed -i 's/\\r$//' f #>", 'win32', 'PowerShell').disposition,
     ).toBe('allow');
-    // A string that BEGAN its token ends it, and the assignment operator ends one,
-    // so the `#` that follows is a comment (PowerShell's own tokenizer).
-    expect(
-      run("Write-Output 'a'#don't\n<# note #>" + sed, 'win32', 'PowerShell').provenance.ref,
-    ).toBe('sed-i-escape');
-    expect(run("$x=#don't\n<# note #>" + sed, 'win32', 'PowerShell').provenance.ref).toBe(
-      'sed-i-escape',
-    );
-    // The same two shapes are word text to bash, where `'a'#b` is one word.
+    // A `#` is read by bash's word-boundary rule for both tools: `'a'#b` is one
+    // word under either grammar to the scanners.
     expect(tokenizeShell("echo 'a'#b")[0]?.tokens).toEqual(['echo', 'a#b']);
-    expect(tokenizeShell("echo 'a'#b", { powershell: true })[0]?.tokens).toEqual(['echo', 'a']);
+    expect(tokenizeShell("echo 'a'#b", { powershell: true })[0]?.tokens).toEqual(['echo', 'a#b']);
   });
 
-  it('a string that continues a token, and an = inside an argument, end nothing; a <# inside $( … ) is a comment there too (final check, BRe-F1 / F2 / F3)', () => {
+  it("PowerShell's own token boundaries are disclosed, not modelled: the scanners read a # after a string, an = or a ) by bash's rule (the bot-round record)", () => {
     const tail = " ; sed -i 's/\\d/x/' f";
-    // PSParser: Command(x=a#c) StatementSeparator(;) Command(sed) — the sed runs.
+    // Where PowerShell reads code and bash's rule agrees — the positive is reached.
+    // PSParser: Command(x=a#c) StatementSeparator(;) Command(sed).
     expect(run("x='a'#c" + tail, 'win32', 'PowerShell').provenance.ref).toBe('sed-i-escape');
-    // PSParser: CommandArgument(a=#b) — one token, the sed runs.
+    // PSParser: CommandArgument(a=#b) / CommandArgument($x=#c) — one token each, the sed runs.
     expect(run('Write-Output a=#b' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
+      'sed-i-escape',
+    );
+    expect(run('Write-Output $x=#c' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
       'sed-i-escape',
     );
     expect(run('Write-Output http://h/p?a=#t' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
       'sed-i-escape',
     );
-    expect(run('Write-Output --define=#fff' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
+    // Where PowerShell reads a comment and bash's rule reads code — the over-scan
+    // direction: the tail PowerShell would never run is denied anyway. Disclosed.
+    expect(run('Write-Output "a"#c' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
       'sed-i-escape',
     );
-    // PSParser: GroupStart Number Comment(<# ) #>) GroupEnd — the `)` inside the block closes nothing.
+    expect(run('$x=#c' + tail, 'win32', 'PowerShell').provenance.ref).toBe('sed-i-escape');
+    expect(run('Write-Output $(1)#c' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
+      'sed-i-escape',
+    );
+    // The one miss direction of that class: such a comment carrying an odd quote on
+    // the same line as a LATER positive desynchronizes the quote scan. Disclosed in
+    // the header; pinned here so a future model of it shows up as a change.
+    expect(
+      run("Write-Output 'a'#don't\n<# note #>\nsed -i 's/\\r$//' f", 'win32', 'PowerShell')
+        .disposition,
+    ).toBe('allow');
+    // The two rules that DID hold: a `<# … #>` inside a `$( … )` is a comment there
+    // too (PSParser: GroupStart Number Comment(<# ) #>) GroupEnd), and a
+    // backtick-escaped quote does not end a double-quoted string.
     expect(run('Write-Output $(1 <# ) #>)' + tail, 'win32', 'PowerShell').provenance.ref).toBe(
       'sed-i-escape',
     );
     expect(
       run('Write-Output $(Write-Output ")" <# ) #>)' + tail, 'win32', 'PowerShell').provenance.ref,
     ).toBe('sed-i-escape');
-    // Controls: where PowerShell really does comment out the tail.
-    expect(run('Write-Output "a"#c' + tail, 'win32', 'PowerShell').disposition).toBe('allow');
-    expect(run('$x =#c' + tail, 'win32', 'PowerShell').disposition).toBe('allow');
-    expect(run('$x=#c' + tail, 'win32', 'PowerShell').disposition).toBe('allow');
   });
 
   it('an operand after -- is a file sed edits, never a script (final check, BRd-F3)', () => {
