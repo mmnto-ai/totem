@@ -470,7 +470,9 @@ function narrowStringArray(value: unknown): string[] | undefined {
  * render as drift (falsification pass 1, F2); a list is the field's shape, and a
  * mirror of the prose sentence is not a list. Silent member-dropping was the
  * pass-2 residual (p2-F5): a list with an empty member is an authoring error the
- * fallback should surface, not a list to quietly shorten.
+ * fallback should surface, not a list to quietly shorten. The result is built
+ * with `Object.fromEntries`, so a key spelled `__proto__` lands as an own
+ * property of the record, never as its prototype.
  */
 function narrowOptionSets(value: unknown): Record<string, string[]> | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;

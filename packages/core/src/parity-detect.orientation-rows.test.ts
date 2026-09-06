@@ -272,7 +272,8 @@ describe('gh-issue-label-canon', () => {
       labelCtx([labelSnapshot('mmnto-ai/totem', 'totem', undefined)]),
     );
     expect(notProbed[0]?.verdict.status).toBe('unknown');
-    expect(notProbed[0]?.verdict.message).toContain('not probed');
+    // Cannot-verify messages name the repo too (pass 2 p2-F4, pinned pass 3 p3-F3).
+    expect(notProbed[0]?.verdict.message).toContain('mmnto-ai/totem labels: not probed');
 
     const unshaped = detectNetworkPostureContract(
       labelContract,
@@ -293,7 +294,10 @@ describe('gh-issue-label-canon', () => {
       repos,
     });
     expect(absent.map((l) => l.verdict.status)).toEqual(['unknown', 'unknown']);
+    // A roster-wide canon fact still names each repo on its own line (pass 3, p3-F1).
+    expect(absent[0]?.verdict.message).toContain('mmnto-ai/totem: label canon');
     expect(absent[0]?.verdict.message).toContain('not resolved');
+    expect(absent[1]?.verdict.message).toContain('mmnto-ai/totem-strategy: label canon');
 
     const offline = detectNetworkPostureContract(
       labelContract,
@@ -421,9 +425,15 @@ describe('gh-project-vocabulary', () => {
       ]),
     );
     expect(lines.map((l) => l.verdict.status)).toEqual(['skip', 'skip', 'skip']);
+    expect(lines[0]?.verdict.message).toContain('mmnto-ai/totem-status: no project bound');
     expect(lines[0]?.verdict.message).toContain('orient.projectNumber unset');
+    expect(lines[1]?.verdict.message).toContain(
+      'mmnto-ai/liquid-city: bound project not derivable',
+    );
     expect(lines[1]?.verdict.message).toContain('sibling repo');
-    expect(lines[2]?.verdict.message).toContain('not resolved');
+    expect(lines[2]?.verdict.message).toContain(
+      'mmnto-ai/totem-strategy: project binding not resolved',
+    );
   });
 
   it('is unknown when the row text yields no option sets (never a hardcoded pass)', () => {

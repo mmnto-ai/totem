@@ -249,7 +249,8 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
   // a doctrine reword that the grammar reads differently fails HERE instead of
   // darkening the sensor with a green suite. The pack is an optionalDependency
   // that never materializes on an unauthenticated install (mmnto-ai/totem#2289),
-  // so the case is skipped, loudly by name, when the manifest is absent.
+  // so the case is skipped when the manifest is absent (vitest reports the skip
+  // in its counts; this case's title names the reason).
   const PINNED_MANIFEST = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../../../node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml',
@@ -271,7 +272,14 @@ describe('parseExpectedOptionSets (the row grammar)', () => {
       expect(prose.get('Status')).toEqual(STATUS);
       expect(prose.get('Priority')).toEqual(PRIORITY);
       if (row.expectedOptionSets !== undefined) {
-        expect(new Map(Object.entries(row.expectedOptionSets))).toEqual(prose);
+        // Same fields, same SETS: option order is ungoverned (the design's
+        // invariants), so the canon's two homes must agree as sets, not as
+        // sequences (pass 3, p3-F5).
+        const structured = row.expectedOptionSets;
+        expect(Object.keys(structured).sort()).toEqual([...prose.keys()].sort());
+        for (const [field, options] of prose) {
+          expect(new Set(structured[field])).toEqual(new Set(options));
+        }
       }
     },
   );

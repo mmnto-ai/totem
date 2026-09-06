@@ -273,7 +273,7 @@ export interface ProjectVocabularyFault {
 export interface ProjectVocabularyDrift {
   conforming: boolean;
   faults: ProjectVocabularyFault[];
-  /** Governed fields whose SET equals the canon in a different order — information, never a fault. */
+  /** Governed fields whose SET equals the canon in a different order or multiplicity (a duplicated option) — information, never a fault. */
   orderDiffers: string[];
   /** Single-select fields beyond the governed ones — permitted additions (LC's `M`), reported. */
   added: string[];
@@ -301,7 +301,13 @@ export function projectVocabularyDrift(
     const extra = actualOptions.filter((option) => !expectedSet.has(option));
     if (missing.length > 0 || extra.length > 0) {
       faults.push({ field, kind: 'option-set-differs', missing, extra });
-    } else if (expectedOptions.some((option, index) => option !== actualOptions[index])) {
+    } else if (
+      // Equal SETS can still differ in length (a duplicated option name) or in
+      // order; both are information, and neither needs a joined string to see
+      // (pass 2 p2-F2 removed the NUL separator; pass 3 p3-F2 kept the length).
+      actualOptions.length !== expectedOptions.length ||
+      expectedOptions.some((option, index) => option !== actualOptions[index])
+    ) {
       orderDiffers.push(field);
     }
   }

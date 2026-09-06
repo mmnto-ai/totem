@@ -739,7 +739,9 @@ export function classifyGraphqlBody(body: unknown): GhFetchResult {
     )
     .join(' ');
   const first = errors.find(
-    (e) => typeof e === 'string' || (typeof e.message === 'string' && e.message.length > 0),
+    (e) =>
+      (typeof e === 'string' && e.length > 0) ||
+      (typeof e !== 'string' && typeof e.message === 'string' && e.message.length > 0),
   );
   const firstMessage =
     typeof first === 'string'

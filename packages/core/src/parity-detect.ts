@@ -3616,8 +3616,14 @@ function labelCanonLines(
 ): LockContentLine[] {
   const lineName = (repo: NetworkProbeRepoSnapshot): string =>
     `Parity: ${contract.id} [${repo.repoSlug}]`;
+  // A roster-wide canon fact still renders one line per repo, and each line
+  // names its repo (pass 3, p3-F1): the `--json` readout carries no per-repo
+  // line name, so identical messages across a roster would be indistinguishable.
   const everyRepo = (verdict: ParityContractVerdict): LockContentLine[] =>
-    inScope.map((repo) => ({ lineName: lineName(repo), verdict }));
+    inScope.map((repo) => ({
+      lineName: lineName(repo),
+      verdict: { ...verdict, message: `${repo.repoSlug}: ${verdict.message}` },
+    }));
 
   const canonSurface = ctx.labelCanon;
   // The canon is not a probe: an absent surface means the CLI edge never
