@@ -1336,7 +1336,9 @@ export const CLAUDE_SESSION_START_ENTRY = {
 // ONE parameterized PreToolUse wrapper that generalizes the shipped
 // `review-gate.sh` content-hash pattern into a reusable form. It reads the
 // PreToolUse stdin envelope, shells to `totem gate check --event <name>
-// --payload <json>`, parses the emitted `GateVerdict`, and maps
+// --payload -` with the projected JSON on the child's stdin (never argv: a
+// Bash command can run to tens of kilobytes and win32 caps a command line at
+// 32,767 characters), parses the emitted `GateVerdict`, and maps
 // `disposition` → host exit code (ADR-109 §2). One wrapper, N gates: each
 // installed PreToolUse entry points at this same script with a different
 // `--event` arg baked into the `command` string, so new gates need no new
@@ -1531,10 +1533,15 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
+  // The payload rides on the child's STDIN (\`--payload -\`), never argv: a Bash
+  // command can run to tens of kilobytes and win32 caps a command line at
+  // 32,767 characters — an argv payload past it fails the spawn with
+  // ENAMETOOLONG and would land in the fail-closed arm below with nothing
+  // broken (mmnto-ai/totem#2799, pass 3).
   const result = spawnSync(
     process.execPath,
-    [cliPath, 'gate', 'check', '--event', event, '--payload', payload],
-    { encoding: 'utf-8', timeout: 30000 },
+    [cliPath, 'gate', 'check', '--event', event, '--payload', '-'],
+    { encoding: 'utf-8', timeout: 30000, input: payload },
   );
 
   // ─── FAIL-CLOSED ──────────────────────────────────────────────────────

@@ -479,27 +479,30 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
-  /** Where the stub CLI records the argv it was spawned with (absent ⇒ never spawned). */
-  const stubArgvPath = (): string => path.join(cwd, 'stub-argv.json');
+  /** Where the stub CLI records the argv and stdin it was spawned with (absent ⇒ never spawned). */
+  const stubRecordPath = (): string => path.join(cwd, 'stub-record.json');
 
-  /** Install a stub local CLI that records its argv and emits a controlled verdict / exit code. */
+  /** Install a stub local CLI that records its argv + stdin and emits a controlled verdict / exit code. */
   function writeStubCli(opts: { verdict?: unknown; exit?: number }): void {
     const distDir = path.join(cwd, 'node_modules', '@mmnto', 'cli', 'dist');
     fs.mkdirSync(distDir, { recursive: true });
     const verdictJson = opts.verdict === undefined ? '' : JSON.stringify(opts.verdict);
     const exitCode = opts.exit ?? 0;
     // CommonJS stub (the wrapper invokes via `node <path>`); .js is fine here
-    // because there is no package.json type:module in the temp dir. The argv
-    // record is what lets a test assert BOTH that a spawn happened and exactly
-    // which `gate check --event … --payload …` the wrapper projected
-    // (mmnto-ai/totem#2799); `JSON.stringify` on the path handles Windows
-    // separators without a hand-written escape.
+    // because there is no package.json type:module in the temp dir. The record
+    // is what lets a test assert BOTH that a spawn happened and exactly which
+    // `gate check --event … --payload -` the wrapper projected, argv AND the
+    // stdin the payload rides on (mmnto-ai/totem#2799); `JSON.stringify` on
+    // the path handles Windows separators without a hand-written escape.
     const stub = [
       '"use strict";',
+      'const fs = require("fs");',
       `const out = ${JSON.stringify(verdictJson)};`,
-      `require("fs").writeFileSync(${JSON.stringify(
-        stubArgvPath(),
-      )}, JSON.stringify(process.argv.slice(2)));`,
+      'let stdin = "";',
+      'try { stdin = fs.readFileSync(0, "utf-8"); } catch { stdin = ""; }',
+      `fs.writeFileSync(${JSON.stringify(
+        stubRecordPath(),
+      )}, JSON.stringify({ argv: process.argv.slice(2), stdin }));`,
       'if (out) process.stdout.write(out + "\\n");',
       `process.exit(${exitCode});`,
       '',
@@ -507,19 +510,32 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     fs.writeFileSync(path.join(distDir, 'index.js'), stub);
   }
 
-  /** The argv the stub CLI was spawned with, or null when the wrapper never spawned it. */
-  function stubArgv(): string[] | null {
-    if (!fs.existsSync(stubArgvPath())) return null;
-    return JSON.parse(fs.readFileSync(stubArgvPath(), 'utf-8')) as string[];
+  /** What the stub CLI was spawned with, or null when the wrapper never spawned it. */
+  function stubRecord(): { argv: string[]; stdin: string } | null {
+    if (!fs.existsSync(stubRecordPath())) return null;
+    return JSON.parse(fs.readFileSync(stubRecordPath(), 'utf-8')) as {
+      argv: string[];
+      stdin: string;
+    };
   }
 
-  /** The `--payload` JSON the wrapper projected, parsed (throws if it never spawned). */
+  /** The argv the stub CLI was spawned with, or null when the wrapper never spawned it. */
+  function stubArgv(): string[] | null {
+    return stubRecord()?.argv ?? null;
+  }
+
+  /**
+   * The payload JSON the wrapper projected, parsed (throws if it never
+   * spawned). The payload rides on the child's stdin under `--payload -` —
+   * never argv, whose win32 limit a long Bash command would exceed.
+   */
   function spawnedPayload(): Record<string, unknown> {
-    const argv = stubArgv();
-    expect(argv, 'the wrapper never spawned the CLI').not.toBeNull();
-    const at = argv!.indexOf('--payload');
+    const record = stubRecord();
+    expect(record, 'the wrapper never spawned the CLI').not.toBeNull();
+    const at = record!.argv.indexOf('--payload');
     expect(at).toBeGreaterThan(-1);
-    return JSON.parse(argv![at + 1] as string) as Record<string, unknown>;
+    expect(record!.argv[at + 1]).toBe('-');
+    return JSON.parse(record!.stdin) as Record<string, unknown>;
   }
 
   /** Run the rendered wrapper with the given envelope + baked extra args. */
@@ -703,19 +719,29 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(BASH_CMD, [], 'transport-shield');
 
     expect(status).toBe(0);
-    expect(stubArgv()).toEqual([
-      'gate',
-      'check',
-      '--event',
-      'transport-shield',
-      '--payload',
-      expect.any(String),
-    ]);
+    expect(stubArgv()).toEqual(['gate', 'check', '--event', 'transport-shield', '--payload', '-']);
     expect(spawnedPayload()).toEqual({
       tool: 'Bash',
       command: 'git status',
       platform: process.platform,
     });
+  });
+
+  it('a Bash command past the win32 command-line limit still reaches the gate on stdin (P3-F6)', () => {
+    // 40,000 characters: past win32's 32,767-character argv cap, where an argv
+    // payload failed the spawn with ENAMETOOLONG and fell into the fail-closed
+    // arm with nothing broken. On stdin the verdict comes back and maps to exit 0.
+    writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+    const long = 'x'.repeat(40_000);
+    const { status, stderr } = runWrapper(
+      { tool_name: 'Bash', tool_input: { command: long } },
+      [],
+      'transport-shield',
+    );
+
+    expect(status).toBe(0);
+    expect(stderr).not.toContain('fail-closed');
+    expect(spawnedPayload()).toEqual({ tool: 'Bash', command: long, platform: process.platform });
   });
 
   it('transport-shield on a PowerShell envelope spawns the same shape with tool PowerShell', () => {
@@ -742,14 +768,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(DECLARED);
 
     expect(status).toBe(0);
-    expect(stubArgv()).toEqual([
-      'gate',
-      'check',
-      '--event',
-      'freeze-check',
-      '--payload',
-      expect.any(String),
-    ]);
+    expect(stubArgv()).toEqual(['gate', 'check', '--event', 'freeze-check', '--payload', '-']);
     expect(spawnedPayload()).toEqual({ subsystem: 'rule-compilation' });
   });
 

@@ -1967,8 +1967,8 @@ export default {
           .filter((n) => n.length > 0);
         // Empty after parse/trim/filter (e.g. `--gates=,` or whitespace-only):
         // fail loud rather than scaffolding an orphan wrapper with no entry.
-        // Restores parity with the verb's resolveGateEvents no-selection
-        // fail-loud (no default-install).
+        // Restores parity with the verb's resolveGates no-selection fail-loud
+        // (no default-install).
         if (names.length === 0) {
           throw new TotemError(
             'GATE_INVALID',

@@ -31,7 +31,14 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * contexts (a heredoc body, a sed -i expression, an inline node/python body, a
  * gh --body) is not a shape this gate reads; a heredoc inside a `bash -c "…"`
  * or `sh -c '…'` operand is quoted text to this scanner and is not recursed
- * into (a corpus gap, not a fail-open of an applicable row).
+ * into (a corpus gap, not a fail-open of an applicable row); a wrapper that
+ * takes operands of its own before the program (`sudo -u me gh …`, `timeout
+ * 30 gh …`, `npx …`) hides the program from the position anchor — the same
+ * class. The scanners read the shell's own grammar where a mis-read would
+ * desynchronize them: a `#` that begins a word is a comment to the end of the
+ * line, discarded WITHOUT quote processing (bash §3.1.3), and `$(( … ))` /
+ * `(( … ))` arithmetic is skipped, so neither an apostrophe in a comment nor
+ * a `<<` shift can hide a later heredoc or expose comment text as arguments.
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -138,7 +145,47 @@ export interface HeredocSpan {
 /** Inside double quotes a backslash escapes only these (POSIX); elsewhere it is kept. */
 const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
 
-const HEREDOC_AT = /^<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/;
+/**
+ * `<<` or `<<-`, optional blanks, then the delimiter word: quoted (`'EOF'`,
+ * `"EOF"`), backslash-quoted (`\EOF` — bash: any quoted character in the word
+ * quotes the whole delimiter, POSIX 2.7.4), or bare. Groups: 1 the dash, 2+3
+ * a quote and its word, 4 the backslash-quoted word, 5 the bare word.
+ */
+const HEREDOC_AT =
+  /^<<(-?)[ \t]*(?:(['"])([A-Za-z_][A-Za-z0-9_]*)\2|\\([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))/;
+
+/** Characters after which the next character begins a word (where `#` starts a comment). */
+const WORD_BOUNDARY: ReadonlySet<string> = new Set([
+  ' ',
+  '\t',
+  '\r',
+  '\n',
+  ';',
+  '|',
+  '&',
+  '(',
+  ')',
+]);
+
+/**
+ * The index just past the `))` that closes an arithmetic expansion or command
+ * whose opening `$((` / `((` ends at `from`; the end of the command when it is
+ * unterminated. A `<<` inside is a shift, never a heredoc operator.
+ */
+function skipArithmetic(command: string, from: number): number {
+  let depth = 2;
+  let i = from;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+    i += 1;
+  }
+  return command.length;
+}
 
 /**
  * Locate every heredoc in a command in ONE pass that tracks shell quoting and
@@ -151,12 +198,15 @@ const HEREDOC_AT = /^<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/;
  * stripped first — or to the end of the command when no such line exists. An
  * operator with no newline after it yields a body of the remaining text: the
  * conservative reading, so a truncated command still refuses on its escapes.
+ * A `#` that begins a word discards the rest of its line without quote
+ * processing, as bash does, and `$(( … ))` / `(( … ))` arithmetic is skipped.
  */
 export function findHeredocs(command: string): HeredocSpan[] {
   const spans: HeredocSpan[] = [];
   const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
   let inSingle = false;
   let inDouble = false;
+  let boundary = true;
   let i = 0;
   const consumeBodies = (from: number): number => {
     let cursor = from;
@@ -200,6 +250,7 @@ export function findHeredocs(command: string): HeredocSpan[] {
     if (inSingle) {
       if (ch === "'") inSingle = false;
       i += 1;
+      boundary = false;
       continue;
     }
     if (inDouble) {
@@ -209,24 +260,46 @@ export function findHeredocs(command: string): HeredocSpan[] {
         if (ch === '"') inDouble = false;
         i += 1;
       }
+      boundary = false;
+      continue;
+    }
+    if (ch === '#' && boundary) {
+      // A comment: discarded to the end of the line without quote processing;
+      // the newline itself stays (it may end an operator line).
+      const nl = command.indexOf('\n', i);
+      i = nl === -1 ? command.length : nl;
+      continue;
+    }
+    if (ch === '$' && command.startsWith('$((', i)) {
+      i = skipArithmetic(command, i + 3);
+      boundary = false;
+      continue;
+    }
+    if (ch === '(' && command[i + 1] === '(' && boundary) {
+      i = skipArithmetic(command, i + 2);
+      boundary = false;
       continue;
     }
     if (ch === '\\') {
       i += 2;
+      boundary = false;
       continue;
     }
     if (ch === "'") {
       inSingle = true;
       i += 1;
+      boundary = false;
       continue;
     }
     if (ch === '"') {
       inDouble = true;
       i += 1;
+      boundary = false;
       continue;
     }
     if (ch === '\n') {
       i = pending.length > 0 ? consumeBodies(i + 1) : i + 1;
+      boundary = true;
       continue;
     }
     if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
@@ -234,13 +307,15 @@ export function findHeredocs(command: string): HeredocSpan[] {
       if (m !== null) {
         pending.push({
           stripTabs: (m[1] ?? '') === '-',
-          quoted: (m[2] ?? '') !== '',
-          delimiter: m[3] ?? '',
+          quoted: m[2] !== undefined || m[4] !== undefined,
+          delimiter: m[3] ?? m[4] ?? m[5] ?? '',
         });
         i += m[0].length;
+        boundary = false;
         continue;
       }
     }
+    boundary = WORD_BOUNDARY.has(ch);
     i += 1;
   }
   if (pending.length > 0) consumeBodies(command.length);
@@ -274,10 +349,11 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
 
 /**
  * A minimal POSIX-shell tokenizer: splits a command into segments at control
- * operators (`&&`, `||`, `|`, `;`, newline) and each segment into words with
- * quotes resolved. Good enough to find an option's value and a program name; it
- * does not expand anything. Command substitutions `$( … )` stay inside the word
- * that carries them.
+ * operators (`&&`, `||`, `|`, `;`, a background `&`, newline) and each segment
+ * into words with quotes resolved. Good enough to find an option's value and a
+ * program name; it does not expand anything. Command substitutions `$( … )`
+ * stay inside the word that carries them. A `#` that begins a word discards the
+ * rest of its line, as bash does — comment text is never an argument.
  */
 export function tokenizeShell(command: string): ShellSegment[] {
   const segments: ShellSegment[] = [];
@@ -307,6 +383,26 @@ export function tokenizeShell(command: string): ShellSegment[] {
     if (ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
       flushWord();
       i += 3;
+      continue;
+    }
+    if (ch === '#' && !inWord) {
+      // A comment runs to the end of the line and is discarded without quote
+      // processing; the newline stays, a separator like any other.
+      const nl = command.indexOf('\n', i);
+      i = nl === -1 ? command.length : nl;
+      continue;
+    }
+    if (
+      ch === '&' &&
+      command[i + 1] !== '&' &&
+      command[i + 1] !== '>' &&
+      command[i - 1] !== '>' &&
+      command[i - 1] !== '<'
+    ) {
+      // A background `&` ends the segment like `;`; `&&`, `&>`, `>&`, `<&` are not it.
+      flushSegment(i);
+      i += 1;
+      segStart = i;
       continue;
     }
     const op = CONTROL_OPERATORS.find((o) => command.startsWith(o, i));
@@ -413,33 +509,68 @@ const WRAPPERS: ReadonlySet<string> = new Set([
  */
 function programIndex(tokens: readonly string[], program: string): number {
   let i = 0;
-  while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i] as string)) i += 1;
-  while (i < tokens.length && WRAPPERS.has(tokens[i] as string)) i += 1;
+  // Assignments and wrappers interleave: `env VAR=x prog`, `VAR=x sudo prog`.
+  while (i < tokens.length) {
+    const t = tokens[i] as string;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || WRAPPERS.has(t)) i += 1;
+    else break;
+  }
   const t = tokens[i];
   if (t === undefined) return -1;
   return t === program || t.endsWith('/' + program) ? i : -1;
 }
 
 /**
- * An option's value and the flag AS WRITTEN: `--long X`, `--long=X`, `-s X`.
- * Returns null when the option is absent. The short flag is required: the one
- * caller always has one, and a nullable parameter with no null caller is dead
- * code (the github-code-quality inline on mmnto-ai/totem#2804 at ac867140).
+ * Every occurrence of an option with its value and the flag AS WRITTEN:
+ * `--long X`, `--long=X`, `-s X`. Every occurrence, not the first — a `-b`
+ * that is some other option's value would otherwise hide a later, real
+ * `--body`. Empty when the option is absent. The short flag is required: the
+ * one caller always has one (the github-code-quality inline on
+ * mmnto-ai/totem#2804 at ac867140).
  */
-function optionAsWritten(
+function optionsAsWritten(
   tokens: readonly string[],
   long: string,
   short: string,
-): { flag: string; value: string } | null {
+): Array<{ flag: string; value: string }> {
+  const out: Array<{ flag: string; value: string }> = [];
   for (let i = 0; i < tokens.length; i += 1) {
     const t = tokens[i] as string;
     if (t === long || t === short) {
       const value = tokens[i + 1];
-      return value === undefined ? null : { flag: t, value };
+      if (value !== undefined) out.push({ flag: t, value });
+    } else if (t.startsWith(long + '=')) {
+      out.push({ flag: long + '=', value: t.slice(long.length + 1) });
     }
-    if (t.startsWith(long + '=')) return { flag: long + '=', value: t.slice(long.length + 1) };
   }
-  return null;
+  return out;
+}
+
+/**
+ * The text with every single-quoted region (outside double quotes) replaced by
+ * spaces, length preserved: a `$(` inside one is a literal, not a subshell.
+ */
+function blankSingleQuoted(text: string): string {
+  let out = '';
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i] as string;
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      out += ch === "'" ? ch : ' ';
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"' && text[i - 1] !== '\\') inDouble = false;
+      out += ch;
+      continue;
+    }
+    if (ch === "'") inSingle = true;
+    else if (ch === '"') inDouble = true;
+    out += ch;
+  }
+  return out;
 }
 
 /** The values of every `-e` / `--expression` / `--expression=` operand in a sed argv. */
@@ -525,8 +656,10 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       for (const seg of tokenizeShell(blanked)) {
         const at = programIndex(seg.tokens, 'gh');
         if (at === -1) continue;
-        const hit = optionAsWritten(seg.tokens.slice(at + 1), '--body', '-b');
-        if (hit !== null && hit.value.startsWith('/')) {
+        const hit = optionsAsWritten(seg.tokens.slice(at + 1), '--body', '-b').find((h) =>
+          h.value.startsWith('/'),
+        );
+        if (hit !== undefined) {
           const written = hit.flag.endsWith('=')
             ? `${hit.flag}${hit.value}`
             : `${hit.flag} ${hit.value}`;
@@ -572,8 +705,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             detail: `a sed -i invocation carries ${sedExpressions(args).length} -e expressions`,
           };
         }
-        if (seg.raw.includes('\n')) {
-          return { fragment: seg.raw.trim(), detail: 'a sed -i invocation spans a newline' };
+        // A QUOTED newline only: a bare newline ends the segment and an unquoted
+        // backslash-newline is a continuation the tokenizer drops, so the only
+        // newline that reaches a token is one inside quotes — the shape that mangles.
+        if (seg.tokens.some((t) => t.includes('\n'))) {
+          return { fragment: seg.raw.trim(), detail: 'a sed -i invocation spans a quoted newline' };
         }
       }
       return null;
@@ -625,7 +761,8 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     cure: 'prefix the command with MSYS_NO_PATHCONV=1',
     find(p) {
       if (!msysApplies(p)) return null;
-      const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
+      // Bodies and single-quoted text blanked first: a `$(` inside either is literal.
+      const blanked = blankSingleQuoted(blankHeredocBodies(p.command, findHeredocs(p.command)));
       let cursor = 0;
       while (cursor < blanked.length) {
         const open = blanked.indexOf('$(', cursor);

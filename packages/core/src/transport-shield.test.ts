@@ -278,12 +278,23 @@ describe('transport-shield — payload, purity, provenance', () => {
     }
   });
 
-  it("every deny and warn reason ends with the row's cure", () => {
+  it("every row's reason ends with its cure — one sample per row, so a new row without a sample fails here", () => {
+    const sample: Record<TransportPatternId, [command: string, platform: string]> = {
+      'heredoc-escape': [HEREDOC_WITH_ESCAPE, 'linux'],
+      'msys-body-slash': ['gh pr comment 5 --body /x', 'win32'],
+      'sed-i-escape': ["sed -i 's/\\(a\\)/x/' f", 'linux'],
+      'inline-body-escape': ["node -e 'a\\d'", 'linux'],
+      'heredoc-oversize': [`cat <<EOF\n${'x'.repeat(HEREDOC_OVERSIZE_BYTES)}\nEOF`, 'linux'],
+      'msys-rev-path-subshell': ['echo $(git show a/b:c)', 'win32'],
+    };
     for (const pattern of TRANSPORT_PATTERNS) {
-      expect(pattern.cure.length).toBeGreaterThan(0);
+      expect(pattern.cure.length, pattern.id).toBeGreaterThan(0);
+      const [command, platform] = sample[pattern.id];
+      const v = run(command, platform);
+      expect(v.provenance.ref, pattern.id).toBe(pattern.id);
+      expect(v.disposition, pattern.id).toBe(pattern.disposition);
+      expect(v.reason.endsWith(`${pattern.cure}.`), `${pattern.id}: ${v.reason}`).toBe(true);
     }
-    expect(run(HEREDOC_WITH_ESCAPE).reason.endsWith('reference it by path.')).toBe(true);
-    expect(run("sed -i 's/\\(a\\)/x/' f").reason.endsWith('use the Edit tool.')).toBe(true);
   });
 });
 

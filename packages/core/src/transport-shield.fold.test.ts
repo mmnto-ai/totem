@@ -143,6 +143,99 @@ describe('transport-shield fold — --eval= and line continuations (F8, F9)', ()
   });
 });
 
+describe('transport-shield fold pass 3 — comments, arithmetic, backslash-quoted delimiters, continuations, every body flag', () => {
+  it('a # comment carrying an apostrophe never hides a later heredoc or program (P3-F1)', () => {
+    const lead = "# don't clobber the file\ncat > f.mjs <<'EOF'\nconst re = /\\d+/;\nEOF";
+    expect(findHeredocs(lead)).toHaveLength(1);
+    expect(run(lead).provenance.ref).toBe('heredoc-escape');
+    expect(run("# don't forget\nsed -i 's/\\t/ /' f").provenance.ref).toBe('sed-i-escape');
+    expect(run("# it's fine\ngh pr comment 5 --body /gemini", 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run("echo hi # don't\ncat > f <<'EOF'\nx\\d\nEOF").provenance.ref).toBe(
+      'heredoc-escape',
+    );
+    expect(run("cat <<EOF # it's the body\nx\\d\nEOF").provenance.ref).toBe('heredoc-escape');
+  });
+
+  it('comment text is discarded, never tokenized as arguments (P3-F5); $# and a # inside a word are not comments', () => {
+    expect(
+      run('gh pr comment 5 --body-file notes.md # was --body /gemini review', 'win32').disposition,
+    ).toBe('allow');
+    expect(run("sed -i -e 's/a/b/' f.txt # -e 's/c/d/'").disposition).toBe('allow');
+    expect(tokenizeShell('echo $# a#b # c')[0]?.tokens).toEqual(['echo', '$#', 'a#b']);
+    expect(tokenizeShell('echo a # c\ngh pr view 1').map((s) => s.tokens)).toEqual([
+      ['echo', 'a'],
+      ['gh', 'pr', 'view', '1'],
+    ]);
+  });
+
+  it('a backslash-continued sed -i is one line to bash and is allowed; a quoted newline still denies (P3-F2)', () => {
+    expect(run("grep -q x f && \\\n  sed -i 's/foo/bar/' file.ts").disposition).toBe('allow');
+    expect(run("sed -i 's/foo/bar/' \\\n  packages/core/src/file.ts").disposition).toBe('allow');
+    expect(run("sed -i \\\n  's/foo/bar/' file.ts").disposition).toBe('allow');
+    expect(run("sed -i 's/a/b\nc/' f").provenance.ref).toBe('sed-i-escape');
+    expect(run("cd x\nsed -i 's/foo/bar/' f").disposition).toBe('allow');
+  });
+
+  it('<< inside $(( … )) or (( … )) is a shift, not a heredoc (P3-F3)', () => {
+    expect(findHeredocs('mask=$((1 << n))\necho done')).toEqual([]);
+    expect(findHeredocs('(( mask = 1 << n ))\necho done')).toEqual([]);
+    expect(run('mask=$((1 << n))\ngh pr comment 5 -b /gemini', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run('(( mask = 1 << n ))\ngh pr comment 5 -b /gemini', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run("mask=$((1 << n))\nsed -i 's/a/b/' 'C:\\x\\y.txt'").disposition).toBe('allow');
+    expect(findHeredocs('x=$((1 << n)) && cat <<EOF\nbody\nEOF')).toHaveLength(1);
+  });
+
+  it('a backslash-quoted delimiter (<<\\EOF) is a quoted heredoc (P3-F4)', () => {
+    const span = findHeredocs('cat > f <<\\EOF\nconst re = /\\d+/;\nEOF')[0];
+    expect(span?.quoted).toBe(true);
+    expect(span?.delimiter).toBe('EOF');
+    expect(span?.unterminated).toBe(false);
+    expect(run('cat > f <<\\EOF\nconst re = /\\d+/;\nEOF').provenance.ref).toBe('heredoc-escape');
+    expect(run('cat > f <<\\EOF\ngh pr comment 5 -b /some/path\nEOF', 'win32').disposition).toBe(
+      'allow',
+    );
+    expect(run("cat > f <<\\EOF\nit's fine\nEOF\ncat > g <<EOF\nx\\d\nEOF").provenance.ref).toBe(
+      'heredoc-escape',
+    );
+  });
+
+  it('env VAR=x prog and a &-backgrounded first command still reach the program (P3-F7)', () => {
+    expect(run('env GH_TOKEN=x gh pr comment 5 -b /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run('sleep 1 & gh pr comment 5 -b /x', 'win32').provenance.ref).toBe('msys-body-slash');
+    expect(tokenizeShell('cmd 2>&1 | tee log; x &>/dev/null; y &').map((s) => s.tokens)).toEqual([
+      ['cmd', '2>&1'],
+      ['tee', 'log'],
+      ['x', '&>/dev/null'],
+      ['y'],
+    ]);
+  });
+
+  it("a later real --body is read when an earlier -b was another option's value (P3-F8)", () => {
+    expect(run('gh issue create --title -b --body /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run('gh issue create --title -b --body-file notes.md', 'win32').disposition).toBe(
+      'allow',
+    );
+  });
+
+  it('a literal $( inside single quotes is not a subshell to the warn row (P3-F11)', () => {
+    expect(run("grep -n '$(git show origin/main:.totem/x.md)' notes.md", 'win32').disposition).toBe(
+      'allow',
+    );
+    expect(run('echo $(git show origin/main:.totem/x.md)', 'win32').disposition).toBe('warn');
+    expect(run('echo "$(git show origin/main:.totem/x.md)"', 'win32').disposition).toBe('warn');
+  });
+});
+
 describe('transport-shield — the false-positive budget fixture (ADR-109; F6)', () => {
   // Everyday commands that share a token with a row. Budget: ZERO denies. A deny
   // here is a defect in a row, never a reason to widen the corpus by hand.
@@ -190,6 +283,16 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ['docker run --rm -v "$PWD:/w" img', 'linux'],
     ['gh pr comment 5 --body "/gemini review"', 'linux'],
     ['gh pr comment 5 --body "/gemini review"', 'darwin'],
+    // Pass 3: comments, continuations, arithmetic, a backslash-quoted delimiter, & and 2>&1.
+    ['gh pr comment 5 --body-file notes.md # was --body /gemini review', 'win32'],
+    ["sed -i -e 's/a/b/' f.txt # -e 's/c/d/'", 'win32'],
+    ["grep -q x f && \\\n  sed -i 's/foo/bar/' file.ts", 'win32'],
+    ["sed -i 's/foo/bar/' \\\n  packages/core/src/file.ts", 'win32'],
+    ["mask=$((1 << n))\nsed -i 's/a/b/' 'C:\\x\\y.txt'", 'win32'],
+    ['cat > f <<\\EOF\ngh pr comment 5 -b /some/path\nEOF', 'win32'],
+    ["grep -n '$(git show origin/main:.totem/x.md)' notes.md", 'win32'],
+    ['cmd 2>&1 | tee log', 'win32'],
+    ['gh issue create --title -b --body-file notes.md', 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {

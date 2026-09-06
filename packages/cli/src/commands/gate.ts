@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
@@ -13,6 +14,7 @@ const TAG = 'Gate';
 
 export interface GateCheckCommandOptions {
   event: string;
+  /** The gate's JSON payload, or `-` to read the JSON from stdin (the wrapper's channel; no argv limit). */
   payload: string;
 }
 
@@ -119,29 +121,41 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
   }
 }
 
+/** All of stdin (fd 0) as UTF-8 — the `--payload -` channel. */
+const readStdinSync = (): string => readFileSync(0, 'utf-8');
+
 /**
- * `totem gate check --event <type> --payload <json>`
+ * `totem gate check --event <type> --payload <json | ->`
  *
  * Evaluates a gate against deterministic state and writes the raw `GateVerdict`
  * JSON to stdout. The command is host-agnostic: it does NOT map the disposition
  * onto an exit code — the calling PreToolUse wrapper does that. Exit is 0 on a
  * successful evaluation (any disposition); a non-zero exit means the evaluation
  * itself failed (unknown event, bad payload, unparseable source) — never a
- * silent default-allow.
+ * silent default-allow. `--payload -` reads the JSON from stdin: the
+ * distributed wrapper's channel, because a Bash command can run to tens of
+ * kilobytes and win32 caps a command line at 32,767 characters — an argv
+ * payload past it fails the spawn with ENAMETOOLONG (mmnto-ai/totem#2799,
+ * pass 3). The argv form stays for hand runs and for wrappers installed before
+ * this cut.
  */
-export async function gateCheckCommand(opts: GateCheckCommandOptions): Promise<void> {
+export async function gateCheckCommand(
+  opts: GateCheckCommandOptions,
+  readStdin: () => string = readStdinSync,
+): Promise<void> {
   // Lazy-load @mmnto/totem inside the handler (ADR-072 §3) so the heavy core
   // module never loads on unrelated CLI invocations (e.g. `totem --help`).
   const { evaluateGate, TotemError } = await import('@mmnto/totem');
 
+  const raw = opts.payload === '-' ? readStdin() : opts.payload;
   let payload: unknown;
   try {
-    payload = JSON.parse(opts.payload);
+    payload = JSON.parse(raw);
   } catch (err) {
     throw new TotemError(
       'GATE_INVALID',
       'Invalid --payload JSON',
-      'Pass valid JSON, e.g. --payload \'{"subsystem":"rule-compilation"}\'.',
+      'Pass valid JSON, e.g. --payload \'{"subsystem":"rule-compilation"}\', or --payload - with the JSON on stdin.',
       err,
     );
   }

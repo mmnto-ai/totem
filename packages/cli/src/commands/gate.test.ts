@@ -86,6 +86,32 @@ describe('gateCheckCommand', () => {
     );
   });
 
+  it('--payload - reads the JSON from stdin (the wrapper channel; no argv limit) and evaluates it', async () => {
+    // The stdin reader is the injectable seam; the CLI default reads fd 0. A
+    // 40,000-character command — past win32's 32,767-character argv cap — is the
+    // shape the argv form could not carry (mmnto-ai/totem#2799, pass 3).
+    const long = 'x'.repeat(40_000);
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    let reads = 0;
+    const readStdin = (): string => {
+      reads += 1;
+      return JSON.stringify({ tool: 'Bash', command: long, platform: 'win32' });
+    };
+
+    await gateCheckCommand({ event: 'transport-shield', payload: '-' }, readStdin);
+
+    expect(reads).toBe(1);
+    expect(spy.mock.calls).toHaveLength(1);
+    const verdict = JSON.parse(spy.mock.calls[0]![0] as string) as { disposition: string };
+    expect(verdict.disposition).toBe('allow');
+  });
+
+  it('--payload - with malformed stdin JSON throws GATE_INVALID like the argv form', async () => {
+    await expect(
+      gateCheckCommand({ event: 'freeze-check', payload: '-' }, () => '{ not valid json'),
+    ).rejects.toThrow(/invalid --payload json/i);
+  });
+
   it('emits a raw GateVerdict to stdout and does NOT map disposition to an exit code', async () => {
     fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), FROZEN);
     const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
