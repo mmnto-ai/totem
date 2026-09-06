@@ -44,12 +44,14 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * substitution is a bash extension, bash §3.5.6, that behaves the same way) —
  * the scanners track which `(` each `)` closes. `$(( … ))` / `(( … ))` arithmetic is skipped. So
  * neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc
- * or expose comment text as arguments. For the PowerShell tool a `<# … #>`
- * block comment is blanked before the scanners run (PowerShell discards it
- * without quote processing, as bash discards a `#` line comment); the blanker
- * tracks PowerShell's string literals and skips its `#` line comments by the
- * same token-start rule the scanners apply, so the two never disagree about
- * which text is code. Not read, disclosed:
+ * or expose comment text as arguments. For the PowerShell tool the SAME walk
+ * reads PowerShell's grammar where it differs from bash's, so there is one
+ * model of which text is code and no pre-pass to disagree with it: a `<# … #>`
+ * block comment outside quotes is skipped whole (a `<#` inside a string is
+ * text; a quote inside a block opens nothing), the backtick is the escape
+ * inside a double-quoted string, and a `#` right after a closing quote or an
+ * `=` begins a comment (`'a'#b`, `$x=#c` — PowerShell ends a token at a string
+ * or an `=`; bash does not). Not read, disclosed:
  * PowerShell here-strings (`@" … "@`, `@' … '@`) are not parsed — a quote
  * inside one can still desynchronize the quote scan for that tool, the miss
  * direction. The MSYS opt-out is honoured through the shell forms that export
@@ -167,6 +169,19 @@ export interface HeredocSpan {
 const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
 
 /**
+ * What the scanners read beyond bash's grammar. `powershell` (the PowerShell
+ * tool): a `<# … #>` block comment outside quotes is skipped whole; the
+ * backtick is the escape inside a double-quoted string; a `#` right after a
+ * closing quote or an `=` begins a comment. Everything else is read with bash's
+ * rules — `''` inside single quotes and `""` inside double quotes read as two
+ * adjacent strings under both grammars, so they need no rule. Not read,
+ * disclosed: PowerShell here-strings (`@" … "@`, `@' … '@`).
+ */
+export interface ScanOptions {
+  powershell?: boolean;
+}
+
+/**
  * `<<` or `<<-`, optional blanks, then the delimiter WORD as bash delimits it:
  * single-quoted, double-quoted, backslash-quoted (`\EOF` — any quoted character
  * in the word quotes the whole delimiter, POSIX 2.7.4), or bare — a bare word
@@ -229,9 +244,11 @@ function skipArithmetic(command: string, from: number): number {
  * processing, as bash does, and `$(( … ))` / `(( … ))` arithmetic is skipped.
  * `parens` records what each open `(` is — a substitution (`$(`, `<(`, `>(`),
  * which is part of a word, or a grouping operator — so the `)` that closes it
- * can say whether the next character begins a word.
+ * can say whether the next character begins a word. With `powershell` set the
+ * same walk reads PowerShell's grammar where it differs (see `ScanOptions`).
  */
-export function findHeredocs(command: string): HeredocSpan[] {
+export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSpan[] {
+  const ps = opts.powershell === true;
   const spans: HeredocSpan[] = [];
   const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
   const parens: Array<'subst' | 'group'> = [];
@@ -279,19 +296,42 @@ export function findHeredocs(command: string): HeredocSpan[] {
   while (i < command.length) {
     const ch = command[i] as string;
     if (inSingle) {
-      if (ch === "'") inSingle = false;
+      // PowerShell: a `#` right after the closing quote begins a comment (a
+      // string ends its token); bash: the word continues.
+      if (ch === "'") {
+        inSingle = false;
+        boundary = ps;
+      } else boundary = false;
       i += 1;
-      boundary = false;
       continue;
     }
     if (inDouble) {
-      if (ch === '\\' && i + 1 < command.length && DQ_ESCAPABLE.has(command[i + 1] as string))
+      if (ps && ch === '`' && i + 1 < command.length) {
+        // PowerShell's escape inside a double-quoted string is the backtick.
         i += 2;
-      else {
-        if (ch === '"') inDouble = false;
-        i += 1;
+        boundary = false;
+        continue;
       }
-      boundary = false;
+      if (ch === '\\' && i + 1 < command.length && DQ_ESCAPABLE.has(command[i + 1] as string)) {
+        i += 2;
+        boundary = false;
+        continue;
+      }
+      if (ch === '"') {
+        inDouble = false;
+        boundary = ps;
+      } else boundary = false;
+      i += 1;
+      continue;
+    }
+    if (ps && command.startsWith('<#', i)) {
+      // PowerShell's block comment, discarded without quote processing; an
+      // unterminated one runs to the end. Skipped in the same walk that tracks
+      // quotes, so a `<#` inside a string is text and a quote inside a block
+      // opens nothing.
+      const close = command.indexOf('#>', i + 2);
+      i = close === -1 ? command.length : close + 2;
+      boundary = true;
       continue;
     }
     if (ch === '#' && boundary) {
@@ -366,7 +406,8 @@ export function findHeredocs(command: string): HeredocSpan[] {
         continue;
       }
     }
-    boundary = WORD_BOUNDARY.has(ch);
+    // PowerShell: a `#` right after `=` begins a comment (`$x=#c`); bash: it is word text.
+    boundary = WORD_BOUNDARY.has(ch) || (ps && ch === '=');
     i += 1;
   }
   if (pending.length > 0) consumeBodies(command.length);
@@ -408,88 +449,6 @@ function substitutionEnd(text: string, open: number): number {
   return text.length;
 }
 
-/**
- * For the PowerShell tool: every `<# … #>` block comment replaced by spaces
- * (newlines kept, length preserved), so a quote inside one cannot desynchronize
- * the scanners — PowerShell discards the block without quote processing. An
- * unterminated `<#` runs to the end. PowerShell string literals are tracked
- * (`'…'` with `''` as the escaped quote; `"…"` with a backtick escape and `""`),
- * so a `<#` inside a string is text and blanks nothing — a string-borne `<#`
- * would otherwise silence every command after it, the miss direction (the
- * bot-round re-arm on mmnto-ai/totem#2804). A backtick escape inside a
- * double-quoted string is blanked WITH the character it escapes: the scanners
- * read every command with bash's quoting rules, under which a PowerShell
- * `` `" `` would close the string early and hide what follows.
- */
-function blankPowerShellBlockComments(command: string): string {
-  let out = '';
-  let i = 0;
-  let inSingle = false;
-  let inDouble = false;
-  // At the start of a token — where PowerShell's `#` begins a line comment. The
-  // scanners discard that comment by the same rule, so the blanker must skip it
-  // too: a quote inside it would otherwise open a phantom string here and leave
-  // a later real block unblanked (the termination check on mmnto-ai/totem#2804).
-  let boundary = true;
-  while (i < command.length) {
-    const ch = command[i] as string;
-    if (inSingle) {
-      if (ch === "'" && command[i + 1] === "'") {
-        out += "''";
-        i += 2;
-        continue;
-      }
-      if (ch === "'") inSingle = false;
-      out += ch;
-      i += 1;
-      continue;
-    }
-    if (inDouble) {
-      if (ch === '`' && i + 1 < command.length) {
-        out += command[i + 1] === '\n' ? ' \n' : '  ';
-        i += 2;
-        continue;
-      }
-      if (ch === '"' && command[i + 1] === '"') {
-        out += '""';
-        i += 2;
-        continue;
-      }
-      if (ch === '"') inDouble = false;
-      out += ch;
-      i += 1;
-      continue;
-    }
-    if (ch === "'") {
-      inSingle = true;
-      boundary = false;
-    } else if (ch === '"') {
-      inDouble = true;
-      boundary = false;
-    } else if (command.startsWith('<#', i)) {
-      const close = command.indexOf('#>', i + 2);
-      const end = close === -1 ? command.length : close + 2;
-      out += command.slice(i, end).replace(/[^\n]/g, ' ');
-      i = end;
-      boundary = true;
-      continue;
-    } else if (ch === '#' && boundary) {
-      // A line comment: copied verbatim to the end of the line (the scanners
-      // discard it); its quotes are text to this tracker.
-      const nl = command.indexOf('\n', i);
-      const end = nl === -1 ? command.length : nl;
-      out += command.slice(i, end);
-      i = end;
-      continue;
-    } else {
-      boundary = /[\s;|(){}&,]/.test(ch);
-    }
-    out += ch;
-    i += 1;
-  }
-  return out;
-}
-
 /** The command with every heredoc body replaced by spaces (length preserved), so tokenizing never reads a body. */
 function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
   let out = command;
@@ -523,15 +482,20 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  * and process substitutions `<( … )` / `>( … )` stay inside the word that
  * carries them; grouping `(` and `)` are operators that delimit words. A `#`
  * that begins a word discards the rest of its line, as bash does — comment
- * text is never an argument.
+ * text is never an argument. With `powershell` set the same walk reads
+ * PowerShell's grammar where it differs (see `ScanOptions`).
  */
-export function tokenizeShell(command: string): ShellSegment[] {
+export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
+  const ps = opts.powershell === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
   let inWord = false;
   let segStart = 0;
   let i = 0;
+  // PowerShell: a string ends its token, so a `#` right after a closing quote
+  // begins a comment; bash: the word continues.
+  let afterQuote = false;
   const flushWord = (): void => {
     if (inWord) tokens.push(word);
     word = '';
@@ -544,6 +508,8 @@ export function tokenizeShell(command: string): ShellSegment[] {
   };
   while (i < command.length) {
     const ch = command[i] as string;
+    const quoteJustClosed = afterQuote;
+    afterQuote = false;
     // A line continuation is whitespace, never an operator or a word character.
     if (ch === '\\' && command[i + 1] === '\n') {
       flushWord();
@@ -555,9 +521,20 @@ export function tokenizeShell(command: string): ShellSegment[] {
       i += 3;
       continue;
     }
-    if (ch === '#' && !inWord) {
+    if (ps && command.startsWith('<#', i)) {
+      // PowerShell's block comment: skipped whole, no token, in the same walk
+      // that tracks quotes (a `<#` inside a string is text; a quote inside a
+      // block opens nothing).
+      flushWord();
+      const close = command.indexOf('#>', i + 2);
+      i = close === -1 ? command.length : close + 2;
+      continue;
+    }
+    if (ch === '#' && (!inWord || (ps && (quoteJustClosed || command[i - 1] === '=')))) {
       // A comment runs to the end of the line and is discarded without quote
-      // processing; the newline stays, a separator like any other.
+      // processing; the newline stays, a separator like any other. PowerShell
+      // also begins one right after a closing quote or an `=`.
+      flushWord();
       const nl = command.indexOf('\n', i);
       i = nl === -1 ? command.length : nl;
       continue;
@@ -588,13 +565,18 @@ export function tokenizeShell(command: string): ShellSegment[] {
       word += command.slice(i + 1, end);
       inWord = true;
       i = end + 1;
+      afterQuote = true;
       continue;
     }
     if (ch === '"') {
       i += 1;
       inWord = true;
       while (i < command.length && command[i] !== '"') {
-        if (
+        if (ps && command[i] === '`' && i + 1 < command.length) {
+          // PowerShell's escape inside a double-quoted string is the backtick.
+          word += command[i + 1];
+          i += 2;
+        } else if (
           command[i] === '\\' &&
           i + 1 < command.length &&
           DQ_ESCAPABLE.has(command[i + 1] as string)
@@ -607,6 +589,7 @@ export function tokenizeShell(command: string): ShellSegment[] {
         }
       }
       i += 1;
+      afterQuote = true;
       continue;
     }
     if (ch === '\\' && i + 1 < command.length) {
@@ -767,12 +750,17 @@ function sedExpressions(args: readonly string[]): string[] {
 /**
  * True when sed takes its script from a FILE — `-f X`, GNU's attached `-fX` and
  * `-f-`, `-f` clustered after argument-less short options (`-nf X`, `-Enf X`),
- * `--file X`, `--file=X`: then no positional operand is an expression. An
- * operand after `--` that begins with `-f` is read as a script file too, an
- * over-allow on a command GNU sed itself rejects.
+ * `--file X`, `--file=X`: then no positional operand is an expression. Option
+ * parsing stops at `--`: an operand after it that begins with `-f` is a FILE
+ * sed edits in place (GNU 4.9 accepts `sed -i -- 's/X/Q/' -file`), never a
+ * script.
  */
 function sedHasScriptFile(args: readonly string[]): boolean {
-  return args.some((a) => /^-[nsErzub]*f/.test(a) || a === '--file' || a.startsWith('--file='));
+  for (const a of args) {
+    if (a === '--') return false;
+    if (/^-[nsErzub]*f/.test(a) || a === '--file' || a.startsWith('--file=')) return true;
+  }
+  return false;
 }
 
 /**
@@ -826,6 +814,11 @@ const REV_PATH_TOKEN = /(^|[\s(])([A-Za-z0-9_./~^-]+:[A-Za-z0-9_./-]+)(?=$|[\s)]
 /** Bash + win32: the platform precondition both MSYS rows share. */
 const msysApplies = (p: TransportShieldPayload): boolean =>
   p.platform === 'win32' && p.tool === 'Bash';
+
+/** The scanners read PowerShell's grammar for the PowerShell tool, bash's otherwise. */
+const scanOpts = (p: TransportShieldPayload): ScanOptions => ({
+  powershell: p.tool === 'PowerShell',
+});
 
 /** The variable MSYS reads for its opt-out — its PRESENCE, any value (`=1`, `=0`, empty all switch conversion off). */
 const MSYS_OPT_OUT_NAME = 'MSYS_NO_PATHCONV';
@@ -914,7 +907,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'deny',
     cure: 'author the file with the Write tool and reference it by path',
     find(p) {
-      for (const h of findHeredocs(p.command)) {
+      for (const h of findHeredocs(p.command, scanOpts(p))) {
         if (hasEscape(h.body)) {
           return {
             fragment: firstEscapedLine(h.body),
@@ -963,8 +956,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'deny',
     cure: 'use the Edit tool',
     find(p) {
-      const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of tokenizeShell(blanked)) {
+      const opts = scanOpts(p);
+      const blanked = blankHeredocBodies(p.command, findHeredocs(p.command, opts));
+      for (const seg of tokenizeShell(blanked, opts)) {
         const at = programIndex(seg.tokens, 'sed');
         if (at === -1) continue;
         const args = seg.tokens.slice(at + 1);
@@ -1031,7 +1025,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     disposition: 'warn',
     cure: 'author the file with the Write tool and reference it by path',
     find(p) {
-      for (const h of findHeredocs(p.command)) {
+      for (const h of findHeredocs(p.command, scanOpts(p))) {
         const bytes = Buffer.byteLength(h.body, 'utf8');
         if (bytes >= HEREDOC_OVERSIZE_BYTES) {
           return {
@@ -1094,13 +1088,7 @@ function boundedFragment(fragment: string): string {
  * return the first deny, else the first warn, else allow. Pure over the payload.
  */
 export const transportShieldEvaluator: GateEvaluator = (payload): GateVerdict => {
-  const parsed = parseTransportShieldPayload(payload);
-  // The PowerShell tool's block comments are discarded before any row reads the
-  // command, as bash's line comments are discarded inside the scanners.
-  const p: TransportShieldPayload =
-    parsed.tool === 'PowerShell'
-      ? { ...parsed, command: blankPowerShellBlockComments(parsed.command) }
-      : parsed;
+  const p = parseTransportShieldPayload(payload);
   const checkedAt = new Date().toISOString();
   let warn: { pattern: TransportPattern; match: TransportMatch } | null = null;
   for (const pattern of TRANSPORT_PATTERNS) {

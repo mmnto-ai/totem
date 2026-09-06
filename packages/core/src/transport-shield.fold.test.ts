@@ -425,6 +425,34 @@ describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Gre
     ).toBe('sed-i-escape');
   });
 
+  it('the scanners read PowerShell in one walk: a # after a substitution, a brace, a closing quote or an = (final check, BRd-F1 / F2)', () => {
+    const sed = "\nsed -i 's/\\r$//' f";
+    expect(run("Write-Output $(1)#c <# it's #>" + sed, 'win32', 'PowerShell').provenance.ref).toBe(
+      'sed-i-escape',
+    );
+    expect(
+      run("if ($true) { Write-Output x }#c <# it's #>" + sed, 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(
+      run("Write-Output $(1)#c <# ; sed -i 's/\\r$//' f #>", 'win32', 'PowerShell').disposition,
+    ).toBe('allow');
+    // PowerShell ends a token at a string or an `=`, so the `#` that follows is a comment.
+    expect(
+      run("Write-Output 'a'#don't\n<# note #>" + sed, 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(run("$x=#don't\n<# note #>" + sed, 'win32', 'PowerShell').provenance.ref).toBe(
+      'sed-i-escape',
+    );
+    // The same two shapes are word text to bash, where `'a'#b` is one word.
+    expect(tokenizeShell("echo 'a'#b")[0]?.tokens).toEqual(['echo', 'a#b']);
+    expect(tokenizeShell("echo 'a'#b", { powershell: true })[0]?.tokens).toEqual(['echo', 'a']);
+  });
+
+  it('an operand after -- is a file sed edits, never a script (final check, BRd-F3)', () => {
+    expect(run("sed -i -- 's/a\\t/b/' -nfile").provenance.ref).toBe('sed-i-escape');
+    expect(run("sed -i -- 's/a\\t/b/' -file").provenance.ref).toBe('sed-i-escape');
+  });
+
   it('a clustered -nf is a script file too (termination check, BRc-F5)', () => {
     expect(run("sed -i -nf 'C:\\t.sed' file").disposition).toBe('allow');
     expect(run("sed -i -Enf 'C:\\t.sed' file").disposition).toBe('allow');
