@@ -50,10 +50,14 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * comment is handled by the same rule as bash's). Not read, disclosed:
  * PowerShell here-strings (`@" … "@`, `@' … '@`) are not parsed — a quote
  * inside one can still desynchronize the quote scan for that tool, the miss
- * direction. The MSYS opt-out is honoured only as an assignment the shell
- * would apply to the judged segment — its own `VAR=… prog` prefix, or an
- * earlier `export MSYS_NO_PATHCONV=1` — never as a substring: a comment or a
- * heredoc body that names the cure opts nothing out.
+ * direction. The MSYS opt-out is honoured through the shell forms that export
+ * the variable to the judged program (MSYS reads its presence, any value): the
+ * segment's own `VAR=… prog` prefix, an earlier `export` / `declare -x` /
+ * `typeset -x`, a bare assignment under `set -a` or followed by `export NAME`,
+ * until an `unset` — never as a substring: a comment, a heredoc body or a
+ * quoted string that names the cure opts nothing out. Disclosed over-allow: an
+ * export inside a subshell `( … )` or a pipeline element is taken as reaching
+ * later segments though the shell would not apply it.
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -406,21 +410,59 @@ function substitutionEnd(text: string, open: number): number {
  * For the PowerShell tool: every `<# … #>` block comment replaced by spaces
  * (newlines kept, length preserved), so a quote inside one cannot desynchronize
  * the scanners — PowerShell discards the block without quote processing. An
- * unterminated `<#` runs to the end. A `<#` inside a PowerShell string literal
- * is blanked too (over-scan direction: text a string carries is never a command).
+ * unterminated `<#` runs to the end. PowerShell string literals are tracked
+ * (`'…'` with `''` as the escaped quote; `"…"` with a backtick escape and `""`),
+ * so a `<#` inside a string is text and blanks nothing — a string-borne `<#`
+ * would otherwise silence every command after it, the miss direction (the
+ * bot-round re-arm on mmnto-ai/totem#2804). A backtick escape inside a
+ * double-quoted string is blanked WITH the character it escapes: the scanners
+ * read every command with bash's quoting rules, under which a PowerShell
+ * `` `" `` would close the string early and hide what follows.
  */
 function blankPowerShellBlockComments(command: string): string {
   let out = '';
   let i = 0;
+  let inSingle = false;
+  let inDouble = false;
   while (i < command.length) {
-    if (command.startsWith('<#', i)) {
+    const ch = command[i] as string;
+    if (inSingle) {
+      if (ch === "'" && command[i + 1] === "'") {
+        out += "''";
+        i += 2;
+        continue;
+      }
+      if (ch === "'") inSingle = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '`' && i + 1 < command.length) {
+        out += command[i + 1] === '\n' ? ' \n' : '  ';
+        i += 2;
+        continue;
+      }
+      if (ch === '"' && command[i + 1] === '"') {
+        out += '""';
+        i += 2;
+        continue;
+      }
+      if (ch === '"') inDouble = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "'") inSingle = true;
+    else if (ch === '"') inDouble = true;
+    else if (command.startsWith('<#', i)) {
       const close = command.indexOf('#>', i + 2);
       const end = close === -1 ? command.length : close + 2;
       out += command.slice(i, end).replace(/[^\n]/g, ' ');
       i = end;
       continue;
     }
-    out += command[i];
+    out += ch;
     i += 1;
   }
   return out;
@@ -700,9 +742,9 @@ function sedExpressions(args: readonly string[]): string[] {
   return out;
 }
 
-/** True when sed takes its script from a FILE (`-f X`, `--file X`, `--file=X`): then no positional operand is an expression. */
+/** True when sed takes its script from a FILE (`-f X`, GNU's attached `-fX` and `-f-`, `--file X`, `--file=X`): then no positional operand is an expression. */
 function sedHasScriptFile(args: readonly string[]): boolean {
-  return args.some((a) => a === '-f' || a === '--file' || a.startsWith('--file='));
+  return args.some((a) => a.startsWith('-f') || a === '--file' || a.startsWith('--file='));
 }
 
 /**
@@ -757,37 +799,76 @@ const REV_PATH_TOKEN = /(^|[\s(])([A-Za-z0-9_./~^-]+:[A-Za-z0-9_./-]+)(?=$|[\s)]
 const msysApplies = (p: TransportShieldPayload): boolean =>
   p.platform === 'win32' && p.tool === 'Bash';
 
-const MSYS_OPT_OUT = 'MSYS_NO_PATHCONV=1';
+/** The variable MSYS reads for its opt-out — its PRESENCE, any value (`=1`, `=0`, empty all switch conversion off). */
+const MSYS_OPT_OUT_NAME = 'MSYS_NO_PATHCONV';
+const isOptOutAssignment = (t: string): boolean => t.startsWith(MSYS_OPT_OUT_NAME + '=');
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 /** True when the segment's own assignment/wrapper prefix carries the opt-out (`MSYS_NO_PATHCONV=1 gh …`, `env MSYS_NO_PATHCONV=1 gh …`). */
 function segmentOptsOut(tokens: readonly string[]): boolean {
   for (const t of tokens) {
-    if (t === MSYS_OPT_OUT) return true;
+    if (isOptOutAssignment(t)) return true;
     if (!ASSIGNMENT.test(t) && !WRAPPERS.has(t)) return false;
   }
   return false;
 }
 
-/** True when the segment exports the opt-out to every later segment: `export MSYS_NO_PATHCONV=1`. A bare assignment sets a shell variable a later program never sees, so it exports nothing. */
-const segmentExportsOptOut = (tokens: readonly string[]): boolean =>
-  tokens[0] === 'export' && tokens.slice(1).includes(MSYS_OPT_OUT);
+/**
+ * True when the segment exports the opt-out to every later segment:
+ * `export MSYS_NO_PATHCONV=…`, `declare -x MSYS_NO_PATHCONV=…`,
+ * `typeset -x MSYS_NO_PATHCONV=…`. A bare assignment sets a shell variable a
+ * later program never sees, so on its own it exports nothing.
+ */
+function segmentExportsOptOut(tokens: readonly string[]): boolean {
+  const [head, ...rest] = tokens;
+  if (head === 'export') return rest.some(isOptOutAssignment);
+  if (head === 'declare' || head === 'typeset') {
+    return rest.includes('-x') && rest.some(isOptOutAssignment);
+  }
+  return false;
+}
 
 /**
  * The segments an MSYS row may judge: each with its tokens and raw text, minus
- * those the opt-out reaches as an ASSIGNMENT the shell applies — the segment's
- * own prefix, or an earlier `export`. Never a substring: a comment, a heredoc
- * body or an unrelated segment naming the cure opts nothing out.
+ * those the opt-out reaches through the shell forms that export it — the
+ * segment's own `VAR=… prog` prefix; an earlier `export` / `declare -x` /
+ * `typeset -x`; a bare assignment under `set -a`, or one followed by
+ * `export MSYS_NO_PATHCONV` — until an `unset MSYS_NO_PATHCONV`. Never a
+ * substring: a comment, a heredoc body, a quoted string or an unrelated segment
+ * naming the cure opts nothing out. Disclosed over-allow: an export inside a
+ * subshell `( … )` or a pipeline element is taken as reaching later segments
+ * though the shell would not apply it (the tokenizer carries no subshell scope).
  */
 function msysSegments(text: string): ShellSegment[] {
   const out: ShellSegment[] = [];
   let exported = false;
+  let allExport = false;
+  let assigned = false;
   for (const seg of tokenizeShell(text)) {
-    if (segmentExportsOptOut(seg.tokens)) {
+    const t = seg.tokens;
+    if (t[0] === 'set' && (t[1] === '-a' || t[1] === '+a')) {
+      allExport = t[1] === '-a';
+      continue;
+    }
+    if (t[0] === 'unset' && t.includes(MSYS_OPT_OUT_NAME)) {
+      exported = false;
+      assigned = false;
+      continue;
+    }
+    if (t.length > 0 && t.every((x) => ASSIGNMENT.test(x)) && t.some(isOptOutAssignment)) {
+      assigned = true;
+      if (allExport) exported = true;
+      continue;
+    }
+    if (t[0] === 'export' && t.includes(MSYS_OPT_OUT_NAME) && assigned) {
       exported = true;
       continue;
     }
-    if (exported || segmentOptsOut(seg.tokens)) continue;
+    if (segmentExportsOptOut(t)) {
+      exported = true;
+      continue;
+    }
+    if (exported || segmentOptsOut(t)) continue;
     out.push(seg);
   }
   return out;

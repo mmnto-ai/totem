@@ -359,6 +359,57 @@ describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Gre
     ).toBe('warn');
   });
 
+  it('a <# inside a PowerShell string literal is text and silences nothing; a real block beside it is still blanked (re-arm, BRb-F1)', () => {
+    expect(
+      run("Write-Output '<#' ; sed -i 's/a\\t/b/' f", 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(
+      run('Write-Output "<#" ; cat > f <<\'EOF\'\nconst re = /\\d+/;\nEOF', 'win32', 'PowerShell')
+        .provenance.ref,
+    ).toBe('heredoc-escape');
+    expect(
+      run("Write-Output 'it''s <#' ; sed -i 's/a\\t/b/' f", 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(
+      run('Write-Output "a`"<#" ; sed -i \'s/a\\t/b/\' f', 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(
+      run("Write-Output '<#' <# it's #> ; sed -i 's/a\\t/b/' f", 'win32', 'PowerShell').provenance
+        .ref,
+    ).toBe('sed-i-escape');
+    expect(run("Write-Output '<#' 'plain'", 'win32', 'PowerShell').disposition).toBe('allow');
+  });
+
+  it('the opt-out is honoured through every shell form that exports it, with any value, until an unset (re-arm, BRb-F4 / F8)', () => {
+    expect(run('declare -x MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32').disposition).toBe(
+      'allow',
+    );
+    expect(run('typeset -x MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32').disposition).toBe(
+      'allow',
+    );
+    expect(
+      run('set -a; MSYS_NO_PATHCONV=1; set +a; gh pr comment 5 -b /x', 'win32').disposition,
+    ).toBe('allow');
+    expect(
+      run('MSYS_NO_PATHCONV=1; export MSYS_NO_PATHCONV; gh pr comment 5 -b /x', 'win32')
+        .disposition,
+    ).toBe('allow');
+    expect(run('MSYS_NO_PATHCONV=0 gh pr comment 5 -b /x', 'win32').disposition).toBe('allow');
+    expect(run('MSYS_NO_PATHCONV= gh pr comment 5 -b /x', 'win32').disposition).toBe('allow');
+    expect(
+      run('export MSYS_NO_PATHCONV=1; unset MSYS_NO_PATHCONV; gh pr comment 5 -b /x', 'win32')
+        .provenance.ref,
+    ).toBe('msys-body-slash');
+    expect(run('declare MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+  });
+
+  it("GNU's attached -fFILE and -f- are script files too (re-arm, BRb-F3)", () => {
+    expect(run("sed -i -fscript.sed 'C:\\temp\\f.txt'").disposition).toBe('allow');
+    expect(run("sed -i -f- 'C:\\temp\\f.txt'").disposition).toBe('allow');
+  });
+
   it('a -f / --file script path is never the sed expression, and with a script file no positional operand is (CodeRabbit)', () => {
     // Quoted, so the backslashes reach the operand (unquoted ones are bash escapes).
     expect(run("sed -i -f 'C:\\tmp\\script.sed' file").disposition).toBe('allow');
@@ -440,6 +491,11 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ["sed -i -f 'C:\\tmp\\script.sed' file", 'win32'],
     ['MSYS_NO_PATHCONV=1 echo hi && gh pr view 1', 'win32'],
     ["Write-Output <# note #> 'plain'", 'win32'],
+    // The re-arm: a string-borne <#, the export forms, GNU's attached -f.
+    ["Write-Output '<#' 'plain'", 'win32'],
+    ['declare -x MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32'],
+    ['MSYS_NO_PATHCONV=0 gh pr comment 5 -b /x', 'win32'],
+    ["sed -i -fscript.sed 'C:\\temp\\f.txt'", 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {
