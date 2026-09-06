@@ -1,0 +1,233 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ac8671401829ab3bdbf36e6bed98d6c19429cbef",
+  "readAt": "2026-09-06T09:31:11Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 236,
+      "claim": "tokenizeShell dropped backslashes inside double quotes, so the charter's sed -i and node -e rows failed on the double-quoted spelling.",
+      "counterexample": "sed -i \"s/\\r//\" f.txt → allow; single-quoted twin → deny. FOLDED bd8b39ef: POSIX double-quote escape set."
+    },
+    {
+      "id": "F2",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 300,
+      "claim": "A bare -b on ANY program was read as --body, denying diff/curl/cp/sort/du/grep on win32 and fabricating a --body prefix in matched.",
+      "counterexample": "curl -b /tmp/cookies.txt … → deny. FOLDED bd8b39ef: scoped to gh; flag reported as written."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 382,
+      "claim": "sed-i-escape scanned filenames for backslashes.",
+      "counterexample": "sed -i 's/a/b/' 'C:\\temp\\f.txt' → deny on the path. FOLDED bd8b39ef: expression operands only."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 121,
+      "claim": "The heredoc operator regex was quote-blind and matched inside <<< here-strings.",
+      "counterexample": "grep '<<EOF' notes.md + a later backslash → deny. FOLDED bd8b39ef/ac867140: quote-tracking scanner; <<< excluded."
+    },
+    {
+      "id": "F5",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 148,
+      "claim": "The terminator test trimmed whitespace, ending a body early on an indented delimiter word.",
+      "counterexample": "body with '  EOF' then x\\d → allow. FOLDED bd8b39ef: exact line match, tabs stripped only for <<-."
+    },
+    {
+      "id": "F6",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 1,
+      "claim": "No ADR-109 false-positive budget or measuring fixture for the registry's first non-exact-match gate.",
+      "counterexample": "grep over the diff: none. FOLDED bd8b39ef: budget 0 over a benign corpus (44 rows after pass 2)."
+    },
+    {
+      "id": "F7",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 198,
+      "claim": "The design claimed the upsert probe searched both matchers so a gate never appears under two; host-hooks skips foreign matchers.",
+      "counterexample": "host-hooks.ts:268 `if (entry.matcher !== matcher …) continue`. FOLDED bd8b39ef (design), ac867140 (the invariant line 231 and the test name, pass-2 NOT HELD until then)."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 411,
+      "claim": "--eval= joined form missed.",
+      "counterexample": "node --eval=\"…\\d…\" → allow. FOLDED bd8b39ef."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 247,
+      "claim": "A line-continued --body evaded the slash row.",
+      "counterexample": "gh pr comment 1 --body \\<newline> \"/x\" → allow. FOLDED bd8b39ef: continuation dropped."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": ".changeset/transport-shield-gate-2799.md",
+      "line": 12,
+      "claim": "'byte for byte' was false as bytes (re-indented inside the event branch).",
+      "counterexample": "git diff of the wrapper. FOLDED bd8b39ef: 'behaviourally unchanged'."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 119,
+      "claim": "The doc line did not name the Bash-only rows.",
+      "counterexample": "three `p.tool !== 'Bash'` guards. FOLDED bd8b39ef."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 1,
+      "claim": "The generated pre-design half contradicted the ruled scope and the shipped shapes.",
+      "counterexample": "zod schema, defaultMatcher, prepare bundling, doctor task. FOLDED bd8b39ef: superseded banner; ac867140: list extended, non-exhaustive."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 528,
+      "claim": "The eject needle matched any command containing the wrapper basename.",
+      "counterexample": "a user hook mentioning gate-wrapper.cjs. FOLDED bd8b39ef (anchored), ac867140 (tokenizing predicate + tests)."
+    },
+    {
+      "id": "F14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1488,
+      "claim": "The PowerShell tool_name is attested from the charter, not observed in an envelope on this repo.",
+      "counterexample": "grep PowerShell over packages/cli/src non-test: only this diff. NOT FOLDED: recorded as attested-not-sensed on the issue's legitimacy record."
+    },
+    {
+      "id": "F15",
+      "severity": "MINOR",
+      "file": "packages/core/src/missing-sdk.test.ts",
+      "line": 1,
+      "claim": "One pre-existing core test failed on the leg's run; untouched by this diff.",
+      "counterexample": "expects 'pnpm exec totem' in a hint; passes on the bus's runs (4454 passed). NOT THIS DIFF."
+    },
+    {
+      "id": "P2-F14",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 123,
+      "claim": "The pass-1 fold's quotedRegions scan treated an apostrophe in a heredoc BODY as an open quote, hiding every later heredoc (heredoc-escape failed open on ordinary prose).",
+      "counterexample": "two heredocs, first body 'doesn't' → 1 span, allow. FOLDED ac867140: one-pass scanner that skips bodies."
+    },
+    {
+      "id": "P2-F15",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 485,
+      "claim": "Same root: a swallowed heredoc's body was tokenized as a command, a spurious deny.",
+      "counterexample": "body 'don't' then a body carrying 'gh -b /x' → deny. FOLDED ac867140; both directions pinned."
+    },
+    {
+      "id": "P2-F16",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 480,
+      "claim": "msys-body-slash named MSYS_NO_PATHCONV=1 as a cure but never honoured it.",
+      "counterexample": "MSYS_NO_PATHCONV=1 gh pr comment 5 -b /x → deny. FOLDED ac867140: shared msysApplies precondition."
+    },
+    {
+      "id": "P2-F17",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 387,
+      "claim": "indexOfProgram matched the program name at any token position.",
+      "counterexample": "grep gh -b /usr/local n.txt → deny; git log --grep sed -i '…\\t…' → deny. FOLDED ac867140: programIndex after assignments and wrappers; corpus rows added."
+    },
+    {
+      "id": "P2-F18",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 529,
+      "claim": "The anchored needle shipped untested and disagreed with commandInstallsGate on extra whitespace and a quoted path.",
+      "counterexample": "two spaces before --event: needle false, probe true. FOLDED ac867140: isInstalledGateCommand + eject-gate-needle.test.ts."
+    },
+    {
+      "id": "P2-F19",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 202,
+      "claim": "A heredoc inside bash -c \"…\" is now quoted text to the scanner and allowed; undisclosed.",
+      "counterexample": "bash -c \"cat <<EOF\\nx\\\\d\\nEOF\" → allow. FOLDED ac867140: disclosed in the module docstring and pinned as a known gap."
+    },
+    {
+      "id": "P2-F20",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 215,
+      "claim": "CR-stripping ended a heredoc on EOF\\r where bash would not.",
+      "counterexample": "fold test pinned unterminated=false. FOLDED ac867140: no CR strip; the test now pins bash's reading."
+    },
+    {
+      "id": "P2-F21",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 522,
+      "claim": "BSD sed's empty -i '' suffix was taken as the expression.",
+      "counterexample": "sed -i '' 's/a\\t/b/' f → allow. FOLDED ac867140."
+    },
+    {
+      "id": "P2-F22",
+      "severity": "MINOR",
+      "file": ".totem/specs/2799-transport-shield.md",
+      "line": 1,
+      "claim": "The superseded banner omitted two divergences the fold created.",
+      "counterexample": "pre-design :68 and :99. FOLDED ac867140."
+    },
+    {
+      "id": "P2-F23",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.fold.test.ts",
+      "line": 107,
+      "claim": "The measured budget of 0 rested on a corpus authored after the rows; near-neighbours denied.",
+      "counterexample": "grep gh -b /usr/local n.txt → deny. FOLDED ac867140: the shapes are corpus rows; out-of-scope backslashes stated in the docstring."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "F13",
+    "P2-F14",
+    "P2-F15",
+    "P2-F16",
+    "P2-F17",
+    "P2-F18",
+    "P2-F19",
+    "P2-F20",
+    "P2-F21",
+    "P2-F22",
+    "P2-F23"
+  ],
+  "verdict": "Two falsification passes (claude-opus-5[1m]): pass 1 over 935dc26a BLOCKING 2 · MATERIAL 5 · MINOR 8, no convergence; pass 2 over the bd8b39ef fold: 12 of 13 folds held, F7 not held until ac867140, new BLOCKING 1 · MATERIAL 4 · MINOR 5, no convergence. 23 findings folded (bd8b39ef, ac867140), F14 recorded as attested on mmnto-ai/totem#2799, F15 not this diff. A THIRD pass over ac867140 is owed before this PR is presented for merge; it opens as a draft."
+}
