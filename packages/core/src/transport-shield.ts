@@ -40,8 +40,9 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * case pattern's) — is a comment to the end of the line, discarded WITHOUT
  * quote processing (POSIX 2.3 rule 9; bash §3.1.3), while a `#` that continues
  * a word is not one: `a#b`, and `$(x)#1` / `<(x)#1`, where the `)` closes a
- * substitution that is part of the word (rules 5 and 8) — the scanners track
- * which `(` each `)` closes. `$(( … ))` / `(( … ))` arithmetic is skipped. So
+ * substitution that is part of the word (rules 5 and 8 for `$( … )`; process
+ * substitution is a bash extension, bash §3.5.6, that behaves the same way) —
+ * the scanners track which `(` each `)` closes. `$(( … ))` / `(( … ))` arithmetic is skipped. So
  * neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc
  * or expose comment text as arguments. Not read, disclosed: PowerShell's block
  * comment `<# … #>` is not a comment to this scanner — an apostrophe inside one
@@ -161,9 +162,9 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  * `EOF.TXT`, `EOF-1`, `1EOF` and `$X` are whole delimiter words (reading only a
  * prefix of one left the body unterminated and over-scanned everything after
  * it; not reading `<<1EOF` at all left its body to be scanned as shell text, the
- * miss direction). A `$X` delimiter is read literally, never expanded: its
- * terminator line is then never found and the body runs to the end — the
- * over-scan direction, disclosed. Groups: 1 the dash, 2 a single-quoted word,
+ * miss direction). A `$X` delimiter is read literally, as bash reads it — a
+ * heredoc delimiter word is never expanded, so bash and the scanner terminate
+ * at the same literal `$X` line. Groups: 1 the dash, 2 a single-quoted word,
  * 3 a double-quoted word, 4 a backslash-quoted word, 5 a bare word. A partly
  * quoted word (`E'O'F`) is read to its first quote — over-scan direction.
  */
@@ -175,8 +176,9 @@ const HEREDOC_AT =
  * a comment (POSIX 2.3 rule 9, the comment rule; rule 8 appends to a word that
  * is still open). Parentheses are not here: an opening `(` and an OPERATOR `)`
  * begin a word, but the `)` that closes a `$( … )` or `<( … )` continues one
- * (rule 5 makes the substitution part of the word) — `findHeredocs` tracks
- * which `(` each `)` closes and sets the boundary from that.
+ * (rule 5 makes a `$( … )` part of the word; `<( … )` is bash's own extension,
+ * §3.5.6, and bash treats it the same way) — `findHeredocs` tracks which `(`
+ * each `)` closes and sets the boundary from that.
  */
 const WORD_BOUNDARY: ReadonlySet<string> = new Set([' ', '\t', '\r', '\n', ';', '|', '&']);
 
