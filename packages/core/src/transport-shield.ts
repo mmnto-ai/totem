@@ -35,15 +35,17 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * takes operands of its own before the program (`sudo -u me gh …`, `timeout
  * 30 gh …`, `npx …`) hides the program from the position anchor — the same
  * class. The scanners read the shell's own grammar where a mis-read would
- * desynchronize them: a `#` after an unquoted blank, newline, `;`, `|`, `&`
- * or `(` is a comment to the end of the line, discarded WITHOUT quote
- * processing (bash §3.1.3; a `#` that continues a word — `a#b`, `$(x)#1` — is
- * not one), and `$(( … ))` / `(( … ))` arithmetic is skipped, so neither an
- * apostrophe in a comment nor a `<<` shift can hide a later heredoc or expose
- * comment text as arguments. Not read, disclosed: a `#` directly after a
- * subshell's closing `)` is taken as word text (over-scan, never a miss), and
- * PowerShell's block comment `<# … #>` is not a comment to this scanner — an
- * apostrophe inside one can still desynchronize the quote scan for that tool
+ * desynchronize them: a `#` that begins a word — after an unquoted blank,
+ * newline, `;`, `|`, `&`, an opening `(` or an OPERATOR `)` (a subshell's, a
+ * case pattern's) — is a comment to the end of the line, discarded WITHOUT
+ * quote processing (POSIX 2.3 rule 9; bash §3.1.3), while a `#` that continues
+ * a word is not one: `a#b`, and `$(x)#1` / `<(x)#1`, where the `)` closes a
+ * substitution that is part of the word (rules 5 and 8) — the scanners track
+ * which `(` each `)` closes. `$(( … ))` / `(( … ))` arithmetic is skipped. So
+ * neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc
+ * or expose comment text as arguments. Not read, disclosed: PowerShell's block
+ * comment `<# … #>` is not a comment to this scanner — an apostrophe inside one
+ * can still desynchronize the quote scan for that tool, the miss direction
  * (its line comment `#` is handled by the same rule as bash's).
  */
 
@@ -152,25 +154,31 @@ export interface HeredocSpan {
 const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
 
 /**
- * `<<` or `<<-`, optional blanks, then the delimiter word: quoted (`'EOF'`,
- * `"EOF"`), backslash-quoted (`\EOF` — bash: any quoted character in the word
- * quotes the whole delimiter, POSIX 2.7.4), or bare. Groups: 1 the dash, 2+3
- * a quote and its word, 4 the backslash-quoted word, 5 the bare word. A
- * delimiter word may carry `.` and `-` after its first character (`EOF.TXT`,
- * `EOF-1`): reading only `EOF` of it left the body unterminated and over-scanned
- * everything after it. A delimiter beginning with a digit or `$` is not read
- * (`<<1`, `<<$X` — a disclosed gap, over-scan direction only).
+ * `<<` or `<<-`, optional blanks, then the delimiter WORD as bash delimits it:
+ * single-quoted, double-quoted, backslash-quoted (`\EOF` — any quoted character
+ * in the word quotes the whole delimiter, POSIX 2.7.4), or bare — a bare word
+ * running to the next blank, quote, backslash or operator character, so
+ * `EOF.TXT`, `EOF-1`, `1EOF` and `$X` are whole delimiter words (reading only a
+ * prefix of one left the body unterminated and over-scanned everything after
+ * it; not reading `<<1EOF` at all left its body to be scanned as shell text, the
+ * miss direction). A `$X` delimiter is read literally, never expanded: its
+ * terminator line is then never found and the body runs to the end — the
+ * over-scan direction, disclosed. Groups: 1 the dash, 2 a single-quoted word,
+ * 3 a double-quoted word, 4 a backslash-quoted word, 5 a bare word. A partly
+ * quoted word (`E'O'F`) is read to its first quote — over-scan direction.
  */
 const HEREDOC_AT =
-  /^<<(-?)[ \t]*(?:(['"])([A-Za-z_][A-Za-z0-9_.-]*)\2|\\([A-Za-z_][A-Za-z0-9_.-]*)|([A-Za-z_][A-Za-z0-9_.-]*))/;
+  /^<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|\\([^\s'"\\<>()|&;]+)|([^\s'"\\<>()|&;]+))/;
 
 /**
  * Characters after which the next character begins a word — where a `#` starts
- * a comment (POSIX 2.3 rule 10). Not `)`: it closes a `$( … )` that is PART of
- * a word (rule 9 — `$(x)#1` is one word), and a `#` after a subshell's `)` is
- * then over-scanned as text rather than mis-read as a comment.
+ * a comment (POSIX 2.3 rule 9, the comment rule; rule 8 appends to a word that
+ * is still open). Parentheses are not here: an opening `(` and an OPERATOR `)`
+ * begin a word, but the `)` that closes a `$( … )` or `<( … )` continues one
+ * (rule 5 makes the substitution part of the word) — `findHeredocs` tracks
+ * which `(` each `)` closes and sets the boundary from that.
  */
-const WORD_BOUNDARY: ReadonlySet<string> = new Set([' ', '\t', '\r', '\n', ';', '|', '&', '(']);
+const WORD_BOUNDARY: ReadonlySet<string> = new Set([' ', '\t', '\r', '\n', ';', '|', '&']);
 
 /**
  * The index just past the `))` that closes an arithmetic expansion or command
@@ -205,10 +213,14 @@ function skipArithmetic(command: string, from: number): number {
  * conservative reading, so a truncated command still refuses on its escapes.
  * A `#` that begins a word discards the rest of its line without quote
  * processing, as bash does, and `$(( … ))` / `(( … ))` arithmetic is skipped.
+ * `parens` records what each open `(` is — a substitution (`$(`, `<(`, `>(`),
+ * which is part of a word, or a grouping operator — so the `)` that closes it
+ * can say whether the next character begins a word.
  */
 export function findHeredocs(command: string): HeredocSpan[] {
   const spans: HeredocSpan[] = [];
   const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
+  const parens: Array<'subst' | 'group'> = [];
   let inSingle = false;
   let inDouble = false;
   let boundary = true;
@@ -285,6 +297,26 @@ export function findHeredocs(command: string): HeredocSpan[] {
       boundary = false;
       continue;
     }
+    if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
+      // A command or process substitution: part of the word that carries it. Its
+      // first character begins a word (a `#` right after `$(` is a comment).
+      parens.push('subst');
+      i += 2;
+      boundary = true;
+      continue;
+    }
+    if (ch === '(') {
+      parens.push('group');
+      i += 1;
+      boundary = true;
+      continue;
+    }
+    if (ch === ')') {
+      // The `)` of a substitution continues the word; an operator `)` ends one.
+      boundary = parens.pop() !== 'subst';
+      i += 1;
+      continue;
+    }
     if (ch === '\\') {
       i += 2;
       boundary = false;
@@ -312,8 +344,8 @@ export function findHeredocs(command: string): HeredocSpan[] {
       if (m !== null) {
         pending.push({
           stripTabs: (m[1] ?? '') === '-',
-          quoted: m[2] !== undefined || m[4] !== undefined,
-          delimiter: m[3] ?? m[4] ?? m[5] ?? '',
+          quoted: m[2] !== undefined || m[3] !== undefined || m[4] !== undefined,
+          delimiter: m[2] ?? m[3] ?? m[4] ?? m[5] ?? '',
         });
         i += m[0].length;
         boundary = false;
@@ -357,8 +389,10 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  * operators (`&&`, `||`, `|`, `;`, a background `&`, newline) and each segment
  * into words with quotes resolved. Good enough to find an option's value and a
  * program name; it does not expand anything. Command substitutions `$( … )`
- * stay inside the word that carries them. A `#` that begins a word discards the
- * rest of its line, as bash does — comment text is never an argument.
+ * and process substitutions `<( … )` / `>( … )` stay inside the word that
+ * carries them; grouping `(` and `)` are operators that delimit words. A `#`
+ * that begins a word discards the rest of its line, as bash does — comment
+ * text is never an argument.
  */
 export function tokenizeShell(command: string): ShellSegment[] {
   const segments: ShellSegment[] = [];
@@ -455,8 +489,10 @@ export function tokenizeShell(command: string): ShellSegment[] {
       i += 1;
       continue;
     }
-    if (ch === '$' && command[i + 1] === '(') {
-      // Keep a command substitution whole inside the word (balanced parens).
+    if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
+      // Keep a command or process substitution whole inside the word (balanced
+      // parens): it is part of the word that carries it, so a `#` right after
+      // its `)` continues that word.
       let depth = 0;
       let j = i;
       while (j < command.length) {
@@ -471,6 +507,13 @@ export function tokenizeShell(command: string): ShellSegment[] {
       word += command.slice(i, end);
       inWord = true;
       i = end;
+      continue;
+    }
+    if (ch === '(' || ch === ')') {
+      // Grouping parentheses are operators: they delimit words and carry none,
+      // so a `#` after a subshell's or a case pattern's `)` begins a comment.
+      flushWord();
+      i += 1;
       continue;
     }
     word += ch;

@@ -255,6 +255,42 @@ describe('transport-shield fold pass 3, re-armed — a # that continues a word, 
     expect(run("echo 'a' $(git show origin/main:x.md)", 'win32').disposition).toBe('warn');
   });
 
+  it('an operator ) begins a word and a substitution ) continues one, so a # after each reads as bash reads it (P3c-F1)', () => {
+    // A `#` after a subshell's or a case pattern's `)` is a comment in bash (an
+    // operator token precedes it); after `$( … )` or `<( … )` it continues the word.
+    expect(run("(echo a)#it's a note\ncat <<'EOF'\nx\\d\nEOF").provenance.ref).toBe(
+      'heredoc-escape',
+    );
+    expect(
+      run("case $x in\na)#don't\n  echo hit;;\nesac\ncat <<'EOF'\ny\\d\nEOF").provenance.ref,
+    ).toBe('heredoc-escape');
+    expect(run("(echo a)#see <<'EOF'\nx\\d\nEOF").disposition).toBe('allow');
+    expect(findHeredocs("$(a)# it's\ncat <<'EOF'\nx\\d\nEOF")).toEqual([]);
+    expect(findHeredocs("diff <(echo a) <(echo b)#it's\ncat <<'EOF'\nx\\d\nEOF")).toEqual([]);
+    expect(run("(cd x && ls)#don't forget\ngh pr comment 5 -b /x", 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(tokenizeShell('(echo a)#x\ndiff <(echo a) <(echo b)#y').map((s) => s.tokens)).toEqual([
+      ['echo', 'a'],
+      ['diff', '<(echo a)', '<(echo b)#y'],
+    ]);
+  });
+
+  it('a delimiter word is read whole as bash delimits it — 1EOF, $X (literally), and a word ending at an operator (P3c-F2)', () => {
+    const two = findHeredocs("cat <<1EOF\nit's\n1EOF\ncat <<'EOF'\nx\\d\nEOF");
+    expect(two.map((s) => [s.delimiter, s.unterminated])).toEqual([
+      ['1EOF', false],
+      ['EOF', false],
+    ]);
+    expect(run("cat <<1EOF\nit's\n1EOF\ncat <<'EOF'\nx\\d\nEOF").provenance.ref).toBe(
+      'heredoc-escape',
+    );
+    expect(run("cat <<1EOF\nit's\n1EOF\nsed -i 's/a/b/' 'C:\\x'").disposition).toBe('allow');
+    expect(findHeredocs('cat <<$X\nbody\nEOF\n')[0]?.unterminated).toBe(true);
+    expect(findHeredocs('x=$(cat <<EOF)\nplain\nEOF\n')[0]?.delimiter).toBe('EOF');
+    expect(findHeredocs('cat <<EOF;\nplain\nEOF\n')[0]?.delimiter).toBe('EOF');
+  });
+
   it('a delimiter word may carry . and - (EOF.TXT, EOF-1), so the body terminates where bash terminates it', () => {
     const spans = findHeredocs("cat <<EOF.TXT\nplain\nEOF.TXT\ncat <<'EOF-1'\nx\nEOF-1\nafter");
     expect(spans.map((s) => [s.delimiter, s.quoted, s.unterminated])).toEqual([
@@ -325,6 +361,9 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ['gh issue create --title -b --body-file notes.md', 'win32'],
     ["cat <<EOF.TXT\nplain\nEOF.TXT\nsed -i 's/a/b/' 'C:\\x'", 'win32'],
     ["awk -F\\' '{print $2}' f", 'win32'],
+    ["(echo a)#see <<'EOF'\nx\\d\nEOF", 'win32'],
+    ["cat <<1EOF\nit's\n1EOF\nsed -i 's/a/b/' 'C:\\x'", 'win32'],
+    ["(cd x && make) # it's done\ncat <<'EOF'\nplain\nEOF", 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {
