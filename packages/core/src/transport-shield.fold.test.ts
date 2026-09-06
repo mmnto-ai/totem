@@ -302,6 +302,77 @@ describe('transport-shield fold pass 3, re-armed — a # that continues a word, 
   });
 });
 
+describe('transport-shield — the bot round on mmnto-ai/totem#2804 (Gemini, Greptile, CodeRabbit findings folded)', () => {
+  it('a ) inside quotes never closes a substitution, so a later positive is still reached (Gemini, tokenizeShell)', () => {
+    expect(tokenizeShell('x=$(echo ")") && gh pr view 1').map((s) => s.tokens)).toEqual([
+      ['x=$(echo ")")'],
+      ['gh', 'pr', 'view', '1'],
+    ]);
+    expect(run('x=$(echo ")") && gh pr comment 5 -b /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run("x=$(echo ')') && sed -i 's/\\t/ /' f").provenance.ref).toBe('sed-i-escape');
+  });
+
+  it('a ) inside quotes never closes the subshell the warn row scans (Gemini, msys-rev-path-subshell)', () => {
+    expect(run('echo $(echo ")" && git show origin/main:x.md)', 'win32').disposition).toBe('warn');
+    expect(run('echo $(echo ")") $(git show origin/main:x.md)', 'win32').disposition).toBe('warn');
+  });
+
+  it('a PowerShell block comment carrying a quote hides nothing (Greptile)', () => {
+    expect(
+      run("Write-Output <# \" #> ; sed -i 's/\\d/x/' file", 'win32', 'PowerShell').provenance.ref,
+    ).toBe('sed-i-escape');
+    expect(run("<# don't #>\nsed -i 's/\\t/ /' f", 'win32', 'PowerShell').provenance.ref).toBe(
+      'sed-i-escape',
+    );
+    expect(
+      run("<# it's\nmulti-line #>\ncat <<'EOF'\nx\\d\nEOF", 'win32', 'PowerShell').provenance.ref,
+    ).toBe('heredoc-escape');
+    expect(run("Write-Output <# note #> 'plain'", 'win32', 'PowerShell').disposition).toBe('allow');
+  });
+
+  it('the MSYS opt-out is an assignment the shell applies to the judged segment, never a substring (CodeRabbit)', () => {
+    expect(
+      run('MSYS_NO_PATHCONV=1 echo hi && gh pr comment 5 -b /tmp/p', 'win32').provenance.ref,
+    ).toBe('msys-body-slash');
+    expect(run('# use MSYS_NO_PATHCONV=1\ngh pr comment 5 -b /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(
+      run('cat <<EOF\nMSYS_NO_PATHCONV=1\nEOF\ngh pr comment 5 -b /x', 'win32').provenance.ref,
+    ).toBe('msys-body-slash');
+    // A bare assignment sets a shell variable a later program never sees.
+    expect(run('MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32').provenance.ref).toBe(
+      'msys-body-slash',
+    );
+    expect(run('export MSYS_NO_PATHCONV=1; gh pr comment 5 -b /x', 'win32').disposition).toBe(
+      'allow',
+    );
+    expect(
+      run('export MSYS_NO_PATHCONV=1 && echo $(git show origin/main:x.md)', 'win32').disposition,
+    ).toBe('allow');
+    expect(run('MSYS_NO_PATHCONV=1 gh pr comment 5 -b /x', 'win32').disposition).toBe('allow');
+    expect(run('env MSYS_NO_PATHCONV=1 gh pr comment 5 -b /x', 'win32').disposition).toBe('allow');
+    expect(
+      run('MSYS_NO_PATHCONV=1 echo hi && echo $(git show origin/main:x.md)', 'win32').disposition,
+    ).toBe('warn');
+  });
+
+  it('a -f / --file script path is never the sed expression, and with a script file no positional operand is (CodeRabbit)', () => {
+    // Quoted, so the backslashes reach the operand (unquoted ones are bash escapes).
+    expect(run("sed -i -f 'C:\\tmp\\script.sed' file").disposition).toBe('allow');
+    expect(run("sed -i --file=C:\\tmp\\script.sed 'C:\\temp\\f.txt'").disposition).toBe('allow');
+    expect(run("sed -i -f script.sed -e 's/a\\t/b/' f").provenance.ref).toBe('sed-i-escape');
+  });
+
+  it('the newline arm reads the expression operand only, never a file operand (CodeRabbit)', () => {
+    expect(run('sed -i \'s/a/b/\' "f\ng"').disposition).toBe('allow');
+    expect(run("sed -i 's/a/b\nc/' f").provenance.ref).toBe('sed-i-escape');
+    expect(run("sed -i -e 's/a/b\nc/' f").provenance.matched).toBe('s/a/b c/');
+  });
+});
+
 describe('transport-shield — the false-positive budget fixture (ADR-109; F6)', () => {
   // Everyday commands that share a token with a row. Budget: ZERO denies. A deny
   // here is a defect in a row, never a reason to widen the corpus by hand.
@@ -364,6 +435,11 @@ describe('transport-shield — the false-positive budget fixture (ADR-109; F6)',
     ["(echo a)#see <<'EOF'\nx\\d\nEOF", 'win32'],
     ["cat <<1EOF\nit's\n1EOF\nsed -i 's/a/b/' 'C:\\x'", 'win32'],
     ["(cd x && make) # it's done\ncat <<'EOF'\nplain\nEOF", 'win32'],
+    // The bot round: quoted parens in a substitution, a sed script file, an opt-out on another segment.
+    ['x=$(echo ")") && gh pr view 1', 'win32'],
+    ["sed -i -f 'C:\\tmp\\script.sed' file", 'win32'],
+    ['MSYS_NO_PATHCONV=1 echo hi && gh pr view 1', 'win32'],
+    ["Write-Output <# note #> 'plain'", 'win32'],
   ];
 
   it('denies none of the benign corpus (budget: 0)', () => {

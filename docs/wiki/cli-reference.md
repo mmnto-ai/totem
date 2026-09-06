@@ -116,7 +116,7 @@ Gate engine. Evaluates decidable predicates against deterministic state.
 
 - `gate check` evaluates a gate predicate and emits a `GateVerdict` (`allow` / `warn` / `deny`) as JSON to stdout. `--payload <json>` carries the gate's input; `--payload -` reads it from stdin (the installed wrapper's channel, so a long shell command never meets the win32 command-line limit).
 - `gate install [name]` installs a gate PreToolUse hook into the committed `.claude/settings.json` (idempotent). Each gate installs under the matcher its registry entry declares, so `freeze-check` lands on `Write|Edit` and `transport-shield` on `Bash|PowerShell`.
-- `transport-shield` (PreToolUse on Bash and PowerShell) refuses the known payload-mangling shapes — heredoc escapes and `sed -i` expression escapes on both tools; a leading-slash `gh --body` under MSYS and inline `node -e` / `python -c` escapes from the Bash tool only — and warns on oversize heredocs (both tools) and on `<rev>:<path>` in a subshell from the Bash tool on win32.
+- `transport-shield` (PreToolUse on Bash and PowerShell) refuses the known payload-mangling shapes — heredoc escapes and `sed -i` expression escapes on both tools; a leading-slash `gh --body` under MSYS and inline `node -e` / `python -c` escapes from the Bash tool only — and warns on oversize heredocs (both tools) and on `<rev>:<path>` in a subshell from the Bash tool on win32. Comments are discarded as each shell discards them (bash `#` lines; PowerShell `#` lines and `<# … #>` blocks); PowerShell here-strings are not parsed, a disclosed gap.
 
 ### `totem install pack/<name>`
 

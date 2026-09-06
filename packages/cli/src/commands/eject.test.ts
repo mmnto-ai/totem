@@ -481,6 +481,62 @@ describe('ejectCommand', () => {
     ]);
   });
 
+  it('removes only the Totem hook from an entry that also carries a user hook, and keeps a user hook that passes --event to another program (the bot round on mmnto-ai/totem#2804)', async () => {
+    // Before the fold the scrub dropped the WHOLE entry when any hook in it was
+    // ours, and the needle claimed any command carrying the wrapper basename plus
+    // a later `--event`. Both shapes deleted user hooks on eject.
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Bash|PowerShell',
+                hooks: [
+                  {
+                    type: 'command',
+                    command:
+                      'node .claude/hooks/gate-wrapper.cjs --event transport-shield --strict',
+                  },
+                  { type: 'command', command: 'node my-audit.cjs' },
+                ],
+              },
+              {
+                matcher: 'Bash',
+                hooks: [
+                  { type: 'command', command: 'echo .claude/hooks/gate-wrapper.cjs --event note' },
+                  { type: 'command', command: 'node security/gate-wrapper.cjs --event authorize' },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(updated.hooks.PreToolUse).toEqual([
+      {
+        matcher: 'Bash|PowerShell',
+        hooks: [{ type: 'command', command: 'node my-audit.cjs' }],
+      },
+      {
+        matcher: 'Bash',
+        hooks: [
+          { type: 'command', command: 'echo .claude/hooks/gate-wrapper.cjs --event note' },
+          { type: 'command', command: 'node security/gate-wrapper.cjs --event authorize' },
+        ],
+      },
+    ]);
+  });
+
   it('leaves a user-authored Write|Edit entry that is not a Totem hook untouched', async () => {
     // The matcher-independent gate needle must not widen into "drop every
     // Write|Edit entry": a user hook under the same matcher survives.

@@ -182,6 +182,26 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
   });
 });
 
+describe('transport-shield — the PowerShell tool (the tool-agnostic rows pinned; the Bash-only rows inert)', () => {
+  it('denies a heredoc escape and a sed -i escape, and warns on an oversize heredoc, from PowerShell too', () => {
+    expectDeny(HEREDOC_WITH_ESCAPE, 'heredoc-escape', 'win32', 'PowerShell');
+    expectDeny("sed -i 's/\\t/ /' f", 'sed-i-escape', 'win32', 'PowerShell');
+    const v = run(
+      `cat > f <<'EOF'\n${'x'.repeat(HEREDOC_OVERSIZE_BYTES)}\nEOF`,
+      'win32',
+      'PowerShell',
+    );
+    expect(v.disposition).toBe('warn');
+    expect(v.provenance.ref).toBe('heredoc-oversize');
+  });
+
+  it('the Bash-only rows never fire from PowerShell', () => {
+    expectAllow('gh pr comment 5 --body /x', 'win32', 'PowerShell');
+    expectAllow('echo $(git show origin/main:x.md)', 'win32', 'PowerShell');
+    expectAllow("node -e 'a\\d'", 'win32', 'PowerShell');
+  });
+});
+
 describe('transport-shield — the warn rows (allow + advisory)', () => {
   it('warns on a <rev>:<path> inside $( … ) on win32 without MSYS_NO_PATHCONV=1, and allows it with the prefix', () => {
     const v = run('echo $(git show origin/main:.totem/x.md)', 'win32');
@@ -197,11 +217,14 @@ describe('transport-shield — the warn rows (allow + advisory)', () => {
     expectAllow('git show origin/main:.totem/x.md', 'win32');
   });
 
-  it('warns on a heredoc body at the oversize threshold and allows one below it', () => {
-    const big = 'x'.repeat(HEREDOC_OVERSIZE_BYTES);
-    const v = run(`cat > f <<'EOF'\n${big}\nEOF`);
+  it('warns on a heredoc body of exactly the oversize threshold and allows one byte below it', () => {
+    // The body includes its trailing newline: HEREDOC_OVERSIZE_BYTES - 1 x's + "\n"
+    // is exactly the threshold, so the comparison operator (>=) is pinned.
+    const atThreshold = 'x'.repeat(HEREDOC_OVERSIZE_BYTES - 1);
+    const v = run(`cat > f <<'EOF'\n${atThreshold}\nEOF`);
     expect(v.disposition).toBe('warn');
     expect(v.provenance.ref).toBe('heredoc-oversize');
+    expect(v.reason).toContain(`is ${HEREDOC_OVERSIZE_BYTES} bytes`);
     expect(v.reason).toContain('heuristic');
     expectAllow(`cat > f <<'EOF'\n${'x'.repeat(HEREDOC_OVERSIZE_BYTES - 2)}\nEOF`);
   });
@@ -258,7 +281,9 @@ describe('transport-shield — payload, purity, provenance', () => {
     const v = run(`cat > f <<'EOF'\n\t${long}\\d\nEOF`);
     expect(v.disposition).toBe('deny');
     const matched = v.provenance.matched as string;
-    expect(matched.length).toBeLessThanOrEqual(MATCHED_FRAGMENT_MAX);
+    // 300 characters truncate deterministically to the cap: 79 kept plus the ellipsis.
+    expect(matched.length).toBe(MATCHED_FRAGMENT_MAX);
+    expect(matched.endsWith('…')).toBe(true);
     expect(/[\x00-\x1f\x7f]/.test(matched)).toBe(false);
   });
 

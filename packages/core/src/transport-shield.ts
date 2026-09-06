@@ -44,10 +44,16 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * substitution is a bash extension, bash §3.5.6, that behaves the same way) —
  * the scanners track which `(` each `)` closes. `$(( … ))` / `(( … ))` arithmetic is skipped. So
  * neither an apostrophe in a comment nor a `<<` shift can hide a later heredoc
- * or expose comment text as arguments. Not read, disclosed: PowerShell's block
- * comment `<# … #>` is not a comment to this scanner — an apostrophe inside one
- * can still desynchronize the quote scan for that tool, the miss direction
- * (its line comment `#` is handled by the same rule as bash's).
+ * or expose comment text as arguments. For the PowerShell tool a `<# … #>`
+ * block comment is blanked before the scanners run (PowerShell discards it
+ * without quote processing, as bash discards a `#` line comment; the line
+ * comment is handled by the same rule as bash's). Not read, disclosed:
+ * PowerShell here-strings (`@" … "@`, `@' … '@`) are not parsed — a quote
+ * inside one can still desynchronize the quote scan for that tool, the miss
+ * direction. The MSYS opt-out is honoured only as an assignment the shell
+ * would apply to the judged segment — its own `VAR=… prog` prefix, or an
+ * earlier `export MSYS_NO_PATHCONV=1` — never as a substring: a comment or a
+ * heredoc body that names the cure opts nothing out.
  */
 
 export const TRANSPORT_SHIELD_EVENT = 'transport-shield';
@@ -361,6 +367,65 @@ export function findHeredocs(command: string): HeredocSpan[] {
   return spans;
 }
 
+/**
+ * The index just past the `)` that closes the substitution whose `(` sits at
+ * `open`, counting parentheses only OUTSIDE quotes — a `)` inside `'…'` or
+ * `"…"`, or after a backslash, is text (POSIX 2.2) and never closes it; the end
+ * of the text when the substitution is unterminated.
+ */
+function substitutionEnd(text: string, open: number): number {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let j = open;
+  while (j < text.length) {
+    const c = text[j] as string;
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+    } else if (inDouble) {
+      if (c === '\\' && j + 1 < text.length && DQ_ESCAPABLE.has(text[j + 1] as string)) j += 1;
+      else if (c === '"') inDouble = false;
+    } else if (c === '\\' && j + 1 < text.length) {
+      j += 1;
+    } else if (c === "'") {
+      inSingle = true;
+    } else if (c === '"') {
+      inDouble = true;
+    } else if (c === '(') {
+      depth += 1;
+    } else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return j + 1;
+    }
+    j += 1;
+  }
+  return text.length;
+}
+
+/**
+ * For the PowerShell tool: every `<# … #>` block comment replaced by spaces
+ * (newlines kept, length preserved), so a quote inside one cannot desynchronize
+ * the scanners — PowerShell discards the block without quote processing. An
+ * unterminated `<#` runs to the end. A `<#` inside a PowerShell string literal
+ * is blanked too (over-scan direction: text a string carries is never a command).
+ */
+function blankPowerShellBlockComments(command: string): string {
+  let out = '';
+  let i = 0;
+  while (i < command.length) {
+    if (command.startsWith('<#', i)) {
+      const close = command.indexOf('#>', i + 2);
+      const end = close === -1 ? command.length : close + 2;
+      out += command.slice(i, end).replace(/[^\n]/g, ' ');
+      i = end;
+      continue;
+    }
+    out += command[i];
+    i += 1;
+  }
+  return out;
+}
+
 /** The command with every heredoc body replaced by spaces (length preserved), so tokenizing never reads a body. */
 function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
   let out = command;
@@ -492,20 +557,11 @@ export function tokenizeShell(command: string): ShellSegment[] {
       continue;
     }
     if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
-      // Keep a command or process substitution whole inside the word (balanced
-      // parens): it is part of the word that carries it, so a `#` right after
-      // its `)` continues that word.
-      let depth = 0;
-      let j = i;
-      while (j < command.length) {
-        if (command[j] === '(') depth += 1;
-        else if (command[j] === ')') {
-          depth -= 1;
-          if (depth === 0) break;
-        }
-        j += 1;
-      }
-      const end = j < command.length ? j + 1 : command.length;
+      // Keep a command or process substitution whole inside the word, its
+      // parentheses balanced OUTSIDE quotes (a `)` inside `"…"` is text): it is
+      // part of the word that carries it, so a `#` right after its `)` continues
+      // that word.
+      const end = substitutionEnd(command, i + 1);
       word += command.slice(i, end);
       inWord = true;
       i = end;
@@ -644,6 +700,32 @@ function sedExpressions(args: readonly string[]): string[] {
   return out;
 }
 
+/** True when sed takes its script from a FILE (`-f X`, `--file X`, `--file=X`): then no positional operand is an expression. */
+function sedHasScriptFile(args: readonly string[]): boolean {
+  return args.some((a) => a === '-f' || a === '--file' || a.startsWith('--file='));
+}
+
+/**
+ * The expression operands of a sed argv: every `-e` value, or — when there is
+ * no `-e` and no script file — the first positional operand (a flag's own value
+ * skipped). Never a filename: with `-f` every positional operand is an input
+ * file, and a Windows path there carries backslashes that are not an escape.
+ */
+function sedExpressionOperands(args: readonly string[]): string[] {
+  const explicit = sedExpressions(args);
+  if (explicit.length > 0 || sedHasScriptFile(args)) return explicit;
+  for (let i = 0; i < args.length; i += 1) {
+    const a = args[i] as string;
+    if (a === '-l' || a === '--line-length') {
+      i += 1;
+      continue;
+    }
+    if (a === '' || a.startsWith('-')) continue;
+    return [a];
+  }
+  return [];
+}
+
 const INLINE_BODIES: ReadonlyArray<{ program: string; flags: readonly string[] }> = [
   { program: 'node', flags: ['-e', '--eval', '-p', '--print'] },
   { program: 'python', flags: ['-c'] },
@@ -671,9 +753,45 @@ function inlineBody(
 
 const REV_PATH_TOKEN = /(^|[\s(])([A-Za-z0-9_./~^-]+:[A-Za-z0-9_./-]+)(?=$|[\s)])/;
 
-/** Bash + win32 + the MSYS opt-out absent: the precondition both MSYS rows share. */
+/** Bash + win32: the platform precondition both MSYS rows share. */
 const msysApplies = (p: TransportShieldPayload): boolean =>
-  p.platform === 'win32' && p.tool === 'Bash' && !p.command.includes('MSYS_NO_PATHCONV=1');
+  p.platform === 'win32' && p.tool === 'Bash';
+
+const MSYS_OPT_OUT = 'MSYS_NO_PATHCONV=1';
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/** True when the segment's own assignment/wrapper prefix carries the opt-out (`MSYS_NO_PATHCONV=1 gh …`, `env MSYS_NO_PATHCONV=1 gh …`). */
+function segmentOptsOut(tokens: readonly string[]): boolean {
+  for (const t of tokens) {
+    if (t === MSYS_OPT_OUT) return true;
+    if (!ASSIGNMENT.test(t) && !WRAPPERS.has(t)) return false;
+  }
+  return false;
+}
+
+/** True when the segment exports the opt-out to every later segment: `export MSYS_NO_PATHCONV=1`. A bare assignment sets a shell variable a later program never sees, so it exports nothing. */
+const segmentExportsOptOut = (tokens: readonly string[]): boolean =>
+  tokens[0] === 'export' && tokens.slice(1).includes(MSYS_OPT_OUT);
+
+/**
+ * The segments an MSYS row may judge: each with its tokens and raw text, minus
+ * those the opt-out reaches as an ASSIGNMENT the shell applies — the segment's
+ * own prefix, or an earlier `export`. Never a substring: a comment, a heredoc
+ * body or an unrelated segment naming the cure opts nothing out.
+ */
+function msysSegments(text: string): ShellSegment[] {
+  const out: ShellSegment[] = [];
+  let exported = false;
+  for (const seg of tokenizeShell(text)) {
+    if (segmentExportsOptOut(seg.tokens)) {
+      exported = true;
+      continue;
+    }
+    if (exported || segmentOptsOut(seg.tokens)) continue;
+    out.push(seg);
+  }
+  return out;
+}
 
 // ─── The table ─────────────────────────────────────────────────────────────
 
@@ -707,10 +825,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       // Scoped to segments whose PROGRAM is `gh`, the one program whose --body / -b
       // takes a free-text body that MSYS path-converts (`-b` means something else on
-      // diff, curl, cp, sort, du, grep); the cure's MSYS_NO_PATHCONV=1 is honoured.
+      // diff, curl, cp, sort, du, grep); the cure's MSYS_NO_PATHCONV=1 is honoured
+      // per segment, as the assignment the shell would apply.
       if (!msysApplies(p)) return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of tokenizeShell(blanked)) {
+      for (const seg of msysSegments(blanked)) {
         const at = programIndex(seg.tokens, 'gh');
         if (at === -1) continue;
         const hit = optionsAsWritten(seg.tokens.slice(at + 1), '--body', '-b').find((h) =>
@@ -746,31 +865,29 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         );
         if (!inPlace) continue;
         // The EXPRESSION operands only — never a filename (a Windows path carries
-        // backslashes) and never BSD sed's empty backup-suffix operand (`-i ''`).
-        let expressions = sedExpressions(args);
-        if (expressions.length === 0) {
-          const first = args.find((a) => a !== '' && !a.startsWith('-'));
-          if (first !== undefined) expressions = [first];
-        }
+        // backslashes), never a `-f` script path, never BSD sed's empty
+        // backup-suffix operand (`-i ''`).
+        const expressions = sedExpressionOperands(args);
         const escaped = expressions.find((e) => e.includes('\\'));
         if (escaped !== undefined) {
           return { fragment: escaped, detail: 'a sed -i expression carries a backslash' };
         }
-        if (sedExpressions(args).length > 1) {
+        if (expressions.length > 1) {
           return {
             fragment: seg.raw.trim(),
-            detail: `a sed -i invocation carries ${sedExpressions(args).length} -e expressions`,
+            detail: `a sed -i invocation carries ${expressions.length} -e expressions`,
           };
         }
-        // A newline INSIDE an operand only: a bare newline ends the segment and an
-        // unquoted backslash-newline is a continuation the tokenizer drops, so a
-        // newline reaches a token only inside quotes (the shape that mangles) or
-        // inside a `$( … )` the tokenizer copies whole (over-scan, disclosed). Every
-        // operand of the segment is read, the file operand included.
-        if (seg.tokens.some((t) => t.includes('\n'))) {
+        // A newline INSIDE an expression operand only: a bare newline ends the
+        // segment and an unquoted backslash-newline is a continuation the tokenizer
+        // drops, so a newline reaches the operand only inside quotes (the shape that
+        // mangles) or inside a `$( … )` the tokenizer copies whole (over-scan,
+        // disclosed). A newline in a file operand is not this row's shape.
+        const multiline = expressions.find((e) => e.includes('\n'));
+        if (multiline !== undefined) {
           return {
-            fragment: seg.raw.trim(),
-            detail: 'a sed -i operand carries a newline inside quotes or a substitution',
+            fragment: multiline,
+            detail: 'a sed -i expression carries a newline inside quotes or a substitution',
           };
         }
       }
@@ -823,31 +940,27 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     cure: 'prefix the command with MSYS_NO_PATHCONV=1',
     find(p) {
       if (!msysApplies(p)) return null;
-      // Bodies and single-quoted text blanked first: a `$(` inside either is literal.
+      // Bodies and single-quoted text blanked first: a `$(` inside either is
+      // literal. Judged per segment, so the opt-out applies where the shell applies it.
       const blanked = blankSingleQuoted(blankHeredocBodies(p.command, findHeredocs(p.command)));
-      let cursor = 0;
-      while (cursor < blanked.length) {
-        const open = blanked.indexOf('$(', cursor);
-        if (open === -1) break;
-        let depth = 0;
-        let j = open + 1;
-        while (j < blanked.length) {
-          if (blanked[j] === '(') depth += 1;
-          else if (blanked[j] === ')') {
-            depth -= 1;
-            if (depth === 0) break;
+      for (const seg of msysSegments(blanked)) {
+        const text = seg.raw;
+        let cursor = 0;
+        while (cursor < text.length) {
+          const open = text.indexOf('$(', cursor);
+          if (open === -1) break;
+          // Balanced outside quotes: a `)` inside `"…"` never closes the subshell.
+          const end = substitutionEnd(text, open + 1);
+          const inner = text.slice(open + 2, text[end - 1] === ')' ? end - 1 : end);
+          const hit = REV_PATH_TOKEN.exec(inner);
+          if (hit !== null && !(hit[2] as string).includes('//')) {
+            return {
+              fragment: hit[2] as string,
+              detail: 'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
+            };
           }
-          j += 1;
+          cursor = end;
         }
-        const inner = blanked.slice(open + 2, j);
-        const hit = REV_PATH_TOKEN.exec(inner);
-        if (hit !== null && !(hit[2] as string).includes('//')) {
-          return {
-            fragment: hit[2] as string,
-            detail: 'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
-          };
-        }
-        cursor = j + 1;
       }
       return null;
     },
@@ -872,7 +985,13 @@ function boundedFragment(fragment: string): string {
  * return the first deny, else the first warn, else allow. Pure over the payload.
  */
 export const transportShieldEvaluator: GateEvaluator = (payload): GateVerdict => {
-  const p = parseTransportShieldPayload(payload);
+  const parsed = parseTransportShieldPayload(payload);
+  // The PowerShell tool's block comments are discarded before any row reads the
+  // command, as bash's line comments are discarded inside the scanners.
+  const p: TransportShieldPayload =
+    parsed.tool === 'PowerShell'
+      ? { ...parsed, command: blankPowerShellBlockComments(parsed.command) }
+      : parsed;
   const checkedAt = new Date().toISOString();
   let warn: { pattern: TransportPattern; match: TransportMatch } | null = null;
   for (const pattern of TRANSPORT_PATTERNS) {

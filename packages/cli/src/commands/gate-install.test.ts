@@ -735,7 +735,9 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     // argument) and darwin admit a 40 KB argv, so there the pre-fold wrapper also
     // exits 0; the stdin record assertion below is what holds on every platform.
     writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-    const long = 'x'.repeat(40_000);
+    /** One command-line past win32's 32,767-character cap (CreateProcess), where argv transport fails. */
+    const PAST_WIN32_ARGV_CAP = 40_000;
+    const long = 'x'.repeat(PAST_WIN32_ARGV_CAP);
     const { status, stderr } = runWrapper(
       { tool_name: 'Bash', tool_input: { command: long } },
       [],

@@ -27,10 +27,25 @@ describe('isInstalledGateCommand — the eject needle agrees with the installer 
     }
   });
 
-  it('rejects a user hook that only mentions the wrapper basename, and unrelated commands', () => {
+  it('accepts the installed grammar with a node path or a ./ or absolute wrapper path', () => {
+    for (const cmd of [
+      '/usr/bin/node ./.claude/hooks/gate-wrapper.cjs --event freeze-check --strict',
+      'C:\\nodejs\\node.exe .claude/hooks/gate-wrapper.cjs --event transport-shield --strict',
+      'node /repo/.claude/hooks/gate-wrapper.cjs --event freeze-check',
+    ]) {
+      expect(isInstalledGateCommand(cmd), cmd).toBe(true);
+    }
+  });
+
+  it('rejects a user hook that only mentions the wrapper basename, one that carries --event under another program or path, and unrelated commands', () => {
     for (const cmd of [
       'node my-hook.cjs --wraps .claude/hooks/gate-wrapper.cjs',
       'echo gate-wrapper.cjs',
+      // The bot-round shapes (mmnto-ai/totem#2804): --event alone is not ownership.
+      'echo .claude/hooks/gate-wrapper.cjs --event note',
+      'node security/gate-wrapper.cjs --event authorize',
+      'node gate-wrapper.cjs --event freeze-check',
+      'node .claude/hooks/gate-wrapper.cjs --strict --event freeze-check',
       'node .claude/hooks/PreWriteShield.cjs',
       'my-hook',
       '',
