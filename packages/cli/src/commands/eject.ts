@@ -448,9 +448,13 @@ function scrubClaudeSettings(cwd: string, summary: EjectSummary): void {
  *     left over from when Phase B added the install side).
  *   - `hooks.SessionStart` entries whose command references `SessionStart.cjs`
  *     (Phase C slice 1 install — mmnto-ai/totem#1845).
- *   - `hooks.PreToolUse` Write|Edit entries whose command references
- *     `gate-wrapper.cjs` (PR-C action-gate install — mmnto-ai/totem#2048;
- *     one per installed gate). Parity with `gate install` / `init --gates=`.
+ *   - `hooks.PreToolUse` entries whose command references `gate-wrapper.cjs`
+ *     under ANY matcher (PR-C action-gate install — mmnto-ai/totem#2048; one
+ *     per installed gate). Since mmnto-ai/totem#2799 each gate installs under
+ *     its OWN matcher (`Write|Edit` for freeze-check, `Bash|PowerShell` for
+ *     transport-shield), so the scrub keys on the wrapper needle — which only
+ *     Totem writes — and never on the matcher. Parity with `gate install` /
+ *     `init --gates=`.
  *
  * User-defined entries (other matchers, other commands) are preserved.
  * Empty arrays/objects/files are pruned bottom-up to leave a clean
@@ -500,20 +504,29 @@ function scrubCommittedClaudeSettings(cwd: string, summary: EjectSummary): void 
 
   let mutated = false;
 
-  // PreToolUse → drop the PreWriteShield entry AND every action-gate
-  // wrapper entry (matcher Write|Edit, command references gate-wrapper.cjs;
-  // one per installed gate — PR-C eject parity, mmnto-ai/totem#2048). Other
-  // matchers (Bash legacy, user-defined Write|Edit) preserved. Array guard
-  // so a malformed-but-valid JSON shape (e.g., `"PreToolUse": null`) is
-  // skipped instead of crashing the eject best-effort cleanup.
+  // PreToolUse → drop the PreWriteShield entry AND every action-gate wrapper
+  // entry (one per installed gate — PR-C eject parity, mmnto-ai/totem#2048).
+  //
+  // The two needles are scoped DIFFERENTLY on purpose:
+  //   - `gate-wrapper.cjs` → matcher-INDEPENDENT. Since mmnto-ai/totem#2799 a
+  //     gate installs under its own matcher (`Write|Edit` for freeze-check,
+  //     `Bash|PowerShell` for transport-shield), and the wrapper path is a
+  //     Totem-authored string no user command carries, so the needle alone
+  //     identifies our entry. Binding it to a matcher would strand every
+  //     non-`Write|Edit` gate entry behind an eject.
+  //   - `PreWriteShield` → still bound to `Write|Edit`, the only matcher that
+  //     install ever writes it under (unchanged, deliberately narrow).
+  // A user-authored `Bash` (or any other) entry carries neither needle and
+  // survives. Array guard so a malformed-but-valid JSON shape (e.g.,
+  // `"PreToolUse": null`) is skipped instead of crashing the best-effort cleanup.
   const preToolUseRaw = hooks.PreToolUse;
   if (Array.isArray(preToolUseRaw)) {
     const preToolUse = preToolUseRaw as Array<{ matcher?: string; hooks?: Array<unknown> }>;
     const filtered = preToolUse.filter(
       (entry) =>
         !(
-          entry.matcher === 'Write|Edit' &&
-          (commandIncludes(entry, 'PreWriteShield') || commandIncludes(entry, 'gate-wrapper.cjs'))
+          commandIncludes(entry, 'gate-wrapper.cjs') ||
+          (entry.matcher === 'Write|Edit' && commandIncludes(entry, 'PreWriteShield'))
         ),
     );
     if (filtered.length !== preToolUse.length) {

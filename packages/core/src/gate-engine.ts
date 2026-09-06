@@ -2,7 +2,8 @@ import * as path from 'node:path';
 
 import { TotemError } from './errors.js';
 import { FREEZE_FILE, readFreezeConfig } from './freeze.js';
-import type { GateEvaluator, GateVerdict } from './gate-types.js';
+import type { GateDefinition, GateEvaluator, GateMatcher, GateVerdict } from './gate-types.js';
+import { TRANSPORT_SHIELD_EVENT, transportShieldEvaluator } from './transport-shield.js';
 
 export const FREEZE_CHECK_EVENT = 'freeze-check';
 
@@ -71,14 +72,41 @@ const freezeCheckEvaluator: GateEvaluator = (payload, totemDir): GateVerdict => 
   };
 };
 
-/** Bounded registry of gate evaluators, keyed by event type. Immutable after load. */
-const REGISTRY: ReadonlyMap<string, GateEvaluator> = new Map<string, GateEvaluator>([
-  [FREEZE_CHECK_EVENT, freezeCheckEvaluator],
+/**
+ * Bounded registry of gate definitions, keyed by event type. Immutable after
+ * load. Each entry carries the PreToolUse matcher its host entry installs under
+ * (mmnto-ai/totem#2799): the installer reads it from here through
+ * `knownGates()` / `gateMatcher()` and never guesses.
+ */
+const REGISTRY: ReadonlyMap<string, GateDefinition> = new Map<string, GateDefinition>([
+  [FREEZE_CHECK_EVENT, { evaluator: freezeCheckEvaluator, matcher: 'Write|Edit' }],
+  [TRANSPORT_SHIELD_EVENT, { evaluator: transportShieldEvaluator, matcher: 'Bash|PowerShell' }],
 ]);
 
 /** The known gate event types — for error messages and host discovery. */
 export function knownGateEvents(): string[] {
   return [...REGISTRY.keys()];
+}
+
+/** Every known gate with the matcher it installs under, in registry order. */
+export function knownGates(): ReadonlyArray<{ event: string; matcher: GateMatcher }> {
+  return [...REGISTRY.entries()].map(([event, def]) => ({ event, matcher: def.matcher }));
+}
+
+/**
+ * The PreToolUse matcher a gate installs under. Throws (fail-loud) on an
+ * unknown event — never a default matcher.
+ */
+export function gateMatcher(event: string): GateMatcher {
+  const def = REGISTRY.get(event);
+  if (!def) {
+    throw new TotemError(
+      'GATE_INVALID',
+      `Unknown gate event "${event}". Known events: ${knownGateEvents().join(', ')}.`,
+      'Use one of the known --event values.',
+    );
+  }
+  return def.matcher;
 }
 
 /**
@@ -87,13 +115,13 @@ export function knownGateEvents(): string[] {
  * source — it never default-allows.
  */
 export function evaluateGate(event: string, payload: unknown, totemDir: string): GateVerdict {
-  const evaluator = REGISTRY.get(event);
-  if (!evaluator) {
+  const def = REGISTRY.get(event);
+  if (!def) {
     throw new TotemError(
       'GATE_INVALID',
       `Unknown gate event "${event}". Known events: ${knownGateEvents().join(', ')}.`,
       'Use one of the known --event values.',
     );
   }
-  return evaluator(payload, totemDir);
+  return def.evaluator(payload, totemDir);
 }

@@ -4,12 +4,13 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TotemError } from '@mmnto/totem';
+import { knownGateEvents, knownGates, TotemError } from '@mmnto/totem';
 
-import { gateCheckCommand } from './gate.js';
+import { gateCheckCommand, resolveGates } from './gate.js';
 
 /**
- * CLI-boundary tests for `totem gate check`.
+ * CLI-boundary tests for `totem gate check` and the `gate install` selection
+ * resolver `resolveGates`.
  *
  * The engine itself (allow/deny/no-file/fail-closed/side-effect-free) is
  * covered by `@mmnto/totem`'s gate-engine.test.ts. This file covers the
@@ -120,5 +121,55 @@ describe('gateCheckCommand', () => {
     expect(verdict.disposition).toBe('allow');
     expect(verdict.provenance.matched).toBeNull();
     expect(process.exitCode).toBeFalsy();
+  });
+});
+
+/**
+ * `resolveGates` (registry-driven selection, mmnto-ai/totem#2799).
+ *
+ * Successor to `resolveGateEvents`, which returned bare event strings; it now
+ * returns `{event, matcher}` pairs read from `knownGates()` so `installGates`
+ * never has to guess a matcher — and so `gate-install.ts` can stay free of any
+ * `@mmnto/totem` import (ADR-072 §3). The fail-loud messages are unchanged.
+ * (These four validation arms moved here from gate-install.test.ts, where they
+ * sat beside the installer they no longer call directly.)
+ */
+describe('resolveGates (registry-driven validation)', () => {
+  it('--all enumerates knownGates() — both gates, in registry order, with matchers', async () => {
+    const resolved = await resolveGates({ all: true });
+    expect(resolved).toEqual(knownGates());
+    // Spelled out, so a registry edit that moved a gate to another matcher
+    // fails here instead of being followed silently.
+    expect(resolved).toEqual([
+      { event: 'freeze-check', matcher: 'Write|Edit' },
+      { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+    ]);
+    // Order is the registry's, and it is what `--all` installs in.
+    expect(resolved.map((g) => g.event)).toEqual(knownGateEvents());
+  });
+
+  it('a known --<name> resolves to its own pair (freeze-check → Write|Edit)', async () => {
+    expect(await resolveGates({ name: 'freeze-check' })).toEqual([
+      { event: 'freeze-check', matcher: 'Write|Edit' },
+    ]);
+  });
+
+  it('transport-shield resolves to the Bash|PowerShell pair', async () => {
+    expect(await resolveGates({ name: 'transport-shield' })).toEqual([
+      { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+    ]);
+  });
+
+  it('an unknown --<name> fails loud (never default-install)', async () => {
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toBeInstanceOf(TotemError);
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toThrow(/unknown gate/i);
+    // The message still enumerates the known EVENT names, unchanged wording.
+    await expect(resolveGates({ name: 'made-up-gate' })).rejects.toThrow(
+      `Unknown gate "made-up-gate". Known gates: ${knownGateEvents().join(', ')}.`,
+    );
+  });
+
+  it('no --all and no --<name> fails loud (no default-install)', async () => {
+    await expect(resolveGates({})).rejects.toThrow(/no gate selected/i);
   });
 });

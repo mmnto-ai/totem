@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
-import { type GateTier, installGates } from './gate-install.js';
+import { type GateInstallSpec, type GateTier, installGates } from './gate-install.js';
 
 /**
  * Command-specific log tag for non-error output (log.success / log.dim).
@@ -37,17 +37,27 @@ function resolveTier(opts: { pilot?: boolean }): GateTier {
 }
 
 /**
- * Resolve + validate the gate events to install from the CLI options. The
- * `knownGateEvents()` registry is the single source of truth: `--all`
- * enumerates it, and a named gate must be a member or we throw (mirror the
- * engine's no-default-allow — never silently install nothing).
+ * Resolve + validate the gates to install from the CLI options, as
+ * `{ event, matcher }` pairs. The core registry is the single source of truth
+ * for BOTH halves (mmnto-ai/totem#2799): `knownGates()` enumerates the pairs in
+ * registry order for `--all`, and a named gate must be a member or we throw
+ * (mirror the engine's no-default-allow — never silently install nothing).
+ * `knownGateEvents()` supplies the event names for the user-facing messages, so
+ * the wording is unchanged from when this resolved event strings only.
+ *
+ * Resolving the matcher HERE (behind the lazy `@mmnto/totem` import, ADR-072 §3)
+ * is what lets `gate-install.ts` stay core-import-free: it receives the pairs
+ * rather than looking them up.
  */
-export async function resolveGateEvents(opts: GateInstallCommandOptions): Promise<string[]> {
-  const { knownGateEvents, TotemError } = await import('@mmnto/totem');
+export async function resolveGates(
+  opts: GateInstallCommandOptions,
+): Promise<ReadonlyArray<GateInstallSpec>> {
+  const { knownGateEvents, knownGates, TotemError } = await import('@mmnto/totem');
+  const gates = knownGates();
   const known = knownGateEvents();
 
   if (opts.all) {
-    return known;
+    return gates;
   }
 
   const name = opts.name?.trim();
@@ -59,7 +69,8 @@ export async function resolveGateEvents(opts: GateInstallCommandOptions): Promis
     );
   }
 
-  if (!known.includes(name)) {
+  const gate = gates.find((g) => g.event === name);
+  if (!gate) {
     throw new TotemError(
       'GATE_INVALID',
       `Unknown gate "${name}". Known gates: ${known.join(', ')}.`,
@@ -67,25 +78,26 @@ export async function resolveGateEvents(opts: GateInstallCommandOptions): Promis
     );
   }
 
-  return [name];
+  return [gate];
 }
 
 /**
  * `totem gate install [--all | --<name>]`
  *
  * Idempotently merges one PreToolUse entry per selected gate into committed
- * `.claude/settings.json` and scaffolds the shared parameterized wrapper to
+ * `.claude/settings.json` — each under the matcher its registry entry declares
+ * — and scaffolds the shared parameterized wrapper to
  * `.claude/hooks/gate-wrapper.cjs`. Thin caller of the shared `installGates`
  * merger (the same path `init --gates=` routes through) — no second copy of
  * the merge logic. Fails loud on an unknown `--<name>` (no default-install).
  */
 export async function gateInstallCommand(opts: GateInstallCommandOptions): Promise<void> {
-  const events = await resolveGateEvents(opts);
+  const gates = await resolveGates(opts);
   const { log } = await import('../ui.js');
 
   const cwd = process.cwd();
   const tier = resolveTier(opts);
-  const results = installGates(cwd, events, tier);
+  const results = installGates(cwd, gates, tier);
 
   for (const result of results) {
     if (result.err) {

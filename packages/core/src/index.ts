@@ -80,8 +80,36 @@ export {
   readFreezeConfig,
   RULE_COMPILATION_FREEZE_ID,
 } from './freeze.js';
-export { evaluateGate, FREEZE_CHECK_EVENT, knownGateEvents } from './gate-engine.js';
-export type { GateDisposition, GateEvaluator, GateProvenance, GateVerdict } from './gate-types.js';
+export {
+  evaluateGate,
+  FREEZE_CHECK_EVENT,
+  gateMatcher,
+  knownGateEvents,
+  knownGates,
+} from './gate-engine.js';
+export type {
+  GateDefinition,
+  GateDisposition,
+  GateEvaluator,
+  GateMatcher,
+  GateProvenance,
+  GateVerdict,
+} from './gate-types.js';
+export type {
+  TransportPattern,
+  TransportPatternId,
+  TransportShieldPayload,
+  TransportTool,
+} from './transport-shield.js';
+export {
+  HEREDOC_OVERSIZE_BYTES,
+  MATCHED_FRAGMENT_MAX,
+  parseTransportShieldPayload,
+  TRANSPORT_PATTERNS,
+  TRANSPORT_SHIELD_EVENT,
+  TRANSPORT_SHIELD_SOURCE,
+  transportShieldEvaluator,
+} from './transport-shield.js';
 
 // Config schemas
 export type {

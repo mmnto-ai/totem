@@ -429,6 +429,95 @@ describe('ejectCommand', () => {
     expect(updated.hooks.PreToolUse[0].matcher).toBe('Write');
   });
 
+  it('scrubs a Bash|PowerShell gate-wrapper entry, keeping a user-authored Bash entry (mmnto-ai/totem#2799)', async () => {
+    // Since #2799 a gate installs under ITS OWN matcher, so the eject scrub keys
+    // on the `gate-wrapper.cjs` needle regardless of matcher. Before the fix the
+    // filter was bound to `matcher === 'Write|Edit'`, so a transport-shield
+    // entry survived an eject forever. A user's own `Bash` entry carries no
+    // Totem needle and must still survive.
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Bash|PowerShell',
+                hooks: [
+                  {
+                    type: 'command',
+                    command:
+                      'node .claude/hooks/gate-wrapper.cjs --event transport-shield --strict',
+                  },
+                ],
+              },
+              {
+                matcher: 'Write|Edit',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: 'node .claude/hooks/gate-wrapper.cjs --event freeze-check --strict',
+                  },
+                ],
+              },
+              { matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    // Both gate entries gone — the Write|Edit one exactly as before, the
+    // Bash|PowerShell one newly reachable.
+    expect(updated.hooks.PreToolUse).toEqual([
+      { matcher: 'Bash', hooks: [{ type: 'command', command: 'my-hook' }] },
+    ]);
+  });
+
+  it('leaves a user-authored Write|Edit entry that is not a Totem hook untouched', async () => {
+    // The matcher-independent gate needle must not widen into "drop every
+    // Write|Edit entry": a user hook under the same matcher survives.
+    const settingsDir = path.join(cwd, '.claude');
+    fs.mkdirSync(settingsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(settingsDir, 'settings.json'),
+      JSON.stringify(
+        {
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: 'Write|Edit',
+                hooks: [
+                  {
+                    type: 'command',
+                    command: 'node .claude/hooks/gate-wrapper.cjs --event freeze-check --strict',
+                  },
+                ],
+              },
+              { matcher: 'Write|Edit', hooks: [{ type: 'command', command: 'my-own-linter' }] },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+
+    await ejectCommand({ force: true });
+
+    const updated = JSON.parse(fs.readFileSync(path.join(settingsDir, 'settings.json'), 'utf-8'));
+    expect(updated.hooks.PreToolUse).toEqual([
+      { matcher: 'Write|Edit', hooks: [{ type: 'command', command: 'my-own-linter' }] },
+    ]);
+  });
+
   it('scrubs both PreWriteShield and SessionStart entries in one pass, leaving file empty', async () => {
     const settingsDir = path.join(cwd, '.claude');
     fs.mkdirSync(settingsDir, { recursive: true });

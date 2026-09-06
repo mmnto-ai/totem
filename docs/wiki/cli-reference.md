@@ -115,7 +115,8 @@ Manage your deterministic rules (Pipeline 1). Subcommands: `list`, `inspect`, `t
 Gate engine. Evaluates decidable predicates against deterministic state.
 
 - `gate check` evaluates a gate predicate and emits a `GateVerdict` (`allow` / `warn` / `deny`) as JSON to stdout.
-- `gate install [name]` installs a gate PreToolUse hook into the committed `.claude/settings.json` (idempotent).
+- `gate install [name]` installs a gate PreToolUse hook into the committed `.claude/settings.json` (idempotent). Each gate installs under the matcher its registry entry declares, so `freeze-check` lands on `Write|Edit` and `transport-shield` on `Bash|PowerShell`.
+- `transport-shield` (PreToolUse on Bash and PowerShell) refuses the known payload-mangling shapes — heredoc escapes, a leading-slash `--body` under MSYS, `sed -i` escapes, inline `node -e` / `python -c` escapes — and warns on `<rev>:<path>` in a subshell and oversize heredocs.
 
 ### `totem install pack/<name>`
 

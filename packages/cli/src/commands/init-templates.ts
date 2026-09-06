@@ -1385,10 +1385,14 @@ export const CLAUDE_GATE_WRAPPER = `// [totem] auto-generated — Claude Code ac
 //
 // Exit-code contract (LOAD-BEARING — ADR-109 §2; branch ONLY on disposition):
 //   0 = allow | warn | --pilot deny | NOT-APPLICABLE fail-soft
-//       (unparseable/non-object envelope, no-declared-subsystem pass-through)
+//       (unparseable/non-object envelope; freeze-check with no declared
+//        subsystem; transport-shield on a tool other than Bash/PowerShell or
+//        with no non-empty string command)
 //   2 = deny (--strict, Claude block convention)
 //       | APPLICABLE-gate-not-evaluable fail-closed (missing CLI, non-zero
 //         \`gate check\`, unparseable verdict, or unknown disposition)
+//       | an --event this wrapper has no payload projection for (a baked event
+//         it cannot project is an applicable gate it cannot evaluate)
 'use strict';
 
 const { spawnSync } = require('child_process');
@@ -1444,38 +1448,78 @@ process.stdin.on('end', () => {
   const input =
     typeof parsed.tool_input === 'object' && parsed.tool_input !== null ? parsed.tool_input : {};
 
-  // ─── THE EMPTY-SUBSYSTEM GUARDRAIL ────────────────────────────────────
-  // freeze-check's predicate is on a DECLARED subsystem. A normal Edit/Write
-  // carries tool_input.file_path (a path), NOT a subsystem. With no declared
-  // subsystem, NO GATE APPLIES → pass through (exit 0). Do NOT shell out — a
-  // blanket fail-closed here would block every ordinary edit.
-  const declaredSubsystem =
-    typeof input.subsystem === 'string' && input.subsystem.trim() !== ''
-      ? input.subsystem.trim()
-      : '';
-  if (declaredSubsystem === '') {
-    process.exit(0);
-  }
+  // ─── PER-EVENT PAYLOAD PROJECTION ─────────────────────────────────────
+  // Each gate reads a DIFFERENT slice of the PreToolUse envelope, so the
+  // projection branches on the baked --event. Every branch owns its own
+  // NOT-APPLICABLE test — the point past which a gate genuinely applies and
+  // any evaluation failure must fail CLOSED.
+  //
+  //   event            | applies when                     | payload
+  //   -----------------|----------------------------------|---------------------------
+  //   freeze-check     | tool_input.subsystem is a         | { subsystem }
+  //                    | non-empty string                  |
+  //   transport-shield | tool_name is Bash or PowerShell   | { tool, command, platform }
+  //                    | AND tool_input.command is a       |
+  //                    | non-empty string                  |
+  //   (anything else)  | — no projection → fail closed     | —
+  let payload = '';
 
-  // A gate genuinely applies. Build the --payload from the declared fields.
-  // NOTE: this payload projection is freeze-check-shaped (subsystem-only). The
-  // wrapper is --event-parameterized, but the payload it builds is currently
-  // freeze-check-specific; a future gate needing a different payload field must
-  // extend this projection (e.g. branch on \`event\`).
-  const payload = JSON.stringify({ subsystem: declaredSubsystem });
+  if (event === 'freeze-check') {
+    // THE EMPTY-SUBSYSTEM GUARDRAIL: freeze-check's predicate is on a DECLARED
+    // subsystem. A normal Edit/Write carries tool_input.file_path (a path), NOT
+    // a subsystem. With no declared subsystem, NO GATE APPLIES → pass through
+    // (exit 0). Do NOT shell out — a blanket fail-closed here would block every
+    // ordinary edit.
+    const declaredSubsystem =
+      typeof input.subsystem === 'string' && input.subsystem.trim() !== ''
+        ? input.subsystem.trim()
+        : '';
+    if (declaredSubsystem === '') {
+      process.exit(0);
+    }
+    payload = JSON.stringify({ subsystem: declaredSubsystem });
+  } else if (event === 'transport-shield') {
+    // transport-shield's predicate is on a SHELL COMMAND. Anything that is not
+    // a Bash/PowerShell invocation carrying a command string is NOT an
+    // applicable gate → pass through (exit 0), mirroring the guardrail above.
+    // The installed matcher is the CLI's own, so a foreign tool_name here means
+    // a hand-edited settings entry, not a shape to judge.
+    const tool = parsed.tool_name;
+    if (tool !== 'Bash' && tool !== 'PowerShell') {
+      process.exit(0);
+    }
+    if (typeof input.command !== 'string' || input.command.trim() === '') {
+      process.exit(0);
+    }
+    payload = JSON.stringify({
+      tool: tool,
+      command: input.command,
+      platform: process.platform,
+    });
+  } else {
+    // A baked --event this wrapper cannot project is an APPLICABLE gate it
+    // cannot evaluate → fail closed (ADR-109). Reinstalling refreshes the
+    // wrapper (\`totem gate install\` drift-repairs the bounded region).
+    process.stderr.write(
+      '[totem gate-wrapper] no payload projection for event "' + event + '"; failing closed.\\n',
+    );
+    process.exit(2);
+  }
 
   // Resolve the LOCAL Totem CLI (the global \`totem\` binary may be stale and
   // missing deps — the known repo gotcha). Invoke node on the installed dist
   // entry.
   //
-  // FAIL-CLOSED on a missing CLI: we are PAST the empty-subsystem guardrail, so
-  // a gate genuinely APPLIES here. freeze-check has NO commit-time hard floor
-  // (unlike PreWriteShield, whose fail-soft is backed by \`totem-lint\` at
-  // commit), so an APPLICABLE gate that cannot be evaluated for ANY reason
-  // (missing CLI OR corrupt freeze.json) must fail closed — not silently allow
-  // (guardrail rule + Tenet 4 fail-closed). Fail-SOFT (exit 0) is reserved for
-  // genuinely NOT-APPLICABLE inputs (unparseable/non-object envelope, no
-  // declared subsystem), all of which already returned above.
+  // FAIL-CLOSED on a missing CLI: we are PAST the per-event applicability
+  // guardrail (freeze-check: a declared subsystem; transport-shield: a Bash or
+  // PowerShell command), so a gate genuinely APPLIES here. Neither gate has a
+  // commit-time hard floor (unlike PreWriteShield, whose fail-soft is backed by
+  // \`totem-lint\` at commit), so an APPLICABLE gate that cannot be evaluated
+  // for ANY reason (missing CLI OR a broken source) must fail closed — not
+  // silently allow (guardrail rule + Tenet 4 fail-closed). Fail-SOFT (exit 0)
+  // is reserved for genuinely NOT-APPLICABLE inputs (unparseable/non-object
+  // envelope, no declared subsystem, no shell command), all of which already
+  // returned above.
   const cliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
   if (!existsSync(cliPath)) {
     process.stderr.write(
@@ -1494,11 +1538,12 @@ process.stdin.on('end', () => {
   );
 
   // ─── FAIL-CLOSED ──────────────────────────────────────────────────────
-  // A gate genuinely applies (a declared subsystem was present) and the
-  // evaluation itself failed (non-zero exit: corrupt freeze.json, spawn
-  // error, etc.). Never silently allow when an applicable gate's source is
-  // broken → exit 2. (No-declared-subsystem already returned exit 0 above,
-  // so this only blocks when a subsystem was actually declared.)
+  // A gate genuinely applies (the per-event projection above found its input:
+  // a declared subsystem, or a Bash/PowerShell command) and the evaluation
+  // itself failed (non-zero exit: corrupt freeze.json, an invalid payload,
+  // spawn error, etc.). Never silently allow when an applicable gate's source
+  // is broken → exit 2. (Not-applicable envelopes already returned exit 0
+  // above, so this only blocks when the gate's input was actually present.)
   if (result.error || typeof result.status !== 'number' || result.status !== 0) {
     process.stderr.write(
       '[totem gate-wrapper] gate "' +
@@ -1550,21 +1595,28 @@ process.stdin.on('end', () => {
 ${TOTEM_FILE_END}
 `;
 
-// The PreToolUse entry constant for the freeze-check gate. The \`--event\`
-// is baked into the command string per-entry (one wrapper, N gates = N
-// entries pointing at the same script with different --event args).
-// Matches the \`Write|Edit\` matcher so the wrapper sees every write — the
-// empty-subsystem guardrail (in the wrapper) is what keeps ordinary edits
-// passing through. Installed into committed \`.claude/settings.json\`
-// (team-level governance — gate opt-in is repo policy, Tenet 12).
+// The PreToolUse entry constant for the freeze-check gate — the EXEMPLAR of the
+// installed shape, not a template every gate is stamped from. The \`--event\` is
+// baked into the command string per-entry (one wrapper, N gates = N entries
+// pointing at the same script with different --event args).
+//
+// SOURCE OF TRUTH for the MATCHER is the core gate registry
+// (mmnto-ai/totem#2799): \`knownGates()\` carries each gate's own matcher, the
+// caller resolves it, and \`gateEntry()\` writes THAT — freeze-check under
+// \`Write|Edit\` (so the wrapper sees every write; the empty-subsystem guardrail
+// is what keeps ordinary edits passing through), transport-shield under
+// \`Bash|PowerShell\`. This constant stays the \`Write|Edit\` freeze-check
+// exemplar and is never consulted for another gate's matcher.
 //
 // SOURCE OF TRUTH for the ACTUAL installed command is
 // gate-install.ts \`gateCommand(event, tier)\` — it builds the per-gate,
 // per-tier string at install time. This constant supplies ONLY the canonical
-// \`matcher\` and hook \`type\` (the fields \`gateEntry()\` reads); its \`command\`
-// here mirrors the DEFAULT install (freeze-check at the default \`--strict\`
-// tier) so a reader sees exactly what a default \`totem gate install\` bakes,
-// not a tier-less never-installed string.
+// hook \`type\` (the one field \`gateEntry()\` still reads); its \`matcher\` and
+// \`command\` here mirror the DEFAULT freeze-check install (at the default
+// \`--strict\` tier) so a reader sees exactly what a default
+// \`totem gate install freeze-check\` bakes, not a tier-less never-installed
+// string. Installed into committed \`.claude/settings.json\` (team-level
+// governance — gate opt-in is repo policy, Tenet 12).
 export const CLAUDE_GATE_WRAPPER_ENTRY = {
   matcher: 'Write|Edit',
   hooks: [
