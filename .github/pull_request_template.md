@@ -22,4 +22,4 @@
 
 ## Related
 
-<!-- Issues and PRs this touches, repo-qualified. To CLOSE an issue on merge, write two adjacent lines as one atom: a bare-prose line reading `Closes mmnto-ai/totem#NNNN`, and directly beneath it an HTML comment whose text is `totem-close: #NNNN`. The D1 autoclose guard (a required check) fails a closing keyword that has no marker, and GitHub closes on a closing keyword beside ANY issue reference even when the sentence negates it — so refer to issues you do not mean to close with "see" or "part of", never with a closing keyword. -->
+<!-- Issues and PRs this touches, repo-qualified. To CLOSE an issue on merge, write two adjacent lines as one atom: a bare-prose line reading `Closes mmnto-ai/totem#NNNN`, and directly beneath it an HTML comment whose text is `totem-close: #NNNN`. The D1 autoclose guard (a required check) fails a closing keyword that has no marker, and GitHub closes on a closing keyword beside ANY issue reference even when the sentence negates it — so refer to issues you do not mean to close with "see" or "part of", not with a closing keyword. -->
