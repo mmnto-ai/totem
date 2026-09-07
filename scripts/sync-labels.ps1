@@ -21,24 +21,48 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if ($WhatIfPreference) {
-    # Shadow the gh executable for the whole script. PowerShell resolves a
-    # function before a native command, so every literal `gh ...` line below --
-    # including the `gh issue list` / `gh issue edit` / `gh label delete` calls
-    # inside Merge-Label -- prints instead of executing. Arguments that carry a
-    # space are re-quoted so the printed line reads like the authored call.
-    function script:gh {
+# The native binary, resolved BEFORE the shadow below exists (a function named
+# gh would otherwise win the lookup). -CommandType Application never returns a
+# function, so this is the real gh.exe / gh on PATH.
+$script:GhNative = (Get-Command gh -CommandType Application | Select-Object -First 1).Source
+$script:Failures = [System.Collections.Generic.List[string]]::new()
+
+# Shadow the gh executable for the whole script. PowerShell resolves a function
+# before a native command, so every literal `gh ...` line below -- including the
+# `gh issue list` / `gh issue edit` / `gh label delete` calls inside Merge-Label
+# -- goes through here. Two modes:
+#   -WhatIf : print the call (arguments carrying a space re-quoted so the line
+#             reads like the authored call) and execute nothing.
+#   normal  : forward to the native binary, then tally a non-zero exit on the
+#             MUTATIONS whose failure means the sync did not converge -- `label
+#             edit` and `issue edit`. `label create` (fails on an existing label
+#             by design; the `edit` that follows carries the convergence) and
+#             `label delete` (fails on an already-retired name) stay expected-
+#             fail. Every literal line keeps its `2>$null`; the exit CODE is what
+#             this checks, and the run ends non-zero when any mutation failed.
+function script:gh {
+    if ($WhatIfPreference) {
         $rendered = @($args | ForEach-Object {
                 $text = [string]$_
                 if ($text -match '\s') { '"' + $text + '"' } else { $text }
             })
         Write-Host "[WhatIf] gh $($rendered -join ' ')"
+        $global:LASTEXITCODE = 0
+        return
+    }
+    & $script:GhNative @args
+    $verb = if ($args.Count -ge 2) { "$($args[0]) $($args[1])" } else { "$args" }
+    if ($LASTEXITCODE -ne 0 -and ($verb -eq 'label edit' -or $verb -eq 'issue edit')) {
+        $target = if ($args.Count -ge 3) { [string]$args[2] } else { '' }
+        $script:Failures.Add("$verb $target")
+        Write-Host "[Error] gh $verb '$target' failed (exit $LASTEXITCODE)" -ForegroundColor Red
     }
 }
-else {
+
+if (-not $WhatIfPreference) {
     # Fail loud when unauthenticated: every call below suppresses stderr with
     # `2>$null`, so without this preflight an unauthenticated run silently
-    # no-ops and reports success.
+    # no-ops. (Write access and API failures are caught per mutation above.)
     gh auth status 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[Error] GitHub CLI (gh) is not authenticated. Run 'gh auth login' and re-run this script." -ForegroundColor Red
@@ -142,5 +166,11 @@ Merge-Label "investigation" "status: investigation"
 
 # Domain merges
 Merge-Label "strategy" "domain: strategy"
+
+if ($script:Failures.Count -gt 0) {
+    Write-Host "[Error] $($script:Failures.Count) label mutation(s) failed for $Repo -- the taxonomy did NOT converge:" -ForegroundColor Red
+    foreach ($failure in $script:Failures) { Write-Host "  - $failure" -ForegroundColor Red }
+    exit 1
+}
 
 Write-Host "Label taxonomy sync complete for $Repo!" -ForegroundColor Green

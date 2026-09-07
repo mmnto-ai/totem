@@ -233,18 +233,38 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
 function makeGhStub(): { dir: string; logPath: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gh-stub-'));
   const logPath = path.join(dir, 'gh-calls.log');
+  // With TOTEM_GH_STUB_FAIL set in the child's environment the stub still logs
+  // every call but exits 1 on `label edit` — the failure path of the script's
+  // mutation tally (Greptile P1 on mmnto-ai/totem#2827).
   if (process.platform === 'win32') {
     fs.writeFileSync(
       path.join(dir, 'gh.cmd'),
-      ['@echo off', `>>"${logPath}" echo %*`, ''].join('\r\n'),
+      [
+        '@echo off',
+        `>>"${logPath}" echo %*`,
+        'if "%TOTEM_GH_STUB_FAIL%"=="" exit /b 0',
+        'echo %* | findstr /C:"label edit" >nul',
+        'if %errorlevel%==0 exit /b 1',
+        'exit /b 0',
+        '',
+      ].join('\r\n'),
       'utf8',
     );
   } else {
     const stub = path.join(dir, 'gh');
-    fs.writeFileSync(stub, ['#!/bin/sh', `printf '%s\\n' "$*" >> "${logPath}"`, ''].join('\n'), {
-      encoding: 'utf8',
-      mode: 0o755,
-    });
+    fs.writeFileSync(
+      stub,
+      [
+        '#!/bin/sh',
+        `printf '%s\\n' "$*" >> "${logPath}"`,
+        'if [ -n "$TOTEM_GH_STUB_FAIL" ]; then',
+        '  case "$*" in *"label edit"*) exit 1 ;; esac',
+        'fi',
+        'exit 0',
+        '',
+      ].join('\n'),
+      { encoding: 'utf8', mode: 0o755 },
+    );
     fs.chmodSync(stub, 0o755);
   }
   return { dir, logPath };
@@ -265,11 +285,11 @@ function envWithPathPrefix(dir: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function runScript(args: string[], stubDir: string) {
+function runScript(args: string[], stubDir: string, extraEnv: NodeJS.ProcessEnv = {}) {
   return spawnSync('pwsh', ['-NoProfile', '-File', SCRIPT_PATH, ...args], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: envWithPathPrefix(stubDir),
+    env: { ...envWithPathPrefix(stubDir), ...extraEnv },
   });
 }
 
@@ -314,9 +334,16 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
         .filter((line) => line.length > 0);
       // The preflight ran (the unauthenticated silent no-op is now a hard stop).
       expect(calls.some((call) => call.startsWith('auth status'))).toBe(true);
-      expect(calls.filter((call) => call.startsWith('label edit ')).length).toBeGreaterThanOrEqual(
-        24,
-      );
+      // Every canonical label was edited, by name, exactly once — the set and
+      // the count both derive from the real script (CodeRabbit on mmnto-ai/totem#2827).
+      const edited = calls
+        .map((call) => /^label edit "?(.+?)"? --color /.exec(call)?.[1])
+        .filter((name): name is string => name !== undefined)
+        .sort();
+      const expectedEdited = realCanon()
+        .labels.map((label) => label.name)
+        .sort();
+      expect(edited).toEqual(expectedEdited);
       const created = calls
         .map((call) => /^label create "?(disposition: [a-z-]+)"?/.exec(call)?.[1])
         .filter((name): name is string => name !== undefined)
@@ -327,6 +354,27 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
         .sort();
       expect(expectedCreated).toHaveLength(6);
       expect(created).toEqual(expectedCreated);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed label edit fails the run — mutation errors never reach "sync complete"', () => {
+    // Authenticated but without write access, or an API failure: the literal
+    // lines suppress stderr by design, so only the exit CODE can carry the
+    // failure. The stub exits 1 on every `label edit`; the tally must name each
+    // canonical label and the script must exit non-zero (Greptile P1).
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, { TOTEM_GH_STUB_FAIL: '1' });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(1);
+      expect(run.stdout).toContain('label mutation(s) failed');
+      expect(run.stdout).not.toContain('sync complete');
+      const tallied = run.stdout
+        .split(/\r?\n/)
+        .filter((line) => line.includes('[Error] gh label edit')).length;
+      expect(tallied).toBe(realCanon().labels.length);
     } finally {
       fs.rmSync(stub.dir, { recursive: true, force: true });
     }
