@@ -101,6 +101,11 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
   const tier = resolveTier(opts);
   const results = installGates(cwd, gates, tier);
 
+  // The matcher each installed gate landed under, keyed by event — read from
+  // the resolved registry pairs (never guessed), so the shell-matcher
+  // disclosure below follows a registry move instead of a hardcoded list.
+  const matcherByEvent = new Map(gates.map((g) => [g.event, g.matcher]));
+
   for (const result of results) {
     if (result.err) {
       log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`);
@@ -117,6 +122,23 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
     } else {
       // Genuine same-tier no-op — the ONLY case that prints "no change".
       log.dim(TAG, `${label} already present — no change`);
+    }
+
+    // ─── Shell-matcher disclosure (mmnto-ai/totem#2822) ─────────────────
+    // A gate whose matcher includes `Bash` applies to the very commands a
+    // fresh clone bootstraps with, so the wrapper's PATH fallback (and its
+    // fail-closed floor when neither CLI resolves) is a property the installer
+    // must state at install time, not one a blocked `pnpm install` teaches.
+    // Keyed on the gate's OWN matcher, so a `Write|Edit` gate never prints it.
+    const matcher = result.event ? matcherByEvent.get(result.event) : undefined;
+    if (matcher?.includes('Bash')) {
+      log.dim(
+        TAG,
+        `${result.event} matches ${matcher}: it applies to a fresh clone's bootstrap commands ` +
+          `(pnpm install, pnpm build); with no repo-local CLI the wrapper falls back to a totem ` +
+          `on PATH and fails closed when neither resolves — bootstrap a fresh clone from a ` +
+          `terminal outside the harness.`,
+      );
     }
   }
 }

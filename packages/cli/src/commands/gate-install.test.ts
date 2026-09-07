@@ -64,6 +64,26 @@ function makeTmpDir(): string {
   return fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gate-install-')));
 }
 
+/**
+ * The parent env with EVERY case-variant of PATH dropped and exactly one
+ * `PATH` set (win32 stores it as `Path`; a plain spread would leave both keys
+ * in the child's block). Everything else is inherited so node still boots under
+ * an empty PATH.
+ *
+ * Load-bearing since the wrapper grew a PATH fallback arm (mmnto-ai/totem#2822):
+ * a wrapper test that means "no CLI is resolvable" must say so explicitly, or it
+ * silently reads the developer's global `@mmnto/cli` and passes/fails by machine.
+ */
+function envWithPath(value: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, val] of Object.entries(process.env)) {
+    if (key.toUpperCase() === 'PATH') continue;
+    env[key] = val;
+  }
+  env.PATH = value;
+  return env;
+}
+
 function readSettings(cwd: string): Record<string, unknown> {
   const raw = fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8');
   return JSON.parse(raw);
@@ -538,11 +558,17 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     return JSON.parse(record!.stdin) as Record<string, unknown>;
   }
 
-  /** Run the rendered wrapper with the given envelope + baked extra args. */
+  /**
+   * Run the rendered wrapper with the given envelope + baked extra args.
+   * `env` defaults to the parent's (every test here writes a repo-local stub,
+   * which the wrapper resolves FIRST, so the ambient PATH is inert for them);
+   * the no-CLI test passes an empty PATH explicitly.
+   */
   function runWrapper(
     envelope: unknown,
     extraArgs: string[] = [],
     event = 'freeze-check',
+    env: NodeJS.ProcessEnv | undefined = undefined,
   ): { status: number | null; stderr: string } {
     const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
     const res = spawnSync(process.execPath, [wrapperPath, '--event', event, ...extraArgs], {
@@ -550,6 +576,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       input: JSON.stringify(envelope),
       encoding: 'utf-8',
       timeout: 30000,
+      ...(env ? { env } : {}),
     });
     return { status: res.status, stderr: res.stderr ?? '' };
   }
@@ -626,12 +653,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
   });
 
   // ─── FIX 2: applicable gate but no local CLI dist → fail-closed ────────
-  it('applicable gate but the local CLI dist is missing → exit 2 fail-closed (FIX 2)', () => {
-    // Deliberately do NOT write the stub CLI. A declared subsystem makes the
-    // gate APPLY, but @mmnto/cli is not resolvable. freeze-check has no
-    // commit-time hard floor, so an applicable-but-unevaluable gate must fail
-    // closed (exit 2) rather than silently allow (exit 0).
-    const { status, stderr } = runWrapper(DECLARED);
+  it('applicable gate but NO CLI is resolvable (local absent, PATH empty) → exit 2 fail-closed (FIX 2)', () => {
+    // Deliberately do NOT write the stub CLI, and hand the wrapper an EMPTY
+    // PATH so neither resolution arm can answer (mmnto-ai/totem#2822 added the
+    // PATH fallback; without this the test would silently read a developer's
+    // global @mmnto/cli and stop testing fail-closed). A declared subsystem
+    // makes the gate APPLY; freeze-check has no commit-time hard floor, so an
+    // applicable-but-unevaluable gate must fail closed (exit 2), never silently
+    // allow (exit 0).
+    const { status, stderr } = runWrapper(DECLARED, [], 'freeze-check', envWithPath(''));
     expect(status).toBe(2);
     expect(stderr).toMatch(/not resolvable|not installed|failing closed/i);
   });
@@ -791,6 +821,167 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(BASH_CMD, ['--pilot'], 'nope');
     expect(status).toBe(2);
     expect(stubArgv()).toBeNull();
+  });
+});
+
+// ─── The PATH fallback arm (mmnto-ai/totem#2822) ───────────────────────
+//
+// A `Bash|PowerShell`-matched gate applies to `pnpm install` / `pnpm build` —
+// the very commands that CREATE the repo-local CLI — so a repo-local-ONLY
+// resolution made the gate block its own bootstrap on a fresh clone, and block
+// the cure its message named (`totem eject`, a Bash command). The wrapper now
+// falls back to a `totem` on PATH (repo-local still FIRST) and fails closed
+// only when NEITHER arm resolves — the #2799 ruling is kept, the self-block is
+// not. Each test below drives the rendered wrapper with a CONTROLLED PATH and
+// discriminates the fold: pre-fix, the first two exited through the no-CLI arm
+// (there was no PATH probe at all) and the third's message named `totem eject`.
+describe('gate-wrapper.cjs PATH fallback (mmnto-ai/totem#2822)', () => {
+  let cwd: string;
+  let pathDir: string;
+
+  /** The self-block case: a bootstrap command under the shell-matched gate. */
+  const BOOTSTRAP = { tool_name: 'Bash', tool_input: { command: 'pnpm install' } };
+  const ALLOW = { disposition: 'allow', reason: 'ok', provenance: {} };
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    fs.mkdirSync(path.join(cwd, '.claude', 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs'), CLAUDE_GATE_WRAPPER);
+    // A PATH entry shaped like an npm global prefix on win32: the `totem.cmd`
+    // shim's sibling `node_modules/@mmnto/cli/dist/index.js`. Deliberately NOT
+    // under `cwd/node_modules`, so the repo-local arm cannot resolve it.
+    pathDir = path.join(cwd, 'global-bin');
+    fs.mkdirSync(pathDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
+
+  /**
+   * A CLI stub at `<dir>/node_modules/@mmnto/cli/dist/index.js` emitting the
+   * given verdict and exit code; returns the entry path the wrapper should
+   * resolve. It drains stdin (the `--payload -` channel) before exiting so the
+   * parent's `input` write never races an EPIPE into `result.error`.
+   */
+  function writeCliUnder(dir: string, opts: { verdict?: unknown; exit?: number }): string {
+    const distDir = path.join(dir, 'node_modules', '@mmnto', 'cli', 'dist');
+    fs.mkdirSync(distDir, { recursive: true });
+    const out = opts.verdict === undefined ? '' : JSON.stringify(opts.verdict);
+    const stub = [
+      '"use strict";',
+      'const fs = require("fs");',
+      `const out = ${JSON.stringify(out)};`,
+      'try { fs.readFileSync(0, "utf-8"); } catch { /* no stdin */ }',
+      'if (out) process.stdout.write(out + "\\n");',
+      `process.exit(${opts.exit ?? 0});`,
+      '',
+    ].join('\n');
+    const entry = path.join(distDir, 'index.js');
+    fs.writeFileSync(entry, stub);
+    return entry;
+  }
+
+  /** Run the rendered wrapper in `cwd` with an exact PATH value. */
+  function runWithPath(
+    envelope: unknown,
+    pathValue: string,
+    event = 'transport-shield',
+  ): { status: number | null; stderr: string } {
+    const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
+    const res = spawnSync(process.execPath, [wrapperPath, '--event', event, '--strict'], {
+      cwd,
+      input: JSON.stringify(envelope),
+      encoding: 'utf-8',
+      timeout: 30000,
+      env: envWithPath(pathValue),
+    });
+    return { status: res.status, stderr: res.stderr ?? '' };
+  }
+
+  it('no repo-local CLI but a totem on PATH → the PATH arm evaluates (allow → exit 0)', () => {
+    writeCliUnder(pathDir, { verdict: ALLOW, exit: 0 });
+    const { status } = runWithPath(BOOTSTRAP, pathDir);
+    // Pre-fix this was exit 2: the wrapper never probed PATH, so a fresh clone's
+    // `pnpm install` was blocked by the gate it was about to install the CLI for.
+    expect(status).toBe(0);
+  });
+
+  it('the PATH CLI failing → exit 2 fail-closed, disclosing which CLI evaluated', () => {
+    // A CLI older than 2.2.0 has no `gate check --payload -` and lands exactly
+    // here (unknown option → non-zero exit). Fail-closed is UNCHANGED; the
+    // added line names the arm so the operator knows what to update.
+    const entry = writeCliUnder(pathDir, { exit: 1 });
+    const { status, stderr } = runWithPath(BOOTSTRAP, pathDir);
+    expect(status).toBe(2);
+    expect(stderr).toMatch(/fail-closed/i);
+    expect(stderr).toContain('evaluated by the PATH CLI at');
+    expect(stderr).toContain(entry);
+  });
+
+  it('no CLI anywhere → exit 2 naming exits this gate does NOT block', () => {
+    const { status, stderr } = runWithPath(BOOTSTRAP, '');
+    expect(status).toBe(2);
+    expect(stderr).toMatch(/failing closed/i);
+    expect(stderr).toContain('terminal OUTSIDE the harness');
+    expect(stderr).toContain('.claude/settings.json');
+    // The cure must not be a command this very gate blocks (the pre-fix message
+    // said "Reinstall totem or run `totem eject`" — both Bash).
+    expect(stderr).not.toContain('totem eject');
+  });
+
+  it('the repo-local CLI still wins when both resolve (pinned beats ambient)', () => {
+    // ADR-072 §2 / Tenet 14: the PATH arm is a FALLBACK, never a preference.
+    // The PATH stub would fail closed if the cascade ever inverted.
+    writeCliUnder(cwd, { verdict: ALLOW, exit: 0 });
+    writeCliUnder(pathDir, { exit: 1 });
+    const { status, stderr } = runWithPath(BOOTSTRAP, pathDir);
+    expect(status).toBe(0);
+    expect(stderr).not.toContain('PATH CLI');
+  });
+});
+
+// ─── Install-time disclosure of the shell-matcher property (#2822) ─────
+describe('gate install discloses a Bash-matched gate applies to bootstrap', () => {
+  let cwd: string;
+  let originalCwd: string;
+  let lines: string[];
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    cwd = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(cwd);
+    lines = [];
+    // `log.*` writes through console.error (ui.ts); capture the rendered lines.
+    // Restored per-test rather than via restoreAllMocks, which would also clear
+    // the module-level install-hooks seam this file mocks.
+    errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '));
+    });
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    process.chdir(originalCwd);
+    fs.rmSync(cwd, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  });
+
+  it('prints the line for a Bash|PowerShell gate and NOT for a Write|Edit gate', async () => {
+    await gateInstallCommand({ name: 'transport-shield' });
+    const shield = lines.join('\n');
+    expect(shield).toContain('transport-shield matches Bash|PowerShell:');
+    expect(shield).toContain("fresh clone's bootstrap commands (pnpm install, pnpm build)");
+    expect(shield).toContain('bootstrap a fresh clone from a terminal outside the harness');
+
+    lines = [];
+    await gateInstallCommand({ name: 'freeze-check' });
+    const freeze = lines.join('\n');
+    // It DID install (the control), and said nothing about bootstrap: the
+    // property is the shell matcher's, not every gate's.
+    expect(freeze).toContain('freeze-check');
+    expect(freeze).not.toContain('bootstrap');
+    expect(freeze).not.toContain('matches Bash|PowerShell');
   });
 });
 
