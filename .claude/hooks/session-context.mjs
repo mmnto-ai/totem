@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { selectLatestJournal } from './lib/select-latest-journal.mjs';
 
 // ─── totem-status sidecar refresh — GH snapshot + obligation store ───
 // (mmnto-ai/totem-status#127: C3 tracked in mmnto-ai/totem#2556, slice-two
@@ -463,27 +464,24 @@ async function buildStaticContext(gitRoot, branch, ticket, records) {
       // mmnto-ai/totem-strategy#813, never reaches an untracked directory).
       // When the two disagree the newer write is served and the drift is
       // named on the banner and in the manifest reason; when they agree
-      // nothing changes. Ties keep the lexical pick.
-      const files = readdirSync(journalDir)
-        .filter((f) => f.endsWith('.md'))
-        .sort()
-        .reverse();
-      if (files.length > 0) {
-        const lexicalLatest = files[0];
-        let mtimeLatest = lexicalLatest;
-        let newestMtimeMs = -Infinity;
-        for (const f of files) {
-          const mtimeMs = statSync(join(journalDir, f)).mtimeMs;
-          if (mtimeMs > newestMtimeMs) {
-            newestMtimeMs = mtimeMs;
-            mtimeLatest = f;
-          }
+      // nothing changes. Ties keep the lexical pick. The algorithm lives in
+      // ./lib/select-latest-journal.mjs so it is unit-tested without spawning
+      // this hook; a sibling whose stat fails is skipped and named there, never
+      // allowed to drop the whole journal block (bot round 1, mmnto-ai/totem#2831).
+      const pick = selectLatestJournal(readdirSync(journalDir), (f) => statSync(join(journalDir, f)).mtimeMs);
+      if (pick) {
+        const { files, lexicalLatest, mtimeLatest, latest, statFailures } = pick;
+        const journalDrift = pick.drift;
+        for (const failure of statFailures) {
+          process.stderr.write(
+            `[session-context] could not stat journal ${failure.file}: ${failure.message} — skipped for the newest-write check\n`,
+          );
         }
-        const journalDrift = mtimeLatest !== lexicalLatest;
-        const latest = journalDrift ? mtimeLatest : lexicalLatest;
         const recencyPolicy = journalDrift
           ? `recency-policy: newest write (${mtimeLatest}); the lexical-newest ${lexicalLatest} is older on disk — names have left the <model>-NNNN counter (mmnto-ai/totem#2828)`
-          : 'recency-policy: latest journal';
+          : pick.reason === 'lexical-unreadable'
+            ? `recency-policy: newest readable write (${latest}); the lexical-newest ${lexicalLatest} could not be stat'ed (see the stderr line)`
+            : 'recency-policy: latest journal';
         if (journalDrift) {
           lines.push(
             `⚠ journal naming drift: the lexical-newest ${lexicalLatest} is older on disk than ${mtimeLatest} — a name has left the <model>-NNNN counter convention (signoff skill step 2); serving the newer write (mmnto-ai/totem#2828)`,
