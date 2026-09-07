@@ -3882,6 +3882,17 @@ describe('bespoke .claude/hooks/session-context.mjs stays in lockstep with the t
     // It is the first of two; the stale banner outlived the second registration.
     expect(bespoke()).not.toContain('sole SessionStart entry');
   });
+
+  it('checks the lexical-newest journal against the newest write and names the drift (mmnto-ai/totem#2828)', () => {
+    // The journal read used to serve files[0] of a lexical sort with no
+    // other signal; a seat whose names left the <model>-NNNN counter got a
+    // stale entry injected as "latest". The sensor line and the per-record
+    // manifest reason are the two surfaces a drift now shows on.
+    const source = bespoke();
+    expect(source).toContain('journal naming drift: the lexical-newest');
+    expect(source).toContain('recency-policy: newest write (');
+    expect(source).toContain('only the newest write injected (naming drift');
+  });
 });
 
 describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890)', () => {
