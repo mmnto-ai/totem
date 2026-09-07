@@ -6,10 +6,11 @@
  * mirrored (Tenet 20 — the same discipline `parity-label-canon.test.ts` applies
  * to the canon itself):
  *
- *   1. Every `.github/ISSUE_TEMPLATE/*.yml` form parses, and every `labels:`
- *      entry it applies on creation is a name the script defines. A space-less
- *      `type:bug` would have GitHub silently create a namespace squatter; here
- *      it fails the suite instead.
+ *   1. Every `.github/ISSUE_TEMPLATE/*.yml` form parses and applies exactly its
+ *      own `type: <basename>` label, a name the script defines. A space-less
+ *      `type:bug` would leave the canon's type label missing on every issue the
+ *      form creates (whether GitHub drops the unknown label or mints a stray
+ *      one); here it fails the suite instead.
  *   2. Every form's `Tier` and `Scope` dropdowns offer exactly the canon's
  *      `tier-*` names and its `scope: ` names with the namespace stripped. Both
  *      option sets are computed from the parsed script — never hand-listed — so
@@ -142,17 +143,19 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
     }
   });
 
-  it('applies only labels the script defines (the space in `type: bug` is load-bearing)', () => {
+  it('applies exactly its own type: label, one the script defines (the space in `type: bug` is load-bearing)', () => {
     const canonNames = new Set(realCanon().labels.map((label) => label.name));
     // The canon must be non-empty, or this assertion would pass vacuously the
     // moment the script's grammar changed (the readers' own empty-canon refusal).
     expect(canonNames.size).toBeGreaterThan(0);
     for (const file of formFiles()) {
       const form = readForm(file);
-      expect(Array.isArray(form.labels), file).toBe(true);
-      for (const applied of form.labels ?? []) {
-        expect(canonNames.has(applied), `${file} applies ${applied}`).toBe(true);
-      }
+      // Charter § 4c(ii): one template per `type:` value, applying THAT label —
+      // derived from the filename, so `docs.yml` cannot ship `type: bug`, an
+      // empty list, or two type labels and still pass.
+      const expected = `type: ${file.replace(/\.yml$/, '')}`;
+      expect(form.labels, file).toEqual([expected]);
+      expect(canonNames.has(expected), `${file} applies ${expected}`).toBe(true);
     }
   });
 
@@ -282,7 +285,12 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
       const labelLines = stdout
         .split(/\r?\n/)
         .filter((line) => line.startsWith('[WhatIf] gh label'));
-      expect(labelLines.length).toBeGreaterThanOrEqual(24);
+      // One line per would-be call, derived from the canon rather than pinned:
+      // an `edit` per canonical label, a `create` per disposition label, and a
+      // `delete` per Merge-Label retirement.
+      const canon = realCanon();
+      const creates = canon.labels.filter((label) => label.name.startsWith('disposition: ')).length;
+      expect(labelLines.length).toBe(canon.labels.length + creates + canon.merges.length);
       // The shadow replaces the executable, so the stub on PATH never ran: no
       // log file at all. This is the "-WhatIf touches nothing" invariant.
       expect(fs.existsSync(stub.logPath)).toBe(false);

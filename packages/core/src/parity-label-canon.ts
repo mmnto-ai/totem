@@ -23,8 +23,8 @@
  * One disclosed asymmetry: this module strips a leading `#` from the CANON's
  * colour too (the twin lower-cases both sides but strips `#` on the live side
  * only), so a `#`-prefixed hex in the script would still match here — identical
- * readings while the script writes bare hex, as every one of its eighteen calls
- * does today. Option NAMES are compared exactly on the live side; the canon's
+ * readings while the script writes bare hex, as every one of its twenty-four
+ * calls does today. Option NAMES are compared exactly on the live side; the canon's
  * authoring whitespace is trimmed (the prose grammar cannot avoid it, and a
  * quoted YAML member may carry it), so a padded live option name is a real
  * difference the board shows, never smoothed away.
