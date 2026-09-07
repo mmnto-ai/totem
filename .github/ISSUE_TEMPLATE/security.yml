@@ -1,0 +1,63 @@
+name: Security
+description: Hardening on a public surface — exploitable vulnerabilities go to the private advisory
+labels: ['type: security']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report an exploitable vulnerability here.** This form is public.
+        An exploitable finding goes through the private security advisory
+        (Security → Advisories → Report a vulnerability), per `SECURITY.md`.
+        Use this form for hardening work whose disclosure costs nothing.
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      description: Immediate priority — next 1-2 PRs / Next release cycle / Long-term architecture
+      options:
+        - tier-1
+        - tier-2
+        - tier-3
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Every package or surface this touches.
+      multiple: true
+      options:
+        - cli
+        - core
+        - mcp
+        - ci
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed
+      description: The weakness as it stands today, at its source.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What an attacker or a careless caller gets, and what it costs.
+    validations:
+      required: true
+  - type: textarea
+    id: ask
+    attributes:
+      label: Ask
+      description: The hardening being requested.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: The condition that closes this issue, stated so someone else can check it.
+    validations:
+      required: true

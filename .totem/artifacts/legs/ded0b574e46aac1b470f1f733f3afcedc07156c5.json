@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ded0b574e46aac1b470f1f733f3afcedc07156c5",
+  "readAt": "2026-09-07T05:45:00Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/parity-label-canon.ts",
+      "line": 26,
+      "claim": "The module header says the script writes bare hex in every one of its eighteen calls.",
+      "counterexample": "The parse run over the branch script yields 24 definitions; the header was left at 18 while the labelCanonDrift doc comment was corrected in ded0b574 — same stale-doc class."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 145,
+      "claim": "The forms-coupling test locks charter § 4c(ii): one template per type: value applying that label.",
+      "counterexample": "The assertion only checks membership in the canon: labels: [] passes (the loop never runs), docs.yml carrying type: bug passes, two type labels pass. Strengthen to exact equality with type: <basename>."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2792.md",
+      "line": 191,
+      "claim": "The failure table is exhaustive.",
+      "counterexample": "labelCanonDrift pushes every canonical name absent from the live list into missing and conforming requires missing.length === 0; merging makes six names canonical before the batch-one run creates them, so totem doctor --parity reports gh-issue-label-canon non-conforming on this repo for the whole interval. Not CI-red (--parity is opt-in). Undisclosed in the record and the PR."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".totem/specs/2792.md",
+      "line": 179,
+      "claim": "Under -WhatIf, Merge-Label's inner gh issue list / gh issue edit / gh label delete print instead of calling.",
+      "counterexample": "The shadow's Write-Host emits to the information stream, so $issues is empty and the foreach never iterates: a full -WhatIf run prints gh issue list and gh label delete for all 22 merges and zero gh issue edit lines."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 285,
+      "claim": "The dry-run test asserts one line per would-be call.",
+      "counterexample": "It asserts >= 24 against an observed 52 (24 edit + 6 create + 22 delete); the exact count is derivable from realCanon() and canon.merges.length."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "scripts/sync-labels.ps1",
+      "line": 30,
+      "claim": "The -WhatIf output reads like the authored call.",
+      "counterexample": "On Windows the redirected pwsh console prints an ASCII hyphen where the file holds U+2014 (a console-encoding artifact; node reads the same bytes as an em-dash and the real call passes UTF-16 args). Cosmetic; a description-text assertion on the dry run would fail the Windows leg."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".changeset",
+      "line": 0,
+      "claim": "No changeset is owed (the only published-source change is a comment).",
+      "counterexample": "Holds; noted that adding one would flip the HARD legs gate on via the .changeset/** glob and require a deposit before push."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2792.md",
+      "line": 242,
+      "claim": "Four open questions remain for the operator.",
+      "counterexample": "The diff ships all four recommendations; the operator's design greenlight adopted them. The line was stale."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": ".totem/specs/2792.md",
+      "line": 197,
+      "claim": "A non-canon labels: entry makes GitHub silently create a squatter label.",
+      "counterexample": "Not grounded: GitHub may drop an unknown template label rather than create it. The guard is correct either way; the prose is reworded to hedge."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F8",
+    "F9"
+  ],
+  "verdict": "no blocking finding; three material folded or disclosed, six minor folded or noted (F6, F7 noted); termination: targeted re-check of the folded lines, no further full leg"
+}

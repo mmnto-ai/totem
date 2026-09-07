@@ -1,0 +1,56 @@
+name: Feature
+description: New capability or behaviour change — the ask, why now, and what done looks like
+labels: ['type: feature']
+body:
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      description: Immediate priority — next 1-2 PRs / Next release cycle / Long-term architecture
+      options:
+        - tier-1
+        - tier-2
+        - tier-3
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Every package or surface this touches.
+      multiple: true
+      options:
+        - cli
+        - core
+        - mcp
+        - ci
+    validations:
+      required: true
+  - type: textarea
+    id: ask
+    attributes:
+      label: Ask
+      description: The capability being requested, in the terms a builder would implement it.
+    validations:
+      required: true
+  - type: textarea
+    id: why-now
+    attributes:
+      label: Why now
+      description: What makes this the next thing rather than a later thing.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: The condition that closes this issue, stated so someone else can check it.
+    validations:
+      required: true
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: Existing code, issues, or tools this should follow or replace. Optional.
+    validations:
+      required: false

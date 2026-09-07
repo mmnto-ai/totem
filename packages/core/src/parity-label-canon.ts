@@ -23,8 +23,8 @@
  * One disclosed asymmetry: this module strips a leading `#` from the CANON's
  * colour too (the twin lower-cases both sides but strips `#` on the live side
  * only), so a `#`-prefixed hex in the script would still match here — identical
- * readings while the script writes bare hex, as every one of its eighteen calls
- * does today. Option NAMES are compared exactly on the live side; the canon's
+ * readings while the script writes bare hex, as every one of its twenty-four
+ * calls does today. Option NAMES are compared exactly on the live side; the canon's
  * authoring whitespace is trimmed (the prose grammar cannot avoid it, and a
  * quoted YAML member may carry it), so a padded live option name is a real
  * difference the board shows, never smoothed away.
@@ -157,9 +157,11 @@ export function namespaceTokensOf(names: readonly string[]): string[] {
  * Faults: a canonical name absent; a canonical name present with a different
  * colour or description; a live name inside a canonical namespace that is not
  * in the canon (the "never redefine a canonical namespace" half). Live names
- * outside every canonical namespace (`routine:*`, `disposition:*`, bare words)
- * are permitted additions, reported and never flagged; a retired name still
- * present is reported the same way.
+ * outside every canonical namespace (`routine:*`, bare words) are permitted
+ * additions, reported and never flagged; a retired name still present is
+ * reported the same way. (`disposition:*` is canonical since the script grew
+ * its six `edit` lines — mmnto-ai/totem#2792 — so a stray value there is a
+ * squatter, not an addition.)
  */
 export function labelCanonDrift(live: readonly LiveLabel[], canon: LabelCanon): LabelCanonDrift {
   const byName = new Map<string, LiveLabel>();

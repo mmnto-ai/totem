@@ -65,18 +65,56 @@ function live(name: string, color = 'd73a4a', description: string | null = 'x'):
 describe('parseLabelCanon — the real scripts/sync-labels.ps1', () => {
   const canon = parseLabelCanon(readFileSync(REAL_SCRIPT_PATH, 'utf8'));
 
-  it('derives exactly the 18 canonical labels the row names (tier ×3 · type ×6 · scope ×4 · domain ×3 · status ×2)', () => {
-    expect(canon.labels).toHaveLength(18);
+  it('derives exactly the 24 canonical labels the row names (tier ×3 · type ×6 · scope ×4 · domain ×3 · status ×2 · disposition ×6)', () => {
+    expect(canon.labels).toHaveLength(24);
     const names = canon.labels.map((l) => l.name);
     expect(names.filter((n) => n.startsWith('tier-'))).toHaveLength(3);
     expect(names.filter((n) => n.startsWith('type: '))).toHaveLength(6);
     expect(names.filter((n) => n.startsWith('scope: '))).toHaveLength(4);
     expect(names.filter((n) => n.startsWith('domain: '))).toHaveLength(3);
     expect(names.filter((n) => n.startsWith('status: '))).toHaveLength(2);
+    expect(names.filter((n) => n.startsWith('disposition: '))).toHaveLength(6);
   });
 
-  it('derives exactly the five namespace tokens, the space kept on the colon tokens', () => {
-    expect(canon.namespaces).toEqual(['domain: ', 'scope: ', 'status: ', 'tier-', 'type: ']);
+  it('derives exactly the six namespace tokens, the space kept on the colon tokens', () => {
+    expect(canon.namespaces).toEqual([
+      'disposition: ',
+      'domain: ',
+      'scope: ',
+      'status: ',
+      'tier-',
+      'type: ',
+    ]);
+    // The § 3 point of putting the six in the `edit` grammar (mmnto-ai/totem#2792):
+    // `disposition: ` becomes a SENSED namespace, so a seventh disposition invented
+    // on the repo is a squatter fault rather than a permitted extra.
+    expect(canon.namespaces).toContain('disposition: ');
+  });
+
+  // The six fixed dispositions, pinned name-for-name against the charter's § 3
+  // wording. A reworded description in the script is a real canon change (every
+  // repo's live label is compared to this text exactly), so it fails HERE first.
+  it('carries the six disposition labels with the charter descriptions and one namespace colour', () => {
+    const expected: Record<string, string> = {
+      'disposition: premise-changed':
+        'UPDATE — the premise moved; a human rewrites or rules; stays open',
+      'disposition: horizon': 'HOLD (Horizon) — premise valid, not now; open, label only, no card',
+      'disposition: done':
+        'ARCHIVE — done elsewhere; closed completed; comment carries the receipt (merged PR or path+digest)',
+      'disposition: obsolete':
+        'ARCHIVE — premise gone, no successor; closed not planned; receipt is the ground contact',
+      'disposition: superseded':
+        'SUPERSEDE — closed not planned; comment names the title-verified successor',
+      'disposition: lateral':
+        "LATERAL — closed not planned; comment names the lane's tracking issue",
+    };
+    for (const [name, description] of Object.entries(expected)) {
+      expect(canon.labels.find((l) => l.name === name)).toEqual({
+        name,
+        color: '6f42c1',
+        description,
+      });
+    }
   });
 
   it('carries the colour and description of each definition, colour lower-case without #', () => {
