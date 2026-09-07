@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
-import { type GateInstallSpec, type GateTier, installGates } from './gate-install.js';
+import {
+  bashMatchedGateDisclosure,
+  type GateInstallSpec,
+  type GateTier,
+  installGates,
+} from './gate-install.js';
 
 /**
  * Command-specific log tag for non-error output (log.success / log.dim).
@@ -101,10 +106,10 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
   const tier = resolveTier(opts);
   const results = installGates(cwd, gates, tier);
 
-  // The matcher each installed gate landed under, keyed by event — read from
-  // the resolved registry pairs (never guessed), so the shell-matcher
-  // disclosure below follows a registry move instead of a hardcoded list.
-  const matcherByEvent = new Map(gates.map((g) => [g.event, g.matcher]));
+  // The registry-resolved spec for each installed gate, keyed by event — the
+  // shell-matcher disclosure below reads the matcher from it (never guesses),
+  // so a registry move carries the disclosure with it.
+  const specByEvent = new Map(gates.map((g) => [g.event, g]));
 
   for (const result of results) {
     if (result.err) {
@@ -125,20 +130,13 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
     }
 
     // ─── Shell-matcher disclosure (mmnto-ai/totem#2822) ─────────────────
-    // A gate whose matcher includes `Bash` applies to the very commands a
-    // fresh clone bootstraps with, so the wrapper's PATH fallback (and its
-    // fail-closed floor when neither CLI resolves) is a property the installer
-    // must state at install time, not one a blocked `pnpm install` teaches.
-    // Keyed on the gate's OWN matcher, so a `Write|Edit` gate never prints it.
-    const matcher = result.event ? matcherByEvent.get(result.event) : undefined;
-    if (matcher?.includes('Bash')) {
-      log.dim(
-        TAG,
-        `${result.event} matches ${matcher}: it applies to a fresh clone's bootstrap commands ` +
-          `(your package manager's install and build; here pnpm install and pnpm build); with no ` +
-          `repo-local CLI the wrapper falls back to a totem on PATH and fails closed when neither ` +
-          `resolves — bootstrap a fresh clone from a terminal outside the harness.`,
-      );
+    // The sentence itself lives in gate-install.ts, beside the installer both
+    // entry points share: `init --gates=` prints its own rows and would
+    // otherwise drop this line entirely.
+    const spec = result.event ? specByEvent.get(result.event) : undefined;
+    const disclosure = spec ? bashMatchedGateDisclosure(spec) : null;
+    if (disclosure) {
+      log.dim(TAG, disclosure);
     }
   }
 }

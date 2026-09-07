@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 14;
+export const REFLEX_VERSION = 15;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -49,6 +49,7 @@ Totem provides CLI commands that map to your development lifecycle. Use them at 
 3. **Before Push:** Run \`totem lint\` — the deterministic enforcement floor (zero LLM, ~2s). **Before PR:** \`totem review\` runs supplementary AI lanes over the diff (~18s) — advisory sensors, not a merge gate; known limits are disclosed in the run output (LLM window truncation on large diffs; non-code files skipped). Your team's own review discipline decides what constitutes the review of record.
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
 5. **Managed hooks self-repair:** \`totem init\` distributes \`.totem/prepare.cjs\` and wires \`package.json\` \`prepare\` to it only when no \`prepare\` script exists. The wrapper runs \`totem hook install\` on every \`pnpm install\`, drift-repairing the managed Claude/Gemini hooks — no manual re-install needed.
+6. **Action gates (PreToolUse):** a gate installed with \`totem gate install <event>\` is evaluated by the repo-local \`@mmnto/cli\` first and by a \`totem\` on PATH when that is absent; an applicable gate that neither can evaluate fails closed and its message names the exits. A \`Bash|PowerShell\`-matched gate applies to a fresh clone's bootstrap commands (install, build), so bootstrap such a clone from a terminal outside the harness when no \`totem\` is on PATH (mmnto-ai/totem#2799, mmnto-ai/totem#2822).
 
 ### Cloud / PR Review Bots
 [FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]

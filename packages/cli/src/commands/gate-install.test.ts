@@ -1095,6 +1095,34 @@ describe('init --gates= routes through the shared installer', () => {
     );
   });
 
+  it('init --gates= discloses the bootstrap property for a Bash-matched gate, not for Write|Edit', async () => {
+    // The verb and init share `installGates` but NOT their output: init prints
+    // its own summary rows, so before mmnto-ai/totem#2822's shared helper the
+    // disclosure existed only on the verb and `--gates=` dropped it silently.
+    const shieldLines: string[] = [];
+    const shieldSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      shieldLines.push(args.map((a) => String(a)).join(' '));
+    });
+    await initCommand({ bare: true, gates: 'transport-shield' });
+    shieldSpy.mockRestore();
+    const shield = shieldLines.join('\n');
+    expect(shield).toContain('transport-shield matches Bash|PowerShell:');
+    expect(shield).toContain('bootstrap a fresh clone from a terminal outside the harness');
+
+    const freezeLines: string[] = [];
+    const freezeSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      freezeLines.push(args.map((a) => String(a)).join(' '));
+    });
+    await initCommand({ bare: true, gates: 'freeze-check' });
+    freezeSpy.mockRestore();
+    const freeze = freezeLines.join('\n');
+    // The control: freeze-check installs (a row names it) and says nothing
+    // about bootstrap — the property is the shell matcher's, not every gate's.
+    expect(freeze).toContain('freeze-check');
+    expect(freeze).not.toContain('bootstrap');
+    expect(freeze).not.toContain('matches Bash|PowerShell');
+  });
+
   it('init --gates= with an unknown member fails loud', async () => {
     await expect(initCommand({ bare: true, gates: 'made-up-gate' })).rejects.toThrow(
       /unknown gate/i,
