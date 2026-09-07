@@ -213,8 +213,14 @@ try {
     describeText = (result.stdout || '') + (result.stderr || '');
     process.stdout.write(describeText);
   } else {
+    // The notice is printed in exactly the state where a Bash|PowerShell-matched
+    // gate self-blocks (no repo-local CLI), so it names the property and the exit
+    // (mmnto-ai/totem#2822 ask 3): the wrapper's PATH arm usually carries a fresh
+    // clone, and when it cannot, the bootstrap belongs in a real terminal.
     process.stdout.write(
-      '[Totem] @mmnto/cli not installed. Run `pnpm install` (or your package manager equivalent) to enable session-start orientation.\n',
+      '[Totem] @mmnto/cli not installed. Run `pnpm install` (or your package manager equivalent) to enable session-start orientation. ' +
+        'If a Bash|PowerShell-matched gate is installed here it applies to the bootstrap commands and falls back to a totem on PATH; ' +
+        'with no totem anywhere, bootstrap this clone from a terminal outside the harness.\n',
     );
   }
 } catch (err) {

@@ -135,9 +135,9 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
       log.dim(
         TAG,
         `${result.event} matches ${matcher}: it applies to a fresh clone's bootstrap commands ` +
-          `(pnpm install, pnpm build); with no repo-local CLI the wrapper falls back to a totem ` +
-          `on PATH and fails closed when neither resolves — bootstrap a fresh clone from a ` +
-          `terminal outside the harness.`,
+          `(your package manager's install and build; here pnpm install and pnpm build); with no ` +
+          `repo-local CLI the wrapper falls back to a totem on PATH and fails closed when neither ` +
+          `resolves — bootstrap a fresh clone from a terminal outside the harness.`,
       );
     }
   }

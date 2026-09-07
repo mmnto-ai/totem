@@ -663,7 +663,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     // allow (exit 0).
     const { status, stderr } = runWrapper(DECLARED, [], 'freeze-check', envWithPath(''));
     expect(status).toBe(2);
-    expect(stderr).toMatch(/not resolvable|not installed|failing closed/i);
+    expect(stderr).toMatch(/failing closed/i);
   });
 
   it('gate check exits 0 with unparseable stdout → exit 2 fail-closed', () => {
@@ -907,7 +907,7 @@ describe('gate-wrapper.cjs PATH fallback (mmnto-ai/totem#2822)', () => {
     expect(status).toBe(0);
   });
 
-  it('the PATH CLI failing → exit 2 fail-closed, disclosing which CLI evaluated', () => {
+  it('the PATH CLI failing → exit 2 fail-closed, disclosing which CLI evaluated (basenames only)', () => {
     // A CLI older than 2.2.0 has no `gate check --payload -` and lands exactly
     // here (unknown option → non-zero exit). Fail-closed is UNCHANGED; the
     // added line names the arm so the operator knows what to update.
@@ -916,7 +916,14 @@ describe('gate-wrapper.cjs PATH fallback (mmnto-ai/totem#2822)', () => {
     expect(status).toBe(2);
     expect(stderr).toMatch(/fail-closed/i);
     expect(stderr).toContain('evaluated by the PATH CLI at');
-    expect(stderr).toContain(entry);
+    // The rendering is NON-resolvable: the PATH entry's basename plus the fixed
+    // package suffix. Hook stderr lands in transcripts that get pasted into
+    // issues, so a user-profile path must never ride along.
+    expect(stderr).toContain(
+      'evaluated by the PATH CLI at global-bin/node_modules/@mmnto/cli/dist/index.js',
+    );
+    expect(stderr).not.toContain(entry);
+    expect(stderr).not.toContain(cwd);
   });
 
   it('no CLI anywhere → exit 2 naming exits this gate does NOT block', () => {
@@ -971,7 +978,9 @@ describe('gate install discloses a Bash-matched gate applies to bootstrap', () =
     await gateInstallCommand({ name: 'transport-shield' });
     const shield = lines.join('\n');
     expect(shield).toContain('transport-shield matches Bash|PowerShell:');
-    expect(shield).toContain("fresh clone's bootstrap commands (pnpm install, pnpm build)");
+    expect(shield).toContain(
+      "fresh clone's bootstrap commands (your package manager's install and build; here pnpm install and pnpm build)",
+    );
     expect(shield).toContain('bootstrap a fresh clone from a terminal outside the harness');
 
     lines = [];
@@ -982,6 +991,17 @@ describe('gate install discloses a Bash-matched gate applies to bootstrap', () =
     expect(freeze).toContain('freeze-check');
     expect(freeze).not.toContain('bootstrap');
     expect(freeze).not.toContain('matches Bash|PowerShell');
+
+    // A third install in the SAME cwd: transport-shield is already present, so
+    // the merge is a no-op — and the disclosure still prints beside it. The
+    // property belongs to the installed gate, not to the write that installed
+    // it, and a re-install is where an operator most often reads the output.
+    lines = [];
+    await gateInstallCommand({ name: 'transport-shield' });
+    const again = lines.join('\n');
+    expect(again).toContain('already present — no change');
+    expect(again).toContain('transport-shield matches Bash|PowerShell:');
+    expect(again).toContain('bootstrap a fresh clone from a terminal outside the harness');
   });
 });
 
