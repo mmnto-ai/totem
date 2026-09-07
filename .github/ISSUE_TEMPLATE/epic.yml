@@ -29,8 +29,8 @@ body:
   - type: textarea
     id: epic-scope
     attributes:
-      label: Scope
-      description: What this epic covers and, explicitly, what it does not.
+      label: Epic scope
+      description: What this epic covers and, explicitly, what it does not. (Named apart from the Scope dropdown above so the two never render under one heading.)
     validations:
       required: true
   - type: textarea

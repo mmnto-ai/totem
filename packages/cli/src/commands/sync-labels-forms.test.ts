@@ -186,6 +186,21 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
     }
   });
 
+  it('renders every field under a distinct heading (the body sensor keys on heading text, never on ids)', () => {
+    // The epic form once carried a `Scope` textarea beside the `Scope` dropdown:
+    // two `### Scope` headings in one rendered body, and a heading-keyed parser
+    // cannot tell them apart. Labels are the contract; ids never render.
+    for (const file of formFiles()) {
+      const form = readForm(file);
+      const labels = (form.body ?? [])
+        .map((field) => field.attributes?.label)
+        .filter((label): label is string => typeof label === 'string');
+      expect(new Set(labels).size, `${file} field labels: ${labels.join(' | ')}`).toBe(
+        labels.length,
+      );
+    }
+  });
+
   it('routes an exploitable vulnerability out of the public security form', () => {
     const form = readForm('security.yml');
     const first = (form.body ?? [])[0];
@@ -199,7 +214,7 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
     };
     expect(config.blank_issues_enabled).toBe(false);
     expect(fs.existsSync(ONBOARDING_PATH)).toBe(true);
-    // Untouched by #2792: still the front-matter markdown template it was.
+    // Untouched by mmnto-ai/totem#2792: still the front-matter markdown template it was.
     expect(fs.readFileSync(ONBOARDING_PATH, 'utf8').startsWith('---')).toBe(true);
   });
 });

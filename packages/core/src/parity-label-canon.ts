@@ -157,9 +157,11 @@ export function namespaceTokensOf(names: readonly string[]): string[] {
  * Faults: a canonical name absent; a canonical name present with a different
  * colour or description; a live name inside a canonical namespace that is not
  * in the canon (the "never redefine a canonical namespace" half). Live names
- * outside every canonical namespace (`routine:*`, `disposition:*`, bare words)
- * are permitted additions, reported and never flagged; a retired name still
- * present is reported the same way.
+ * outside every canonical namespace (`routine:*`, bare words) are permitted
+ * additions, reported and never flagged; a retired name still present is
+ * reported the same way. (`disposition:*` is canonical since the script grew
+ * its six `edit` lines — mmnto-ai/totem#2792 — so a stray value there is a
+ * squatter, not an addition.)
  */
 export function labelCanonDrift(live: readonly LiveLabel[], canon: LabelCanon): LabelCanonDrift {
   const byName = new Map<string, LiveLabel>();
