@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
 import { beforeAll, describe, expect, it } from 'vitest';
 
 // The latest-journal pick of the bespoke SessionStart hook
