@@ -9,6 +9,15 @@
             "command": "node .claude/hooks/PreWriteShield.cjs"
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/gate-wrapper.cjs --event transport-shield --strict"
+          }
+        ]
       }
     ],
     "SessionStart": [
