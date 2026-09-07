@@ -2,7 +2,12 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 import { isGlobalConfigPath, loadConfig, resolveConfigPath } from '../utils.js';
-import { type GateInstallSpec, type GateTier, installGates } from './gate-install.js';
+import {
+  bashMatchedGateDisclosure,
+  type GateInstallSpec,
+  type GateTier,
+  installGates,
+} from './gate-install.js';
 
 /**
  * Command-specific log tag for non-error output (log.success / log.dim).
@@ -101,6 +106,11 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
   const tier = resolveTier(opts);
   const results = installGates(cwd, gates, tier);
 
+  // The registry-resolved spec for each installed gate, keyed by event — the
+  // shell-matcher disclosure below reads the matcher from it (never guesses),
+  // so a registry move carries the disclosure with it.
+  const specByEvent = new Map(gates.map((g) => [g.event, g]));
+
   for (const result of results) {
     if (result.err) {
       log.error('Totem Error', `Gate install failed for ${result.file}: ${result.err}`);
@@ -117,6 +127,16 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
     } else {
       // Genuine same-tier no-op — the ONLY case that prints "no change".
       log.dim(TAG, `${label} already present — no change`);
+    }
+
+    // ─── Shell-matcher disclosure (mmnto-ai/totem#2822) ─────────────────
+    // The sentence itself lives in gate-install.ts, beside the installer both
+    // entry points share: `init --gates=` prints its own rows and would
+    // otherwise drop this line entirely.
+    const spec = result.event ? specByEvent.get(result.event) : undefined;
+    const disclosure = spec ? bashMatchedGateDisclosure(spec) : null;
+    if (disclosure) {
+      log.dim(TAG, disclosure);
     }
   }
 }

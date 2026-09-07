@@ -1950,7 +1950,7 @@ export default {
     // path the `gate install` verb uses — no second copy of the merge logic.
     if (options?.gates) {
       const { resolveGates } = await import('./gate.js');
-      const { installGates } = await import('./gate-install.js');
+      const { bashMatchedGateDisclosure, installGates } = await import('./gate-install.js');
       const { TotemError, knownGateEvents } = await import('@mmnto/totem');
       const requested = options.gates.trim();
       // `{ event, matcher }` pairs, resolved through the core registry by
@@ -2021,6 +2021,21 @@ export default {
             action: `Updated gate "${result.event}" tier to ${gateTier}`,
           });
         }
+      }
+
+      // ─── Shell-matcher disclosure (mmnto-ai/totem#2822) ───────────────
+      // The `gate install` verb prints this for a Bash-matched gate; init
+      // installs through the SAME installer but prints its own rows, so
+      // without this the property is silently dropped on the `--gates=` path.
+      // Driven off the resolved specs (one line per gate, not per result row)
+      // and suppressed for a gate whose install actually errored.
+      const failedGates = new Set(
+        gateResults.filter((result) => result.err && result.event).map((result) => result.event),
+      );
+      for (const gate of gates) {
+        if (failedGates.has(gate.event)) continue;
+        const disclosure = bashMatchedGateDisclosure(gate);
+        if (disclosure) log.dim('Totem', disclosure);
       }
     }
 

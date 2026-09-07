@@ -12,15 +12,78 @@
 //        subsystem; transport-shield on a tool other than Bash/PowerShell or
 //        with no non-empty string command)
 //   2 = deny (--strict, Claude block convention)
-//       | APPLICABLE-gate-not-evaluable fail-closed (missing CLI, non-zero
-//         `gate check`, unparseable verdict, or unknown disposition)
+//       | APPLICABLE-gate-not-evaluable fail-closed (no CLI resolvable
+//         (repo-local, then PATH), non-zero `gate check`, unparseable verdict,
+//         or unknown disposition)
 //       | an --event this wrapper has no payload projection for (a baked event
 //         it cannot project is an applicable gate it cannot evaluate)
 'use strict';
 
 const { spawnSync } = require('child_process');
-const { existsSync } = require('fs');
-const { join } = require('path');
+const { existsSync, realpathSync } = require('fs');
+const { basename, delimiter, dirname, join } = require('path');
+
+// ─── PATH FALLBACK for the Totem CLI (mmnto-ai/totem#2822) ──────────────
+// A `Bash|PowerShell`-matched gate applies to the very commands that CREATE
+// the repo-local CLI on a fresh clone (`pnpm install`, then `pnpm build` in
+// this monorepo), so with a repo-local-only resolution the gate blocks its own
+// bootstrap — and blocks the cure it prints. This is a RESOLUTION arm, not an
+// exemption: an applicable gate that cannot be evaluated by EITHER arm still
+// fails closed (mmnto-ai/totem#2799 ruling, Tenet 4).
+//
+// A session started in a fresh worktree has no node_modules at its cwd and
+// takes this arm; with no global CLI it fails closed — the ruling, not a bug.
+//
+// The repo-local pinned dist stays FIRST — the pinned-beats-ambient ordering of
+// ADR-072 § 2; tiers 1, 3 and 5 are out of scope for a hook that must not shell
+// out. This runs only when the pinned dist is absent. Two npm-global layouts
+// are probed per PATH dir, first hit wins:
+//   (a) <dir>/node_modules/@mmnto/cli/dist/index.js — the win32 layout, where
+//       the `totem.cmd` shim sits beside `node_modules`;
+//   (b) <dir>/totem realpath'd — the POSIX npm-global symlink, taken only when
+//       it resolves to an existing `.js` file (a shell shim resolves to an
+//       extensionless script and is correctly skipped).
+// A dir that yields neither is skipped; nothing here throws.
+//
+// PATH is trusted here at exactly the level `node` itself already is: the
+// settings.json entry invokes this hook as a bare `node`, so whoever controls
+// PATH controls the interpreter before this line ever runs.
+//
+// Returns { entry, display }: `entry` is the absolute path to spawn, `display`
+// a NON-resolvable rendering (basenames only) for the stderr provenance line —
+// hook stderr lands in transcripts that get pasted into issues, so it never
+// carries a user-profile path.
+function resolveCliFromPath() {
+  const raw = typeof process.env.PATH === 'string' ? process.env.PATH : '';
+  const dirs = raw.split(delimiter);
+  for (let i = 0; i < dirs.length; i++) {
+    const dir = dirs[i];
+    if (!dir) continue;
+    const packaged = join(dir, 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
+    if (existsSync(packaged)) {
+      return {
+        entry: packaged,
+        display: basename(dir) + '/node_modules/@mmnto/cli/dist/index.js',
+      };
+    }
+    const shim = join(dir, 'totem');
+    if (existsSync(shim)) {
+      try {
+        const real = realpathSync(shim);
+        if (typeof real === 'string' && real.endsWith('.js') && existsSync(real)) {
+          return {
+            entry: real,
+            display:
+              basename(dir) + '/totem -> ' + basename(dirname(real)) + '/' + basename(real),
+          };
+        }
+      } catch (err) {
+        // An unreadable link is not a resolution — keep scanning the PATH.
+      }
+    }
+  }
+  return null;
+}
 
 // ─── Parse baked args (--event <name>, optional --pilot / --strict) ─────
 // The tier is read ONLY from argv (baked into the installed command at
@@ -129,27 +192,57 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
-  // Resolve the LOCAL Totem CLI (the global `totem` binary may be stale and
-  // missing deps — the known repo gotcha). Invoke node on the installed dist
-  // entry.
+  // Resolve the Totem CLI: the repo-local pinned dist FIRST (a global `totem`
+  // may be stale and missing deps — the known repo gotcha; the
+  // pinned-beats-ambient ordering of ADR-072 § 2, Tenet 14), then a `totem` on
+  // PATH as a FALLBACK (mmnto-ai/totem#2822 — the bootstrap self-block above).
+  // Invoke node on whichever dist entry resolved.
   //
-  // FAIL-CLOSED on a missing CLI: we are PAST the per-event applicability
-  // guardrail (freeze-check: a declared subsystem; transport-shield: a Bash or
-  // PowerShell command), so a gate genuinely APPLIES here. Neither gate has a
-  // commit-time hard floor (unlike PreWriteShield, whose fail-soft is backed by
-  // `totem-lint` at commit), so an APPLICABLE gate that cannot be evaluated
-  // for ANY reason (missing CLI OR a broken source) must fail closed — not
-  // silently allow (guardrail rule + Tenet 4 fail-closed). Fail-SOFT (exit 0)
-  // is reserved for genuinely NOT-APPLICABLE inputs (unparseable/non-object
-  // envelope, no declared subsystem, no shell command), all of which already
-  // returned above.
-  const cliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
-  if (!existsSync(cliPath)) {
+  // FAIL-CLOSED when NEITHER arm resolves: we are PAST the per-event
+  // applicability guardrail (freeze-check: a declared subsystem;
+  // transport-shield: a Bash or PowerShell command), so a gate genuinely
+  // APPLIES here. Neither gate has a commit-time hard floor (unlike
+  // PreWriteShield, whose fail-soft is backed by `totem-lint` at commit), so an
+  // APPLICABLE gate that cannot be evaluated for ANY reason (no CLI anywhere OR
+  // a broken source) must fail closed — not silently allow (guardrail rule +
+  // Tenet 4 fail-closed). Fail-SOFT (exit 0) is reserved for genuinely
+  // NOT-APPLICABLE inputs (unparseable/non-object envelope, no declared
+  // subsystem, no shell command), all of which already returned above.
+  const localCliPath = join(process.cwd(), 'node_modules', '@mmnto', 'cli', 'dist', 'index.js');
+  let cliPath = '';
+  // Which arm resolved — 'repo-local' or 'PATH' — for the provenance line the
+  // fail-closed arms below disclose. Empty until one resolves.
+  let arm = '';
+  // The PATH arm's non-resolvable rendering of what it found (basenames only).
+  let cliDisplay = '';
+  if (existsSync(localCliPath)) {
+    cliPath = localCliPath;
+    arm = 'repo-local';
+  } else {
+    const fromPath = resolveCliFromPath();
+    if (fromPath) {
+      cliPath = fromPath.entry;
+      cliDisplay = fromPath.display;
+      arm = 'PATH';
+    }
+  }
+
+  if (!cliPath) {
+    // The exits named here must be exits the gate does NOT block: "reinstall
+    // totem" and `totem eject` are Bash commands a Bash|PowerShell gate blocks
+    // with this very message (mmnto-ai/totem#2822). They are ORDERED: the
+    // editor path still needs the bootstrap before the gate can be reinstalled.
     process.stderr.write(
       '[totem gate] ' +
         event +
-        ' applies but the totem CLI is not resolvable; failing closed. ' +
-        'Reinstall totem or run `totem eject` to remove the gate.\n',
+        ' applies but no totem CLI is resolvable ' +
+        '(repo-local node_modules/@mmnto/cli/dist/index.js absent; no totem on PATH); ' +
+        'failing closed. Exits: bootstrap from a terminal OUTSIDE the harness ' +
+        '(pnpm install and pnpm build, or npm i -g @mmnto/cli); or remove this ' +
+        "gate's entry from .claude/settings.json with the editor, bootstrap, " +
+        'then re-run totem gate install ' +
+        event +
+        '.\n',
     );
     process.exit(2);
   }
@@ -165,6 +258,20 @@ process.stdin.on('end', () => {
     { encoding: 'utf-8', timeout: 30000, input: payload },
   );
 
+  // Provenance for the PATH fallback arm (mmnto-ai/totem#2822): a CLI older
+  // than 2.2.0 has no `gate check --payload -` and lands in the fail-closed
+  // arms below (unknown option → non-zero exit, or nothing on stdout). The
+  // BEHAVIOUR is unchanged — exit 2 either way — the line only names WHICH CLI
+  // evaluated and how to update it. Empty on the repo-local arm. It prints the
+  // basename rendering, never the absolute entry: this is transcript-bound text.
+  const armNote =
+    arm === 'PATH'
+      ? 'evaluated by the PATH CLI at ' +
+        cliDisplay +
+        "; a CLI older than 2.2.0 lacks 'gate check --payload -' — " +
+        'update it: npm i -g @mmnto/cli@latest\n'
+      : '';
+
   // ─── FAIL-CLOSED ──────────────────────────────────────────────────────
   // A gate genuinely applies (the per-event projection above found its input:
   // a declared subsystem, or a Bash/PowerShell command) and the evaluation
@@ -178,7 +285,8 @@ process.stdin.on('end', () => {
         event +
         '" evaluation failed (source broken or unavailable) — blocking (fail-closed).\n' +
         (result.stderr || (result.error ? String(result.error.message || result.error) : '')) +
-        '\n',
+        '\n' +
+        armNote,
     );
     process.exit(2);
   }
@@ -190,7 +298,7 @@ process.stdin.on('end', () => {
     // The command emitted unparseable stdout despite a 0 exit — an applicable
     // gate whose verdict we cannot read is a broken source → fail-closed.
     process.stderr.write(
-      '[totem gate-wrapper] gate "' + event + '" emitted unparseable verdict — blocking (fail-closed).\n',
+      '[totem gate-wrapper] gate "' + event + '" emitted unparseable verdict — blocking (fail-closed).\n' + armNote,
     );
     process.exit(2);
   }
@@ -203,6 +311,10 @@ process.stdin.on('end', () => {
     (verdict && verdict.provenance ? ' [' + JSON.stringify(verdict.provenance) + ']' : '');
 
   if (disposition === 'allow') {
+    // Deliberately SILENT on the PATH arm too: a provenance line on every
+    // allowed Bash command would be transcript noise on the common path, and
+    // the operator already learned the property at install time (the
+    // `gate install` disclosure) — stderr here is reserved for what blocks.
     process.exit(0);
   }
   if (disposition === 'warn') {
@@ -214,9 +326,11 @@ process.stdin.on('end', () => {
     process.exit(tier === 'pilot' ? 0 : 2);
   }
 
-  // Unknown disposition from an applicable gate — fail-closed.
+  // Unknown disposition from an applicable gate — fail-closed. The provenance
+  // note rides here too, so all four not-evaluable causes in the exit-code
+  // contract above disclose which arm evaluated.
   process.stderr.write(
-    '[totem gate-wrapper] gate "' + event + '" returned unknown disposition "' + disposition + '" — blocking (fail-closed).\n',
+    '[totem gate-wrapper] gate "' + event + '" returned unknown disposition "' + disposition + '" — blocking (fail-closed).\n' + armNote,
   );
   process.exit(2);
 });

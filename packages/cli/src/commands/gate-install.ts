@@ -42,6 +42,33 @@ export interface GateInstallSpec {
   matcher: 'Write|Edit' | 'Bash|PowerShell';
 }
 
+/**
+ * The install-time disclosure for a gate whose PreToolUse matcher includes
+ * `Bash` — one sentence, or `null` for every other matcher
+ * (mmnto-ai/totem#2822).
+ *
+ * A shell-matched gate applies to the very commands a fresh clone bootstraps
+ * with, so the wrapper's PATH fallback and its fail-closed floor are a property
+ * the INSTALLER must state — not one a blocked `pnpm install` teaches. It lives
+ * here, beside the installer both entry points share, because there are two of
+ * them: the `gate install` verb (gate.ts) and `init --gates=` (init.ts), which
+ * calls `installGates` directly and prints its own rows. A copy in one of them
+ * is a disclosure the other silently drops.
+ *
+ * Keyed on the gate's OWN matcher — read from the registry-resolved
+ * {@link GateInstallSpec}, never guessed — so a registry move carries the
+ * disclosure with it and a `Write|Edit` gate never prints it.
+ */
+export function bashMatchedGateDisclosure(gate: GateInstallSpec): string | null {
+  if (!gate.matcher.includes('Bash')) return null;
+  return (
+    `${gate.event} matches ${gate.matcher}: it applies to a fresh clone's bootstrap commands ` +
+    `(your package manager's install and build; here pnpm install and pnpm build); with no ` +
+    `repo-local CLI the wrapper falls back to a totem on PATH and fails closed when neither ` +
+    `resolves — bootstrap a fresh clone from a terminal outside the harness.`
+  );
+}
+
 /** The wrapper script's repo-relative install path. */
 export const GATE_WRAPPER_REL = '.claude/hooks/gate-wrapper.cjs';
 

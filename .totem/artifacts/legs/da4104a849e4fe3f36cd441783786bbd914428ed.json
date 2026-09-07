@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "da4104a849e4fe3f36cd441783786bbd914428ed",
+  "readAt": "2026-09-07T18:21:18Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1207,
+      "claim": "The diff presents itself as the whole mmnto-ai/totem#2822 fix.",
+      "counterexample": "Two of the issue's four numbered asks were delivered as nothing and named nowhere: ask 3's second half (the repo's session-start notice should point a fresh clone at a terminal) and ask 4 (verify the hook's cwd for a worktree-started session; document or cure). Neither the session-start template nor any body line carried them; a Closes on the PR would have buried both. Folded: the not-installed notice in CLAUDE_SESSION_START gains the sentence, and the worktree finding is documented in the wrapper comment and the PR body."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 33,
+      "claim": "The repo-local pinned dist stays first per the ADR-072 section 2 amended cascade.",
+      "counterexample": "ADR-072 section 2 defines five tiers; the wrapper implements tiers 2 and 4 and skips tier 3 (pnpm exec), the last deterministic tier above ambient. The ordering asserted (pinned beats ambient) is correct and the ADR scopes itself to the git-hook template, so this is citation precision. Folded: the comment names the ordering, not full conformance, and says tiers 1, 3 and 5 are out of scope for a hook that must not shell out."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 237,
+      "claim": "The provenance line only names which CLI evaluated.",
+      "counterexample": "It writes the resolved absolute path (a user-profile path on this machine) into hook stderr, which lands in transcripts that get pasted into GitHub, and a test pins the absolute form. ADR-109 property 3 forbids resolvable absolute paths in verdict provenance for the same reason; the clause governs the verdict, not stderr, so not a contract break. Folded: the line prints the PATH entry's basename plus the fixed suffix, and the test asserts that form and the absence of the absolute prefix."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 283,
+      "claim": "Provenance is scoped to PATH-arm failures.",
+      "counterexample": "A PATH-arm allow is entirely silent while a PATH-arm deny is fully disclosed; the ambient-CLI concern bites hardest on the allow side. Defensible (stderr on every allowed command is transcript noise; the install-time line covers the operator) but the tradeoff was unrecorded. Folded: one comment sentence records the deliberate silence and why."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 296,
+      "claim": "The provenance note is appended to the fail-closed arms.",
+      "counterexample": "The file's own header lists four not-evaluable causes including unknown disposition; the note was appended to two of the four. Folded: the note is appended to the unknown-disposition arm for symmetry."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate.ts",
+      "line": 134,
+      "claim": "The install disclosure names the bootstrap commands.",
+      "counterexample": "It names pnpm install and pnpm build with no alternative, in a template scaffolded into every consumer repo including npm and yarn consumers with no build script; the wrapper's message self-corrects with the npm -g parenthetical, the install line does not. Folded: the install line says your package manager's install and build commands, naming the pnpm pair as this repo's."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 206,
+      "claim": "The no-CLI message names ungated exits.",
+      "counterexample": "Its two alternatives are joined by or, and the second alone (remove the entry, then re-run totem gate install) cannot work because the install verb needs the CLI that is by hypothesis missing; read as a sequence it is coherent. Folded: the clauses become one ordered instruction."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 631,
+      "claim": "The disclosure prints on a no-op re-install.",
+      "counterexample": "True by code (the line sits outside the action branches) but pinned by no test: the disclosure test installs each gate once. Folded: a same-cwd re-install asserts the line reappears beside the already-present result."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 636,
+      "claim": "The FIX 2 assertion guards the no-CLI message.",
+      "counterexample": "Two of its three regex alternations (not resolvable, not installed) no longer occur in the message; it matches only via failing closed and would pass if the pre-fix eject wording came back. Covered elsewhere by the new safe-exits test. Folded: the dead alternations pruned."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 42,
+      "claim": "The PATH arm adds no new trust surface.",
+      "counterexample": "The enforcement component now executes JavaScript found under a PATH entry. Largely falsified: settings.json already invokes the hook as bare node, so PATH is already a trusted execution input at the same level. Folded: one comment line records that PATH is trusted at the level of node itself."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 15,
+      "claim": "The exit-code contract header describes the resolution.",
+      "counterexample": "It still says missing CLI; true but imprecise now that resolution is repo-local then PATH. Folded: the header names both arms."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 52,
+      "claim": "The PATH arm resolves a totem shim.",
+      "counterexample": "pnpm-global, volta and corepack shims are extensionless shell scripts whose realpath is itself, so they are skipped and the wrapper fails closed (loud, not open). The comment scopes itself to the two npm-global layouts. Declined: documented scope, not drift."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": ".changeset/gate-wrapper-path-arm-2822.md",
+      "line": 2,
+      "claim": "The change is a patch.",
+      "counterexample": "It adds a resolution arm and a new install-time output line, which reads feature-shaped, but the repo's convention maps a fix to patch (the transport-shield feature took the minor). Declined: convention holds."
+    },
+    {
+      "id": "F14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 186,
+      "claim": "CI pins the repo's committed gate-wrapper.cjs against the template.",
+      "counterexample": "The test pins a scaffolded temp copy and doctor --parity covers only SessionStart.cjs; nothing in CI compares the committed .claude/hooks/gate-wrapper.cjs to CLAUDE_GATE_WRAPPER. Pre-existing gap, verified by hand this round (sha256 match). Declined here; filed as its own issue."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11"
+  ],
+  "verdict": "No BLOCKING finding. The code, the four pre-fix-failing tests (re-derived against origin/main), the byte identity of the scaffolded wrapper (sha256 match), the fail-closed floor and the pinned-before-ambient ordering all survived. One MATERIAL disposition finding (F1) and nine MINOR wording, comment and assertion findings folded in the follow-up commit on the same branch; none of the folds rewires semantics, so the leg is not re-armed. F12 and F13 declined as documented scope and convention; F14 declined here and filed as its own issue. Termination named after the fold."
+}
