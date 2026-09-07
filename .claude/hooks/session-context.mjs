@@ -24,6 +24,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { selectLatestJournal } from './lib/select-latest-journal.mjs';
 
 // ─── totem-status sidecar refresh — GH snapshot + obligation store ───
 // (mmnto-ai/totem-status#127: C3 tracked in mmnto-ai/totem#2556, slice-two
@@ -450,12 +451,42 @@ async function buildStaticContext(gitRoot, branch, ticket, records) {
 
   if (journalDir) {
     try {
-      const files = readdirSync(journalDir)
-        .filter((f) => f.endsWith('.md'))
-        .sort()
-        .reverse();
-      if (files.length > 0) {
-        const latest = files[0];
+      // The signoff skill's filename convention (`<model>-NNNN-<slug>.md`, a
+      // per-seat session counter) is what makes a lexical sort the recency
+      // policy. A seat whose names leave the counter breaks that premise
+      // silently — on 2026-09-06/07 this seat stamped seven journals with an
+      // HHMM clock prefix, `claude-2315-…` out-sorted the later `claude-0132-…`
+      // signoff, four names collided with June counters, and the manifest
+      // attested the wrong pick as `selected` (mmnto-ai/totem#2828). So the
+      // lexical pick is checked against the newest WRITE: these files are
+      // per-clone and untracked, so mtime is the write instant (the
+      // clone/worktree reset that makes mtime unsafe for mail cutoffs,
+      // mmnto-ai/totem-strategy#813, never reaches an untracked directory).
+      // When the two disagree the newer write is served and the drift is
+      // named on the banner and in the manifest reason; when they agree
+      // nothing changes. Ties keep the lexical pick. The algorithm lives in
+      // ./lib/select-latest-journal.mjs so it is unit-tested without spawning
+      // this hook; a sibling whose stat fails is skipped and named there, never
+      // allowed to drop the whole journal block (bot round 1, mmnto-ai/totem#2831).
+      const pick = selectLatestJournal(readdirSync(journalDir), (f) => statSync(join(journalDir, f)).mtimeMs);
+      if (pick) {
+        const { files, lexicalLatest, mtimeLatest, latest, statFailures } = pick;
+        const journalDrift = pick.drift;
+        for (const failure of statFailures) {
+          process.stderr.write(
+            `[session-context] could not stat journal ${failure.file}: ${failure.message} — skipped for the newest-write check\n`,
+          );
+        }
+        const recencyPolicy = journalDrift
+          ? `recency-policy: newest write (${mtimeLatest}); the lexical-newest ${lexicalLatest} is older on disk — names have left the <model>-NNNN counter (mmnto-ai/totem#2828)`
+          : pick.reason === 'lexical-unreadable'
+            ? `recency-policy: newest readable write (${latest}); the lexical-newest ${lexicalLatest} could not be stat'ed (see the stderr line)`
+            : 'recency-policy: latest journal';
+        if (journalDrift) {
+          lines.push(
+            `⚠ journal naming drift: the lexical-newest ${lexicalLatest} is older on disk than ${mtimeLatest} — a name has left the <model>-NNNN counter convention (signoff skill step 2); serving the newer write (mmnto-ai/totem#2828)`,
+          );
+        }
         lines.push(`Latest journal (${journalSourceLabel}): ${latest}`);
         const content = readFileSync(join(journalDir, latest), 'utf-8');
         // Cap was 20 — far below the size of a normal journal entry
@@ -486,17 +517,20 @@ async function buildStaticContext(gitRoot, branch, ticket, records) {
           content,
           disposition: journalTruncated ? 'truncated' : 'selected',
           reason: journalTruncated
-            ? `recency-policy: latest journal; display-cap ${JOURNAL_DISPLAY_LINE_CAP} lines`
-            : 'recency-policy: latest journal, no display-cap cut (the global char slice may still apply — see finalTruncation)',
+            ? `${recencyPolicy}; display-cap ${JOURNAL_DISPLAY_LINE_CAP} lines`
+            : `${recencyPolicy}, no display-cap cut (the global char slice may still apply — see finalTruncation)`,
           ...(journalTruncated && {
             deliveredBytes: Buffer.byteLength(journalLines.join('\n'), 'utf-8'),
           }),
         });
-        for (const f of files.slice(1)) {
+        for (const f of files) {
+          if (f === latest) continue;
           records.push({
             id: `journal/${f}`,
             disposition: 'excluded',
-            reason: 'recency-policy: only latest journal injected',
+            reason: journalDrift
+              ? 'recency-policy: only the newest write injected (naming drift — see the served record)'
+              : 'recency-policy: only latest journal injected',
           });
         }
       }
