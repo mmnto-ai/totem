@@ -1,0 +1,49 @@
+name: Chore
+description: Maintenance, refactoring, dependency or CI/CD work
+labels: ['type: chore']
+body:
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      description: Immediate priority — next 1-2 PRs / Next release cycle / Long-term architecture
+      options:
+        - tier-1
+        - tier-2
+        - tier-3
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Every package or surface this touches.
+      multiple: true
+      options:
+        - cli
+        - core
+        - mcp
+        - ci
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: The maintenance work, named concretely.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What this unblocks or what it stops costing.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: The condition that closes this issue, stated so someone else can check it.
+    validations:
+      required: true

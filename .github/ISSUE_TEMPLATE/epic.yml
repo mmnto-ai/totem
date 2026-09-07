@@ -1,0 +1,49 @@
+name: Epic
+description: A multi-issue initiative — its scope, its slices, and its completion bar
+labels: ['type: epic']
+body:
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Tier
+      description: Immediate priority — next 1-2 PRs / Next release cycle / Long-term architecture
+      options:
+        - tier-1
+        - tier-2
+        - tier-3
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Every package or surface this touches.
+      multiple: true
+      options:
+        - cli
+        - core
+        - mcp
+        - ci
+    validations:
+      required: true
+  - type: textarea
+    id: epic-scope
+    attributes:
+      label: Scope
+      description: What this epic covers and, explicitly, what it does not.
+    validations:
+      required: true
+  - type: textarea
+    id: slices
+    attributes:
+      label: Slices
+      description: The child issues or landable steps, each one shippable on its own.
+    validations:
+      required: true
+  - type: textarea
+    id: done-when
+    attributes:
+      label: Done when
+      description: The condition that closes this epic, stated so someone else can check it.
+    validations:
+      required: true
