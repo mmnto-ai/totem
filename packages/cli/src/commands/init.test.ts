@@ -4138,6 +4138,16 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNON_SKILL_CONTENT).toContain('`totem describe`');
     expect(SIGNON_SKILL_CONTENT).toContain('`totem orient --session`');
     expect(SIGNON_SKILL_CONTENT).toContain('no journal and no mail');
+    // The claim is scoped to INJECTION (fold F8). The hook also mints a
+    // session id, appends a ledger event and spawns sidecar refreshes, so
+    // "runs … and nothing else" was false about the hook while being true
+    // about the context it produces; the two briefing blocks are the exact
+    // claim, and the body must not re-broaden it.
+    expect(SIGNON_SKILL_CONTENT).toContain('injects exactly two briefing blocks');
+    expect(SIGNON_SKILL_CONTENT).toContain('and injects nothing else');
+    expect(SIGNON_SKILL_CONTENT).not.toContain(
+      'runs `totem describe` and `totem orient --session`, and nothing else',
+    );
 
     // Ordering is the whole point of the slice: step 0 precedes step 1
     // precedes step 2 precedes the orientation step, as NUMBERED steps (a
