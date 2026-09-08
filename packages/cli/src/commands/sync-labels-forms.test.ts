@@ -306,11 +306,29 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
         .split(/\r?\n/)
         .filter((line) => line.startsWith('[WhatIf] gh label'));
       // One line per would-be call, derived from the canon rather than pinned:
-      // an `edit` per canonical label, a `create` per disposition label, and a
-      // `delete` per Merge-Label retirement.
+      // a `create` AND an `edit` per canonical label (mmnto-ai/totem#2837 — an
+      // `edit`-only canonical exits the run on a repo that never carried it),
+      // and a `delete` per Merge-Label retirement.
       const canon = realCanon();
-      const creates = canon.labels.filter((label) => label.name.startsWith('disposition: ')).length;
+      const creates = canon.labels.length;
       expect(labelLines.length).toBe(canon.labels.length + creates + canon.merges.length);
+      // Every canonical's `create` line immediately precedes its `edit` line.
+      // Keyed on the name alone: the shadow re-quotes only an argument carrying
+      // whitespace, and a description's em-dash is transliterated by the child
+      // console's code page, so the colour and description are the count's
+      // business (above), not this adjacency's.
+      const q = (text: string) => (/\s/.test(text) ? `"${text}"` : text);
+      for (const label of canon.labels) {
+        const createAt = labelLines.findIndex((line) =>
+          line.startsWith(`[WhatIf] gh label create ${q(label.name)} --color `),
+        );
+        expect(createAt, `create line for ${label.name}`).toBeGreaterThanOrEqual(0);
+        expect(labelLines[createAt + 1], `edit line follows create for ${label.name}`).toMatch(
+          new RegExp(
+            `^\\[WhatIf\\] gh label edit ${q(label.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} --color `,
+          ),
+        );
+      }
       // The shadow replaces the executable, so the stub on PATH never ran: no
       // log file at all. This is the "-WhatIf touches nothing" invariant.
       expect(fs.existsSync(stub.logPath)).toBe(false);

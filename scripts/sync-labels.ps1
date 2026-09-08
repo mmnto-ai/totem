@@ -90,36 +90,58 @@ function Merge-Label {
 
 Write-Host "Updating canonical labels..." -ForegroundColor Yellow
 
+# Two lines per canonical label, every namespace (mmnto-ai/totem#2837): `create`
+# makes it exist (an error on an existing label is suppressed and never tallied),
+# `edit` converges its colour and description on every run AND is the line both
+# canon parsers read -- a `create` line is invisible to them. An `edit`-only
+# canonical fails loud on a repo that never carried it (the shadow tallies a
+# non-zero `label edit`), which ended the run before any merge on liquid-city.
+
 # Tiers (Replaces Priorities)
+gh label create "tier-1" --color "d73a4a" --description "Immediate priority - next 1-2 PRs" --repo $Repo 2>$null
 gh label edit "tier-1" --color "d73a4a" --description "Immediate priority - next 1-2 PRs" --repo $Repo 2>$null
+gh label create "tier-2" --color "fbca04" --description "Next release cycle" --repo $Repo 2>$null
 gh label edit "tier-2" --color "fbca04" --description "Next release cycle" --repo $Repo 2>$null
+gh label create "tier-3" --color "0e8a16" --description "Phase 4 / long-term architecture" --repo $Repo 2>$null
 gh label edit "tier-3" --color "0e8a16" --description "Phase 4 / long-term architecture" --repo $Repo 2>$null
 
 # Types
+gh label create "type: bug" --color "d73a4a" --description "Something is not working" --repo $Repo 2>$null
 gh label edit "type: bug" --color "d73a4a" --description "Something is not working" --repo $Repo 2>$null
+gh label create "type: feature" --color "a59758" --description "New feature or request" --repo $Repo 2>$null
 gh label edit "type: feature" --color "a59758" --description "New feature or request" --repo $Repo 2>$null
+gh label create "type: chore" --color "b1d3e7" --description "Maintenance, refactoring, or CI/CD" --repo $Repo 2>$null
 gh label edit "type: chore" --color "b1d3e7" --description "Maintenance, refactoring, or CI/CD" --repo $Repo 2>$null
+gh label create "type: epic" --color "041b3f" --description "Large, multi-issue initiatives" --repo $Repo 2>$null
 gh label edit "type: epic" --color "041b3f" --description "Large, multi-issue initiatives" --repo $Repo 2>$null
+gh label create "type: docs" --color "0075ca" --description "Improvements to documentation" --repo $Repo 2>$null
 gh label edit "type: docs" --color "0075ca" --description "Improvements to documentation" --repo $Repo 2>$null
+gh label create "type: security" --color "ff0000" --description "Security vulnerabilities or hardening" --repo $Repo 2>$null
 gh label edit "type: security" --color "ff0000" --description "Security vulnerabilities or hardening" --repo $Repo 2>$null
 
 # Scopes / Domains
+gh label create "scope: cli" --color "de89ff" --description "Issues related to the CLI package" --repo $Repo 2>$null
 gh label edit "scope: cli" --color "de89ff" --description "Issues related to the CLI package" --repo $Repo 2>$null
+gh label create "scope: core" --color "de89ff" --description "Issues related to the Core engine package" --repo $Repo 2>$null
 gh label edit "scope: core" --color "de89ff" --description "Issues related to the Core engine package" --repo $Repo 2>$null
+gh label create "scope: mcp" --color "de89ff" --description "Issues related to the MCP server package" --repo $Repo 2>$null
 gh label edit "scope: mcp" --color "de89ff" --description "Issues related to the MCP server package" --repo $Repo 2>$null
+gh label create "scope: ci" --color "32c597" --description "GitHub Actions, Turbo, or build pipelines" --repo $Repo 2>$null
 gh label edit "scope: ci" --color "32c597" --description "GitHub Actions, Turbo, or build pipelines" --repo $Repo 2>$null
+gh label create "domain: architecture" --color "1edb45" --description "System design and structural decisions" --repo $Repo 2>$null
 gh label edit "domain: architecture" --color "1edb45" --description "System design and structural decisions" --repo $Repo 2>$null
+gh label create "domain: ux" --color "1edb45" --description "Terminal UI, CLI output, and user experience" --repo $Repo 2>$null
 gh label edit "domain: ux" --color "1edb45" --description "Terminal UI, CLI output, and user experience" --repo $Repo 2>$null
+gh label create "domain: strategy" --color "1edb45" --description "Product and execution strategy decisions" --repo $Repo 2>$null
 gh label edit "domain: strategy" --color "1edb45" --description "Product and execution strategy decisions" --repo $Repo 2>$null
 
 # Status / Meta
+gh label create "status: blocked" --color "dda26d" --description "Blocked by external dependency" --repo $Repo 2>$null
 gh label edit "status: blocked" --color "dda26d" --description "Blocked by external dependency" --repo $Repo 2>$null
+gh label create "status: investigation" --color "cfd3d7" --description "Research or spike" --repo $Repo 2>$null
 gh label edit "status: investigation" --color "cfd3d7" --description "Research or spike" --repo $Repo 2>$null
 
 # Dispositions (issue pre-registration; the six fixed outcomes)
-# Two lines per label: `create` makes it exist (an error on an existing label is
-# suppressed), `edit` converges its colour and description on every run AND is
-# the line both canon parsers read -- a `create` line is invisible to them.
 gh label create "disposition: premise-changed" --color "6f42c1" --description "UPDATE — the premise moved; a human rewrites or rules; stays open" --repo $Repo 2>$null
 gh label edit "disposition: premise-changed" --color "6f42c1" --description "UPDATE — the premise moved; a human rewrites or rules; stays open" --repo $Repo 2>$null
 gh label create "disposition: horizon" --color "6f42c1" --description "HOLD (Horizon) — premise valid, not now; open, label only, no card" --repo $Repo 2>$null
