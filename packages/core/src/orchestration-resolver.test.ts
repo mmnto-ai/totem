@@ -623,6 +623,20 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
   });
 
+  it('an origin whose CASE differs still keys the map — GitHub repo names are case-insensitive', () => {
+    const root = mkGitRepo('wt-2801-cased', 'https://github.com/mmnto-ai/Totem.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('a case-shifted DIRECTORY name keys the map too (the basename arm folds case as well)', () => {
+    const root = mkDir(path.join(tmpRoot, 'Totem-Strategy'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
   it('(iii) NO origin falls back to the basename — a git repo named `totem` still resolves', () => {
     const root = mkGitRepo('totem');
     const result = resolveSelfAgents(root, {});
@@ -635,6 +649,29 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
     expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
+  it('every cohort-map key is reachable through the lower-cased lookup — no key carries upper case (fold F4)', () => {
+    // The lookup lower-cases its key, so a map key with an upper-case letter
+    // would be permanently unreachable while still contributing agents to
+    // `knownCohortAgents()`. Walking the repo names and comparing the reachable
+    // union against that flatten catches exactly that, and also catches a new
+    // map entry whose repo name this test does not yet name.
+    const repoNames = [
+      'totem',
+      'totem-strategy',
+      'liquid-city',
+      'arhgap11',
+      'totem-status',
+      'totem-playground',
+    ];
+    const reachable = new Set<string>();
+    for (const name of repoNames) {
+      for (const seat of resolveSelfAgents(mkDir(path.join(tmpRoot, name)), {}).agents) {
+        reachable.add(seat);
+      }
+    }
+    expect([...reachable].sort()).toEqual(knownCohortAgents());
   });
 
   it('(iv) an origin naming a repo the map does not know resolves empty, as today', () => {

@@ -204,7 +204,11 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
  */
 function cohortSeatsForRepo(resolvedRoot: string): readonly string[] {
   const originName = getOriginRepoName(resolvedRoot);
-  const key = originName ?? path.basename(resolvedRoot);
+  // Lower-cased before lookup: GitHub repository names are case-insensitive,
+  // so `…/mmnto-ai/Totem.git` and a `Totem` directory name the same repository
+  // the map already knows, and a case-exact lookup would silently resolve
+  // zero seats for them. The map's own keys are lower-case (locked by test).
+  const key = (originName ?? path.basename(resolvedRoot)).toLowerCase();
   return COHORT_AGENT_MAP[key] ?? [];
 }
 
