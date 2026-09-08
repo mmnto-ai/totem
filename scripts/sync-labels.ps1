@@ -104,8 +104,41 @@ function Merge-Label {
         return
     }
 
-    # Every issue that carried the old label now carries the new one: retire it
+    # The migration read is capped (--limit 1000): a label on more issues than the
+    # cap lists a subset, and deleting after relabelling only that subset strips
+    # the rest (Greptile P1 on mmnto-ai/totem#2839). One more read, limit 1, asks
+    # whether ANY issue still carries the old label; a remainder or a failed read
+    # keeps the label, and the next run continues the migration.
+    $remaining = gh issue list --label $OldName --repo $Repo --state all --limit 1 --json number --jq '.[].number' | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        $script:Failures.Add("issue list $OldName (recheck)")
+        Write-Host "[Error] gh issue list '$OldName' recheck failed (exit $LASTEXITCODE) -- keeping '$OldName'" -ForegroundColor Red
+        return
+    }
+    if (@($remaining -split '\s+' | Where-Object { $_ -ne '' }).Count -gt 0) {
+        $script:Failures.Add("issue list $OldName (issues remain past the 1000-issue read cap)")
+        Write-Host "[Error] keeping '$OldName': issues still carry it after the relabel pass (the read is capped at 1000) -- re-run to continue the migration" -ForegroundColor Red
+        return
+    }
+
+    # Every issue that carried the old label now carries the new one: retire it.
+    # `label delete` fails on an already-retired name by design (2>$null, never
+    # tallied), so a failure is VERIFIED rather than assumed benign: the exact
+    # name is read back -- absent is a no-op, present or unreadable means the
+    # taxonomy did not converge (CodeRabbit on mmnto-ai/totem#2839).
     gh label delete $OldName --yes --repo $Repo 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $present = gh label list --repo $Repo --search $OldName --limit 100 --json name --jq ".[] | select(.name == `"$OldName`") | .name" | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            $script:Failures.Add("label delete $OldName (unverified)")
+            Write-Host "[Error] gh label delete '$OldName' failed and the label could not be read back -- keeping '$OldName'" -ForegroundColor Red
+            return
+        }
+        if ($present.Trim().Length -gt 0) {
+            $script:Failures.Add("label delete $OldName")
+            Write-Host "[Error] gh label delete '$OldName' failed and the label is still present" -ForegroundColor Red
+        }
+    }
 }
 
 Write-Host "Updating canonical labels..." -ForegroundColor Yellow

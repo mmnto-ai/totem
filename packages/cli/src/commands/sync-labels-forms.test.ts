@@ -42,7 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 
-import { parseLabelCanon } from '@mmnto/totem';
+import { normalizeLabelColor, parseLabelCanon } from '@mmnto/totem';
 
 /** packages/cli/src/commands → the repo root. */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
@@ -223,6 +223,29 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
     // Untouched by mmnto-ai/totem#2792: still the front-matter markdown template it was.
     expect(fs.readFileSync(ONBOARDING_PATH, 'utf8').startsWith('---')).toBe(true);
   });
+
+  it("every canonical's create line carries exactly the colour and description of its edit twin", () => {
+    // The canon readers regex only the `edit` lines; the `create` twin is
+    // invisible to them, so a later change to one line of a pair would leave a
+    // fresh repository initialised with metadata the canon does not carry
+    // (Greptile P2 on mmnto-ai/totem#2839). Read from the script TEXT, not the
+    // rendered dry run, so a console code page cannot transliterate the compare.
+    const script = fs.readFileSync(SCRIPT_PATH, 'utf8');
+    const createRe = /gh label create "([^"]+)" --color "([^"]+)" --description "([^"]*)"/g;
+    const creates = new Map<string, { color: string; description: string }>();
+    for (const match of script.matchAll(createRe)) {
+      creates.set(match[1]!, { color: normalizeLabelColor(match[2]), description: match[3]! });
+    }
+    const canon = realCanon();
+    expect(canon.labels.length).toBeGreaterThan(0);
+    expect(creates.size).toBe(canon.labels.length);
+    for (const label of canon.labels) {
+      expect(creates.get(label.name), `create twin for ${label.name}`).toEqual({
+        color: normalizeLabelColor(label.color),
+        description: label.description,
+      });
+    }
+  });
 });
 
 // ─── The pwsh dry run ────────────────────────────────────
@@ -236,15 +259,23 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
 function makeGhStub(): { dir: string; logPath: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gh-stub-'));
   const logPath = path.join(dir, 'gh-calls.log');
-  // The stub logs every call and exits 0, with four opt-in modes read from the
-  // child's environment:
-  //   TOTEM_GH_STUB_ISSUES          — `issue list` answers with one issue, #7,
-  //                                   so the merge phase has something to relabel
-  //   TOTEM_GH_STUB_FAIL_ISSUE_LIST — `issue list` exits 1 (a failed READ)
-  //   TOTEM_GH_STUB_FAIL_ISSUE_EDIT — `issue edit` exits 1 (a failed relabel —
-  //                                   the totem-status incident, mmnto-ai/totem#2837)
-  //   TOTEM_GH_STUB_FAIL            — `label edit` exits 1 — the failure path of
-  //                                   the mutation tally (Greptile P1 on mmnto-ai/totem#2827)
+  // The stub logs every call and exits 0, with opt-in modes read from the
+  // child's environment. The script's two `issue list` reads differ only by
+  // their cap — `--limit 1000` migrates, `--limit 1 --json` rechecks — and the
+  // stub keys on that token so each read can be answered on its own:
+  //   TOTEM_GH_STUB_ISSUES            — the migration read answers with one
+  //                                     issue, #7, so the merge phase relabels
+  //   TOTEM_GH_STUB_ISSUES_REMAIN     — the recheck read still answers #7 (an
+  //                                     issue past the cap; Greptile P1 on
+  //                                     mmnto-ai/totem#2839)
+  //   TOTEM_GH_STUB_FAIL_ISSUE_LIST   — `issue list` exits 1 (a failed READ)
+  //   TOTEM_GH_STUB_FAIL_ISSUE_EDIT   — `issue edit` exits 1 (a failed relabel —
+  //                                     the totem-status incident, mmnto-ai/totem#2837)
+  //   TOTEM_GH_STUB_FAIL_LABEL_DELETE — `label delete` exits 1
+  //   TOTEM_GH_STUB_LABEL_PRESENT     — `label list` answers non-empty (the
+  //                                     deleted label is still there)
+  //   TOTEM_GH_STUB_FAIL              — `label edit` exits 1 — the failure path of
+  //                                     the mutation tally (Greptile P1 on mmnto-ai/totem#2827)
   if (process.platform === 'win32') {
     fs.writeFileSync(
       path.join(dir, 'gh.cmd'),
@@ -252,9 +283,17 @@ function makeGhStub(): { dir: string; logPath: string } {
         '@echo off',
         `>>"${logPath}" echo %*`,
         'if "%TOTEM_GH_STUB_ISSUES%"=="" goto :after_issues',
-        'echo %* | findstr /C:"issue list" >nul',
+        'echo %* | findstr /C:"--limit 1000" >nul',
         'if %errorlevel%==0 echo 7',
         ':after_issues',
+        'if "%TOTEM_GH_STUB_ISSUES_REMAIN%"=="" goto :after_remain',
+        'echo %* | findstr /C:"--limit 1 --json" >nul',
+        'if %errorlevel%==0 echo 7',
+        ':after_remain',
+        'if "%TOTEM_GH_STUB_LABEL_PRESENT%"=="" goto :after_present',
+        'echo %* | findstr /C:"label list" >nul',
+        'if %errorlevel%==0 echo present',
+        ':after_present',
         'if "%TOTEM_GH_STUB_FAIL_ISSUE_LIST%"=="" goto :after_list_fail',
         'echo %* | findstr /C:"issue list" >nul',
         'if %errorlevel%==0 exit /b 1',
@@ -263,6 +302,10 @@ function makeGhStub(): { dir: string; logPath: string } {
         'echo %* | findstr /C:"issue edit" >nul',
         'if %errorlevel%==0 exit /b 1',
         ':after_edit_fail',
+        'if "%TOTEM_GH_STUB_FAIL_LABEL_DELETE%"=="" goto :after_delete_fail',
+        'echo %* | findstr /C:"label delete" >nul',
+        'if %errorlevel%==0 exit /b 1',
+        ':after_delete_fail',
         'if "%TOTEM_GH_STUB_FAIL%"=="" exit /b 0',
         'echo %* | findstr /C:"label edit" >nul',
         'if %errorlevel%==0 exit /b 1',
@@ -279,13 +322,22 @@ function makeGhStub(): { dir: string; logPath: string } {
         '#!/bin/sh',
         `printf '%s\\n' "$*" >> "${logPath}"`,
         'if [ -n "$TOTEM_GH_STUB_ISSUES" ]; then',
-        '  case "$*" in *"issue list"*) echo 7 ;; esac',
+        '  case "$*" in *"--limit 1000"*) echo 7 ;; esac',
+        'fi',
+        'if [ -n "$TOTEM_GH_STUB_ISSUES_REMAIN" ]; then',
+        '  case "$*" in *"--limit 1 --json"*) echo 7 ;; esac',
+        'fi',
+        'if [ -n "$TOTEM_GH_STUB_LABEL_PRESENT" ]; then',
+        '  case "$*" in *"label list"*) echo present ;; esac',
         'fi',
         'if [ -n "$TOTEM_GH_STUB_FAIL_ISSUE_LIST" ]; then',
         '  case "$*" in *"issue list"*) exit 1 ;; esac',
         'fi',
         'if [ -n "$TOTEM_GH_STUB_FAIL_ISSUE_EDIT" ]; then',
         '  case "$*" in *"issue edit"*) exit 1 ;; esac',
+        'fi',
+        'if [ -n "$TOTEM_GH_STUB_FAIL_LABEL_DELETE" ]; then',
+        '  case "$*" in *"label delete"*) exit 1 ;; esac',
         'fi',
         'if [ -n "$TOTEM_GH_STUB_FAIL" ]; then',
         '  case "$*" in *"label edit"*) exit 1 ;; esac',
@@ -505,6 +557,86 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
       const calls = loggedCalls(stub.logPath);
       expect(calls.filter((call) => call.startsWith('issue edit '))).toHaveLength(0);
       expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(0);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('an issue past the read cap keeps the old label — the delete waits until no issue carries it', () => {
+    // The migration read is `--limit 1000`; a label on more issues than that
+    // lists a subset (Greptile P1 on mmnto-ai/totem#2839). The stub relabels
+    // #7 and then answers the limit-1 recheck with #7 again: the script must
+    // keep every legacy label, delete nothing, name the cap, and exit non-zero.
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, {
+        TOTEM_GH_STUB_ISSUES: '1',
+        TOTEM_GH_STUB_ISSUES_REMAIN: '1',
+      });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(1);
+      expect(run.stdout).not.toContain('sync complete');
+      const merges = realCanon().merges.length;
+      const kept = run.stdout
+        .split(/\r?\n/)
+        .filter((line) => line.includes('issues still carry it after the relabel pass')).length;
+      expect(kept).toBe(merges);
+      const calls = loggedCalls(stub.logPath);
+      expect(calls.filter((call) => /^issue edit 7 --add-label /.test(call))).toHaveLength(merges);
+      expect(calls.filter((call) => /^issue list .* --limit 1 --json/.test(call))).toHaveLength(
+        merges,
+      );
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(0);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed delete of an already-absent label is a no-op — the run still converges', () => {
+    // `label delete` exits 1 on a name that was retired on an earlier run; the
+    // read-back finds nothing, so the failure is benign and the run completes.
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, {
+        TOTEM_GH_STUB_ISSUES: '1',
+        TOTEM_GH_STUB_FAIL_LABEL_DELETE: '1',
+      });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(0);
+      expect(run.stdout).toContain('sync complete');
+      const merges = realCanon().merges.length;
+      const calls = loggedCalls(stub.logPath);
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(merges);
+      expect(calls.filter((call) => call.startsWith('label list '))).toHaveLength(merges);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed delete of a label that remains fails the run — convergence is never reported over a leftover', () => {
+    // `label delete` exits 1 and the read-back still finds the name (CodeRabbit
+    // on mmnto-ai/totem#2839): the failure is tallied, the run exits non-zero
+    // and never prints "sync complete".
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, {
+        TOTEM_GH_STUB_ISSUES: '1',
+        TOTEM_GH_STUB_FAIL_LABEL_DELETE: '1',
+        TOTEM_GH_STUB_LABEL_PRESENT: '1',
+      });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(1);
+      expect(run.stdout).not.toContain('sync complete');
+      const merges = realCanon().merges.length;
+      const still = run.stdout
+        .split(/\r?\n/)
+        .filter((line) =>
+          /\[Error\] gh label delete '.+' failed and the label is still present/.test(line),
+        ).length;
+      expect(still).toBe(merges);
+      const calls = loggedCalls(stub.logPath);
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(merges);
+      expect(calls.filter((call) => call.startsWith('label list '))).toHaveLength(merges);
     } finally {
       fs.rmSync(stub.dir, { recursive: true, force: true });
     }
