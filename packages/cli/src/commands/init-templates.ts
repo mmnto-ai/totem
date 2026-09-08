@@ -1625,6 +1625,14 @@ function blankHeredocBodies(command) {
       boundary = false;
       continue;
     }
+    // A backslash before a NEWLINE is a line continuation: the shell removes
+    // both characters and the command carries on, so the scanner must too
+    // (mmnto-ai/totem#2800 round 3, F6). Absorbing the newline into a token is
+    // what hid \`gh \\<LF>pr merge 5\` from the position anchor.
+    if (ch === '\\\\' && (command[i + 1] === '\\n' || (command[i + 1] === '\\r' && command[i + 2] === '\\n'))) {
+      i += command[i + 1] === '\\r' ? 3 : 2;
+      continue;
+    }
     if (ch === '\\\\' && i + 1 < command.length) {
       out += ch + command[i + 1];
       i += 2;
@@ -1638,6 +1646,15 @@ function blankHeredocBodies(command) {
     if (ch === '#' && boundary) {
       const nl = command.indexOf('\\n', i);
       i = nl === -1 ? command.length : nl;
+      continue;
+    }
+    // PowerShell's \`<# … #>\` block comment is data, not commands: blank it
+    // whole, the way a heredoc body is blanked (round 3, F8). A \`<#\` inside a
+    // quoted string never reaches here, because the quote arms run first.
+    if (ch === '<' && command[i + 1] === '#') {
+      const close = command.indexOf('#>', i + 2);
+      i = close === -1 ? command.length : close + 2;
+      boundary = true;
       continue;
     }
     if (ch === '$' && command.slice(i, i + 3) === '$((') {
@@ -1795,6 +1812,13 @@ function ghPrMergeArgs(rawCommand) {
     ) {
       endSegment();
       i++;
+      continue;
+    }
+    // A line continuation joins the two halves of ONE word (\`gh \\<LF>pr\` is
+    // \`ghpr\` to the shell, and \`gh \\<LF>pr merge\` keeps \`gh\` at the front of
+    // the segment): drop both characters and keep tokenizing (round 3, F6).
+    if (ch === '\\\\' && (command[i + 1] === '\\n' || (command[i + 1] === '\\r' && command[i + 2] === '\\n'))) {
+      i += command[i + 1] === '\\r' ? 3 : 2;
       continue;
     }
     if (ch === '\\\\' && i + 1 < command.length) {

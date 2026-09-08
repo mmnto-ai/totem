@@ -108,9 +108,11 @@ describe('bot identity — exactly one definition', () => {
       ['indexOf()', "if (lower.indexOf('greptile') !== -1) return 'greptile';"],
       ['startsWith()', "if (lower.startsWith('gemini-code-assist')) return 'gca';"],
       ['concatenation', "const login = 'greptile' + '-apps' + '[bot]';"],
-      // Display-cased: the literal scan was case-sensitive while the regex arms
-      // were /i, so this shape walked straight through (round 2, F9).
-      ['a display-cased Set', "const BOTS = new Set(['CodeRabbitAI[bot]', 'Greptile-Apps[bot]']);"],
+      // Display-cased, `[Bot]` INCLUDED: the earlier version of this row spelled
+      // `[bot]` in lowercase, so the pre-fold sensor already caught it on that
+      // spelling alone and the row proved nothing (round 3, F3). Every letter a
+      // consumer could case differently is cased here.
+      ['a display-cased Set', "const BOTS = new Set(['CodeRabbitAI[Bot]', 'GREPTILE-APPS[BOT]']);"],
     ];
     for (const [label, mutant] of mutants) {
       const scanned = codeOnly(mutant);

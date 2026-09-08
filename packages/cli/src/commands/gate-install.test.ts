@@ -1072,6 +1072,37 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
+    it('a line continuation does not hide the anchor (round 3, F6)', () => {
+      // The shell removes a backslash-newline and joins the halves. Absorbing
+      // the newline into the token left the segment starting with something
+      // other than `gh`, so a real merge went unjudged.
+      initGitRepo();
+      for (const command of ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5']) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
+      }
+
+      // A backslash before an ORDINARY character keeps its old meaning: it
+      // escapes that character into the token.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 5 --body a\\ b'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
+    });
+
+    it('a PowerShell block comment is data, not commands (round 3, F8)', () => {
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const { status } = runWrapper(bash('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready');
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      // And the merge AFTER one is still judged — the blank must not eat it.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 4 });
+    });
+
     it('a comment is not a command: a merge inside one never fires', () => {
       initGitRepo();
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
