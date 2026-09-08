@@ -1443,7 +1443,7 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
     return {
       ok: false,
       refusal:
-        `Seat NOT DERIVED — ${supplied} does not name exactly one seat; this repo hosts: ${hostedList}. ` +
+        `Seat NOT DERIVED — no single seat declared (${supplied}); this repo hosts: ${hostedList}. ` +
         `Set the per-shell TOTEM_SELF_AGENT to one of them and re-run — no seat is adopted for you, ` +
         `not the only seat in sight, not the crown, not the repo basename.${diagnostics}`,
     };
