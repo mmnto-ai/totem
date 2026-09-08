@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "b812ec01beaf3bdd426f9a43da4dcc5046a10633",
+  "readAt": "2026-09-08T21:24:25Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail-cli-wiring.test.ts",
+      "line": 78,
+      "claim": "index.ts now passes `json` into deriveSeatCommand so `totem mail --json --derive-seat` and `totem --json mail --derive-seat` both reach json:true",
+      "counterexample": "The fold changed packages/cli/src/index.ts:984-989 to `deriveSeatCommand({ json, asSeat, allSeats, deriveSeat: true })` but did NOT update the mirror that exists to sense exactly this drift: mail-cli-wiring.test.ts:75 comments '// EXACT translation of the #2801 short-circuit' and line 78 still reads `handlers.deriveSeatCommand({ asSeat, allSeats, deriveSeat: true })` — no `json`. The file header at line 32-34 states 'the mirror must carry it to sense it (fold re-arm finding 7)'. Consequence: the harness comment is now false, and NO test pins the json passthrough at the Commander seam — the '#2097 seam' test at line 172 asserts only `mailCommand`'s opts. Dropping `json` from index.ts:985 would leave every test green. (The runtime claim itself is TRUE: verified end-to-end against the built CLI in both flag orders — one stdout object, exit 0, 0 bytes on real stderr.) Folded: the mirror carries `json` and a seam test pins it in both flag orders."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 213,
+      "claim": "'a repository named `constructor` or `toString` — both legal GitHub names, both accepted by repoNameFromRemoteUrl — would otherwise read an inherited function out of it and throw at the first .filter' (same sentence in .changeset/signon-derive-seat-2801.md:10 and in the test comment at orchestration-resolver.test.ts:696)",
+      "counterexample": "The key is lower-cased at orchestration-resolver.ts:216 BEFORE the lookup, so `toString` becomes `tostring`, which is not an Object.prototype member. Simulating the pre-fold line verbatim: constructor -> key `constructor` -> THREW TypeError: mapped.filter is not a function; toString -> key `tostring` -> OK, mapped=[]; hasOwnProperty -> key `hasownproperty` -> OK, mapped=[]; __proto__ -> key `__proto__` -> THREW TypeError. So the `toString` half of the rationale is false in all three places, and 2 of the 4 names in the new test loop (orchestration-resolver.test.ts:698) pass on the PRE-fold code — non-falsifying rows. The control as a whole would still have failed pre-fold on iteration 1 (`constructor`), so it has teeth. Also imprecise: for `__proto__` the pre-fold read returns Object.prototype, an OBJECT, not a 'function'. Folded: the comment, the changeset and the test name the two lower-case prototype members that reach the map (`constructor`, `__proto__`) and say why camel-case members cannot."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-derive-seat.test.ts",
+      "line": 597,
+      "claim": "the test named '--json emits ONE stdout object in both arms with the same exit codes, and nothing on stderr' proves nothing reaches stderr",
+      "counterexample": "`stderr` is fed ONLY by the `vi.spyOn(log,'error')` mock (lines 109-112). `expect(refused.stderr).toBe('')` therefore proves exactly 'log.error was not called' — the same proposition as `expect(refused.tags).toEqual([])` on the next line — and CANNOT observe console.error, process.stderr.write, or a child process's stderr. The harness DOES disclose the proxy (lines 87-92: 'log.error is the CLI's stderr channel'), and the property holds today (real CLI: 0 bytes on stderr in all three json arms, verified), so this is an assertion-strength gap, not a false claim: a future console.error added anywhere on the path (deriveSeatStatuses, a resolver warning print) would pass this test. Folded: the harness also spies process.stderr.write and console.error and the json test asserts both stayed silent."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".changeset/signon-derive-seat-2801.md",
+      "line": 12,
+      "claim": "the BLIND-kit marker needed `<code>BLIND round: </code>` raw HTML so the trailing space is part of the literal",
+      "counterexample": "Rendering-inert: micromark 4.0.2 renders the code-span form and the raw-HTML form to byte-identical HTML — both give `<p>prefix <code>BLIND round: </code> plus</p>` (CommonMark strips a space only when the span begins AND ends with one). The added parenthetical '(the trailing space is part of the literal)' is what does the work; the HTML swap achieves nothing. No pipeline damage found: prettier --check passes on all nine changed files, @changesets/cli/changelog copies the summary verbatim, tools/augment-cohort-changelog-headers.mjs only rewrites empty `## X.Y.Z` headers, and md.config.cjs/docs-inject only replaces `<!-- docs TRANSFORM -->` marker blocks (docs/wiki/cli-reference.md has none, so the edited bullet is not regenerated). Disposition: kept — the HTML form is what silences markdownlint MD038, which is the finding it answers; the rendering is the same either way, as the leg shows."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 215,
+      "claim": "the pre-fold lookup was 'breaking the resolver's never-throw contract'",
+      "counterexample": "No such general clause exists in the cited file. The verbatim never-throw clauses are scoped: :202 and :398 say the git READ never throws, and :452 says 'the resolver is best-effort and never throws on a user-supplied config'. The fix is still correct and the throw is real (resolveSelfAgents:468 has no try/catch around layer 3), but the comment cites a contract wider than any clause in the repo states. Folded: the comment names the actual consequence — layer 3 has no try/catch, so the throw reached every poll."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1376,
+      "claim": "the DeriveSeatResult docblock still describes the refusal's stream",
+      "counterexample": "Line 1376 reads '`refusal` is the single stderr line the refusal arm prints' — under the new --json arm (mail.ts:1580-1584) the refusal is written to STDOUT as a field of DeriveSeatJson. The next sentence ('the caller decides the stream') survives, so this is stale rather than wrong-by-construction, but the DeriveSeatJson docblock added at :1546 does not correct it. Folded: the sentence names both streams."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F5",
+    "F6"
+  ],
+  "verdict": "termination named (conditional on no runtime path moving; none did): no BLOCKING finding; two MATERIAL — the CLI-wiring mirror omitted the json passthrough it exists to pin, and the toString half of the own-property rationale was false (keys are lower-cased first) — plus four MINOR; F1, F2, F3, F5, F6 folded in round 2 as test strengthening, comments and a docblock; F4 kept as posted (the HTML code element is what silences markdownlint MD038, the rendering is identical either way, as the leg showed)"
+}
