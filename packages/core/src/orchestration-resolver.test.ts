@@ -14,7 +14,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Passthrough mock so `vi.spyOn` can observe the ORIGIN READ the resolver
+// performs (mmnto-ai/totem#2801 fold round 3, F7): the precedence test below
+// claims layers 1 and 2 never reach it, and a claim about a call is only
+// testable by counting the call. Every export behaves identically until a test
+// installs a spy.
+vi.mock('./sys/git.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./sys/git.js')>();
+  return { ...actual };
+});
 
 import {
   isPathSafeAgentId,
@@ -23,6 +33,7 @@ import {
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
+import * as gitModule from './sys/git.js';
 import { envWithoutGitLocation, getOriginRepoName, repoNameFromRemoteUrl } from './sys/git.js';
 import { cleanTmpDir } from './test-utils.js';
 
@@ -699,21 +710,39 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
   });
 
-  it('env and config still win — neither reaches the origin read', () => {
+  it('env and config win WITHOUT reaching the origin read — zero spawns on layers 1 and 2', () => {
+    // The claim is about a CALL, so it is counted, not inferred from the
+    // result (fold round 3, F7). The docstring promises an identity-declaring
+    // poll spawns no git; this is that promise under test.
     const root = mkGitRepo('wt-precedence', 'https://github.com/mmnto-ai/totem.git');
-    expect(resolveSelfAgents(root, { TOTEM_SELF_AGENT: 'visitor-seat' })).toEqual({
-      agents: ['visitor-seat'],
-      source: 'env',
-    });
-    mkDir(path.join(root, '.totem', 'orchestration'));
-    fs.writeFileSync(
-      path.join(root, '.totem', 'orchestration', 'config.json'),
-      JSON.stringify({ host_agents: ['declared-seat'] }),
-      'utf-8',
-    );
-    const viaConfig = resolveSelfAgents(root, {});
-    expect(viaConfig.source).toBe('config');
-    expect(viaConfig.agents).toEqual(['declared-seat']);
+    const originSpy = vi.spyOn(gitModule, 'getOriginRepoName');
+    try {
+      expect(resolveSelfAgents(root, { TOTEM_SELF_AGENT: 'visitor-seat' })).toEqual({
+        agents: ['visitor-seat'],
+        source: 'env',
+      });
+      expect(originSpy).not.toHaveBeenCalled();
+
+      mkDir(path.join(root, '.totem', 'orchestration'));
+      fs.writeFileSync(
+        path.join(root, '.totem', 'orchestration', 'config.json'),
+        JSON.stringify({ host_agents: ['declared-seat'] }),
+        'utf-8',
+      );
+      const viaConfig = resolveSelfAgents(root, {});
+      expect(viaConfig.source).toBe('config');
+      expect(viaConfig.agents).toEqual(['declared-seat']);
+      expect(originSpy).not.toHaveBeenCalled();
+
+      // Positive control: layer 3 DOES reach it, exactly once — otherwise the
+      // two negatives above could pass on a spy that never wires up.
+      fs.rmSync(path.join(root, '.totem', 'orchestration', 'config.json'));
+      const viaMap = resolveSelfAgents(root, {});
+      expect(viaMap.source).toBe('map');
+      expect(originSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      originSpy.mockRestore();
+    }
   });
 });
 
