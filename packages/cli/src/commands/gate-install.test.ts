@@ -1007,7 +1007,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 42 });
     });
 
-    it('fires at command position after a separator, and after do/then', () => {
+    it("fires at command position after a separator, after the shell's command-position words, and behind an assignment prefix", () => {
       initGitRepo();
       for (const command of [
         'git status && gh pr merge 7',
@@ -1015,6 +1015,17 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'for x in 1; do gh pr merge 7; done',
         'if true; then gh pr merge 7; fi',
         'git log |\ngh pr merge 7',
+        // PR round 1 (greptile): a merge used AS the condition, and one behind
+        // an assignment prefix, each left something other than `gh` at the
+        // segment's front and went unjudged.
+        'if gh pr merge 7; then echo merged; fi',
+        'if false; then :; elif gh pr merge 7; then :; fi',
+        'while gh pr merge 7; do break; done',
+        'until gh pr merge 7; do sleep 1; done',
+        'GH_TOKEN=x gh pr merge 7',
+        'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
+        'exec gh pr merge 7',
+        'command gh pr merge 7',
       ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
@@ -1038,11 +1049,12 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
         // An UNTERMINATED body runs to the end of the command and is still data.
         'cat <<EOF\ngh pr merge 5',
-        // DISCLOSED misses (the gate does not fire — the safe direction):
-        // an env-assignment prefix and a wrapper program take the first token,
-        // so the position anchor never sees `gh`.
-        'GH_TOKEN=x gh pr merge 5',
+        // DISCLOSED misses (the gate does not fire — the safe direction): a
+        // wrapper PROGRAM takes the first token, so the position anchor never
+        // sees `gh` (an assignment prefix no longer hides it — PR round 1).
         'sudo gh pr merge 5',
+        'timeout 30 gh pr merge 5',
+        'env GH_TOKEN=x gh pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
@@ -1051,6 +1063,32 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         expect(status, command).toBe(0);
         expect(stubArgv(), command).toBeNull();
       }
+    });
+
+    it('every gh pr merge at command position is judged, not only the first (PR round 1, greptile)', () => {
+      initGitRepo();
+      // The stub overwrites its record on every spawn, so the record names the
+      // LAST payload judged. An allowing stub: the second merge is reached.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const allowed = runWrapper(bash('gh pr merge 7; gh pr merge 8'), [], 'merge-ready');
+      expect(allowed.status).toBe(0);
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+
+      // A denying stub under strict: the FIRST deny exits 2, so the second
+      // merge is never spawned and the record still names the first.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'not ready', provenance: {} } });
+      const denied = runWrapper(bash('gh pr merge 7 && gh pr merge 8'), [], 'merge-ready');
+      expect(denied.status).toBe(2);
+      expect(spawnedPayload()).toMatchObject({ pr: 7 });
+      expect(denied.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(1);
+
+      // Under --pilot a deny prints and the NEXT merge is still judged: two
+      // deny lines, the record names the second merge, exit 0.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'not ready', provenance: {} } });
+      const pilot = runWrapper(bash('gh pr merge 7; gh pr merge 8'), ['--pilot'], 'merge-ready');
+      expect(pilot.status).toBe(0);
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+      expect(pilot.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(2);
     });
 
     it('an arithmetic shift or a comment does not swallow the merge that follows (fold round 2, F1)', () => {

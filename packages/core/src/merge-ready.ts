@@ -373,15 +373,23 @@ const SUCCESS_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 const SUCCESS_CONTEXT_STATES = new Set(['SUCCESS']);
 const PENDING_CONTEXT_STATES = new Set(['PENDING', 'EXPECTED']);
 
-function readPageInfo(connection: Record<string, unknown> | null): {
-  hasNext: boolean;
-  cursor: string | null;
-} {
+/**
+ * A connection's `pageInfo`, read STRICTLY: the query asks for it on every
+ * connection, so an answer without one — or with a `hasNextPage` that is not
+ * a boolean — is an unreadable page, never "no more pages". Reading a missing
+ * `pageInfo` as complete was the fail-open Greptile named on the reviews and
+ * threads connections (mmnto-ai/totem#2844 round 1): a truncated or malformed
+ * answer read as a clean, finished list and predicates 2–4 passed on it.
+ */
+function readPageInfo(
+  connection: Record<string, unknown> | null,
+): { ok: true; hasNext: boolean; cursor: string | null } | { ok: false; detail: string } {
   const info = asObject(connection?.pageInfo);
-  return {
-    hasNext: info?.hasNextPage === true,
-    cursor: asString(info?.endCursor),
-  };
+  if (info === null) return { ok: false, detail: 'carried no pageInfo' };
+  if (typeof info.hasNextPage !== 'boolean') {
+    return { ok: false, detail: 'carried a pageInfo whose hasNextPage is not a boolean' };
+  }
+  return { ok: true, hasNext: info.hasNextPage, cursor: asString(info.endCursor) };
 }
 
 function readChecks(rollup: Record<string, unknown> | null): {
@@ -391,8 +399,19 @@ function readChecks(rollup: Record<string, unknown> | null): {
   detail?: string;
 } {
   const contexts = asObject(rollup?.contexts);
-  const nodes = asArray(contexts?.nodes) ?? [];
   const entries: CheckEntry[] = [];
+  // No rollup at all is the R5 no-checks shape (the caller has already
+  // refused a rollup WITHOUT a contexts connection): an empty, complete list.
+  if (contexts === null) return { entries, hasNext: false, cursor: null };
+  const nodes = asArray(contexts.nodes);
+  if (nodes === null) {
+    return {
+      entries,
+      hasNext: false,
+      cursor: null,
+      detail: 'the status-check rollup contexts carried no nodes array',
+    };
+  }
   for (const node of nodes) {
     const n = asObject(node);
     if (n === null)
@@ -429,51 +448,103 @@ function readChecks(rollup: Record<string, unknown> | null): {
     }
   }
   const info = readPageInfo(contexts);
+  if (!info.ok) {
+    return {
+      entries,
+      hasNext: false,
+      cursor: null,
+      detail: `the status-check rollup contexts ${info.detail}`,
+    };
+  }
   return { entries, hasNext: info.hasNext, cursor: info.cursor };
 }
 
+/**
+ * The `reviews` connection, read as STRICTLY as the checks connection above
+ * (mmnto-ai/totem#2844 round 1, Greptile): a connection that is missing, has no
+ * `nodes` array, has no readable `pageInfo`, or carries a node that is not an
+ * object or has no `state` is an UNREADABLE answer, returned with a named
+ * `detail` — never an empty, complete list that lets predicate 3 pass on an
+ * answer the read did not actually receive. A review whose author is a
+ * deleted account (`author: null`) is the one shape SKIPPED rather than
+ * refused: it carries no identity to supersede or attribute, so it is never
+ * counted as a CHANGES_REQUESTED nobody can clear.
+ */
 function readReviews(connection: Record<string, unknown> | null): {
   entries: ReviewEntry[];
   hasNext: boolean;
   cursor: string | null;
+  detail?: string;
 } {
   const entries: ReviewEntry[] = [];
-  for (const node of asArray(connection?.nodes) ?? []) {
+  const unreadable = (why: string): ReturnType<typeof readReviews> => ({
+    entries,
+    hasNext: false,
+    cursor: null,
+    detail: `the reviews connection ${why}`,
+  });
+  if (connection === null) return unreadable('was missing from the answer');
+  const nodes = asArray(connection.nodes);
+  if (nodes === null) return unreadable('carried no nodes array');
+  for (const node of nodes) {
     const n = asObject(node);
-    if (n === null) continue;
-    const login = asString(asObject(n.author)?.login);
+    if (n === null) return unreadable('carried a node that is not an object');
     const state = asString(n.state);
-    // A review whose author is a deleted account has `author: null`; it carries
-    // no identity to supersede or attribute, so it is skipped (never counted as
-    // a CHANGES_REQUESTED nobody can clear).
-    if (login === null || state === null) continue;
+    if (state === null) return unreadable('carried a review with no state');
+    const login = asString(asObject(n.author)?.login);
+    if (login === null) continue;
     entries.push({ login, state, submittedAt: asString(n.submittedAt) });
   }
   const info = readPageInfo(connection);
+  if (!info.ok) return unreadable(info.detail);
   return { entries, hasNext: info.hasNext, cursor: info.cursor };
 }
 
+/**
+ * The `reviewThreads` connection, read with the same strictness as
+ * {@link readReviews}: a missing connection, a missing `nodes` array or
+ * `pageInfo`, a thread node that is not an object, or a thread whose first
+ * comment cannot be read (no `comments.nodes` array, or an empty one — a
+ * review thread always has its root comment) is UNREADABLE and named, so
+ * predicates 2 and 4 never pass on a list the read did not deliver
+ * (mmnto-ai/totem#2844 round 1). A root comment whose author is a deleted
+ * account keeps `rootLogin: null` — it is not a known bot, which is a fact
+ * about the thread, not an unreadable answer.
+ */
 function readThreads(connection: Record<string, unknown> | null): {
   entries: ThreadEntry[];
   hasNext: boolean;
   cursor: string | null;
+  detail?: string;
 } {
   const entries: ThreadEntry[] = [];
-  for (const node of asArray(connection?.nodes) ?? []) {
+  const unreadable = (why: string): ReturnType<typeof readThreads> => ({
+    entries,
+    hasNext: false,
+    cursor: null,
+    detail: `the review threads connection ${why}`,
+  });
+  if (connection === null) return unreadable('was missing from the answer');
+  const nodes = asArray(connection.nodes);
+  if (nodes === null) return unreadable('carried no nodes array');
+  for (const node of nodes) {
     const n = asObject(node);
-    if (n === null) continue;
-    const comments = asArray(asObject(n.comments)?.nodes) ?? [];
+    if (n === null) return unreadable('carried a node that is not an object');
+    const comments = asArray(asObject(n.comments)?.nodes);
+    if (comments === null) return unreadable('carried a thread with no comments array');
     const root = asObject(comments[0]);
+    if (root === null) return unreadable('carried a thread whose root comment is unreadable');
     entries.push({
       isResolved: n.isResolved === true,
       isOutdated: n.isOutdated === true,
-      rootLogin: asString(asObject(root?.author)?.login),
-      rootBody: asString(root?.body) ?? '',
-      rootCommit: asString(asObject(root?.commit)?.oid),
-      rootOriginalCommit: asString(asObject(root?.originalCommit)?.oid),
+      rootLogin: asString(asObject(root.author)?.login),
+      rootBody: asString(root.body) ?? '',
+      rootCommit: asString(asObject(root.commit)?.oid),
+      rootOriginalCommit: asString(asObject(root.originalCommit)?.oid),
     });
   }
   const info = readPageInfo(connection);
+  if (!info.ok) return unreadable(info.detail);
   return { entries, hasNext: info.hasNext, cursor: info.cursor };
 }
 
@@ -566,8 +637,13 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
   }
   const checks = readChecks(rollup);
   if (checks.detail !== undefined) return { ok: false, detail: checks.detail };
+  // The two review connections are held to the SAME bar as the checks
+  // connection: an answer that is missing or malformed is a failed read, named,
+  // never an empty list (mmnto-ai/totem#2844 round 1).
   const reviews = readReviews(asObject(pr.reviews));
+  if (reviews.detail !== undefined) return { ok: false, detail: reviews.detail };
   const threads = readThreads(asObject(pr.reviewThreads));
+  if (threads.detail !== undefined) return { ok: false, detail: threads.detail };
 
   return {
     ok: true,
@@ -754,6 +830,15 @@ function withoutCode(body: string): string {
     .replace(/(`+)[^`]*?\1/g, CODE_PLACEHOLDER);
 }
 
+/**
+ * Whether a comment body carries a bot's OWN structured high-severity label —
+ * one of {@link HIGH_SEVERITY_MARKERS}, read against the body with every code
+ * form replaced first ({@link withoutCode}), so a quoted marker never reads
+ * as a label and prose is never matched. `true` is "this finding's author
+ * ranked it HIGH/Major/P0/P1"; `false` is "no such label in the prose" — which
+ * includes a bot that emits no structured label at all (the disclosed miss
+ * direction above).
+ */
 export function hasHighSeverityMarker(body: string): boolean {
   const prose = withoutCode(body);
   return HIGH_SEVERITY_MARKERS.some((re) => re.test(prose));
@@ -1218,11 +1303,20 @@ export function evaluateMergeReady(
   detail.changesRequestedBy = changesRequestedBy(state.reviews);
   detail.highInline = highSeverityInlines(state.threads, state.headSha).length;
 
+  // The predicates are read BEFORE the unreadable-commit arm below: a failure
+  // that stands in charter order ahead of predicate 4 is a fact, and a tier
+  // never softens a fact — the arm that returned first here turned a failing
+  // check plus one unplaceable HIGH inline into the UNEVALUABLE class, which
+  // pilot maps to `warn` (mmnto-ai/totem#2844 round 1, CodeRabbit).
+  const blocked = firstFailure(state, detail);
+
   // A bot HIGH inline whose `comment.commit` came back null cannot be placed
   // against the head, so predicate 4's input is missing for it: unevaluable and
-  // NAMED, never a silent pass (round 2, F8).
+  // NAMED, never a silent pass (round 2, F8). It still preempts predicate 5 —
+  // predicate 4's missing input comes before predicate 5 in charter order —
+  // but never a failure of predicates 1–3 or a READABLE predicate-4 failure.
   const unreadable = unreadableCommitHighInlines(state.threads);
-  if (unreadable.length > 0) {
+  if ((blocked === null || blocked.predicate === 'merge-state') && unreadable.length > 0) {
     const first = unreadable[0]!;
     return unevaluable(
       `${unreadable.length} HIGH bot inline(s) carry no commit, so predicate 4 cannot place them against the head — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
@@ -1245,8 +1339,6 @@ export function evaluateMergeReady(
       `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)} has ZERO status checks${state.rollupPresent ? '' : ' (no rollup on the head commit)'} — predicate 1 passes as a fact; branch protection, not this gate, decides whether zero checks may merge.`,
     );
   }
-
-  const blocked = firstFailure(state, detail);
 
   if (override) {
     return allowByOverride(

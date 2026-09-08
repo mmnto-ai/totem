@@ -8,10 +8,12 @@
  * mmnto-ai/totem-strategy#1251, and mmnto-ai/totem#2827 (the comment that
  * re-pointed to the head) — plus the benign corpus, every bot inline thread on
  * mmnto-ai/totem#2820-2839, which measures the severity read's ADR-109
- * false-positive budget. The other 39 are synthetic and labelled `synthetic-`
+ * false-positive budget. The other 44 are synthetic and labelled `synthetic-`
  * in their names — one per invariant the captures cannot exercise (all three
  * PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for each and no
- * capture can carry a BEHIND / DIRTY / BLOCKED head, or a resolved HIGH thread).
+ * capture can carry a BEHIND / DIRTY / BLOCKED head, or a resolved HIGH thread);
+ * the five PR-round-1 rows (mmnto-ai/totem#2844) cover the strict connection
+ * reads and the predicate order ahead of the unreadable-commit arm.
  * The README beside them lists every file with its sha256 and instant, and a
  * test recomputes those receipts from the files on disk.
  *
@@ -161,8 +163,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(39);
-    expect(files.length).toBe(43);
+    expect(synthetic.length).toBe(44);
+    expect(files.length).toBe(48);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -684,6 +686,30 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     ).toBe('warn');
   });
 
+  it('a failing check beside a null-commit HIGH inline DENIES as predicate 1 at both tiers — a tier never softens a fact (PR round 1)', () => {
+    // Before the fold the unreadable-commit arm returned first, so this shape
+    // was the UNEVALUABLE class: `warn` under pilot, and `ref: unevaluable`
+    // under strict for an audit record whose cause was predicate 1.
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-failing-check-and-null-commit-high.json', { tier });
+      expect(e.verdict.disposition, tier).toBe('deny');
+      expect(e.verdict.provenance.ref, tier).toBe('checks');
+      expect(e.verdict.reason, tier).toMatch(/status checks are failing/);
+      expect(e.notices.join('\n'), tier).not.toMatch(/could not derive/);
+    }
+  });
+
+  it("BEHIND beside a null-commit HIGH inline is still unevaluable — predicate 4's missing input precedes predicate 5 (PR round 1)", () => {
+    const strict = evaluate('synthetic-merge-state-behind-and-null-commit-high.json');
+    expect(strict.verdict.disposition).toBe('deny');
+    expect(strict.verdict.provenance.ref).toBe('unevaluable');
+    expect(strict.verdict.reason).toMatch(/carry no commit/i);
+    expect(
+      evaluate('synthetic-merge-state-behind-and-null-commit-high.json', { tier: 'pilot' }).verdict
+        .disposition,
+    ).toBe('warn');
+  });
+
   it('no bot review present passes predicates 2-4 as a fact, never a failure', () => {
     const e = evaluate('synthetic-merge-state-clean.json');
     expect(e.verdict.disposition).toBe('allow');
@@ -792,6 +818,27 @@ describe('merge-ready — pagination and the unevaluable class', () => {
     expect(pilot.verdict.disposition).not.toBe('allow');
   });
 
+  it('a missing or truncated reviews / reviewThreads connection is unevaluable, never an empty complete list (PR round 1)', () => {
+    // Greptile's round-1 P1: `?? []` and a defaulted `hasNext: false` turned an
+    // answer WITHOUT these connections into "no reviews, no threads, complete",
+    // and predicates 2–4 passed on a list the read never received. The checks
+    // rollup already failed closed on the same shape; these now match it.
+    for (const [file, pattern] of [
+      ['synthetic-reviews-connection-missing.json', /reviews connection was missing/],
+      ['synthetic-threads-connection-missing.json', /review threads connection was missing/],
+      ['synthetic-threads-pageinfo-missing.json', /review threads connection carried no pageInfo/],
+    ] as const) {
+      const strict = evaluate(file);
+      expect(strict.verdict.disposition, file).toBe('deny');
+      expect(strict.verdict.provenance.ref, file).toBe('unevaluable');
+      expect(strict.verdict.reason, file).toMatch(pattern);
+      expect(strict.detail.threads.complete, file).toBe(false);
+      const pilot = evaluate(file, { tier: 'pilot' });
+      expect(pilot.verdict.disposition, file).toBe('warn');
+      expect(pilot.verdict.disposition, file).not.toBe('allow');
+    }
+  });
+
   it('a head sha that moved between pages is unevaluable, named', () => {
     const e = evaluate('synthetic-head-moved.json');
     expect(e.verdict.disposition).toBe('deny');
@@ -868,7 +915,10 @@ describe('merge-ready — the audited override', () => {
     const audit = e.notices.find((n) => n.includes('OVERRIDE'));
     expect(audit).toBeDefined();
     expect(audit).toContain('mmnto-ai/totem#4242');
-    expect(audit).toContain('aaaaaaaaaaaa'); // the head sha, shortened
+    // The head sha, SHORTENED to 12: the fixture sha is 40 identical chars, so
+    // a bare `toContain` of the prefix could not tell 12 from 40.
+    expect(audit).toContain('a'.repeat(12));
+    expect(audit).not.toContain('a'.repeat(13));
     expect(audit).toContain('merge-state');
   });
 

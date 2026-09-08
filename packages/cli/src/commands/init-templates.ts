@@ -1503,8 +1503,17 @@ for (let i = 0; i < argv.length; i++) {
 // tokenizes each segment. A segment whose FIRST token is \`gh\`, followed by
 // \`pr\` and \`merge\`, is a merge at command position; a quoted
 // "gh pr merge" is a single token and never matches, so
-// \`echo "gh pr merge"\` does not fire. Leading shell keywords (\`do\`,
-// \`then\`, \`else\`, \`!\`) are skipped so \`for … ; do gh pr merge; done\` fires.
+// \`echo "gh pr merge"\` does not fire. The shell's own COMMAND-POSITION words
+// are skipped before the anchor is read — the reserved words \`do\`, \`then\`,
+// \`else\`, \`if\`, \`elif\`, \`while\`, \`until\` and \`!\`, the builtins \`exec\` and
+// \`command\` (which run their operand as the command), and any run of
+// \`NAME=value\` assignment prefixes — so \`for … ; do gh pr merge; done\`,
+// \`if gh pr merge 5; then …\` and \`GH_TOKEN=x gh pr merge 5\` all fire. Before
+// the PR's review round only \`do\`/\`then\`/\`else\`/\`!\` were skipped, so a merge
+// used AS an \`if\` condition, or behind an assignment prefix, went unjudged
+// (mmnto-ai/totem#2844 round 1, greptile). EVERY matching segment is
+// collected, not the first: \`gh pr merge 7; gh pr merge 8\` yields two argv
+// lists and the wrapper judges each PR on its own facts (same round).
 //
 // HEREDOC BODIES ARE BLANKED FIRST (mmnto-ai/totem#2800 fold F4). A heredoc
 // body is DATA, not commands: \`cat <<EOF\` … \`gh pr merge 5\` … \`EOF\` writes a
@@ -1524,10 +1533,11 @@ for (let i = 0; i < argv.length; i++) {
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny:
-//   - an env-assignment prefix (\`GH_TOKEN=x gh pr merge 5\`): the assignment is
-//     the segment's first token, so the position anchor does not see \`gh\`;
-//   - a wrapper program that takes operands before \`gh\` (\`sudo\`, \`timeout 30\`,
-//     \`npx\`), for the same reason;
+//   - a wrapper PROGRAM that takes operands before \`gh\` (\`sudo\`, \`timeout 30\`,
+//     \`npx\`, \`env\`, \`nohup\`): the program is the segment's first token, so the
+//     position anchor does not see \`gh\` (the shell's reserved words and the
+//     \`exec\`/\`command\` builtins are skipped; an arbitrary program is not, since
+//     the walk cannot know which of its operands is the command);
 //   - PowerShell's own quoting (backtick escapes, here-strings) is not
 //     modelled — the walk reads POSIX quoting for both tools.
 // Which characters END a word, so the scanner can say whether the next one
@@ -1739,7 +1749,36 @@ function blankHeredocBodies(command, powershell) {
   return out;
 }
 
-function ghPrMergeArgs(rawCommand, powershell) {
+// The words the shell reads at command position that are NOT the command:
+// reserved words that introduce a compound command, the negation, and the two
+// builtins that execute their operand. Stripped from a segment's front, in any
+// run, before the \`gh pr merge\` anchor is read.
+const COMMAND_POSITION_WORDS = [
+  'do',
+  'then',
+  'else',
+  'if',
+  'elif',
+  'while',
+  'until',
+  '!',
+  'exec',
+  'command',
+];
+
+// A \`NAME=value\` word at a segment's front is an assignment PREFIX to the
+// command that follows it (\`GH_TOKEN=x gh pr merge 5\`), never the command.
+function isAssignmentPrefix(token) {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
+}
+
+/**
+ * The argv after EVERY \`gh pr merge\` at command position in the command —
+ * one array per merge, in command order — or an empty array when there is
+ * none. A compound command that merges twice yields two, and the wrapper
+ * judges each (mmnto-ai/totem#2844 round 1).
+ */
+function ghPrMergeArgvs(rawCommand, powershell) {
   const command = blankHeredocBodies(rawCommand, powershell === true);
   const segments = [];
   let current = [];
@@ -1836,19 +1875,20 @@ function ghPrMergeArgs(rawCommand, powershell) {
   }
   endSegment();
 
+  const found = [];
   for (const segment of segments) {
     let tokens = segment;
     while (
       tokens.length > 0 &&
-      (tokens[0] === 'do' || tokens[0] === 'then' || tokens[0] === 'else' || tokens[0] === '!')
+      (COMMAND_POSITION_WORDS.indexOf(tokens[0]) !== -1 || isAssignmentPrefix(tokens[0]))
     ) {
       tokens = tokens.slice(1);
     }
     if (tokens.length >= 3 && tokens[0] === 'gh' && tokens[1] === 'pr' && tokens[2] === 'merge') {
-      return tokens.slice(3);
+      found.push(tokens.slice(3));
     }
   }
-  return null;
+  return found;
 }
 
 /** Run git read-only and return trimmed stdout, or '' when it did not answer. */
@@ -1994,7 +2034,11 @@ process.stdin.on('end', () => {
   //                    | AND the command runs \`gh pr merge\`|
   //                    | at COMMAND POSITION               |
   //   (anything else)  | — no projection → fail closed     | —
-  let payload = '';
+  //
+  // A projection yields ONE payload per gate evaluation — and merge-ready can
+  // yield several for one envelope (one per \`gh pr merge\` at command
+  // position), each judged on its own below.
+  let payloads = [];
 
   if (event === 'freeze-check') {
     // THE EMPTY-SUBSYSTEM GUARDRAIL: freeze-check's predicate is on a DECLARED
@@ -2009,7 +2053,7 @@ process.stdin.on('end', () => {
     if (declaredSubsystem === '') {
       process.exit(0);
     }
-    payload = JSON.stringify({ subsystem: declaredSubsystem });
+    payloads = [JSON.stringify({ subsystem: declaredSubsystem })];
   } else if (event === 'transport-shield') {
     // transport-shield's predicate is on a SHELL COMMAND. Anything that is not
     // a Bash/PowerShell invocation carrying a command string is NOT an
@@ -2023,11 +2067,13 @@ process.stdin.on('end', () => {
     if (typeof input.command !== 'string' || input.command.trim() === '') {
       process.exit(0);
     }
-    payload = JSON.stringify({
-      tool: tool,
-      command: input.command,
-      platform: process.platform,
-    });
+    payloads = [
+      JSON.stringify({
+        tool: tool,
+        command: input.command,
+        platform: process.platform,
+      }),
+    ];
   } else if (event === 'merge-ready') {
     // merge-ready's predicate is on a PULL REQUEST about to be merged. The gate
     // installs under Bash|PowerShell, so this branch sees every shell command:
@@ -2040,11 +2086,15 @@ process.stdin.on('end', () => {
     if (typeof input.command !== 'string' || input.command.trim() === '') {
       process.exit(0);
     }
-    const mergeArgs = ghPrMergeArgs(input.command, tool === 'PowerShell');
-    if (mergeArgs === null) {
+    const merges = ghPrMergeArgvs(input.command, tool === 'PowerShell');
+    if (merges.length === 0) {
       process.exit(0);
     }
-    payload = JSON.stringify(projectMergeReady(mergeArgs));
+    // One payload per merge: \`gh pr merge 7; gh pr merge 8\` is judged twice,
+    // each PR against its own facts (mmnto-ai/totem#2844 round 1).
+    for (let m = 0; m < merges.length; m++) {
+      payloads.push(JSON.stringify(projectMergeReady(merges[m])));
+    }
   } else {
     // A baked --event this wrapper cannot project is an APPLICABLE gate it
     // cannot evaluate → fail closed (ADR-109). Reinstalling refreshes the
@@ -2133,21 +2183,6 @@ process.stdin.on('end', () => {
     checkArgs.push('--tier', tier);
   }
   checkArgs.push('--payload', '-');
-  const result = spawnSync(process.execPath, checkArgs, {
-    encoding: 'utf-8',
-    timeout: 30000,
-    input: payload,
-  });
-
-  // ─── The child's stderr IS a gate surface (fold F1) ────────────────────
-  // merge-ready's audited-override line, its zero-checks fact and every
-  // "could not derive" line are written by the ENGINE to stderr. Passing them
-  // through verbatim in EVERY arm — allow included — is what puts them in the
-  // transcript; printing them only on failure hid the override's audit trail,
-  // the one line that must never be silent.
-  if (typeof result.stderr === 'string' && result.stderr !== '') {
-    process.stderr.write(result.stderr);
-  }
 
   // Provenance for the PATH fallback arm (mmnto-ai/totem#2822): a CLI older
   // than 2.2.0 has no \`gate check --payload -\` and lands in the fail-closed
@@ -2169,68 +2204,99 @@ process.stdin.on('end', () => {
         'update it: npm i -g @mmnto/cli@latest\\n'
       : '';
 
-  // ─── FAIL-CLOSED ──────────────────────────────────────────────────────
-  // A gate genuinely applies (the per-event projection above found its input:
-  // a declared subsystem, or a Bash/PowerShell command) and the evaluation
-  // itself failed (non-zero exit: corrupt freeze.json, an invalid payload,
-  // spawn error, etc.). Never silently allow when an applicable gate's source
-  // is broken → exit 2. (Not-applicable envelopes already returned exit 0
-  // above, so this only blocks when the gate's input was actually present.)
-  if (result.error || typeof result.status !== 'number' || result.status !== 0) {
+  // ─── One evaluation per projected payload ─────────────────────────────
+  // freeze-check and transport-shield project exactly one. merge-ready projects
+  // one per \`gh pr merge\` at command position, so \`gh pr merge 7; gh pr merge 8\`
+  // is judged TWICE, each PR on its own facts — judging only the first let the
+  // shell run the second unjudged (mmnto-ai/totem#2844 round 1). The first
+  // strict deny, and every fail-closed arm, EXITS at once; a warn, and a deny
+  // under --pilot, print their line and let the NEXT payload be judged, so every
+  // merge in the envelope gets its stderr line; exit 0 only once every payload
+  // has allowed or warned.
+  for (let p = 0; p < payloads.length; p++) {
+    const result = spawnSync(process.execPath, checkArgs, {
+      encoding: 'utf-8',
+      timeout: 30000,
+      input: payloads[p],
+    });
+
+    // ─── The child's stderr IS a gate surface (fold F1) ──────────────────
+    // merge-ready's audited-override line, its zero-checks fact and every
+    // "could not derive" line are written by the ENGINE to stderr. Passing them
+    // through verbatim in EVERY arm — allow included — is what puts them in the
+    // transcript; printing them only on failure hid the override's audit trail,
+    // the one line that must never be silent.
+    if (typeof result.stderr === 'string' && result.stderr !== '') {
+      process.stderr.write(result.stderr);
+    }
+
+    // ─── FAIL-CLOSED ────────────────────────────────────────────────────
+    // A gate genuinely applies (the per-event projection above found its input:
+    // a declared subsystem, or a Bash/PowerShell command) and the evaluation
+    // itself failed (non-zero exit: corrupt freeze.json, an invalid payload,
+    // spawn error, etc.). Never silently allow when an applicable gate's source
+    // is broken → exit 2. (Not-applicable envelopes already returned exit 0
+    // above, so this only blocks when the gate's input was actually present.)
+    if (result.error || typeof result.status !== 'number' || result.status !== 0) {
+      process.stderr.write(
+        '[totem gate-wrapper] gate "' +
+          event +
+          '" evaluation failed (source broken or unavailable) — blocking (fail-closed).\\n' +
+          // The child's stderr already went through verbatim above (fold F1);
+          // only a spawn-level error (no child, so no stderr) is added here.
+          (result.error ? String(result.error.message || result.error) + '\\n' : '') +
+          armNote,
+      );
+      process.exit(2);
+    }
+
+    let verdict;
+    try {
+      verdict = JSON.parse(result.stdout || '');
+    } catch (err) {
+      // The command emitted unparseable stdout despite a 0 exit — an applicable
+      // gate whose verdict we cannot read is a broken source → fail-closed.
+      process.stderr.write(
+        '[totem gate-wrapper] gate "' + event + '" emitted unparseable verdict — blocking (fail-closed).\\n' + armNote,
+      );
+      process.exit(2);
+    }
+
+    // ─── Disposition → host exit code (branch ONLY on disposition) ───────
+    const disposition = verdict && typeof verdict.disposition === 'string' ? verdict.disposition : '';
+    // reason/provenance are OPAQUE stderr passthrough — never parsed for control flow.
+    const detail =
+      (verdict && verdict.reason ? verdict.reason : '') +
+      (verdict && verdict.provenance ? ' [' + JSON.stringify(verdict.provenance) + ']' : '');
+
+    if (disposition === 'allow') {
+      // Deliberately SILENT on the PATH arm too: a provenance line on every
+      // allowed Bash command would be transcript noise on the common path, and
+      // the operator already learned the property at install time (the
+      // \`gate install\` disclosure) — stderr here is reserved for what blocks.
+      continue;
+    }
+    if (disposition === 'warn') {
+      process.stderr.write('[totem gate-wrapper] ' + event + ' (warn): ' + detail + '\\n');
+      continue;
+    }
+    if (disposition === 'deny') {
+      process.stderr.write('[totem gate-wrapper] ' + event + ' (deny): ' + detail + '\\n');
+      if (tier !== 'pilot') {
+        process.exit(2);
+      }
+      continue;
+    }
+
+    // Unknown disposition from an applicable gate — fail-closed. The provenance
+    // note rides here too, so all four not-evaluable causes in the exit-code
+    // contract above disclose which arm evaluated.
     process.stderr.write(
-      '[totem gate-wrapper] gate "' +
-        event +
-        '" evaluation failed (source broken or unavailable) — blocking (fail-closed).\\n' +
-        // The child's stderr already went through verbatim above (fold F1);
-        // only a spawn-level error (no child, so no stderr) is added here.
-        (result.error ? String(result.error.message || result.error) + '\\n' : '') +
-        armNote,
+      '[totem gate-wrapper] gate "' + event + '" returned unknown disposition "' + disposition + '" — blocking (fail-closed).\\n' + armNote,
     );
     process.exit(2);
   }
-
-  let verdict;
-  try {
-    verdict = JSON.parse(result.stdout || '');
-  } catch (err) {
-    // The command emitted unparseable stdout despite a 0 exit — an applicable
-    // gate whose verdict we cannot read is a broken source → fail-closed.
-    process.stderr.write(
-      '[totem gate-wrapper] gate "' + event + '" emitted unparseable verdict — blocking (fail-closed).\\n' + armNote,
-    );
-    process.exit(2);
-  }
-
-  // ─── Disposition → host exit code (branch ONLY on disposition) ─────────
-  const disposition = verdict && typeof verdict.disposition === 'string' ? verdict.disposition : '';
-  // reason/provenance are OPAQUE stderr passthrough — never parsed for control flow.
-  const detail =
-    (verdict && verdict.reason ? verdict.reason : '') +
-    (verdict && verdict.provenance ? ' [' + JSON.stringify(verdict.provenance) + ']' : '');
-
-  if (disposition === 'allow') {
-    // Deliberately SILENT on the PATH arm too: a provenance line on every
-    // allowed Bash command would be transcript noise on the common path, and
-    // the operator already learned the property at install time (the
-    // \`gate install\` disclosure) — stderr here is reserved for what blocks.
-    process.exit(0);
-  }
-  if (disposition === 'warn') {
-    process.stderr.write('[totem gate-wrapper] ' + event + ' (warn): ' + detail + '\\n');
-    process.exit(0);
-  }
-  if (disposition === 'deny') {
-    process.stderr.write('[totem gate-wrapper] ' + event + ' (deny): ' + detail + '\\n');
-    process.exit(tier === 'pilot' ? 0 : 2);
-  }
-
-  // Unknown disposition from an applicable gate — fail-closed. The provenance
-  // note rides here too, so all four not-evaluable causes in the exit-code
-  // contract above disclose which arm evaluated.
-  process.stderr.write(
-    '[totem gate-wrapper] gate "' + event + '" returned unknown disposition "' + disposition + '" — blocking (fail-closed).\\n' + armNote,
-  );
-  process.exit(2);
+  process.exit(0);
 });
 ${TOTEM_FILE_END}
 `;
