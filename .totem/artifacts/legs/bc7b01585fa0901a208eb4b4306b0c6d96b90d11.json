@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "bc7b01585fa0901a208eb4b4306b0c6d96b90d11",
+  "readAt": "2026-09-08T07:17:26Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 656,
+      "claim": "The docstring names three code forms the stripper does not recognise and states they leave their contents in scanned prose, reading HIGH.",
+      "counterexample": "A nested fence inside a list item IS stripped at every indent 0-4 (the fence arm allows leading whitespace on opener and closer) and reads not high; a four-backtick fence closed by three has its contents stripped because the backtick run backtracks to a three-backtick prefix, so only the text after the pseudo-closer reaches prose; only the multi-line HTML code element exemplar held. Folded: the paragraph rewritten to what the stripper does, with the direction of each form."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 604,
+      "claim": "The greptile arm states its observed versus documented-but-unobserved forms per the file's own discipline.",
+      "counterexample": "The arm fires on an unquoted alt=P1 (three shapes verified true), a form no corpus greptile thread carries (all four are quoted), while the docstring mentioned only single-versus-double quotes and the changeset said 'in either quote style'. Folded: the unquoted form stated as documented-but-unobserved in the arm and the changeset."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 700,
+      "claim": "The badge read does not turn on spelling details HTML permits.",
+      "counterexample": "alt = \"P1\" with whitespace around the equals sign reads not high; HTML5 permits it and the arm requires none. Miss direction, unobserved. Folded: disclosed in the arm."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 736,
+      "claim": "Replacing inline spans of any backtick run only removes code from the scanned prose.",
+      "counterexample": "The span pattern now matches across newlines and blank lines, so a label between two lone backticks in separate paragraphs read HIGH before round 4 and not high after, though CommonMark forms no code span across a paragraph break. Reach: 0 of 34 fixture bodies differ; 16 of 16 corpus labels sit on line 0 with even backtick counts. Folded: disclosed as an allow-direction channel with its measured reach."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 735,
+      "claim": "The new arm strips CommonMark indented code blocks.",
+      "counterexample": "The arm is unconditional, but an indented code block cannot interrupt a paragraph, so a four-space or tab-indented label after a prose line read HIGH before round 4 and not high after. Same measured reach as F4. Folded: disclosed."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 734,
+      "claim": "(note) Stripping pre blocks removes only real HTML code blocks.",
+      "counterexample": "The pre arm runs before the span arm, so pre tags quoted inside code spans act as block delimiters and a genuine label between them is swallowed — the inverse of the self-referential case the docstring protects. Unreachable for a line-0 label. Folded: disclosed."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 610,
+      "claim": "(note) The variation-selector rows control that a bare selector before 'major' is not a label.",
+      "counterexample": "Two rows use escapes; the third embeds a raw U+FE0F, so a normalisation that drops the invisible codepoint leaves a row that still passes for the wrong reason and cannot report its own corruption. Folded: the row uses an escape."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-gate-2800.md",
+      "line": 8,
+      "claim": "(note) The changeset's stripper sentence names what is stripped.",
+      "counterexample": "It named fenced blocks and inline spans; the stripper also removes pre blocks and indented blocks. Folded: all four forms named."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "termination named on the fifth leg: after 49 findings across four prior legs (13 + 13 + 11 + 12) and four fold rounds — predicate 4 re-pointed to the currently-applied commit, the tier flag narrowed to pilot installs, wrapper stderr passthrough, heredoc/arithmetic/comment/continuation-aware projection, exact-by-marker severity with the ADR-109 zero-disagreement budget and its 16-thread corpus, the rollup identity and count guards, closed observed logins, machine-written fixture receipts — the two round-4 commits held on every firing and allow claim attacked; this leg's 8 findings (2 MATERIAL disclosure defects, 6 MINOR with zero measured reach over 34 fixture bodies) were folded as disclosure only, with no regex, guard or walk changed"
+}

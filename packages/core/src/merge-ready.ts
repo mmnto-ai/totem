@@ -1,0 +1,1535 @@
+import { isBotReviewerLoginExact } from './bot-identity.js';
+import { TotemError } from './errors.js';
+import type { GateEvaluator, GateTier, GateVerdict, GhRunner } from './gate-types.js';
+import { safeExec } from './sys/exec.js';
+
+/**
+ * merge-ready (mmnto-ai/totem#2800): a PreToolUse gate over the Bash and
+ * PowerShell tools that reads the five-point deterministic pre-merge floor off
+ * GitHub before `gh pr merge` runs.
+ *
+ * ZERO LLM calls, zero filesystem writes. The only outside state is what `gh`
+ * answers, and `gh` reaches this module through the injected {@link GhRunner}
+ * seam so a test replaces the network with a checked-in capture (R3, R4).
+ *
+ * The five predicates, evaluated IN ORDER (the first failure is the reason):
+ *   1. `checks`                — the head commit's status-check rollup is green
+ *   2. `unresolved-bot-threads`— no unresolved, non-outdated review thread whose
+ *                                ROOT comment is one of the known review bots
+ *   3. `changes-requested`     — no un-superseded CHANGES_REQUESTED review
+ *   4. `high-severity-inline`  — no HIGH/Major bot inline that CURRENTLY applies
+ *                                to the head commit (`comment.commit.oid`,
+ *                                thread resolution ignored)
+ *   5. `merge-state`           — GitHub's own `mergeStateStatus` is mergeable
+ *
+ * THE TIER SPLIT (R1): a predicate that FAILS is `deny` at every tier (the
+ * wrapper's tier map decides whether that blocks). A predicate whose INPUT
+ * could not be derived — gh missing, an API error, an incomplete page, a head
+ * that moved mid-read, `mergeStateStatus: UNKNOWN` — is the UNEVALUABLE class:
+ * `deny` under strict, `warn` under pilot, and NEVER `allow`. Every unevaluable
+ * path is named on stderr under BOTH tiers; only the exit code differs.
+ *
+ * THE OVERRIDE: `TOTEM_MERGE_GATE_OVERRIDE=1` yields `allow` plus one stderr
+ * audit line naming the repo, the PR, the head sha and the predicates that
+ * would have denied. It is read per evaluation (no module-level state).
+ */
+
+/** The gate's registry event name. */
+export const MERGE_READY_EVENT = 'merge-ready';
+
+/** The module label every verdict cites as its `provenance.source` (never a path). */
+export const MERGE_READY_SOURCE = 'merge-ready gh graphql read';
+
+/** The audited bypass. Set to exactly `1`; any other value is not an override. */
+export const MERGE_READY_OVERRIDE_ENV = 'TOTEM_MERGE_GATE_OVERRIDE';
+
+/** Prefix every stderr line this gate emits carries, so a reader can grep one gate out of a hook log. */
+export const MERGE_READY_NOTICE_PREFIX = '[totem merge-ready]';
+
+/** Page size for every paginated connection in the query. */
+const PAGE_SIZE = 100;
+
+/**
+ * Hard cap on GraphQL round trips per evaluation. A PR that needs more pages
+ * than this is UNEVALUABLE (named), never "clean by exhaustion" — the capped-read
+ * bar from the charter's errata item 5.
+ */
+const MAX_PAGES = 20;
+
+/** `provenance.matched` (and every quoted evidence fragment) is bounded to this many characters. */
+export const MERGE_READY_EVIDENCE_MAX = 160;
+
+/** The predicates, in evaluation order. */
+export type MergeReadyPredicate =
+  | 'checks'
+  | 'unresolved-bot-threads'
+  | 'changes-requested'
+  | 'high-severity-inline'
+  | 'merge-state';
+
+/** The payload the wrapper projects from a `gh pr merge` command (or a hand caller passes). */
+export interface MergeReadyPayload {
+  /** `owner/name`. */
+  repo: string;
+  /** The PR number, or null when the command named no PR (then `branch` carries the target). */
+  pr: number | null;
+  /** The branch the PR is resolved from when `pr` is null. */
+  branch?: string;
+  /** The local head sha the caller believes it is merging, when it could read one. */
+  headSha?: string;
+  /**
+   * A `gh pr merge` argument the projection could not turn into a PR — an
+   * UNEXPANDED shell variable (`gh pr merge $PR`), whose value the wrapper
+   * cannot know (mmnto-ai/totem#2800 fold F13). Carried instead of guessed: a
+   * literal `"$PR"` read as a branch name would resolve nothing and the gate
+   * would judge the wrong PR, or none. Present ⇒ the evaluation is UNEVALUABLE
+   * before any read, so strict denies and pilot warns (R1).
+   */
+  unresolvedTarget?: string;
+}
+
+/**
+ * The rich evidence every merge-ready verdict carries in `provenance.detail`.
+ * A type alias, not an interface, so it satisfies the verdict's
+ * `Record<string, unknown>` detail slot without a cast.
+ */
+export type MergeReadyProvenanceDetail = {
+  repo: string;
+  pr: number | null;
+  /** The PR head sha as GitHub answered it, or null when the read never got that far. */
+  headSha: string | null;
+  checks: { total: number; success: number; pending: number; failing: number };
+  threads: { unresolvedBot: number; pagesRead: number; complete: boolean };
+  changesRequestedBy: string[];
+  highInline: number;
+  mergeStateStatus: string | null;
+  evaluatedAt: string;
+  /** `gh <version>`, read from the same binary that answered the query. */
+  evaluatedBy: string;
+  /** Present and true only when the audited override produced the verdict. */
+  override?: boolean;
+};
+
+/** What one evaluation produced: the verdict, its evidence, and the lines the host must print. */
+export interface MergeReadyEvaluation {
+  verdict: GateVerdict;
+  detail: MergeReadyProvenanceDetail;
+  /** stderr lines, already prefixed. Every unevaluable path and R5's zero-check fact is here. */
+  notices: readonly string[];
+}
+
+/** Options for the pure {@link evaluateMergeReady} entry point. */
+export interface MergeReadyOptions {
+  /** The gh seam. Production passes {@link makeGhRunner}; tests pass fixtures. */
+  runner: GhRunner;
+  /** Enforcement tier for the UNEVALUABLE class only (default `strict`). */
+  tier?: GateTier;
+  /** Environment the override is read from (default `process.env`). */
+  env?: NodeJS.ProcessEnv;
+  /** Clock seam for `checkedAt` / `evaluatedAt` (default `Date`). */
+  now?: () => Date;
+}
+
+// ─── The read surface (R2: one GraphQL query, explicit cursors, no REST) ────
+
+/**
+ * The PR fields every predicate reads, as a fragment so the number-keyed and
+ * branch-keyed documents cannot drift apart. The three paginated connections
+ * each take their own cursor variable, declared by the operation.
+ *
+ * `comments(first: 10)` is deliberate: only the ROOT comment of a thread is
+ * judged (it is the finding; the rest are the discussion), matching how triage
+ * reads a thread. The later comments are fetched for evidence, not for a
+ * predicate, so a thread with more than ten comments is not an incomplete read.
+ */
+const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
+  number
+  isDraft
+  mergeStateStatus
+  headRefOid
+  headRefName
+  baseRefName
+  commits(last: 1) {
+    nodes {
+      commit {
+        oid
+        statusCheckRollup {
+          state
+          contexts(first: ${PAGE_SIZE}, after: $checksAfter) {
+            totalCount
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              __typename
+              ... on CheckRun { name status conclusion }
+              ... on StatusContext { context state }
+            }
+          }
+        }
+      }
+    }
+  }
+  reviews(first: ${PAGE_SIZE}, after: $reviewsAfter) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      author { login }
+      state
+      submittedAt
+    }
+  }
+  reviewThreads(first: ${PAGE_SIZE}, after: $threadsAfter) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      isResolved
+      isOutdated
+      comments(first: 10) {
+        nodes {
+          author { login }
+          body
+          commit { oid }
+          originalCommit { oid }
+        }
+      }
+    }
+  }
+}`;
+
+const SHARED_VARS =
+  '$owner: String!, $name: String!, $reviewsAfter: String, $threadsAfter: String, $checksAfter: String';
+
+/** The read the evaluator sends when the payload names a PR number. Fixtures are captured with THIS string. */
+export const MERGE_READY_QUERY = `query TotemMergeReady($number: Int!, ${SHARED_VARS}) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) { ...MergeReadyPr }
+  }
+}
+
+${MERGE_READY_FRAGMENT}`;
+
+/**
+ * The read the evaluator sends when the payload carries a branch and no number
+ * (`gh pr merge` with no argument). Same fragment, so the predicates read the
+ * same fields; the first page resolves the number, and every later page uses
+ * {@link MERGE_READY_QUERY} against that fixed number.
+ */
+export const MERGE_READY_BRANCH_QUERY = `query TotemMergeReadyByBranch($branch: String!, ${SHARED_VARS}) {
+  repository(owner: $owner, name: $name) {
+    pullRequests(headRefName: $branch, first: 1, states: OPEN, orderBy: { field: CREATED_AT, direction: DESC }) {
+      nodes { ...MergeReadyPr }
+    }
+  }
+}
+
+${MERGE_READY_FRAGMENT}`;
+
+// ─── Payload parsing (fail loud — the engine never default-allows) ──────────
+
+const REPO_SLUG = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+const SHA_40 = /^[0-9a-f]{40}$/i;
+
+/** Parse + validate the payload. Throws `GATE_INVALID` (the wrapper's fail-closed arm) on anything else. */
+export function parseMergeReadyPayload(payload: unknown): MergeReadyPayload {
+  const invalid = (why: string): never => {
+    throw new TotemError(
+      'GATE_INVALID',
+      `merge-ready payload is invalid: ${why}.`,
+      'Pass --payload \'{"repo":"owner/name","pr":123}\' (or "pr":null with "branch":"<name>").',
+    );
+  };
+
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    return invalid('expected a JSON object');
+  }
+  const raw = payload as Record<string, unknown>;
+
+  const repo = typeof raw.repo === 'string' ? raw.repo.trim() : '';
+  if (repo === '') return invalid('"repo" must be a non-empty "owner/name" string');
+  if (!REPO_SLUG.test(repo)) return invalid(`"repo" must look like owner/name (got "${repo}")`);
+
+  let pr: number | null = null;
+  if (typeof raw.pr === 'number') {
+    if (!Number.isInteger(raw.pr) || raw.pr <= 0) return invalid('"pr" must be a positive integer');
+    pr = raw.pr;
+  } else if (raw.pr !== null && raw.pr !== undefined) {
+    return invalid('"pr" must be a positive integer or null');
+  }
+
+  let branch: string | undefined;
+  if (typeof raw.branch === 'string' && raw.branch.trim() !== '') {
+    branch = raw.branch.trim();
+  } else if (raw.branch !== undefined && typeof raw.branch !== 'string') {
+    return invalid('"branch" must be a string when present');
+  }
+
+  let unresolvedTarget: string | undefined;
+  if (typeof raw.unresolvedTarget === 'string' && raw.unresolvedTarget.trim() !== '') {
+    unresolvedTarget = raw.unresolvedTarget.trim();
+  } else if (raw.unresolvedTarget !== undefined && typeof raw.unresolvedTarget !== 'string') {
+    return invalid('"unresolvedTarget" must be a string when present');
+  }
+
+  if (pr === null && branch === undefined && unresolvedTarget === undefined) {
+    return invalid('either "pr" or "branch" must identify the pull request');
+  }
+
+  let headSha: string | undefined;
+  if (typeof raw.headSha === 'string' && raw.headSha.trim() !== '') {
+    const trimmed = raw.headSha.trim();
+    if (!SHA_40.test(trimmed)) return invalid('"headSha" must be a 40-character hex sha');
+    headSha = trimmed.toLowerCase();
+  } else if (raw.headSha !== undefined && typeof raw.headSha !== 'string') {
+    return invalid('"headSha" must be a string when present');
+  }
+
+  return {
+    repo,
+    pr,
+    ...(branch === undefined ? {} : { branch }),
+    ...(headSha === undefined ? {} : { headSha }),
+    ...(unresolvedTarget === undefined ? {} : { unresolvedTarget }),
+  };
+}
+
+// ─── Narrow readers over the GraphQL body (no `any`, no silent coercion) ────
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asArray(value: unknown): unknown[] | null {
+  return Array.isArray(value) ? value : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+/** One classified status check. */
+interface CheckEntry {
+  name: string;
+  kind: 'success' | 'pending' | 'failing';
+}
+
+/** One review, reduced to what predicate 3 reads. */
+interface ReviewEntry {
+  login: string;
+  state: string;
+  submittedAt: string | null;
+}
+
+/** One review thread, reduced to what predicates 2 and 4 read. */
+interface ThreadEntry {
+  isResolved: boolean;
+  isOutdated: boolean;
+  rootLogin: string | null;
+  rootBody: string;
+  /**
+   * `comment.commit.oid` — the commit the comment CURRENTLY applies to, which
+   * GitHub re-points as the diff moves. This is what predicate 4 reads (the
+   * prototype's (c) semantics), and the REST `commit_id` the charter names.
+   */
+  rootCommit: string | null;
+  /**
+   * `comment.originalCommit.oid` — the commit it was WRITTEN against. Carried
+   * for provenance only: it never moves, so a predicate keyed on it goes inert
+   * the moment the branch advances.
+   */
+  rootOriginalCommit: string | null;
+}
+
+/** One page of the read, already classified. */
+interface PrPage {
+  number: number;
+  headRefOid: string;
+  mergeStateStatus: string;
+  isDraft: boolean;
+  /** false when the head commit carries no rollup at all (a PR with zero checks). */
+  rollupPresent: boolean;
+  /** The rollup state GitHub reported, or null when there is no rollup. */
+  rollupState: string | null;
+  /** `contexts.totalCount` EXACTLY as reported — judged by the caller, not coerced. */
+  rollupTotalCount: unknown;
+  checks: CheckEntry[];
+  checksHasNext: boolean;
+  checksCursor: string | null;
+  reviews: ReviewEntry[];
+  reviewsHasNext: boolean;
+  reviewsCursor: string | null;
+  threads: ThreadEntry[];
+  threadsHasNext: boolean;
+  threadsCursor: string | null;
+}
+
+type PageRead = { ok: true; page: PrPage } | { ok: false; detail: string };
+
+/**
+ * A CheckRun's conclusion vocabulary. `NEUTRAL` and `SKIPPED` are successes (a
+ * skipped required check is branch protection's business, not this gate's);
+ * every other terminal conclusion — including an absent one on a COMPLETED run
+ * — is a failure, because an unreadable outcome must never read as green.
+ */
+const SUCCESS_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
+const SUCCESS_CONTEXT_STATES = new Set(['SUCCESS']);
+const PENDING_CONTEXT_STATES = new Set(['PENDING', 'EXPECTED']);
+
+/**
+ * A connection's `pageInfo`, read STRICTLY: the query asks for it on every
+ * connection, so an answer without one — or with a `hasNextPage` that is not
+ * a boolean — is an unreadable page, never "no more pages". Reading a missing
+ * `pageInfo` as complete was the fail-open Greptile named on the reviews and
+ * threads connections (mmnto-ai/totem#2844 round 1): a truncated or malformed
+ * answer read as a clean, finished list and predicates 2–4 passed on it.
+ */
+function readPageInfo(
+  connection: Record<string, unknown> | null,
+): { ok: true; hasNext: boolean; cursor: string | null } | { ok: false; detail: string } {
+  const info = asObject(connection?.pageInfo);
+  if (info === null) return { ok: false, detail: 'carried no pageInfo' };
+  if (typeof info.hasNextPage !== 'boolean') {
+    return { ok: false, detail: 'carried a pageInfo whose hasNextPage is not a boolean' };
+  }
+  return { ok: true, hasNext: info.hasNextPage, cursor: asString(info.endCursor) };
+}
+
+function readChecks(rollup: Record<string, unknown> | null): {
+  entries: CheckEntry[];
+  hasNext: boolean;
+  cursor: string | null;
+  detail?: string;
+} {
+  const contexts = asObject(rollup?.contexts);
+  const entries: CheckEntry[] = [];
+  // No rollup at all is the R5 no-checks shape (the caller has already
+  // refused a rollup WITHOUT a contexts connection): an empty, complete list.
+  if (contexts === null) return { entries, hasNext: false, cursor: null };
+  const nodes = asArray(contexts.nodes);
+  if (nodes === null) {
+    return {
+      entries,
+      hasNext: false,
+      cursor: null,
+      detail: 'the status-check rollup contexts carried no nodes array',
+    };
+  }
+  for (const node of nodes) {
+    const n = asObject(node);
+    if (n === null)
+      return { entries, hasNext: false, cursor: null, detail: 'a check node was not an object' };
+    const typename = asString(n.__typename);
+    if (typename === 'CheckRun') {
+      const name = asString(n.name) ?? '(unnamed check)';
+      const status = asString(n.status) ?? '';
+      const conclusion = asString(n.conclusion);
+      if (status !== 'COMPLETED') {
+        entries.push({ name, kind: 'pending' });
+      } else if (conclusion !== null && SUCCESS_CONCLUSIONS.has(conclusion)) {
+        entries.push({ name, kind: 'success' });
+      } else {
+        entries.push({ name, kind: 'failing' });
+      }
+    } else if (typename === 'StatusContext') {
+      const name = asString(n.context) ?? '(unnamed context)';
+      const state = asString(n.state) ?? '';
+      if (SUCCESS_CONTEXT_STATES.has(state)) {
+        entries.push({ name, kind: 'success' });
+      } else if (PENDING_CONTEXT_STATES.has(state)) {
+        entries.push({ name, kind: 'pending' });
+      } else {
+        entries.push({ name, kind: 'failing' });
+      }
+    } else {
+      return {
+        entries,
+        hasNext: false,
+        cursor: null,
+        detail: `a check node carried an unknown __typename "${typename ?? 'null'}"`,
+      };
+    }
+  }
+  const info = readPageInfo(contexts);
+  if (!info.ok) {
+    return {
+      entries,
+      hasNext: false,
+      cursor: null,
+      detail: `the status-check rollup contexts ${info.detail}`,
+    };
+  }
+  return { entries, hasNext: info.hasNext, cursor: info.cursor };
+}
+
+/**
+ * The `reviews` connection, read as STRICTLY as the checks connection above
+ * (mmnto-ai/totem#2844 round 1, Greptile): a connection that is missing, has no
+ * `nodes` array, has no readable `pageInfo`, or carries a node that is not an
+ * object or has no `state` is an UNREADABLE answer, returned with a named
+ * `detail` — never an empty, complete list that lets predicate 3 pass on an
+ * answer the read did not actually receive. A review whose author is a
+ * deleted account (`author: null`) is the one shape SKIPPED rather than
+ * refused: it carries no identity to supersede or attribute, so it is never
+ * counted as a CHANGES_REQUESTED nobody can clear.
+ */
+function readReviews(connection: Record<string, unknown> | null): {
+  entries: ReviewEntry[];
+  hasNext: boolean;
+  cursor: string | null;
+  detail?: string;
+} {
+  const entries: ReviewEntry[] = [];
+  const unreadable = (why: string): ReturnType<typeof readReviews> => ({
+    entries,
+    hasNext: false,
+    cursor: null,
+    detail: `the reviews connection ${why}`,
+  });
+  if (connection === null) return unreadable('was missing from the answer');
+  const nodes = asArray(connection.nodes);
+  if (nodes === null) return unreadable('carried no nodes array');
+  for (const node of nodes) {
+    const n = asObject(node);
+    if (n === null) return unreadable('carried a node that is not an object');
+    const state = asString(n.state);
+    if (state === null) return unreadable('carried a review with no state');
+    const login = asString(asObject(n.author)?.login);
+    if (login === null) continue;
+    entries.push({ login, state, submittedAt: asString(n.submittedAt) });
+  }
+  const info = readPageInfo(connection);
+  if (!info.ok) return unreadable(info.detail);
+  return { entries, hasNext: info.hasNext, cursor: info.cursor };
+}
+
+/**
+ * The `reviewThreads` connection, read with the same strictness as
+ * {@link readReviews}: a missing connection, a missing `nodes` array or
+ * `pageInfo`, a thread node that is not an object, or a thread whose first
+ * comment cannot be read (no `comments.nodes` array, or an empty one — a
+ * review thread always has its root comment) is UNREADABLE and named, so
+ * predicates 2 and 4 never pass on a list the read did not deliver
+ * (mmnto-ai/totem#2844 round 1). A root comment whose author is a deleted
+ * account keeps `rootLogin: null` — it is not a known bot, which is a fact
+ * about the thread, not an unreadable answer.
+ */
+function readThreads(connection: Record<string, unknown> | null): {
+  entries: ThreadEntry[];
+  hasNext: boolean;
+  cursor: string | null;
+  detail?: string;
+} {
+  const entries: ThreadEntry[] = [];
+  const unreadable = (why: string): ReturnType<typeof readThreads> => ({
+    entries,
+    hasNext: false,
+    cursor: null,
+    detail: `the review threads connection ${why}`,
+  });
+  if (connection === null) return unreadable('was missing from the answer');
+  const nodes = asArray(connection.nodes);
+  if (nodes === null) return unreadable('carried no nodes array');
+  for (const node of nodes) {
+    const n = asObject(node);
+    if (n === null) return unreadable('carried a node that is not an object');
+    const comments = asArray(asObject(n.comments)?.nodes);
+    if (comments === null) return unreadable('carried a thread with no comments array');
+    const root = asObject(comments[0]);
+    if (root === null) return unreadable('carried a thread whose root comment is unreadable');
+    entries.push({
+      isResolved: n.isResolved === true,
+      isOutdated: n.isOutdated === true,
+      rootLogin: asString(asObject(root.author)?.login),
+      rootBody: asString(root.body) ?? '',
+      rootCommit: asString(asObject(root.commit)?.oid),
+      rootOriginalCommit: asString(asObject(root.originalCommit)?.oid),
+    });
+  }
+  const info = readPageInfo(connection);
+  if (!info.ok) return unreadable(info.detail);
+  return { entries, hasNext: info.hasNext, cursor: info.cursor };
+}
+
+/** Read one `gh api graphql` response body into a classified page. */
+function parsePage(raw: string, byBranch: boolean): PageRead {
+  let body: unknown;
+  // totem-context: NOT a swallowed error — an unreadable response body is the
+  // gate's UNEVALUABLE class, and this returns it NAMED, which the caller turns
+  // into a `deny` (strict) or a `warn` (pilot) plus a stderr line. Throwing here
+  // would surface as the wrapper's generic fail-closed arm and lose the reason;
+  // the fail-loud property is kept by never returning a clean read (Tenet 4).
+  try {
+    body = JSON.parse(raw);
+    // totem-context: intentional degradation — see the directive above the try; dual placement so the rule reads either the catch-keyword line or the catch body.
+  } catch {
+    // totem-context: intentional degradation — an unreadable body is the NAMED unevaluable class, never a clean read.
+    return { ok: false, detail: 'the gh response was not JSON' };
+  }
+  const top = asObject(body);
+  if (top === null) return { ok: false, detail: 'the gh response was not a JSON object' };
+
+  // GraphQL reports authorization, not-found and rate-limit failures in the
+  // BODY, at HTTP 200 — an errors array is a failed read, never an empty one.
+  const errors = asArray(top.errors);
+  if (errors !== null && errors.length > 0) {
+    const first = asObject(errors[0]);
+    const message = asString(first?.message) ?? 'unnamed GraphQL error';
+    return { ok: false, detail: `the GraphQL read returned an error: ${message}` };
+  }
+
+  const repository = asObject(asObject(top.data)?.repository);
+  if (repository === null) return { ok: false, detail: 'the response carried no repository' };
+
+  let pr: Record<string, unknown> | null;
+  if (byBranch) {
+    const nodes = asArray(asObject(repository.pullRequests)?.nodes) ?? [];
+    pr = asObject(nodes[0]);
+    if (pr === null) return { ok: false, detail: 'no open pull request has that head branch' };
+  } else {
+    pr = asObject(repository.pullRequest);
+    if (pr === null)
+      return { ok: false, detail: 'the repository has no pull request with that number' };
+  }
+
+  const number = typeof pr.number === 'number' ? pr.number : null;
+  const headRefOid = asString(pr.headRefOid);
+  const mergeStateStatus = asString(pr.mergeStateStatus);
+  if (number === null || headRefOid === null || mergeStateStatus === null) {
+    return {
+      ok: false,
+      detail: 'the pull request answer was missing number, headRefOid or mergeStateStatus',
+    };
+  }
+
+  // Predicate 1 reads the rollup off `commits(last: 1)`. That is only the head
+  // commit's rollup if the node IS the head commit, so the identity is checked
+  // rather than assumed (mmnto-ai/totem#2800 fold F7): a rollup read off some
+  // other commit would be a green light for code that is not what merges.
+  const commitNodes = asArray(asObject(pr.commits)?.nodes) ?? [];
+  if (commitNodes.length === 0) {
+    return {
+      ok: false,
+      detail: 'the pull request answered no commits — the head commit rollup could not be read',
+    };
+  }
+  const commit = asObject(asObject(commitNodes[0])?.commit);
+  const commitOid = asString(commit?.oid);
+  if (commitOid === null) {
+    return {
+      ok: false,
+      detail: 'the head commit answered no oid — the rollup cannot be attributed',
+    };
+  }
+  if (commitOid.toLowerCase() !== headRefOid.toLowerCase()) {
+    return {
+      ok: false,
+      detail: `the status-check rollup belongs to ${shortSha(commitOid)}, not the head commit ${shortSha(headRefOid)}`,
+    };
+  }
+  const rollup = asObject(commit?.statusCheckRollup);
+  // A rollup that exists but carries no `contexts` connection is an unreadable
+  // answer, NOT the zero-checks fact (R5): the fact needs the rollup itself to
+  // report an empty context list.
+  if (rollup !== null && asObject(rollup.contexts) === null) {
+    return {
+      ok: false,
+      detail:
+        'the status-check rollup carried no contexts connection — the check list is unreadable',
+    };
+  }
+  const checks = readChecks(rollup);
+  if (checks.detail !== undefined) return { ok: false, detail: checks.detail };
+  // The two review connections are held to the SAME bar as the checks
+  // connection: an answer that is missing or malformed is a failed read, named,
+  // never an empty list (mmnto-ai/totem#2844 round 1).
+  const reviews = readReviews(asObject(pr.reviews));
+  if (reviews.detail !== undefined) return { ok: false, detail: reviews.detail };
+  const threads = readThreads(asObject(pr.reviewThreads));
+  if (threads.detail !== undefined) return { ok: false, detail: threads.detail };
+
+  return {
+    ok: true,
+    page: {
+      number,
+      headRefOid: headRefOid.toLowerCase(),
+      mergeStateStatus,
+      isDraft: pr.isDraft === true,
+      rollupPresent: rollup !== null,
+      rollupState: asString(rollup?.state),
+      rollupTotalCount: asObject(rollup?.contexts)?.totalCount ?? null,
+      checks: checks.entries,
+      checksHasNext: checks.hasNext,
+      checksCursor: checks.cursor,
+      reviews: reviews.entries,
+      reviewsHasNext: reviews.hasNext,
+      reviewsCursor: reviews.cursor,
+      threads: threads.entries,
+      threadsHasNext: threads.hasNext,
+      threadsCursor: threads.cursor,
+    },
+  };
+}
+
+// ─── Severity read (predicate 4) ────────────────────────────────────────────
+
+/**
+ * The severity read is EXACT-BY-MARKER: it matches each bot's own STRUCTURED
+ * severity label and nothing else. Prose is never read
+ * (mmnto-ai/totem#2800 fold round 2, F4; round 3 F4/F5/F7/F11).
+ *
+ * Which forms are OBSERVED and which are DOCUMENTED-BUT-UNOBSERVED is stated
+ * per arm, because the two are not the same evidence:
+ *   - **greptile** — a badge image whose alt text is the priority:
+ *     `<a href="#"><img alt="P1" src="…/badges/p1.svg…" align="top"></a>`.
+ *     OBSERVED in the corpus: `P1` (high) and `P2` (not high). `P0` is
+ *     DOCUMENTED-BUT-UNOBSERVED — greptile publishes the `p0.svg` badge, so the
+ *     arm accepts it; no thread in the window carries one. Single quotes are
+ *     accepted beside double (`alt='P1'`) — HTML permits either and the read
+ *     must not turn on the quote style.
+ *   - **gemini-code-assist** — a priority image whose alt text is the level:
+ *     `![high](https://www.gstatic.com/codereviewagent/high-priority.svg)`.
+ *     OBSERVED: `high`. There is NO `critical` arm: the corresponding asset
+ *     404s and GCA's published rubric emits `high` as its top level, so an arm
+ *     for it would be inference, not transcription (round 3, F5).
+ *   - **CodeRabbit** — an emphasis-wrapped label that OPENS a table cell or a
+ *     line. CodeRabbit's severity scale is Critical / Major / Minor / Trivial;
+ *     `Potential issue` is its issue-CLASS label, carried here because the
+ *     user-level prototype matched it and it marks a blocking finding.
+ *     OBSERVED: `_🟠 Major_` (high), `_🟡 Minor_` and `_🔵 Trivial_` (not
+ *     high). DOCUMENTED-BUT-UNOBSERVED: `_🔴 Critical_` and
+ *     `_⚠️ Potential issue_` — in CodeRabbit's own label vocabulary, absent
+ *     from this window. The label must FILL its cell: the emphasis plus the
+ *     cell/line boundary are what separate a LABEL from a word in a sentence.
+ *
+ * CODE IS NOT A LABEL (round 3, F4). Fenced blocks (``` … ```, ~~~ … ~~~) and
+ * inline code spans are stripped before the scan. A bot that QUOTES a marker —
+ * a CodeRabbit Minor whose suggestion block quotes this very file, which
+ * carries every marker in its docstring — would otherwise read as HIGH and
+ * false-deny the gate's own maintenance PR.
+ *
+ * FALSE-POSITIVE BUDGET (ADR-109: a non-exact-match gate ships a stated budget
+ * and the fixture that measures it — the `transport-shield` precedent):
+ * **ZERO** high-severity reads over the benign corpus in
+ * `gate-fixtures/merge-ready/benign-corpus-bot-inlines.json` — every bot inline
+ * thread on mmnto-ai/totem#2820 through mmnto-ai/totem#2839, each carrying the
+ * severity its own bot declared — and over the quoted-marker row in
+ * `gate-fixtures/merge-ready/synthetic-benign-fenced-marker-quote.json`.
+ * `merge-ready.test.ts` asserts the read agrees with every one of those
+ * declarations, so a marker that widens into prose or into quoted code fails
+ * there. The prose arms this replaced did not hold that budget: the greptile
+ * **P2** thread on mmnto-ai/totem#2831 read as HIGH through the word "critical"
+ * in its explanation — a false deny on a finding its own author ranked below
+ * the bar. A miss in the field is a corpus row plus a marker fix, never a
+ * hand-carved exemption; the `--pilot` tier exists for a measurement week, and
+ * `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past one.
+ *
+ * Out of scope by design, disclosed: a bot that stops emitting a structured
+ * label (or a fourth bot) reads as NOT high — the miss direction, a corpus gap
+ * to be closed by observation, never a silent deny; a label a bot places
+ * somewhere this read does not look (a summary table, a list item, a
+ * blockquote) is the same class; a human quoting a bot's label verbatim would
+ * read as high, but predicates 2 and 4 both require the thread's ROOT comment
+ * to be a known bot login.
+ *
+ * THE STRIPPER'S EDGES, measured rather than assumed (round 5, F1/F4/F5/F6).
+ * It recognises fenced blocks of any backtick or tilde run, `<pre>` blocks,
+ * CommonMark indented blocks, and inline spans of any backtick run. At the
+ * edges:
+ *   - a fence indented under a list item IS stripped, at two spaces or four —
+ *     the opener and closer both allow leading blanks;
+ *   - a four-backtick fence closed by three has its CONTENTS stripped (the
+ *     opener matches three of the four backticks and the fourth reads as the
+ *     info string), so only the text AFTER the short closer reaches the scan —
+ *     a marker there reads HIGH, the false-deny direction;
+ *   - an HTML `<code>` element is NOT stripped at all. A label inside one reads
+ *     HIGH wherever it carries its own anchor — a `|` cell delimiter, or a line
+ *     start inside a multi-line element — and reads not-high only when it has
+ *     neither. False-deny direction.
+ * Three edges run the other way, toward ALLOW, by swallowing prose that is not
+ * code: a backtick run whose match crosses a paragraph break takes a label
+ * sitting between two lone backticks with it; an indented line that follows a
+ * prose line is stripped though CommonMark would not open a code block there;
+ * and `<pre>` tags quoted inside code spans still act as block delimiters,
+ * because the `<pre>` arm runs before the span arm. Measured reach: NONE of
+ * the 34 bodies in the checked-in fixtures is affected — every one of them,
+ * corpus included, gets the same verdict from its first line alone, and all
+ * 16 corpus labels sit on line 0, where no stripper edge can reach them. Each
+ * edge is a corpus row plus a stripper fix when one is observed in the field;
+ * `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past a false deny in the
+ * meantime.
+ */
+
+/**
+ * The glyphs CodeRabbit puts before an un-emphasised severity label — its four
+ * severity dots and the warning sign, with and without the variation selector.
+ * Built from code points rather than typed, so this source carries no `\u`
+ * escape and no pasted emoji (round 3, F7 narrowed this from "any non-ASCII
+ * glyph", which let an em-dash-led line read as a label).
+ */
+const CR_LABEL_GLYPHS = [0x1f534, 0x1f7e0, 0x1f7e1, 0x1f535, 0x26a0]
+  .map((cp) => String.fromCodePoint(cp))
+  .join('');
+
+/**
+ * The variation selector rides AFTER a glyph (`⚠️` is the warning sign plus
+ * this), so it is a modifier here rather than a class member: a BARE selector
+ * before "major" is not a severity label (round 4, F9).
+ */
+const VARIATION_SELECTOR = String.fromCodePoint(0xfe0f);
+
+const LABEL_GLYPH = `(?:[${CR_LABEL_GLYPHS}][${VARIATION_SELECTOR}]?)`;
+
+/**
+ * The un-emphasised arm is built with the `u` flag so `LABEL_GLYPH` is a
+ * CODE-POINT class: without it the astral dots decompose into surrogate halves
+ * and a lone surrogate — or a bare variation selector — before "major" matched
+ * as if it were a severity glyph (round 4, F9).
+ */
+const UNEMPHASISED_LABEL = new RegExp(
+  `(?:^|\\n)[ \\t]*${LABEL_GLYPH}+[ \\t]*(?:critical|major|potential issue)(?![A-Za-z0-9])`,
+  'iu',
+);
+
+const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
+  // greptile: the badge's alt attribute, P0/P1 only, quoted either way or
+  // unquoted (the lookahead is what ends an unquoted attribute value).
+  /<img[^>]*\balt=["']?P[01]["']?(?=[\s/>])/i,
+  // gemini-code-assist: the priority image's alt text. `high` only.
+  /!\[high\]\(/i,
+  // CodeRabbit: an emphasis-wrapped severity label that OPENS a table cell or a
+  // line. The `[^A-Za-z0-9\n|]*` arms absorb the glyph and the spaces inside the
+  // emphasis; requiring the opening emphasis to sit at a cell/line boundary is
+  // what separates a LABEL from an emphasised word inside a sentence.
+  /(?:^|\n|\|)[ \t]*[_*]{1,2}[^A-Za-z0-9\n|]*(?:critical|major|potential issue)[^A-Za-z0-9\n|]*[_*]{1,2}/i,
+  // CodeRabbit's un-emphasised heading form: the severity glyph, then the
+  // label, at the start of a line.
+  UNEMPHASISED_LABEL,
+];
+
+/**
+ * The token every stripped code form leaves behind. It MUST be non-whitespace:
+ * replacing a span with a space opened a fresh line/cell-start position, and
+ * `` `x`_🟠 Major_ `` then read as a label — a regression this stripper itself
+ * introduced (round 4, F2). A word of ASCII letters is neither a boundary the
+ * anchors accept nor a glyph the un-emphasised arm reads.
+ */
+const CODE_PLACEHOLDER = 'CODE';
+
+/**
+ * A body with its CODE replaced by {@link CODE_PLACEHOLDER}: fenced blocks
+ * first (they can contain backticks), then `<pre>` blocks, then CommonMark's
+ * indented blocks, then inline spans of any backtick run. What is left is the
+ * bot's prose and its labels — the only text a severity label can legitimately
+ * live in (round 3 F4; round 4 F2/F4). An unterminated fence swallows the rest
+ * of the body, which is how a markdown renderer reads it too.
+ */
+function withoutCode(body: string): string {
+  return body
+    .replace(/^[ \t]*(```+|~~~+)[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, CODE_PLACEHOLDER)
+    .replace(/^[ \t]*(```|~~~)[\s\S]*$/m, CODE_PLACEHOLDER)
+    .replace(/<pre[\s>][\s\S]*?<\/pre>/gi, CODE_PLACEHOLDER)
+    .replace(/^(?: {4}|\t)[^\n]*$/gm, CODE_PLACEHOLDER)
+    .replace(/(`+)[^`]*?\1/g, CODE_PLACEHOLDER);
+}
+
+/**
+ * Whether a comment body carries a bot's OWN structured high-severity label —
+ * one of {@link HIGH_SEVERITY_MARKERS}, read against the body with every code
+ * form replaced first ({@link withoutCode}), so a quoted marker never reads
+ * as a label and prose is never matched. `true` is "this finding's author
+ * ranked it HIGH/Major/P0/P1"; `false` is "no such label in the prose" — which
+ * includes a bot that emits no structured label at all (the disclosed miss
+ * direction above).
+ */
+export function hasHighSeverityMarker(body: string): boolean {
+  const prose = withoutCode(body);
+  return HIGH_SEVERITY_MARKERS.some((re) => re.test(prose));
+}
+
+// ─── Evidence helpers ───────────────────────────────────────────────────────
+
+/** Bound and sanitize a fragment for a reason / provenance: no control characters, bounded length. */
+function bounded(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    out += code < 0x20 || code === 0x7f ? ' ' : ch;
+  }
+  out = out.replace(/\s+/g, ' ').trim();
+  return out.length > MERGE_READY_EVIDENCE_MAX
+    ? out.slice(0, MERGE_READY_EVIDENCE_MAX - 1) + '…'
+    : out;
+}
+
+function shortSha(sha: string | null): string {
+  return sha === null ? '(unknown)' : sha.slice(0, 12);
+}
+
+// ─── The read loop ──────────────────────────────────────────────────────────
+
+/** Everything the predicates read, accumulated across pages. */
+interface ReadState {
+  number: number;
+  headSha: string;
+  mergeStateStatus: string;
+  isDraft: boolean;
+  rollupPresent: boolean;
+  rollupState: string | null;
+  rollupTotalCount: unknown;
+  checks: CheckEntry[];
+  reviews: ReviewEntry[];
+  threads: ThreadEntry[];
+  pagesRead: number;
+  complete: boolean;
+}
+
+type ReadOutcome =
+  | { ok: true; state: ReadState }
+  | { ok: false; detail: string; pagesRead: number };
+
+function graphqlArgs(
+  query: string,
+  variables: ReadonlyArray<readonly [string, string | number]>,
+): string[] {
+  const args = ['api', 'graphql', '-f', `query=${query}`];
+  for (const [key, value] of variables) {
+    // `-F` sends a typed value (the `$number: Int!` argument requires it); `-f`
+    // sends a string. Never a shell string — the runner spawns argv.
+    args.push(typeof value === 'number' ? '-F' : '-f', `${key}=${value}`);
+  }
+  return args;
+}
+
+/**
+ * Run the paginated read. Every failure — a non-zero gh exit, an unparseable
+ * body, a GraphQL error, a head that moved between pages, a page budget blown —
+ * returns `ok: false` with a NAMED detail. There is no arm that returns a
+ * partial read as if it were complete.
+ */
+function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutcome {
+  const [owner, name] = payload.repo.split('/');
+  const state: ReadState = {
+    number: payload.pr ?? 0,
+    headSha: '',
+    mergeStateStatus: '',
+    isDraft: false,
+    rollupPresent: false,
+    rollupState: null,
+    rollupTotalCount: null,
+    checks: [],
+    reviews: [],
+    threads: [],
+    pagesRead: 0,
+    complete: false,
+  };
+
+  let checksDone = false;
+  let reviewsDone = false;
+  let threadsDone = false;
+  let checksCursor: string | null = null;
+  let reviewsCursor: string | null = null;
+  let threadsCursor: string | null = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    // The branch-keyed document is used ONLY for the first page of a payload
+    // with no number; once the number is known every later page targets it, so
+    // a PR opened mid-read cannot swap the target under us.
+    const byBranch = payload.pr === null && page === 0;
+    const query = byBranch ? MERGE_READY_BRANCH_QUERY : MERGE_READY_QUERY;
+    const variables: Array<readonly [string, string | number]> = [
+      ['owner', owner ?? ''],
+      ['name', name ?? ''],
+    ];
+    if (byBranch) {
+      variables.push(['branch', payload.branch ?? '']);
+    } else {
+      variables.push(['number', state.number]);
+    }
+    if (checksCursor !== null) variables.push(['checksAfter', checksCursor]);
+    if (reviewsCursor !== null) variables.push(['reviewsAfter', reviewsCursor]);
+    if (threadsCursor !== null) variables.push(['threadsAfter', threadsCursor]);
+
+    const run = runner(graphqlArgs(query, variables));
+    state.pagesRead = page + 1;
+    if (run.exitCode !== 0) {
+      return {
+        ok: false,
+        detail: `gh api graphql exited ${run.exitCode}: ${bounded(run.stdout)}`,
+        pagesRead: state.pagesRead,
+      };
+    }
+
+    const parsed = parsePage(run.stdout, byBranch);
+    if (!parsed.ok) return { ok: false, detail: parsed.detail, pagesRead: state.pagesRead };
+    const p = parsed.page;
+
+    if (page === 0) {
+      state.number = p.number;
+      state.headSha = p.headRefOid;
+      state.mergeStateStatus = p.mergeStateStatus;
+      state.isDraft = p.isDraft;
+      state.rollupPresent = p.rollupPresent;
+      state.rollupState = p.rollupState;
+      state.rollupTotalCount = p.rollupTotalCount;
+    } else if (p.headRefOid !== state.headSha) {
+      // The head moved between reads: everything already accumulated describes
+      // a commit that is no longer what would merge.
+      return {
+        ok: false,
+        detail: `the head sha moved during evaluation (${shortSha(state.headSha)} → ${shortSha(p.headRefOid)})`,
+        pagesRead: state.pagesRead,
+      };
+    }
+
+    if (!checksDone) {
+      state.checks.push(...p.checks);
+      checksDone = !p.checksHasNext;
+      checksCursor = p.checksCursor;
+    }
+    if (!reviewsDone) {
+      state.reviews.push(...p.reviews);
+      reviewsDone = !p.reviewsHasNext;
+      reviewsCursor = p.reviewsCursor;
+    }
+    if (!threadsDone) {
+      state.threads.push(...p.threads);
+      threadsDone = !p.threadsHasNext;
+      threadsCursor = p.threadsCursor;
+    }
+
+    if (checksDone && reviewsDone && threadsDone) {
+      // The rollup must ACCOUNT for itself before predicate 1 reads it
+      // (mmnto-ai/totem#2800 round 4, F3). `totalCount` is judged as the API
+      // typed it — a string "3", a boolean, a negative or a fractional number
+      // is an unreadable answer, not a count — and once every page is in, the
+      // number of contexts the read MATERIALISED must equal the number the
+      // rollup CLAIMED. A claim the read did not deliver is an incomplete read
+      // (R2), never a smaller green list.
+      if (state.rollupPresent) {
+        const claimed = state.rollupTotalCount;
+        if (typeof claimed !== 'number' || !Number.isInteger(claimed) || claimed < 0) {
+          return {
+            ok: false,
+            detail:
+              'the status-check rollup reported a totalCount that is not a non-negative integer (' +
+              bounded(typeof claimed === 'string' ? JSON.stringify(claimed) : String(claimed)) +
+              ') - the check state is unreadable',
+            pagesRead: state.pagesRead,
+          };
+        }
+        if (claimed !== state.checks.length) {
+          return {
+            ok: false,
+            detail:
+              'the status-check rollup claims ' +
+              String(claimed) +
+              ' checks but the read materialised ' +
+              String(state.checks.length) +
+              ' - the check state is unreadable',
+            pagesRead: state.pagesRead,
+          };
+        }
+      }
+
+      // R5's zero-checks FACT applies ONLY where the rollup is consistent about
+      // it, and that is exactly two shapes: no rollup at all, or a rollup that
+      // reports SUCCESS over an empty context list AND counts zero (the count
+      // agreement above already holds). Every other shape — a PENDING or
+      // FAILURE state with nothing listed, a `state` that is null or not a
+      // string — is an unreadable answer, never a green light (fold F7; round 2
+      // F3 added the null/non-string state).
+      if (state.checks.length === 0 && state.rollupPresent && state.rollupState !== 'SUCCESS') {
+        return {
+          ok: false,
+          detail:
+            state.rollupState === null
+              ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
+              : 'the status-check rollup reports ' +
+                bounded(state.rollupState) +
+                ' but listed no checks - the check state is unreadable',
+          pagesRead: state.pagesRead,
+        };
+      }
+      state.complete = true;
+      return { ok: true, state };
+    }
+  }
+
+  return {
+    ok: false,
+    detail: `the read needed more than ${MAX_PAGES} pages; a capped read is never reported as clean`,
+    pagesRead: state.pagesRead,
+  };
+}
+
+// ─── The predicates ─────────────────────────────────────────────────────────
+
+/** A predicate failure: which one, and the evidence that failed it. */
+interface Blocked {
+  predicate: MergeReadyPredicate;
+  evidence: string;
+}
+
+/** `mergeStateStatus` values that pass predicate 5. `UNSTABLE` (a non-required check red) is predicate 1's business. */
+const MERGE_STATE_PASS = new Set(['CLEAN', 'HAS_HOOKS', 'UNSTABLE']);
+/** Values that fail predicate 5 outright. `DRAFT` is GitHub's own "not ready to merge". */
+const MERGE_STATE_DENY = new Map<string, string>([
+  ['BEHIND', 'the branch is behind its base — update it before merging'],
+  ['DIRTY', 'the merge is conflicted — resolve the conflict before merging'],
+  ['BLOCKED', 'branch protection blocks the merge (a required review or check is missing)'],
+  ['DRAFT', 'the pull request is still a draft'],
+]);
+
+function summarizeChecks(checks: readonly CheckEntry[]): {
+  total: number;
+  success: number;
+  pending: number;
+  failing: number;
+} {
+  let success = 0;
+  let pending = 0;
+  let failing = 0;
+  for (const c of checks) {
+    if (c.kind === 'success') success++;
+    else if (c.kind === 'pending') pending++;
+    else failing++;
+  }
+  return { total: checks.length, success, pending, failing };
+}
+
+/**
+ * The authors whose LATEST decision review is CHANGES_REQUESTED. `COMMENTED`
+ * reviews are not decisions and never supersede (GitHub's own semantics); a
+ * later APPROVED or DISMISSED from the same reviewer does.
+ */
+function changesRequestedBy(reviews: readonly ReviewEntry[]): string[] {
+  const DECISIONS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
+  const latest = new Map<string, { state: string; at: string }>();
+  for (const r of reviews) {
+    if (!DECISIONS.has(r.state)) continue;
+    const at = r.submittedAt ?? '';
+    const seen = latest.get(r.login);
+    // Ties (or a missing timestamp) fall back to array order, which the API
+    // returns chronologically — the later row wins.
+    if (seen === undefined || at >= seen.at) latest.set(r.login, { state: r.state, at });
+  }
+  const out: string[] = [];
+  for (const [login, decision] of latest) {
+    if (decision.state === 'CHANGES_REQUESTED') out.push(login);
+  }
+  return out.sort();
+}
+
+/** Unresolved, non-outdated threads whose ROOT comment is a known review bot. */
+function unresolvedBotThreads(threads: readonly ThreadEntry[]): ThreadEntry[] {
+  return threads.filter(
+    (t) =>
+      !t.isResolved &&
+      !t.isOutdated &&
+      t.rootLogin !== null &&
+      isBotReviewerLoginExact(t.rootLogin),
+  );
+}
+
+/**
+ * HIGH/Major bot inlines that CURRENTLY apply to the head commit — thread
+ * resolution deliberately IGNORED (ruled on mmnto-ai/totem#2800, fold F2).
+ *
+ * The comparison is `comment.commit.oid`, the commit the finding applies to
+ * NOW (GitHub re-points it as the diff moves; it is the REST `commit_id` the
+ * charter's predicate (c) names), never `originalCommit.oid`, the commit it was
+ * written against — a predicate keyed on the write-time commit goes inert the
+ * moment the branch advances, which is exactly the inert state this fold
+ * removed.
+ *
+ * Predicate 4's distinct territory, the one predicate 2 cannot reach: a HIGH
+ * finding a human RESOLVED by hand without changing the code. The comment still
+ * applies to the head commit, so the floor still refuses the merge. Predicate 2
+ * keeps its own rule (unresolved AND non-outdated, any severity) and still
+ * fires first when both match.
+ */
+function highSeverityInlines(threads: readonly ThreadEntry[], headSha: string): ThreadEntry[] {
+  return threads.filter(
+    (t) =>
+      t.rootLogin !== null &&
+      isBotReviewerLoginExact(t.rootLogin) &&
+      t.rootCommit !== null &&
+      t.rootCommit.toLowerCase() === headSha &&
+      hasHighSeverityMarker(t.rootBody),
+  );
+}
+
+/**
+ * Bot HIGH inlines whose `comment.commit` came back NULL — the predicate's
+ * input is missing, so whether they apply to the head is UNKNOWN
+ * (mmnto-ai/totem#2800 round 2, F8). R2: an unreadable input is never a pass,
+ * so these never fall out of the filter above and read as "not on head".
+ * They make the evaluation UNEVALUABLE, named on stderr, only when no
+ * predicate ahead of them in charter order has already failed: a failing
+ * check, an unresolved bot thread, a standing CHANGES_REQUESTED or a
+ * placeable HIGH inline is a fact and denies first, and that verdict names
+ * its own cause, not these (the PR's review round; see the call site).
+ */
+function unreadableCommitHighInlines(threads: readonly ThreadEntry[]): ThreadEntry[] {
+  return threads.filter(
+    (t) =>
+      t.rootLogin !== null &&
+      isBotReviewerLoginExact(t.rootLogin) &&
+      t.rootCommit === null &&
+      hasHighSeverityMarker(t.rootBody),
+  );
+}
+
+// ─── The evaluation ─────────────────────────────────────────────────────────
+
+/** Read `gh --version` through the seam. A failure here IS the "gh unavailable" failure mode. */
+function readGhVersion(
+  runner: GhRunner,
+): { ok: true; version: string } | { ok: false; detail: string } {
+  const run = runner(['--version']);
+  if (run.exitCode !== 0) {
+    return {
+      ok: false,
+      detail: `gh is unavailable or unauthenticated (gh --version exited ${run.exitCode}: ${bounded(run.stdout)})`,
+    };
+  }
+  const match = /gh version (\S+)/.exec(run.stdout);
+  return {
+    ok: true,
+    version: match?.[1] !== undefined ? `gh ${match[1]}` : 'gh (version unknown)',
+  };
+}
+
+/**
+ * Evaluate the merge-ready floor. Pure with respect to state: it reads GitHub
+ * through the injected runner and returns a verdict, its evidence, and the
+ * stderr lines the host must print. It writes nothing.
+ */
+export function evaluateMergeReady(
+  payload: unknown,
+  options: MergeReadyOptions,
+): MergeReadyEvaluation {
+  const parsed = parseMergeReadyPayload(payload);
+  const tier: GateTier = options.tier ?? 'strict';
+  const env = options.env ?? process.env;
+  const now = options.now ?? ((): Date => new Date());
+  const checkedAt = now().toISOString();
+  const notices: string[] = [];
+  const override = env[MERGE_READY_OVERRIDE_ENV] === '1';
+
+  const detail: MergeReadyProvenanceDetail = {
+    repo: parsed.repo,
+    pr: parsed.pr,
+    headSha: null,
+    checks: { total: 0, success: 0, pending: 0, failing: 0 },
+    threads: { unresolvedBot: 0, pagesRead: 0, complete: false },
+    changesRequestedBy: [],
+    highInline: 0,
+    mergeStateStatus: null,
+    evaluatedAt: checkedAt,
+    evaluatedBy: 'gh (not read)',
+  };
+
+  /** The UNEVALUABLE class: `deny` under strict, `warn` under pilot — never `allow`. */
+  const unevaluable = (why: string): MergeReadyEvaluation => {
+    notices.push(
+      `${MERGE_READY_NOTICE_PREFIX} could not derive the merge floor for ${parsed.repo}#${parsed.pr ?? parsed.branch ?? '?'}: ${why} (tier=${tier} → ${tier === 'pilot' ? 'warn' : 'deny'}).`,
+    );
+    if (override) return allowByOverride(`the read failed: ${why}`);
+    return {
+      verdict: {
+        disposition: tier === 'pilot' ? 'warn' : 'deny',
+        reason: `merge-ready could not derive: ${why}.`,
+        provenance: {
+          source: MERGE_READY_SOURCE,
+          ref: 'unevaluable',
+          matched: bounded(why),
+          checkedAt,
+          detail: { ...detail },
+        },
+      },
+      detail,
+      notices,
+    };
+  };
+
+  /** The audited bypass: `allow` plus one line naming what would have denied. */
+  const allowByOverride = (wouldHaveDenied: string): MergeReadyEvaluation => {
+    detail.override = true;
+    notices.push(
+      `${MERGE_READY_NOTICE_PREFIX} OVERRIDE (${MERGE_READY_OVERRIDE_ENV}=1): allowing ${parsed.repo}#${parsed.pr ?? detail.pr ?? '?'} at head ${shortSha(detail.headSha)} — would have denied: ${wouldHaveDenied}.`,
+    );
+    return {
+      verdict: {
+        disposition: 'allow',
+        reason: `Allowed by ${MERGE_READY_OVERRIDE_ENV}=1 (audited). Would have denied: ${wouldHaveDenied}.`,
+        provenance: {
+          source: MERGE_READY_SOURCE,
+          ref: 'override',
+          matched: bounded(wouldHaveDenied),
+          checkedAt,
+          detail: { ...detail },
+        },
+      },
+      detail,
+      notices,
+    };
+  };
+
+  // An argument the wrapper could not project into a PR (an unexpanded shell
+  // variable) is UNEVALUABLE before any read: there is nothing to query, and
+  // guessing would judge the wrong PR (mmnto-ai/totem#2800 fold F13). No `gh`
+  // runs on this path.
+  if (parsed.unresolvedTarget !== undefined) {
+    return unevaluable(
+      `shell variable not expanded — pass a literal PR number or URL (the command named "${bounded(parsed.unresolvedTarget)}")`,
+    );
+  }
+
+  const version = readGhVersion(options.runner);
+  if (!version.ok) return unevaluable(version.detail);
+  detail.evaluatedBy = version.version;
+
+  const read = readPullRequest(parsed, options.runner);
+  if (!read.ok) {
+    detail.threads.pagesRead = read.pagesRead;
+    return unevaluable(read.detail);
+  }
+  const state = read.state;
+
+  detail.pr = state.number;
+  detail.headSha = state.headSha;
+  detail.mergeStateStatus = state.mergeStateStatus;
+  detail.checks = summarizeChecks(state.checks);
+  detail.threads = {
+    unresolvedBot: unresolvedBotThreads(state.threads).length,
+    pagesRead: state.pagesRead,
+    complete: state.complete,
+  };
+  detail.changesRequestedBy = changesRequestedBy(state.reviews);
+  detail.highInline = highSeverityInlines(state.threads, state.headSha).length;
+
+  // The predicates are read BEFORE the unreadable-commit arm below: a failure
+  // that stands in charter order ahead of predicate 4 is a fact, and a tier
+  // never softens a fact — the arm that returned first here turned a failing
+  // check plus one unplaceable HIGH inline into the UNEVALUABLE class, which
+  // pilot maps to `warn` (mmnto-ai/totem#2844 round 1, CodeRabbit).
+  const blocked = firstFailure(state, detail);
+
+  // A bot HIGH inline whose `comment.commit` came back null cannot be placed
+  // against the head, so predicate 4's input is missing for it: unevaluable and
+  // NAMED, never a silent pass (round 2, F8). It still preempts predicate 5 —
+  // predicate 4's missing input comes before predicate 5 in charter order —
+  // but never a failure of predicates 1–3 or a READABLE predicate-4 failure.
+  const unreadable = unreadableCommitHighInlines(state.threads);
+  if ((blocked === null || blocked.predicate === 'merge-state') && unreadable.length > 0) {
+    const first = unreadable[0]!;
+    return unevaluable(
+      `${unreadable.length} HIGH bot inline(s) carry no commit, so predicate 4 cannot place them against the head — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+    );
+  }
+
+  // The caller's local head is evidence, not a predicate: a local branch can
+  // legitimately sit ahead of or behind the PR head, and the charter's floor
+  // does not include "your checkout matches". A mismatch is NAMED, never silent.
+  if (parsed.headSha !== undefined && parsed.headSha !== state.headSha) {
+    notices.push(
+      `${MERGE_READY_NOTICE_PREFIX} the payload head sha (${shortSha(parsed.headSha)}) is not the PR head (${shortSha(state.headSha)}); the floor was read against the PR head.`,
+    );
+  }
+
+  // R5: zero checks passes predicate 1 as a FACT, with the count in provenance
+  // and one stderr line. Branch protection owns "must have checks".
+  if (detail.checks.total === 0) {
+    notices.push(
+      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)} has ZERO status checks${state.rollupPresent ? '' : ' (no rollup on the head commit)'} — predicate 1 passes as a fact; branch protection, not this gate, decides whether zero checks may merge.`,
+    );
+  }
+
+  if (override) {
+    return allowByOverride(
+      blocked === null
+        ? 'nothing (every predicate passed)'
+        : `${blocked.predicate} — ${blocked.evidence}`,
+    );
+  }
+
+  // `mergeStateStatus: UNKNOWN` means GitHub has not computed mergeability yet:
+  // an input that failed to derive, not a fact — the UNEVALUABLE class.
+  if (blocked === null && state.mergeStateStatus === 'UNKNOWN') {
+    return unevaluable(
+      'GitHub has not computed mergeability yet (mergeStateStatus: UNKNOWN) — retry',
+    );
+  }
+  if (blocked === null && !MERGE_STATE_PASS.has(state.mergeStateStatus)) {
+    return unevaluable(
+      `mergeStateStatus "${bounded(state.mergeStateStatus)}" is not a value this gate reads`,
+    );
+  }
+
+  if (blocked !== null) {
+    return {
+      verdict: {
+        disposition: 'deny',
+        reason: `${parsed.repo}#${state.number} is not merge-ready: ${blocked.evidence}.`,
+        provenance: {
+          source: MERGE_READY_SOURCE,
+          ref: blocked.predicate,
+          matched: bounded(blocked.evidence),
+          checkedAt,
+          detail: { ...detail },
+        },
+      },
+      detail,
+      notices,
+    };
+  }
+
+  const botReviewSeen = state.threads.some(
+    (t) => t.rootLogin !== null && isBotReviewerLoginExact(t.rootLogin),
+  );
+  const factClause = botReviewSeen ? '' : ' No bot review present — predicates 2–4 pass as a fact.';
+  return {
+    verdict: {
+      disposition: 'allow',
+      reason: `${parsed.repo}#${state.number} at ${shortSha(state.headSha)} meets the merge-ready floor (${detail.checks.success}/${detail.checks.total} checks green, mergeStateStatus ${state.mergeStateStatus}).${factClause}`,
+      provenance: {
+        source: MERGE_READY_SOURCE,
+        ref: 'merge-ready',
+        matched: state.headSha,
+        checkedAt,
+        detail: { ...detail },
+      },
+    },
+    detail,
+    notices,
+  };
+}
+
+/** The FIRST predicate that fails, in charter order, or null when the floor is met. */
+function firstFailure(state: ReadState, detail: MergeReadyProvenanceDetail): Blocked | null {
+  // 1. checks
+  if (detail.checks.failing > 0) {
+    const names = state.checks
+      .filter((c) => c.kind === 'failing')
+      .map((c) => c.name)
+      .join(', ');
+    return {
+      predicate: 'checks',
+      evidence: `${detail.checks.failing} of ${detail.checks.total} status checks are failing (${bounded(names)})`,
+    };
+  }
+  if (detail.checks.pending > 0) {
+    const names = state.checks
+      .filter((c) => c.kind === 'pending')
+      .map((c) => c.name)
+      .join(', ');
+    return {
+      predicate: 'checks',
+      evidence: `${detail.checks.pending} of ${detail.checks.total} status checks are still running (${bounded(names)})`,
+    };
+  }
+
+  // 2. unresolved, non-outdated bot threads
+  const unresolved = unresolvedBotThreads(state.threads);
+  if (unresolved.length > 0) {
+    const first = unresolved[0]!;
+    return {
+      predicate: 'unresolved-bot-threads',
+      evidence: `${unresolved.length} unresolved bot review thread(s) — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+    };
+  }
+
+  // 3. un-superseded CHANGES_REQUESTED
+  if (detail.changesRequestedBy.length > 0) {
+    return {
+      predicate: 'changes-requested',
+      evidence: `CHANGES_REQUESTED stands from ${detail.changesRequestedBy.join(', ')}`,
+    };
+  }
+
+  // 4. HIGH/Major bot inline on the head commit
+  const high = highSeverityInlines(state.threads, state.headSha);
+  if (high.length > 0) {
+    const first = high[0]!;
+    return {
+      predicate: 'high-severity-inline',
+      evidence: `${high.length} HIGH/Major bot inline(s) still applying to the head commit — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+    };
+  }
+
+  // 5. GitHub's own mergeability
+  const denyReason = MERGE_STATE_DENY.get(state.mergeStateStatus);
+  if (denyReason !== undefined) {
+    return {
+      predicate: 'merge-state',
+      evidence: `mergeStateStatus is ${state.mergeStateStatus} — ${denyReason}`,
+    };
+  }
+
+  return null;
+}
+
+// ─── The registry entry ─────────────────────────────────────────────────────
+
+/**
+ * The production gh seam: spawn `gh` with an argv (never a shell string) and
+ * report `{ stdout, exitCode }`. A spawn failure (gh absent) and a non-zero
+ * exit are the SAME shape here — both are "the read did not answer", which the
+ * evaluator turns into the named UNEVALUABLE class.
+ *
+ * When gh writes its diagnosis to stderr and nothing to stdout (the missing
+ * binary, an auth failure), the stderr text is returned as `stdout` so the
+ * reason can name what gh said; the exit code is what decides.
+ */
+export function makeGhRunner(timeoutMs = 30_000, execute: typeof safeExec = safeExec): GhRunner {
+  return (args: string[]) => {
+    // totem-context: NOT a swallowed error — the seam's contract is
+    // `{ stdout, exitCode }`, so a spawn failure (gh absent) and a non-zero exit
+    // must arrive at the evaluator the SAME way: as a read that did not answer,
+    // which becomes a NAMED unevaluable verdict carrying what gh said. Throwing
+    // instead would erase that text and land in the wrapper's generic
+    // fail-closed arm; nothing here can return a clean read (Tenet 4).
+    try {
+      return {
+        stdout: execute('gh', args, { timeout: timeoutMs, trim: false }),
+        exitCode: 0,
+      };
+      // totem-context: intentional degradation — see the directive above the try; dual placement so the rule reads either the catch-keyword line or the catch body.
+    } catch (err) {
+      // totem-context: intentional degradation — a gh that did not answer is the NAMED unevaluable class, carrying what gh said; never a clean read.
+      const fields = err as { status?: number | null; stdout?: string; stderr?: string };
+      const stdout = fields.stdout?.trim();
+      const stderr = fields.stderr?.trim();
+      const text =
+        stdout !== undefined && stdout !== ''
+          ? stdout
+          : stderr !== undefined && stderr !== ''
+            ? stderr
+            : err instanceof Error
+              ? err.message
+              : String(err);
+      const status = typeof fields.status === 'number' ? fields.status : 1;
+      return { stdout: text, exitCode: status === 0 ? 1 : status };
+    }
+  };
+}
+
+/**
+ * The registry evaluator. Builds the production runner lazily (so no gh is
+ * spawned unless this gate actually runs), evaluates, and prints the gate's
+ * stderr lines through the injected sink.
+ */
+export const mergeReadyEvaluator: GateEvaluator = (payload, _totemDir, context): GateVerdict => {
+  const runner = context?.ghRunner ?? makeGhRunner();
+
+  const evaluation = evaluateMergeReady(payload, {
+    runner,
+    tier: context?.tier,
+    env: context?.env,
+  });
+
+  const write = context?.writeStderr ?? ((line: string): void => void process.stderr.write(line));
+  for (const notice of evaluation.notices) {
+    write(`${notice}\n`);
+  }
+  return evaluation.verdict;
+};

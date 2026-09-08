@@ -1,0 +1,80 @@
+{
+  "kind": "capture",
+  "repo": "mmnto-ai/totem-strategy",
+  "pr": 1251,
+  "role": "negative control (R4)",
+  "capturedAt": "2026-09-08T03:53:45.685Z",
+  "ghVersion": "gh version 2.99.0 (2026-09-01)",
+  "query": "MERGE_READY_QUERY (packages/core/src/merge-ready.ts) — sent verbatim by evaluateMergeReady",
+  "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 1251,
+              "isDraft": false,
+              "mergeStateStatus": "UNKNOWN",
+              "headRefOid": "220366097990ffd63536703f0a879f1472164b91",
+              "headRefName": "chore/strategy-doctrine-0.1.44-cut",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "220366097990ffd63536703f0a879f1472164b91",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 3,
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": "Mw"
+                          },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Analyze (javascript-typescript)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            },
+                            {
+                              "__typename": "StatusContext",
+                              "context": "CodeRabbit",
+                              "state": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

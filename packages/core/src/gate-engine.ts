@@ -2,7 +2,14 @@ import * as path from 'node:path';
 
 import { TotemError } from './errors.js';
 import { FREEZE_FILE, readFreezeConfig } from './freeze.js';
-import type { GateDefinition, GateEvaluator, GateMatcher, GateVerdict } from './gate-types.js';
+import type {
+  GateContext,
+  GateDefinition,
+  GateEvaluator,
+  GateMatcher,
+  GateVerdict,
+} from './gate-types.js';
+import { MERGE_READY_EVENT, mergeReadyEvaluator } from './merge-ready.js';
 import { TRANSPORT_SHIELD_EVENT, transportShieldEvaluator } from './transport-shield.js';
 
 export const FREEZE_CHECK_EVENT = 'freeze-check';
@@ -81,6 +88,7 @@ const freezeCheckEvaluator: GateEvaluator = (payload, totemDir): GateVerdict => 
 const REGISTRY: ReadonlyMap<string, GateDefinition> = new Map<string, GateDefinition>([
   [FREEZE_CHECK_EVENT, { evaluator: freezeCheckEvaluator, matcher: 'Write|Edit' }],
   [TRANSPORT_SHIELD_EVENT, { evaluator: transportShieldEvaluator, matcher: 'Bash|PowerShell' }],
+  [MERGE_READY_EVENT, { evaluator: mergeReadyEvaluator, matcher: 'Bash|PowerShell' }],
 ]);
 
 /** The known gate event types — for error messages and host discovery. */
@@ -113,8 +121,19 @@ export function gateMatcher(event: string): GateMatcher {
  * Evaluate a gate. Pure with respect to state: reads deterministic sources,
  * never mutates. Throws (fail-loud) on an unknown event or an unparseable
  * source — it never default-allows.
+ *
+ * `context` (mmnto-ai/totem#2800) carries the per-evaluation seams a gate may
+ * read: the enforcement tier for ITS OWN unevaluable class, the injected `gh`
+ * runner, the environment, and the stderr sink. A gate that reads none of them
+ * — `freeze-check`, `transport-shield` — is unaffected by what it carries, so
+ * a tier can never soften them.
  */
-export function evaluateGate(event: string, payload: unknown, totemDir: string): GateVerdict {
+export function evaluateGate(
+  event: string,
+  payload: unknown,
+  totemDir: string,
+  context?: GateContext,
+): GateVerdict {
   const def = REGISTRY.get(event);
   if (!def) {
     throw new TotemError(
@@ -123,5 +142,5 @@ export function evaluateGate(event: string, payload: unknown, totemDir: string):
       'Use one of the known --event values.',
     );
   }
-  return def.evaluator(payload, totemDir);
+  return def.evaluator(payload, totemDir, context);
 }

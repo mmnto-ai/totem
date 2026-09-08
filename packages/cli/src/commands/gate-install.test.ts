@@ -106,6 +106,7 @@ const TRANSPORT_SHIELD: GateInstallSpec = {
   event: 'transport-shield',
   matcher: 'Bash|PowerShell',
 };
+const MERGE_READY: GateInstallSpec = { event: 'merge-ready', matcher: 'Bash|PowerShell' };
 
 /**
  * Every PreToolUse matcher an entry installing `event` currently appears under.
@@ -273,6 +274,15 @@ describe('installGates per-gate matcher (mmnto-ai/totem#2799)', () => {
       },
     ],
   };
+  const STRICT_MERGE_READY_ENTRY = {
+    matcher: 'Bash|PowerShell',
+    hooks: [
+      {
+        type: 'command',
+        command: 'node .claude/hooks/gate-wrapper.cjs --event merge-ready --strict',
+      },
+    ],
+  };
 
   beforeEach(() => {
     cwd = makeTmpDir();
@@ -337,6 +347,37 @@ describe('installGates per-gate matcher (mmnto-ai/totem#2799)', () => {
     const cmd = gateCommandFor(cwd, 'transport-shield');
     expect(cmd).toContain('--strict');
     expect(cmd).not.toContain('--pilot');
+  });
+
+  it('merge-ready writes ONE entry under Bash|PowerShell, beside transport-shield (mmnto-ai/totem#2800)', () => {
+    installGates(cwd, [MERGE_READY]);
+
+    expect(gateEntryCount(cwd, 'merge-ready')).toBe(1);
+    expect(matchersFor(cwd, 'merge-ready')).toEqual(['Bash|PowerShell']);
+    expect(gateCommandFor(cwd, 'merge-ready')).toBe(
+      'node .claude/hooks/gate-wrapper.cjs --event merge-ready --strict',
+    );
+    expect(preToolUseEntries(cwd)).toEqual([STRICT_MERGE_READY_ENTRY]);
+
+    // A second Bash|PowerShell gate is its OWN entry, never folded into the
+    // first (each gate's --event is its identity).
+    installGates(cwd, [TRANSPORT_SHIELD]);
+    expect(gateEntryCount(cwd, 'merge-ready')).toBe(1);
+    expect(gateEntryCount(cwd, 'transport-shield')).toBe(1);
+    expect(preToolUseEntries(cwd)).toEqual([STRICT_MERGE_READY_ENTRY, STRICT_TRANSPORT_ENTRY]);
+  });
+
+  it('a merge-ready tier switch updates the one entry in place', () => {
+    installGates(cwd, [MERGE_READY], 'pilot');
+    expect(gateCommandFor(cwd, 'merge-ready')).toContain('--pilot');
+
+    const switched = installGates(cwd, [MERGE_READY], 'strict');
+
+    expect(switched.find((r) => r.event === 'merge-ready')?.action).toBe('updated');
+    expect(gateEntryCount(cwd, 'merge-ready')).toBe(1);
+    expect(gateCommandFor(cwd, 'merge-ready')).toBe(
+      'node .claude/hooks/gate-wrapper.cjs --event merge-ready --strict',
+    );
   });
 
   it('after any sequence of INSTALLER writes, no gate appears under two matchers (hand edits are not enforced)', () => {
@@ -503,11 +544,22 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
   const stubRecordPath = (): string => path.join(cwd, 'stub-record.json');
 
   /** Install a stub local CLI that records its argv + stdin and emits a controlled verdict / exit code. */
-  function writeStubCli(opts: { verdict?: unknown; exit?: number }): void {
+  function writeStubCli(opts: { verdict?: unknown; exit?: number; stderr?: string }): void {
     const distDir = path.join(cwd, 'node_modules', '@mmnto', 'cli', 'dist');
     fs.mkdirSync(distDir, { recursive: true });
+    // A fresh stub starts with NO record: the record is written only by a
+    // spawn, so `stubArgv() === null` after a run means "never spawned" and a
+    // `spawnedPayload()` after a run names THAT run's payload. Without this
+    // reset a loop of firing shapes that all name the same PR passed on the
+    // record left by its FIRST iteration — the PR-round-2 leg proved every
+    // later row green against the pre-fold wrapper (F2).
+    fs.rmSync(stubRecordPath(), { force: true });
     const verdictJson = opts.verdict === undefined ? '' : JSON.stringify(opts.verdict);
     const exitCode = opts.exit ?? 0;
+    // `stderr` stands in for the ENGINE's own agent-facing lines (merge-ready's
+    // override audit, its zero-checks fact): the wrapper must pass them through
+    // in every arm, allow included (mmnto-ai/totem#2800 fold F1).
+    const stderrText = opts.stderr ?? '';
     // CommonJS stub (the wrapper invokes via `node <path>`); .js is fine here
     // because there is no package.json type:module in the temp dir. The record
     // is what lets a test assert BOTH that a spawn happened and exactly which
@@ -523,6 +575,8 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       `fs.writeFileSync(${JSON.stringify(
         stubRecordPath(),
       )}, JSON.stringify({ argv: process.argv.slice(2), stdin }));`,
+      `const err = ${JSON.stringify(stderrText)};`,
+      'if (err) process.stderr.write(err + "\\n");',
       'if (out) process.stdout.write(out + "\\n");',
       `process.exit(${exitCode});`,
       '',
@@ -749,6 +803,11 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(BASH_CMD, [], 'transport-shield');
 
     expect(status).toBe(0);
+    // The baked tier rides along since mmnto-ai/totem#2800 (R1): the engine owns
+    // the strict/pilot split for a gate's own unevaluable class.
+    // A STRICT wrapper forwards NO `--tier` (fold F3): strict is the engine's
+    // default, and an option a 2.2.x CLI cannot parse would fail the check
+    // closed — re-entering the mmnto-ai/totem#2822 bootstrap self-block.
     expect(stubArgv()).toEqual(['gate', 'check', '--event', 'transport-shield', '--payload', '-']);
     expect(spawnedPayload()).toEqual({
       tool: 'Bash',
@@ -807,6 +866,55 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     expect(spawnedPayload()).toEqual({ subsystem: 'rule-compilation' });
   });
 
+  it('a PILOT install forwards --tier pilot; a strict one forwards none (fold F3)', () => {
+    // The tier the ENGINE needs is the non-default one. Forwarding `--tier` on
+    // every entry made a 2.2.x CLI exit "unknown option" — the fail-closed arm —
+    // for every gated command, so only pilot pays that coupling and its
+    // install-time disclosure names the 2.3.0 floor.
+    writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+    runWrapper(DECLARED, ['--pilot']);
+    expect(stubArgv()).toEqual([
+      'gate',
+      'check',
+      '--event',
+      'freeze-check',
+      '--tier',
+      'pilot',
+      '--payload',
+      '-',
+    ]);
+
+    writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+    runWrapper(DECLARED, ['--strict']);
+    expect(stubArgv()).not.toContain('--tier');
+  });
+
+  it('the child CLI stderr reaches the transcript on ALLOW, not just on failure (fold F1)', () => {
+    // merge-ready writes its audited-override line and its zero-checks fact to
+    // stderr with an `allow` verdict. Printing the child's stderr only in the
+    // failure arm silently dropped exactly the lines that must never be silent.
+    writeStubCli({
+      verdict: ALLOW_VERDICT,
+      exit: 0,
+      stderr: '[totem merge-ready] OVERRIDE (TOTEM_MERGE_GATE_OVERRIDE=1): allowing repo#1',
+    });
+    const { status, stderr } = runWrapper(DECLARED);
+    expect(status).toBe(0);
+    expect(stderr).toContain('[totem merge-ready] OVERRIDE');
+  });
+
+  it('a warn verdict carries the child stderr through as well (fold F1)', () => {
+    writeStubCli({
+      verdict: { disposition: 'warn', reason: 'heads up', provenance: {} },
+      exit: 0,
+      stderr: '[totem merge-ready] ZERO status checks — predicate 1 passes as a fact',
+    });
+    const { status, stderr } = runWrapper(DECLARED);
+    expect(status).toBe(0);
+    expect(stderr).toContain('ZERO status checks');
+    expect(stderr).toContain('heads up');
+  });
+
   it('an --event the wrapper cannot project → exit 2 fail-closed, never spawns', () => {
     writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
     const { status, stderr } = runWrapper(BASH_CMD, [], 'nope');
@@ -821,6 +929,362 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(BASH_CMD, ['--pilot'], 'nope');
     expect(status).toBe(2);
     expect(stubArgv()).toBeNull();
+  });
+
+  // ─── merge-ready projection (mmnto-ai/totem#2800) ──────────────────────
+  //
+  // The gate installs under Bash|PowerShell, so this branch sees EVERY shell
+  // command: the load-bearing half is what it does NOT do — a command that is
+  // not `gh pr merge` at command position must pass through (exit 0) without
+  // ever spawning the CLI. `stubArgv() === null` is the filesystem record of
+  // "never spawned", not an inference from the exit code.
+  describe('merge-ready', () => {
+    /** Give the temp cwd a git identity so the projection can read repo/branch/head. */
+    function initGitRepo(): string {
+      spawnSync('git', ['init', '-b', 'feat/demo'], { cwd, encoding: 'utf-8' });
+      spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/mmnto-ai/totem.git'], {
+        cwd,
+      });
+      fs.writeFileSync(path.join(cwd, 'file.txt'), 'x');
+      spawnSync('git', ['add', '-A'], { cwd });
+      spawnSync(
+        'git',
+        ['-c', 'user.email=t@example.com', '-c', 'user.name=t', 'commit', '-m', 'init'],
+        { cwd },
+      );
+      return spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf-8' }).stdout.trim();
+    }
+
+    const bash = (command: string): Record<string, unknown> => ({
+      tool_name: 'Bash',
+      tool_input: { command },
+    });
+
+    it('projects { repo, pr, headSha } from `gh pr merge <number>`', () => {
+      const head = initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status } = runWrapper(bash('gh pr merge 2800 --squash'), [], 'merge-ready');
+
+      expect(status).toBe(0);
+      // No `--tier` at the default strict tier (fold F3).
+      expect(stubArgv()).toEqual(['gate', 'check', '--event', 'merge-ready', '--payload', '-']);
+      expect(spawnedPayload()).toEqual({ repo: 'mmnto-ai/totem', pr: 2800, headSha: head });
+    });
+
+    it('projects pr: null + the CURRENT branch when the command names no PR', () => {
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge'), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.pr).toBeNull();
+      expect(payload.branch).toBe('feat/demo');
+      expect(payload.repo).toBe('mmnto-ai/totem');
+    });
+
+    it('reads the repo from -R / --repo= and the PR from a URL, over the git remote', () => {
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge --squash -R mmnto-ai/liquid-city 363'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ repo: 'mmnto-ai/liquid-city', pr: 363 });
+
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        bash('gh pr merge https://github.com/mmnto-ai/totem-strategy/pull/1251 --merge'),
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload()).toMatchObject({ repo: 'mmnto-ai/totem-strategy', pr: 1251 });
+
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 12 --repo=mmnto-ai/other'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ repo: 'mmnto-ai/other', pr: 12 });
+    });
+
+    it('a named branch is projected as the branch, not as a PR number', () => {
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge feat/other-branch'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: null, branch: 'feat/other-branch' });
+    });
+
+    it('a value-taking flag does not swallow the PR target (`-b "…" 42`)', () => {
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge -b "merge this now" 42'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 42 });
+    });
+
+    it("fires at command position after a separator, after the shell's command-position words, and behind an assignment prefix", () => {
+      initGitRepo();
+      for (const command of [
+        'git status && gh pr merge 7',
+        'git fetch; gh pr merge 7',
+        'for x in 1; do gh pr merge 7; done',
+        'if true; then gh pr merge 7; fi',
+        'git log |\ngh pr merge 7',
+        // PR round 1 (greptile): a merge used AS the condition, and one behind
+        // an assignment prefix, each left something other than `gh` at the
+        // segment's front and went unjudged.
+        'if gh pr merge 7; then echo merged; fi',
+        'if false; then :; elif gh pr merge 7; then :; fi',
+        'while gh pr merge 7; do break; done',
+        'until gh pr merge 7; do sleep 1; done',
+        'GH_TOKEN=x gh pr merge 7',
+        'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
+        'exec gh pr merge 7',
+        'command gh pr merge 7',
+        // Round 2 (the leg's F1): two more reserved words and the builtin that
+        // runs an unquoted operand as the command.
+        'time gh pr merge 7',
+        'coproc gh pr merge 7',
+        'eval gh pr merge 7',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 7 });
+      }
+    });
+
+    it('does NOT fire inside a quoted string, a heredoc body, or on another gh verb — and never spawns', () => {
+      initGitRepo();
+      for (const command of [
+        'echo "gh pr merge 5"',
+        "echo 'gh pr merge 5'",
+        'gh pr list',
+        'gh pr view 3 | grep merge',
+        'git commit -m "gh pr merge"',
+        // A heredoc body is DATA, not commands (fold F4): firing here was a
+        // false deny — the direction this projection must not have.
+        'cat <<EOF\ngh pr merge 5\nEOF',
+        "cat <<'EOF'\ngh pr merge 5\nEOF",
+        'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
+        'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
+        // An UNTERMINATED body runs to the end of the command and is still data.
+        'cat <<EOF\ngh pr merge 5',
+        // DISCLOSED misses (the gate does not fire — the safe direction): a
+        // wrapper PROGRAM takes the first token, so the position anchor never
+        // sees `gh` (an assignment prefix no longer hides it — PR round 1).
+        'sudo gh pr merge 5',
+        'timeout 30 gh pr merge 5',
+        'env GH_TOKEN=x gh pr merge 5',
+        // Round 2 (the leg's F1/F3), disclosed in the template's comment: a
+        // merge handed over as ONE quoted word, a builtin with a flag before
+        // `gh`, a backtick substitution, a leading redirection.
+        'eval "gh pr merge 5"',
+        'command -p gh pr merge 5',
+        'exec -a x gh pr merge 5',
+        // Round 3 (the leg's F1): the reserved word carrying its own flag.
+        'time -p gh pr merge 5',
+        'time -- gh pr merge 5',
+        'echo `gh pr merge 5`',
+        '> out.txt gh pr merge 5',
+      ]) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(bash(command), [], 'merge-ready');
+        expect(status, command).toBe(0);
+        expect(stubArgv(), command).toBeNull();
+      }
+    });
+
+    it('every gh pr merge at command position is judged, not only the first (PR round 1, greptile)', () => {
+      initGitRepo();
+      // The stub overwrites its record on every spawn, so the record names the
+      // LAST payload judged. An allowing stub: the second merge is reached.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const allowed = runWrapper(bash('gh pr merge 7; gh pr merge 8'), [], 'merge-ready');
+      expect(allowed.status).toBe(0);
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+
+      // A denying stub under strict: the FIRST deny exits 2, so the second
+      // merge is never spawned and the record still names the first.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'not ready', provenance: {} } });
+      const denied = runWrapper(bash('gh pr merge 7 && gh pr merge 8'), [], 'merge-ready');
+      expect(denied.status).toBe(2);
+      expect(spawnedPayload()).toMatchObject({ pr: 7 });
+      expect(denied.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(1);
+
+      // Under --pilot a deny prints and the NEXT merge is still judged: two
+      // deny lines, the record names the second merge, exit 0.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'not ready', provenance: {} } });
+      const pilot = runWrapper(bash('gh pr merge 7; gh pr merge 8'), ['--pilot'], 'merge-ready');
+      expect(pilot.status).toBe(0);
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+      expect(pilot.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(2);
+    });
+
+    it('an arithmetic shift or a comment does not swallow the merge that follows (fold round 2, F1)', () => {
+      // `$((1<<2))` is a SHIFT and `# see <<note` is a comment: neither opens a
+      // heredoc. Before the guards, each swallowed the rest of the command and
+      // the real merge after it went unjudged — a silent miss on the exact
+      // command this gate exists for.
+      initGitRepo();
+      for (const command of [
+        'echo $((1<<2)); gh pr merge 5',
+        'echo $(( 3<<1 )); gh pr merge 5',
+        '# see <<note\ngh pr merge 5',
+        '(( 1<<3 ))\ngh pr merge 5',
+        'echo hi # <<EOF\ngh pr merge 5',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+    });
+
+    it('a line continuation does not hide the anchor (round 3, F6)', () => {
+      // The shell removes a backslash-newline and joins the halves. Absorbing
+      // the newline into the token left the segment starting with something
+      // other than `gh`, so a real merge went unjudged.
+      initGitRepo();
+      for (const command of ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5']) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
+      }
+
+      // A backslash before an ORDINARY character keeps its old meaning: it
+      // escapes that character into the token.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 5 --body a\\ b'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
+    });
+
+    it('a PowerShell block comment is data, not commands (round 3 F8; round 4 F1, F8)', () => {
+      initGitRepo();
+      const pwsh = (command: string): Record<string, unknown> => ({
+        tool_name: 'PowerShell',
+        tool_input: { command },
+      });
+
+      // THE CONTROL (round 4, F1): a MULTI-LINE block comment. Without the
+      // `<#` arm this fires with pr 9 — verified by stripping the arm from a
+      // rendered copy. The single-line row below behaves the same either way
+      // (the `#` word-comment arm already covers it), so it is a companion, not
+      // a control.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      expect(runWrapper(pwsh('<#\ngh pr merge 9\n#>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      expect(runWrapper(pwsh('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      // The merge AFTER one is still judged — the blank must not eat it.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(pwsh('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 4 });
+
+      // ROUND 4 F8: the blank is a POWERSHELL rule. In bash `<#tmp` is a
+      // redirect from a file named `#tmp`, and blanking from it to a later `#>`
+      // would swallow the real merge on the next line.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('sort <#tmp\ngh pr merge 8'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+    });
+
+    it('a comment is not a command: a merge inside one never fires', () => {
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const { status } = runWrapper(bash('echo hi # gh pr merge 9'), [], 'merge-ready');
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it('EVERY heredoc queued on a line is read as data, not just the first (fold round 2, F2)', () => {
+      // bash reads `cat <<A <<B` as two bodies in order, so a command sitting
+      // in B's body is data too. Consuming only A's body left B's body as
+      // commands — a false deny on text.
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const { status } = runWrapper(
+        bash('cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n'),
+        [],
+        'merge-ready',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      // The complement: a heredoc as the merge's OWN operand still fires.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 5 <<EOF\nnotes\nEOF\n'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
+    });
+
+    it('still fires on a real merge that FOLLOWS a heredoc (the blanker keeps the segments)', () => {
+      // The heredoc blanker must not swallow the rest of the command: the
+      // terminator line ends the body and the next segment is judged normally.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        bash('cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21'),
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload()).toMatchObject({ pr: 21 });
+    });
+
+    it('an unexpanded shell variable rides as unresolvedTarget, not as a branch (fold F13)', () => {
+      // `gh pr merge $PR` names a target the hook cannot know — the shell
+      // expands it after the gate has already decided. Reading "$PR" as a
+      // branch would judge the wrong PR, or none.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge $PR --squash'), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.unresolvedTarget).toBe('$PR');
+      expect(payload.pr).toBeNull();
+      // NOT the current-branch fallback: that is for a command naming no target.
+      expect(payload.branch).toBeUndefined();
+    });
+
+    it('a braced expansion keeps its braces in the evidence (round 2, F10)', () => {
+      // `${PR}` used to reach the engine as bare "$", because the tokenizer
+      // split on the braces. A `$( … )` deliberately still splits — a real
+      // merge inside a command substitution must keep firing.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge ${PR}'), [], 'merge-ready');
+      expect(spawnedPayload().unresolvedTarget).toBe('${PR}');
+
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('echo $(gh pr merge 8)'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
+    });
+
+    it('a Write envelope and a PowerShell command are treated by tool, not by text', () => {
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const write = runWrapper(
+        { tool_name: 'Write', tool_input: { file_path: 'notes.md' } },
+        [],
+        'merge-ready',
+      );
+      expect(write.status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: 'gh pr merge 11' } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload()).toMatchObject({ pr: 11 });
+    });
+
+    it('an evaluation failure on an APPLICABLE merge blocks (fail-closed), pilot exits 0', () => {
+      initGitRepo();
+      writeStubCli({ exit: 1 });
+      const strict = runWrapper(bash('gh pr merge 2800'), [], 'merge-ready');
+      expect(strict.status).toBe(2);
+      expect(strict.stderr).toMatch(/fail-closed/i);
+
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'behind', provenance: {} }, exit: 0 });
+      const pilot = runWrapper(bash('gh pr merge 2800'), ['--pilot'], 'merge-ready');
+      expect(pilot.status).toBe(0);
+      expect(pilot.stderr).toContain('behind');
+    });
   });
 });
 
@@ -1003,6 +1467,28 @@ describe('gate install discloses a Bash-matched gate applies to bootstrap', () =
     expect(again).toContain('transport-shield matches Bash|PowerShell:');
     expect(again).toContain('bootstrap a fresh clone from a terminal outside the harness');
   });
+
+  // ─── Pilot-tier CLI floor (mmnto-ai/totem#2800 fold F3) ───────────────
+  it('a --pilot install names the CLI floor its wrapper needs; a strict one does not', async () => {
+    await gateInstallCommand({ name: 'merge-ready', pilot: true });
+    const pilot = lines.join('\n');
+    expect(pilot).toContain('gate check --tier pilot');
+    expect(pilot).toContain('2.3.0');
+
+    lines = [];
+    await gateInstallCommand({ name: 'freeze-check' });
+    const strict = lines.join('\n');
+    // A strict install forwards no tier, so it carries no floor to disclose.
+    expect(strict).not.toContain('2.3.0');
+    expect(strict).not.toContain('--tier');
+  });
+
+  it('init --gates= discloses the same pilot floor (it prints its own rows)', async () => {
+    await initCommand({ bare: true, gates: 'merge-ready', pilot: true });
+    const out = lines.join('\n');
+    expect(out).toContain('gate check --tier pilot');
+    expect(out).toContain('2.3.0');
+  });
 });
 
 // ─── eject parity ──────────────────────────────────────────────────────
@@ -1121,6 +1607,15 @@ describe('init --gates= routes through the shared installer', () => {
     expect(freeze).toContain('freeze-check');
     expect(freeze).not.toContain('bootstrap');
     expect(freeze).not.toContain('matches Bash|PowerShell');
+  });
+
+  it('init --gates=merge-ready installs it under Bash|PowerShell (mmnto-ai/totem#2800)', async () => {
+    await initCommand({ bare: true, gates: 'merge-ready' });
+    expect(gateEntryCount(cwd, 'merge-ready')).toBe(1);
+    expect(matchersFor(cwd, 'merge-ready')).toEqual(['Bash|PowerShell']);
+    expect(gateCommandFor(cwd, 'merge-ready')).toBe(
+      'node .claude/hooks/gate-wrapper.cjs --event merge-ready --strict',
+    );
   });
 
   it('init --gates= with an unknown member fails loud', async () => {

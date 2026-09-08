@@ -1950,7 +1950,8 @@ export default {
     // path the `gate install` verb uses — no second copy of the merge logic.
     if (options?.gates) {
       const { resolveGates } = await import('./gate.js');
-      const { bashMatchedGateDisclosure, installGates } = await import('./gate-install.js');
+      const { bashMatchedGateDisclosure, installGates, pilotTierCliFloorDisclosure } =
+        await import('./gate-install.js');
       const { TotemError, knownGateEvents } = await import('@mmnto/totem');
       const requested = options.gates.trim();
       // `{ event, matcher }` pairs, resolved through the core registry by
@@ -2036,6 +2037,14 @@ export default {
         if (failedGates.has(gate.event)) continue;
         const disclosure = bashMatchedGateDisclosure(gate);
         if (disclosure) log.dim('Totem', disclosure);
+      }
+
+      // ─── Pilot-tier CLI floor (mmnto-ai/totem#2800 fold F3) ──────────
+      // Same reason as the line above: init prints its own rows, so the
+      // verb's copy would not reach a `--gates=` install. Once per install.
+      const tierFloor = pilotTierCliFloorDisclosure(gateTier);
+      if (tierFloor && gates.some((gate) => !failedGates.has(gate.event))) {
+        log.dim('Totem', tierFloor);
       }
     }
 

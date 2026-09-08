@@ -5,7 +5,8 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { TotemConfigError } from './errors.js';
-import { evaluateGate, knownGateEvents } from './gate-engine.js';
+import { evaluateGate, gateMatcher, knownGateEvents } from './gate-engine.js';
+import type { GhRunner } from './gate-types.js';
 
 let tmpRoot: string;
 let totemDir: string;
@@ -134,5 +135,134 @@ describe('evaluateGate — dispatch', () => {
 
   it('exposes the known gate events', () => {
     expect(knownGateEvents()).toContain('freeze-check');
+  });
+});
+
+// ─── merge-ready through the registry (mmnto-ai/totem#2800) ──────────────
+//
+// The evaluator's own predicate matrix lives in merge-ready.test.ts; what is
+// locked HERE is what the registry owes: the event is dispatchable under its own
+// matcher, the gh seam and the tier ride in on the context, and the ADR-109
+// side-effect fixture extends to this event (a verdict that mutates on-disk
+// state falsifies the ADR).
+
+/** A runner that answers `gh --version` and then one canned, minimal PR page. */
+function ghRunnerStub(mergeStateStatus: string): GhRunner {
+  const pr = {
+    number: 4242,
+    isDraft: false,
+    mergeStateStatus,
+    headRefOid: 'a'.repeat(40),
+    headRefName: 'feat/x',
+    baseRefName: 'main',
+    commits: {
+      nodes: [
+        {
+          commit: {
+            oid: 'a'.repeat(40),
+            statusCheckRollup: {
+              state: 'SUCCESS',
+              contexts: {
+                totalCount: 1,
+                pageInfo: { hasNextPage: false, endCursor: null },
+                nodes: [
+                  {
+                    __typename: 'CheckRun',
+                    name: 'CI',
+                    status: 'COMPLETED',
+                    conclusion: 'SUCCESS',
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+    },
+    reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+  };
+  return (args) =>
+    args[0] === '--version'
+      ? { stdout: 'gh version 2.99.0 (2026-09-01)', exitCode: 0 }
+      : { stdout: JSON.stringify({ data: { repository: { pullRequest: pr } } }), exitCode: 0 };
+}
+
+const MERGE_READY_PAYLOAD = { repo: 'mmnto-ai/totem', pr: 4242 };
+
+describe('evaluateGate — merge-ready', () => {
+  it('is a known gate under the Bash|PowerShell matcher', () => {
+    expect(knownGateEvents()).toContain('merge-ready');
+    expect(gateMatcher('merge-ready')).toBe('Bash|PowerShell');
+  });
+
+  it('dispatches with the injected gh runner and returns an ADR-109 verdict', () => {
+    const v = evaluateGate('merge-ready', MERGE_READY_PAYLOAD, totemDir, {
+      ghRunner: ghRunnerStub('CLEAN'),
+      env: {},
+      writeStderr: () => {},
+    });
+    expect(v.disposition).toBe('allow');
+    expect(v.reason).toMatch(/merge-ready floor/i);
+    expect(v.provenance.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('reads the tier from the context for its own UNEVALUABLE class only', () => {
+    const strict = evaluateGate('merge-ready', MERGE_READY_PAYLOAD, totemDir, {
+      ghRunner: ghRunnerStub('UNKNOWN'),
+      env: {},
+      writeStderr: () => {},
+    });
+    expect(strict.disposition).toBe('deny');
+
+    const pilot = evaluateGate('merge-ready', MERGE_READY_PAYLOAD, totemDir, {
+      tier: 'pilot',
+      ghRunner: ghRunnerStub('UNKNOWN'),
+      env: {},
+      writeStderr: () => {},
+    });
+    expect(pilot.disposition).toBe('warn');
+  });
+
+  it('leaves freeze-check failing closed at EVERY tier (the tier is per gate)', () => {
+    writeFreeze('{ not valid json');
+    expect(() =>
+      evaluateGate('freeze-check', { subsystem: 'rule-compilation' }, totemDir, {
+        tier: 'pilot',
+      }),
+    ).toThrow(TotemConfigError);
+
+    writeFreeze(FROZEN);
+    const denied = evaluateGate('freeze-check', { subsystem: 'rule-compilation' }, totemDir, {
+      tier: 'pilot',
+    });
+    expect(denied.disposition).toBe('deny'); // never downgraded to `warn`
+  });
+
+  it('throws on a malformed payload — never default-allow', () => {
+    expect(() =>
+      evaluateGate('merge-ready', { repo: '', pr: null }, totemDir, {
+        ghRunner: ghRunnerStub('CLEAN'),
+        env: {},
+        writeStderr: () => {},
+      }),
+    ).toThrow(/merge-ready payload is invalid/);
+  });
+
+  it('is side-effect-free — never writes or mutates state (ADR-109 fixture, extended)', () => {
+    writeFreeze(FROZEN);
+    const before = fs.readFileSync(path.join(totemDir, 'freeze.json'), 'utf-8');
+    const entriesBefore = fs.readdirSync(totemDir).sort();
+    const rootBefore = fs.readdirSync(tmpRoot).sort();
+
+    evaluateGate('merge-ready', MERGE_READY_PAYLOAD, totemDir, {
+      ghRunner: ghRunnerStub('CLEAN'),
+      env: {},
+      writeStderr: () => {},
+    });
+
+    expect(fs.readFileSync(path.join(totemDir, 'freeze.json'), 'utf-8')).toBe(before);
+    expect(fs.readdirSync(totemDir).sort()).toEqual(entriesBefore);
+    expect(fs.readdirSync(tmpRoot).sort()).toEqual(rootBefore); // no cache, no ledger, no stamp
   });
 });

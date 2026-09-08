@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "bfb52a9fc8b64f50221126ed91fd97a357a30f6a",
+  "readAt": "2026-09-08T21:59:52Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1541,
+      "claim": "The disclosed misses behind a flag are 'the same builtins WITH flags (`command -p gh pr merge 5`, `exec -a x gh pr merge 5`)' (template :1541; changeset line 14 'one of the skipped builtins carrying a flag'; spec :256 'a skipped builtin with a flag') — i.e. the flag-bearing miss class is fully disclosed for the words the fold added.",
+      "counterexample": "`time -p gh pr merge 5` and `time -- gh pr merge 5` each run the wrapper to exit 0 with ZERO spawns (rendered HEAD wrapper + denying stub, stub-record absent), while bash DOES execute the operand: `bash -c 'time -p echo ran-time-p'` prints ran-time-p, `bash -c 'time -- echo ran-time-dashdash'` prints ran-time-dashdash (bash 5.3.15). `time` is a reserved word, not a builtin — the comment at :1777-1780 says so itself — so neither the template, the changeset nor the spec discloses this bypass, and no test row locks it. Control: `time gh pr merge 5` fires with pr 5. Folded: disclosed as a reserved word carrying a flag in the template, the changeset and the spec; two no-fire rows lock it."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2263,
+      "claim": "'The loop shares ONE 30-second budget across its payloads, so the wrapper's wall time is what it was before the loop' (.changeset/merge-ready-gate-2800.md:14) / 'the wrapper's wall time stays what it was before the loop … never in the host's kill' (:2255-2257).",
+      "counterexample": "`timeout: Math.max(1000, deadline - Date.now())` floors every spawn at 1000 ms, so once the budget is spent each further payload still gets a full second: worst-case wall is 30 s + (N-1)x1 s, not 30 s. Measured against a scratch copy with the constant at 3000: command with six merges, stub answering in 900 ms each -> status 0, elapsedMs 5840 (1.9x the 'shared budget'). At the shipped 30000 the same shape needs ~31 sub-second answers after exhaustion to pass the 60 s host budget the comment cites — contrived, but the claim is stated absolutely. Folded: the comment and the changeset state the bound as 30 s plus one second per payload past the budget."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2259,
+      "claim": "'a merge that cannot be judged inside it lands in the fail-closed arm below (the spawn times out → `result.error`), never in the host's kill' (:2256-2258) — the deadline bounds the wrapper's exposure to the host hook-kill.",
+      "counterexample": "`const deadline` is set AFTER the projection, and merge-ready's projection calls `gitRead` up to three times PER payload (`config --get remote.origin.url`, `rev-parse --abbrev-ref HEAD`, `rev-parse HEAD` — rendered wrapper lines 610/614/617) each with `timeout: 10000` (:1919). A hung git therefore spends up to 30 s per merge OUTSIDE the shared budget before the deadline exists, so the host kill (60 s, tree-kill, exit code not applied) is still reachable — the fail-OPEN the fold set out to close. Not introduced by this fold; the absolute claim is. Folded: the comment names the projection's git reads as outside the budget."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1552,
+      "claim": "'Two disclosed FALSE FIRES, the deny direction, both contrived' (:1552-1559) and 'two contrived false fires (an array assignment spelling a merge; a `case` pattern `gh pr merge)`)' (.totem/specs/2800.md:256) — a closed enumeration of the fire-when-nothing-runs shapes.",
+      "counterexample": "A function DEFINITION is a third: `function f { gh pr merge 5; }` and `f() { gh pr merge 5; }` each spawn the engine with {pr: 5} (measured on the HEAD wrapper), while bash executes nothing at definition time (`bash -c 'function f { echo SHOULD-NOT-RUN; }; echo defined-only'` prints only defined-only). `{` is a separator, so the body is its own segment starting with `gh`. Pre-existing (both shapes also fire against 479dddd4), but the 'Two' count and the spec's 'two contrived false fires' are this fold's prose. Folded: the function-definition shape joins the disclosed false fires; the count is dropped."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "verdict": "termination named for the review round: nothing found rewires firing or timing semantics; one MATERIAL disclosure gap (the reserved word time carrying -p or -- bypasses the anchor) and three MINOR prose imprecisions (the budget floor arithmetic, the projection's git reads outside the budget, a third false-fire shape), all folded in round 3 as disclosure and test rows; the three added words produce no false fire across 25 controls, the timeout reaches the fail-closed arm on both platforms, the eleven firing rows are real controls against the pre-fold wrapper"
+}

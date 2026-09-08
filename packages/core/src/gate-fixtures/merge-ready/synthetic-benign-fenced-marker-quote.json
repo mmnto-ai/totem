@@ -1,0 +1,15 @@
+{
+  "kind": "synthetic",
+  "role": "F4 — a CodeRabbit Minor whose fenced block QUOTES the gate's own markers: code is not a label, so this must read NOT high (it would otherwise false-deny merge-ready's own maintenance PR)",
+  "synthesizedAt": "2026-09-08T06:25:27.919Z",
+  "threads": [
+    {
+      "thread": "synthetic/fenced-marker-quote",
+      "bot": "coderabbitai",
+      "isResolved": false,
+      "declaredLabel": "_🟡 Minor_",
+      "expectedHigh": false,
+      "body": "_🟡 Minor_ | _⚡ Quick win_\n\n**Name the marker forms in the docstring.**\n\nThe current text reads:\n\n```ts\n// greptile: the badge alt attribute, P0/P1 only.\n/<img[^>]*\\balt=[\"']P[01][\"']/i,\n// _🔴 Critical_ and _⚠️ Potential issue_ are CodeRabbit label forms\n/!\\[high\\]\\(/i,\n```\n\nConsider adding `![high](` beside it, and mention `_🟠 Major_` inline."
+    }
+  ]
+}

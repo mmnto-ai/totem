@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "cdd2f620e84873340b17312cc58c6bfde389d0da",
+  "readAt": "2026-09-08T21:18:45Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1756,
+      "claim": "COMMAND_POSITION_WORDS closes the command-position-word bypass class the round named, and the only remaining misses are wrapper PROGRAMS and PowerShell quoting ('Two misses stay disclosed', changeset line 14).",
+      "counterexample": "Rendered wrapper + denying stub, exit 0 with NO spawn for: 'time gh pr merge 5', 'coproc gh pr merge 5', 'eval gh pr merge 5', 'eval \"gh pr merge 5\"' (control 'gh pr merge 5' exits 2). `time` and `coproc` are bash RESERVED WORDS at command position and `eval` is the builtin that runs its operand as the command — the same justification the fold gives for adding `exec`/`command` — so the template's own generalization at line 1538 ('the shell's reserved words and the exec/command builtins are skipped') is false and the miss is undisclosed in template, changeset and spec. Folded: `time`, `coproc` and `eval` join the strip list (three firing rows); the quoted-operand form is a disclosed miss (a no-fire row)."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1032,
+      "claim": "The eight new firing rows (if / elif / while / until / GH_TOKEN= / GH_REPO=.. / exec / command) are controls that would have FAILED before the fold.",
+      "counterexample": "writeStubCli (line 547) never deletes cwd/stub-record.json and stubRecord (line 581) returns whatever is on disk; the cwd is fresh per TEST, not per loop iteration, and every row merges PR 7. Ran the PRE-fold wrapper (479dddd4) through the same loop: rows 2-13 do not spawn at all, yet the record left by row 1 still reads {pr:7}, so `expect(spawnedPayload(), command).toMatchObject({pr:7})` PASSES on the unfixed code. Assertion strength is below the contract clause it claims to hold. (The separate multi-merge test at line 1067 IS sound — each stage's prior record names a different PR, so the record discriminates.) Fix: unlink the record per iteration, or give each row a distinct PR number. Folded: writeStubCli removes the record, so every firing row and every no-fire row observes its own run."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1536,
+      "claim": "The disclosed-misses list is complete: a wrapper PROGRAM taking operands first, and PowerShell quoting; and 'a real gh pr merge inside a command substitution has to keep firing' (line 1497).",
+      "counterexample": "Three further shapes bypass, none disclosed anywhere: backtick command substitution 'echo `gh pr merge 5`' (exit 0, no spawn — while $(gh pr merge 5) DOES fire, so the command-substitution sentence is only half true); a leading redirection '> out.txt gh pr merge 5'; and the two named builtins WITH flags, 'command -p gh pr merge 5' and 'exec -a x gh pr merge 5'. All verified end-to-end against a denying stub. Folded: all four disclosed in the template, the changeset and the spec's as-built deltas, and locked as no-fire rows."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1164,
+      "claim": "unreadableCommitHighInlines' docstring: 'R2: an unreadable input is never a pass, so these make the evaluation unevaluable and are named on stderr'.",
+      "counterexample": "With the reorder, a failing check beside a null-commit HIGH inline returns disposition=deny ref=checks with notices=[] — the unplaceable HIGH inline is named NOWHERE (measured against the built engine; same for the predicate-2 and predicate-3 cells). The call-site comment at 1305-1310 was updated to the new truth; this docstring was not, so a reader is told every unplaceable HIGH inline gets an stderr line. Folded: the docstring says when the arm decides and when an earlier fact does."
+    },
+    {
+      "id": "F5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2219,
+      "claim": "The per-payload loop is a pure widening: judging N merges instead of 1 costs nothing the single-payload path did not already cost.",
+      "counterexample": "Each iteration spawns with `timeout: 30000`, so worst-case wrapper wall time is now N x 30s (pre-fold it was bounded at 30s), and CLAUDE_GATE_WRAPPER_ENTRY (line 2330) declares no `timeout` for the hook. Two merges against a hung `gh` reach the 60s default hook budget the repo itself records for a hook host at init-templates.ts:362-364; a host that kills a PreToolUse hook does not apply its exit code, which is a fail-OPEN on a gate whose whole posture is fail-closed. QUESTION component: the Claude Code default hook timeout and its kill-then-continue semantics are my knowledge, not a source in this repo — the seat should confirm before ruling. Folded: one 30-second budget shared across the payloads (each spawn's timeout is what remains), so the wrapper's wall time is what it was before the loop and a merge that cannot be judged inside it fails closed in the wrapper, never in the host's kill; the 60 s host default is the figure the session-hook template in this same file cuts its legs against."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1877,
+      "claim": "Returning EVERY matching segment only adds judged merges.",
+      "counterexample": "It also un-hides pre-existing FALSE fires that used to sit behind the first match: 'gh pr merge 7; A=(gh pr merge 8)' → pre [\"7\"], post [[\"7\"],[\"8\"]] (a bash array assignment judged as a merge), and 'gh pr merge 7; case $x in a) :;; gh pr merge) :;; esac' → post [[\"7\"],[]] where the empty argv falls back to the CURRENT BRANCH (line 1978), so a case PATTERN can deny on an unrelated PR. Both shapes are contrived, but the direction is a false deny. Folded: both disclosed in the template and the changeset as false fires with the override as the way past; the scanner is not grown for them."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2216,
+      "claim": "Every applicable gate reaches an evaluation.",
+      "counterexample": "If `payloads` is empty at the loop the wrapper falls straight to `process.exit(0)` (line 2299) with no evaluation and no line. Unreachable today (merge-ready returns earlier on merges.length===0; the other two branches assign exactly one; the else fail-closes), but pre-fold a branch that forgot to assign left payload = '' and the child's non-zero exit fail-closed. The default flipped from closed to open for any future event branch. Folded: an empty payload list past the projection fails closed with a line."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-gate-2800.md",
+      "line": 12,
+      "claim": "'the predicates are read BEFORE the unreadable-input arms' (plural).",
+      "counterexample": "Only ONE arm moved. A connection-level unreadable answer still preempts every predicate: a FAILING check beside a missing `reviews` connection returns warn under pilot (measured), i.e. exactly the 'a tier softens a fact' shape the sentence says was removed. Singular ('the unreadable-commit arm', as the template and spec say) is the accurate wording. Folded: singular, and the connection-level preemption stated."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1319,
+      "claim": "The reorder guard `blocked === null || blocked.predicate === 'merge-state'` puts predicate 4's missing input exactly at its charter place.",
+      "counterexample": "none found: drove the built engine over the full matrix — P1 failing check, P1 pending, P2 unresolved bot thread, P3 CHANGES_REQUESTED, P4 readable HIGH on head, P5 BEHIND, mergeStateStatus UNKNOWN, and clean — each crossed with a null-commit HIGH inline, at strict and pilot, plus the override path in each cell. Every disposition, provenance.ref and stderr notice matched the charter order and the changeset's stated semantics; the override always audits the charter-first cause."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 144,
+      "claim": "The new strict connection reads cannot break the pagination loop on a later page.",
+      "counterexample": "none found: MERGE_READY_FRAGMENT is shared by both documents and requests reviews/reviewThreads/contexts with pageInfo on EVERY page, and readPullRequest re-sends the same query for pages 2..N, so no later page can legitimately omit a connection. Verified with a 2-page synthetic where threads paginate and page 2's reviews answer is the realistic exhausted-cursor shape (nodes: [], pageInfo present) — allow, 2 pages read. A page 2 that OMITS reviews is unevaluable, which is the safe direction and not a real GraphQL answer (a nulled field arrives with an `errors` array, which parsePage already refuses)."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 530,
+      "claim": "'a review thread always has its root comment', so an empty comments.nodes is an unreadable answer.",
+      "counterexample": "QUESTION, not a grounded finding: a thread whose `comments.nodes` is [] now makes the WHOLE evaluation unevaluable → strict deny (measured: 'the review threads connection carried a thread whose root comment is unreadable'), where pre-fold it was skipped. I could not confirm from the four captures (none carries one) or from the schema whether GitHub can return a review thread whose comments were all deleted; if it can, this is a false deny on a real shape and the safer read is to skip that thread, as `author: null` is skipped. Kept unfolded: no capture carries the shape and the direction is fail-closed; a corpus row decides it if one is ever observed."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1875,
+      "claim": "The new strip run introduces no false fire, and the single-payload gates are unchanged.",
+      "counterexample": "none found: a 36-command corpus differential (case patterns, [[ ]], assignments whose value contains the phrase, quoted/echoed forms, PowerShell shapes, exports, aliases, `command -v`, `exec 3>&1`) changed exactly one row — the intended 'GH_TOKEN=x gh pr merge 5'. And a 160-cell pre/post end-to-end differential (freeze-check declared/undeclared, transport-shield Bash/PowerShell/other-tool/empty, single merge-ready, no-merge, branch merge, unknown event × allow/allow+stderr/warn/deny/unknown/non-zero/unparseable/empty stub × strict/pilot) produced identical status and stderr in every cell."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 119,
+      "claim": "The five new fixture rows' sha256, instants, roles and the 44/48 counts are receipts.",
+      "counterexample": "none found: recomputed all five sha256 from the bytes on disk — e31a29fb…, 258cbbf6…, b894dbbb…, e7b1f28c…, dc169f68… — each matches its README row; the directory holds 48 .json of which 44 are synthetic, matching the test header and both count assertions; all five carry synthesizedAt 2026-09-08T21:08:06.765Z, the instant the README paragraph names; each `role` matches what the test asserts (including the resolved-thread/isResolved:true detail that keeps predicate 2 out of the failing-check fixture)."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "termination NOT named at this read: one BLOCKING (three command-position words missing from the strip list — time, coproc, eval), four MATERIAL (a firing test that could not fail, four more undisclosed misses, a stale docstring, an N×30s wall-time widening) and three MINOR folded in round 2; F1 and F5 rewire the wrapper's firing and timing, so a scoped leg re-arms on those lines before the PR is presented; F9, F10, F12, F13 held; F11 kept unfolded as an open question in the fail-closed direction"
+}
