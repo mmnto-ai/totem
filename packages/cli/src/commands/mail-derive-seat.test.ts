@@ -110,10 +110,25 @@ async function run(
     tags.push(tag);
     stderr.push(msg);
   });
+  // The REAL stderr channels, observed beside the logger mock (the leg's F3):
+  // a `--json` arm that stays silent on `log.error` could still leak through
+  // `console.error` (ui.ts's own sink) or a direct `process.stderr.write`
+  // somewhere on the resolver path, and the logger mock cannot see either.
+  const consoleErrSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    stderr.push(args.map(String).join(' '));
+  });
+  const rawErrSpy = vi
+    .spyOn(process.stderr, 'write')
+    .mockImplementation((chunk: string | Uint8Array): boolean => {
+      stderr.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
+      return true;
+    });
   try {
     const { exitCode } = await deriveSeatCommand(opts);
     return { exitCode, stdout: stdout.join(''), stderr: stderr.join('\n'), tags };
   } finally {
+    consoleErrSpy.mockRestore();
+    rawErrSpy.mockRestore();
     outSpy.mockRestore();
     errSpy.mockRestore();
   }

@@ -1373,9 +1373,10 @@ export function formatTextResult(result: MailPollResult): string {
 
 /**
  * Verdict of the `--derive-seat` probe. `line` is the single stdout line the
- * success arm prints; `refusal` is the single stderr line the refusal arm
- * prints. Pure data — the caller decides the stream and the exit code
- * (AGENTS.md: lib returns data, wrapper maps to a code).
+ * success arm prints; `refusal` is the refusal text — one stderr line in text
+ * mode, the `refusal` field of the stdout object under `--json`. Pure data —
+ * the caller decides the stream and the exit code (AGENTS.md: lib returns
+ * data, wrapper maps to a code).
  */
 export type DeriveSeatResult =
   | { ok: true; seat: string; line: string }

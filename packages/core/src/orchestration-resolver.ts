@@ -210,10 +210,14 @@ function cohortSeatsForRepo(resolvedRoot: string): readonly string[] {
   // zero seats for them. The map's own keys are lower-case (locked by test).
   const key = (originName ?? path.basename(resolvedRoot)).toLowerCase();
   // An OWN-property lookup: the frozen map keeps `Object.prototype`, and a
-  // repository named `constructor` or `toString` — both legal GitHub names, both
-  // accepted by `repoNameFromRemoteUrl` — would otherwise read an inherited
-  // function out of it and throw at the first `.filter`, breaking the
-  // resolver's never-throw contract (mmnto-ai/totem#2843 round 1, CodeRabbit).
+  // repository whose lower-cased name is one of its members — `constructor`
+  // (a function) or `__proto__` (Object.prototype itself), both legal GitHub
+  // names that `repoNameFromRemoteUrl` accepts — would otherwise read the
+  // inherited value out of the map, and layer 3 below has no try/catch, so the
+  // TypeError at the first `.filter` reached every poll. Camel-case members
+  // (`toString`, `hasOwnProperty`) never get here: the fold above lower-cases
+  // the key first (mmnto-ai/totem#2843 round 1, CodeRabbit; the leg narrowed
+  // the two names).
   if (!Object.hasOwn(COHORT_AGENT_MAP, key)) return [];
   return COHORT_AGENT_MAP[key] ?? [];
 }

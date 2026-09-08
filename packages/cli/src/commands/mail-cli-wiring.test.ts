@@ -73,9 +73,12 @@ function buildMailProgram(handlers: WiringHandlers): Command {
           deriveSeat?: boolean;
         }>();
         // EXACT translation of the #2801 short-circuit: the derive-seat probe
-        // takes the whole action and the poll never runs.
+        // takes the whole action and the poll never runs. `json` rides along
+        // since the PR's round 1 (the probe answers --json in kind), and the
+        // seam test below pins it in BOTH flag orders — the mirror must carry
+        // it to sense it.
         if (deriveSeat === true) {
-          handlers.deriveSeatCommand({ asSeat, allSeats, deriveSeat: true });
+          handlers.deriveSeatCommand({ json, asSeat, allSeats, deriveSeat: true });
           return;
         }
         handlers.mailCommand({ json, recursive, workspace, asSeat, allSeats });
@@ -167,6 +170,21 @@ describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #220
     expect(h.deriveSeatCommand).toHaveBeenCalledTimes(1);
     const opts = h.deriveSeatCommand.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts['allSeats']).toBe(true);
+  });
+
+  it('--json reaches the derive-seat probe in BOTH flag orders (#2097 seam; PR round 1 leg F1)', () => {
+    for (const argv of [
+      ['node', 'totem', '--json', 'mail', '--derive-seat'],
+      ['node', 'totem', 'mail', '--json', '--derive-seat'],
+    ]) {
+      const h = handlers();
+      buildMailProgram(h).parse(argv);
+      expect(h.deriveSeatCommand, argv.join(' ')).toHaveBeenCalledTimes(1);
+      const opts = h.deriveSeatCommand.mock.calls[0]![0] as Record<string, unknown>;
+      expect(opts['json'], argv.join(' ')).toBe(true);
+      expect(opts['deriveSeat'], argv.join(' ')).toBe(true);
+      expect(h.mailCommand, argv.join(' ')).not.toHaveBeenCalled();
+    }
   });
 
   it('`totem --json mail --as x` merges the program-level --json into the poll opts (#2097 seam)', () => {

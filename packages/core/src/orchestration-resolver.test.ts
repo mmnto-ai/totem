@@ -693,10 +693,14 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
   });
 
   it('an origin named like an Object.prototype member resolves empty and never throws (PR round 1)', () => {
-    // `constructor` and `toString` are legal repository names and pass
-    // `repoNameFromRemoteUrl`; a plain-object lookup read the inherited
-    // FUNCTION out of the frozen map and threw at the first `.filter`.
-    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+    // `constructor` and `__proto__` are legal repository names, pass
+    // `repoNameFromRemoteUrl`, and survive the lower-casing of the key — so a
+    // plain-object lookup read the inherited value (a function, and
+    // Object.prototype itself) out of the frozen map and threw at the first
+    // `.filter`. Both rows FAIL on the pre-fold line (the leg simulated it);
+    // camel-case members such as `toString` never reached the map at all,
+    // because the key is lower-cased first, so they are not controls here.
+    for (const name of ['constructor', '__proto__']) {
       const root = mkGitRepo(`wt-${name}`, `https://github.com/someone/${name}.git`);
       const result = resolveSelfAgents(root, {});
       expect(result.source, name).toBe('none');
