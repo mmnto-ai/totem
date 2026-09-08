@@ -1,8 +1,9 @@
 # merge-ready fixtures (mmnto-ai/totem#2800, ruling R4)
 
 Every file here answers the injected `GhRunner` seam in place of the network, so
-`merge-ready.test.ts` never calls GitHub. Three files are REAL captures; the rest are
-synthetic and say so in their name and in their `"kind"` field.
+`merge-ready.test.ts` never calls GitHub. FOUR files are REAL captures — three pull
+requests plus the benign corpus that measures the severity read's false-positive budget —
+and the rest are synthetic, saying so in their name and in their `"kind"` field.
 
 All of them were re-made in the fold round: the query now asks for `comment.commit { oid }`
 (fold F2 — the commit a finding CURRENTLY applies to, beside the `originalCommit` it was
@@ -31,7 +32,9 @@ with a non-zero `exitCode` carries `stdout` (the text gh wrote) instead of `body
 Each was taken by running the REAL `evaluateMergeReady` with a runner that spawned `gh`
 and teed each response, so the query in the capture is `MERGE_READY_QUERY` from
 `packages/core/src/merge-ready.ts` verbatim. sha256 of that query string at capture time:
-`f4825687f2c5cf28778f895a82f7c4d575fecda9b0020326e346d48fabe7d7db`. `gh version 2.99.0
+`f4825687f2c5cf28778f895a82f7c4d575fecda9b0020326e346d48fabe7d7db` — re-derived from the
+exported constant by the receipts test, so a query change that skips a re-capture fails
+there. `gh version 2.99.0
 (2026-09-01)` answered all three.
 
 | File                       | PR                                                                                   | Captured (UTC)             | sha256                                                             |
@@ -104,14 +107,17 @@ read from those fields rather than asserted in prose: **8 of the 16** threads ar
 re-pointed (#2827=1, #2830=1, #2831=2, #2834=1, #2839=3), and **3 of the 8 marker-HIGH**
 threads are (#2827=1, #2839=2). mmnto-ai/totem#2831 re-points **none** of its HIGH threads
 — all three carry `commit == originalCommit == 835b3d7f` — which an earlier version of
-this sentence got wrong (round 3, F2). `merge-ready.test.ts` asserts these counts.
+this sentence got wrong (round 3, F2). `merge-ready.test.ts` asserts these counts — the total, the per-PR HIGH breakdown, and
+that mmnto-ai/totem#2831 contributes none — so the table above cannot drift from the
+fixture.
 
 ## The synthetic fixtures
 
 All synthesized `2026-09-08T03:55:11.894Z`, except the three fold-round-2 rows
 (`2026-09-08T05:42:31.591Z`) and the two fold-round-3 rows
-(`2026-09-08T06:26:38.783Z` and `2026-09-08T06:25:27.919Z`) at the end of the table. Each
-covers an invariant the captures cannot.
+(`2026-09-08T06:26:38.783Z` and `2026-09-08T06:25:27.919Z`) and the four fold-round-4 rows
+(`2026-09-08T07:05:39.879Z`) at the end of the table. Each covers an invariant the captures
+cannot.
 
 | File                                             | Invariant                                                              | sha256                                                             |
 | ------------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -136,6 +142,10 @@ covers an invariant the captures cannot.
 | `synthetic-high-inline-null-commit.json`         | R2 F8 — a bot HIGH inline with a null commit is unevaluable, named     | `76ada16983527160448ddc6fe149913914b024bd029027d643216f3c6a7bee27` |
 | `synthetic-rollup-count-without-checks.json`     | R3 F9 — SUCCESS with `totalCount: 3` over an empty list is unevaluable | `634bbc0926996d8b3bdbd7d1e547883b7f6cc46590eced02f0e6499fcb117be8` |
 | `synthetic-benign-fenced-marker-quote.json`      | R3 F4 — a Minor whose FENCE quotes the gate's markers reads NOT high   | `38f3e306d9dc9f25260aaae12c223a7bf57f92f9ffa0d98f32a1641acc0ffd32` |
+| `synthetic-rollup-count-string.json`             | R4 F3 — a string `totalCount` is not a count: unevaluable              | `a76902c1a0b972fbcdbf3a28c9664f892fbc5bc4d374846c3b609326b60967f5` |
+| `synthetic-rollup-count-negative.json`           | R4 F3 — a negative `totalCount` is not a count: unevaluable            | `ecd4cc19d90a0fff7e0a84e285702ba3f138ef51429fba445775e3501c2d385c` |
+| `synthetic-rollup-count-boolean.json`            | R4 F3 — a boolean `totalCount` is not a count: unevaluable             | `d7c639dc8d4fc3f9038d4ebb1459b09fba434bf40bf896af9d483adf7f151b4f` |
+| `synthetic-rollup-count-mismatch.json`           | R4 F3 — 3 claimed, 1 materialised: an incomplete read, unevaluable     | `47b6e604bc478756527752e34b98aa4704ea94324f8723a04f83917a071e5664` |
 | `synthetic-unresolved-bot-thread.json`           | an unresolved, non-outdated bot thread denies                          | `f72089d6aab5cee70af916b0d1370918e00ec3150a43e183869655508a58de9b` |
 | `synthetic-resolved-outdated-human-threads.json` | resolved / outdated / HUMAN threads never deny                         | `64381afaa783e059c4d019e60e8fb0735d7048ac7570e975809807f6ba55d349` |
 | `synthetic-stale-commit-high-inline.json`        | F2 — a HIGH inline applying to an OLDER commit does not deny           | `98ca60196f7315602b13822a69b748fe03ca89743db96bf63227e8ec2d8aebf7` |

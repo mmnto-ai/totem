@@ -1564,7 +1564,7 @@ function skipArithmetic(command, from) {
   return command.length;
 }
 
-function blankHeredocBodies(command) {
+function blankHeredocBodies(command, powershell) {
   let out = '';
   let i = 0;
   let quote = '';
@@ -1649,9 +1649,12 @@ function blankHeredocBodies(command) {
       continue;
     }
     // PowerShell's \`<# … #>\` block comment is data, not commands: blank it
-    // whole, the way a heredoc body is blanked (round 3, F8). A \`<#\` inside a
-    // quoted string never reaches here, because the quote arms run first.
-    if (ch === '<' && command[i + 1] === '#') {
+    // whole, the way a heredoc body is blanked (round 3, F8). Applied ONLY when
+    // the TOOL is PowerShell (round 4, F8): bash has no such comment, and there
+    // \`sort <#tmp\` is a redirect from a file named \`#tmp\` — blanking from it
+    // to a later \`#>\` would swallow real commands. A \`<#\` inside a quoted
+    // string never reaches here, because the quote arms run first.
+    if (powershell && ch === '<' && command[i + 1] === '#') {
       const close = command.indexOf('#>', i + 2);
       i = close === -1 ? command.length : close + 2;
       boundary = true;
@@ -1736,8 +1739,8 @@ function blankHeredocBodies(command) {
   return out;
 }
 
-function ghPrMergeArgs(rawCommand) {
-  const command = blankHeredocBodies(rawCommand);
+function ghPrMergeArgs(rawCommand, powershell) {
+  const command = blankHeredocBodies(rawCommand, powershell === true);
   const segments = [];
   let current = [];
   let token = '';
@@ -2037,7 +2040,7 @@ process.stdin.on('end', () => {
     if (typeof input.command !== 'string' || input.command.trim() === '') {
       process.exit(0);
     }
-    const mergeArgs = ghPrMergeArgs(input.command);
+    const mergeArgs = ghPrMergeArgs(input.command, tool === 'PowerShell');
     if (mergeArgs === null) {
       process.exit(0);
     }

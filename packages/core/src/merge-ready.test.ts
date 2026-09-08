@@ -8,7 +8,7 @@
  * mmnto-ai/totem-strategy#1251, and mmnto-ai/totem#2827 (the comment that
  * re-pointed to the head) — plus the benign corpus, every bot inline thread on
  * mmnto-ai/totem#2820-2839, which measures the severity read's ADR-109
- * false-positive budget. The other 35 are synthetic and labelled `synthetic-`
+ * false-positive budget. The other 39 are synthetic and labelled `synthetic-`
  * in their names — one per invariant the captures cannot exercise (all three
  * PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for each and no
  * capture can carry a BEHIND / DIRTY / BLOCKED head, or a resolved HIGH thread).
@@ -161,8 +161,23 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(35);
-    expect(files.length).toBe(39);
+    expect(synthetic.length).toBe(39);
+    expect(files.length).toBe(43);
+  });
+
+  it('the README query sha is the sha of the exported query (round 4, F7)', () => {
+    // A receipt for the QUERY, re-derived like the file receipts: change the
+    // query without re-capturing and this row stops matching, which is exactly
+    // when the fixtures stop describing what the evaluator would receive.
+    const readme = fs.readFileSync(path.join(FIXTURE_DIR, 'README.md'), 'utf-8');
+    const actual = createHash('sha256')
+      .update(Buffer.from(MERGE_READY_QUERY, 'utf-8'))
+      .digest('hex');
+    const claimed = /sha256 of that query string at capture time:\s*\n?`([0-9a-f]{64})`/.exec(
+      readme,
+    );
+    expect(claimed, 'the README no longer states a query sha').not.toBeNull();
+    expect(claimed![1]).toBe(actual);
   });
 });
 
@@ -320,10 +335,43 @@ describe('merge-ready — predicate 1 (checks)', () => {
     const e = evaluate('synthetic-rollup-count-without-checks.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('unevaluable');
-    expect(e.verdict.reason).toMatch(/claims 3 checks but listed none/i);
+    expect(e.verdict.reason).toMatch(/claims 3 checks but the read materialised 0/i);
     expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
     expect(
       evaluate('synthetic-rollup-count-without-checks.json', { tier: 'pilot' }).verdict.disposition,
+    ).toBe('warn');
+  });
+
+  it('a totalCount that is not a non-negative integer is unevaluable (round 4, F3)', () => {
+    // The count is judged AS THE API TYPED IT. A `> 0` test on an untyped value
+    // let a string "3", a boolean and a negative fall through to the
+    // zero-checks fact and ALLOW.
+    for (const file of [
+      'synthetic-rollup-count-string.json',
+      'synthetic-rollup-count-negative.json',
+      'synthetic-rollup-count-boolean.json',
+    ]) {
+      const e = evaluate(file);
+      expect(e.verdict.disposition, file).toBe('deny');
+      expect(e.verdict.provenance.ref, file).toBe('unevaluable');
+      expect(e.verdict.reason, file).toMatch(/not a non-negative integer/i);
+      expect(
+        e.notices.some((n) => n.includes('ZERO status checks')),
+        file,
+      ).toBe(false);
+      expect(evaluate(file, { tier: 'pilot' }).verdict.disposition, file).toBe('warn');
+    }
+  });
+
+  it('a claimed count the read did not materialise is an incomplete read (round 4, F3)', () => {
+    // `totalCount: 3` with ONE node listed used to read as "1/1 green" and
+    // allow. The claim and the delivery must agree, or the read is incomplete.
+    const e = evaluate('synthetic-rollup-count-mismatch.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/claims 3 checks but the read materialised 1/i);
+    expect(
+      evaluate('synthetic-rollup-count-mismatch.json', { tier: 'pilot' }).verdict.disposition,
     ).toBe('warn');
   });
 
@@ -463,6 +511,23 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     const highRePointed = rePointed.filter((t) => t.expectedHigh);
     expect(rePointed.length).toBe(8);
     expect(highRePointed.map((t) => t.pr).sort()).toEqual([2827, 2839, 2839]);
+
+    // The per-PR breakdowns the README prints, asserted here so the table
+    // cannot drift from the fixture (round 4, F12).
+    const byPr = (rows: CorpusThread[]): Record<number, number> =>
+      rows.reduce<Record<number, number>>(
+        (acc, t) => ({ ...acc, [t.pr]: (acc[t.pr] ?? 0) + 1 }),
+        {},
+      );
+    expect(byPr(rePointed)).toEqual({ 2827: 1, 2830: 1, 2831: 2, 2834: 1, 2839: 3 });
+    expect(byPr(highRePointed)).toEqual({ 2827: 1, 2839: 2 });
+    expect(byPr(corpus.threads.filter((t) => t.expectedHigh))).toEqual({
+      2821: 1,
+      2827: 1,
+      2830: 1,
+      2831: 3,
+      2839: 2,
+    });
     expect(corpus.threads.filter((t) => t.pr === 2831 && t.expectedHigh && t.rePointed)).toEqual(
       [],
     );
@@ -496,8 +561,15 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     expect(row.body).toContain('```'); // the fence really is in the body
     expect(hasHighSeverityMarker(row.body)).toBe(false);
 
-    // A4 — an inline code span carrying a label.
-    expect(hasHighSeverityMarker('the arm is `_\u{1F7E0} Major_` in the table')).toBe(false);
+    // A4 — a TRUE control (round 4, F11): a fenced block on its own lines
+    // carrying the label cell. Pre-strip this read HIGH (the cell opens a line
+    // inside the fence); post-strip it does not. The earlier A4 row was an
+    // inline span mid-sentence, which never read HIGH either way.
+    expect(
+      hasHighSeverityMarker('here is the row:\n\n```md\n| _\u{1F7E0} Major_ |\n```\n\nend'),
+    ).toBe(false);
+    // The same cell OUTSIDE the fence still reads HIGH — the control's other half.
+    expect(hasHighSeverityMarker('here is the row:\n\n| _\u{1F7E0} Major_ |\n\nend')).toBe(true);
     // A5 — a backtick fence.
     expect(
       hasHighSeverityMarker('see below\n\n```md\n_\u{1F534} Critical_ | body\n```\n\ndone'),
@@ -508,6 +580,49 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     ).toBe(false);
     // The complement: the SAME label outside code still reads high.
     expect(hasHighSeverityMarker('_\u{1F534} Critical_ | body')).toBe(true);
+
+    // An indented block and a <pre> block are code too (round 4, F4).
+    expect(hasHighSeverityMarker('example:\n\n    _\u{1F534} Critical_ | body\n\ndone')).toBe(
+      false,
+    );
+    expect(hasHighSeverityMarker('example:\n\n<pre>\n_\u{1F534} Critical_ | body\n</pre>\n')).toBe(
+      false,
+    );
+  });
+
+  it('stripping code leaves a PLACEHOLDER, not a gap that opens an anchor (round 4, F2)', () => {
+    // The round-3 stripper replaced a span with a SPACE, so the text after it
+    // began a fresh line/cell position and the CR arm matched — a regression
+    // the stripper itself introduced. Each of these read HIGH with a space
+    // placeholder and must not now.
+    expect(hasHighSeverityMarker('``_\u{1F7E0} Major_``')).toBe(false);
+    expect(hasHighSeverityMarker('`x`_\u{1F7E0} Major_')).toBe(false);
+    expect(hasHighSeverityMarker('| `x`_\u{1F7E0} Major_ |')).toBe(false);
+    // A label with no code anywhere near it is untouched by the stripper.
+    expect(hasHighSeverityMarker('| _\u{1F7E0} Major_ |')).toBe(true);
+  });
+
+  it('the glyph class is read as CODE POINTS, not surrogate halves (round 4, F9)', () => {
+    // Without the `u` flag the astral dots decompose, so a lone surrogate — or
+    // a bare variation selector — before "major" matched as if it were one.
+    expect(hasHighSeverityMarker('\uD83D major rewrite')).toBe(false);
+    expect(hasHighSeverityMarker('\uDD34 major rewrite')).toBe(false);
+    expect(hasHighSeverityMarker('️ major rewrite')).toBe(false);
+    // The four dots and the warning sign still read as labels.
+    for (const glyph of ['\u{1F534}', '\u{1F7E0}', '\u{1F7E1}', '\u{1F535}', '⚠']) {
+      expect(hasHighSeverityMarker(`${glyph} Critical\n\nbody`), glyph).toBe(true);
+    }
+  });
+
+  it('the greptile badge is read whatever the quote style, unquoted included (round 4, F10)', () => {
+    expect(hasHighSeverityMarker('<img alt="P1" src="x.svg">')).toBe(true);
+    expect(hasHighSeverityMarker("<img alt='P1' src='x.svg'>")).toBe(true);
+    expect(hasHighSeverityMarker('<img alt=P1 src=x.svg>')).toBe(true);
+    expect(hasHighSeverityMarker('<img alt=P0 />')).toBe(true);
+    // The levels below the bar stay below it in every spelling.
+    expect(hasHighSeverityMarker('<img alt=P2 src=x.svg>')).toBe(false);
+    // And an alt value that merely STARTS with P1 is not the badge.
+    expect(hasHighSeverityMarker('<img alt=P1x src=x.svg>')).toBe(false);
   });
 
   it('an em-dash-led line is not a label (round 3, F7)', () => {

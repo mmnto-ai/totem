@@ -1090,17 +1090,37 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
-    it('a PowerShell block comment is data, not commands (round 3, F8)', () => {
+    it('a PowerShell block comment is data, not commands (round 3 F8; round 4 F1, F8)', () => {
       initGitRepo();
+      const pwsh = (command: string): Record<string, unknown> => ({
+        tool_name: 'PowerShell',
+        tool_input: { command },
+      });
+
+      // THE CONTROL (round 4, F1): a MULTI-LINE block comment. Without the
+      // `<#` arm this fires with pr 9 — verified by stripping the arm from a
+      // rendered copy. The single-line row below behaves the same either way
+      // (the `#` word-comment arm already covers it), so it is a companion, not
+      // a control.
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(bash('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready');
-      expect(status).toBe(0);
+      expect(runWrapper(pwsh('<#\ngh pr merge 9\n#>\necho hi'), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
 
-      // And the merge AFTER one is still judged — the blank must not eat it.
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      expect(runWrapper(pwsh('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      // The merge AFTER one is still judged — the blank must not eat it.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
+      runWrapper(pwsh('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 4 });
+
+      // ROUND 4 F8: the blank is a POWERSHELL rule. In bash `<#tmp` is a
+      // redirect from a file named `#tmp`, and blanking from it to a later `#>`
+      // would swallow the real merge on the next line.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('sort <#tmp\ngh pr merge 8'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
     });
 
     it('a comment is not a command: a merge inside one never fires', () => {
