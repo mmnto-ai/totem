@@ -32,7 +32,14 @@ const IDENTITY_SRC = path.resolve(HERE, '../../../core/src/bot-identity.ts');
  * free to NAME a bot in prose (and both do, explaining where the list went).
  */
 function codeOnly(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  // Lowercased: the regex arms below are case-insensitive, so a case-SENSITIVE
+  // literal scan beside them let a display-cased re-declaration
+  // (`new Set(['CodeRabbitAI[bot]'])`) through — the sensor's own asymmetry
+  // (mmnto-ai/totem#2800 round 2, F9).
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    .toLowerCase();
 }
 
 /** The login spellings that only a re-declared list would need to name in code. */
@@ -101,13 +108,17 @@ describe('bot identity — exactly one definition', () => {
       ['indexOf()', "if (lower.indexOf('greptile') !== -1) return 'greptile';"],
       ['startsWith()', "if (lower.startsWith('gemini-code-assist')) return 'gca';"],
       ['concatenation', "const login = 'greptile' + '-apps' + '[bot]';"],
+      // Display-cased: the literal scan was case-sensitive while the regex arms
+      // were /i, so this shape walked straight through (round 2, F9).
+      ['a display-cased Set', "const BOTS = new Set(['CodeRabbitAI[bot]', 'Greptile-Apps[bot]']);"],
     ];
     for (const [label, mutant] of mutants) {
+      const scanned = codeOnly(mutant);
       const caught =
-        LOCAL_BOT_REGEX.test(mutant) ||
-        LOCAL_BOT_SUBSTRING.test(mutant) ||
-        LOCAL_BOT_CONCAT.test(mutant) ||
-        LOGIN_SPELLINGS.some((s) => mutant.includes(s));
+        LOCAL_BOT_REGEX.test(scanned) ||
+        LOCAL_BOT_SUBSTRING.test(scanned) ||
+        LOCAL_BOT_CONCAT.test(scanned) ||
+        LOGIN_SPELLINGS.some((s) => scanned.includes(s));
       expect(caught, `the parity sensor missed the ${label} re-declaration`).toBe(true);
     }
   });
