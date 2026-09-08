@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "an unresolved HIGH inline on an OLDER commit does not deny (outdated thread, stale commit)",
-  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "role": "F2 — a RESOLVED bot HIGH inline whose comment.commit.oid is an OLDER commit does not deny",
+  "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -63,8 +63,8 @@
                 },
                 "nodes": [
                   {
-                    "isResolved": false,
-                    "isOutdated": true,
+                    "isResolved": true,
+                    "isOutdated": false,
                     "comments": {
                       "nodes": [
                         {
@@ -72,6 +72,9 @@
                             "login": "gemini-code-assist"
                           },
                           "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe engines range and the dependency range disagree.",
+                          "commit": {
+                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                          },
                           "originalCommit": {
                             "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                           }

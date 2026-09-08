@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
   "role": "gh missing or unauthenticated — the init failure mode; UNEVALUABLE at both tiers",
-  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "'gh' is not recognized as an internal or external command",
   "ghVersionExitCode": 1,
   "pages": []

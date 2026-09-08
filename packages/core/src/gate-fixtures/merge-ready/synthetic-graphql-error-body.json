@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
   "role": "GraphQL reports auth/rate-limit failures in the 200 BODY — an errors array is a failed read",
-  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {

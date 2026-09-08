@@ -17,8 +17,9 @@ import { safeExec } from './sys/exec.js';
  *   2. `unresolved-bot-threads`— no unresolved, non-outdated review thread whose
  *                                ROOT comment is one of the known review bots
  *   3. `changes-requested`     — no un-superseded CHANGES_REQUESTED review
- *   4. `high-severity-inline`  — no unresolved HIGH/Major bot inline written
- *                                against the CURRENT head commit
+ *   4. `high-severity-inline`  — no HIGH/Major bot inline that CURRENTLY applies
+ *                                to the head commit (`comment.commit.oid`,
+ *                                thread resolution ignored)
  *   5. `merge-state`           — GitHub's own `mergeStateStatus` is mergeable
  *
  * THE TIER SPLIT (R1): a predicate that FAILS is `deny` at every tier (the
@@ -76,6 +77,15 @@ export interface MergeReadyPayload {
   branch?: string;
   /** The local head sha the caller believes it is merging, when it could read one. */
   headSha?: string;
+  /**
+   * A `gh pr merge` argument the projection could not turn into a PR — an
+   * UNEXPANDED shell variable (`gh pr merge $PR`), whose value the wrapper
+   * cannot know (mmnto-ai/totem#2800 fold F13). Carried instead of guessed: a
+   * literal `"$PR"` read as a branch name would resolve nothing and the gate
+   * would judge the wrong PR, or none. Present ⇒ the evaluation is UNEVALUABLE
+   * before any read, so strict denies and pilot warns (R1).
+   */
+  unresolvedTarget?: string;
 }
 
 /**
@@ -175,6 +185,7 @@ const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
         nodes {
           author { login }
           body
+          commit { oid }
           originalCommit { oid }
         }
       }
@@ -249,7 +260,14 @@ export function parseMergeReadyPayload(payload: unknown): MergeReadyPayload {
     return invalid('"branch" must be a string when present');
   }
 
-  if (pr === null && branch === undefined) {
+  let unresolvedTarget: string | undefined;
+  if (typeof raw.unresolvedTarget === 'string' && raw.unresolvedTarget.trim() !== '') {
+    unresolvedTarget = raw.unresolvedTarget.trim();
+  } else if (raw.unresolvedTarget !== undefined && typeof raw.unresolvedTarget !== 'string') {
+    return invalid('"unresolvedTarget" must be a string when present');
+  }
+
+  if (pr === null && branch === undefined && unresolvedTarget === undefined) {
     return invalid('either "pr" or "branch" must identify the pull request');
   }
 
@@ -267,6 +285,7 @@ export function parseMergeReadyPayload(payload: unknown): MergeReadyPayload {
     pr,
     ...(branch === undefined ? {} : { branch }),
     ...(headSha === undefined ? {} : { headSha }),
+    ...(unresolvedTarget === undefined ? {} : { unresolvedTarget }),
   };
 }
 
@@ -305,7 +324,18 @@ interface ThreadEntry {
   isOutdated: boolean;
   rootLogin: string | null;
   rootBody: string;
+  /**
+   * `comment.commit.oid` — the commit the comment CURRENTLY applies to, which
+   * GitHub re-points as the diff moves. This is what predicate 4 reads (the
+   * prototype's (c) semantics), and the REST `commit_id` the charter names.
+   */
   rootCommit: string | null;
+  /**
+   * `comment.originalCommit.oid` — the commit it was WRITTEN against. Carried
+   * for provenance only: it never moves, so a predicate keyed on it goes inert
+   * the moment the branch advances.
+   */
+  rootOriginalCommit: string | null;
 }
 
 /** One page of the read, already classified. */
@@ -316,6 +346,8 @@ interface PrPage {
   isDraft: boolean;
   /** false when the head commit carries no rollup at all (a PR with zero checks). */
   rollupPresent: boolean;
+  /** The rollup state GitHub reported, or null when there is no rollup. */
+  rollupState: string | null;
   checks: CheckEntry[];
   checksHasNext: boolean;
   checksCursor: string | null;
@@ -435,7 +467,8 @@ function readThreads(connection: Record<string, unknown> | null): {
       isOutdated: n.isOutdated === true,
       rootLogin: asString(asObject(root?.author)?.login),
       rootBody: asString(root?.body) ?? '',
-      rootCommit: asString(asObject(root?.originalCommit)?.oid),
+      rootCommit: asString(asObject(root?.commit)?.oid),
+      rootOriginalCommit: asString(asObject(root?.originalCommit)?.oid),
     });
   }
   const info = readPageInfo(connection);
@@ -493,8 +526,42 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
     };
   }
 
-  const commit = asObject(asObject(asArray(asObject(pr.commits)?.nodes)?.[0])?.commit);
+  // Predicate 1 reads the rollup off `commits(last: 1)`. That is only the head
+  // commit's rollup if the node IS the head commit, so the identity is checked
+  // rather than assumed (mmnto-ai/totem#2800 fold F7): a rollup read off some
+  // other commit would be a green light for code that is not what merges.
+  const commitNodes = asArray(asObject(pr.commits)?.nodes) ?? [];
+  if (commitNodes.length === 0) {
+    return {
+      ok: false,
+      detail: 'the pull request answered no commits — the head commit rollup could not be read',
+    };
+  }
+  const commit = asObject(asObject(commitNodes[0])?.commit);
+  const commitOid = asString(commit?.oid);
+  if (commitOid === null) {
+    return {
+      ok: false,
+      detail: 'the head commit answered no oid — the rollup cannot be attributed',
+    };
+  }
+  if (commitOid.toLowerCase() !== headRefOid.toLowerCase()) {
+    return {
+      ok: false,
+      detail: `the status-check rollup belongs to ${shortSha(commitOid)}, not the head commit ${shortSha(headRefOid)}`,
+    };
+  }
   const rollup = asObject(commit?.statusCheckRollup);
+  // A rollup that exists but carries no `contexts` connection is an unreadable
+  // answer, NOT the zero-checks fact (R5): the fact needs the rollup itself to
+  // report an empty context list.
+  if (rollup !== null && asObject(rollup.contexts) === null) {
+    return {
+      ok: false,
+      detail:
+        'the status-check rollup carried no contexts connection — the check list is unreadable',
+    };
+  }
   const checks = readChecks(rollup);
   if (checks.detail !== undefined) return { ok: false, detail: checks.detail };
   const reviews = readReviews(asObject(pr.reviews));
@@ -508,6 +575,7 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
       mergeStateStatus,
       isDraft: pr.isDraft === true,
       rollupPresent: rollup !== null,
+      rollupState: asString(rollup?.state),
       checks: checks.entries,
       checksHasNext: checks.hasNext,
       checksCursor: checks.cursor,
@@ -536,13 +604,28 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
  * documented way past a false positive. The FP direction — a body that merely
  * discusses "a major refactor" — is disclosed, not modelled away.
  */
+/**
+ * Word boundaries that also break on markdown emphasis. `\b` does NOT fire
+ * between `_` and a letter — `_` is a word character — so a `\b`-anchored
+ * marker misses CodeRabbit's `_Potential issue_` and `_🔴 Critical_` headings
+ * entirely (found by the fold F9 fixture). These boundaries treat anything
+ * outside [a-z0-9] as a separator, so emphasis, quotes and HTML attributes all
+ * delimit the marker while a mid-token `GP1X` still does not match.
+ */
+const MARKER_BEFORE = '(?:^|[^a-z0-9])';
+const MARKER_AFTER = '(?:[^a-z0-9]|$)';
+
 const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
   /!\[(?:high|critical)\]/i,
-  /\bcritical\b/i,
-  /\bmajor\b/i,
-  /\bhigh[- ]severity\b/i,
-  /\bseverity:\s*high\b/i,
-  /\bP[01]\b/,
+  new RegExp(`${MARKER_BEFORE}critical${MARKER_AFTER}`, 'i'),
+  new RegExp(`${MARKER_BEFORE}major${MARKER_AFTER}`, 'i'),
+  new RegExp(`${MARKER_BEFORE}high[- ]severity${MARKER_AFTER}`, 'i'),
+  new RegExp(`${MARKER_BEFORE}severity:\\s*high${MARKER_AFTER}`, 'i'),
+  new RegExp(`${MARKER_BEFORE}p[01]${MARKER_AFTER}`, 'i'),
+  // CodeRabbit's blocking class heads its comment with an emoji plus the words
+  // "Potential issue", usually inside markdown emphasis — the words are read
+  // here, the emoji is not (the prototype's marker, mmnto-ai/totem#2800 F9).
+  new RegExp(`${MARKER_BEFORE}potential issue${MARKER_AFTER}`, 'i'),
 ];
 
 /** Does this inline body carry a HIGH/Major severity marker? */
@@ -578,6 +661,7 @@ interface ReadState {
   mergeStateStatus: string;
   isDraft: boolean;
   rollupPresent: boolean;
+  rollupState: string | null;
   checks: CheckEntry[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
@@ -616,6 +700,7 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     mergeStateStatus: '',
     isDraft: false,
     rollupPresent: false,
+    rollupState: null,
     checks: [],
     reviews: [],
     threads: [],
@@ -669,6 +754,7 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
       state.mergeStateStatus = p.mergeStateStatus;
       state.isDraft = p.isDraft;
       state.rollupPresent = p.rollupPresent;
+      state.rollupState = p.rollupState;
     } else if (p.headRefOid !== state.headSha) {
       // The head moved between reads: everything already accumulated describes
       // a commit that is no longer what would merge.
@@ -696,6 +782,25 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     }
 
     if (checksDone && reviewsDone && threadsDone) {
+      // R5's zero-checks FACT applies only when the rollup is consistent about
+      // it: no rollup at all, or a rollup that reports success over an empty
+      // context list. A rollup that says PENDING or FAILURE while classifying
+      // zero contexts is an unreadable answer, never a green light
+      // (mmnto-ai/totem#2800 fold F7).
+      if (
+        state.checks.length === 0 &&
+        state.rollupState !== null &&
+        state.rollupState !== 'SUCCESS'
+      ) {
+        return {
+          ok: false,
+          detail:
+            'the status-check rollup reports ' +
+            bounded(state.rollupState) +
+            ' but listed no checks - the check state is unreadable',
+          pagesRead: state.pagesRead,
+        };
+      }
       state.complete = true;
       return { ok: true, state };
     }
@@ -778,17 +883,25 @@ function unresolvedBotThreads(threads: readonly ThreadEntry[]): ThreadEntry[] {
 }
 
 /**
- * Unresolved HIGH/Major bot inlines written against the CURRENT head commit.
+ * HIGH/Major bot inlines that CURRENTLY apply to the head commit — thread
+ * resolution deliberately IGNORED (ruled on mmnto-ai/totem#2800, fold F2).
  *
- * Predicate 4 reads the dimension predicate 2 cannot: a thread GitHub marked
- * OUTDATED still denies when its finding was written against the head commit,
- * while a HIGH finding on an OLDER commit does not (it describes code that has
- * since moved). A RESOLVED thread never denies at either predicate.
+ * The comparison is `comment.commit.oid`, the commit the finding applies to
+ * NOW (GitHub re-points it as the diff moves; it is the REST `commit_id` the
+ * charter's predicate (c) names), never `originalCommit.oid`, the commit it was
+ * written against — a predicate keyed on the write-time commit goes inert the
+ * moment the branch advances, which is exactly the inert state this fold
+ * removed.
+ *
+ * Predicate 4's distinct territory, the one predicate 2 cannot reach: a HIGH
+ * finding a human RESOLVED by hand without changing the code. The comment still
+ * applies to the head commit, so the floor still refuses the merge. Predicate 2
+ * keeps its own rule (unresolved AND non-outdated, any severity) and still
+ * fires first when both match.
  */
 function highSeverityInlines(threads: readonly ThreadEntry[], headSha: string): ThreadEntry[] {
   return threads.filter(
     (t) =>
-      !t.isResolved &&
       t.rootLogin !== null &&
       isBotReviewerLoginExact(t.rootLogin) &&
       t.rootCommit !== null &&
@@ -892,6 +1005,16 @@ export function evaluateMergeReady(
       notices,
     };
   };
+
+  // An argument the wrapper could not project into a PR (an unexpanded shell
+  // variable) is UNEVALUABLE before any read: there is nothing to query, and
+  // guessing would judge the wrong PR (mmnto-ai/totem#2800 fold F13). No `gh`
+  // runs on this path.
+  if (parsed.unresolvedTarget !== undefined) {
+    return unevaluable(
+      `shell variable not expanded — pass a literal PR number or URL (the command named "${bounded(parsed.unresolvedTarget)}")`,
+    );
+  }
 
   const version = readGhVersion(options.runner);
   if (!version.ok) return unevaluable(version.detail);
@@ -1043,7 +1166,7 @@ function firstFailure(state: ReadState, detail: MergeReadyProvenanceDetail): Blo
     const first = high[0]!;
     return {
       predicate: 'high-severity-inline',
-      evidence: `${high.length} unresolved HIGH/Major bot inline(s) on the head commit — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+      evidence: `${high.length} HIGH/Major bot inline(s) still applying to the head commit — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
     };
   }
 

@@ -22,6 +22,7 @@ import { TotemError } from './errors.js';
 import type { GateTier, GhRunner } from './gate-types.js';
 import {
   evaluateMergeReady,
+  hasHighSeverityMarker,
   MERGE_READY_BRANCH_QUERY,
   MERGE_READY_OVERRIDE_ENV,
   MERGE_READY_QUERY,
@@ -132,6 +133,40 @@ describe('merge-ready — the checked-in captures', () => {
     expect(pilot.notices.join('\n')).toMatch(/tier=pilot/);
   });
 
+  it('mmnto-ai/totem#2827 (capture): the comment re-pointed to the head while originalCommit stayed behind', () => {
+    // The corpus witness for fold F2. GitHub moves `comment.commit.oid` to the
+    // commit the finding CURRENTLY applies to; `originalCommit.oid` never
+    // moves. Here they differ and only the current one is the head — so a
+    // predicate keyed on the write-time commit reads this real HIGH finding as
+    // "not on head" and goes inert. Read straight off the capture, not asserted
+    // through the evaluator, so it stays a statement about GitHub's data.
+    const fixture = loadFixture('totem-2827.json');
+    const body = fixture.pages[0]!.body as {
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: string;
+            reviewThreads: {
+              nodes: Array<{
+                comments: {
+                  nodes: Array<{ commit: { oid: string }; originalCommit: { oid: string } }>;
+                };
+              }>;
+            };
+          };
+        };
+      };
+    };
+    const pr = body.data.repository.pullRequest;
+    const root = pr.reviewThreads.nodes[0]!.comments.nodes[0]!;
+    expect(root.commit.oid).toBe(pr.headRefOid);
+    expect(root.originalCommit.oid).not.toBe(pr.headRefOid);
+
+    const e = evaluate('totem-2827.json');
+    expect(e.detail.highInline).toBe(1);
+    expect(e.verdict.disposition).toBe('deny');
+  });
+
   it('sends the exported query, as argv, with no shell string anywhere', () => {
     const e = evaluate('liquid-city-363.json');
     expect(e.calls[0]).toEqual(['--version']);
@@ -173,6 +208,46 @@ describe('merge-ready — predicate 1 (checks)', () => {
     expect(zeroLines).toHaveLength(1);
     expect(zeroLines[0]).toMatch(/branch protection/i);
   });
+
+  // ─── The rollup must BELONG to the head commit (fold F7) ────────────────
+  //
+  // Predicate 1 reads `commits(last: 1)`. Every way that node can fail to be
+  // the head commit's green rollup is UNEVALUABLE — a green light read off
+  // another commit, or off an unreadable answer, is the one outcome this gate
+  // must never produce.
+
+  it('a rollup that belongs to another commit is unevaluable, never a green light', () => {
+    const e = evaluate('synthetic-rollup-commit-mismatch.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/rollup belongs to/i);
+    expect(
+      evaluate('synthetic-rollup-commit-mismatch.json', { tier: 'pilot' }).verdict.disposition,
+    ).toBe('warn');
+  });
+
+  it('a PR that answered no commits is unevaluable', () => {
+    const e = evaluate('synthetic-no-commits.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/no commits/i);
+  });
+
+  it('a rollup with no contexts connection is unevaluable, NOT the zero-checks fact', () => {
+    const e = evaluate('synthetic-rollup-no-contexts.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/no contexts connection/i);
+    expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
+  });
+
+  it('a rollup reporting PENDING while listing zero checks is unevaluable, not R5', () => {
+    const e = evaluate('synthetic-rollup-state-without-checks.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/listed no checks/i);
+    expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
+  });
 });
 
 // ─── Predicate 2 + 4: bot threads and severity ──────────────────────────────
@@ -192,17 +267,40 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.detail.highInline).toBe(0);
   });
 
-  it('a HIGH inline on an OLDER commit does not deny', () => {
+  it('a HIGH inline whose comment applies to an OLDER commit does not deny', () => {
     const e = evaluate('synthetic-stale-commit-high-inline.json');
     expect(e.verdict.disposition).toBe('allow');
     expect(e.detail.highInline).toBe(0);
   });
 
-  it('the same HIGH inline on the HEAD commit denies at predicate 4', () => {
+  it('a RESOLVED HIGH inline that still applies to the HEAD commit denies at predicate 4', () => {
+    // Predicate 4's own territory (ruled, fold F2): a human resolved the thread
+    // without changing the code, so predicate 2 passes and the finding still
+    // applies to what would merge. Resolution is IGNORED here by design.
     const e = evaluate('synthetic-head-commit-high-inline.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('high-severity-inline');
+    expect(e.detail.threads.unresolvedBot).toBe(0); // predicate 2 did NOT fire
     expect(e.detail.highInline).toBe(1);
+  });
+
+  it('reads comment.commit (where the finding applies NOW), never originalCommit', () => {
+    // The falsifier for the inert predicate this fold removed: both fixtures
+    // carry the SAME `originalCommit` (an older sha) and differ only in
+    // `commit.oid`. A predicate keyed on the write-time commit cannot tell them
+    // apart — it would allow both.
+    const stale = evaluate('synthetic-stale-commit-high-inline.json');
+    const current = evaluate('synthetic-head-commit-high-inline.json');
+    expect(stale.verdict.disposition).toBe('allow');
+    expect(current.verdict.disposition).toBe('deny');
+  });
+
+  it('CodeRabbit "Potential issue" reads as a HIGH marker (fold F9)', () => {
+    const e = evaluate('synthetic-coderabbit-potential-issue.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('high-severity-inline');
+    expect(hasHighSeverityMarker('_Potential issue_ the error is dropped')).toBe(true);
+    expect(hasHighSeverityMarker('nit: rename this local')).toBe(false);
   });
 
   it('no bot review present passes predicates 2-4 as a fact, never a failure', () => {
@@ -215,7 +313,11 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
 // ─── Predicate 3: CHANGES_REQUESTED ─────────────────────────────────────────
 
 describe('merge-ready — predicate 3 (changes requested)', () => {
-  it('an un-superseded CHANGES_REQUESTED denies and names the reviewer', () => {
+  it('an un-superseded CHANGES_REQUESTED denies; a later COMMENTED from the SAME reviewer does not clear it', () => {
+    // The fixture carries satur8d CHANGES_REQUESTED, then someone-else
+    // COMMENTED, then satur8d COMMENTED — GitHub's own semantics say a
+    // COMMENTED review is not a decision, so it supersedes nothing (fold F6).
+    // A reader that took the latest review of ANY state would report [].
     const e = evaluate('synthetic-changes-requested-standing.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('changes-requested');
@@ -429,6 +531,25 @@ describe('merge-ready — payload validation (never a default allow)', () => {
       expect(() => parseMergeReadyPayload(payload)).toThrow(/merge-ready payload is invalid/);
     });
   }
+
+  it('an unexpanded shell variable is unevaluable BEFORE any gh call (fold F13)', () => {
+    // The runner throws if touched: the arm must return without a read, since
+    // there is no PR to query and guessing would judge the wrong one.
+    const runner: GhRunner = () => {
+      throw new Error('the evaluator must not call gh for an unresolved target');
+    };
+    const payload = { repo: 'mmnto-ai/totem', pr: null, unresolvedTarget: '$PR' };
+
+    const strict = evaluateMergeReady(payload, { runner, env: {} });
+    expect(strict.verdict.disposition).toBe('deny');
+    expect(strict.verdict.provenance.ref).toBe('unevaluable');
+    expect(strict.verdict.reason).toMatch(/shell variable not expanded/i);
+    expect(strict.verdict.reason).toContain('$PR');
+    expect(strict.notices.join('\n')).toMatch(/could not derive/);
+
+    const pilot = evaluateMergeReady(payload, { runner, tier: 'pilot', env: {} });
+    expect(pilot.verdict.disposition).toBe('warn');
+  });
 
   it('names a payload head sha that is not the PR head, without changing the disposition', () => {
     const e = evaluate('synthetic-merge-state-clean.json', {

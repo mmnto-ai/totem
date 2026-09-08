@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "UNKNOWN is UNEVALUABLE — strict deny, pilot warn, never allow",
+  "role": "F9 — CodeRabbit \"Potential issue\" reads as HIGH; resolved, still on head, so predicate 4 denies",
   "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -12,7 +12,7 @@
             "pullRequest": {
               "number": 4242,
               "isDraft": false,
-              "mergeStateStatus": "UNKNOWN",
+              "mergeStateStatus": "CLEAN",
               "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "headRefName": "feat/example",
               "baseRefName": "main",
@@ -61,7 +61,28 @@
                   "hasNextPage": false,
                   "endCursor": null
                 },
-                "nodes": []
+                "nodes": [
+                  {
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "comments": {
+                      "nodes": [
+                        {
+                          "author": {
+                            "login": "coderabbitai"
+                          },
+                          "body": "_Potential issue_\n\nThe early return drops the error without a rethrow.",
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
               }
             }
           }

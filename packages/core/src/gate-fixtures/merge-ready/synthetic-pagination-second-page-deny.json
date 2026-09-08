@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
   "role": "first thread page clean, second page carries the unresolved bot thread — denies (the capped-read bar)",
-  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -72,6 +72,9 @@
                             "login": "satur8d"
                           },
                           "body": "looks fine",
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
                           "originalCommit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                           }
@@ -154,6 +157,9 @@
                             "login": "coderabbitai"
                           },
                           "body": "nit: consider renaming this local for symmetry with the caller.",
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
                           "originalCommit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                           }

@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "the same HIGH inline written against the HEAD commit denies at predicate 4",
-  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "role": "F2 — a RESOLVED bot HIGH inline that still applies to the HEAD commit denies at predicate 4 (resolution ignored)",
+  "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -63,8 +63,8 @@
                 },
                 "nodes": [
                   {
-                    "isResolved": false,
-                    "isOutdated": true,
+                    "isResolved": true,
+                    "isOutdated": false,
                     "comments": {
                       "nodes": [
                         {
@@ -72,8 +72,11 @@
                             "login": "gemini-code-assist"
                           },
                           "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe engines range and the dependency range disagree.",
-                          "originalCommit": {
+                          "commit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                           }
                         }
                       ]

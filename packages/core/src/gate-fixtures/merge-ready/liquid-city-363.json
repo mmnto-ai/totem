@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/liquid-city",
   "pr": 363,
   "role": "positive control (R4): green rollup, one unresolved HIGH inline",
-  "capturedAt": "2026-09-08T02:30:21.104Z",
+  "capturedAt": "2026-09-08T03:53:45.077Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "query": "MERGE_READY_QUERY (packages/core/src/merge-ready.ts) — sent verbatim by evaluateMergeReady",
   "pages": [
@@ -113,6 +113,9 @@
                             "login": "gemini-code-assist"
                           },
                           "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe `@mmnto/totem` version in `devDependencies` is being bumped to `^1.43.6`, but the `engines` requirement (line 28) remains at `^1.43.2`. While the PR description notes this is intentional, this discrepancy can lead to environments where the host tool version does not match the project's declared engine constraints. This is particularly relevant given the hash convention logic mentioned in the style guide (§12), which is consumed downstream from this package. It is recommended to keep the `engines` floor in sync with the `devDependencies` to ensure environment parity and prevent potential desynchronization issues.",
+                          "commit": {
+                            "oid": "d09ce906b1a12125e089b77e668bea25f1bdef2d"
+                          },
                           "originalCommit": {
                             "oid": "d09ce906b1a12125e089b77e668bea25f1bdef2d"
                           }
@@ -122,6 +125,9 @@
                             "login": "satur8d"
                           },
                           "body": "Conceding — your catch was correct. The \"intentional\" framing in the PR body was based on incorrect inference about LC's engines convention. `git log` on this field shows:\n\n- [`db2a822d`](https://github.com/mmnto-ai/liquid-city/commit/db2a822d) (#356) — field ADDED specifically to address CR critical + GCA HIGH bot review.\n- [`641dcf9f`](https://github.com/mmnto-ai/liquid-city/commit/641dcf9f) (#357) — bumped lockstep with devDeps in the prior cohort sync.\n\nSo the LC convention is `engines.@mmnto/totem` tracks devDeps in cohort sync — set by the same author one PR ago. My #363 broke the lockstep, and \"separate policy decision\" was the wrong frame.\n\nFollow-up restoring lockstep: [#364](https://github.com/mmnto-ai/liquid-city/pull/364). Banked the precedent locally so future cohort syncs don't repeat the misread.\n\nThanks for the catch.",
+                          "commit": {
+                            "oid": "d09ce906b1a12125e089b77e668bea25f1bdef2d"
+                          },
                           "originalCommit": {
                             "oid": "d09ce906b1a12125e089b77e668bea25f1bdef2d"
                           }

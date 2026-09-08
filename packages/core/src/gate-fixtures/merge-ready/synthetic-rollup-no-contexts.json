@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "UNKNOWN is UNEVALUABLE — strict deny, pilot warn, never allow",
+  "role": "F7 — a rollup with no contexts connection is unreadable, NOT the zero-checks fact",
   "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -12,7 +12,7 @@
             "pullRequest": {
               "number": 4242,
               "isDraft": false,
-              "mergeStateStatus": "UNKNOWN",
+              "mergeStateStatus": "CLEAN",
               "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "headRefName": "feat/example",
               "baseRefName": "main",
@@ -23,27 +23,7 @@
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
                         "state": "SUCCESS",
-                        "contexts": {
-                          "totalCount": 2,
-                          "pageInfo": {
-                            "hasNextPage": false,
-                            "endCursor": null
-                          },
-                          "nodes": [
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Verify (ubuntu-latest)",
-                              "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
-                            },
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Totem Lint",
-                              "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
-                            }
-                          ]
-                        }
+                        "contexts": null
                       }
                     }
                   }

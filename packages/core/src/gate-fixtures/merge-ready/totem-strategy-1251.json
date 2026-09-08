@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem-strategy",
   "pr": 1251,
   "role": "negative control (R4)",
-  "capturedAt": "2026-09-08T02:30:22.164Z",
+  "capturedAt": "2026-09-08T03:53:45.685Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "query": "MERGE_READY_QUERY (packages/core/src/merge-ready.ts) — sent verbatim by evaluateMergeReady",
   "pages": [

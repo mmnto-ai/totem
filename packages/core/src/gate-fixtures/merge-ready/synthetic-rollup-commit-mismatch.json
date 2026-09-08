@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "UNKNOWN is UNEVALUABLE — strict deny, pilot warn, never allow",
+  "role": "F7 — the rollup belongs to a commit that is NOT the head: UNEVALUABLE, never a green light",
   "synthesizedAt": "2026-09-08T03:55:11.894Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -12,7 +12,7 @@
             "pullRequest": {
               "number": 4242,
               "isDraft": false,
-              "mergeStateStatus": "UNKNOWN",
+              "mergeStateStatus": "CLEAN",
               "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "headRefName": "feat/example",
               "baseRefName": "main",
@@ -20,7 +20,7 @@
                 "nodes": [
                   {
                     "commit": {
-                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "oid": "dddddddddddddddddddddddddddddddddddddddd",
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
