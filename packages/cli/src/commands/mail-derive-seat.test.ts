@@ -281,6 +281,67 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(stderr).not.toContain('is not a seat this repo hosts');
   });
 
+  it('the config-omits-a-dir branch — the ONLY one that reads seat dirs — still touches no outbox or processed dir (fold round 2)', async () => {
+    // The suite's other spy test covers the SUCCESS path. This branch is the
+    // one that calls the seat-dir reader (and through it each dir's
+    // lifecycle.json), so it is the one place the no-poll-surfaces property
+    // could regress unnoticed.
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    fs.writeFileSync(
+      path.join(repoRoot, '.totem', 'orchestration', 'config.json'),
+      JSON.stringify({ host_agents: ['seat-beta'] }, null, 2),
+      'utf-8',
+    );
+
+    const touched: string[] = [];
+    const record = (target: unknown): void => {
+      if (typeof target === 'string') touched.push(target);
+      else if (Buffer.isBuffer(target)) touched.push(target.toString('utf-8'));
+      else if (target instanceof URL) touched.push(target.pathname);
+    };
+    const realReaddir = fs.readdirSync;
+    const realReadFile = fs.readFileSync;
+    const readdirSpy = vi.spyOn(fs, 'readdirSync').mockImplementation(((
+      target: unknown,
+      options: unknown,
+    ) => {
+      record(target);
+      return (realReaddir as (t: unknown, o: unknown) => unknown)(target, options);
+    }) as unknown as typeof fs.readdirSync);
+    const readFileSpy = vi.spyOn(fs, 'readFileSync').mockImplementation(((
+      target: unknown,
+      options: unknown,
+    ) => {
+      record(target);
+      return (realReadFile as (t: unknown, o: unknown) => unknown)(target, options);
+    }) as unknown as typeof fs.readFileSync);
+
+    const errSpy = vi.spyOn(log, 'error').mockImplementation(() => {});
+    try {
+      const { exitCode } = await deriveSeatCommand({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'seat-alpha' },
+      });
+      // The branch under test really is the one that ran.
+      expect(exitCode).toBe(2);
+      expect(errSpy.mock.calls.map((c) => String(c[1])).join('\n')).toContain(
+        'is a present seat dir that',
+      );
+    } finally {
+      errSpy.mockRestore();
+      readdirSpy.mockRestore();
+      readFileSpy.mockRestore();
+    }
+
+    // Liveness: the reader was exercised over this fixture's tree.
+    const orchestration = path.join(repoRoot, '.totem', 'orchestration');
+    expect(touched.filter((p) => p.startsWith(orchestration)).length).toBeGreaterThan(0);
+    const poked = touched.filter((p) => /outbox|processed/i.test(p));
+    expect(poked, `the config branch must not touch the poll surfaces: ${poked.join(', ')}`).toEqual(
+      [],
+    );
+  });
+
   it('a DUPLICATED env entry is one identity, not two — accepted like the poll accepts it (fold round 2)', async () => {
     // `pollMail` normalizes duplicates out of its own resolution before it
     // counts seats; the probe must apply the same normalization or it refuses
