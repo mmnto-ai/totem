@@ -158,6 +158,54 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
   });
 
+  // ── the per-agent-worktree shape (falsification-leg F1) ──
+  //
+  // `.totem/orchestration/` is gitignored and a worktree basename is not a
+  // COHORT_AGENT_MAP key, so the STRUCTURAL union is empty there — as it is in
+  // every `totem init` consumer that has not yet run `totem seat add`. `--as`
+  // and `pollMail` both fall back to the env-declared list in exactly that
+  // shape, so the probe must too: a probe that refuses an identity the poll
+  // then serves sends a correctly-declared session to fix nothing.
+  describe('empty structural union — the per-agent worktree (mmnto-ai/totem#2801 fold F1)', () => {
+    /** `.totem/` and nothing else: no orchestration dir, non-cohort basename. */
+    function makeWorktreeShape(): string {
+      const repoRoot = path.join(tmpRoot, 'totem-totem-claude-build-2801');
+      fs.mkdirSync(path.join(repoRoot, '.totem'), { recursive: true });
+      expect(fs.existsSync(path.join(repoRoot, '.totem', 'orchestration'))).toBe(false);
+      return repoRoot;
+    }
+
+    it('(a) env naming ONE seat is accepted — the probe agrees with the poll', async () => {
+      const repoRoot = makeWorktreeShape();
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      });
+      expect(stderr).toBe('');
+      expect(stdout).toBe('seat=totem-claude source=env\n');
+      expect(exitCode).toBe(0);
+    });
+
+    it('(b) env EMPTY still hits the hosts-no-seat arm — the fallback adopts nothing', async () => {
+      const repoRoot = makeWorktreeShape();
+      const { exitCode, stdout, stderr } = await run({ repoRoot, env: {} });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
+    });
+
+    it('(c) env declaring TWO seats still refuses — the fallback is not a licence to guess', async () => {
+      const repoRoot = makeWorktreeShape();
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' },
+      });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('totem-claude,totem-gemini');
+    });
+  });
+
   it('an env declaring MULTIPLE seats refuses — a session has one identity (exit 2)', async () => {
     const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
     const { exitCode, stdout, stderr } = await run({
