@@ -7,22 +7,26 @@
  * developer actually fixed.
  */
 
+import { type BotReviewerTool, detectBotReviewer, isBotReviewerLogin } from '@mmnto/totem';
+
 import { parseCodeRabbitReviewFindings, parseGreptileReviewFindings } from '../parse-nits.js';
 
 // ─── Types ──────────────────────────────────────────
 
 /**
  * The review bots whose comment formats triage-pr knows how to parse, plus
- * `unknown` for an unrecognized author. Adding a bot is a single-place change
- * here + its severity parser in {@link parseSeverityForTool}.
+ * `unknown` for an unrecognized author. The bot members come from
+ * `@mmnto/totem`'s `BOT_REVIEWER_IDENTITIES` (mmnto-ai/totem#2800), so adding a
+ * bot is a single-place change THERE plus its severity parser in
+ * {@link parseSeverityForTool}.
  *
  * NOTE: `gca` is triage's local id for `gemini-code-assist` — it intentionally
  * diverges from the core actor-id scheme in `@mmnto/totem`'s `resolveActorId`
  * (which uses `gemini-code-assist` and EXACT-login matching for hit-rate
  * attribution). Triage's goal is broad recognition (surface every finding) with
  * a compact display id; it matches coderabbit/gca by substring and greptile by
- * its bot-login shape (see `GREPTILE_BOT_LOGIN`). The two schemes serve
- * different purposes and are deliberately not coupled.
+ * its bot-login shape (`loginPattern` on each identity). Both ids now hang off
+ * the ONE identity array, so they cannot drift apart.
  *
  * `ghcq` is GitHub's own `github-code-quality[bot]` (mmnto-ai/totem#2626;
  * observed corpus n=7 inline comments: mmnto-ai/totem #1897/#2224/#2434/#2457
@@ -31,7 +35,7 @@ import { parseCodeRabbitReviewFindings, parseGreptileReviewFindings } from '../p
  * for it (attested: no tag has ever been attempted in-org and none is
  * documented) — treat disposition comments as audit-trail-only.
  */
-export type BotTool = 'coderabbit' | 'gca' | 'greptile' | 'ghcq' | 'unknown';
+export type BotTool = BotReviewerTool | 'unknown';
 
 export interface NormalizedBotFinding {
   tool: BotTool;
@@ -64,44 +68,22 @@ export interface CommentThread {
 
 // ─── Bot Detection ──────────────────────────────────
 
-// greptile is matched by its bot-login SHAPE — `greptile[bot]`,
-// `greptile-apps[bot]`, `greptile-enterprise[bot]` — rather than a bare
-// `greptile` substring, so a human account like `alice-greptile` is NOT
-// misclassified as a bot (which would hide real human replies in
-// `isThreadResolved` and ingest human comments as bot findings — CR Major on
-// mmnto-ai/totem#2244), while future bot variants are still surfaced. The
-// reviewer's suggested regex carried a trailing `\b` that fails right after the
-// closing `]` (non-word char at end-of-string), so it is dropped here.
-// coderabbit / gca keep their established bare-substring match (canonical
-// exact-login map lives in `@mmnto/totem`'s `review-catch.ts`).
-const GREPTILE_BOT_LOGIN = /\bgreptile(?:-[^[]+)?\[bot\]/i;
-
-// ghcq follows the greptile bot-login-shape precedent (mmnto-ai/totem#2626):
-// every observed login across both repos is exactly `github-code-quality[bot]`,
-// the `[bot]` suffix requirement keeps a human account like
-// `alice-github-code-quality` out of the bot classes, and the optional
-// `(?:-[^[]+)?` variant arm mirrors greptile's ("future bot variants are still
-// surfaced") so a renamed/tiered variant never re-enters the invisible-drop
-// state this normalization removes.
-const GHCQ_BOT_LOGIN = /\bgithub-code-quality(?:-[^[]+)?\[bot\]/i;
+// The login patterns are NOT declared here: `@mmnto/totem`'s `bot-identity.ts`
+// is the ONE definition the cohort reads (mmnto-ai/totem#2800), and
+// `bot-identity-parity.test.ts` fails if this module grows a copy. What lived
+// here — coderabbit/gca by bare substring, greptile and ghcq by bot-login SHAPE
+// (the `[bot]` suffix required, so a human `alice-greptile` is not
+// misclassified and real human replies are not hidden in `isThreadResolved` —
+// CR Major on mmnto-ai/totem#2244) — is that module's `loginPattern`, moved
+// verbatim. Triage's compact ids (`gca`) still differ from the Layer-B actor
+// ids (`gemini-code-assist`) by design; both now hang off the same array.
 
 export function isBotComment(author: string): boolean {
-  const lower = author.toLowerCase();
-  return (
-    lower.includes('coderabbit') ||
-    lower.includes('gemini-code-assist') ||
-    GREPTILE_BOT_LOGIN.test(author) ||
-    GHCQ_BOT_LOGIN.test(author)
-  );
+  return isBotReviewerLogin(author);
 }
 
 export function detectBot(author: string): BotTool {
-  const lower = author.toLowerCase();
-  if (lower.includes('coderabbit')) return 'coderabbit';
-  if (lower.includes('gemini-code-assist')) return 'gca';
-  if (GREPTILE_BOT_LOGIN.test(author)) return 'greptile';
-  if (GHCQ_BOT_LOGIN.test(author)) return 'ghcq';
-  return 'unknown';
+  return detectBotReviewer(author) ?? 'unknown';
 }
 
 // ─── CodeRabbit Parser ──────────────────────────────

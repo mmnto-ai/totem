@@ -9,6 +9,7 @@
 // network/LLM-free. No LLM-judge — the resolution is a deterministic disposition read
 // (resolutionSource `disposition-thread`), so FM-b holds.
 
+import { botReviewerActorIds } from '../bot-identity.js';
 import {
   type CapabilityClaim,
   CapabilityClaimSchema,
@@ -49,12 +50,15 @@ export interface ReviewCatchMineResult {
   resolutions: CapabilityResolution[];
 }
 
-/** The three active paid review bots → their stable actor-id, keyed by EXACT login. */
-const REVIEW_BOT_ACTOR_IDS: Readonly<Record<string, string>> = {
-  'coderabbitai[bot]': 'coderabbit',
-  'gemini-code-assist[bot]': 'gemini-code-assist',
-  'greptile-apps[bot]': 'greptile',
-};
+/**
+ * The three active paid review bots → their stable actor-id, keyed by EXACT
+ * login. Derived from the ONE bot-identity definition in `../bot-identity.ts`
+ * (mmnto-ai/totem#2800): this module declares no list of its own, so a login
+ * that drifts is fixed in one place. `github-code-quality[bot]` is recognized
+ * there but carries no `actorId`, so it is deliberately absent from this map
+ * and still resolves to its own trimmed login below.
+ */
+const REVIEW_BOT_ACTOR_IDS: Readonly<Record<string, string>> = botReviewerActorIds();
 
 /**
  * Resolve a GitHub author login to a stable Layer-B actor-id, COUPLING to existing

@@ -95,6 +95,16 @@ export type {
   GateProvenance,
   GateVerdict,
 } from './gate-types.js';
+// The ONE review-bot identity definition (mmnto-ai/totem#2800) — both consumers
+// import it and neither declares a list of its own.
+export type { BotReviewerIdentity, BotReviewerTool } from './bot-identity.js';
+export {
+  BOT_REVIEWER_IDENTITIES,
+  botReviewerActorIds,
+  detectBotReviewer,
+  isBotReviewerLogin,
+  isBotReviewerLoginExact,
+} from './bot-identity.js';
 export type {
   TransportPattern,
   TransportPatternId,
