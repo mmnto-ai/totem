@@ -440,6 +440,65 @@ export function resolveTotemRepoRootSync(repoRootOpt: string | undefined, cwd: s
   return findTotemRepoRootSync(start) ?? start;
 }
 
+/**
+ * The REPOSITORY NAME of a checkout's `origin` remote — `totem` for
+ * `https://github.com/mmnto-ai/totem.git`, `git@github.com:mmnto-ai/totem.git`,
+ * and either form without the `.git` suffix or with trailing slashes. The
+ * owner and the host are deliberately dropped: this answers "which repository
+ * is this checkout of", which is a property of the path's last segment, and a
+ * mirror or a fork at the same repo name answers the same (the same
+ * host-blindness the doctor's cohort-id derivation already has).
+ *
+ * Returns `null` when there is no origin, when git is unavailable or fails for
+ * ANY reason, or when the URL yields no `owner/repo` pair. Never throws: every
+ * caller's fallback is "we do not know", and a git failure is exactly that.
+ *
+ * Costs one synchronous `git config` spawn, so call it only where the answer
+ * cannot be had from the filesystem (mmnto-ai/totem#2801: the cohort map's key,
+ * where a per-agent worktree's DIRECTORY basename names the worktree rather
+ * than the repository).
+ *
+ * The read is `--local`-scoped deliberately. A bare `git config --get` searches
+ * local, then GLOBAL, then system, and answers outside a repository at all — so
+ * a machine carrying a global `remote.origin.url` would hand a repo-shaped
+ * answer to a directory that is not a repo, and every basename-keyed caller
+ * would silently change behaviour per machine. `--local` errors outside a
+ * repository, which lands on the `null` this function documents. In a linked
+ * worktree it reads the shared common-dir config, where remotes live.
+ */
+export function getOriginRepoName(cwd: string): string | null {
+  let url: string;
+  try {
+    url = safeExec('git', ['config', '--local', '--get', 'remote.origin.url'], {
+      cwd,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+    });
+    // totem-context: intentional fall-through — no origin, a non-git dir, an absent git binary and a timeout are all "we do not know the repository name", which is the documented null return, not a sensor failure.
+  } catch {
+    return null;
+  }
+  return repoNameFromRemoteUrl(url);
+}
+
+/**
+ * Extract the repository name from an ssh (`git@host:owner/repo.git`) or https
+ * (`https://host/owner/repo.git`) remote URL, tolerating a trailing `.git` and
+ * trailing slashes in either order. Returns `null` when no `owner/repo` pair
+ * resolves. Pure — exported for direct testing of the parse.
+ */
+export function repoNameFromRemoteUrl(remoteUrl: string | undefined): string | null {
+  if (typeof remoteUrl !== 'string' || remoteUrl.trim().length === 0) return null;
+  const trimmed = remoteUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
+  const match = /[/:]([^/:]+)\/([^/]+)$/.exec(trimmed);
+  if (match === null) return null;
+  const repo = match[2];
+  return repo !== undefined && repo.length > 0 ? repo : null;
+}
+
 export function resolveGitRoot(cwd: string): string | null {
   try {
     const root = safeExec('git', ['rev-parse', '--show-toplevel'], {

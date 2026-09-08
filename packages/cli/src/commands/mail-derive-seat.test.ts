@@ -25,6 +25,7 @@
  * exactly the seat dirs this fixture writes.
  */
 
+import { execFileSync } from 'node:child_process';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -156,6 +157,97 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(exitCode).toBe(2);
     expect(stdout).toBe('');
     expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
+  });
+
+  // ── the per-agent-worktree shape (mmnto-ai/totem#2801 fold round 2) ──
+  //
+  // `.totem/orchestration/` is gitignored and a worktree's DIRECTORY basename
+  // (`totem-totem-claude-build-2801`) is no COHORT_AGENT_MAP key, so the
+  // structural union came back empty there. Round 1 answered that by falling
+  // back to the env-declared list, which made the hosted check a tautology —
+  // any well-formed id was accepted, so the probe could not refuse an identity,
+  // which is the entire point of it. The cure is structural information, not a
+  // looser probe: the cohort map is now keyed on the ORIGIN repository name, so
+  // this shape resolves the real totem seats and an unhosted seat is refused
+  // against them.
+  describe('per-agent worktree — cohort map keyed on the git origin (mmnto-ai/totem#2801)', () => {
+    /**
+     * `.totem/` plus a real git repo with an `origin` remote, in a directory
+     * whose basename is NOT a cohort key and with no orchestration tree at all
+     * — the exact shape of a per-agent worktree of `mmnto-ai/totem`.
+     */
+    function makeWorktreeShape(originUrl?: string): string {
+      const repoRoot = path.join(tmpRoot, 'totem-totem-claude-build-2801');
+      fs.mkdirSync(path.join(repoRoot, '.totem'), { recursive: true });
+      execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+      if (originUrl !== undefined) {
+        execFileSync('git', ['remote', 'add', 'origin', originUrl], {
+          cwd: repoRoot,
+          stdio: 'ignore',
+        });
+      }
+      expect(fs.existsSync(path.join(repoRoot, '.totem', 'orchestration'))).toBe(false);
+      return repoRoot;
+    }
+
+    it('(a) env naming a seat the ORIGIN repo hosts is accepted', async () => {
+      const repoRoot = makeWorktreeShape('https://github.com/mmnto-ai/totem.git');
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      });
+      expect(stderr).toBe('');
+      expect(stdout).toBe('seat=totem-claude source=env\n');
+      expect(exitCode).toBe(0);
+    });
+
+    it("(a') env naming a seat the origin repo does NOT host is REFUSED against the cohort list", async () => {
+      // The round-1 tautology, inverted: this is the assertion that fails when
+      // hosted-ness is whatever the env said.
+      const repoRoot = makeWorktreeShape('https://github.com/mmnto-ai/totem.git');
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'lc-claude' },
+      });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('lc-claude');
+      expect(stderr).toContain('totem-claude');
+      expect(stderr).toContain('totem-gemini');
+    });
+
+    it("(a'') matching is case-insensitive and the STRUCTURAL casing is printed", async () => {
+      const repoRoot = makeWorktreeShape('git@github.com:mmnto-ai/totem.git');
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'TOTEM-Claude' },
+      });
+      expect(stderr).toBe('');
+      expect(stdout).toBe('seat=totem-claude source=env\n');
+      expect(exitCode).toBe(0);
+    });
+
+    it('(b) NO origin and no seat dirs is the ruled hosts-no-seat refusal, even with the env set', async () => {
+      const repoRoot = makeWorktreeShape();
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude' },
+      });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
+    });
+
+    it('(c) a comma list of two hosted seats still refuses — a session has one identity', async () => {
+      const repoRoot = makeWorktreeShape('https://github.com/mmnto-ai/totem.git');
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' },
+      });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('totem-claude,totem-gemini');
+    });
   });
 
   it('config.json host_agents omitting a PRESENT seat dir refuses by NAMING that cause, not by contradicting itself (fold F2)', async () => {

@@ -783,9 +783,11 @@ export {
   getGitLogSince,
   getGitStatus,
   getLatestTag,
+  getOriginRepoName,
   getTagDate,
   inferScopeFromFiles,
   isFileDirty,
+  repoNameFromRemoteUrl,
   resolveGitRoot,
   resolveTotemRepoRootSync,
 } from './sys/git.js';

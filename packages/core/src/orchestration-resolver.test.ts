@@ -9,6 +9,7 @@
  * the two resolvers' tests stay symmetric.
  */
 
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -22,6 +23,7 @@ import {
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
+import { getOriginRepoName, repoNameFromRemoteUrl } from './sys/git.js';
 import { cleanTmpDir } from './test-utils.js';
 
 let tmpRoot: string;
@@ -562,6 +564,147 @@ describe('knownCohortAgents — single-source recipient set', () => {
 // cohort's frozen value lives in `totem.config.ts`, not a core constant. See
 // `packages/core/src/config-schema.test.ts` (schema) and
 // `packages/cli/src/commands/ecl-gc.test.ts` (resolution precedence).
+
+// ─── cohort map keyed on the git origin (mmnto-ai/totem#2801) ──────────────
+//
+// The map used to be keyed on the repo-root BASENAME, which every checkout
+// whose directory is not named after its repository fails: a per-agent
+// worktree (`totem-totem-claude-build-2801`), a second clone (`totem-2`), a
+// rename. There the map contributed nothing, so a repo that plainly hosts
+// seats resolved as hosting none — and `totem mail --derive-seat`, whose whole
+// job is refusing an identity the repo does not host, had nothing to check
+// against. The key is now the `origin` remote's repository name when one can be
+// read, with the basename as the unchanged fallback.
+
+describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto-ai/totem#2801)', () => {
+  /** A real git repo in a directory whose basename is NOT a cohort key. */
+  function mkGitRepo(dirName: string, originUrl?: string): string {
+    const root = mkDir(path.join(tmpRoot, dirName));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
+    if (originUrl !== undefined) {
+      execFileSync('git', ['remote', 'add', 'origin', originUrl], { cwd: root, stdio: 'ignore' });
+    }
+    return root;
+  }
+
+  it('(i) an https origin keys the map — the totem seats resolve from a worktree-named directory', () => {
+    const root = mkGitRepo('totem-totem-claude-build-2801', 'https://github.com/mmnto-ai/totem.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('(ii) an ssh origin keys the map identically', () => {
+    const root = mkGitRepo('wt-2801', 'git@github.com:mmnto-ai/totem.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('an origin WITHOUT the .git suffix (and with a trailing slash) parses the same', () => {
+    const root = mkGitRepo('wt-2801-plain', 'https://github.com/mmnto-ai/liquid-city/');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+  });
+
+  it('(iii) NO origin falls back to the basename — a git repo named `totem` still resolves', () => {
+    const root = mkGitRepo('totem');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('(iii) a non-git directory is unaffected — the basename answers, as it always did', () => {
+    const root = mkDir(path.join(tmpRoot, 'totem-strategy'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
+  it('(iv) an origin naming a repo the map does not know resolves empty, as today', () => {
+    const root = mkGitRepo('wt-unknown', 'https://github.com/someone/not-a-cohort-repo.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('none');
+    expect(result.agents).toEqual([]);
+  });
+
+  it('the ORIGIN wins over a misleading directory name (the key is the repository)', () => {
+    // A directory named `totem` that is actually a liquid-city checkout must
+    // not claim the totem seats.
+    const root = mkGitRepo('totem-lookalike', 'https://github.com/mmnto-ai/liquid-city.git');
+    fs.renameSync(root, path.join(tmpRoot, 'totem-decoy'));
+    const renamed = path.join(tmpRoot, 'totem-decoy');
+    const result = resolveSelfAgents(renamed, {});
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+  });
+
+  it('seat dirs still UNION the origin-keyed map', () => {
+    const root = mkGitRepo('wt-union', 'https://github.com/mmnto-ai/totem.git');
+    mkDir(path.join(root, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('dirs+map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
+  });
+
+  it('env and config still win — neither reaches the origin read', () => {
+    const root = mkGitRepo('wt-precedence', 'https://github.com/mmnto-ai/totem.git');
+    expect(resolveSelfAgents(root, { TOTEM_SELF_AGENT: 'visitor-seat' })).toEqual({
+      agents: ['visitor-seat'],
+      source: 'env',
+    });
+    mkDir(path.join(root, '.totem', 'orchestration'));
+    fs.writeFileSync(
+      path.join(root, '.totem', 'orchestration', 'config.json'),
+      JSON.stringify({ host_agents: ['declared-seat'] }),
+      'utf-8',
+    );
+    const viaConfig = resolveSelfAgents(root, {});
+    expect(viaConfig.source).toBe('config');
+    expect(viaConfig.agents).toEqual(['declared-seat']);
+  });
+});
+
+describe('repoNameFromRemoteUrl — the parse (mmnto-ai/totem#2801)', () => {
+  it.each([
+    ['https://github.com/mmnto-ai/totem.git', 'totem'],
+    ['https://github.com/mmnto-ai/totem', 'totem'],
+    ['https://github.com/mmnto-ai/totem.git/', 'totem'],
+    ['git@github.com:mmnto-ai/totem.git', 'totem'],
+    ['git@github.com:mmnto-ai/totem', 'totem'],
+    ['ssh://git@github.com/mmnto-ai/liquid-city.git', 'liquid-city'],
+    ['https://gitlab.example.com/team/sub/totem-status.git', 'totem-status'],
+  ])('%s -> %s', (url, expected) => {
+    expect(repoNameFromRemoteUrl(url)).toBe(expected);
+  });
+
+  it.each([undefined, '', '   ', 'not-a-url'])('%s -> null', (url) => {
+    expect(repoNameFromRemoteUrl(url)).toBeNull();
+  });
+});
+
+describe('getOriginRepoName — the read (mmnto-ai/totem#2801)', () => {
+  it('returns null for a directory that is not a git repository — never throws', () => {
+    const plain = mkDir(path.join(tmpRoot, 'not-a-repo'));
+    expect(getOriginRepoName(plain)).toBeNull();
+  });
+
+  it('returns null for a git repo with no origin remote', () => {
+    const root = mkDir(path.join(tmpRoot, 'no-origin'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
+    expect(getOriginRepoName(root)).toBeNull();
+  });
+
+  it('returns the repository name for a git repo with an origin', () => {
+    const root = mkDir(path.join(tmpRoot, 'has-origin'));
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', 'git@github.com:mmnto-ai/totem-status.git'], {
+      cwd: root,
+      stdio: 'ignore',
+    });
+    expect(getOriginRepoName(root)).toBe('totem-status');
+  });
+});
 
 // ─── resolveSelfAgents — seat dirs (mmnto-ai/totem#2141) ───────────────────
 

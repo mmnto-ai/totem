@@ -26,6 +26,8 @@ import * as path from 'node:path';
 
 import { z } from 'zod';
 
+import { getOriginRepoName } from './sys/git.js';
+
 /**
  * Resolved orchestration path triple for a single agent's tree within
  * a single repo. Non-null path values are absolute and normalized.
@@ -161,11 +163,11 @@ export function resolveOrchestrationPaths(repoRoot: string, agentId: string): Or
  * where no dirs exist yet (fresh clones — the tree is gitignored) or only
  * some seats have written (partial-dir union, `resolveSelfAgents` layer 3).
  *
- * Keyed by the repo-root basename (the bottom segment of the repo's
- * absolute path). Each value is the list of agent-ids this repo natively
- * hosts (zero, one, or two — the Claude + Gemini pair where both
- * variants ship). Empty array marks an orphan-stream repo with no native
- * agent (`totem-playground`).
+ * Keyed by REPOSITORY name — the `origin` remote's repo segment where one can
+ * be read, else the repo-root basename ({@link cohortSeatsForRepo}). Each value
+ * is the list of agent-ids this repo natively hosts (zero, one, or two — the
+ * Claude + Gemini pair where both variants ship). Empty array marks an
+ * orphan-stream repo with no native agent (`totem-playground`).
  */
 const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.freeze({
   totem: Object.freeze(['totem-claude', 'totem-gemini']),
@@ -179,6 +181,32 @@ const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.fre
   'totem-status': Object.freeze(['status-claude', 'status-gemini']),
   'totem-playground': Object.freeze([]),
 });
+
+/**
+ * The cohort seats `COHORT_AGENT_MAP` records for a checkout, keyed on the
+ * REPOSITORY the checkout belongs to.
+ *
+ * The key is the `origin` remote's repository name when one can be read, and
+ * the repo-root basename otherwise (no origin, no git, an unparseable URL).
+ * Keying on the basename alone was wrong for every checkout whose DIRECTORY is
+ * not named after its repository — a per-agent worktree
+ * (`totem-totem-claude-build-2801`), a second clone (`totem-2`), a rename —
+ * and there the map contributed nothing, so a repo that plainly hosts seats
+ * resolved as hosting none (mmnto-ai/totem#2801). The basename arm keeps every
+ * origin-less checkout (a fresh `git init`, an offline export, a fixture)
+ * behaving exactly as before.
+ *
+ * Cost: at most ONE `git config` spawn per resolution, on the map-lookup path
+ * only — layers 1 and 2 (`TOTEM_SELF_AGENT`, `config.json host_agents`) return
+ * before it, so the hook-path polls that declare identity never reach it. The
+ * read never throws; a failure means "unknown repository" and the basename
+ * answers instead.
+ */
+function cohortSeatsForRepo(resolvedRoot: string): readonly string[] {
+  const originName = getOriginRepoName(resolvedRoot);
+  const key = originName ?? path.basename(resolvedRoot);
+  return COHORT_AGENT_MAP[key] ?? [];
+}
 
 /**
  * Enumerate the seat directories registered in a repo's orchestration tree:
@@ -338,11 +366,13 @@ function parseEnvAgentList(raw: string): string[] {
  *      PRESENT safe seat dir attaches a loud warning naming the omitted
  *      seat(s) (mmnto-ai/totem#2141 warn-shape; the in-repo mirror of the
  *      strategy-side `ecl-self-agent-binding` superset-of-dirs probe)
- *   3. Seat dirs UNION `COHORT_AGENT_MAP[basename]` — union, not replace:
- *      orchestration is gitignored, so on a partial-dir fresh clone a
- *      dirs-only answer would vanish roster siblings; the map keeps them
- *      visible while present dirs admit unmapped seats with zero
- *      registration surfaces (Tenet 20; the totem-codex exhibit)
+ *   3. Seat dirs UNION the cohort map for this REPOSITORY
+ *      ({@link cohortSeatsForRepo}: the `origin` remote's repo name, else the
+ *      repo-root basename) — union, not replace: orchestration is gitignored,
+ *      so on a partial-dir fresh clone a dirs-only answer would vanish roster
+ *      siblings; the map keeps them visible while present dirs admit unmapped
+ *      seats with zero registration surfaces (Tenet 20; the totem-codex
+ *      exhibit)
  *   4. `{ agents: [], source: 'none' }`
  *
  * Entries failing `isPathSafeAgentId` (path traversal, null byte, control/
@@ -351,8 +381,12 @@ function parseEnvAgentList(raw: string): string[] {
  * a higher-precedence layer falls through to the next (so a malformed env
  * var doesn't shadow a valid config or map entry).
  *
- * Pure utility — no caching, no logging, no side effects other than a
- * single `fs.readFileSync` of the config.json when present.
+ * No caching, no logging, no mutation. Reads: a single `fs.readFileSync` of
+ * config.json when present, the seat-dir listing, and — on layer 3 ONLY, so
+ * never when the env or config answered — one synchronous `git config --get
+ * remote.origin.url` spawn to key the cohort map on the repository rather than
+ * on the directory name (mmnto-ai/totem#2801). That read never throws; a
+ * failure degrades to the basename key.
  *
  * @param repoRoot — Absolute path to the consuming repo's root.
  * @param env — Optional env override (default: `process.env`). Injection
@@ -418,8 +452,7 @@ export function resolveSelfAgents(
   // a map-only answer is the stale cache mmnto-ai/totem#2141 indicts (the
   // totem-codex exhibit: a registered dir invisible to mail). The tri-state
   // source keeps the derivation honest.
-  const basename = path.basename(resolvedRoot);
-  const mapped = COHORT_AGENT_MAP[basename] ?? [];
+  const mapped = cohortSeatsForRepo(resolvedRoot);
   const dirs = readSeatDirs(resolvedRoot);
   const dirSet = new Set(dirs);
   const mapExtra = mapped.filter((agent) => !dirSet.has(agent));
