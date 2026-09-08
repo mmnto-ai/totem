@@ -1,0 +1,94 @@
+{
+  "kind": "synthetic",
+  "role": "a pagination failure is UNEVALUABLE, never clean",
+  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "ghVersion": "gh version 2.99.0 (2026-09-01)",
+  "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "CLEAN",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 2,
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Verify (ubuntu-latest)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": true,
+                  "endCursor": "CURSOR-1"
+                },
+                "nodes": [
+                  {
+                    "isResolved": false,
+                    "isOutdated": false,
+                    "comments": {
+                      "nodes": [
+                        {
+                          "author": {
+                            "login": "satur8d"
+                          },
+                          "body": "looks fine",
+                          "originalCommit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "exitCode": 1,
+      "stdout": "gh: API rate limit exceeded for user ID 1234567."
+    }
+  ]
+}

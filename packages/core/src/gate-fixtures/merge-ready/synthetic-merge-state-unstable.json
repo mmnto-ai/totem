@@ -1,0 +1,72 @@
+{
+  "kind": "synthetic",
+  "role": "UNSTABLE passes predicate 5 — a non-required red check is predicate 1 business",
+  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "ghVersion": "gh version 2.99.0 (2026-09-01)",
+  "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "UNSTABLE",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 2,
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Verify (ubuntu-latest)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

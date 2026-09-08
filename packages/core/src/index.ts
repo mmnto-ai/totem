@@ -88,12 +88,15 @@ export {
   knownGates,
 } from './gate-engine.js';
 export type {
+  GateContext,
   GateDefinition,
   GateDisposition,
   GateEvaluator,
   GateMatcher,
   GateProvenance,
+  GateTier,
   GateVerdict,
+  GhRunner,
 } from './gate-types.js';
 // The ONE review-bot identity definition (mmnto-ai/totem#2800) — both consumers
 // import it and neither declares a list of its own.
@@ -105,6 +108,28 @@ export {
   isBotReviewerLogin,
   isBotReviewerLoginExact,
 } from './bot-identity.js';
+// merge-ready gate (mmnto-ai/totem#2800) — the deterministic pre-merge floor.
+export type {
+  MergeReadyEvaluation,
+  MergeReadyOptions,
+  MergeReadyPayload,
+  MergeReadyPredicate,
+  MergeReadyProvenanceDetail,
+} from './merge-ready.js';
+export {
+  evaluateMergeReady,
+  hasHighSeverityMarker,
+  makeGhRunner,
+  MERGE_READY_BRANCH_QUERY,
+  MERGE_READY_EVENT,
+  MERGE_READY_EVIDENCE_MAX,
+  MERGE_READY_NOTICE_PREFIX,
+  MERGE_READY_OVERRIDE_ENV,
+  MERGE_READY_QUERY,
+  MERGE_READY_SOURCE,
+  mergeReadyEvaluator,
+  parseMergeReadyPayload,
+} from './merge-ready.js';
 export type {
   TransportPattern,
   TransportPatternId,

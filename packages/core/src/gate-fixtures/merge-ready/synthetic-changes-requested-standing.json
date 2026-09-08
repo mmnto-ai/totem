@@ -1,0 +1,87 @@
+{
+  "kind": "synthetic",
+  "role": "an un-superseded CHANGES_REQUESTED denies at predicate 3",
+  "synthesizedAt": "2026-09-08T02:31:38.467Z",
+  "ghVersion": "gh version 2.99.0 (2026-09-01)",
+  "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "CLEAN",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 2,
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Verify (ubuntu-latest)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": [
+                  {
+                    "author": {
+                      "login": "satur8d"
+                    },
+                    "state": "CHANGES_REQUESTED",
+                    "submittedAt": "2026-09-01T10:00:00Z"
+                  },
+                  {
+                    "author": {
+                      "login": "someone-else"
+                    },
+                    "state": "COMMENTED",
+                    "submittedAt": "2026-09-01T11:00:00Z"
+                  }
+                ]
+              },
+              "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
