@@ -75,16 +75,36 @@ Write-Host "Syncing labels for repository: $Repo" -ForegroundColor Magenta
 function Merge-Label {
     param($OldName, $NewName)
     Write-Host "Merging '$OldName' into '$NewName'..." -ForegroundColor Cyan
-    # Get issues with the old label
+    # Get issues with the old label. A label the repo never carried lists as
+    # empty with exit 0; a non-zero exit is a failed READ (auth, rate limit,
+    # network), and deleting on one would strip the old label from every issue
+    # that carries it with no replacement -- so the read failure keeps the label
+    # and counts against convergence.
     $issues = gh issue list --label $OldName --repo $Repo --state all --limit 1000 --json number --jq '.[].number' | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        $script:Failures.Add("issue list $OldName")
+        Write-Host "[Error] gh issue list '$OldName' failed (exit $LASTEXITCODE) -- keeping '$OldName'" -ForegroundColor Red
+        return
+    }
     $issueNumbers = $issues -split '\s+' | Where-Object { $_ -ne '' }
-    
+
+    $failuresBefore = $script:Failures.Count
     foreach ($num in $issueNumbers) {
         Write-Host "  Updating issue #$num"
         gh issue edit $num --add-label $NewName --remove-label $OldName --repo $Repo
     }
-    
-    # Try deleting the old label
+
+    # The delete is gated on every relabel above having succeeded. On totem-status
+    # (2026-09-08, mmnto-ai/totem#2837) every `issue edit` had failed on an absent
+    # canonical and the delete still ran: `bug`, `enhancement` and `documentation`
+    # left their issues with no replacement, repaired by hand.
+    $relabelFailures = $script:Failures.Count - $failuresBefore
+    if ($relabelFailures -gt 0) {
+        Write-Host "[Error] keeping '$OldName': $relabelFailures relabel(s) into '$NewName' failed" -ForegroundColor Red
+        return
+    }
+
+    # Every issue that carried the old label now carries the new one: retire it
     gh label delete $OldName --yes --repo $Repo 2>$null
 }
 

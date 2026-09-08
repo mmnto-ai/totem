@@ -18,12 +18,15 @@
  *      The scope derivation reads ONLY names starting with `scope: `, so the
  *      `disposition: ` namespace can never leak into the dropdown.
  *
- * The last two cases spawn `pwsh` against the real script. The first proves the
+ * The remaining cases spawn `pwsh` against the real script. The first proves the
  * `-WhatIf` shadow prints every `gh` call and executes none (a stub `gh` sits on
  * PATH and must stay untouched); the second proves the shadow does NOT leak into
- * a normal run — the same stub, no `-WhatIf`, must receive the whole canon. Both
- * run against `-Repo example/stub`; neither can reach GitHub, because `gh` on the
- * child's PATH is a log-appending stub.
+ * a normal run — the same stub, no `-WhatIf`, must receive the whole canon; the
+ * rest drive the stub's failure modes (a refused `label edit`, a refused
+ * `issue edit`, a failed `issue list`) to pin the mutation tally and the gated
+ * delete in `Merge-Label` (mmnto-ai/totem#2837). Every one runs against
+ * `-Repo example/stub`; none can reach GitHub, because `gh` on the child's PATH
+ * is a log-appending stub.
  *
  * Every case skips when the repo-root files are absent (a packaged install
  * carries neither the script nor `.github/`), and the spawning ones skip when
@@ -233,15 +236,33 @@ describe.skipIf(!REPO_FILES_PRESENT)('issue forms', () => {
 function makeGhStub(): { dir: string; logPath: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gh-stub-'));
   const logPath = path.join(dir, 'gh-calls.log');
-  // With TOTEM_GH_STUB_FAIL set in the child's environment the stub still logs
-  // every call but exits 1 on `label edit` — the failure path of the script's
-  // mutation tally (Greptile P1 on mmnto-ai/totem#2827).
+  // The stub logs every call and exits 0, with four opt-in modes read from the
+  // child's environment:
+  //   TOTEM_GH_STUB_ISSUES          — `issue list` answers with one issue, #7,
+  //                                   so the merge phase has something to relabel
+  //   TOTEM_GH_STUB_FAIL_ISSUE_LIST — `issue list` exits 1 (a failed READ)
+  //   TOTEM_GH_STUB_FAIL_ISSUE_EDIT — `issue edit` exits 1 (a failed relabel —
+  //                                   the totem-status incident, mmnto-ai/totem#2837)
+  //   TOTEM_GH_STUB_FAIL            — `label edit` exits 1 — the failure path of
+  //                                   the mutation tally (Greptile P1 on mmnto-ai/totem#2827)
   if (process.platform === 'win32') {
     fs.writeFileSync(
       path.join(dir, 'gh.cmd'),
       [
         '@echo off',
         `>>"${logPath}" echo %*`,
+        'if "%TOTEM_GH_STUB_ISSUES%"=="" goto :after_issues',
+        'echo %* | findstr /C:"issue list" >nul',
+        'if %errorlevel%==0 echo 7',
+        ':after_issues',
+        'if "%TOTEM_GH_STUB_FAIL_ISSUE_LIST%"=="" goto :after_list_fail',
+        'echo %* | findstr /C:"issue list" >nul',
+        'if %errorlevel%==0 exit /b 1',
+        ':after_list_fail',
+        'if "%TOTEM_GH_STUB_FAIL_ISSUE_EDIT%"=="" goto :after_edit_fail',
+        'echo %* | findstr /C:"issue edit" >nul',
+        'if %errorlevel%==0 exit /b 1',
+        ':after_edit_fail',
         'if "%TOTEM_GH_STUB_FAIL%"=="" exit /b 0',
         'echo %* | findstr /C:"label edit" >nul',
         'if %errorlevel%==0 exit /b 1',
@@ -257,6 +278,15 @@ function makeGhStub(): { dir: string; logPath: string } {
       [
         '#!/bin/sh',
         `printf '%s\\n' "$*" >> "${logPath}"`,
+        'if [ -n "$TOTEM_GH_STUB_ISSUES" ]; then',
+        '  case "$*" in *"issue list"*) echo 7 ;; esac',
+        'fi',
+        'if [ -n "$TOTEM_GH_STUB_FAIL_ISSUE_LIST" ]; then',
+        '  case "$*" in *"issue list"*) exit 1 ;; esac',
+        'fi',
+        'if [ -n "$TOTEM_GH_STUB_FAIL_ISSUE_EDIT" ]; then',
+        '  case "$*" in *"issue edit"*) exit 1 ;; esac',
+        'fi',
         'if [ -n "$TOTEM_GH_STUB_FAIL" ]; then',
         '  case "$*" in *"label edit"*) exit 1 ;; esac',
         'fi',
@@ -362,16 +392,13 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
         .labels.map((label) => label.name)
         .sort();
       expect(edited).toEqual(expectedEdited);
+      // ...and created, by name, exactly once — every namespace, not only the
+      // dispositions (mmnto-ai/totem#2837).
       const created = calls
-        .map((call) => /^label create "?(disposition: [a-z-]+)"?/.exec(call)?.[1])
+        .map((call) => /^label create "?(.+?)"? --color /.exec(call)?.[1])
         .filter((name): name is string => name !== undefined)
         .sort();
-      const expectedCreated = realCanon()
-        .labels.map((label) => label.name)
-        .filter((name) => name.startsWith('disposition: '))
-        .sort();
-      expect(expectedCreated).toHaveLength(6);
-      expect(created).toEqual(expectedCreated);
+      expect(created).toEqual(expectedEdited);
     } finally {
       fs.rmSync(stub.dir, { recursive: true, force: true });
     }
@@ -393,6 +420,91 @@ describe.skipIf(!PWSH_PRESENT)('scripts/sync-labels.ps1 dry run', () => {
         .split(/\r?\n/)
         .filter((line) => line.includes('[Error] gh label edit')).length;
       expect(tallied).toBe(realCanon().labels.length);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  /** The stub's call log, one trimmed line per `gh` invocation. */
+  function loggedCalls(logPath: string): string[] {
+    return fs
+      .readFileSync(logPath, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+
+  it('a converged relabel retires the old label — every merge deletes once the issue carries the new name', () => {
+    // The positive control for the gate below: the stub lists issue #7 under
+    // every legacy label and accepts every `issue edit`, so every `Merge-Label`
+    // relabels #7 and then deletes the legacy name.
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, { TOTEM_GH_STUB_ISSUES: '1' });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(0);
+      expect(run.stdout).toContain('sync complete');
+      const calls = loggedCalls(stub.logPath);
+      const merges = realCanon().merges.length;
+      expect(merges).toBeGreaterThan(0);
+      expect(calls.filter((call) => /^issue edit 7 --add-label /.test(call))).toHaveLength(merges);
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(merges);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed relabel keeps the old label — the delete is gated on every issue carrying the new name', () => {
+    // The totem-status incident (2026-09-08, mmnto-ai/totem#2837): every
+    // `issue edit --add-label "type: bug"` had failed and the delete still ran,
+    // so `bug` left its issues with no replacement. The stub lists issue #7
+    // under every legacy label and refuses every `issue edit`: the script must
+    // name each kept label, delete nothing, and exit non-zero.
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, {
+        TOTEM_GH_STUB_ISSUES: '1',
+        TOTEM_GH_STUB_FAIL_ISSUE_EDIT: '1',
+      });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(1);
+      expect(run.stdout).not.toContain('sync complete');
+      const merges = realCanon().merges.length;
+      const kept = run.stdout
+        .split(/\r?\n/)
+        .filter((line) => line.includes("[Error] keeping '")).length;
+      expect(kept).toBe(merges);
+      const calls = loggedCalls(stub.logPath);
+      expect(calls.filter((call) => /^issue edit 7 --add-label /.test(call))).toHaveLength(merges);
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(0);
+    } finally {
+      fs.rmSync(stub.dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a failed issue list keeps the old label — a read failure is not an empty list', () => {
+    // `gh issue list` exits 1 (auth, rate limit, network): the script must not
+    // read that as "no issue carries the label" and delete it. Nothing is
+    // relabelled, nothing is deleted, the read failure counts against
+    // convergence, and the run exits non-zero.
+    const stub = makeGhStub();
+    try {
+      const run = runScript(['-Repo', 'example/stub'], stub.dir, {
+        TOTEM_GH_STUB_FAIL_ISSUE_LIST: '1',
+      });
+      expect(run.error).toBeUndefined();
+      expect(run.status, run.stdout).toBe(1);
+      expect(run.stdout).not.toContain('sync complete');
+      const merges = realCanon().merges.length;
+      const kept = run.stdout
+        .split(/\r?\n/)
+        .filter((line) =>
+          /\[Error\] gh issue list '.+' failed \(exit 1\) -- keeping '/.test(line),
+        ).length;
+      expect(kept).toBe(merges);
+      const calls = loggedCalls(stub.logPath);
+      expect(calls.filter((call) => call.startsWith('issue edit '))).toHaveLength(0);
+      expect(calls.filter((call) => call.startsWith('label delete '))).toHaveLength(0);
     } finally {
       fs.rmSync(stub.dir, { recursive: true, force: true });
     }
