@@ -445,9 +445,16 @@ function readThreads(connection: Record<string, unknown> | null): {
 /** Read one `gh api graphql` response body into a classified page. */
 function parsePage(raw: string, byBranch: boolean): PageRead {
   let body: unknown;
+  // totem-context: NOT a swallowed error — an unreadable response body is the
+  // gate's UNEVALUABLE class, and this returns it NAMED, which the caller turns
+  // into a `deny` (strict) or a `warn` (pilot) plus a stderr line. Throwing here
+  // would surface as the wrapper's generic fail-closed arm and lose the reason;
+  // the fail-loud property is kept by never returning a clean read (Tenet 4).
   try {
     body = JSON.parse(raw);
+    // totem-context: intentional degradation — see the directive above the try; dual placement so the rule reads either the catch-keyword line or the catch body.
   } catch {
+    // totem-context: intentional degradation — an unreadable body is the NAMED unevaluable class, never a clean read.
     return { ok: false, detail: 'the gh response was not JSON' };
   }
   const top = asObject(body);
@@ -1066,12 +1073,20 @@ function firstFailure(state: ReadState, detail: MergeReadyProvenanceDetail): Blo
  */
 export function makeGhRunner(timeoutMs = 30_000, execute: typeof safeExec = safeExec): GhRunner {
   return (args: string[]) => {
+    // totem-context: NOT a swallowed error — the seam's contract is
+    // `{ stdout, exitCode }`, so a spawn failure (gh absent) and a non-zero exit
+    // must arrive at the evaluator the SAME way: as a read that did not answer,
+    // which becomes a NAMED unevaluable verdict carrying what gh said. Throwing
+    // instead would erase that text and land in the wrapper's generic
+    // fail-closed arm; nothing here can return a clean read (Tenet 4).
     try {
       return {
         stdout: execute('gh', args, { timeout: timeoutMs, trim: false }),
         exitCode: 0,
       };
+      // totem-context: intentional degradation — see the directive above the try; dual placement so the rule reads either the catch-keyword line or the catch body.
     } catch (err) {
+      // totem-context: intentional degradation — a gh that did not answer is the NAMED unevaluable class, carrying what gh said; never a clean read.
       const fields = err as { status?: number | null; stdout?: string; stderr?: string };
       const stdout = fields.stdout?.trim();
       const stderr = fields.stderr?.trim();
