@@ -44,6 +44,23 @@ const LOGIN_SPELLINGS = [
   '[bot]',
 ];
 
+/** A local regex over a bot name — the first re-declaration shape. */
+const LOCAL_BOT_REGEX =
+  /\/[^\n/]*(?:greptile|coderabbit|gemini|github-code-quality)[^\n]*\/[gimsuy]*/i;
+
+/**
+ * A local SUBSTRING test over a bot name — the second shape. `includes` was the
+ * only member until fold F8: `indexOf`, `startsWith` and a bare comparison
+ * against a concatenated name are the same re-declaration wearing another
+ * method, and the sensor missed all three (mmnto-ai/totem#2800).
+ */
+const LOCAL_BOT_SUBSTRING =
+  /(?:includes|indexOf|startsWith|endsWith|search|match)\(\s*['"`](?:coderabbit|greptile|gemini|github-code-quality)/i;
+
+/** A bot name assembled from pieces to dodge a literal scan — the third shape. */
+const LOCAL_BOT_CONCAT =
+  /['"`](?:coderabbit|greptile|gemini|github-code-quality)[^'"`\n]*['"`]\s*\+/i;
+
 describe('bot identity — exactly one definition', () => {
   it('the single source declares the three review bots the charter names', () => {
     const tools = BOT_REVIEWER_IDENTITIES.map((i) => i.tool);
@@ -66,15 +83,34 @@ describe('bot identity — exactly one definition', () => {
           `${label} names the login spelling "${spelling}" in code — the identity list lives in bot-identity.ts`,
         ).toBe(false);
       }
-      // No local regex over a bot name, and no local substring test either.
-      expect(code).not.toMatch(
-        /\/[^\n/]*(?:greptile|coderabbit|gemini|github-code-quality)[^\n]*\/[gimsuy]*/i,
-      );
-      expect(code).not.toMatch(
-        /includes\(\s*['"](?:coderabbit|greptile|gemini|github-code-quality)/i,
-      );
+      // No local regex over a bot name, no local substring test in ANY of the
+      // methods that spell one, and no name assembled by concatenation.
+      expect(code).not.toMatch(LOCAL_BOT_REGEX);
+      expect(code).not.toMatch(LOCAL_BOT_SUBSTRING);
+      expect(code).not.toMatch(LOCAL_BOT_CONCAT);
     });
   }
+
+  it('the sensor catches every re-declaration shape it claims to (mutant rows)', () => {
+    // The sensor is only worth its line if it FAILS on a re-declaration. Each
+    // mutant below is a plausible way a consumer could grow its own list back;
+    // a sensor that misses one would pass this file while the drift is real.
+    const mutants: Array<[string, string]> = [
+      ['a local regex', 'const GREPTILE = /\\bgreptile(?:-[^[]+)?\\[bot\\]/i;'],
+      ['includes()', "if (lower.includes('coderabbit')) return 'coderabbit';"],
+      ['indexOf()', "if (lower.indexOf('greptile') !== -1) return 'greptile';"],
+      ['startsWith()', "if (lower.startsWith('gemini-code-assist')) return 'gca';"],
+      ['concatenation', "const login = 'greptile' + '-apps' + '[bot]';"],
+    ];
+    for (const [label, mutant] of mutants) {
+      const caught =
+        LOCAL_BOT_REGEX.test(mutant) ||
+        LOCAL_BOT_SUBSTRING.test(mutant) ||
+        LOCAL_BOT_CONCAT.test(mutant) ||
+        LOGIN_SPELLINGS.some((s) => mutant.includes(s));
+      expect(caught, `the parity sensor missed the ${label} re-declaration`).toBe(true);
+    }
+  });
 
   it('both consumers import the identity module', () => {
     const parser = fs.readFileSync(PARSER_SRC, 'utf-8');
@@ -125,12 +161,28 @@ describe('bot identity — behaviour the consumers had before the move', () => {
     expect(resolveActorId('totem-claude')).toBe('totem-claude');
   });
 
-  it('the GraphQL spelling (no [bot] suffix) is a bot on the anchored read only', () => {
+  it('the GraphQL spelling (no [bot] suffix) is a bot on the exact-login read only', () => {
     expect(isBotReviewerLoginExact('gemini-code-assist')).toBe(true);
     expect(isBotReviewerLoginExact('greptile-apps')).toBe(true);
+    expect(isBotReviewerLoginExact('greptile-apps[bot]')).toBe(true);
     expect(isBotReviewerLoginExact('coderabbitai')).toBe(true);
     expect(isBotReviewerLoginExact('alice-greptile')).toBe(false);
     expect(isBotReviewerLoginExact('satur8d')).toBe(false);
     expect(isBotReviewerLoginExact('')).toBe(false);
+  });
+
+  it('a HUMAN login that merely shares a bot prefix is not a bot (fold F5)', () => {
+    // The pre-fold wildcard arm (`greptile-<anything>`) admitted every one of
+    // these, which would let a human comment gate a merge.
+    for (const human of [
+      'greptile-fan',
+      'greptile-fan[bot]',
+      'greptile',
+      'github-code-quality-fan',
+      'coderabbitai-mirror',
+      'gemini-code-assist-community',
+    ]) {
+      expect(isBotReviewerLoginExact(human), `${human} must not read as a bot`).toBe(false);
+    }
   });
 });
