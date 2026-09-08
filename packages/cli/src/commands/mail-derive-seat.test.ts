@@ -340,8 +340,35 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
       readFileSpy.mockRestore();
     }
 
+    // Liveness (fold F5): a spy that observed NOTHING would satisfy the
+    // "no outbox" assertion vacuously — a wiring break, a mock that never
+    // installed, or a refactor that stopped touching the tree at all would all
+    // pass silently. The probe must be seen reading THIS fixture's
+    // orchestration tree for the negative below to mean anything.
+    const orchestration = path.join(repoRoot, '.totem', 'orchestration');
+    const observed = touched.filter((p) => p.startsWith(orchestration));
+    expect(
+      observed.length,
+      `the fs spy observed no read under ${orchestration} — the negative assertion below would be vacuous`,
+    ).toBeGreaterThan(0);
+
     const poked = touched.filter((p) => /outbox|processed/i.test(p));
     expect(poked, `derive-seat must not touch the poll surfaces: ${poked.join(', ')}`).toEqual([]);
+  });
+
+  it('matches the hosted seat case-insensitively and prints the resolver’s casing (fold F5)', async () => {
+    // Every other seat comparison in mail.ts folds case (`pollMail`'s
+    // `selfLower`, the `--as` member lookup), so a case-shifted env must not
+    // be refused by a probe whose whole job is to agree with the poll — and
+    // the line must carry the dir's own spelling, not the env's.
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    const { exitCode, stdout, stderr } = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'SEAT-Alpha' },
+    });
+    expect(stderr).toBe('');
+    expect(stdout).toBe('seat=seat-alpha source=env\n');
+    expect(exitCode).toBe(0);
   });
 
   it('deriveSeat is pure — it returns the verdict without printing (the lib/wrapper split)', () => {
