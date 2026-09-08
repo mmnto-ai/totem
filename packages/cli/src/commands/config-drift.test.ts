@@ -270,7 +270,10 @@ describe('agent instruction files stay concise (FMEA-001 / FR-C01)', () => {
   // self-canonical for .junie/guidelines.md). Budget bumped to 6000/40 in
   // ADR-038 migration to accommodate AGENTS.md absorbing the cross-vendor
   // content that CLAUDE.md + GEMINI.md previously held separately.
-  const CANONICAL_MAX_CHARS = 6000;
+  // 6000 → 6200: the R4 sentence of mmnto-ai/totem#2801 took AGENTS.md from 5987
+  // to 6110 characters; raised on the operator's ruling 2026-09-08 rather than
+  // trimming unrelated prose.
+  const CANONICAL_MAX_CHARS = 6200;
   const CANONICAL_MAX_DIRECTIVES = 40;
 
   // Redirect files exist only to point Claude Code / Gemini CLI at AGENTS.md.
