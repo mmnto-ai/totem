@@ -1481,12 +1481,19 @@ export function deriveSeat(opts: DeriveSeatOptions = {}): DeriveSeatResult {
   // second resolution would mean duplicating core's own parse.)
   const envDeclares = typeof rawEnv === 'string' && rawEnv.trim().length > 0;
   const resolution = envDeclares ? resolveSelfAgents(repoRoot, env) : hosted;
-  // Dedupe before the one-identity test, the same normalization `pollMail`
-  // applies to its own resolution above: `TOTEM_SELF_AGENT=a,a` is one seat
+  // Dedupe before the one-identity test, and fold case while doing it (fold
+  // round 3, F6). `TOTEM_SELF_AGENT=a,a` — and `a,A`, which every seat
+  // comparison downstream already treats as one seat — is one identity
   // declared clumsily, not two, and the poll serves it. A probe that refused
   // what the poll then serves is the disagreement class this whole slice is
-  // about.
-  const declaredSeats = [...new Set(resolution.agents)];
+  // about. First occurrence wins here; the seat PRINTED is the hosted set's
+  // own spelling, resolved just below.
+  const declaredByLower = new Map<string, string>();
+  for (const agent of resolution.agents) {
+    const key = agent.toLowerCase();
+    if (!declaredByLower.has(key)) declaredByLower.set(key, agent);
+  }
+  const declaredSeats = [...declaredByLower.values()];
   if (resolution.source !== 'env' || declaredSeats.length !== 1) {
     return {
       ok: false,

@@ -385,6 +385,19 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(exitCode).toBe(0);
   });
 
+  it('a CASE-SHIFTED duplicate is one identity too, and the hosted spelling is printed (fold round 3 F6)', async () => {
+    // Every seat comparison downstream folds case, so `a,A` names one seat.
+    // Refusing it would be the probe disagreeing with the poll again.
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    const { exitCode, stdout, stderr } = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'seat-alpha,SEAT-Alpha' },
+    });
+    expect(stderr).toBe('');
+    expect(stdout).toBe('seat=seat-alpha source=env\n');
+    expect(exitCode).toBe(0);
+  });
+
   it('an env declaring MULTIPLE seats refuses — a session has one identity (exit 2)', async () => {
     const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
     const { exitCode, stdout, stderr } = await run({
