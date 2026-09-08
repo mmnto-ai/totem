@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "56fcab9692512e46e843b76c0736f64dfbe365b1",
+  "readAt": "2026-09-08T06:00:52Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 525,
+      "claim": "The exec spy proves the verb never posts a comment, a reply or a review.",
+      "counterexample": "The five not.toMatch patterns were a denylist: gh pr comment was caught but gh pr review --approve, gh api -X POST, gh api --method=POST, gh pr edit and gh pr merge all evaded it, and the dry-run test never ran the spy. The source was clean by construction (five enumerated exec sites, all through the seam). Folded: an allowlist over the verb's exact argv shapes, run in the dry-run test too, with mutant rows that must fail."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 306,
+      "claim": "'non-bot' in-thread means the same thing it means at PR level, so only a human reply is in-thread evidence.",
+      "counterexample": "isBotComment used only the four-name closed list while the PR-level arm tests user.type, the [bot] suffix and the loose pattern; github-actions[bot], copilot-pull-request-reviewer[bot] and sonarqubecloud[bot] all returned exact=false, so a CodeRabbit thread whose only reply was from such an App classified as resolve with in-thread-reply evidence (fail-open). The query selected only author { login }. Folded: author { __typename login } fetched in both documents; a Bot typename or [bot] suffix or exact-list login is a bot; tests for the App replies."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 866,
+      "claim": "(note) applied: true and exit 0 mean the mutation resolved the thread.",
+      "counterexample": "Success was inferred from gh exit 0 plus an absent errors array; the selected thread { id isResolved } was never read, so a body of {data:{resolveReviewThread:null}} yielded applied=true. Folded: the response is parsed and isResolved === true is required."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 375,
+      "claim": "(note) PR-level evidence is 'the round-disposition comment' as the header, wiki and changeset narrate it.",
+      "counterexample": "Any non-bot PR-level comment created after the root qualifies, body unread; a bare review-trigger comment resolves a thread it postdates. This is R2 verbatim, so no contract breach; live sampling shows the trigger always precedes the roots, so it bites only on a re-invoked round. Strict later-than confirmed. Folded: the texts state the ruled rule and its consequence."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 360,
+      "claim": "(note) 'A human account whose name merely contains a bot's name stays human.'",
+      "counterexample": "True only for the greptile/ghcq patterns, which require the [bot] suffix; isBotReviewerLogin('coderabbit-fan') is true, so a human of that name posting the disposition yields skip:no-evidence (fail-safe). The test exercised alice-greptile, the arm where the claim holds. Folded: the comment narrowed and coderabbit-fan asserted as a disclosed limit."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 246,
+      "claim": "(note) The CAPTURE_2839 fixture is 'trimmed to the fields the verb reads'.",
+      "counterexample": "It was also row-trimmed: the live PR carries 7 issue comments, the fixture 5 (two coderabbitai[bot] rows dropped); the live verb prints 7 read. The three threads are verbatim-real. Folded: the dropped rows disclosed."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 706,
+      "claim": "(note) The 'PR not found' message arms are the paths a missing PR takes.",
+      "counterexample": "The fixtures used exit 0 with null data, a shape gh never emits; live gh exits 1 on an errors body and the earlier check fires first, so those arms were unreachable dead text (exit 1 either way). Folded: fixtures shaped like the real failure."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 775,
+      "claim": "(note) --json carries the same rows as one document shape.",
+      "counterexample": "The error document is {error, rows, exitCode} and the success document {repo, pr, apply, rows, summary}; verified live with an unmatched id. No test locked the error shape and neither the wiki nor the changeset named two shapes. Folded: locked and named."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4125,
+      "claim": "(note) The lock proves the resolve step sits after the disposition comment.",
+      "counterexample": "An indexOf comparison passes vacuously if the disposition command string is reworded (-1 < positive); nothing asserted that string's presence. Folded: presence asserted first."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 39,
+      "claim": "(note) Exit 1 for gh absent names gh auth status (the seat's briefing claim, not the source's).",
+      "counterexample": "requireGhCli prints the install cure and exits 1; gh auth status is named only on the gh-present-but-failing path. The source is right; the briefing conflated two causes. Not folded."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 331,
+      "claim": "(note) A deleted account's in-thread reply is human evidence.",
+      "counterexample": "Contradicts the generated spec's '(and is not null)' clause in the permissive direction, and that divergence was not on the design's disagreement list; the test locks it as intended. Folded: the divergence recorded on the design's list (a deleted account's reply was a human reply when written)."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F11"
+  ],
+  "verdict": "termination named: no BLOCKING defect; the verb's read, selection, exit-code and mutation contracts held live and offline; two MATERIAL folds (the never-writes spy rebuilt as an allowlist; App replies in-thread no longer count as human evidence, author typename fetched) and seven MINOR folded; one briefing error recorded unfolded"
+}
