@@ -4103,6 +4103,17 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
       'Failure Mode: Hook-less session launched without TOTEM_SELF_AGENT set.',
     );
     expect(SIGNON_SKILL_CONTENT).toContain('STOP and ask the operator');
+    // The third arm (fold F4): the env is SET and the probe still refuses —
+    // declaration and repo disagree. Without it a session reads "set → use it"
+    // and proceeds on a seat the CLI just refused, or worse, mutates the repo
+    // during a read-only bring-up to make the probe pass.
+    expect(SIGNON_SKILL_CONTENT).toContain('Set but REFUSED');
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'signon is read-only, so `totem seat add` is never run here',
+    );
+    // "STOP and ask the operator" stays the EMPTY arm's wording alone — a
+    // second STOP arm would blur which state halts the bring-up.
+    expect(SIGNON_SKILL_CONTENT.match(/STOP and ask the operator/g)).toHaveLength(1);
 
     // Step 1 — the ordering clause itself, verbatim as the design states it.
     expect(SIGNON_SKILL_CONTENT).toContain('assignment mail before orient');
