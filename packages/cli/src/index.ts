@@ -686,6 +686,45 @@ program
     }
   });
 
+// ─── `totem resolve-threads` — resolve dispositioned bot threads (mmnto-ai/totem#2841) ───
+// Dry-run by DEFAULT (R1); `--apply` is the only mutating path. Custom exit-code
+// contract (the index wrapper sets process.exitCode, same as `mail` / `pr merge`):
+// 0 = plan printed or applied clean; 1 = a read that did not complete (nothing
+// resolved) or gh absent; 2 = an unmatched --ids entry, a mutation that failed,
+// or a selected thread skipped for want of disposition evidence under --apply.
+program
+  .command('resolve-threads <pr-number>')
+  .description(
+    'Resolve the bot review threads a round has dispositioned (dry-run by default; --apply mutates)',
+  )
+  .option('--apply', 'Run the resolveReviewThread mutation (default: print the plan only)')
+  .option('--ids <ids>', 'Comma-separated REST root comment ids to narrow the batch')
+  .option('--json', 'Emit the plan rows as one JSON document')
+  .action(async (prNumber: string, _opts: unknown, cmd: Command) => {
+    requireGhCli();
+    try {
+      const { resolveThreadsCommand } = await import('./commands/resolve-threads.js');
+      // The program-level `--json` (top of file) swallows the flag when it
+      // appears after the subcommand (commander parent/child option collision,
+      // mmnto-ai/totem#2097) — `optsWithGlobals` merges both scopes so
+      // `totem resolve-threads 42 --json` and `totem --json resolve-threads 42`
+      // agree. Typed destructure, as `mail` does.
+      const { apply, ids, json } = cmd.optsWithGlobals<{
+        apply?: boolean;
+        ids?: string;
+        json?: boolean;
+      }>();
+      const { exitCode } = await resolveThreadsCommand(prNumber, {
+        apply: apply === true,
+        ...(ids === undefined ? {} : { ids }),
+        json: json === true,
+      });
+      if (exitCode !== 0) process.exitCode = exitCode;
+    } catch (err) {
+      handleError(err);
+    }
+  });
+
 // ─── `totem pr merge` — auto-close-safe squash merge actuator (mmnto-ai/totem#1762) ───
 // The sanctioned paved-road merge path (no command interception — OPTION 1
 // ruling, 2026-07-22). Custom fail-closed exit-code contract (the index
