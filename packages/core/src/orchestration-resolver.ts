@@ -209,6 +209,12 @@ function cohortSeatsForRepo(resolvedRoot: string): readonly string[] {
   // the map already knows, and a case-exact lookup would silently resolve
   // zero seats for them. The map's own keys are lower-case (locked by test).
   const key = (originName ?? path.basename(resolvedRoot)).toLowerCase();
+  // An OWN-property lookup: the frozen map keeps `Object.prototype`, and a
+  // repository named `constructor` or `toString` — both legal GitHub names, both
+  // accepted by `repoNameFromRemoteUrl` — would otherwise read an inherited
+  // function out of it and throw at the first `.filter`, breaking the
+  // resolver's never-throw contract (mmnto-ai/totem#2843 round 1, CodeRabbit).
+  if (!Object.hasOwn(COHORT_AGENT_MAP, key)) return [];
   return COHORT_AGENT_MAP[key] ?? [];
 }
 

@@ -692,6 +692,18 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     expect(result.agents).toEqual([]);
   });
 
+  it('an origin named like an Object.prototype member resolves empty and never throws (PR round 1)', () => {
+    // `constructor` and `toString` are legal repository names and pass
+    // `repoNameFromRemoteUrl`; a plain-object lookup read the inherited
+    // FUNCTION out of the frozen map and threw at the first `.filter`.
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      const root = mkGitRepo(`wt-${name}`, `https://github.com/someone/${name}.git`);
+      const result = resolveSelfAgents(root, {});
+      expect(result.source, name).toBe('none');
+      expect(result.agents, name).toEqual([]);
+    }
+  });
+
   it('the ORIGIN wins over a misleading directory name (the key is the repository)', () => {
     // A directory named `totem` that is actually a liquid-city checkout must
     // not claim the totem seats.

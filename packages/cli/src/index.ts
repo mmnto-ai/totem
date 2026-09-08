@@ -915,7 +915,7 @@ const mailCmd = program
   )
   .option(
     '--derive-seat',
-    'Print the seat this session inherited (`seat=<id> source=env`) and poll nothing — refuses (exit 2) unless TOTEM_SELF_AGENT names exactly one seat this repo hosts, where hosts means config.json host_agents, else the seat dirs, else the cohort map keyed on the origin repository. Unlike `--as`, the env never widens the hosted set: `--as` is your declaration, this flag corroborates one. Contradictory with --as and --all-seats',
+    'Print the seat this session inherited (`seat=<id> source=env`) and poll nothing — refuses (exit 2) unless TOTEM_SELF_AGENT names exactly one seat this repo hosts, where hosts means config.json host_agents, else the seat dirs, else the cohort map keyed on the origin repository. Unlike `--as`, the env never widens the hosted set: `--as` is your declaration, this flag corroborates one. Contradictory with --as and --all-seats. Under --json: one object on stdout in both arms, `{ ok: true, seat, source, line }` or `{ ok: false, refusal }`, same exit codes',
   )
   .addHelpText(
     'after',
@@ -943,7 +943,9 @@ const mailCmd = program
       '`--derive-seat` answers the prior question — which seat is this session? —',
       'and polls nothing: one stdout line `seat=<id> source=env` (exit 0), or a',
       'stderr refusal naming the supplied value and every seat this repo hosts',
-      '(exit 2). It never adopts a seat you did not declare.',
+      '(exit 2). It never adopts a seat you did not declare. With --json the',
+      'line and the refusal become one stdout object — `{ ok: true, seat,',
+      'source, line }` or `{ ok: false, refusal }` — with the same exit codes.',
       '',
     ].join('\n'),
   )
@@ -979,7 +981,12 @@ const mailCmd = program
         // (`--as`, `--all-seats`) are refused inside the command so the lib
         // owns the whole rule.
         if (deriveSeat === true) {
-          const { exitCode } = await deriveSeatCommand({ asSeat, allSeats, deriveSeat: true });
+          const { exitCode } = await deriveSeatCommand({
+            json,
+            asSeat,
+            allSeats,
+            deriveSeat: true,
+          });
           if (exitCode !== 0) process.exitCode = exitCode;
           return;
         }

@@ -92,21 +92,27 @@ function makeRepo(repo: string, seats: string[]): string {
  */
 async function run(
   opts: Parameters<typeof deriveSeatCommand>[0],
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+): Promise<{ exitCode: number; stdout: string; stderr: string; tags: string[] }> {
   const stdout: string[] = [];
   const stderr: string[] = [];
+  // The tag of every `log.error` call, captured beside the message: the repo
+  // styleguide fixes it at `'Totem Error'` for every `log.error`, and a
+  // command-specific tag here renders the wrong stderr prefix (PR round 1,
+  // gemini-code-assist + CodeRabbit).
+  const tags: string[] = [];
   const outSpy = vi
     .spyOn(process.stdout, 'write')
     .mockImplementation((chunk: string | Uint8Array): boolean => {
       stdout.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8'));
       return true;
     });
-  const errSpy = vi.spyOn(log, 'error').mockImplementation((_tag: string, msg: string) => {
+  const errSpy = vi.spyOn(log, 'error').mockImplementation((tag: string, msg: string) => {
+    tags.push(tag);
     stderr.push(msg);
   });
   try {
     const { exitCode } = await deriveSeatCommand(opts);
-    return { exitCode, stdout: stdout.join(''), stderr: stderr.join('\n') };
+    return { exitCode, stdout: stdout.join(''), stderr: stderr.join('\n'), tags };
   } finally {
     outSpy.mockRestore();
     errSpy.mockRestore();
@@ -554,6 +560,60 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(stderr).toBe('');
     expect(stdout).toBe('seat=seat-alpha source=env\n');
     expect(exitCode).toBe(0);
+  });
+
+  it("every refusal is logged under the CLI's fixed 'Totem Error' tag, never the command's TAG (PR round 1)", async () => {
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    const unset = await run({ repoRoot, env: {} });
+    expect(unset.exitCode).toBe(2);
+    expect(unset.tags).toEqual(['Totem Error']);
+    const contradiction = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'seat-alpha' },
+      asSeat: 'seat-alpha',
+    });
+    expect(contradiction.exitCode).toBe(2);
+    expect(contradiction.tags).toEqual(['Totem Error']);
+  });
+
+  it('--json emits ONE stdout object in both arms with the same exit codes, and nothing on stderr (PR round 1, greptile)', async () => {
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+
+    const ok = await run({ repoRoot, env: { TOTEM_SELF_AGENT: 'seat-alpha' }, json: true });
+    expect(ok.exitCode).toBe(0);
+    expect(ok.stderr).toBe('');
+    expect(JSON.parse(ok.stdout)).toEqual({
+      ok: true,
+      seat: 'seat-alpha',
+      source: 'env',
+      line: 'seat=seat-alpha source=env',
+    });
+
+    // The refusal arm: the poll's own --json contract — the object is emitted
+    // even on the exit-2 arm, so a consumer parses one object AND reads the
+    // exit code (mmnto-ai/totem#2312) — and stderr stays empty.
+    const refused = await run({ repoRoot, env: {}, json: true });
+    expect(refused.exitCode).toBe(2);
+    expect(refused.stderr).toBe('');
+    expect(refused.tags).toEqual([]);
+    const parsed = JSON.parse(refused.stdout) as { ok: boolean; refusal: string };
+    expect(parsed.ok).toBe(false);
+    expect(parsed.refusal).toContain('seat-alpha');
+    expect(parsed.refusal).toContain('seat-beta');
+
+    // The contradiction arm under --json is the same object shape.
+    const contradiction = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'seat-alpha' },
+      allSeats: true,
+      json: true,
+    });
+    expect(contradiction.exitCode).toBe(2);
+    expect(contradiction.stderr).toBe('');
+    expect(JSON.parse(contradiction.stdout)).toMatchObject({ ok: false });
+    expect((JSON.parse(contradiction.stdout) as { refusal: string }).refusal).toContain(
+      '--all-seats',
+    );
   });
 
   it('deriveSeat is pure — it returns the verdict without printing (the lib/wrapper split)', () => {

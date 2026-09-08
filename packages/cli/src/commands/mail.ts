@@ -1547,16 +1547,45 @@ export function deriveSeat(opts: DeriveSeatOptions = {}): DeriveSeatResult {
 }
 
 /**
+ * The `--json` shape of `--derive-seat`: one object on stdout in BOTH arms,
+ * mirroring the poll's own `--json` contract (the full result is emitted even
+ * on the exit-2 arm, so a consumer parses one object AND reads the exit code —
+ * mmnto-ai/totem#2312). `ok: true` carries the seat, its source and the exact
+ * text line the text mode prints; `ok: false` carries the refusal.
+ */
+export type DeriveSeatJson =
+  | { ok: true; seat: string; source: 'env'; line: string }
+  | { ok: false; refusal: string };
+
+/**
  * CLI wrapper for `--derive-seat`: one stdout line on success (exit 0), one
  * stderr refusal otherwise (exit 2 — the same NOT-DERIVED family the poll's
  * unresolved-self arm uses; a derivation that could not be made is never a
  * clean answer). stdout carries the success line ALONE so a caller can read
  * it without parsing a banner; every refusal stays off stdout entirely.
+ *
+ * Under `--json` (the `mail` command's advertised machine-readable mode,
+ * which this flag ignored — mmnto-ai/totem#2843 round 1, greptile) the text
+ * line and the stderr refusal are replaced by ONE {@link DeriveSeatJson}
+ * object on stdout, in both arms; the exit code is unchanged.
+ *
+ * `log.error` carries the CLI's fixed `'Totem Error'` tag (the repo
+ * styleguide's rule for every `log.error` call), not this command's `TAG`.
  */
 export async function deriveSeatCommand(
   opts: MailCommandOptions = {},
 ): Promise<{ exitCode: 0 | 2 }> {
   const { log } = await import('../ui.js');
+  const json = opts.json === true;
+  const refuse = (refusal: string): { exitCode: 2 } => {
+    if (json) {
+      const out: DeriveSeatJson = { ok: false, refusal };
+      process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+    } else {
+      log.error('Totem Error', refusal);
+    }
+    return { exitCode: 2 };
+  };
 
   // Contradiction arms first — a flag pair that cannot both be honoured is
   // refused before anything is derived. `--as` / `--all-seats` DECLARE a seat
@@ -1565,12 +1594,10 @@ export async function deriveSeatCommand(
   const declaring =
     opts.asSeat !== undefined ? '--as <seat>' : opts.allSeats === true ? '--all-seats' : null;
   if (declaring !== null) {
-    log.error(
-      TAG,
+    return refuse(
       `Seat NOT DERIVED — --derive-seat and ${declaring} are contradictory: --derive-seat asks which seat ` +
         `this session inherited, ${declaring} declares one. Pass exactly one.`,
     );
-    return { exitCode: 2 };
   }
 
   // The seat-dir reader is dynamic-imported (mmnto-ai/totem#2339: no static
@@ -1582,9 +1609,11 @@ export async function deriveSeatCommand(
     ...opts,
     presentSeatDirs: (repoRoot) => deriveSeatStatuses(repoRoot).map((s) => s.seat),
   });
-  if (!result.ok) {
-    log.error(TAG, result.refusal);
-    return { exitCode: 2 };
+  if (!result.ok) return refuse(result.refusal);
+  if (json) {
+    const out: DeriveSeatJson = { ok: true, seat: result.seat, source: 'env', line: result.line };
+    process.stdout.write(JSON.stringify(out, null, 2) + '\n');
+    return { exitCode: 0 };
   }
   process.stdout.write(`${result.line}\n`);
   return { exitCode: 0 };
