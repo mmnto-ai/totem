@@ -1372,9 +1372,12 @@ export const CLAUDE_SESSION_START_ENTRY = {
 //   subsystem IS present does the wrapper shell out; only then can a broken
 //   deterministic source (corrupt freeze.json) fail-close (exit 2).
 //
-// Tier (--strict default / --pilot) is read by the WRAPPER, not the engine
-// (the engine stays pure per ADR-109 [LOCKED]; freeze-check never emits
-// `warn`). The tier is BAKED into the installed command string at install
+// Tier (--strict default / --pilot) is read by the WRAPPER and, since
+// mmnto-ai/totem#2800 (R1), also FORWARDED to `gate check --tier` so a gate can
+// apply it to its OWN unevaluable class (merge-ready warns under pilot where a
+// read failed to derive; freeze-check ignores it and fails closed at every
+// tier). The engine stays pure — the tier is an input, not state. The tier is
+// BAKED into the installed command string at install
 // time and read ONLY from argv — there is NO env-var override, so a default
 // (`--strict`) install is enforcement-immune to a consumer's environment
 // (env-var sourcing would be a fail-open: a `TOTEM_GATE_TIER=pilot` in any
@@ -1396,7 +1399,8 @@ export const CLAUDE_GATE_WRAPPER = `// [totem] auto-generated — Claude Code ac
 //   0 = allow | warn | --pilot deny | NOT-APPLICABLE fail-soft
 //       (unparseable/non-object envelope; freeze-check with no declared
 //        subsystem; transport-shield on a tool other than Bash/PowerShell or
-//        with no non-empty string command)
+//        with no non-empty string command; merge-ready on any command that is
+//        not \`gh pr merge\` at command position)
 //   2 = deny (--strict, Claude block convention)
 //       | APPLICABLE-gate-not-evaluable fail-closed (no CLI resolvable
 //         (repo-local, then PATH), non-zero \`gate check\`, unparseable verdict,
@@ -1491,6 +1495,194 @@ for (let i = 0; i < argv.length; i++) {
   }
 }
 
+// ─── merge-ready: \`gh pr merge\` at COMMAND POSITION + its payload ──────
+//
+// One walk over the command text does BOTH jobs, so recognition and argv
+// extraction can never disagree: it tracks quoting, splits on the unquoted
+// command separators (\`;\`, \`&\`, \`|\`, a newline, \`(\`/\`)\`, \`{\`/\`}\`) and
+// tokenizes each segment. A segment whose FIRST token is \`gh\`, followed by
+// \`pr\` and \`merge\`, is a merge at command position; a quoted
+// "gh pr merge" is a single token and never matches, so
+// \`echo "gh pr merge"\` does not fire. Leading shell keywords (\`do\`,
+// \`then\`, \`else\`, \`!\`) are skipped so \`for … ; do gh pr merge; done\` fires.
+//
+// Disclosed, same posture as transport-shield's scanner: PowerShell's own
+// quoting (backtick escapes, here-strings) is not modelled — the walk reads
+// POSIX quoting for both tools; a wrapper program that takes operands before
+// \`gh\` (\`sudo\`, \`timeout 30\`, \`npx\`) hides it from the position anchor.
+// Both are the MISS direction (the gate does not fire), never a false deny.
+function ghPrMergeArgs(command) {
+  const segments = [];
+  let current = [];
+  let token = '';
+  let hasToken = false;
+  let i = 0;
+  const endToken = () => {
+    if (hasToken) {
+      current.push(token);
+      token = '';
+      hasToken = false;
+    }
+  };
+  const endSegment = () => {
+    endToken();
+    segments.push(current);
+    current = [];
+  };
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'") {
+      hasToken = true;
+      i++;
+      while (i < command.length && command[i] !== "'") {
+        token += command[i];
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      hasToken = true;
+      i++;
+      while (i < command.length && command[i] !== '"') {
+        if (command[i] === '\\\\' && i + 1 < command.length) {
+          token += command[i + 1];
+          i += 2;
+          continue;
+        }
+        token += command[i];
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (ch === ' ' || ch === '\\t' || ch === '\\r') {
+      endToken();
+      i++;
+      continue;
+    }
+    if (
+      ch === ';' ||
+      ch === '&' ||
+      ch === '|' ||
+      ch === '\\n' ||
+      ch === '(' ||
+      ch === ')' ||
+      ch === '{' ||
+      ch === '}'
+    ) {
+      endSegment();
+      i++;
+      continue;
+    }
+    if (ch === '\\\\' && i + 1 < command.length) {
+      token += command[i + 1];
+      hasToken = true;
+      i += 2;
+      continue;
+    }
+    token += ch;
+    hasToken = true;
+    i++;
+  }
+  endSegment();
+
+  for (const segment of segments) {
+    let tokens = segment;
+    while (
+      tokens.length > 0 &&
+      (tokens[0] === 'do' || tokens[0] === 'then' || tokens[0] === 'else' || tokens[0] === '!')
+    ) {
+      tokens = tokens.slice(1);
+    }
+    if (tokens.length >= 3 && tokens[0] === 'gh' && tokens[1] === 'pr' && tokens[2] === 'merge') {
+      return tokens.slice(3);
+    }
+  }
+  return null;
+}
+
+/** Run git read-only and return trimmed stdout, or '' when it did not answer. */
+function gitRead(args) {
+  const res = spawnSync('git', args, { encoding: 'utf-8', timeout: 10000 });
+  if (res.error || typeof res.status !== 'number' || res.status !== 0) return '';
+  return (res.stdout || '').trim();
+}
+
+/** \`owner/name\` out of any git remote URL shape (ssh, https, with or without .git). */
+function repoFromRemote(url) {
+  const m = /[:/]([^/:]+)\\/([^/]+?)(?:\\.git)?$/.exec(url.trim());
+  return m ? m[1] + '/' + m[2] : '';
+}
+
+// The flags of \`gh pr merge\` that CONSUME the next argv element — without this
+// list, \`gh pr merge -b "some branch"\` would read the body as the PR target.
+const GH_MERGE_VALUE_FLAGS = [
+  '-R',
+  '--repo',
+  '-b',
+  '--body',
+  '-F',
+  '--body-file',
+  '-t',
+  '--subject',
+  '--match-head-commit',
+  '--author-email',
+];
+
+/**
+ * Project { repo, pr, branch?, headSha? } from the argv after \`gh pr merge\`:
+ * a number, a PR URL, a branch, \`-R/--repo\`. With no argument at all, gh
+ * merges the PR for the CURRENT branch — so the payload carries pr: null plus
+ * that branch, exactly as the gate's payload contract allows.
+ */
+function projectMergeReady(argv) {
+  let repo = '';
+  let pr = null;
+  let branch = '';
+  let positional = null;
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const eq = arg.indexOf('=');
+    if (arg.slice(0, 2) === '--' && eq > 2) {
+      if (arg.slice(0, eq) === '--repo') repo = arg.slice(eq + 1);
+      continue;
+    }
+    if (GH_MERGE_VALUE_FLAGS.indexOf(arg) !== -1) {
+      if (arg === '-R' || arg === '--repo') repo = argv[i + 1] || '';
+      i++;
+      continue;
+    }
+    if (arg.charAt(0) === '-') continue;
+    if (positional === null) positional = arg;
+  }
+
+  if (positional !== null) {
+    const url = /^https?:\\/\\/[^/]+\\/([^/]+)\\/([^/]+)\\/pull\\/(\\d+)/.exec(positional);
+    if (url) {
+      if (repo === '') repo = url[1] + '/' + url[2];
+      pr = parseInt(url[3], 10);
+    } else if (/^\\d+$/.test(positional)) {
+      pr = parseInt(positional, 10);
+    } else {
+      branch = positional;
+    }
+  }
+
+  // gh itself honours GH_REPO before the git remote; mirror that order so the
+  // gate reads the SAME pull request the command would merge.
+  if (repo === '') repo = (process.env.GH_REPO || '').trim();
+  if (repo === '') repo = repoFromRemote(gitRead(['config', '--get', 'remote.origin.url']));
+  if (pr === null && branch === '') branch = gitRead(['rev-parse', '--abbrev-ref', 'HEAD']);
+
+  const headSha = gitRead(['rev-parse', 'HEAD']);
+  const out = { repo: repo, pr: pr };
+  if (branch !== '') out.branch = branch;
+  if (/^[0-9a-f]{40}$/i.test(headSha)) out.headSha = headSha;
+  return out;
+}
+
 // Read the PreToolUse stdin envelope.
 let stdin = '';
 process.stdin.setEncoding('utf-8');
@@ -1533,6 +1725,9 @@ process.stdin.on('end', () => {
   //   transport-shield | tool_name is Bash or PowerShell   | { tool, command, platform }
   //                    | AND tool_input.command is a       |
   //                    | non-empty string                  |
+  //   merge-ready      | tool_name is Bash or PowerShell   | { repo, pr, branch?, headSha? }
+  //                    | AND the command runs \`gh pr merge\`|
+  //                    | at COMMAND POSITION               |
   //   (anything else)  | — no projection → fail closed     | —
   let payload = '';
 
@@ -1568,6 +1763,23 @@ process.stdin.on('end', () => {
       command: input.command,
       platform: process.platform,
     });
+  } else if (event === 'merge-ready') {
+    // merge-ready's predicate is on a PULL REQUEST about to be merged. The gate
+    // installs under Bash|PowerShell, so this branch sees every shell command:
+    // anything that is not \`gh pr merge\` at COMMAND POSITION is NOT an
+    // applicable gate → pass through (exit 0) WITHOUT spawning.
+    const tool = parsed.tool_name;
+    if (tool !== 'Bash' && tool !== 'PowerShell') {
+      process.exit(0);
+    }
+    if (typeof input.command !== 'string' || input.command.trim() === '') {
+      process.exit(0);
+    }
+    const mergeArgs = ghPrMergeArgs(input.command);
+    if (mergeArgs === null) {
+      process.exit(0);
+    }
+    payload = JSON.stringify(projectMergeReady(mergeArgs));
   } else {
     // A baked --event this wrapper cannot project is an APPLICABLE gate it
     // cannot evaluate → fail closed (ADR-109). Reinstalling refreshes the
@@ -1638,9 +1850,13 @@ process.stdin.on('end', () => {
   // 32,767 characters — an argv payload past it fails the spawn with
   // ENAMETOOLONG and would land in the fail-closed arm below with nothing
   // broken (mmnto-ai/totem#2799, pass 3).
+  // The baked tier rides along (mmnto-ai/totem#2800 R1): the ENGINE owns the
+  // strict/pilot split for a gate's UNEVALUABLE class (a read that could not
+  // derive), while the disposition → exit map below stays the wrapper's. A gate
+  // that ignores the tier — freeze-check — still fails closed at both.
   const result = spawnSync(
     process.execPath,
-    [cliPath, 'gate', 'check', '--event', event, '--payload', '-'],
+    [cliPath, 'gate', 'check', '--event', event, '--tier', tier, '--payload', '-'],
     { encoding: 'utf-8', timeout: 30000, input: payload },
   );
 

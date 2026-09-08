@@ -8,6 +8,10 @@ import {
   type GateTier,
   installGates,
 } from './gate-install.js';
+// The tier vocabulary is ONE string union, imported above: the install-time
+// bake and the check-time `--tier` argument cannot drift apart. `GateTier` is
+// spelled locally in gate-install.ts so that module imports nothing from core
+// (ADR-072 §3).
 
 /**
  * Command-specific log tag for non-error output (log.success / log.dim).
@@ -21,6 +25,15 @@ export interface GateCheckCommandOptions {
   event: string;
   /** The gate's JSON payload, or `-` to read the JSON from stdin (the wrapper's channel; no argv limit). */
   payload: string;
+  /**
+   * Enforcement tier for the evaluated gate's UNEVALUABLE class
+   * (mmnto-ai/totem#2800 R1). Default `strict`. The wrapper passes the tier it
+   * was installed with, so a `--pilot` install reaches the engine. It NEVER
+   * softens a predicate that actually failed (the wrapper's disposition map
+   * owns that), and gates that do not read it — freeze-check, transport-shield
+   * — are unaffected: freeze-check fails closed at every tier.
+   */
+  tier?: string;
 }
 
 export interface GateInstallCommandOptions {
@@ -167,6 +180,19 @@ export async function gateCheckCommand(
   // module never loads on unrelated CLI invocations (e.g. `totem --help`).
   const { evaluateGate, TotemError } = await import('@mmnto/totem');
 
+  // Validate the tier at the boundary: an unrecognized value is a broken
+  // wrapper install, and silently defaulting it to `strict` (or `pilot`) would
+  // decide enforcement by accident.
+  const rawTier = opts.tier?.trim();
+  if (rawTier !== undefined && rawTier !== '' && rawTier !== 'strict' && rawTier !== 'pilot') {
+    throw new TotemError(
+      'GATE_INVALID',
+      `Unknown --tier "${rawTier}".`,
+      'Pass --tier strict (the default) or --tier pilot.',
+    );
+  }
+  const tier: GateTier = rawTier === 'pilot' ? 'pilot' : 'strict';
+
   const raw = opts.payload === '-' ? readStdin() : opts.payload;
   let payload: unknown;
   try {
@@ -186,6 +212,9 @@ export async function gateCheckCommand(
   const configRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
   const totemDir = path.join(configRoot, config.totemDir);
 
-  const verdict = evaluateGate(opts.event, payload, totemDir);
+  // The tier rides in on the gate context; a gate's own stderr lines go to the
+  // process stderr the wrapper already passes through (the engine's default
+  // sink), so the verdict on stdout stays the only parsed channel.
+  const verdict = evaluateGate(opts.event, payload, totemDir, { tier });
   process.stdout.write(JSON.stringify(verdict) + '\n');
 }

@@ -1963,11 +1963,15 @@ gateCmd
   .description('Evaluate a gate predicate; emit a GateVerdict (allow|warn|deny) as JSON to stdout')
   .requiredOption('--event <type>', 'Gate event type (e.g. freeze-check)')
   .requiredOption('--payload <json>', 'Gate-specific JSON payload, or - to read it from stdin')
+  .option(
+    '--tier <tier>',
+    'Enforcement tier for the gate\'s UNEVALUABLE class: "strict" (default — a read that failed to derive denies) or "pilot" (it warns). Never softens a predicate that actually failed, and gates that fail closed at every tier (freeze-check) ignore it.',
+  )
   .addHelpText(
     'after',
-    `\nExamples:\n  $ totem gate check --event freeze-check --payload '{"subsystem":"rule-compilation"}'\n  $ echo '{"tool":"Bash","command":"git status","platform":"win32"}' | totem gate check --event transport-shield --payload -\n`,
+    `\nExamples:\n  $ totem gate check --event freeze-check --payload '{"subsystem":"rule-compilation"}'\n  $ echo '{"tool":"Bash","command":"git status","platform":"win32"}' | totem gate check --event transport-shield --payload -\n  $ totem gate check --event merge-ready --tier pilot --payload '{"repo":"mmnto-ai/totem","pr":2800}'\n`,
   )
-  .action(async (opts: { event: string; payload: string }) => {
+  .action(async (opts: { event: string; payload: string; tier?: string }) => {
     try {
       const { gateCheckCommand } = await import('./commands/gate.js');
       await gateCheckCommand(opts);

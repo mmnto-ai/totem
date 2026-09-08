@@ -155,6 +155,51 @@ describe('gateCheckCommand', () => {
     expect(verdict.provenance.matched).toBeNull();
     expect(process.exitCode).toBeFalsy();
   });
+
+  // ─── --tier (mmnto-ai/totem#2800 R1) ──────────────────────────────────
+  //
+  // The verb carries the tier the wrapper was installed with to the engine,
+  // which applies it to the evaluated gate's OWN unevaluable class. The
+  // merge-ready evaluator is exercised in core; what these lock is the command
+  // seam: the default, the validation, and that no tier softens freeze-check.
+
+  it('rejects an unknown --tier rather than defaulting one silently', async () => {
+    await expect(
+      gateCheckCommand({
+        event: 'freeze-check',
+        payload: '{"subsystem":"x"}',
+        tier: 'advisory',
+      }),
+    ).rejects.toThrow(/unknown --tier "advisory"/i);
+  });
+
+  it('accepts strict and pilot, and defaults to strict when omitted', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.totem', 'freeze.json'), FROZEN);
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    for (const tier of [undefined, 'strict', 'pilot']) {
+      await gateCheckCommand({
+        event: 'freeze-check',
+        payload: '{"subsystem":"rule-compilation"}',
+        ...(tier === undefined ? {} : { tier }),
+      });
+    }
+
+    // freeze-check ignores the tier entirely: a frozen subsystem is a `deny` at
+    // every tier — the ruling's "freeze-check keeps failing closed".
+    expect(spy.mock.calls).toHaveLength(3);
+    for (const call of spy.mock.calls) {
+      expect(JSON.parse(call[0] as string).disposition).toBe('deny');
+    }
+  });
+
+  it('merge-ready is dispatchable through the verb (payload validated at the boundary)', async () => {
+    // No gh runs: the payload fails validation first, which is the arm that
+    // must throw rather than emit a default allow.
+    await expect(
+      gateCheckCommand({ event: 'merge-ready', payload: '{"repo":"","pr":null}' }),
+    ).rejects.toThrow(/merge-ready payload is invalid/i);
+  });
 });
 
 /**
@@ -168,7 +213,7 @@ describe('gateCheckCommand', () => {
  * sat beside the installer they no longer call directly.)
  */
 describe('resolveGates (registry-driven validation)', () => {
-  it('--all enumerates knownGates() — both gates, in registry order, with matchers', async () => {
+  it('--all enumerates knownGates() — every gate, in registry order, with matchers', async () => {
     const resolved = await resolveGates({ all: true });
     expect(resolved).toEqual(knownGates());
     // Spelled out, so a registry edit that moved a gate to another matcher
@@ -176,6 +221,7 @@ describe('resolveGates (registry-driven validation)', () => {
     expect(resolved).toEqual([
       { event: 'freeze-check', matcher: 'Write|Edit' },
       { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+      { event: 'merge-ready', matcher: 'Bash|PowerShell' },
     ]);
     // Order is the registry's, and it is what `--all` installs in.
     expect(resolved.map((g) => g.event)).toEqual(knownGateEvents());
@@ -190,6 +236,12 @@ describe('resolveGates (registry-driven validation)', () => {
   it('transport-shield resolves to the Bash|PowerShell pair', async () => {
     expect(await resolveGates({ name: 'transport-shield' })).toEqual([
       { event: 'transport-shield', matcher: 'Bash|PowerShell' },
+    ]);
+  });
+
+  it('merge-ready resolves to the Bash|PowerShell pair (mmnto-ai/totem#2800)', async () => {
+    expect(await resolveGates({ name: 'merge-ready' })).toEqual([
+      { event: 'merge-ready', matcher: 'Bash|PowerShell' },
     ]);
   });
 
