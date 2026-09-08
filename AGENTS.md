@@ -8,6 +8,8 @@ Totem is a **deterministic, git-native governance toolkit** — _rules you enfor
 
 ## Session Start Protocol (MANDATORY)
 
+On a hook-less seat, signon's seat-and-assignment step (`/signon` 0–1) precedes every search below (mmnto-ai/totem#2801).
+
 1. Run `totem status` for health.
 2. **NEVER GUESS ARCHITECTURE.** Before modifying any core system, run `totem search <system_name>`.
 3. Before writing code, call `search_knowledge` describing what you're changing.
