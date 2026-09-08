@@ -607,7 +607,10 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     // a bare variation selector — before "major" matched as if it were one.
     expect(hasHighSeverityMarker('\uD83D major rewrite')).toBe(false);
     expect(hasHighSeverityMarker('\uDD34 major rewrite')).toBe(false);
-    expect(hasHighSeverityMarker('️ major rewrite')).toBe(false);
+    // Built from its code point, never pasted: a raw variation selector is
+    // invisible in a diff and an editor can drop it, which would leave this
+    // control asserting nothing (round 5, F7).
+    expect(hasHighSeverityMarker(`${String.fromCharCode(0xfe0f)} major rewrite`)).toBe(false);
     // The four dots and the warning sign still read as labels.
     for (const glyph of ['\u{1F534}', '\u{1F7E0}', '\u{1F7E1}', '\u{1F535}', '⚠']) {
       expect(hasHighSeverityMarker(`${glyph} Critical\n\nbody`), glyph).toBe(true);

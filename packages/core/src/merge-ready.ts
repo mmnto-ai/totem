@@ -653,14 +653,32 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
  * read as high, but predicates 2 and 4 both require the thread's ROOT comment
  * to be a known bot login.
  *
- * The code stripper recognises fenced blocks (any backtick or tilde run),
- * `<pre>` blocks, CommonMark indented blocks and inline spans of any backtick
- * run. A code form it does NOT recognise — a four-backtick fence closed by
- * three, an HTML `<code>` element, a nested fence inside a list item — leaves
- * its contents in the scanned prose, so a marker quoted there reads HIGH: the
- * FALSE-DENY direction, and the one direction this gate pays for with the
- * audited override rather than modelling away. Each such form is a corpus row
- * plus a stripper fix when one is observed.
+ * THE STRIPPER'S EDGES, measured rather than assumed (round 5, F1/F4/F5/F6).
+ * It recognises fenced blocks of any backtick or tilde run, `<pre>` blocks,
+ * CommonMark indented blocks, and inline spans of any backtick run. At the
+ * edges:
+ *   - a fence indented under a list item IS stripped, at two spaces or four —
+ *     the opener and closer both allow leading blanks;
+ *   - a four-backtick fence closed by three has its CONTENTS stripped (the
+ *     opener matches three of the four backticks and the fourth reads as the
+ *     info string), so only the text AFTER the short closer reaches the scan —
+ *     a marker there reads HIGH, the false-deny direction;
+ *   - an HTML `<code>` element is NOT stripped at all. A label inside one reads
+ *     HIGH wherever it carries its own anchor — a `|` cell delimiter, or a line
+ *     start inside a multi-line element — and reads not-high only when it has
+ *     neither. False-deny direction.
+ * Three edges run the other way, toward ALLOW, by swallowing prose that is not
+ * code: a backtick run whose match crosses a paragraph break takes a label
+ * sitting between two lone backticks with it; an indented line that follows a
+ * prose line is stripped though CommonMark would not open a code block there;
+ * and `<pre>` tags quoted inside code spans still act as block delimiters,
+ * because the `<pre>` arm runs before the span arm. Measured reach: NONE of
+ * the 34 bodies in the checked-in fixtures is affected — every one of them,
+ * corpus included, gets the same verdict from its first line alone, and all
+ * 16 corpus labels sit on line 0, where no stripper edge can reach them. Each
+ * edge is a corpus row plus a stripper fix when one is observed in the field;
+ * `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past a false deny in the
+ * meantime.
  */
 
 /**
