@@ -29,7 +29,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+// `deriveSeatStatuses` (mmnto-ai/totem#2801) joins the sibling value imports
+// under the same justification the block already carries: `deriveSeat` is SYNC,
+// so the mmnto-ai/totem#2339 dynamic-import cure is unavailable for it, and
+// mail.ts is action-lazy-loaded by index.ts and ecl-gc, so this statement never
+// runs on the --help startup graph. It is called on ONE refusal branch (the
+// config-omits-a-present-seat-dir arm) and never on the success path.
 import {
+  // totem-ignore-next-line mmnto-ai/totem#2801
   deriveSeatStatuses,
   isPathSafeAgentId,
   knownCohortAgents,
