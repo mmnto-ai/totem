@@ -1383,12 +1383,15 @@ export type DeriveSeatResult =
 
 /**
  * Reader for the seat ids that have a DIRECTORY in this repo's orchestration
- * tree. Injected rather than imported so `deriveSeat` stays a sync function
- * with no static value import from `@mmnto/totem` (the core barrel pulls
- * LanceDB into every startup — mmnto-ai/totem#2339); `deriveSeatCommand`
- * dynamic-imports core's `deriveSeatStatuses` and passes it in. Omitted, the
- * one branch that needs it (the config-omits-a-present-seat-dir refusal)
- * simply falls back to the generic not-hosted wording — no crash, no guess.
+ * tree. Injected rather than imported so this file adds no NEW static value
+ * import from `@mmnto/totem` — the mmnto-ai/totem#2339 rule, which errors on
+ * exactly that. It buys no startup saving here: the core barrel is already on
+ * this module's graph through the six value imports at the top of the file, all
+ * predating that rule. What it buys is a `deriveSeat` that stays sync while the
+ * rule stays satisfied without a suppression directive; `deriveSeatCommand`,
+ * already async, dynamic-imports core's `deriveSeatStatuses` and passes it in.
+ * Omitted, the one branch that needs it (the config-omits-a-present-seat-dir
+ * refusal) falls back to the generic not-hosted wording — no crash, no guess.
  */
 export type PresentSeatDirsReader = (repoRoot: string) => readonly string[];
 
