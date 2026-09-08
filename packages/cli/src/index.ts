@@ -913,6 +913,10 @@ const mailCmd = program
     '--all-seats',
     'Serve the full multi-seat union (repo dashboard view) — bypasses the identity gate by name',
   )
+  .option(
+    '--derive-seat',
+    'Print the seat this session inherited (`seat=<id> source=env`) and poll nothing — refuses (exit 2) unless TOTEM_SELF_AGENT names exactly one seat this repo hosts, where hosts means config.json host_agents, else the seat dirs, else the cohort map keyed on the origin repository. Unlike `--as`, the env never widens the hosted set: `--as` is your declaration, this flag corroborates one. Contradictory with --as and --all-seats. Under --json: one object on stdout in both arms, `{ ok: true, seat, source, line }` or `{ ok: false, refusal }`, same exit codes',
+  )
   .addHelpText(
     'after',
     [
@@ -925,8 +929,10 @@ const mailCmd = program
       '(directed mail is withheld as a count, exit 2) until identity is explicit:',
       'per-shell TOTEM_SELF_AGENT, `--as <seat>`, or `--all-seats` by name.',
       '',
-      'Exit codes: 0 = verdict derived. 2 = NOT DERIVED (no self agent, or an',
-      'identity-gated poll) — fix identity and re-poll. 4 = SENDER FAULT',
+      'Exit codes: 0 = verdict derived. 2 = NOT DERIVED (no self agent, an',
+      'identity-gated poll, or a flag contradiction — `--derive-seat` passed with',
+      '`--as <seat>` or `--all-seats`, which declare the seat it asks for) — fix',
+      'identity or the flags and re-run. 4 = SENDER FAULT',
       '(mmnto-ai/totem#2685): the verdict IS derived, but an outbox this repo hosts',
       'for a resolved seat carries a dispatch whose `to:` matches no roster agent —',
       'undeliverable to every seat-scoped poll. Rendered as an Error line (and a',
@@ -934,12 +940,19 @@ const mailCmd = program
       'per dispatch, or broadcast) and re-poll. An Error line names a dispatch',
       "basename, like a gated poll's warnings — propagate nothing from it.",
       '',
+      '`--derive-seat` answers the prior question — which seat is this session? —',
+      'and polls nothing: one stdout line `seat=<id> source=env` (exit 0), or a',
+      'stderr refusal naming the supplied value and every seat this repo hosts',
+      '(exit 2). It never adopts a seat you did not declare. With --json the',
+      'line and the refusal become one stdout object — `{ ok: true, seat,',
+      'source, line }` or `{ ok: false, refusal }` — with the same exit codes.',
+      '',
     ].join('\n'),
   )
   .action(
     async (_opts: { json?: boolean; recursive?: boolean; workspace?: string }, cmd: Command) => {
       try {
-        const { mailCommand } = await import('./commands/mail.js');
+        const { deriveSeatCommand, mailCommand } = await import('./commands/mail.js');
         // The program-level `--json` (top of file) swallows the flag when it
         // appears after the subcommand (commander parent/child option collision,
         // mmnto-ai/totem#2097): the value lands on program.opts() and the action
@@ -952,13 +965,31 @@ const mailCmd = program
           workspace,
           as: asSeat,
           allSeats,
+          deriveSeat,
         } = cmd.optsWithGlobals<{
           json?: boolean;
           recursive?: boolean;
           workspace?: string;
           as?: string;
           allSeats?: boolean;
+          deriveSeat?: boolean;
         }>();
+        // `--derive-seat` (mmnto-ai/totem#2801) short-circuits BEFORE any poll:
+        // it answers which seat this session is, and a probe that polled would
+        // defeat the ordering signon step 0 exists to establish. Same
+        // exitCode-not-exit contract as the poll below; the contradiction arms
+        // (`--as`, `--all-seats`) are refused inside the command so the lib
+        // owns the whole rule.
+        if (deriveSeat === true) {
+          const { exitCode } = await deriveSeatCommand({
+            json,
+            asSeat,
+            allSeats,
+            deriveSeat: true,
+          });
+          if (exitCode !== 0) process.exitCode = exitCode;
+          return;
+        }
         // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
         // so the wrapper returns the code and we set process.exitCode (never
         // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
