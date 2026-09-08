@@ -248,6 +248,26 @@ describe('merge-ready — predicate 1 (checks)', () => {
     expect(e.verdict.reason).toMatch(/listed no checks/i);
     expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
   });
+
+  it('a rollup whose state is null or not a string is unevaluable, not R5 (round 2, F3)', () => {
+    // R5's fact needs the rollup to be CONSISTENT about having no checks: absent
+    // entirely, or SUCCESS over an empty list. A state that cannot be read is
+    // not a green light — before this it fell through the fact and ALLOWED.
+    for (const file of [
+      'synthetic-rollup-state-null.json',
+      'synthetic-rollup-state-non-string.json',
+    ]) {
+      const e = evaluate(file);
+      expect(e.verdict.disposition, file).toBe('deny');
+      expect(e.verdict.provenance.ref, file).toBe('unevaluable');
+      expect(e.verdict.reason, file).toMatch(/unreadable/i);
+      expect(
+        e.notices.some((n) => n.includes('ZERO status checks')),
+        file,
+      ).toBe(false);
+      expect(evaluate(file, { tier: 'pilot' }).verdict.disposition, file).toBe('warn');
+    }
+  });
 });
 
 // ─── Predicate 2 + 4: bot threads and severity ──────────────────────────────
@@ -302,6 +322,104 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(hasHighSeverityMarker('_Potential issue_ the error is dropped')).toBe(true);
     expect(hasHighSeverityMarker('nit: rename this local')).toBe(false);
   });
+});
+
+// ─── The severity read's false-positive budget (ADR-109, fold round 2 F4) ───
+//
+// Predicate 4 is the gate's only non-exact-match read, so ADR-109 requires a
+// STATED budget and the fixture that measures it — the transport-shield
+// precedent. The budget is ZERO high-severity reads over the benign corpus, and
+// this is the fixture: every bot inline thread on mmnto-ai/totem#2820 through
+// mmnto-ai/totem#2839, each carrying the severity ITS OWN BOT declared.
+//
+// The read is measured against the bots' declarations, not against a hand list,
+// so a marker that widens into prose fails here rather than in a merge.
+
+interface CorpusThread {
+  thread: string;
+  bot: string;
+  isResolved: boolean;
+  declaredLabel: string;
+  expectedHigh: boolean;
+  body: string;
+}
+
+describe('merge-ready — the severity read over the benign corpus', () => {
+  const corpus = JSON.parse(
+    fs.readFileSync(path.join(FIXTURE_DIR, 'benign-corpus-bot-inlines.json'), 'utf-8'),
+  ) as { threads: CorpusThread[]; prsThatAnswered: number };
+
+  it('the corpus is the whole window, not a hand-picked subset', () => {
+    expect(corpus.threads.length).toBe(16);
+    expect(corpus.prsThatAnswered).toBe(10);
+    // Every one of the three review bots is represented.
+    expect(new Set(corpus.threads.map((t) => t.bot))).toEqual(
+      new Set(['greptile-apps', 'coderabbitai', 'gemini-code-assist']),
+    );
+  });
+
+  it('BUDGET: the read agrees with every bot own severity label — zero false reads', () => {
+    const disagreements = corpus.threads.filter(
+      (t) => hasHighSeverityMarker(t.body) !== t.expectedHigh,
+    );
+    expect(
+      disagreements.map((t) => `${t.thread} (${t.declaredLabel})`),
+      'the severity read disagreed with a bot own declaration',
+    ).toEqual([]);
+    expect(corpus.threads.filter((t) => t.expectedHigh).length).toBe(8);
+  });
+
+  it('the greptile P2 thread on mmnto-ai/totem#2831 reads NOT high (the fold F4 falsifier)', () => {
+    // The prose read this replaced flagged it, through the word "critical" in
+    // its own explanation: a false deny on a finding its author ranked below
+    // the bar. The badge alt text is what decides now.
+    const p2 = corpus.threads.find((t) => t.thread === 'mmnto-ai/totem#2831/thread-2');
+    expect(p2, 'the P2 specimen must stay in the corpus').toBeDefined();
+    expect(p2!.declaredLabel).toBe('alt="P2"');
+    expect(p2!.body.toLowerCase()).toContain('critical'); // the prose that fooled the old read
+    expect(hasHighSeverityMarker(p2!.body)).toBe(false);
+  });
+
+  it('reads each bot structured label, and no prose that merely uses the words', () => {
+    // Positives: the label forms, transcribed from the corpus.
+    for (const label of [
+      '<a href="#"><img alt="P0" src="x.svg" align="top"></a> **Boom**',
+      '<a href="#"><img alt="P1" src="x.svg" align="top"></a> **Boom**',
+      '![high](https://www.gstatic.com/codereviewagent/high-priority.svg)',
+      '![critical](https://www.gstatic.com/codereviewagent/critical-priority.svg)',
+      '_Potential issue_\n\nthe error is dropped',
+    ]) {
+      expect(hasHighSeverityMarker(label), label.slice(0, 40)).toBe(true);
+    }
+
+    // Negatives: the levels below the bar, and prose that shares the words.
+    for (const benign of [
+      '<a href="#"><img alt="P2" src="x.svg" align="top"></a> **Nit**',
+      '<a href="#"><img alt="P3" src="x.svg" align="top"></a> **Nit**',
+      '![medium](https://www.gstatic.com/codereviewagent/medium-priority.svg)',
+      'This is a critical section of the parser, but only a nit.',
+      '- critical path issues remain',
+      '> major rewrite needed here',
+      'the major refactor is out of scope',
+      'a potential issue could arise if the cache is cold',
+    ]) {
+      expect(hasHighSeverityMarker(benign), benign.slice(0, 40)).toBe(false);
+    }
+  });
+
+  it('a bot HIGH inline with a NULL commit is unevaluable, never a silent pass (round 2, F8)', () => {
+    // Predicate 4's input is missing for that thread, so whether it applies to
+    // the head is unknown. R2: an unreadable input is never a pass — it used to
+    // fall out of the filter and read as "not on head".
+    const e = evaluate('synthetic-high-inline-null-commit.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/carry no commit/i);
+    expect(e.notices.join('\n')).toMatch(/could not derive/);
+    expect(
+      evaluate('synthetic-high-inline-null-commit.json', { tier: 'pilot' }).verdict.disposition,
+    ).toBe('warn');
+  });
 
   it('no bot review present passes predicates 2-4 as a fact, never a failure', () => {
     const e = evaluate('synthetic-merge-state-clean.json');
@@ -324,7 +442,12 @@ describe('merge-ready — predicate 3 (changes requested)', () => {
     expect(e.detail.changesRequestedBy).toEqual(['satur8d']);
   });
 
-  it('a later APPROVED from the SAME reviewer supersedes it; a COMMENTED does not', () => {
+  it('a later APPROVED from the SAME reviewer supersedes it, and a DIFFERENT reviewer COMMENTED after does not resurrect it', () => {
+    // What this fixture actually proves: satur8d CHANGES_REQUESTED then
+    // APPROVED (the supersession), with a coderabbitai COMMENTED afterwards
+    // that must not re-open anything. The SAME-reviewer COMMENTED case is the
+    // standing fixture's job, one test up (round 2, F12: the old title claimed
+    // both).
     const e = evaluate('synthetic-changes-requested-superseded.json');
     expect(e.verdict.disposition).toBe('allow');
     expect(e.detail.changesRequestedBy).toEqual([]);

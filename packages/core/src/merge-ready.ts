@@ -592,43 +592,77 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
 // ─── Severity read (predicate 4) ────────────────────────────────────────────
 
 /**
- * HIGH/Major markers in a bot inline body, as the three bots actually write them:
- *   - GCA prints a priority IMAGE whose alt text is the level —
- *     `![high](https://www.gstatic.com/codereviewagent/high-priority.svg)`
- *     (observed on mmnto-ai/liquid-city#363, the checked-in positive capture);
- *   - CodeRabbit prints the severity WORD beside its emoji (`Critical`, `Major`);
- *   - greptile prints a `P0`/`P1` priority label.
+ * The severity read is EXACT-BY-MARKER: it matches each bot's own STRUCTURED
+ * severity label and nothing else. Prose is never read
+ * (mmnto-ai/totem#2800 fold round 2, F4).
  *
- * Deliberately WORD-based (no emoji code points in this source). The read is
- * broad on purpose: it errs toward blocking, and the audited override is the
- * documented way past a false positive. The FP direction — a body that merely
- * discusses "a major refactor" — is disclosed, not modelled away.
+ * The markers, transcribed from what the bots actually emit — every form below
+ * is quoted from the checked-in benign corpus, not inferred:
+ *   - **greptile** — a badge image whose alt text is the priority:
+ *     `<a href="#"><img alt="P1" src="…/badges/p1.svg…" align="top"></a>`.
+ *     `P0` and `P1` are high; `P2` and below are NOT.
+ *   - **gemini-code-assist** — a priority image whose alt text is the level:
+ *     `![high](https://www.gstatic.com/codereviewagent/high-priority.svg)`.
+ *     `high` and `critical` are high; `medium` / `low` are not.
+ *   - **CodeRabbit** — an emphasis-wrapped label occupying a whole table cell
+ *     or line, the severity one of five levels: `_🔴 Critical_`, `_🟠 Major_`,
+ *     `_⚠️ Potential issue_` are high; `_🟡 Minor_`, `_🔵 Trivial_` are not.
+ *     The label must FILL its cell — the emphasis and the cell/line boundary
+ *     are what make it a label rather than a word in a sentence.
+ *
+ * FALSE-POSITIVE BUDGET (ADR-109: a non-exact-match gate ships a stated budget
+ * and the fixture that measures it — the `transport-shield` precedent):
+ * **ZERO** high-severity reads over the benign corpus in
+ * `gate-fixtures/merge-ready/benign-corpus-bot-inlines.json` — every bot inline
+ * thread on mmnto-ai/totem#2820 through mmnto-ai/totem#2839, each carrying the
+ * severity its own bot declared. `merge-ready.test.ts` asserts this read agrees
+ * with all sixteen of those declarations, so a marker that widens into prose
+ * fails there. The prose arms this replaced did not hold that budget: the
+ * greptile **P2** thread on mmnto-ai/totem#2831 read as HIGH through the word
+ * "critical" in its explanation — a false deny on a finding its own author
+ * ranked below the bar. A miss in the field is a corpus row plus a marker fix,
+ * never a hand-carved exemption; the `--pilot` tier exists for a measurement
+ * week, and `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past one.
+ *
+ * Out of scope by design, disclosed: a bot that stops emitting a structured
+ * label (or a fourth bot) reads as NOT high — the miss direction, a corpus gap
+ * to be closed by observation, never a silent deny; a human quoting a bot's
+ * label verbatim in their own comment would read as high, but predicates 2 and
+ * 4 both require the thread's ROOT comment to be a known bot login.
  */
 /**
- * Word boundaries that also break on markdown emphasis. `\b` does NOT fire
- * between `_` and a letter — `_` is a word character — so a `\b`-anchored
- * marker misses CodeRabbit's `_Potential issue_` and `_🔴 Critical_` headings
- * entirely (found by the fold F9 fixture). These boundaries treat anything
- * outside [a-z0-9] as a separator, so emphasis, quotes and HTML attributes all
- * delimit the marker while a mid-token `GP1X` still does not match.
+ * A glyph that is neither ASCII alphanumeric, nor whitespace, nor ASCII
+ * punctuation — in practice the emoji a bot puts before its label. Spelled as
+ * an EXCLUSION so this source names no code point (and authors no `\u` escape).
+ * Excluding ASCII punctuation is what keeps a markdown bullet (`- critical
+ * path`) or a quote (`> major rewrite`) out of the un-emphasised arm below.
  */
-const MARKER_BEFORE = '(?:^|[^a-z0-9])';
-const MARKER_AFTER = '(?:[^a-z0-9]|$)';
+const LABEL_GLYPH = '[^A-Za-z0-9\\s\\n|_*#>+.,:;!?()\\[\\]{}"\'`~^&%$@/\\\\=<-]';
 
 const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
-  /!\[(?:high|critical)\]/i,
-  new RegExp(`${MARKER_BEFORE}critical${MARKER_AFTER}`, 'i'),
-  new RegExp(`${MARKER_BEFORE}major${MARKER_AFTER}`, 'i'),
-  new RegExp(`${MARKER_BEFORE}high[- ]severity${MARKER_AFTER}`, 'i'),
-  new RegExp(`${MARKER_BEFORE}severity:\\s*high${MARKER_AFTER}`, 'i'),
-  new RegExp(`${MARKER_BEFORE}p[01]${MARKER_AFTER}`, 'i'),
-  // CodeRabbit's blocking class heads its comment with an emoji plus the words
-  // "Potential issue", usually inside markdown emphasis — the words are read
-  // here, the emoji is not (the prototype's marker, mmnto-ai/totem#2800 F9).
-  new RegExp(`${MARKER_BEFORE}potential issue${MARKER_AFTER}`, 'i'),
+  // greptile: the badge's alt attribute, P0/P1 only.
+  /<img[^>]*\balt="P[01]"/i,
+  // gemini-code-assist: the priority image's alt text.
+  /!\[(?:high|critical)\]\(/i,
+  // CodeRabbit: an emphasis-wrapped severity label that OPENS a table cell or a
+  // line. The `[^A-Za-z0-9\n|]*` arms absorb the emoji and the spaces inside the
+  // emphasis without this source naming a code point; requiring the opening
+  // emphasis to sit at a cell/line boundary is what separates a LABEL from an
+  // emphasised word inside a sentence.
+  /(?:^|\n|\|)[ \t]*[_*]{1,2}[^A-Za-z0-9\n|]*(?:critical|major|potential issue)[^A-Za-z0-9\n|]*[_*]{1,2}/i,
+  // CodeRabbit's un-emphasised heading form: the emoji, then the label, at the
+  // start of a line.
+  new RegExp(
+    `(?:^|\\n)[ \\t]*${LABEL_GLYPH}+[ \\t]*(?:critical|major|potential issue)(?![A-Za-z0-9])`,
+    'i',
+  ),
 ];
 
-/** Does this inline body carry a HIGH/Major severity marker? */
+/**
+ * Does this inline body carry one of the bots' own HIGH/Major severity labels?
+ * Exact-by-marker (see {@link HIGH_SEVERITY_MARKERS}) — a body that merely
+ * discusses a "critical" path or a "major" refactor is NOT high.
+ */
 export function hasHighSeverityMarker(body: string): boolean {
   return HIGH_SEVERITY_MARKERS.some((re) => re.test(body));
 }
@@ -782,22 +816,22 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     }
 
     if (checksDone && reviewsDone && threadsDone) {
-      // R5's zero-checks FACT applies only when the rollup is consistent about
-      // it: no rollup at all, or a rollup that reports success over an empty
-      // context list. A rollup that says PENDING or FAILURE while classifying
-      // zero contexts is an unreadable answer, never a green light
-      // (mmnto-ai/totem#2800 fold F7).
-      if (
-        state.checks.length === 0 &&
-        state.rollupState !== null &&
-        state.rollupState !== 'SUCCESS'
-      ) {
+      // R5's zero-checks FACT applies ONLY where the rollup is consistent about
+      // it, and that is exactly two shapes: no rollup at all, or a rollup that
+      // reports SUCCESS over an empty context list. Every other shape — a
+      // PENDING or FAILURE state with nothing listed, a `state` that is null,
+      // a `state` that is not a string at all — is an unreadable answer, never
+      // a green light (mmnto-ai/totem#2800 fold F7, tightened in round 2 F3:
+      // the null/non-string state used to fall through into the fact).
+      if (state.checks.length === 0 && state.rollupPresent && state.rollupState !== 'SUCCESS') {
         return {
           ok: false,
           detail:
-            'the status-check rollup reports ' +
-            bounded(state.rollupState) +
-            ' but listed no checks - the check state is unreadable',
+            state.rollupState === null
+              ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
+              : 'the status-check rollup reports ' +
+                bounded(state.rollupState) +
+                ' but listed no checks - the check state is unreadable',
           pagesRead: state.pagesRead,
         };
       }
@@ -906,6 +940,23 @@ function highSeverityInlines(threads: readonly ThreadEntry[], headSha: string): 
       isBotReviewerLoginExact(t.rootLogin) &&
       t.rootCommit !== null &&
       t.rootCommit.toLowerCase() === headSha &&
+      hasHighSeverityMarker(t.rootBody),
+  );
+}
+
+/**
+ * Bot HIGH inlines whose `comment.commit` came back NULL — the predicate's
+ * input is missing, so whether they apply to the head is UNKNOWN
+ * (mmnto-ai/totem#2800 round 2, F8). R2: an unreadable input is never a pass,
+ * so these make the evaluation unevaluable and are named on stderr, rather
+ * than falling out of the filter above and reading as "not on head".
+ */
+function unreadableCommitHighInlines(threads: readonly ThreadEntry[]): ThreadEntry[] {
+  return threads.filter(
+    (t) =>
+      t.rootLogin !== null &&
+      isBotReviewerLoginExact(t.rootLogin) &&
+      t.rootCommit === null &&
       hasHighSeverityMarker(t.rootBody),
   );
 }
@@ -1038,6 +1089,17 @@ export function evaluateMergeReady(
   };
   detail.changesRequestedBy = changesRequestedBy(state.reviews);
   detail.highInline = highSeverityInlines(state.threads, state.headSha).length;
+
+  // A bot HIGH inline whose `comment.commit` came back null cannot be placed
+  // against the head, so predicate 4's input is missing for it: unevaluable and
+  // NAMED, never a silent pass (round 2, F8).
+  const unreadable = unreadableCommitHighInlines(state.threads);
+  if (unreadable.length > 0) {
+    const first = unreadable[0]!;
+    return unevaluable(
+      `${unreadable.length} HIGH bot inline(s) carry no commit, so predicate 4 cannot place them against the head — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+    );
+  }
 
   // The caller's local head is evidence, not a predicate: a local branch can
   // legitimately sit ahead of or behind the PR head, and the charter's floor
