@@ -21,17 +21,22 @@
  *   - `loginPattern` — the loose, substring-style read of a REST-shaped login
  *     (triage's surface: recognize every finding, `[bot]` suffix required for
  *     the shape-matched bots so a human `alice-greptile` is never a bot); and
- *   - `loginExact` — an ANCHORED read of a WHOLE login, so the suffix-less
- *     GraphQL spelling matches without the loose pattern having to drop the
- *     `[bot]` anchor (dropping it would misclassify `alice-greptile`).
- * A gate that reads GraphQL (merge-ready) uses `loginExact`; triage keeps
+ *   - `exactLogins` — the CLOSED list of logins actually OBSERVED, each in
+ *     both spellings (with and without `[bot]`). It is a membership test, not a
+ *     pattern: a wildcard variant arm (`greptile-<anything>`) admitted human
+ *     accounts like `greptile-fan`, which would let a human comment gate a
+ *     merge (mmnto-ai/totem#2800 fold F5). A new bot variant is added HERE, by
+ *     observation, the same way the first ones were.
+ * A gate that reads GraphQL (merge-ready) uses `exactLogins`; triage keeps
  * `loginPattern`.
  *
  * The GREPTILE login is fixed BY OBSERVATION, not by either stale copy: the
  * runs above show `greptile-apps[bot]` on every totem PR greptile reviewed in
- * the 2026-09 window (#2821, #2827, #2831, #2834). The variant arm
- * (`greptile-<something>`) stays so a renamed/tiered app is still surfaced,
- * and `loginExact` is anchored so it never widens to a human account.
+ * the 2026-09 window (#2821, #2827, #2831, #2834). The loose `loginPattern`
+ * keeps its variant arm (a renamed app is still SURFACED to triage, and the
+ * required `[bot]` suffix keeps a human out); the anchored `exactLogins` list
+ * carries only what has been observed, so nothing a human could register
+ * satisfies the gate's read.
  */
 
 /** Triage's compact tool id (the `BotTool` members that are bots). */
@@ -47,10 +52,11 @@ export interface BotReviewerIdentity {
    */
   loginPattern: RegExp;
   /**
-   * Anchored recognition over a WHOLE login — matches the GraphQL spelling,
-   * where `[bot]` is absent, without widening the loose pattern.
+   * The closed list of logins observed for this reviewer, lowercase, in BOTH
+   * spellings: the REST one (`name[bot]`) and the GraphQL one (no suffix).
+   * Membership, never a pattern — see the module header.
    */
-  loginExact: RegExp;
+  exactLogins: readonly string[];
   /**
    * The stable Layer-B actor id for hit-rate attribution
    * (`capability/review-catch.ts`), when this reviewer has one. `ghcq` has
@@ -75,14 +81,14 @@ export const BOT_REVIEWER_IDENTITIES: readonly BotReviewerIdentity[] = Object.fr
   {
     tool: 'coderabbit',
     loginPattern: /coderabbit/i,
-    loginExact: /^coderabbitai(?:\[bot\])?$/i,
+    exactLogins: ['coderabbitai', 'coderabbitai[bot]'],
     actorId: 'coderabbit',
     actorLogins: ['coderabbitai[bot]'],
   },
   {
     tool: 'gca',
     loginPattern: /gemini-code-assist/i,
-    loginExact: /^gemini-code-assist(?:\[bot\])?$/i,
+    exactLogins: ['gemini-code-assist', 'gemini-code-assist[bot]'],
     // The Layer-B actor id deliberately diverges from triage's compact `gca`:
     // the ledger keys hit-rate on the full name.
     actorId: 'gemini-code-assist',
@@ -93,7 +99,7 @@ export const BOT_REVIEWER_IDENTITIES: readonly BotReviewerIdentity[] = Object.fr
     // The reviewer's suggested trailing `\b` fails right after the closing `]`
     // (a non-word char at end-of-string), so it is deliberately absent.
     loginPattern: /\bgreptile(?:-[^[]+)?\[bot\]/i,
-    loginExact: /^greptile(?:-[a-z0-9._-]+)?(?:\[bot\])?$/i,
+    exactLogins: ['greptile-apps', 'greptile-apps[bot]'],
     actorId: 'greptile',
     // Observed 2026-09-07 on mmnto-ai/totem#2821, #2827, #2831 and #2834.
     actorLogins: ['greptile-apps[bot]'],
@@ -104,7 +110,7 @@ export const BOT_REVIEWER_IDENTITIES: readonly BotReviewerIdentity[] = Object.fr
     // deliberately WITHOUT an actorId (see `actorId` above).
     tool: 'ghcq',
     loginPattern: /\bgithub-code-quality(?:-[^[]+)?\[bot\]/i,
-    loginExact: /^github-code-quality(?:-[a-z0-9._-]+)?(?:\[bot\])?$/i,
+    exactLogins: ['github-code-quality', 'github-code-quality[bot]'],
     actorLogins: [],
   },
 ]);
@@ -121,13 +127,14 @@ export function detectBotReviewer(author: string): BotReviewerTool | null {
 
 /**
  * Is this a known review bot on a surface that spells the login WHOLE — the
- * GraphQL `author.login`, where the `[bot]` suffix is absent? Anchored, so a
- * human account that merely contains a bot's name is not a bot.
+ * GraphQL `author.login`, where the `[bot]` suffix is absent? A CLOSED-list
+ * membership test: a login not on the observed list is not a bot, so no human
+ * account can satisfy it (mmnto-ai/totem#2800 fold F5).
  */
 export function isBotReviewerLoginExact(author: string): boolean {
-  const trimmed = author.trim();
+  const trimmed = author.trim().toLowerCase();
   if (trimmed.length === 0) return false;
-  return BOT_REVIEWER_IDENTITIES.some((id) => id.loginExact.test(trimmed));
+  return BOT_REVIEWER_IDENTITIES.some((id) => id.exactLogins.includes(trimmed));
 }
 
 /**
