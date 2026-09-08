@@ -440,6 +440,107 @@ export function resolveTotemRepoRootSync(repoRootOpt: string | undefined, cwd: s
   return findTotemRepoRootSync(start) ?? start;
 }
 
+/**
+ * Git's repository-LOCATION environment variables: every one of these is
+ * consulted before `cwd`, and git exports them into the hook processes it
+ * spawns, so a read meant to describe a directory silently describes whatever
+ * repository the ambient environment names. Scrubbed by
+ * {@link envWithoutGitLocation} for reads whose whole contract is "about this
+ * cwd" (mmnto-ai/totem#2801). Deliberately NOT a general git-env scrub:
+ * authorship, pager, terminal-prompt and credential variables are none of this
+ * concern and stay inherited.
+ */
+const GIT_LOCATION_ENV_VARS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CEILING_DIRECTORIES',
+] as const;
+
+/**
+ * A copy of `env` with {@link GIT_LOCATION_ENV_VARS} removed and everything
+ * else — PATH included — carried through unchanged. Exported for direct
+ * testing; callers pass the result as the child's `env`.
+ */
+export function envWithoutGitLocation(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const scrubbed: NodeJS.ProcessEnv = { ...env };
+  for (const name of GIT_LOCATION_ENV_VARS) delete scrubbed[name];
+  return scrubbed;
+}
+
+/**
+ * The REPOSITORY NAME of a checkout's `origin` remote — `totem` for
+ * `https://github.com/mmnto-ai/totem.git`, `git@github.com:mmnto-ai/totem.git`,
+ * and either form without the `.git` suffix or with trailing slashes. The
+ * owner and the host are deliberately dropped: this answers "which repository
+ * is this checkout of", which is a property of the path's last segment, and a
+ * mirror or a fork at the same repo name answers the same (the same
+ * host-blindness the doctor's cohort-id derivation already has).
+ *
+ * Returns `null` when there is no origin, when git is unavailable or fails for
+ * ANY reason, or when the URL yields no `owner/repo` pair. Never throws: every
+ * caller's fallback is "we do not know", and a git failure is exactly that.
+ *
+ * Costs one synchronous `git config` spawn, so call it only where the answer
+ * cannot be had from the filesystem (mmnto-ai/totem#2801: the cohort map's key,
+ * where a per-agent worktree's DIRECTORY basename names the worktree rather
+ * than the repository).
+ *
+ * The answer is a function of `cwd` ALONE, and two guards make it so.
+ *
+ * `--local` scope: a bare `git config --get` searches local, then GLOBAL, then
+ * system, and answers outside a repository at all — so a machine carrying a
+ * global `remote.origin.url` would hand a repo-shaped answer to a directory
+ * that is not a repo. `--local` errors outside a repository, which lands on the
+ * documented `null`. In a linked worktree it reads the shared common-dir
+ * config, where remotes live.
+ *
+ * A scrubbed env: git's repository-location variables are read from the
+ * environment before `cwd` is consulted, and git EXPORTS them into every hook
+ * process it spawns. Inheriting them made this read answer for whatever
+ * repository the ambient `GIT_DIR` named — a non-repo directory resolved as
+ * that repo, which is the identity-adoption class the caller exists to
+ * prevent, and it turned the resolver's own suite red under an exported
+ * `GIT_DIR`. {@link GIT_LOCATION_ENV_VARS} are therefore deleted from the
+ * child's env; everything else (PATH above all) is inherited unchanged.
+ */
+export function getOriginRepoName(cwd: string): string | null {
+  let url: string;
+  try {
+    url = safeExec('git', ['config', '--local', '--get', 'remote.origin.url'], {
+      cwd,
+      env: envWithoutGitLocation(process.env),
+      timeout: GIT_COMMAND_TIMEOUT_MS,
+    });
+    // totem-context: intentional fall-through — no origin, a non-git dir, an absent git binary and a timeout are all "we do not know the repository name", which is the documented null return, not a sensor failure.
+  } catch {
+    return null;
+  }
+  return repoNameFromRemoteUrl(url);
+}
+
+/**
+ * Extract the repository name from an ssh (`git@host:owner/repo.git`) or https
+ * (`https://host/owner/repo.git`) remote URL, tolerating a trailing `.git` and
+ * trailing slashes in either order. Returns `null` when no `owner/repo` pair
+ * resolves. Pure — exported for direct testing of the parse.
+ */
+export function repoNameFromRemoteUrl(remoteUrl: string | undefined): string | null {
+  if (typeof remoteUrl !== 'string' || remoteUrl.trim().length === 0) return null;
+  const trimmed = remoteUrl
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '');
+  const match = /[/:]([^/:]+)\/([^/]+)$/.exec(trimmed);
+  if (match === null) return null;
+  const repo = match[2];
+  return repo !== undefined && repo.length > 0 ? repo : null;
+}
+
 export function resolveGitRoot(cwd: string): string | null {
   try {
     const root = safeExec('git', ['rev-parse', '--show-toplevel'], {

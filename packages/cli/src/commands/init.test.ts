@@ -4080,6 +4080,104 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNON_SKILL_CONTENT).toContain('propagate nothing from a gated poll');
   });
 
+  // ── signon step 0/1/2: derive the seat first (mmnto-ai/totem#2801) ──
+  //
+  // The ruled design (`.totem/specs/2801.md` § Implementation Design +
+  // § Phase 4 rulings R1–R4) reorders the managed bring-up: derive the seat
+  // BEFORE orient, journal or search; poll the seat-anchored assignment mail
+  // before orient; and stop at the kit while a BLIND round is in flight.
+  // These are STRING locks because the artifact under contract is prose — the
+  // three distributed surfaces are byte-locked to this constant above, so a
+  // clause deleted here is a clause deleted from every consumer repo. Each
+  // literal below fails on the pre-#2801 text (verified RED before the edit).
+  it('SIGNON_SKILL_CONTENT derives the seat first, polls assignment mail before orient, and stops at the kit (mmnto-ai/totem#2801)', () => {
+    // Step 0 — the inherited env is READ first, and never overwritten with a
+    // different seat (the charter's correction class: an inline form may only
+    // RESTATE the inherited value).
+    expect(SIGNON_SKILL_CONTENT).toContain('never write a different one');
+    // The probe the step names (R2: the verb lives on `totem mail`).
+    expect(SIGNON_SKILL_CONTENT).toContain('totem mail --derive-seat');
+    // The empty case is STOP-and-ask with ONE reportable failure line — not a
+    // guess, not a crown fallback, not a basename derivation.
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'Failure Mode: Hook-less session launched without TOTEM_SELF_AGENT set.',
+    );
+    expect(SIGNON_SKILL_CONTENT).toContain('STOP and ask the operator');
+    // The third arm (fold F4): the env is SET and the probe still refuses —
+    // declaration and repo disagree. Without it a session reads "set → use it"
+    // and proceeds on a seat the CLI just refused, or worse, mutates the repo
+    // during a read-only bring-up to make the probe pass.
+    // ONE definition of "hosts" across the CLI help, the wiki, the changeset
+    // and this text (fold round 2 item 7) — and the env is explicitly not part
+    // of it, because a hosted set the env feeds cannot refuse the env.
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'config.json `host_agents`, else the seat dirs, else the cohort map keyed on the origin repository',
+    );
+    expect(SIGNON_SKILL_CONTENT).toContain('never the env you supplied');
+    expect(SIGNON_SKILL_CONTENT).toContain('Set but REFUSED');
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'signon is read-only, so `totem seat add` is never run here',
+    );
+    // The `--as` asymmetry, disclosed rather than aligned (fold round 3 F1): a
+    // refusal on an unregistered repo is a failure to CORROBORATE, and the poll
+    // still serves the declaration. Without this, a session reads the refusal
+    // as "your seat is wrong" and stops working.
+    expect(SIGNON_SKILL_CONTENT).toContain('the repo cannot CORROBORATE you');
+    expect(SIGNON_SKILL_CONTENT).toContain('still serve your declaration');
+    // "STOP and ask the operator" stays the EMPTY arm's wording alone — a
+    // second STOP arm would blur which state halts the bring-up.
+    expect(SIGNON_SKILL_CONTENT.match(/STOP and ask the operator/g)).toHaveLength(1);
+
+    // Step 1 — the ordering clause itself, verbatim as the design states it.
+    expect(SIGNON_SKILL_CONTENT).toContain('assignment mail before orient');
+
+    // Step 2 — the kit-first rule, with the BLIND-kit marker quoted VERBATIM
+    // as R3 fixed it: the SUBJECT's literal prefix plus the deadline clause.
+    // A paraphrase here is a marker a session cannot match on.
+    expect(SIGNON_SKILL_CONTENT).toContain('kit-first');
+    expect(SIGNON_SKILL_CONTENT).toContain('BLIND round: ');
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      '— deposit to <orchestrator-seat> by <ISO-8601 deadline>',
+    );
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'A round is in flight while such a dispatch has an unpassed deadline and no deposit received',
+    );
+
+    // R1 — the skill names exactly the two blocks the MANAGED SessionStart
+    // hook injects (grounded in CLAUDE_SESSION_START / GEMINI_SESSION_START in
+    // this same file: a `totem describe` leg and a `totem orient --session`
+    // leg, and no others), and derives journal + mail by hand on every seat.
+    expect(SIGNON_SKILL_CONTENT).toContain('injects exactly two blocks');
+    expect(SIGNON_SKILL_CONTENT).toContain('`totem describe`');
+    expect(SIGNON_SKILL_CONTENT).toContain('`totem orient --session`');
+    expect(SIGNON_SKILL_CONTENT).toContain('no journal and no mail');
+    // The claim is scoped to INJECTION (fold F8). The hook also mints a
+    // session id, appends a ledger event and spawns sidecar refreshes, so
+    // "runs … and nothing else" was false about the hook while being true
+    // about the context it produces; the two briefing blocks are the exact
+    // claim, and the body must not re-broaden it.
+    expect(SIGNON_SKILL_CONTENT).toContain('injects exactly two briefing blocks');
+    expect(SIGNON_SKILL_CONTENT).toContain('and injects nothing else');
+    expect(SIGNON_SKILL_CONTENT).not.toContain(
+      'runs `totem describe` and `totem orient --session`, and nothing else',
+    );
+
+    // Ordering is the whole point of the slice: step 0 precedes step 1
+    // precedes step 2 precedes the orientation step, as NUMBERED steps (a
+    // demotable preamble would satisfy the substring locks alone).
+    expect(SIGNON_SKILL_CONTENT).toMatch(/\n0\. \*\*Derive the seat FIRST/);
+    const seatStep = SIGNON_SKILL_CONTENT.indexOf('0. **Derive the seat FIRST');
+    const mailStep = SIGNON_SKILL_CONTENT.indexOf('1. **Assignment mail before orient');
+    const kitStep = SIGNON_SKILL_CONTENT.indexOf('2. **Kit-first');
+    const orientStep = SIGNON_SKILL_CONTENT.indexOf('3. **Consume the injected orientation');
+    expect(seatStep).toBeGreaterThanOrEqual(0);
+    expect(seatStep).toBeLessThan(mailStep);
+    expect(mailStep).toBeLessThan(kitStep);
+    expect(kitStep).toBeLessThan(orientStep);
+    // The renumber is complete: the old step-1 orientation heading is gone.
+    expect(SIGNON_SKILL_CONTENT).not.toContain('1. **Consume the injected orientation');
+  });
+
   // rev-6 item 4: the consolidated round-disposition comment is a CONCRETE, executable
   // step — it EXECUTES `totem review --covariate` inside the comment-assembly flow, so the
   // covariate line no longer rides a conditional aside that never runs. Lock the executable

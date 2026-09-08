@@ -9,11 +9,22 @@
  * the two resolvers' tests stay symmetric.
  */
 
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Passthrough mock so `vi.spyOn` can observe the ORIGIN READ the resolver
+// performs (mmnto-ai/totem#2801 fold round 3, F7): the precedence test below
+// claims layers 1 and 2 never reach it, and a claim about a call is only
+// testable by counting the call. Every export behaves identically until a test
+// installs a spy.
+vi.mock('./sys/git.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./sys/git.js')>();
+  return { ...actual };
+});
 
 import {
   isPathSafeAgentId,
@@ -22,6 +33,8 @@ import {
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
+import * as gitModule from './sys/git.js';
+import { envWithoutGitLocation, getOriginRepoName, repoNameFromRemoteUrl } from './sys/git.js';
 import { cleanTmpDir } from './test-utils.js';
 
 let tmpRoot: string;
@@ -30,6 +43,18 @@ let repoRoot: string;
 function mkDir(p: string): string {
   fs.mkdirSync(p, { recursive: true });
   return p;
+}
+
+/**
+ * Run git against a FIXTURE directory. The location env is scrubbed for the
+ * same reason the product read scrubs it (mmnto-ai/totem#2801 F3): git reads
+ * `GIT_DIR` and friends before `cwd`, so under an exported `GIT_DIR` — the
+ * shape every git hook runs in — `git init` here would target the ambient
+ * repository and `git remote add` would try to write to it. The fixtures must
+ * describe the directory they name, exactly like the code under test.
+ */
+function gitFixture(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'ignore', env: envWithoutGitLocation(process.env) });
 }
 
 /**
@@ -562,6 +587,285 @@ describe('knownCohortAgents — single-source recipient set', () => {
 // cohort's frozen value lives in `totem.config.ts`, not a core constant. See
 // `packages/core/src/config-schema.test.ts` (schema) and
 // `packages/cli/src/commands/ecl-gc.test.ts` (resolution precedence).
+
+// ─── cohort map keyed on the git origin (mmnto-ai/totem#2801) ──────────────
+//
+// The map used to be keyed on the repo-root BASENAME, which every checkout
+// whose directory is not named after its repository fails: a per-agent
+// worktree (`totem-totem-claude-build-2801`), a second clone (`totem-2`), a
+// rename. There the map contributed nothing, so a repo that plainly hosts
+// seats resolved as hosting none — and `totem mail --derive-seat`, whose whole
+// job is refusing an identity the repo does not host, had nothing to check
+// against. The key is now the `origin` remote's repository name when one can be
+// read, with the basename as the unchanged fallback.
+
+describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto-ai/totem#2801)', () => {
+  /** A real git repo in a directory whose basename is NOT a cohort key. */
+  function mkGitRepo(dirName: string, originUrl?: string): string {
+    const root = mkDir(path.join(tmpRoot, dirName));
+    gitFixture(root, ['init', '-q', '-b', 'main']);
+    if (originUrl !== undefined) {
+      gitFixture(root, ['remote', 'add', 'origin', originUrl]);
+    }
+    return root;
+  }
+
+  it('(i) an https origin keys the map — the totem seats resolve from a worktree-named directory', () => {
+    const root = mkGitRepo(
+      'totem-totem-claude-build-2801',
+      'https://github.com/mmnto-ai/totem.git',
+    );
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('(ii) an ssh origin keys the map identically', () => {
+    const root = mkGitRepo('wt-2801', 'git@github.com:mmnto-ai/totem.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('an origin WITHOUT the .git suffix (and with a trailing slash) parses the same', () => {
+    const root = mkGitRepo('wt-2801-plain', 'https://github.com/mmnto-ai/liquid-city/');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+  });
+
+  it('an origin whose CASE differs still keys the map — GitHub repo names are case-insensitive', () => {
+    const root = mkGitRepo('wt-2801-cased', 'https://github.com/mmnto-ai/Totem.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('a case-shifted DIRECTORY name keys the map too (the basename arm folds case as well)', () => {
+    const root = mkDir(path.join(tmpRoot, 'Totem-Strategy'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
+  it('(iii) NO origin falls back to the basename — a git repo named `totem` still resolves', () => {
+    const root = mkGitRepo('totem');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+  });
+
+  it('(iii) a non-git directory is unaffected — the basename answers, as it always did', () => {
+    const root = mkDir(path.join(tmpRoot, 'totem-strategy'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('map');
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+  });
+
+  it('every cohort-map key is reachable through the lower-cased lookup — no key carries upper case (fold F4)', () => {
+    // The lookup lower-cases its key, so a map key with an upper-case letter
+    // would be permanently unreachable while still contributing agents to
+    // `knownCohortAgents()`. Walking the repo names and comparing the reachable
+    // union against that flatten catches exactly that, and also catches a new
+    // map entry whose repo name this test does not yet name.
+    const repoNames = [
+      'totem',
+      'totem-strategy',
+      'liquid-city',
+      'arhgap11',
+      'totem-status',
+      'totem-playground',
+    ];
+    const reachable = new Set<string>();
+    for (const name of repoNames) {
+      for (const seat of resolveSelfAgents(mkDir(path.join(tmpRoot, name)), {}).agents) {
+        reachable.add(seat);
+      }
+    }
+    expect([...reachable].sort()).toEqual(knownCohortAgents());
+  });
+
+  it('(iv) an origin naming a repo the map does not know resolves empty, as today', () => {
+    const root = mkGitRepo('wt-unknown', 'https://github.com/someone/not-a-cohort-repo.git');
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('none');
+    expect(result.agents).toEqual([]);
+  });
+
+  it('an origin named like an Object.prototype member resolves empty and never throws (PR round 1)', () => {
+    // `constructor` and `__proto__` are legal repository names, pass
+    // `repoNameFromRemoteUrl`, and survive the lower-casing of the key — so a
+    // plain-object lookup read the inherited value (a function, and
+    // Object.prototype itself) out of the frozen map and threw at the first
+    // `.filter`. Both rows FAIL on the pre-fold line (the leg simulated it);
+    // camel-case members such as `toString` never reached the map at all,
+    // because the key is lower-cased first, so they are not controls here.
+    for (const name of ['constructor', '__proto__']) {
+      const root = mkGitRepo(`wt-${name}`, `https://github.com/someone/${name}.git`);
+      const result = resolveSelfAgents(root, {});
+      expect(result.source, name).toBe('none');
+      expect(result.agents, name).toEqual([]);
+    }
+  });
+
+  it('the ORIGIN wins over a misleading directory name (the key is the repository)', () => {
+    // A directory named `totem` that is actually a liquid-city checkout must
+    // not claim the totem seats.
+    const root = mkGitRepo('totem-lookalike', 'https://github.com/mmnto-ai/liquid-city.git');
+    fs.renameSync(root, path.join(tmpRoot, 'totem-decoy'));
+    const renamed = path.join(tmpRoot, 'totem-decoy');
+    const result = resolveSelfAgents(renamed, {});
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+  });
+
+  it('seat dirs still UNION the origin-keyed map', () => {
+    const root = mkGitRepo('wt-union', 'https://github.com/mmnto-ai/totem.git');
+    mkDir(path.join(root, '.totem', 'orchestration', 'totem-codex'));
+    const result = resolveSelfAgents(root, {});
+    expect(result.source).toBe('dirs+map');
+    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
+  });
+
+  it('env and config win WITHOUT reaching the origin read — zero spawns on layers 1 and 2', () => {
+    // The claim is about a CALL, so it is counted, not inferred from the
+    // result (fold round 3, F7). The docstring promises an identity-declaring
+    // poll spawns no git; this is that promise under test.
+    const root = mkGitRepo('wt-precedence', 'https://github.com/mmnto-ai/totem.git');
+    const originSpy = vi.spyOn(gitModule, 'getOriginRepoName');
+    try {
+      expect(resolveSelfAgents(root, { TOTEM_SELF_AGENT: 'visitor-seat' })).toEqual({
+        agents: ['visitor-seat'],
+        source: 'env',
+      });
+      expect(originSpy).not.toHaveBeenCalled();
+
+      mkDir(path.join(root, '.totem', 'orchestration'));
+      fs.writeFileSync(
+        path.join(root, '.totem', 'orchestration', 'config.json'),
+        JSON.stringify({ host_agents: ['declared-seat'] }),
+        'utf-8',
+      );
+      const viaConfig = resolveSelfAgents(root, {});
+      expect(viaConfig.source).toBe('config');
+      expect(viaConfig.agents).toEqual(['declared-seat']);
+      expect(originSpy).not.toHaveBeenCalled();
+
+      // Positive control: layer 3 DOES reach it, exactly once — otherwise the
+      // two negatives above could pass on a spy that never wires up.
+      fs.rmSync(path.join(root, '.totem', 'orchestration', 'config.json'));
+      const viaMap = resolveSelfAgents(root, {});
+      expect(viaMap.source).toBe('map');
+      expect(originSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      originSpy.mockRestore();
+    }
+  });
+});
+
+describe('repoNameFromRemoteUrl — the parse (mmnto-ai/totem#2801)', () => {
+  it.each([
+    ['https://github.com/mmnto-ai/totem.git', 'totem'],
+    ['https://github.com/mmnto-ai/totem', 'totem'],
+    ['https://github.com/mmnto-ai/totem.git/', 'totem'],
+    ['git@github.com:mmnto-ai/totem.git', 'totem'],
+    ['git@github.com:mmnto-ai/totem', 'totem'],
+    ['ssh://git@github.com/mmnto-ai/liquid-city.git', 'liquid-city'],
+    ['https://gitlab.example.com/team/sub/totem-status.git', 'totem-status'],
+  ])('%s -> %s', (url, expected) => {
+    expect(repoNameFromRemoteUrl(url)).toBe(expected);
+  });
+
+  it.each([undefined, '', '   ', 'not-a-url'])('%s -> null', (url) => {
+    expect(repoNameFromRemoteUrl(url)).toBeNull();
+  });
+});
+
+describe('getOriginRepoName — the read (mmnto-ai/totem#2801)', () => {
+  it('returns null for a directory that is not a git repository — never throws', () => {
+    const plain = mkDir(path.join(tmpRoot, 'not-a-repo'));
+    expect(getOriginRepoName(plain)).toBeNull();
+  });
+
+  it('returns null for a git repo with no origin remote', () => {
+    const root = mkDir(path.join(tmpRoot, 'no-origin'));
+    gitFixture(root, ['init', '-q', '-b', 'main']);
+    expect(getOriginRepoName(root)).toBeNull();
+  });
+
+  it('returns the repository name for a git repo with an origin', () => {
+    const root = mkDir(path.join(tmpRoot, 'has-origin'));
+    gitFixture(root, ['init', '-q', '-b', 'main']);
+    gitFixture(root, ['remote', 'add', 'origin', 'git@github.com:mmnto-ai/totem-status.git']);
+    expect(getOriginRepoName(root)).toBe('totem-status');
+  });
+
+  // ── the ambient-GIT_DIR class (mmnto-ai/totem#2801 fold round 3, F3) ──
+  //
+  // Git reads its repository-location variables BEFORE cwd, and exports them
+  // into every hook process it spawns. An inherited GIT_DIR therefore made this
+  // read answer for the ambient repository instead of the directory asked
+  // about — a non-repo dir resolving cohort seats, which is exactly the
+  // identity adoption the caller exists to prevent (and it turned this suite
+  // 19-red under an exported GIT_DIR).
+  describe('is a function of cwd alone — ambient git-location env is scrubbed', () => {
+    /** A scratch repo whose origin is a cohort repo, to point GIT_DIR at. */
+    function scratchCohortRepo(): string {
+      const root = mkDir(path.join(tmpRoot, 'ambient-origin-repo'));
+      gitFixture(root, ['init', '-q', '-b', 'main']);
+      gitFixture(root, ['remote', 'add', 'origin', 'https://github.com/mmnto-ai/totem.git']);
+      return root;
+    }
+
+    it('an exported GIT_DIR does not make a NON-repo directory resolve that repo', () => {
+      const ambient = scratchCohortRepo();
+      const plain = mkDir(path.join(tmpRoot, 'not-a-repo-under-git-dir'));
+      const saved = process.env['GIT_DIR'];
+      process.env['GIT_DIR'] = path.join(ambient, '.git');
+      try {
+        expect(getOriginRepoName(plain)).toBeNull();
+        // And the caller that keys on it stays honest: no seats, not the
+        // ambient repo's seats.
+        const result = resolveSelfAgents(plain, {});
+        expect(result.source).toBe('none');
+        expect(result.agents).toEqual([]);
+      } finally {
+        if (saved === undefined) delete process.env['GIT_DIR'];
+        else process.env['GIT_DIR'] = saved;
+      }
+    });
+
+    it('an exported GIT_DIR does not override a real repo’s own origin', () => {
+      const ambient = scratchCohortRepo();
+      const own = mkDir(path.join(tmpRoot, 'own-repo'));
+      gitFixture(own, ['init', '-q', '-b', 'main']);
+      gitFixture(own, ['remote', 'add', 'origin', 'https://github.com/mmnto-ai/liquid-city']);
+      const saved = process.env['GIT_DIR'];
+      process.env['GIT_DIR'] = path.join(ambient, '.git');
+      try {
+        expect(getOriginRepoName(own)).toBe('liquid-city');
+      } finally {
+        if (saved === undefined) delete process.env['GIT_DIR'];
+        else process.env['GIT_DIR'] = saved;
+      }
+    });
+
+    it('envWithoutGitLocation drops every location variable and keeps the rest', () => {
+      const scrubbed = envWithoutGitLocation({
+        GIT_DIR: '/somewhere/.git',
+        GIT_WORK_TREE: '/somewhere',
+        GIT_COMMON_DIR: '/somewhere/.git',
+        GIT_INDEX_FILE: '/somewhere/.git/index',
+        GIT_OBJECT_DIRECTORY: '/somewhere/.git/objects',
+        GIT_ALTERNATE_OBJECT_DIRECTORIES: '/elsewhere/objects',
+        GIT_CEILING_DIRECTORIES: '/',
+        PATH: '/usr/bin',
+        GIT_AUTHOR_NAME: 'someone',
+      });
+      expect(Object.keys(scrubbed).sort()).toEqual(['GIT_AUTHOR_NAME', 'PATH']);
+      expect(scrubbed['PATH']).toBe('/usr/bin');
+    });
+  });
+});
 
 // ─── resolveSelfAgents — seat dirs (mmnto-ai/totem#2141) ───────────────────
 

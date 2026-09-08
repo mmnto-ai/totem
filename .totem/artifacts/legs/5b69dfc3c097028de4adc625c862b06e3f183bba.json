@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "5b69dfc3c097028de4adc625c862b06e3f183bba",
+  "readAt": "2026-09-08T05:35:33Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1446,
+      "claim": "Round 2's revert of the env fallback leaves --derive-seat agreeing with the poll it precedes; hosted-ness is one rule for the command.",
+      "counterexample": "On a fixture with .totem/ but no .totem/orchestration, no origin and a non-cohort basename, with TOTEM_SELF_AGENT=totem-claude: totem mail --derive-seat exits 2 with 'this repo hosts no seat', while totem mail and totem mail --as totem-claude both serve totem-claude and exit 0, because --as at mail.ts:1620-1623 kept the env fallback that deriveSeat dropped at mail.ts:1446. Signon step 0 then tells that session to stop and change nothing, on a repo where step 1's poll works. No test asserted poll/--as behaviour on the same fixture. Ruled: a principled asymmetry (declaration vs corroboration), folded as disclosure in help, skill and changeset plus a locking test."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 509,
+      "claim": "The four texts state one definition of 'hosts'; the changeset's 'Hosts has ONE definition' and the wiki's 'one definition throughout' are true of HEAD.",
+      "counterexample": "docs/wiki/cli-reference.md:509 (the --as bullet, two bullets above) defines the same notion as 'config / seat dirs / cohort map, or the env-declared list when those are empty', which line 511 explicitly denies ('The env never contributes to that set'). Line 509 is the accurate description of --as, so the page documented two incompatible definitions and the 'throughout'/'ONE definition' claims were falsified inside the file that made them. Folded: the --as bullet names its fallback as --as-specific; 'throughout' dropped."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 465,
+      "claim": "'--local errors outside a repository, which lands on the null this function documents': the scoping prevents the read from silently changing behaviour per machine, and resolveSelfAgents' env parameter remains the test injection surface.",
+      "counterexample": "safeExec passed no env, so the spawn inherited process.env and honoured GIT_DIR. In a directory that is NOT a git repo, GIT_DIR=<repo>/.git TOTEM_SELF_AGENT=totem-claude totem mail --derive-seat printed seat=totem-claude source=env exit 0. The resolver suite was 87/87 on a clean env and 19 failed | 68 passed with only GIT_DIR exported (first failure orchestration-resolver.test.ts:777: expected ['first-seat'], received ['first-seat','totem-claude','totem-gemini']). git sets GIT_DIR in every hook process. Folded: the spawn env strips the GIT_* location variables."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 205,
+      "claim": "Keying the cohort map on the origin repository makes a worktree or renamed clone of a cohort repo resolve its real seats.",
+      "counterexample": "COHORT_AGENT_MAP[key] was an exact-case lookup on the URL's literal repo segment, while GitHub URLs are case-insensitive and every seat comparison in the feature folds case. A clone whose origin is https://github.com/mmnto-ai/Totem.git yielded key 'Totem' and 'this repo hosts no seat', exit 2. Folded: the key is lower-cased before lookup."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 196,
+      "claim": "'The basename arm keeps every origin-less checkout behaving exactly as before': the origin key is presented as purely additive.",
+      "counterexample": "The subtractive direction was undisclosed: a checkout WITH an origin whose repo name is not a map key loses the basename answer it had on origin/main. A directory named totem with origin https://github.com/someone/totem-fork.git resolved totem-claude and totem-gemini before and now returns 'this repo hosts no seat'. Folded: one changeset clause names the fork/mirror direction."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1480,
+      "claim": "The dedupe closes the probe/poll disagreement for a clumsily-declared single identity.",
+      "counterexample": "[...new Set(resolution.agents)] was case-sensitive while pollMail's comparison set is lower-cased (mail.ts:684). With TOTEM_SELF_AGENT='totem-claude,TOTEM-Claude' in the origin-keyed fixture, --derive-seat exited 2 with 'no single seat declared' while totem mail served totem-claude and exited 0. 'a,a' and 'a, a' were both cured. Folded: case-insensitive dedupe."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/orchestration-resolver.test.ts",
+      "line": 653,
+      "claim": "The test 'env and config still win — neither reaches the origin read' locks the no-spawn cost contract.",
+      "counterexample": "Every assertion in the test was on the returned resolution shape; a resolver that spawned git config and discarded the result would pass it identically. The property does hold (a PATH-shim git spy over the built core dist logged zero spawns for the env and config layers and exactly one per layer-3 call) but nothing in CI locked it. Folded: renamed or spied."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1474,
+      "claim": "'Cost: at most ONE git config spawn per resolution' bounds the probe's git cost.",
+      "counterexample": "deriveSeat performed TWO resolutions (structural at mail.ts:1446, env-inclusive at mail.ts:1474); with the env unset and a non-empty hosted set both reached layer 3: the shim recorded 1 spawn for the env-set probe and 2 for the env-unset probe, each carrying the 15 s git timeout. Folded: the structural resolution is reused for the hosted list."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1386,
+      "claim": "'Injected rather than imported so deriveSeat stays a sync function with no static value import from @mmnto/totem (the core barrel pulls LanceDB into every startup)'.",
+      "counterexample": "mail.ts:39-46 statically imports six values from @mmnto/totem (identical to the set on origin/main), so the barrel is already on the module graph; the dynamic import resolves an already-evaluated module with zero marginal load cost. The refactor achieves its lint goal (zero occurrences of the mmnto-ai/totem#2339 rule in totem lint --branch --base main, no suppression anywhere) but the LanceDB/startup rationale was not true of this file. Folded: the comment states the lint-rule reason only."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity-fetch.ts",
+      "line": 349,
+      "claim": "Core's repoNameFromRemoteUrl and the CLI's slugFromRemoteUrl are two parsers of one canon and may disagree (a note, not folded).",
+      "counterexample": "No disagreement found: fed both the same 12 URL shapes via the built dists, identical repo segment in all 12 including matching null/undefined; the chains are byte-identical. Recorded as a future-divergence surface only; the CLI could now import core's parser."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 469,
+      "claim": "The 59 new lines in packages/core/src/sys/git.ts carry their own tests (a note, not folded).",
+      "counterexample": "packages/core/src/sys/git.test.ts is unchanged on this branch; getOriginRepoName and repoNameFromRemoteUrl are covered from orchestration-resolver.test.ts:679-708 instead. Coverage exists and passes; locality is the only cost."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "termination named: no blocking finding; three MATERIAL consistency items (probe-vs---as asymmetry, the wiki's --as bullet, the git read honouring ambient GIT_DIR) and five MINOR, all folded in round 3 as disclosure or bounded fixes; two notes recorded unfolded"
+}
