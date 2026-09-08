@@ -29,15 +29,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// `deriveSeatStatuses` (mmnto-ai/totem#2801) joins the sibling value imports
-// under the same justification the block already carries: `deriveSeat` is SYNC,
-// so the mmnto-ai/totem#2339 dynamic-import cure is unavailable for it, and
-// mail.ts is action-lazy-loaded by index.ts and ecl-gc, so this statement never
-// runs on the --help startup graph. It is called on ONE refusal branch (the
-// config-omits-a-present-seat-dir arm) and never on the success path.
 import {
-  // totem-ignore-next-line mmnto-ai/totem#2801
-  deriveSeatStatuses,
   isPathSafeAgentId,
   knownCohortAgents,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
@@ -1390,6 +1382,23 @@ export type DeriveSeatResult =
   | { ok: false; refusal: string };
 
 /**
+ * Reader for the seat ids that have a DIRECTORY in this repo's orchestration
+ * tree. Injected rather than imported so `deriveSeat` stays a sync function
+ * with no static value import from `@mmnto/totem` (the core barrel pulls
+ * LanceDB into every startup — mmnto-ai/totem#2339); `deriveSeatCommand`
+ * dynamic-imports core's `deriveSeatStatuses` and passes it in. Omitted, the
+ * one branch that needs it (the config-omits-a-present-seat-dir refusal)
+ * simply falls back to the generic not-hosted wording — no crash, no guess.
+ */
+export type PresentSeatDirsReader = (repoRoot: string) => readonly string[];
+
+/** Options for {@link deriveSeat}: the command's options plus the injected reader. */
+export interface DeriveSeatOptions extends MailCommandOptions {
+  /** See {@link PresentSeatDirsReader}. Absent on the success path by design. */
+  presentSeatDirs?: PresentSeatDirsReader;
+}
+
+/**
  * Resolve the seat this session IS, or refuse.
  *
  * The line grammar is `seat=<id> source=<env|config|dir>`; today only `env`
@@ -1418,11 +1427,13 @@ export type DeriveSeatResult =
  * Membership is matched case-insensitively, like every other seat comparison in
  * this file, with the structural set's own casing printed back.
  *
- * Reads nothing but the resolver's sources (plus, on the config-omits-a-dir
- * refusal alone, the seat-dir listing behind `deriveSeatStatuses`). No outbox,
- * no `processed/`, no workspace scan.
+ * Reads nothing but the resolver's sources. On the config-omits-a-dir refusal
+ * alone it additionally calls the injected `presentSeatDirs` reader, which
+ * lists the orchestration tree's seat dirs and reads each one's
+ * `lifecycle.json` (core's `deriveSeatStatuses`) — still no outbox, no
+ * `processed/`, no workspace scan, and nothing at all on the success path.
  */
-export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
+export function deriveSeat(opts: DeriveSeatOptions = {}): DeriveSeatResult {
   const env = opts.env ?? process.env;
   const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
 
@@ -1487,12 +1498,13 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
     // "the dir is the registration" warning contradicts itself in one breath
     // (falsification-leg F2). The VERDICT is unchanged (config replaces the
     // dir set); the refusal names that cause and its two cures instead of
-    // arguing with itself. `deriveSeatStatuses` is the public read surface for
-    // the seat dirs — the source, not the warning's prose.
-    if (hosted.source === 'config') {
-      const isPresentDir = deriveSeatStatuses(repoRoot).some(
-        (s) => s.seat.toLowerCase() === declared.toLowerCase(),
-      );
+    // arguing with itself. The presence answer comes from the injected reader
+    // over core's public seat-dir surface — the source, not the warning's
+    // prose — and only here.
+    if (hosted.source === 'config' && opts.presentSeatDirs !== undefined) {
+      const isPresentDir = opts
+        .presentSeatDirs(repoRoot)
+        .some((seatId) => seatId.toLowerCase() === declared.toLowerCase());
       if (isPresentDir) {
         return {
           ok: false,
@@ -1542,7 +1554,15 @@ export async function deriveSeatCommand(
     return { exitCode: 2 };
   }
 
-  const result = deriveSeat(opts);
+  // The seat-dir reader is dynamic-imported (mmnto-ai/totem#2339: no static
+  // value import of the core barrel from a command file) and handed to the
+  // sync derivation, which calls it on ONE refusal branch and never on the
+  // success path.
+  const { deriveSeatStatuses } = await import('@mmnto/totem');
+  const result = deriveSeat({
+    ...opts,
+    presentSeatDirs: (repoRoot) => deriveSeatStatuses(repoRoot).map((s) => s.seat),
+  });
   if (!result.ok) {
     log.error(TAG, result.refusal);
     return { exitCode: 2 };
