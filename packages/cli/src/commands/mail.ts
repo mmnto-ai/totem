@@ -1404,21 +1404,19 @@ export type DeriveSeatResult =
  * it named exactly ONE seat (a session has one identity), and this repo hosts
  * that seat.
  *
- * Hosted-ness follows the `--as` rule exactly, both halves of it: the
- * STRUCTURAL union (config.json `host_agents` > seat dirs ∪ basename map) with
- * any ambient `TOTEM_SELF_AGENT` stripped first, so the env cannot vouch for
- * itself — and, when that union is EMPTY, the env-declared list itself. The
- * empty-union shape is not exotic: `.totem/orchestration/` is gitignored and a
- * per-agent worktree's basename is no cohort-map key, and every `totem init`
- * consumer that has not run `totem seat add` is in it too. `--as` and
- * `pollMail` both serve the env-declared seat there, so a probe that refused it
- * would disagree with the poll it precedes and send a correctly-declared
- * session to fix an identity that is already right (falsification-leg F1). The
- * fallback licenses nothing else: an empty env still lands on the
- * hosts-no-seat arm, and a two-seat env declaration still refuses.
+ * Hosted-ness is the STRUCTURAL union and only that: config.json
+ * `host_agents`, else the seat dirs, else the cohort map keyed on the origin
+ * repository. Any ambient `TOTEM_SELF_AGENT` is stripped before that
+ * derivation, so the env can never vouch for itself — the probe's whole value
+ * is that it can REFUSE a supplied identity, and a hosted set the env
+ * contributes to is a tautology that refuses nothing (the round-2 leg's
+ * finding: with an env-declared fallback, `bogus-typo-seat` resolved as
+ * happily as `totem-claude`). An empty structural union is therefore not a
+ * licence to trust the env: it is the ruled hosts-no-seat refusal, cured by
+ * `totem seat add` or by a git origin the cohort map knows.
  *
  * Membership is matched case-insensitively, like every other seat comparison in
- * this file, with the resolver's own casing printed back.
+ * this file, with the structural set's own casing printed back.
  *
  * Reads nothing but the resolver's sources (plus, on the config-omits-a-dir
  * refusal alone, the seat-dir listing behind `deriveSeatStatuses`). No outbox,
@@ -1428,16 +1426,13 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
   const env = opts.env ?? process.env;
   const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
 
-  // What this repo HOSTS — the `--as` derivation, verbatim in spirit: the
-  // structural answer first (env excluded, so the env cannot vouch for
-  // itself), and the env-declared list when that answer is empty (the
-  // per-agent worktree and the seat-less `totem init` consumer;
-  // falsification-leg F1). Nothing is adopted by the fallback: an empty env
-  // resolves to nothing here too and falls through to the hosts-no-seat arm.
+  // What this repo HOSTS: the STRUCTURAL answer, with the ambient
+  // TOTEM_SELF_AGENT stripped so the env cannot vouch for itself. There is no
+  // env fallback here — one would make the hosted check a tautology and the
+  // probe unable to refuse anything, which is the one thing it exists to do.
   const structuralEnv = { ...env };
   delete structuralEnv['TOTEM_SELF_AGENT'];
-  const structural = resolveSelfAgents(repoRoot, structuralEnv);
-  const hosted = structural.agents.length > 0 ? structural : resolveSelfAgents(repoRoot, env);
+  const hosted = resolveSelfAgents(repoRoot, structuralEnv);
   // The resolver's own diagnostics ride every refusal (the same reasoning as
   // the `--as` rejection path): the mmnto-ai/totem#2141 config-omits-a-present-
   // seat-dir warn-shape often IS the explanation for a seat going missing.
