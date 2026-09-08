@@ -348,6 +348,8 @@ interface PrPage {
   rollupPresent: boolean;
   /** The rollup state GitHub reported, or null when there is no rollup. */
   rollupState: string | null;
+  /** `contexts.totalCount` as reported, or null when it was not a number. */
+  rollupTotalCount: number | null;
   checks: CheckEntry[];
   checksHasNext: boolean;
   checksCursor: string | null;
@@ -576,6 +578,10 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
       isDraft: pr.isDraft === true,
       rollupPresent: rollup !== null,
       rollupState: asString(rollup?.state),
+      rollupTotalCount:
+        typeof asObject(rollup?.contexts)?.totalCount === 'number'
+          ? (asObject(rollup?.contexts)?.totalCount as number)
+          : null,
       checks: checks.entries,
       checksHasNext: checks.hasNext,
       checksCursor: checks.cursor,
@@ -594,64 +600,88 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
 /**
  * The severity read is EXACT-BY-MARKER: it matches each bot's own STRUCTURED
  * severity label and nothing else. Prose is never read
- * (mmnto-ai/totem#2800 fold round 2, F4).
+ * (mmnto-ai/totem#2800 fold round 2, F4; round 3 F4/F5/F7/F11).
  *
- * The markers, transcribed from what the bots actually emit — every form below
- * is quoted from the checked-in benign corpus, not inferred:
+ * Which forms are OBSERVED and which are DOCUMENTED-BUT-UNOBSERVED is stated
+ * per arm, because the two are not the same evidence:
  *   - **greptile** — a badge image whose alt text is the priority:
  *     `<a href="#"><img alt="P1" src="…/badges/p1.svg…" align="top"></a>`.
- *     `P0` and `P1` are high; `P2` and below are NOT.
+ *     OBSERVED in the corpus: `P1` (high) and `P2` (not high). `P0` is
+ *     DOCUMENTED-BUT-UNOBSERVED — greptile publishes the `p0.svg` badge, so the
+ *     arm accepts it; no thread in the window carries one. Single quotes are
+ *     accepted beside double (`alt='P1'`) — HTML permits either and the read
+ *     must not turn on the quote style.
  *   - **gemini-code-assist** — a priority image whose alt text is the level:
  *     `![high](https://www.gstatic.com/codereviewagent/high-priority.svg)`.
- *     `high` and `critical` are high; `medium` / `low` are not.
- *   - **CodeRabbit** — an emphasis-wrapped label occupying a whole table cell
- *     or line, the severity one of five levels: `_🔴 Critical_`, `_🟠 Major_`,
- *     `_⚠️ Potential issue_` are high; `_🟡 Minor_`, `_🔵 Trivial_` are not.
- *     The label must FILL its cell — the emphasis and the cell/line boundary
- *     are what make it a label rather than a word in a sentence.
+ *     OBSERVED: `high`. There is NO `critical` arm: the corresponding asset
+ *     404s and GCA's published rubric emits `high` as its top level, so an arm
+ *     for it would be inference, not transcription (round 3, F5).
+ *   - **CodeRabbit** — an emphasis-wrapped label that OPENS a table cell or a
+ *     line. CodeRabbit's severity scale is Critical / Major / Minor / Trivial;
+ *     `Potential issue` is its issue-CLASS label, carried here because the
+ *     user-level prototype matched it and it marks a blocking finding.
+ *     OBSERVED: `_🟠 Major_` (high), `_🟡 Minor_` and `_🔵 Trivial_` (not
+ *     high). DOCUMENTED-BUT-UNOBSERVED: `_🔴 Critical_` and
+ *     `_⚠️ Potential issue_` — in CodeRabbit's own label vocabulary, absent
+ *     from this window. The label must FILL its cell: the emphasis plus the
+ *     cell/line boundary are what separate a LABEL from a word in a sentence.
+ *
+ * CODE IS NOT A LABEL (round 3, F4). Fenced blocks (``` … ```, ~~~ … ~~~) and
+ * inline code spans are stripped before the scan. A bot that QUOTES a marker —
+ * a CodeRabbit Minor whose suggestion block quotes this very file, which
+ * carries every marker in its docstring — would otherwise read as HIGH and
+ * false-deny the gate's own maintenance PR.
  *
  * FALSE-POSITIVE BUDGET (ADR-109: a non-exact-match gate ships a stated budget
  * and the fixture that measures it — the `transport-shield` precedent):
  * **ZERO** high-severity reads over the benign corpus in
  * `gate-fixtures/merge-ready/benign-corpus-bot-inlines.json` — every bot inline
  * thread on mmnto-ai/totem#2820 through mmnto-ai/totem#2839, each carrying the
- * severity its own bot declared. `merge-ready.test.ts` asserts this read agrees
- * with all sixteen of those declarations, so a marker that widens into prose
- * fails there. The prose arms this replaced did not hold that budget: the
- * greptile **P2** thread on mmnto-ai/totem#2831 read as HIGH through the word
- * "critical" in its explanation — a false deny on a finding its own author
- * ranked below the bar. A miss in the field is a corpus row plus a marker fix,
- * never a hand-carved exemption; the `--pilot` tier exists for a measurement
- * week, and `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past one.
+ * severity its own bot declared — and over the quoted-marker row in
+ * `gate-fixtures/merge-ready/synthetic-benign-fenced-marker-quote.json`.
+ * `merge-ready.test.ts` asserts the read agrees with every one of those
+ * declarations, so a marker that widens into prose or into quoted code fails
+ * there. The prose arms this replaced did not hold that budget: the greptile
+ * **P2** thread on mmnto-ai/totem#2831 read as HIGH through the word "critical"
+ * in its explanation — a false deny on a finding its own author ranked below
+ * the bar. A miss in the field is a corpus row plus a marker fix, never a
+ * hand-carved exemption; the `--pilot` tier exists for a measurement week, and
+ * `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past one.
  *
  * Out of scope by design, disclosed: a bot that stops emitting a structured
  * label (or a fourth bot) reads as NOT high — the miss direction, a corpus gap
- * to be closed by observation, never a silent deny; a human quoting a bot's
- * label verbatim in their own comment would read as high, but predicates 2 and
- * 4 both require the thread's ROOT comment to be a known bot login.
+ * to be closed by observation, never a silent deny; a label a bot places
+ * somewhere this read does not look (a summary table, a list item, a
+ * blockquote) is the same class; a human quoting a bot's label verbatim would
+ * read as high, but predicates 2 and 4 both require the thread's ROOT comment
+ * to be a known bot login.
  */
+
 /**
- * A glyph that is neither ASCII alphanumeric, nor whitespace, nor ASCII
- * punctuation — in practice the emoji a bot puts before its label. Spelled as
- * an EXCLUSION so this source names no code point (and authors no `\u` escape).
- * Excluding ASCII punctuation is what keeps a markdown bullet (`- critical
- * path`) or a quote (`> major rewrite`) out of the un-emphasised arm below.
+ * The glyphs CodeRabbit puts before an un-emphasised severity label — its four
+ * severity dots and the warning sign, with and without the variation selector.
+ * Built from code points rather than typed, so this source carries no `\u`
+ * escape and no pasted emoji (round 3, F7 narrowed this from "any non-ASCII
+ * glyph", which let an em-dash-led line read as a label).
  */
-const LABEL_GLYPH = '[^A-Za-z0-9\\s\\n|_*#>+.,:;!?()\\[\\]{}"\'`~^&%$@/\\\\=<-]';
+const CR_LABEL_GLYPHS = [0x1f534, 0x1f7e0, 0x1f7e1, 0x1f535, 0x26a0, 0xfe0f]
+  .map((cp) => String.fromCodePoint(cp))
+  .join('');
+
+const LABEL_GLYPH = `[${CR_LABEL_GLYPHS}]`;
 
 const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
-  // greptile: the badge's alt attribute, P0/P1 only.
-  /<img[^>]*\balt="P[01]"/i,
-  // gemini-code-assist: the priority image's alt text.
-  /!\[(?:high|critical)\]\(/i,
+  // greptile: the badge's alt attribute, P0/P1 only, either quote style.
+  /<img[^>]*\balt=["']P[01]["']/i,
+  // gemini-code-assist: the priority image's alt text. `high` only.
+  /!\[high\]\(/i,
   // CodeRabbit: an emphasis-wrapped severity label that OPENS a table cell or a
-  // line. The `[^A-Za-z0-9\n|]*` arms absorb the emoji and the spaces inside the
-  // emphasis without this source naming a code point; requiring the opening
-  // emphasis to sit at a cell/line boundary is what separates a LABEL from an
-  // emphasised word inside a sentence.
+  // line. The `[^A-Za-z0-9\n|]*` arms absorb the glyph and the spaces inside the
+  // emphasis; requiring the opening emphasis to sit at a cell/line boundary is
+  // what separates a LABEL from an emphasised word inside a sentence.
   /(?:^|\n|\|)[ \t]*[_*]{1,2}[^A-Za-z0-9\n|]*(?:critical|major|potential issue)[^A-Za-z0-9\n|]*[_*]{1,2}/i,
-  // CodeRabbit's un-emphasised heading form: the emoji, then the label, at the
-  // start of a line.
+  // CodeRabbit's un-emphasised heading form: the severity glyph, then the
+  // label, at the start of a line.
   new RegExp(
     `(?:^|\\n)[ \\t]*${LABEL_GLYPH}+[ \\t]*(?:critical|major|potential issue)(?![A-Za-z0-9])`,
     'i',
@@ -659,12 +689,27 @@ const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
 ];
 
 /**
+ * A body with its CODE removed: fenced blocks first (they can contain
+ * backticks), then inline spans. What is left is the bot's prose and its
+ * labels — the only text a severity label can legitimately live in (round 3,
+ * F4). An unterminated fence swallows the rest of the body, which is how a
+ * markdown renderer reads it too.
+ */
+function withoutCode(body: string): string {
+  return body
+    .replace(/^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, ' ')
+    .replace(/^[ \t]*(```|~~~)[\s\S]*$/m, ' ')
+    .replace(/`[^`\n]*`/g, ' ');
+}
+
+/**
  * Does this inline body carry one of the bots' own HIGH/Major severity labels?
  * Exact-by-marker (see {@link HIGH_SEVERITY_MARKERS}) — a body that merely
  * discusses a "critical" path or a "major" refactor is NOT high.
  */
 export function hasHighSeverityMarker(body: string): boolean {
-  return HIGH_SEVERITY_MARKERS.some((re) => re.test(body));
+  const prose = withoutCode(body);
+  return HIGH_SEVERITY_MARKERS.some((re) => re.test(prose));
 }
 
 // ─── Evidence helpers ───────────────────────────────────────────────────────
@@ -696,6 +741,7 @@ interface ReadState {
   isDraft: boolean;
   rollupPresent: boolean;
   rollupState: string | null;
+  rollupTotalCount: number | null;
   checks: CheckEntry[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
@@ -735,6 +781,7 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     isDraft: false,
     rollupPresent: false,
     rollupState: null,
+    rollupTotalCount: null,
     checks: [],
     reviews: [],
     threads: [],
@@ -789,6 +836,7 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
       state.isDraft = p.isDraft;
       state.rollupPresent = p.rollupPresent;
       state.rollupState = p.rollupState;
+      state.rollupTotalCount = p.rollupTotalCount;
     } else if (p.headRefOid !== state.headSha) {
       // The head moved between reads: everything already accumulated describes
       // a commit that is no longer what would merge.
@@ -818,22 +866,29 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     if (checksDone && reviewsDone && threadsDone) {
       // R5's zero-checks FACT applies ONLY where the rollup is consistent about
       // it, and that is exactly two shapes: no rollup at all, or a rollup that
-      // reports SUCCESS over an empty context list. Every other shape — a
-      // PENDING or FAILURE state with nothing listed, a `state` that is null,
-      // a `state` that is not a string at all — is an unreadable answer, never
-      // a green light (mmnto-ai/totem#2800 fold F7, tightened in round 2 F3:
-      // the null/non-string state used to fall through into the fact).
-      if (state.checks.length === 0 && state.rollupPresent && state.rollupState !== 'SUCCESS') {
-        return {
-          ok: false,
-          detail:
-            state.rollupState === null
-              ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
-              : 'the status-check rollup reports ' +
-                bounded(state.rollupState) +
-                ' but listed no checks - the check state is unreadable',
-          pagesRead: state.pagesRead,
-        };
+      // reports SUCCESS over an empty context list AND says the count is zero.
+      // Every other shape — a PENDING or FAILURE state with nothing listed, a
+      // `state` that is null or not a string, or a rollup that CLAIMS N checks
+      // while listing none — is an unreadable answer, never a green light
+      // (mmnto-ai/totem#2800 fold F7; round 2 F3 added the null/non-string
+      // state, round 3 F9 the count).
+      if (state.checks.length === 0 && state.rollupPresent) {
+        const claimsChecks = state.rollupTotalCount !== null && state.rollupTotalCount > 0;
+        if (state.rollupState !== 'SUCCESS' || claimsChecks) {
+          return {
+            ok: false,
+            detail: claimsChecks
+              ? 'the status-check rollup claims ' +
+                String(state.rollupTotalCount) +
+                ' checks but listed none - the check state is unreadable'
+              : state.rollupState === null
+                ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
+                : 'the status-check rollup reports ' +
+                  bounded(state.rollupState) +
+                  ' but listed no checks - the check state is unreadable',
+            pagesRead: state.pagesRead,
+          };
+        }
       }
       state.complete = true;
       return { ok: true, state };
