@@ -41,11 +41,24 @@ vi.mock('node:fs', async () => {
 
 import * as fs from 'node:fs';
 
+import { envWithoutGitLocation } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
 import { deriveSeat, deriveSeatCommand } from './mail.js';
 
 let tmpRoot: string;
+
+/**
+ * Run git against a FIXTURE directory with git's repository-location env
+ * scrubbed — the same guard the product read carries (mmnto-ai/totem#2801 F3).
+ * Under an exported `GIT_DIR` (the shape every git hook runs in) an inherited
+ * environment would point `git init` and `git remote add` at the ambient
+ * repository instead of the fixture.
+ */
+function gitFixture(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'ignore', env: envWithoutGitLocation(process.env) });
+}
 
 /** `<tmp>/<repo>/.totem/` with a seat dir (plus outbox/processed) per seat. */
 function makeRepo(repo: string, seats: string[]): string {
@@ -179,12 +192,9 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     function makeWorktreeShape(originUrl?: string): string {
       const repoRoot = path.join(tmpRoot, 'totem-totem-claude-build-2801');
       fs.mkdirSync(path.join(repoRoot, '.totem'), { recursive: true });
-      execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: repoRoot, stdio: 'ignore' });
+      gitFixture(repoRoot, ['init', '-q', '-b', 'main']);
       if (originUrl !== undefined) {
-        execFileSync('git', ['remote', 'add', 'origin', originUrl], {
-          cwd: repoRoot,
-          stdio: 'ignore',
-        });
+        gitFixture(repoRoot, ['remote', 'add', 'origin', originUrl]);
       }
       expect(fs.existsSync(path.join(repoRoot, '.totem', 'orchestration'))).toBe(false);
       return repoRoot;

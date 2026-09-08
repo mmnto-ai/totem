@@ -769,6 +769,7 @@ export {
 // Git utilities (pure helpers — no CLI dependencies)
 export type { GitBranchDiffResult } from './sys/git.js';
 export {
+  envWithoutGitLocation,
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,

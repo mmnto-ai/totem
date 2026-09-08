@@ -23,7 +23,7 @@ import {
   resolveOrchestrationPaths,
   resolveSelfAgents,
 } from './orchestration-resolver.js';
-import { getOriginRepoName, repoNameFromRemoteUrl } from './sys/git.js';
+import { envWithoutGitLocation, getOriginRepoName, repoNameFromRemoteUrl } from './sys/git.js';
 import { cleanTmpDir } from './test-utils.js';
 
 let tmpRoot: string;
@@ -32,6 +32,18 @@ let repoRoot: string;
 function mkDir(p: string): string {
   fs.mkdirSync(p, { recursive: true });
   return p;
+}
+
+/**
+ * Run git against a FIXTURE directory. The location env is scrubbed for the
+ * same reason the product read scrubs it (mmnto-ai/totem#2801 F3): git reads
+ * `GIT_DIR` and friends before `cwd`, so under an exported `GIT_DIR` — the
+ * shape every git hook runs in — `git init` here would target the ambient
+ * repository and `git remote add` would try to write to it. The fixtures must
+ * describe the directory they name, exactly like the code under test.
+ */
+function gitFixture(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'ignore', env: envWithoutGitLocation(process.env) });
 }
 
 /**
@@ -580,9 +592,9 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
   /** A real git repo in a directory whose basename is NOT a cohort key. */
   function mkGitRepo(dirName: string, originUrl?: string): string {
     const root = mkDir(path.join(tmpRoot, dirName));
-    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
+    gitFixture(root, ['init', '-q', '-b', 'main']);
     if (originUrl !== undefined) {
-      execFileSync('git', ['remote', 'add', 'origin', originUrl], { cwd: root, stdio: 'ignore' });
+      gitFixture(root, ['remote', 'add', 'origin', originUrl]);
     }
     return root;
   }
@@ -694,18 +706,82 @@ describe('getOriginRepoName — the read (mmnto-ai/totem#2801)', () => {
 
   it('returns null for a git repo with no origin remote', () => {
     const root = mkDir(path.join(tmpRoot, 'no-origin'));
-    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
+    gitFixture(root, ['init', '-q', '-b', 'main']);
     expect(getOriginRepoName(root)).toBeNull();
   });
 
   it('returns the repository name for a git repo with an origin', () => {
     const root = mkDir(path.join(tmpRoot, 'has-origin'));
-    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, stdio: 'ignore' });
-    execFileSync('git', ['remote', 'add', 'origin', 'git@github.com:mmnto-ai/totem-status.git'], {
-      cwd: root,
-      stdio: 'ignore',
-    });
+    gitFixture(root, ['init', '-q', '-b', 'main']);
+    gitFixture(root, ['remote', 'add', 'origin', 'git@github.com:mmnto-ai/totem-status.git']);
     expect(getOriginRepoName(root)).toBe('totem-status');
+  });
+
+  // ── the ambient-GIT_DIR class (mmnto-ai/totem#2801 fold round 3, F3) ──
+  //
+  // Git reads its repository-location variables BEFORE cwd, and exports them
+  // into every hook process it spawns. An inherited GIT_DIR therefore made this
+  // read answer for the ambient repository instead of the directory asked
+  // about — a non-repo dir resolving cohort seats, which is exactly the
+  // identity adoption the caller exists to prevent (and it turned this suite
+  // 19-red under an exported GIT_DIR).
+  describe('is a function of cwd alone — ambient git-location env is scrubbed', () => {
+    /** A scratch repo whose origin is a cohort repo, to point GIT_DIR at. */
+    function scratchCohortRepo(): string {
+      const root = mkDir(path.join(tmpRoot, 'ambient-origin-repo'));
+      gitFixture(root, ['init', '-q', '-b', 'main']);
+      gitFixture(root, ['remote', 'add', 'origin', 'https://github.com/mmnto-ai/totem.git']);
+      return root;
+    }
+
+    it('an exported GIT_DIR does not make a NON-repo directory resolve that repo', () => {
+      const ambient = scratchCohortRepo();
+      const plain = mkDir(path.join(tmpRoot, 'not-a-repo-under-git-dir'));
+      const saved = process.env['GIT_DIR'];
+      process.env['GIT_DIR'] = path.join(ambient, '.git');
+      try {
+        expect(getOriginRepoName(plain)).toBeNull();
+        // And the caller that keys on it stays honest: no seats, not the
+        // ambient repo's seats.
+        const result = resolveSelfAgents(plain, {});
+        expect(result.source).toBe('none');
+        expect(result.agents).toEqual([]);
+      } finally {
+        if (saved === undefined) delete process.env['GIT_DIR'];
+        else process.env['GIT_DIR'] = saved;
+      }
+    });
+
+    it('an exported GIT_DIR does not override a real repo’s own origin', () => {
+      const ambient = scratchCohortRepo();
+      const own = mkDir(path.join(tmpRoot, 'own-repo'));
+      gitFixture(own, ['init', '-q', '-b', 'main']);
+      gitFixture(own, ['remote', 'add', 'origin', 'https://github.com/mmnto-ai/liquid-city']);
+      const saved = process.env['GIT_DIR'];
+      process.env['GIT_DIR'] = path.join(ambient, '.git');
+      try {
+        expect(getOriginRepoName(own)).toBe('liquid-city');
+      } finally {
+        if (saved === undefined) delete process.env['GIT_DIR'];
+        else process.env['GIT_DIR'] = saved;
+      }
+    });
+
+    it('envWithoutGitLocation drops every location variable and keeps the rest', () => {
+      const scrubbed = envWithoutGitLocation({
+        GIT_DIR: '/somewhere/.git',
+        GIT_WORK_TREE: '/somewhere',
+        GIT_COMMON_DIR: '/somewhere/.git',
+        GIT_INDEX_FILE: '/somewhere/.git/index',
+        GIT_OBJECT_DIRECTORY: '/somewhere/.git/objects',
+        GIT_ALTERNATE_OBJECT_DIRECTORIES: '/elsewhere/objects',
+        GIT_CEILING_DIRECTORIES: '/',
+        PATH: '/usr/bin',
+        GIT_AUTHOR_NAME: 'someone',
+      });
+      expect(Object.keys(scrubbed).sort()).toEqual(['GIT_AUTHOR_NAME', 'PATH']);
+      expect(scrubbed['PATH']).toBe('/usr/bin');
+    });
   });
 });
 
