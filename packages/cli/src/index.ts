@@ -720,8 +720,11 @@ program
         json: json === true,
       });
       if (exitCode !== 0) process.exitCode = exitCode;
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action in this file; nothing is swallowed.
     } catch (err) {
       handleError(err);
+      // totem-context: handleError returns `never` (process.exit), so the throw is unreachable but required to satisfy the Tenet 4 fail-loud rule that bans bare-catch silent-degrade. Mirrors the mail / pr merge pattern.
+      throw err;
     }
   });
 
