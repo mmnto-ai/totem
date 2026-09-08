@@ -6,6 +6,7 @@ import {
   type BotIdentityPredicates,
   buildResolveThreadsPlan,
   classifyThread,
+  confirmResolved,
   deriveEvidence,
   isBotRootedThread,
   parseIdSelection,
@@ -28,9 +29,20 @@ const identity: BotIdentityPredicates = {
 
 // ─── Fixture builders ────────────────────────────────────────────────────────
 
+/**
+ * The GraphQL logins that answer `__typename: "Bot"` on the real API without
+ * carrying a `[bot]` suffix — verified read-only on mmnto-ai/totem#2839 at
+ * 2026-09-08T06:03:03Z (`greptile-apps` and `coderabbitai` both answered `Bot`).
+ * A fixture may override `typename` explicitly; this only keeps the DEFAULT
+ * honest so a test does not accidentally model a review bot as a User.
+ */
+const KNOWN_BOT_LOGINS = ['coderabbitai', 'gemini-code-assist', 'greptile-apps', 'github-actions'];
+
 interface FakeComment {
   databaseId?: number | null;
   login: string | null;
+  /** GraphQL `author.__typename`. Defaults to the honest value for the login. */
+  typename?: string;
   createdAt: string;
 }
 
@@ -54,10 +66,17 @@ interface FakePrComment {
   createdAt?: string;
 }
 
+function defaultTypename(login: string): string {
+  return KNOWN_BOT_LOGINS.includes(login.toLowerCase()) || /\[bot\]$/i.test(login) ? 'Bot' : 'User';
+}
+
 function commentNode(c: FakeComment): ReviewThreadNode['comments']['nodes'][number] {
   return {
     databaseId: c.databaseId === undefined ? 1 : c.databaseId,
-    author: c.login === null ? null : { login: c.login },
+    author:
+      c.login === null
+        ? null
+        : { __typename: c.typename ?? defaultTypename(c.login), login: c.login },
     createdAt: c.createdAt,
   };
 }
@@ -87,8 +106,10 @@ interface RunnerSpec {
   threadsCursor?: string | null;
   /** The threads the second page answers with (when `threadsCursor` is followable). */
   threadsSecondPage?: FakeThread[];
-  /** Thread ids whose `resolveReviewThread` mutation fails. */
+  /** Thread ids whose `resolveReviewThread` mutation fails (a GraphQL errors body). */
   mutationFailures?: string[];
+  /** Thread id → a raw mutation body to answer with (a clean gh exit, an unusable answer). */
+  mutationRawBody?: Record<string, string>;
   /** Make the whole threads read fail with this gh exit code. */
   threadsExitCode?: number;
   /** Answer the threads read with this raw body instead of a well-formed one. */
@@ -125,6 +146,8 @@ function makeRunner(spec: RunnerSpec): Harness {
             exitCode: 0,
           };
         }
+        const raw = spec.mutationRawBody?.[threadId];
+        if (raw !== undefined) return { stdout: raw, exitCode: 0 };
         return {
           stdout: JSON.stringify({
             data: { resolveReviewThread: { thread: { id: threadId, isResolved: true } } },
@@ -152,9 +175,14 @@ function makeRunner(spec: RunnerSpec): Harness {
         };
       }
 
-      // The thread read.
+      // The thread read. A non-zero exit carries the raw body when one is given
+      // (gh prints the GraphQL body on stdout AND exits 1 for a NOT_FOUND —
+      // observed 2026-09-08), else a canned failure string.
       if (spec.threadsExitCode !== undefined && spec.threadsExitCode !== 0) {
-        return { stdout: 'gh: API rate limit exceeded', exitCode: spec.threadsExitCode };
+        return {
+          stdout: spec.threadsRawBody ?? 'gh: API rate limit exceeded',
+          exitCode: spec.threadsExitCode,
+        };
       }
       if (spec.threadsRawBody !== undefined) {
         return { stdout: spec.threadsRawBody, exitCode: 0 };
@@ -240,37 +268,153 @@ function mutationCalls(calls: string[][]): string[][] {
   return calls.filter((c) => c.some((a) => a.includes('TotemResolveReviewThread')));
 }
 
+// ─── The exec ALLOWLIST ──────────────────────────────────────────────────────
+//
+// An ALLOWLIST, deliberately, not a denylist: "no `pr comment`, no `/replies`,
+// no `/reviews`" only refuses the write shapes someone thought to enumerate, and
+// a write nobody listed (`gh pr review --approve`, `gh api -X POST …`,
+// `gh api --method PUT …`, an `addComment` GraphQL mutation) sails through. So
+// every argv the seam records must match exactly ONE of the five shapes this
+// verb is allowed to send; anything else THROWS, including a mutation under
+// dry-run. `rejects a write argv` below is the mutant check that this predicate
+// actually refuses writes.
+
+/** The five exec shapes the verb may send. */
+type ExecShape = 'repo-view' | 'threads-read' | 'comments-read' | 'mutation' | 'issue-comments';
+
+const ISSUE_COMMENTS_PATH = /^repos\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/issues\/\d+\/comments$/;
+
+/** Variables each declared document is allowed to carry. */
+const ALLOWED_VARIABLES: Record<Exclude<ExecShape, 'repo-view' | 'issue-comments'>, string[]> = {
+  'threads-read': ['owner', 'name', 'number', 'threadsAfter'],
+  'comments-read': ['threadId', 'commentsAfter'],
+  mutation: ['threadId'],
+};
+
+function classifyExecShape(args: readonly string[]): ExecShape {
+  const reject = (why: string): never => {
+    throw new Error(`argv is not a declared exec shape (${why}): ${JSON.stringify(args)}`);
+  };
+
+  if (args[0] === 'repo') {
+    if (args.join(' ') !== 'repo view --json nameWithOwner --jq .nameWithOwner') {
+      return reject('unexpected `gh repo` argv');
+    }
+    return 'repo-view';
+  }
+
+  if (args[0] !== 'api') return reject('only `gh repo view` and `gh api` are declared');
+
+  if (args[1] === 'graphql') {
+    if (args[2] !== '-f' || args[3]?.startsWith('query=') !== true) {
+      return reject('a graphql call must pass the document as `-f query=…`');
+    }
+    const document = args[3].slice('query='.length);
+    const shape: ExecShape | null =
+      document === RESOLVE_THREADS_QUERY
+        ? 'threads-read'
+        : document === RESOLVE_THREAD_COMMENTS_QUERY
+          ? 'comments-read'
+          : document === RESOLVE_THREAD_MUTATION
+            ? 'mutation'
+            : null;
+    if (shape === null) return reject('the document is not one of the three declared constants');
+    const allowed = ALLOWED_VARIABLES[shape as keyof typeof ALLOWED_VARIABLES];
+    for (let i = 4; i < args.length; i += 2) {
+      const flag = args[i];
+      const pair = args[i + 1];
+      if (flag !== '-f' && flag !== '-F') return reject(`unexpected flag ${String(flag)}`);
+      const key = pair?.split('=')[0] ?? '';
+      if (!allowed.includes(key)) return reject(`unexpected variable ${key}`);
+    }
+    return shape;
+  }
+
+  // A REST call: exactly the paginated issue-comment READ, nothing else. Any
+  // method flag at all is a write attempt and is refused by falling through.
+  if (args.length !== 3 || !ISSUE_COMMENTS_PATH.test(args[1] ?? '') || args[2] !== '--paginate') {
+    return reject('the only declared REST call is the paginated issue-comment read');
+  }
+  return 'issue-comments';
+}
+
+/**
+ * Assert every recorded argv is a declared shape, and that a mutation appears
+ * only when `--apply` was passed. Throws on the first offender.
+ */
+function assertOnlyDeclaredExecShapes(
+  calls: readonly (readonly string[])[],
+  opts: { apply: boolean },
+): ExecShape[] {
+  return calls.map((args) => {
+    const shape = classifyExecShape(args);
+    if (shape === 'mutation' && !opts.apply) {
+      throw new Error(`a mutation was sent without --apply: ${JSON.stringify(args)}`);
+    }
+    return shape;
+  });
+}
+
 const BOT_ROOT = { login: 'coderabbitai', createdAt: '2026-09-08T03:32:00Z' };
 
 // ─── Real capture (disclosed) ────────────────────────────────────────────────
 //
-// Captured read-only from mmnto-ai/totem#2839 on 2026-09-08T04:19:20Z with
-// `gh api graphql` (review threads) and `gh api repos/mmnto-ai/totem/issues/2839/comments`
-// (PR-level comments). Three bot-rooted threads, none with an in-thread reply;
-// two human PR-level comments, one BEFORE every thread root (the round-trigger
-// comment) and one AFTER (the round disposition). Trimmed to the fields the
-// verb reads; ids, logins and instants are verbatim.
+// Captured READ-ONLY from mmnto-ai/totem#2839: the review threads at
+// 2026-09-08T06:03:03Z (`gh api graphql`, the same selection set
+// RESOLVE_THREADS_QUERY sends, `author { __typename login }` included) and the
+// PR-level comments at 2026-09-08T06:03:12Z
+// (`gh api repos/mmnto-ai/totem/issues/2839/comments --paginate`). Both clock
+// reads are from the same shell as the capture.
+//
+// COMPLETE, not trimmed by row: all three review threads and ALL SEVEN PR-level
+// comments the PR carried at that instant are here, including the four bot ones
+// that change no verdict — a fixture that quietly dropped the inert rows would
+// stop being a witness to what the verb actually reads. Only the FIELDS are
+// reduced (to the ones the verb reads: ids, logins, __typename/type, instants,
+// paths); every value is verbatim.
+//
+// What it witnesses: three bot-rooted threads (two greptile, one coderabbit),
+// none with an in-thread reply; a human comment at 03:24:01Z BEFORE every
+// thread root (the round-trigger comment — not evidence for any of them) and a
+// human comment at 03:42:27Z AFTER all three (the round disposition). Note the
+// GraphQL logins carry no `[bot]` suffix while `__typename` is `Bot` — the trap
+// the three-arm bot test exists for.
 const CAPTURE_2839: RunnerSpec = {
   threads: [
     {
       id: 'PRRT_kwDORatBZ86gFX3q',
       path: 'scripts/sync-labels.ps1',
       comments: [
-        { databaseId: 3954062164, login: 'greptile-apps', createdAt: '2026-09-08T03:30:29Z' },
+        {
+          databaseId: 3954062164,
+          login: 'greptile-apps',
+          typename: 'Bot',
+          createdAt: '2026-09-08T03:30:29Z',
+        },
       ],
     },
     {
       id: 'PRRT_kwDORatBZ86gFX3s',
       path: 'packages/cli/src/commands/sync-labels-forms.test.ts',
       comments: [
-        { databaseId: 3954062167, login: 'greptile-apps', createdAt: '2026-09-08T03:30:29Z' },
+        {
+          databaseId: 3954062167,
+          login: 'greptile-apps',
+          typename: 'Bot',
+          createdAt: '2026-09-08T03:30:29Z',
+        },
       ],
     },
     {
       id: 'PRRT_kwDORatBZ86gFYvi',
       path: 'scripts/sync-labels.ps1',
       comments: [
-        { databaseId: 3954067481, login: 'coderabbitai', createdAt: '2026-09-08T03:32:00Z' },
+        {
+          databaseId: 3954067481,
+          login: 'coderabbitai',
+          typename: 'Bot',
+          createdAt: '2026-09-08T03:32:00Z',
+        },
       ],
     },
   ],
@@ -278,7 +422,9 @@ const CAPTURE_2839: RunnerSpec = {
     { login: 'satur8d', createdAt: '2026-09-08T03:24:01Z' },
     { login: 'coderabbitai[bot]', type: 'Bot', createdAt: '2026-09-08T03:24:15Z' },
     { login: 'greptile-apps[bot]', type: 'Bot', createdAt: '2026-09-08T03:30:23Z' },
+    { login: 'coderabbitai[bot]', type: 'Bot', createdAt: '2026-09-08T03:31:57Z' },
     { login: 'satur8d', createdAt: '2026-09-08T03:42:27Z' },
+    { login: 'coderabbitai[bot]', type: 'Bot', createdAt: '2026-09-08T03:42:48Z' },
     { login: 'greptile-apps[bot]', type: 'Bot', createdAt: '2026-09-08T03:42:53Z' },
   ],
 };
@@ -357,12 +503,46 @@ describe('resolve-threads classification', () => {
         { id: 2, user: { login: 'coderabbitai[bot]', type: 'Bot' }, created_at: 'b' },
         // A GitHub App that is NOT a review bot is still not the human disposition.
         { id: 3, user: { login: 'github-actions[bot]', type: 'Bot' }, created_at: 'c' },
-        // A human account whose name merely contains a bot's name stays human.
+        // NARROW claim: `alice-greptile` stays human because core's greptile
+        // pattern REQUIRES the `[bot]` suffix. That is true of the greptile and
+        // ghcq arms only — it is NOT a general property of the loose pattern
+        // (see the disclosed limit below).
         { id: 4, user: { login: 'alice-greptile', type: 'User' }, created_at: 'd' },
       ],
       identity,
     );
     expect(records.map((r) => r.isBot)).toEqual([false, true, true, false]);
+  });
+
+  it('DISCLOSED LIMIT: a human whose login contains `coderabbit` reads as a bot on REST', async () => {
+    // core's coderabbit arm is a bare substring (`/coderabbit/i`, no `[bot]`
+    // requirement), so a real human account named `coderabbit-fan` is classified
+    // as a bot on the REST surface and its PR-level comment is NOT evidence.
+    // The direction is safe (a thread stays open rather than being resolved on
+    // thin evidence) and the pattern is core's, unchanged here
+    // (packages/core/src/bot-identity.ts, mmnto-ai/totem#2800) — this test
+    // exists so the limit is recorded, not so the behaviour looks correct.
+    expect(
+      toPrCommentRecords([{ id: 1, user: { login: 'coderabbit-fan', type: 'User' } }], identity)[0]
+        ?.isBot,
+    ).toBe(true);
+    const result = await run({
+      threads: [{ id: 'T', comments: [{ databaseId: 1, ...BOT_ROOT }] }],
+      prComments: [{ login: 'coderabbit-fan', createdAt: '2026-09-08T04:00:00Z' }],
+    });
+    expect(result.rows[0]?.verdict).toBe('skip:no-evidence');
+    // On the GRAPHQL surface the same human is NOT a bot (the exact list plus
+    // `__typename: User`), so an in-thread reply from them WOULD be evidence.
+    const [record] = toThreadRecords(
+      [
+        threadNode({
+          id: 'T',
+          comments: [BOT_ROOT, { login: 'coderabbit-fan', createdAt: '2026-09-08T04:00:00Z' }],
+        }),
+      ],
+      identity,
+    );
+    expect(record?.humanReplyCount).toBe(1);
   });
 
   it('parses --ids and refuses a malformed entry', () => {
@@ -423,6 +603,88 @@ describe('resolve-threads evidence rule (R2)', () => {
     });
     expect(result.rows.map((r) => [r.verdict, r.evidence])).toEqual([['skip:no-evidence', 'none']]);
     expect(result.stdout).toContain('give it evidence');
+  });
+
+  // ── S3 / S3b: an App reply is not a human reply ──
+  // The four review-bot logins are a CLOSED list, but any GitHub App can reply
+  // in a review thread. Before the three-arm bot test these two cases resolved
+  // the thread on the App's own comment — the fail-open direction.
+
+  it('S3: a `github-actions` in-thread reply is NOT evidence (skip:no-evidence)', async () => {
+    const result = await run({
+      threads: [
+        {
+          id: 'T-gha',
+          comments: [
+            { databaseId: 1, ...BOT_ROOT },
+            // The GraphQL spelling of an App login carries no `[bot]` suffix —
+            // `__typename` is the arm that catches it.
+            {
+              databaseId: 2,
+              login: 'github-actions',
+              typename: 'Bot',
+              createdAt: '2026-09-08T04:00:00Z',
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.rows[0]?.humanReplyCount).toBe(0);
+    expect(result.rows.map((r) => [r.verdict, r.evidence])).toEqual([['skip:no-evidence', 'none']]);
+  });
+
+  it('S3b: a Copilot-reviewer in-thread reply is NOT evidence, on either spelling', async () => {
+    const result = await run({
+      threads: [
+        {
+          id: 'T-copilot-typename',
+          comments: [
+            { databaseId: 1, ...BOT_ROOT },
+            // An App outside core's list, caught by `__typename` alone.
+            {
+              databaseId: 2,
+              login: 'copilot-pull-request-reviewer',
+              typename: 'Bot',
+              createdAt: '2026-09-08T04:00:00Z',
+            },
+          ],
+        },
+        {
+          id: 'T-copilot-suffix',
+          comments: [
+            { databaseId: 3, ...BOT_ROOT },
+            // Belt and braces: the `[bot]` suffix arm catches it even if a
+            // future payload were to answer `User` for the typename.
+            {
+              databaseId: 4,
+              login: 'copilot-pull-request-reviewer[bot]',
+              typename: 'User',
+              createdAt: '2026-09-08T04:00:00Z',
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.rows.map((r) => r.verdict)).toEqual(['skip:no-evidence', 'skip:no-evidence']);
+  });
+
+  it('a HUMAN in-thread reply still resolves (the fold did not close the door on people)', async () => {
+    const result = await run({
+      threads: [
+        {
+          id: 'T-human-reply',
+          comments: [
+            { databaseId: 1, ...BOT_ROOT },
+            { databaseId: 2, login: 'satur8d', createdAt: '2026-09-08T04:00:00Z' },
+          ],
+        },
+      ],
+    });
+    expect(result.rows[0]?.humanReplyCount).toBe(1);
+    expect(result.rows.map((r) => [r.verdict, r.evidence])).toEqual([
+      ['resolve', 'in-thread-reply'],
+    ]);
+    expect(result.exitCode).toBe(0);
   });
 
   it('does not accept a BOT PR-level comment as the disposition', async () => {
@@ -494,9 +756,14 @@ describe('resolve-threads mutation discipline', () => {
     prComments: [{ login: 'satur8d', createdAt: '2026-09-08T04:05:00Z' }],
   };
 
-  it('dry-run (the default) performs zero mutations', async () => {
+  it('dry-run (the default) performs zero mutations and sends only declared read shapes', async () => {
     const result = await run(evidenced);
     expect(mutationCalls(result.calls)).toHaveLength(0);
+    // The allowlist, run over the dry-run too: every argv is a declared shape
+    // AND none of them is the mutation.
+    const shapes = assertOnlyDeclaredExecShapes(result.calls, { apply: false });
+    expect(shapes).not.toContain('mutation');
+    expect(new Set(shapes)).toEqual(new Set(['repo-view', 'threads-read', 'issue-comments']));
     expect(result.rows.every((r) => r.applied === null)).toBe(true);
     expect(result.stdout).toContain('dry-run');
     expect(result.exitCode).toBe(0);
@@ -518,26 +785,90 @@ describe('resolve-threads mutation discipline', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('sends the resolveReviewThread mutation and nothing else that could write', async () => {
+  it('every argv it sends is one of the five declared exec shapes (allowlist)', async () => {
     const result = await run(evidenced, { apply: true });
-    // Not one call posts a comment, an inline reply, or a review.
-    const flat = result.calls.map((c) => c.join(' '));
-    for (const call of flat) {
-      expect(call).not.toMatch(/\bpr comment\b/);
-      expect(call).not.toMatch(/\/replies\b/);
-      expect(call).not.toMatch(/\/reviews\b/);
-      expect(call).not.toMatch(/\bissue comment\b/);
-      expect(call).not.toMatch(/--method\s+(POST|PATCH|PUT|DELETE)/);
-    }
-    // Every GraphQL document sent is one of the three this module declares.
-    for (const q of result.queries) {
-      expect([
-        RESOLVE_THREADS_QUERY,
-        RESOLVE_THREAD_COMMENTS_QUERY,
-        RESOLVE_THREAD_MUTATION,
-      ]).toContain(q);
-    }
+    const shapes = assertOnlyDeclaredExecShapes(result.calls, { apply: true });
+    // The whole run is: one repo read, one thread page, one issue-comment read,
+    // two mutations. Nothing else was sent — not by omission from a denylist,
+    // but because nothing else is representable in the allowlist.
+    expect(shapes).toEqual(['repo-view', 'threads-read', 'issue-comments', 'mutation', 'mutation']);
     expect(result.queries.filter((q) => q === RESOLVE_THREAD_MUTATION)).toHaveLength(2);
+  });
+
+  it('the allowlist REJECTS a write argv (the mutant check on the predicate itself)', () => {
+    // If any of these passed, the allowlist would be decorative.
+    const writes: string[][] = [
+      ['pr', 'review', '2839', '--approve'],
+      ['pr', 'comment', '2839', '--body', 'hi'],
+      ['api', '-X', 'POST', 'repos/mmnto-ai/totem/issues/2839/comments'],
+      ['api', '--method', 'PUT', 'repos/mmnto-ai/totem/pulls/2839/merge'],
+      ['api', 'repos/mmnto-ai/totem/pulls/comments/1/replies', '-f', 'body=hi'],
+      ['api', 'repos/mmnto-ai/totem/pulls/2839/reviews', '-f', 'event=APPROVE'],
+      ['api', 'graphql', '-f', 'query=mutation { addComment(input: {}) { clientMutationId } }'],
+      // The right document with a variable it never sends.
+      ['api', 'graphql', '-f', `query=${RESOLVE_THREAD_MUTATION}`, '-f', 'body=hi'],
+    ];
+    for (const argv of writes) {
+      expect(() => assertOnlyDeclaredExecShapes([argv], { apply: true })).toThrow();
+    }
+    // And the declared mutation is still refused when --apply was not passed.
+    expect(() =>
+      assertOnlyDeclaredExecShapes(
+        [['api', 'graphql', '-f', `query=${RESOLVE_THREAD_MUTATION}`, '-f', 'threadId=T']],
+        { apply: false },
+      ),
+    ).toThrow(/without --apply/);
+    // A real read still passes, so the predicate is not simply always-throwing.
+    expect(
+      assertOnlyDeclaredExecShapes(
+        [['api', 'repos/mmnto-ai/totem/issues/2839/comments', '--paginate']],
+        { apply: false },
+      ),
+    ).toEqual(['issue-comments']);
+  });
+
+  it('a mutation that exits 0 without confirming isResolved is a FAILURE, not an applied row', async () => {
+    const result = await run(
+      {
+        ...evidenced,
+        // gh exits 0 and the body parses — but the payload carries no thread, so
+        // nothing confirms the thread was resolved.
+        mutationRawBody: { 'T-a': JSON.stringify({ data: { resolveReviewThread: null } }) },
+      },
+      { apply: true },
+    );
+    expect(result.rows.find((r) => r.threadId === 'T-a')?.applied).toBe(false);
+    expect(result.rows.find((r) => r.threadId === 'T-a')?.errorText).toContain('no thread');
+    expect(result.rows.find((r) => r.threadId === 'T-b')?.applied).toBe(true);
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('1 thread(s) failed to resolve');
+  });
+
+  it('a mutation answering isResolved: false is a FAILURE — the thread is still open', async () => {
+    const result = await run(
+      {
+        ...evidenced,
+        mutationRawBody: {
+          'T-a': JSON.stringify({
+            data: { resolveReviewThread: { thread: { id: 'T-a', isResolved: false } } },
+          }),
+        },
+      },
+      { apply: true },
+    );
+    expect(result.rows.find((r) => r.threadId === 'T-a')?.applied).toBe(false);
+    expect(result.rows.find((r) => r.threadId === 'T-a')?.errorText).toContain('still open');
+    expect(result.exitCode).toBe(2);
+  });
+
+  it('confirmResolved refuses every unusable answer and accepts only a resolved thread', () => {
+    expect(
+      confirmResolved({ data: { resolveReviewThread: { thread: { id: 'T', isResolved: true } } } }),
+    ).toEqual({ ok: true });
+    expect(confirmResolved({ data: { resolveReviewThread: null } }).ok).toBe(false);
+    expect(confirmResolved({ data: { resolveReviewThread: { thread: null } } }).ok).toBe(false);
+    expect(confirmResolved({ data: {} }).ok).toBe(false);
+    expect(confirmResolved('not json at all').ok).toBe(false);
   });
 
   it('continues past a failed mutation and exits 2 naming the count', async () => {
@@ -703,22 +1034,84 @@ describe('resolve-threads read failures', () => {
     expect(mutationCalls(result.calls)).toHaveLength(0);
   });
 
-  it('fails hard when the PR is not found', async () => {
+  // The two NOT_FOUND fixtures below are the shape `gh` was OBSERVED to emit,
+  // not an invented one: read-only on 2026-09-08 against mmnto-ai/totem,
+  // `gh api graphql` for an absent PR number and for an absent repo each exited
+  // **1** while printing a body carrying BOTH the null data and a NOT_FOUND
+  // `errors` array. So the reachable arm is the non-zero-exit arm, and the line
+  // it prints quotes GitHub's own message.
+
+  it('fails hard when the PR is not found (gh exit 1 + a NOT_FOUND errors body)', async () => {
     const result = await run({
+      threads: [],
+      threadsExitCode: 1,
+      threadsRawBody: JSON.stringify({
+        data: { repository: { pullRequest: null } },
+        errors: [
+          {
+            type: 'NOT_FOUND',
+            path: ['repository', 'pullRequest'],
+            message: 'Could not resolve to a PullRequest with the number of 2839.',
+          },
+        ],
+      }),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('review threads NOT read — nothing resolved');
+    expect(result.stderr).toContain('gh exited 1');
+    expect(result.stderr).toContain('Could not resolve to a PullRequest');
+    expect(mutationCalls(result.calls)).toHaveLength(0);
+  });
+
+  it('fails hard when the repository is inaccessible (gh exit 1 + a NOT_FOUND errors body)', async () => {
+    const result = await run({
+      threads: [],
+      threadsExitCode: 1,
+      threadsRawBody: JSON.stringify({
+        data: { repository: null },
+        errors: [
+          {
+            type: 'NOT_FOUND',
+            path: ['repository'],
+            message: "Could not resolve to a Repository with the name 'mmnto-ai/nope'.",
+          },
+        ],
+      }),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Could not resolve to a Repository');
+  });
+
+  it('a 200 body with null data and NO errors is still a named hard failure (defence in depth)', async () => {
+    // GitHub has not been observed to emit this (the NOT_FOUND path exits 1,
+    // above) — a proxy or cache could. The arms exist so such a body is named
+    // rather than read as "a PR with no threads", and this is what they print.
+    const noPull = await run({
       threads: [],
       threadsRawBody: JSON.stringify({ data: { repository: { pullRequest: null } } }),
     });
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('PR #2839 not found');
-  });
+    expect(noPull.exitCode).toBe(1);
+    expect(noPull.stderr).toContain('PR #2839 not found');
 
-  it('fails hard when the repository is inaccessible', async () => {
-    const result = await run({
+    const noRepo = await run({
       threads: [],
       threadsRawBody: JSON.stringify({ data: { repository: null } }),
     });
+    expect(noRepo.exitCode).toBe(1);
+    expect(noRepo.stderr).toContain('not found or inaccessible');
+  });
+
+  it('a GraphQL errors array in a 200 body is a hard failure, never a partial read', async () => {
+    const result = await run({
+      threads: [],
+      threadsRawBody: JSON.stringify({
+        data: { repository: null },
+        errors: [{ message: 'API rate limit exceeded' }],
+      }),
+    });
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('not found or inaccessible');
+    expect(result.stderr).toContain('GraphQL errors');
+    expect(result.stderr).toContain('API rate limit exceeded');
   });
 
   it('fails hard and names the cure when gh cannot resolve the repository', async () => {
@@ -783,6 +1176,25 @@ describe('resolve-threads output', () => {
     ]);
     expect(result.exitCode).toBe(0);
     expect(mutationCalls(result.calls)).toHaveLength(0);
+  });
+
+  it('--json emits the {error, rows, exitCode} document on a failure, and nothing else', async () => {
+    // The failure shape is a CONTRACT for a script that reads --json: it is not
+    // the success document with an added key, and `rows` is present (empty when
+    // the failure predates the plan) so a consumer can read it unconditionally.
+    const readFailed = await run({ threads: [], threadsExitCode: 1 }, { json: true });
+    const failDoc = JSON.parse(readFailed.stdout) as Record<string, unknown>;
+    expect(Object.keys(failDoc).sort()).toEqual(['error', 'exitCode', 'rows']);
+    expect(typeof failDoc['error']).toBe('string');
+    expect(failDoc['rows']).toEqual([]);
+    expect(failDoc['exitCode']).toBe(1);
+
+    // The unmatched-id abort carries the SAME shape, with the rows it had built.
+    const unmatched = await run(CAPTURE_2839, { json: true, ids: '999999' });
+    const idDoc = JSON.parse(unmatched.stdout) as { rows: ResolveThreadsRow[]; exitCode: number };
+    expect(Object.keys(idDoc).sort()).toEqual(['error', 'exitCode', 'rows']);
+    expect(idDoc.exitCode).toBe(2);
+    expect(idDoc.rows).toHaveLength(3);
   });
 
   it('refuses a non-numeric PR argument before any gh call', async () => {

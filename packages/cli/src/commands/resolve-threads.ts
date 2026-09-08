@@ -9,16 +9,35 @@
  * round has answered — not to silence the predicate. This verb does exactly
  * that, deterministically and with zero LLM calls.
  *
- * THE EVIDENCE RULE (R2), the whole point of the verb: a thread is resolved
- * only when the round answered it, and an answer takes either of two shapes —
- *   - `in-thread-reply`: a comment after the root whose author is not a review
- *     bot (the CodeRabbit/Greptile routine); or
- *   - `pr-level-disposition`: a non-bot PR-level (issue) comment created AFTER
- *     the thread's root comment (the round-disposition comment — the ONLY
- *     lawful answer to a GCA thread, since bot-protocols forbids replying to
- *     GCA in-thread, and the practiced answer to every round).
+ * THE EVIDENCE RULE (R2 verbatim): "An in-thread human reply OR a human
+ * PR-level comment created after the thread's root — either suffices." So:
+ *   - `in-thread-reply`: a comment after the root whose author is not a bot
+ *     (the CodeRabbit/Greptile routine); or
+ *   - `pr-level-disposition`: ANY non-bot PR-level (issue) comment created
+ *     AFTER the thread's root comment. It is NOT keyed to the round-disposition
+ *     comment specifically — the rule is any non-bot comment that postdates the
+ *     root, because a PR-level comment is the only lawful answer to a GCA
+ *     thread (bot-protocols forbids replying to GCA in-thread) and no
+ *     deterministic reading distinguishes a disposition from other human prose.
+ *     CONSEQUENCE, stated because it is load-bearing: on a re-invoked round the
+ *     operator's trigger comment ("@coderabbitai review") is itself non-bot
+ *     evidence for every thread it postdates — which is exactly why the round
+ *     disposition must be posted BEFORE this verb runs (the review-reply
+ *     skill's step 4 ordering), not after.
  * A thread with neither is a `skip:no-evidence` row and is NEVER resolved,
  * under any flag. There is no override.
+ *
+ * WHAT COUNTS AS A BOT, on each surface (the fail-open trap this holds shut):
+ * the four review-bot logins are core's closed list, but ANY GitHub App can
+ * comment — `github-actions[bot]`, a Copilot reviewer, a scanner — and an App's
+ * comment is not a human answer. So a comment is a bot's when GraphQL says
+ * `author.__typename === 'Bot'`, or the login ends in `[bot]`, or it is on
+ * core's exact list; on REST, when `user.type === 'Bot'`, or the login ends in
+ * `[bot]`, or core's loose review-bot pattern matches. Only what survives all
+ * three arms is evidence. A DELETED account (null author) is deliberately NOT a
+ * bot: the reply it left was a human reply when it was written, and deleting
+ * the account does not retract it (recorded as item (6) of the design's
+ * disagreement list in `.totem/specs/2841.md`).
  *
  * SAFETY PROPERTIES this module holds:
  *   - Dry-run by DEFAULT. `--apply` is the only path that mutates.
@@ -84,7 +103,7 @@ export const RESOLVE_THREADS_QUERY = `query TotemResolveThreads($owner: String!,
             pageInfo { hasNextPage endCursor }
             nodes {
               databaseId
-              author { login }
+              author { __typename login }
               createdAt
             }
           }
@@ -107,7 +126,7 @@ export const RESOLVE_THREAD_COMMENTS_QUERY = `query TotemResolveThreadComments($
         pageInfo { hasNextPage endCursor }
         nodes {
           databaseId
-          author { login }
+          author { __typename login }
           createdAt
         }
       }
@@ -115,7 +134,11 @@ export const RESOLVE_THREAD_COMMENTS_QUERY = `query TotemResolveThreadComments($
   }
 }`;
 
-/** The ONLY mutation this verb can issue. */
+/**
+ * The ONLY mutation this verb can issue. It asks the thread back with
+ * `isResolved` so the run can CONFIRM the outcome rather than infer it from a
+ * clean exit (see {@link confirmResolved}).
+ */
 export const RESOLVE_THREAD_MUTATION = `mutation TotemResolveReviewThread($threadId: ID!) {
   resolveReviewThread(input: { threadId: $threadId }) {
     thread { id isResolved }
@@ -129,10 +152,17 @@ const PageInfoSchema = z.object({
   endCursor: z.string().nullable(),
 });
 
-/** `author` is null for a deleted/ghost account — never coerced to a bot. */
+/**
+ * `author` is null for a deleted/ghost account — never coerced to a bot.
+ * `__typename` is REQUIRED, not optional: both documents select it, and it is
+ * the only signal that catches a GitHub App outside core's four-name review-bot
+ * list (`github-actions`, a Copilot reviewer, a scanner). Making it optional
+ * would let a document that quietly stopped selecting it fail OPEN — every App
+ * reply reading as a human reply. Absent ⇒ the read fails loud instead.
+ */
 const GqlCommentSchema = z.object({
   databaseId: z.number().nullable(),
-  author: z.object({ login: z.string() }).nullable(),
+  author: z.object({ __typename: z.string(), login: z.string() }).nullable(),
   createdAt: z.string(),
 });
 
@@ -157,6 +187,15 @@ const ThreadsPageSchema = z.object({
           })
           .nullable(),
       })
+      .nullable(),
+  }),
+});
+
+/** The mutation's answer. `thread.isResolved` is what makes a row `applied`. */
+const ResolveMutationSchema = z.object({
+  data: z.object({
+    resolveReviewThread: z
+      .object({ thread: z.object({ id: z.string(), isResolved: z.boolean() }).nullable() })
       .nullable(),
   }),
 });
@@ -297,15 +336,30 @@ export interface ResolveThreadsResult {
 
 // ─── Pure mapping + selection ────────────────────────────────────────────────
 
+/** A login spelled the REST way (`name[bot]`) — the App suffix, on any surface. */
+const BOT_LOGIN_SUFFIX = /\[bot\]$/i;
+
 /**
- * Is this GraphQL comment author a review bot? A null author (deleted/ghost
- * account) is NOT a bot — the spec's edge case 1: it must never be classified
- * as a valid bot identity, so such a comment counts as a human reply and such a
- * root is not a candidate.
+ * Is this GraphQL comment written by a bot? THREE arms, because core's
+ * review-bot list is a closed list of four and any GitHub App can reply in a
+ * thread: GitHub's own `author.__typename === 'Bot'` (the authoritative
+ * signal — verified 2026-09-08T06:03:03Z on mmnto-ai/totem#2839, where
+ * `greptile-apps` and `coderabbitai` both answer `Bot` with no `[bot]` suffix
+ * on the login), a `[bot]`-suffixed login, or core's exact review-bot list.
+ * Anything narrower fails OPEN: a `github-actions[bot]` or Copilot-reviewer
+ * comment would count as the human reply and resolve the thread.
+ *
+ * A null author (deleted/ghost account) is deliberately NOT a bot — the reply
+ * it left was a human reply when it was written, and deleting the account does
+ * not retract it. So such a comment still counts as evidence, while such a ROOT
+ * is not a bot root and its thread is not a candidate at all.
  */
 function isBotComment(comment: ReviewCommentNode, identity: BotIdentityPredicates): boolean {
-  const login = comment.author?.login;
-  return login !== undefined && identity.isBotLoginExact(login);
+  const author = comment.author;
+  if (author === null) return false;
+  if (author.__typename === 'Bot') return true;
+  if (BOT_LOGIN_SUFFIX.test(author.login)) return true;
+  return identity.isBotLoginExact(author.login);
 }
 
 /**
@@ -342,10 +396,22 @@ export function isBotRootedThread(
   record: ReviewThreadRecord,
   identity: BotIdentityPredicates,
 ): boolean {
+  // The ROOT test stays core's EXACT four-name list, deliberately narrower than
+  // {@link isBotComment}'s three arms: predicate 2 of merge-ready denies on a
+  // thread rooted by a KNOWN REVIEW BOT, and this verb exists to clear exactly
+  // those. Widening it to every App would have the verb resolving threads the
+  // gate never denied on.
   return record.rootAuthor !== null && identity.isBotLoginExact(record.rootAuthor);
 }
 
-/** Reduce validated REST issue comments to {@link PrIssueCommentRecord}s. Pure given `identity`. */
+/**
+ * Reduce validated REST issue comments to {@link PrIssueCommentRecord}s. Pure
+ * given `identity`. The bot test is the REST mirror of {@link isBotComment}'s
+ * three arms: GitHub's `user.type === 'Bot'` (every App), a `[bot]`-suffixed
+ * login, or core's LOOSE review-bot pattern (the REST surface's own test).
+ * A null user (deleted account) is not a bot, for the same reason a null
+ * GraphQL author is not.
+ */
 export function toPrCommentRecords(
   comments: readonly RestIssueComment[],
   identity: BotIdentityPredicates,
@@ -354,7 +420,7 @@ export function toPrCommentRecords(
     const login = c.user?.login ?? '';
     const isBot =
       c.user !== null &&
-      (c.user.type === 'Bot' || /\[bot\]$/i.test(login) || identity.isBotLoginLoose(login));
+      (c.user.type === 'Bot' || BOT_LOGIN_SUFFIX.test(login) || identity.isBotLoginLoose(login));
     return { author: login, isBot, createdAt: c.created_at ?? null };
   });
 }
@@ -724,6 +790,34 @@ export function readPrIssueComments(
   return { ok: true, comments: parsed.data };
 }
 
+/**
+ * Did the mutation actually resolve the thread? `gh` exiting 0 says only that a
+ * request was answered; the ANSWER has to say `isResolved: true`. A null
+ * payload, a null thread, `isResolved: false`, or a body that does not parse
+ * are each a named per-thread failure — a row is never marked applied on a
+ * mutation whose result was not read back.
+ */
+export function confirmResolved(body: unknown): { ok: true } | { ok: false; detail: string } {
+  const parsed = ResolveMutationSchema.safeParse(body);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      detail: `the resolveReviewThread response did not match the expected shape: ${bounded(parsed.error.message)}`,
+    };
+  }
+  const thread = parsed.data.data.resolveReviewThread?.thread ?? null;
+  if (thread === null) {
+    return { ok: false, detail: 'the resolveReviewThread response carried no thread' };
+  }
+  if (!thread.isResolved) {
+    return {
+      ok: false,
+      detail: `GitHub answered isResolved: false for ${thread.id} — the thread is still open`,
+    };
+  }
+  return { ok: true };
+}
+
 // ─── Rendering ───────────────────────────────────────────────────────────────
 
 const VERDICT_WIDTH = 'skip:already-resolved'.length;
@@ -868,16 +962,21 @@ export async function resolveThreadsCommand(
         graphqlArgs(RESOLVE_THREAD_MUTATION, [['threadId', row.threadId]]),
         `resolveReviewThread ${row.threadId}`,
       );
-      if (run.ok) {
+      // A clean exit is not the same as a resolved thread: the mutation's own
+      // answer must say so. Anything else — a null payload, a thread that came
+      // back `isResolved: false`, a shape that does not parse — is a per-thread
+      // FAILURE, never a silent "applied".
+      const confirmed = run.ok ? confirmResolved(run.body) : { ok: false, detail: run.detail };
+      if (confirmed.ok) {
         row.applied = true;
         emit(`applied  id=${row.rootCommentId ?? 'unknown'}  ${row.threadId}`);
       } else {
         // A per-thread failure never aborts the run — the remaining threads are
         // still resolved and the count is named in the exit code.
         row.applied = false;
-        row.errorText = run.detail;
+        row.errorText = confirmed.detail;
         failures += 1;
-        err(`[Totem Error] failed to resolve ${row.threadId}: ${run.detail}\n`);
+        err(`[Totem Error] failed to resolve ${row.threadId}: ${confirmed.detail}\n`);
         emit(`failed   id=${row.rootCommentId ?? 'unknown'}  ${row.threadId}`);
       }
     }
