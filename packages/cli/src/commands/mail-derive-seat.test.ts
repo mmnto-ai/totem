@@ -206,6 +206,37 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     });
   });
 
+  it('config.json host_agents omitting a PRESENT seat dir refuses by NAMING that cause, not by contradicting itself (fold F2)', async () => {
+    // The resolver keeps config's shipped replace semantics and attaches a
+    // "the dir is the registration" warning (mmnto-ai/totem#2141). Appending
+    // that warning to "is not a seat this repo hosts" told the reader both
+    // that the seat is not hosted and that its dir IS its registration. The
+    // verdict stays (config replaces the dir set, exactly as `--as` treats
+    // it); the refusal now names the cause and both cures.
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    fs.writeFileSync(
+      path.join(repoRoot, '.totem', 'orchestration', 'config.json'),
+      JSON.stringify({ host_agents: ['seat-beta'] }, null, 2),
+      'utf-8',
+    );
+    const { exitCode, stdout, stderr } = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'seat-alpha' },
+    });
+    expect(exitCode).toBe(2);
+    expect(stdout).toBe('');
+    expect(stderr).toContain('is a present seat dir that');
+    expect(stderr).toContain('host_agents omits');
+    expect(stderr).toContain('REPLACES the dir set (mmnto-ai/totem#2141)');
+    expect(stderr).toContain('Add the seat to host_agents, or remove its stale seat dir');
+    expect(stderr).toContain('this repo hosts: seat-beta');
+    // The self-contradiction is gone: the raw resolver warning no longer rides
+    // this refusal, and the old "not a seat this repo hosts" verdict prose is
+    // replaced rather than supplemented.
+    expect(stderr).not.toContain('the dir is the registration');
+    expect(stderr).not.toContain('is not a seat this repo hosts');
+  });
+
   it('an env declaring MULTIPLE seats refuses — a session has one identity (exit 2)', async () => {
     const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
     const { exitCode, stdout, stderr } = await run({

@@ -30,6 +30,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  deriveSeatStatuses,
   isPathSafeAgentId,
   knownCohortAgents,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
@@ -1412,8 +1413,9 @@ export type DeriveSeatResult =
  * Membership is matched case-insensitively, like every other seat comparison in
  * this file, with the resolver's own casing printed back.
  *
- * Reads nothing but the resolver's sources. No outbox, no `processed/`, no
- * workspace scan.
+ * Reads nothing but the resolver's sources (plus, on the config-omits-a-dir
+ * refusal alone, the seat-dir listing behind `deriveSeatStatuses`). No outbox,
+ * no `processed/`, no workspace scan.
  */
 export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
   const env = opts.env ?? process.env;
@@ -1470,6 +1472,30 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
   const declared = resolution.agents[0]!;
   const seat = hosted.agents.find((a) => a.toLowerCase() === declared.toLowerCase());
   if (seat === undefined) {
+    // Two different repairs hide behind one verdict. When config.json
+    // `host_agents` ANSWERED — replace semantics, the shipped contract `--as`
+    // honours too — and the declared seat is a PRESENT seat dir that the
+    // config omits, "not a seat this repo hosts" followed by the resolver's
+    // "the dir is the registration" warning contradicts itself in one breath
+    // (falsification-leg F2). The VERDICT is unchanged (config replaces the
+    // dir set); the refusal names that cause and its two cures instead of
+    // arguing with itself. `deriveSeatStatuses` is the public read surface for
+    // the seat dirs — the source, not the warning's prose.
+    if (hosted.source === 'config') {
+      const isPresentDir = deriveSeatStatuses(repoRoot).some(
+        (s) => s.seat.toLowerCase() === declared.toLowerCase(),
+      );
+      if (isPresentDir) {
+        return {
+          ok: false,
+          refusal:
+            `Seat NOT DERIVED — ${supplied} is a present seat dir that .totem/orchestration/config.json ` +
+            `host_agents omits, and host_agents REPLACES the dir set (mmnto-ai/totem#2141), so this repo ` +
+            `hosts: ${hostedList}. Add the seat to host_agents, or remove its stale seat dir — ` +
+            `config-exclusion is not a decommission mechanism.`,
+        };
+      }
+    }
     return {
       ok: false,
       refusal:
