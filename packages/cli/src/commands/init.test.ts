@@ -4212,16 +4212,24 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // Executable, both halves: the dry run first, then the mutating one.
     expect(section).toContain('```bash\ntotem resolve-threads $ARGUMENTS\n```');
     expect(section).toContain('```bash\ntotem resolve-threads $ARGUMENTS --apply\n```');
-    expect(section.indexOf('totem resolve-threads $ARGUMENTS\n```')).toBeLessThan(
-      section.indexOf('totem resolve-threads $ARGUMENTS --apply'),
-    );
     // The mutating half is gated on the operator, in those words.
     expect(section).toMatch(/on the operator's explicit go/);
     // The floor the verb holds is stated where the agent reads it.
     expect(section).toContain('skip:no-evidence');
     // The step runs AFTER the disposition comment is posted (it is the evidence).
-    expect(section.indexOf('gh pr comment $ARGUMENTS --body-file -')).toBeLessThan(
-      section.indexOf('totem resolve-threads'),
-    );
+    // Assert PRESENCE first: an absent needle indexes to -1, which is less than
+    // everything, so the ordering assertion alone would pass vacuously if the
+    // post step were ever removed or reworded.
+    const postAt = section.indexOf('gh pr comment $ARGUMENTS --body-file -');
+    const resolveAt = section.indexOf('totem resolve-threads');
+    expect(postAt).toBeGreaterThanOrEqual(0);
+    expect(resolveAt).toBeGreaterThanOrEqual(0);
+    expect(postAt).toBeLessThan(resolveAt);
+    // Same guard for the dry-before-apply ordering above.
+    const dryAt = section.indexOf('totem resolve-threads $ARGUMENTS\n```');
+    const applyAt = section.indexOf('totem resolve-threads $ARGUMENTS --apply');
+    expect(dryAt).toBeGreaterThanOrEqual(0);
+    expect(applyAt).toBeGreaterThanOrEqual(0);
+    expect(dryAt).toBeLessThan(applyAt);
   });
 });
