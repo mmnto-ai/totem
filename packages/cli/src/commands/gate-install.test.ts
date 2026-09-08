@@ -547,6 +547,13 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
   function writeStubCli(opts: { verdict?: unknown; exit?: number; stderr?: string }): void {
     const distDir = path.join(cwd, 'node_modules', '@mmnto', 'cli', 'dist');
     fs.mkdirSync(distDir, { recursive: true });
+    // A fresh stub starts with NO record: the record is written only by a
+    // spawn, so `stubArgv() === null` after a run means "never spawned" and a
+    // `spawnedPayload()` after a run names THAT run's payload. Without this
+    // reset a loop of firing shapes that all name the same PR passed on the
+    // record left by its FIRST iteration — the PR-round-2 leg proved every
+    // later row green against the pre-fold wrapper (F2).
+    fs.rmSync(stubRecordPath(), { force: true });
     const verdictJson = opts.verdict === undefined ? '' : JSON.stringify(opts.verdict);
     const exitCode = opts.exit ?? 0;
     // `stderr` stands in for the ENGINE's own agent-facing lines (merge-ready's
@@ -1026,6 +1033,11 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
         'exec gh pr merge 7',
         'command gh pr merge 7',
+        // Round 2 (the leg's F1): two more reserved words and the builtin that
+        // runs an unquoted operand as the command.
+        'time gh pr merge 7',
+        'coproc gh pr merge 7',
+        'eval gh pr merge 7',
       ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
@@ -1055,6 +1067,14 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'sudo gh pr merge 5',
         'timeout 30 gh pr merge 5',
         'env GH_TOKEN=x gh pr merge 5',
+        // Round 2 (the leg's F1/F3), disclosed in the template's comment: a
+        // merge handed over as ONE quoted word, a builtin with a flag before
+        // `gh`, a backtick substitution, a leading redirection.
+        'eval "gh pr merge 5"',
+        'command -p gh pr merge 5',
+        'exec -a x gh pr merge 5',
+        'echo `gh pr merge 5`',
+        '> out.txt gh pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },

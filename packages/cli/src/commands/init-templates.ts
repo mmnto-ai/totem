@@ -1536,10 +1536,26 @@ for (let i = 0; i < argv.length; i++) {
 //   - a wrapper PROGRAM that takes operands before \`gh\` (\`sudo\`, \`timeout 30\`,
 //     \`npx\`, \`env\`, \`nohup\`): the program is the segment's first token, so the
 //     position anchor does not see \`gh\` (the shell's reserved words and the
-//     \`exec\`/\`command\` builtins are skipped; an arbitrary program is not, since
-//     the walk cannot know which of its operands is the command);
+//     \`exec\`/\`command\`/\`eval\` builtins are skipped; an arbitrary program is
+//     not, since the walk cannot know which of its operands is the command);
+//   - the same builtins WITH flags (\`command -p gh pr merge 5\`,
+//     \`exec -a x gh pr merge 5\`): the flag is a token before \`gh\`;
+//   - a merge handed over as ONE quoted word (\`eval "gh pr merge 5"\`,
+//     \`bash -c "gh pr merge 5"\`): a quoted string is data to this walk;
+//   - a backtick command substitution (\`echo \\\`gh pr merge 5\\\`\`): the walk
+//     splits on \`$( … )\` parens but treats a backtick as an ordinary character,
+//     so the merge inside it stays part of \`echo\`'s segment;
+//   - a leading redirection (\`> out.txt gh pr merge 5\`): the redirection word
+//     is the segment's first token;
 //   - PowerShell's own quoting (backtick escapes, here-strings) is not
 //     modelled — the walk reads POSIX quoting for both tools.
+// Two disclosed FALSE FIRES, the deny direction, both contrived and both
+// surfaced when every segment began to be collected (round 2, F6): a bash
+// array assignment whose elements spell a merge (\`A=(gh pr merge 8)\`) is judged
+// as a merge of 8, because \`(\` is a separator here and the segment inside it
+// starts with \`gh\`; and a \`case\` pattern \`gh pr merge)\` yields an EMPTY argv,
+// which projects to the current branch's PR. \`TOTEM_MERGE_GATE_OVERRIDE=1\` is
+// the audited way past either.
 // Which characters END a word, so the scanner can say whether the next one
 // BEGINS one. Same set core's scanner uses (mmnto-ai/totem#2800 round 2, F1).
 function isWordBoundary(ch) {
@@ -1750,9 +1766,13 @@ function blankHeredocBodies(command, powershell) {
 }
 
 // The words the shell reads at command position that are NOT the command:
-// reserved words that introduce a compound command, the negation, and the two
-// builtins that execute their operand. Stripped from a segment's front, in any
-// run, before the \`gh pr merge\` anchor is read.
+// reserved words that introduce a compound command (\`time\` and \`coproc\` are
+// reserved words too — the round-2 leg found them missing), the negation, and
+// the builtins that execute their operand as the command (\`exec\`, \`command\`,
+// and \`eval\` on an UNQUOTED operand — \`eval "gh pr merge 5"\` hands the shell a
+// single quoted word, which this walk reads as data, a disclosed miss below).
+// Stripped from a segment's front, in any run, before the \`gh pr merge\`
+// anchor is read.
 const COMMAND_POSITION_WORDS = [
   'do',
   'then',
@@ -1761,9 +1781,12 @@ const COMMAND_POSITION_WORDS = [
   'elif',
   'while',
   'until',
+  'time',
+  'coproc',
   '!',
   'exec',
   'command',
+  'eval',
 ];
 
 // A \`NAME=value\` word at a segment's front is an assignment PREFIX to the
@@ -2105,6 +2128,17 @@ process.stdin.on('end', () => {
     process.exit(2);
   }
 
+  // No payload past the projection is not an applicable gate that passed — it
+  // is a branch above that forgot to project, and before the loop that shape
+  // fail-closed through the child's non-zero exit. Keep the default closed
+  // (round 2, F7).
+  if (payloads.length === 0) {
+    process.stderr.write(
+      '[totem gate-wrapper] event "' + event + '" projected no payload; failing closed.\\n',
+    );
+    process.exit(2);
+  }
+
   // Resolve the Totem CLI: the repo-local pinned dist FIRST (a global \`totem\`
   // may be stale and missing deps — the known repo gotcha; the
   // pinned-beats-ambient ordering of ADR-072 § 2, Tenet 14), then a \`totem\` on
@@ -2213,10 +2247,20 @@ process.stdin.on('end', () => {
   // under --pilot, print their line and let the NEXT payload be judged, so every
   // merge in the envelope gets its stderr line; exit 0 only once every payload
   // has allowed or warned.
+  //
+  // ONE 30-second budget across every payload, not 30 seconds each (round 2,
+  // F5): the hook host kills a PreToolUse hook at its own default budget (60 s
+  // on both Claude Code and Gemini, the same figure the session-hook templates
+  // above cut their legs against) and a killed hook's exit code is never
+  // applied — a fail-OPEN on a gate whose posture is fail-closed. With the
+  // budget shared, the wrapper's wall time stays what it was before the loop,
+  // and a merge that cannot be judged inside it lands in the fail-closed arm
+  // below (the spawn times out → \`result.error\`), never in the host's kill.
+  const deadline = Date.now() + 30000;
   for (let p = 0; p < payloads.length; p++) {
     const result = spawnSync(process.execPath, checkArgs, {
       encoding: 'utf-8',
-      timeout: 30000,
+      timeout: Math.max(1000, deadline - Date.now()),
       input: payloads[p],
     });
 

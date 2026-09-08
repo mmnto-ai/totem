@@ -1161,8 +1161,12 @@ function highSeverityInlines(threads: readonly ThreadEntry[], headSha: string): 
  * Bot HIGH inlines whose `comment.commit` came back NULL — the predicate's
  * input is missing, so whether they apply to the head is UNKNOWN
  * (mmnto-ai/totem#2800 round 2, F8). R2: an unreadable input is never a pass,
- * so these make the evaluation unevaluable and are named on stderr, rather
- * than falling out of the filter above and reading as "not on head".
+ * so these never fall out of the filter above and read as "not on head".
+ * They make the evaluation UNEVALUABLE, named on stderr, only when no
+ * predicate ahead of them in charter order has already failed: a failing
+ * check, an unresolved bot thread, a standing CHANGES_REQUESTED or a
+ * placeable HIGH inline is a fact and denies first, and that verdict names
+ * its own cause, not these (the PR's review round; see the call site).
  */
 function unreadableCommitHighInlines(threads: readonly ThreadEntry[]): ThreadEntry[] {
   return threads.filter(
