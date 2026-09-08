@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "b8c65ec181a707b531e7ebd9844e0c4815192f3d",
+  "readAt": "2026-09-08T06:19:37Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 342,
+      "claim": "The wiki and changeset define a bot with three arms and say the verb prints one row per bot-rooted thread with nothing skipped silently, while the root test is only core's exact four-name list, so an App-rooted thread prints no row.",
+      "counterexample": "A thread rooted by {__typename:'Bot', login:'github-actions'} yields no row at all, though the wiki's own bot definition covers it. Safety-neutral: merge-ready's predicate 2 denies on the same narrow list. Folded: both texts state that rows are printed for threads rooted by core's review-bot identities and that the three-arm test decides who counts as a human reply."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4115,
+      "claim": "The fold commit's narration said both review-reply ordering locks could pass vacuously; only the disposition-step lock could, because the dry/apply needles are strict substrings of the toContain fences that run first.",
+      "counterexample": "Mutant A (dry-run fence deleted) fails at the toContain line before the ordering lock; mutant B (disposition step reworded) passes every pre-fold assertion and fails only the post-fold presence guard. Fix correct, narration overstated. Folded: a test comment names the one needle that lacked a presence lock."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 39,
+      "claim": "KNOWN_BOT_LOGINS keeps fixture defaults honest so a test never models a review bot as a User.",
+      "counterexample": "It listed github-actions (not one of core's identities) and omitted github-code-quality (one of core's four), so a ghcq fixture defaulted to User — the miss the comment claimed to prevent; no behavioural effect (the exact-list arm catches ghcq). Only two of four entries had been verified live. Folded: the list derives from core's BOT_REVIEWER_IDENTITIES with github-actions kept as a separate App constant."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 1163,
+      "claim": "Both --json document shapes are locked by a test.",
+      "counterexample": "The failure arms assert the exact key set; the success test spot-checked five fields, leaving seven of summary's eight fields and any added key unasserted. Folded: the success document's key set and every summary field asserted exactly."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "verdict": "termination named on the second of two legs: the first leg's 11 findings (two MATERIAL — the never-writes spy rebuilt as an allowlist, App replies no longer human evidence — and nine MINOR; ten folded) verified as genuinely fixed under adversarial probing, live GitHub reads and an injected-write mutant; this leg adds four MINOR precision items (two doc/narration, one fixture-comment accuracy, one success-JSON assertion strength), all folded, none rewiring semantics"
+}

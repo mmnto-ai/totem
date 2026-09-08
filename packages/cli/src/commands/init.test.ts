@@ -4195,4 +4195,47 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // The `done` action reaches this step (wired into the flow, not orphaned).
     expect(REVIEW_REPLY_SKILL_CONTENT).toMatch(/EXECUTES `totem review --covariate`/);
   });
+
+  // mmnto-ai/totem#2841 R3: the round's LAST operator-gated action is resolving
+  // the threads the disposition just answered — the disposition comment IS the
+  // evidence `totem resolve-threads` reads, so the step sits inside the
+  // disposition flow, after the comment posts, and runs dry first.
+  it('REVIEW_REPLY_SKILL_CONTENT ends the round with the operator-gated `totem resolve-threads` step (mmnto-ai/totem#2841 R3)', () => {
+    // Reachable from `done` — not an orphaned section.
+    const doneParts = REVIEW_REPLY_SKILL_CONTENT.split('### `done`');
+    expect(doneParts.length).toBe(2);
+    expect(doneParts[1]!.split('\n## ')[0]!).toContain('totem resolve-threads');
+
+    const parts = REVIEW_REPLY_SKILL_CONTENT.split('## Consolidated round-disposition comment');
+    expect(parts.length).toBe(2);
+    const section = parts[1]!;
+    // Executable, both halves: the dry run first, then the mutating one.
+    expect(section).toContain('```bash\ntotem resolve-threads $ARGUMENTS\n```');
+    expect(section).toContain('```bash\ntotem resolve-threads $ARGUMENTS --apply\n```');
+    // The mutating half is gated on the operator, in those words.
+    expect(section).toMatch(/on the operator's explicit go/);
+    // The floor the verb holds is stated where the agent reads it.
+    expect(section).toContain('skip:no-evidence');
+    // The step runs AFTER the disposition comment is posted (it is the evidence).
+    // Assert PRESENCE first: an absent needle indexes to -1, which is less than
+    // everything, so the ordering assertion alone would pass vacuously if the
+    // post step were ever removed or reworded.
+    //
+    // PRECISELY WHICH needle lacked that guard, since the fold commit
+    // (mmnto-ai/totem#2841 F9) over-stated it: only the `gh pr comment` one.
+    // The dry/apply pair was already pinned by the two `toContain` fences a few
+    // lines above, so that ordering assertion could not have gone vacuous — the
+    // guard below is belt-and-braces, not a repair.
+    const postAt = section.indexOf('gh pr comment $ARGUMENTS --body-file -');
+    const resolveAt = section.indexOf('totem resolve-threads');
+    expect(postAt).toBeGreaterThanOrEqual(0);
+    expect(resolveAt).toBeGreaterThanOrEqual(0);
+    expect(postAt).toBeLessThan(resolveAt);
+    // Same guard for the dry-before-apply ordering above.
+    const dryAt = section.indexOf('totem resolve-threads $ARGUMENTS\n```');
+    const applyAt = section.indexOf('totem resolve-threads $ARGUMENTS --apply');
+    expect(dryAt).toBeGreaterThanOrEqual(0);
+    expect(applyAt).toBeGreaterThanOrEqual(0);
+    expect(dryAt).toBeLessThan(applyAt);
+  });
 });

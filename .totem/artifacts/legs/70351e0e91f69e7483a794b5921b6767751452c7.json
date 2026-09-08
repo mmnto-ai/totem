@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "70351e0e91f69e7483a794b5921b6767751452c7",
+  "readAt": "2026-09-08T22:25:47Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 626,
+      "claim": "The two 2841 leg deposits committed at 70351e0e answer for HEAD after the rebase.",
+      "counterexample": "git merge-base --is-ancestor is false for both 56fcab96 and b8c65ec1 vs HEAD; `node packages/cli/dist/index.js legs gate --advisory` prints BLOCKED for head 70351e0e and lists both as 'stale deposit … not an ancestor of head'. The replay orphaned the deposit lineage; a deposit at --sha HEAD is required. Folded: this deposit is that cure — the leg read the rebased head itself, over the interaction scope (the registry the verb consumes, the three skill surfaces, the CLI seam, the wiki entry, the changeset's place in the 2.3.0 train, the gate's post-resolve behaviour) and the full cli suite (4875 passed) and core merge-ready suite (74)."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/bot-identity.ts",
+      "line": 1,
+      "claim": "(briefing premise) mmnto-ai/totem#2844's later rounds changed bot-identity.ts (exactLogins, actorId, actorLogins, isBotReviewerLoginExact) after the verb was written against it.",
+      "counterexample": "The blob is ac13294c3b98f002a615f2d9096cc3169071ee1f at 91f51cbf, HEAD and origin/main; last touched by 1f66d847, an ancestor of the stack base. The verb was written against the final module. Registry agreement verified: merge-ready.ts:1128 and resolve-threads.ts:404 both call isBotReviewerLoginExact; ghcq and suffixless gemini-code-assist resolve identically on both surfaces. A corrected premise, nothing to fold."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/parsers/bot-identity-parity.test.ts",
+      "line": 81,
+      "claim": "bot-identity-parity.test.ts fails if a consumer declares a bot-login list of its own.",
+      "counterexample": "The loop is a hardcoded two-entry array (PARSER_SRC, REVIEW_CATCH_SRC). resolve-threads.ts is a third consumer of isBotReviewerLogin/isBotReviewerLoginExact and is unscanned; the module docstring's 'Both consumers' is now numerically stale. No drift today (its only bot-name literals are in comments), but it cannot be added as-is: BOT_LOGIN_SUFFIX = /\\[bot\\]$/i spells a LOGIN_SPELLINGS member in code. Deferred, named in the PR: the sensor widening rides the pilot-install PR that follows the 2.3.0 cut, where the suffix rule can move to core and the third consumer join the scan."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 375,
+      "claim": "The verb and merge-ready agree on every thread shape they both read.",
+      "counterexample": "A thread with an empty comments.nodes array passes the verb's Zod schema, yields rootAuthor null, prints no row and is silently dropped; merged readThreads treats the same shape as an unreadable answer and refuses the whole evaluation. Both fail-safe, shape unobserved. Kept as a note beside the gate's own open question on the same shape."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1175,
+      "claim": "The verb's texts describe the gate's post-resolve behaviour completely.",
+      "counterexample": "unreadableCommitHighInlines is new since 91f51cbf and fires only when no earlier predicate failed, so clearing predicate 2 with --apply can surface an UNEVALUABLE deny the operator did not expect. No 2841 text is falsified (all scope their claim to predicate 2), but the skill's step-4 line does not say a clean resolve run is not an allow verdict. Deferred, named in the PR: one clause on the review-reply skill's step 4, folded on the pilot-install PR that re-renders that skill."
+    }
+  ],
+  "folded": [
+    "F1"
+  ],
+  "verdict": "termination named for the rebase's interaction scope: no BLOCKING defect; the one MATERIAL item is the push gate's own precondition and this deposit is its cure; F2 corrects the charge's premise (the registry module predates the build unchanged); F3 and F5 are minor follow-ups deferred to the pilot-install PR and named in this PR's body; F4 a note. The full cli suite (180 files, 4875 passed), the three skill-parity files (438) and core's merge-ready suite (74) pass on the rebased head."
+}
