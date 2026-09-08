@@ -20,6 +20,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 interface WiringHandlers {
   mailCommand: (opts: Record<string, unknown>) => void;
+  deriveSeatCommand: (opts: Record<string, unknown>) => void;
   mailReply: (source: string, opts: Record<string, unknown>) => void;
   markSource: (source: string, opts: Record<string, unknown>) => void;
 }
@@ -39,6 +40,7 @@ function buildMailProgram(handlers: WiringHandlers): Command {
     .option('--workspace <path>', 'Workspace dir to scan')
     .option('--as <seat>', "Serve exactly this seat's mail")
     .option('--all-seats', 'Serve the full multi-seat union')
+    .option('--derive-seat', 'Print the seat this session inherited and poll nothing')
     .action(
       (
         _opts: {
@@ -47,6 +49,7 @@ function buildMailProgram(handlers: WiringHandlers): Command {
           workspace?: string;
           as?: string;
           allSeats?: boolean;
+          deriveSeat?: boolean;
         },
         cmd: Command,
       ) => {
@@ -60,13 +63,21 @@ function buildMailProgram(handlers: WiringHandlers): Command {
           workspace,
           as: asSeat,
           allSeats,
+          deriveSeat,
         } = cmd.optsWithGlobals<{
           json?: boolean;
           recursive?: boolean;
           workspace?: string;
           as?: string;
           allSeats?: boolean;
+          deriveSeat?: boolean;
         }>();
+        // EXACT translation of the #2801 short-circuit: the derive-seat probe
+        // takes the whole action and the poll never runs.
+        if (deriveSeat === true) {
+          handlers.deriveSeatCommand({ asSeat, allSeats, deriveSeat: true });
+          return;
+        }
         handlers.mailCommand({ json, recursive, workspace, asSeat, allSeats });
       },
     );
@@ -95,7 +106,12 @@ function buildMailProgram(handlers: WiringHandlers): Command {
 }
 
 function handlers() {
-  return { mailCommand: vi.fn(), mailReply: vi.fn(), markSource: vi.fn() };
+  return {
+    mailCommand: vi.fn(),
+    deriveSeatCommand: vi.fn(),
+    mailReply: vi.fn(),
+    markSource: vi.fn(),
+  };
 }
 
 describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #2204)', () => {
@@ -120,6 +136,36 @@ describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #220
     const h = handlers();
     buildMailProgram(h).parse(['node', 'totem', 'mail', '--all-seats']);
     const opts = h.mailCommand.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts['allSeats']).toBe(true);
+  });
+
+  it('`mail --derive-seat` takes the action and the poll never fires (#2801)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', '--derive-seat']);
+    expect(h.deriveSeatCommand).toHaveBeenCalledTimes(1);
+    expect(h.mailCommand).not.toHaveBeenCalled();
+    const opts = h.deriveSeatCommand.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts['deriveSeat']).toBe(true);
+    expect(opts['asSeat']).toBeUndefined();
+    expect(opts['allSeats']).toBeUndefined();
+  });
+
+  it('`mail --derive-seat --as x` reaches the probe WITH the contradicting flag (the lib owns the refusal, #2801)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', '--derive-seat', '--as', 'x']);
+    expect(h.deriveSeatCommand).toHaveBeenCalledTimes(1);
+    expect(h.mailCommand).not.toHaveBeenCalled();
+    // The wiring must not swallow the contradiction — the flag has to LAND on
+    // the lib for the exit-2 refusal to fire.
+    const opts = h.deriveSeatCommand.mock.calls[0]![0] as Record<string, unknown>;
+    expect(opts['asSeat']).toBe('x');
+  });
+
+  it('`mail --derive-seat --all-seats` reaches the probe WITH the contradicting flag (#2801)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', '--derive-seat', '--all-seats']);
+    expect(h.deriveSeatCommand).toHaveBeenCalledTimes(1);
+    const opts = h.deriveSeatCommand.mock.calls[0]![0] as Record<string, unknown>;
     expect(opts['allSeats']).toBe(true);
   });
 

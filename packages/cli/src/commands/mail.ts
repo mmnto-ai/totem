@@ -205,6 +205,15 @@ export interface MailCommandOptions {
    * (mmnto-ai/totem#2204); mutually exclusive with `asSeat`.
    */
   allSeats?: boolean;
+  /**
+   * Answer "which seat is this session?" and poll NOTHING (`--derive-seat`,
+   * mmnto-ai/totem#2801 R2). Consumed by `deriveSeatCommand`, which
+   * short-circuits before any poll — `pollMail` and `mailCommand` never read
+   * this field, and the command that honours it reaches no outbox and no
+   * `processed/` dir. Contradictory with `asSeat` and `allSeats`: those two
+   * DECLARE a seat, this one ASKS which seat was declared.
+   */
+  deriveSeat?: boolean;
 }
 
 // ─── Frontmatter parsing ────────────────────────────────
@@ -1347,6 +1356,147 @@ export function formatTextResult(result: MailPollResult): string {
     lines.push(`[scan truncated at ${result.scanned} files; raise concern if this persists]`);
   }
   return lines.join('\n');
+}
+
+// ─── Seat derivation (`--derive-seat`, mmnto-ai/totem#2801) ─────
+//
+// The signon step-0 probe: "which seat is this session?", answered from the
+// INHERITED identity alone and answered before anything is polled, oriented,
+// journalled or searched. It is deliberately not a poll — it opens no outbox
+// and reads no `processed/` cursor — because the whole point of asking first
+// is that everything downstream of the answer is seat-scoped.
+//
+// Verb home is `totem mail` per the R2 ruling (mmnto-ai/totem-strategy#956
+// asked for it there), implemented as ONE call into `resolveSelfAgents` —
+// the same resolver `totem seat` and the poll itself use — so a later
+// `totem seat whoami` alias is one line.
+
+/**
+ * Verdict of the `--derive-seat` probe. `line` is the single stdout line the
+ * success arm prints; `refusal` is the single stderr line the refusal arm
+ * prints. Pure data — the caller decides the stream and the exit code
+ * (AGENTS.md: lib returns data, wrapper maps to a code).
+ */
+export type DeriveSeatResult =
+  | { ok: true; seat: string; line: string }
+  | { ok: false; refusal: string };
+
+/**
+ * Resolve the seat this session IS, or refuse.
+ *
+ * The line grammar is `seat=<id> source=<env|config|dir>`; today only `env`
+ * can satisfy the gate, and that is the ruled design, not an omission. A
+ * config- or dirs-derived answer states what the REPO hosts, never what this
+ * session was launched as — adopting it would be the implicit-identity
+ * adoption the charter forbids ("no fallback to any seat, ever"), and on the
+ * single-seat repo it is exactly the guess that reads as a derivation. So a
+ * non-env resolution refuses, with the hosted list attached as the cure.
+ *
+ * Success requires all three: the env supplied the resolution (`source: 'env'`),
+ * it named exactly ONE seat (a session has one identity), and this repo hosts
+ * that seat. Hosted-ness is derived the way `--as` derives it — the STRUCTURAL
+ * union (config.json `host_agents` > seat dirs ∪ basename map) with any ambient
+ * `TOTEM_SELF_AGENT` stripped first, so the env cannot vouch for itself — and
+ * membership is matched case-insensitively, like every other seat comparison in
+ * this file, with the resolver's own casing printed back.
+ *
+ * Reads nothing but the resolver's sources. No outbox, no `processed/`, no
+ * workspace scan.
+ */
+export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
+  const env = opts.env ?? process.env;
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+
+  // The repo's structural answer: what this repo HOSTS, env excluded.
+  const structuralEnv = { ...env };
+  delete structuralEnv['TOTEM_SELF_AGENT'];
+  const hosted = resolveSelfAgents(repoRoot, structuralEnv);
+  // The resolver's own diagnostics ride every refusal (the same reasoning as
+  // the `--as` rejection path): the mmnto-ai/totem#2141 config-omits-a-present-
+  // seat-dir warn-shape often IS the explanation for a seat going missing.
+  const diagnostics =
+    hosted.warnings !== undefined && hosted.warnings.length > 0
+      ? ` Resolver: ${hosted.warnings.join('; ')}`
+      : '';
+
+  // The supplied value is echoed JSON-escaped — it is unvalidated operator
+  // input that may carry control bytes, and this is the path that exists to
+  // reject it (same guard the `--as` refusal applies).
+  const rawEnv = env['TOTEM_SELF_AGENT'];
+  const supplied =
+    typeof rawEnv === 'string' && rawEnv.trim().length > 0
+      ? `TOTEM_SELF_AGENT=${JSON.stringify(rawEnv.trim())}`
+      : 'TOTEM_SELF_AGENT unset';
+
+  if (hosted.agents.length === 0) {
+    return {
+      ok: false,
+      refusal:
+        `Seat NOT DERIVED — this repo hosts no seat — \`totem seat add\` registers one ` +
+        `(${supplied}; resolved via ${hosted.source}).${diagnostics}`,
+    };
+  }
+
+  const hostedList = hosted.agents.join(', ');
+  const resolution = resolveSelfAgents(repoRoot, env);
+  if (resolution.source !== 'env' || resolution.agents.length !== 1) {
+    return {
+      ok: false,
+      refusal:
+        `Seat NOT DERIVED — ${supplied} does not name exactly one seat; this repo hosts: ${hostedList}. ` +
+        `Set the per-shell TOTEM_SELF_AGENT to one of them and re-run — no seat is adopted for you, ` +
+        `not the only seat in sight, not the crown, not the repo basename.${diagnostics}`,
+    };
+  }
+
+  const declared = resolution.agents[0]!;
+  const seat = hosted.agents.find((a) => a.toLowerCase() === declared.toLowerCase());
+  if (seat === undefined) {
+    return {
+      ok: false,
+      refusal:
+        `Seat NOT DERIVED — ${supplied} is not a seat this repo hosts; this repo hosts: ${hostedList}. ` +
+        `Fix the identity (a seat's mail, marks and journal live in the repo that hosts it) and re-run.${diagnostics}`,
+    };
+  }
+
+  return { ok: true, seat, line: `seat=${seat} source=env` };
+}
+
+/**
+ * CLI wrapper for `--derive-seat`: one stdout line on success (exit 0), one
+ * stderr refusal otherwise (exit 2 — the same NOT-DERIVED family the poll's
+ * unresolved-self arm uses; a derivation that could not be made is never a
+ * clean answer). stdout carries the success line ALONE so a caller can read
+ * it without parsing a banner; every refusal stays off stdout entirely.
+ */
+export async function deriveSeatCommand(
+  opts: MailCommandOptions = {},
+): Promise<{ exitCode: 0 | 2 }> {
+  const { log } = await import('../ui.js');
+
+  // Contradiction arms first — a flag pair that cannot both be honoured is
+  // refused before anything is derived. `--as` / `--all-seats` DECLARE a seat
+  // (or the whole union); `--derive-seat` ASKS which seat was declared, so
+  // answering with the flag's own argument would be a mirror, not a probe.
+  const declaring =
+    opts.asSeat !== undefined ? '--as <seat>' : opts.allSeats === true ? '--all-seats' : null;
+  if (declaring !== null) {
+    log.error(
+      TAG,
+      `Seat NOT DERIVED — --derive-seat and ${declaring} are contradictory: --derive-seat asks which seat ` +
+        `this session inherited, ${declaring} declares one. Pass exactly one.`,
+    );
+    return { exitCode: 2 };
+  }
+
+  const result = deriveSeat(opts);
+  if (!result.ok) {
+    log.error(TAG, result.refusal);
+    return { exitCode: 2 };
+  }
+  process.stdout.write(`${result.line}\n`);
+  return { exitCode: 0 };
 }
 
 // ─── CLI entry ──────────────────────────────────────────
