@@ -238,6 +238,24 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
       expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
     });
 
+    it('(F6) with NO origin, a two-seat env is never echoed back as "this repo hosts"', async () => {
+      // The refusal's hosted list must come from the STRUCTURAL set. Here the
+      // structural set is empty, so the only honest answer is that the repo
+      // hosts no seat — echoing the env's own entries would tell the operator
+      // this repo hosts exactly what they typed, which is how the round-1
+      // tautology read from the outside.
+      const repoRoot = makeWorktreeShape();
+      const { exitCode, stdout, stderr } = await run({
+        repoRoot,
+        env: { TOTEM_SELF_AGENT: 'totem-claude,totem-gemini' },
+      });
+      expect(exitCode).toBe(2);
+      expect(stdout).toBe('');
+      expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
+      expect(stderr).not.toContain('this repo hosts: totem-claude');
+      expect(stderr).not.toContain('this repo hosts: totem-claude, totem-gemini');
+    });
+
     it('(c) a comma list of two hosted seats still refuses — a session has one identity', async () => {
       const repoRoot = makeWorktreeShape('https://github.com/mmnto-ai/totem.git');
       const { exitCode, stdout, stderr } = await run({
