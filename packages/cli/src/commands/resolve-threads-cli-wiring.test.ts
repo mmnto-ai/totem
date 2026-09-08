@@ -16,6 +16,9 @@
  * `optsWithGlobals()`. Parser-level only: no gh, no network, no core import.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
 import { Command } from 'commander';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -98,5 +101,24 @@ describe('resolve-threads CLI command-surface (Commander wiring, mmnto-ai/totem#
     const handler = vi.fn();
     expect(() => buildProgram(handler).parse(['node', 'totem', 'resolve-threads'])).toThrow();
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("the SHIPPED action carries no action-level gh precondition — the verb probes gh itself so --json fails in contract (PR round 1, greptile P1; the leg's F1 sensor)", () => {
+    // The mirror above cannot see this, and the verb's own test calls the
+    // command directly, so re-inserting `requireGhCli();` as the action's first
+    // statement would restore the exact defect with every other test green.
+    // Read the registration SOURCE structurally, the way lesson.test.ts reads
+    // its deprecation aliases: the `resolve-threads` action block, from its
+    // `.command(` to the next `.command(`, must not call requireGhCli.
+    const indexSrc = fs.readFileSync(path.join(process.cwd(), 'src/index.ts'), 'utf-8');
+    const start = indexSrc.indexOf(".command('resolve-threads <pr-number>')");
+    expect(start, 'the resolve-threads registration is present').toBeGreaterThan(-1);
+    const next = indexSrc.indexOf('.command(', start + 1);
+    const block = indexSrc.slice(start, next === -1 ? undefined : next);
+    expect(block).toContain('resolveThreadsCommand(');
+    expect(block).not.toMatch(/requireGhCli\(\)\s*;/);
+    // The sibling actions still carry it — the sensor is about THIS verb's
+    // contract, not a repo-wide retirement of the precondition.
+    expect(indexSrc).toMatch(/requireGhCli\(\);/);
   });
 });

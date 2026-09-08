@@ -876,6 +876,10 @@ describe('resolve-threads mutation discipline', () => {
       ['api', 'graphql', '-f', 'query=mutation { addComment(input: {}) { clientMutationId } }'],
       // The right document with a variable it never sends.
       ['api', 'graphql', '-f', `query=${RESOLVE_THREAD_MUTATION}`, '-f', 'body=hi'],
+      // Probe-shaped rows (round-1 leg, F2): the version probe is exactly one
+      // token; anything riding on it, or a near-spelling, is not the probe.
+      ['--version', '--repo', 'x'],
+      ['--versionx'],
     ];
     for (const argv of writes) {
       expect(() => assertOnlyDeclaredExecShapes([argv], { apply: true })).toThrow();
