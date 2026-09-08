@@ -4107,6 +4107,13 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // declaration and repo disagree. Without it a session reads "set → use it"
     // and proceeds on a seat the CLI just refused, or worse, mutates the repo
     // during a read-only bring-up to make the probe pass.
+    // ONE definition of "hosts" across the CLI help, the wiki, the changeset
+    // and this text (fold round 2 item 7) — and the env is explicitly not part
+    // of it, because a hosted set the env feeds cannot refuse the env.
+    expect(SIGNON_SKILL_CONTENT).toContain(
+      'config.json `host_agents`, else the seat dirs, else the cohort map keyed on the origin repository',
+    );
+    expect(SIGNON_SKILL_CONTENT).toContain('never the env you supplied');
     expect(SIGNON_SKILL_CONTENT).toContain('Set but REFUSED');
     expect(SIGNON_SKILL_CONTENT).toContain(
       'signon is read-only, so `totem seat add` is never run here',
