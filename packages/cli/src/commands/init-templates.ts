@@ -1538,8 +1538,10 @@ for (let i = 0; i < argv.length; i++) {
 //     position anchor does not see \`gh\` (the shell's reserved words and the
 //     \`exec\`/\`command\`/\`eval\` builtins are skipped; an arbitrary program is
 //     not, since the walk cannot know which of its operands is the command);
-//   - the same builtins WITH flags (\`command -p gh pr merge 5\`,
-//     \`exec -a x gh pr merge 5\`): the flag is a token before \`gh\`;
+//   - a skipped word carrying a FLAG (\`command -p gh pr merge 5\`,
+//     \`exec -a x gh pr merge 5\`, and the reserved word's own \`time -p\` /
+//     \`time --\`): the flag is a token before \`gh\`, and bash runs the merge
+//     all the same (round 3, F1);
 //   - a merge handed over as ONE quoted word (\`eval "gh pr merge 5"\`,
 //     \`bash -c "gh pr merge 5"\`): a quoted string is data to this walk;
 //   - a backtick command substitution (\`echo \\\`gh pr merge 5\\\`\`): the walk
@@ -1549,13 +1551,17 @@ for (let i = 0; i < argv.length; i++) {
 //     is the segment's first token;
 //   - PowerShell's own quoting (backtick escapes, here-strings) is not
 //     modelled — the walk reads POSIX quoting for both tools.
-// Two disclosed FALSE FIRES, the deny direction, both contrived and both
-// surfaced when every segment began to be collected (round 2, F6): a bash
+// Disclosed FALSE FIRES, the deny direction, all contrived — text the shell
+// does not execute as a merge but that sits at a segment's front here: a bash
 // array assignment whose elements spell a merge (\`A=(gh pr merge 8)\`) is judged
-// as a merge of 8, because \`(\` is a separator here and the segment inside it
-// starts with \`gh\`; and a \`case\` pattern \`gh pr merge)\` yields an EMPTY argv,
-// which projects to the current branch's PR. \`TOTEM_MERGE_GATE_OVERRIDE=1\` is
-// the audited way past either.
+// as a merge of 8, because \`(\` is a separator and the segment inside it starts
+// with \`gh\`; a \`case\` pattern \`gh pr merge)\` yields an EMPTY argv, which
+// projects to the current branch's PR (both surfaced when every segment began
+// to be collected, round 2 F6); and a function DEFINITION whose body is a
+// merge (\`f() { gh pr merge 5; }\`) fires at definition time, because \`{\` is a
+// separator and the body is its own segment (round 3, F4; it fired before this
+// PR's rounds too). \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any
+// of them.
 // Which characters END a word, so the scanner can say whether the next one
 // BEGINS one. Same set core's scanner uses (mmnto-ai/totem#2800 round 2, F1).
 function isWordBoundary(ch) {
@@ -2253,9 +2259,14 @@ process.stdin.on('end', () => {
   // on both Claude Code and Gemini, the same figure the session-hook templates
   // above cut their legs against) and a killed hook's exit code is never
   // applied — a fail-OPEN on a gate whose posture is fail-closed. With the
-  // budget shared, the wrapper's wall time stays what it was before the loop,
-  // and a merge that cannot be judged inside it lands in the fail-closed arm
-  // below (the spawn times out → \`result.error\`), never in the host's kill.
+  // budget shared, the loop's wall time is bounded at 30 s plus the one-second
+  // floor each payload past the budget still gets (round 3, F2), and a merge
+  // that cannot be judged inside it lands in the fail-closed arm below (the
+  // spawn times out → \`result.error\`) rather than in the host's kill. What the
+  // budget does NOT cover, disclosed (round 3, F3): the projection above runs
+  // up to three \`gitRead\`s per merge, each on its own 10 s timeout, before this
+  // deadline exists — a hung git on a multi-merge envelope can still reach the
+  // host's budget through them.
   const deadline = Date.now() + 30000;
   for (let p = 0; p < payloads.length; p++) {
     const result = spawnSync(process.execPath, checkArgs, {

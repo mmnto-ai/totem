@@ -1073,6 +1073,9 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'eval "gh pr merge 5"',
         'command -p gh pr merge 5',
         'exec -a x gh pr merge 5',
+        // Round 3 (the leg's F1): the reserved word carrying its own flag.
+        'time -p gh pr merge 5',
+        'time -- gh pr merge 5',
         'echo `gh pr merge 5`',
         '> out.txt gh pr merge 5',
       ]) {
