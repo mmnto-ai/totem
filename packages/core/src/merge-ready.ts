@@ -348,8 +348,8 @@ interface PrPage {
   rollupPresent: boolean;
   /** The rollup state GitHub reported, or null when there is no rollup. */
   rollupState: string | null;
-  /** `contexts.totalCount` as reported, or null when it was not a number. */
-  rollupTotalCount: number | null;
+  /** `contexts.totalCount` EXACTLY as reported — judged by the caller, not coerced. */
+  rollupTotalCount: unknown;
   checks: CheckEntry[];
   checksHasNext: boolean;
   checksCursor: string | null;
@@ -578,10 +578,7 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
       isDraft: pr.isDraft === true,
       rollupPresent: rollup !== null,
       rollupState: asString(rollup?.state),
-      rollupTotalCount:
-        typeof asObject(rollup?.contexts)?.totalCount === 'number'
-          ? (asObject(rollup?.contexts)?.totalCount as number)
-          : null,
+      rollupTotalCount: asObject(rollup?.contexts)?.totalCount ?? null,
       checks: checks.entries,
       checksHasNext: checks.hasNext,
       checksCursor: checks.cursor,
@@ -655,6 +652,15 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
  * blockquote) is the same class; a human quoting a bot's label verbatim would
  * read as high, but predicates 2 and 4 both require the thread's ROOT comment
  * to be a known bot login.
+ *
+ * The code stripper recognises fenced blocks (any backtick or tilde run),
+ * `<pre>` blocks, CommonMark indented blocks and inline spans of any backtick
+ * run. A code form it does NOT recognise — a four-backtick fence closed by
+ * three, an HTML `<code>` element, a nested fence inside a list item — leaves
+ * its contents in the scanned prose, so a marker quoted there reads HIGH: the
+ * FALSE-DENY direction, and the one direction this gate pays for with the
+ * audited override rather than modelling away. Each such form is a corpus row
+ * plus a stripper fix when one is observed.
  */
 
 /**
@@ -664,15 +670,34 @@ function parsePage(raw: string, byBranch: boolean): PageRead {
  * escape and no pasted emoji (round 3, F7 narrowed this from "any non-ASCII
  * glyph", which let an em-dash-led line read as a label).
  */
-const CR_LABEL_GLYPHS = [0x1f534, 0x1f7e0, 0x1f7e1, 0x1f535, 0x26a0, 0xfe0f]
+const CR_LABEL_GLYPHS = [0x1f534, 0x1f7e0, 0x1f7e1, 0x1f535, 0x26a0]
   .map((cp) => String.fromCodePoint(cp))
   .join('');
 
-const LABEL_GLYPH = `[${CR_LABEL_GLYPHS}]`;
+/**
+ * The variation selector rides AFTER a glyph (`⚠️` is the warning sign plus
+ * this), so it is a modifier here rather than a class member: a BARE selector
+ * before "major" is not a severity label (round 4, F9).
+ */
+const VARIATION_SELECTOR = String.fromCodePoint(0xfe0f);
+
+const LABEL_GLYPH = `(?:[${CR_LABEL_GLYPHS}][${VARIATION_SELECTOR}]?)`;
+
+/**
+ * The un-emphasised arm is built with the `u` flag so `LABEL_GLYPH` is a
+ * CODE-POINT class: without it the astral dots decompose into surrogate halves
+ * and a lone surrogate — or a bare variation selector — before "major" matched
+ * as if it were a severity glyph (round 4, F9).
+ */
+const UNEMPHASISED_LABEL = new RegExp(
+  `(?:^|\\n)[ \\t]*${LABEL_GLYPH}+[ \\t]*(?:critical|major|potential issue)(?![A-Za-z0-9])`,
+  'iu',
+);
 
 const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
-  // greptile: the badge's alt attribute, P0/P1 only, either quote style.
-  /<img[^>]*\balt=["']P[01]["']/i,
+  // greptile: the badge's alt attribute, P0/P1 only, quoted either way or
+  // unquoted (the lookahead is what ends an unquoted attribute value).
+  /<img[^>]*\balt=["']?P[01]["']?(?=[\s/>])/i,
   // gemini-code-assist: the priority image's alt text. `high` only.
   /!\[high\]\(/i,
   // CodeRabbit: an emphasis-wrapped severity label that OPENS a table cell or a
@@ -682,31 +707,35 @@ const HIGH_SEVERITY_MARKERS: readonly RegExp[] = [
   /(?:^|\n|\|)[ \t]*[_*]{1,2}[^A-Za-z0-9\n|]*(?:critical|major|potential issue)[^A-Za-z0-9\n|]*[_*]{1,2}/i,
   // CodeRabbit's un-emphasised heading form: the severity glyph, then the
   // label, at the start of a line.
-  new RegExp(
-    `(?:^|\\n)[ \\t]*${LABEL_GLYPH}+[ \\t]*(?:critical|major|potential issue)(?![A-Za-z0-9])`,
-    'i',
-  ),
+  UNEMPHASISED_LABEL,
 ];
 
 /**
- * A body with its CODE removed: fenced blocks first (they can contain
- * backticks), then inline spans. What is left is the bot's prose and its
- * labels — the only text a severity label can legitimately live in (round 3,
- * F4). An unterminated fence swallows the rest of the body, which is how a
- * markdown renderer reads it too.
+ * The token every stripped code form leaves behind. It MUST be non-whitespace:
+ * replacing a span with a space opened a fresh line/cell-start position, and
+ * `` `x`_🟠 Major_ `` then read as a label — a regression this stripper itself
+ * introduced (round 4, F2). A word of ASCII letters is neither a boundary the
+ * anchors accept nor a glyph the un-emphasised arm reads.
+ */
+const CODE_PLACEHOLDER = 'CODE';
+
+/**
+ * A body with its CODE replaced by {@link CODE_PLACEHOLDER}: fenced blocks
+ * first (they can contain backticks), then `<pre>` blocks, then CommonMark's
+ * indented blocks, then inline spans of any backtick run. What is left is the
+ * bot's prose and its labels — the only text a severity label can legitimately
+ * live in (round 3 F4; round 4 F2/F4). An unterminated fence swallows the rest
+ * of the body, which is how a markdown renderer reads it too.
  */
 function withoutCode(body: string): string {
   return body
-    .replace(/^[ \t]*(```|~~~)[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, ' ')
-    .replace(/^[ \t]*(```|~~~)[\s\S]*$/m, ' ')
-    .replace(/`[^`\n]*`/g, ' ');
+    .replace(/^[ \t]*(```+|~~~+)[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm, CODE_PLACEHOLDER)
+    .replace(/^[ \t]*(```|~~~)[\s\S]*$/m, CODE_PLACEHOLDER)
+    .replace(/<pre[\s>][\s\S]*?<\/pre>/gi, CODE_PLACEHOLDER)
+    .replace(/^(?: {4}|\t)[^\n]*$/gm, CODE_PLACEHOLDER)
+    .replace(/(`+)[^`]*?\1/g, CODE_PLACEHOLDER);
 }
 
-/**
- * Does this inline body carry one of the bots' own HIGH/Major severity labels?
- * Exact-by-marker (see {@link HIGH_SEVERITY_MARKERS}) — a body that merely
- * discusses a "critical" path or a "major" refactor is NOT high.
- */
 export function hasHighSeverityMarker(body: string): boolean {
   const prose = withoutCode(body);
   return HIGH_SEVERITY_MARKERS.some((re) => re.test(prose));
@@ -741,7 +770,7 @@ interface ReadState {
   isDraft: boolean;
   rollupPresent: boolean;
   rollupState: string | null;
-  rollupTotalCount: number | null;
+  rollupTotalCount: unknown;
   checks: CheckEntry[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
@@ -864,31 +893,57 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     }
 
     if (checksDone && reviewsDone && threadsDone) {
-      // R5's zero-checks FACT applies ONLY where the rollup is consistent about
-      // it, and that is exactly two shapes: no rollup at all, or a rollup that
-      // reports SUCCESS over an empty context list AND says the count is zero.
-      // Every other shape — a PENDING or FAILURE state with nothing listed, a
-      // `state` that is null or not a string, or a rollup that CLAIMS N checks
-      // while listing none — is an unreadable answer, never a green light
-      // (mmnto-ai/totem#2800 fold F7; round 2 F3 added the null/non-string
-      // state, round 3 F9 the count).
-      if (state.checks.length === 0 && state.rollupPresent) {
-        const claimsChecks = state.rollupTotalCount !== null && state.rollupTotalCount > 0;
-        if (state.rollupState !== 'SUCCESS' || claimsChecks) {
+      // The rollup must ACCOUNT for itself before predicate 1 reads it
+      // (mmnto-ai/totem#2800 round 4, F3). `totalCount` is judged as the API
+      // typed it — a string "3", a boolean, a negative or a fractional number
+      // is an unreadable answer, not a count — and once every page is in, the
+      // number of contexts the read MATERIALISED must equal the number the
+      // rollup CLAIMED. A claim the read did not deliver is an incomplete read
+      // (R2), never a smaller green list.
+      if (state.rollupPresent) {
+        const claimed = state.rollupTotalCount;
+        if (typeof claimed !== 'number' || !Number.isInteger(claimed) || claimed < 0) {
           return {
             ok: false,
-            detail: claimsChecks
-              ? 'the status-check rollup claims ' +
-                String(state.rollupTotalCount) +
-                ' checks but listed none - the check state is unreadable'
-              : state.rollupState === null
-                ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
-                : 'the status-check rollup reports ' +
-                  bounded(state.rollupState) +
-                  ' but listed no checks - the check state is unreadable',
+            detail:
+              'the status-check rollup reported a totalCount that is not a non-negative integer (' +
+              bounded(typeof claimed === 'string' ? JSON.stringify(claimed) : String(claimed)) +
+              ') - the check state is unreadable',
             pagesRead: state.pagesRead,
           };
         }
+        if (claimed !== state.checks.length) {
+          return {
+            ok: false,
+            detail:
+              'the status-check rollup claims ' +
+              String(claimed) +
+              ' checks but the read materialised ' +
+              String(state.checks.length) +
+              ' - the check state is unreadable',
+            pagesRead: state.pagesRead,
+          };
+        }
+      }
+
+      // R5's zero-checks FACT applies ONLY where the rollup is consistent about
+      // it, and that is exactly two shapes: no rollup at all, or a rollup that
+      // reports SUCCESS over an empty context list AND counts zero (the count
+      // agreement above already holds). Every other shape — a PENDING or
+      // FAILURE state with nothing listed, a `state` that is null or not a
+      // string — is an unreadable answer, never a green light (fold F7; round 2
+      // F3 added the null/non-string state).
+      if (state.checks.length === 0 && state.rollupPresent && state.rollupState !== 'SUCCESS') {
+        return {
+          ok: false,
+          detail:
+            state.rollupState === null
+              ? 'the status-check rollup listed no checks and reported no readable state - the check state is unreadable'
+              : 'the status-check rollup reports ' +
+                bounded(state.rollupState) +
+                ' but listed no checks - the check state is unreadable',
+          pagesRead: state.pagesRead,
+        };
       }
       state.complete = true;
       return { ok: true, state };
