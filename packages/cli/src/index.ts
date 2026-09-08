@@ -915,7 +915,7 @@ const mailCmd = program
   )
   .option(
     '--derive-seat',
-    'Print the seat this session inherited (`seat=<id> source=env`) and poll nothing — refuses (exit 2) unless TOTEM_SELF_AGENT names exactly one seat this repo hosts, where hosts means config.json host_agents, else the seat dirs, else the cohort map keyed on the origin repository; contradictory with --as and --all-seats',
+    'Print the seat this session inherited (`seat=<id> source=env`) and poll nothing — refuses (exit 2) unless TOTEM_SELF_AGENT names exactly one seat this repo hosts, where hosts means config.json host_agents, else the seat dirs, else the cohort map keyed on the origin repository. Unlike `--as`, the env never widens the hosted set: `--as` is your declaration, this flag corroborates one. Contradictory with --as and --all-seats',
   )
   .addHelpText(
     'after',

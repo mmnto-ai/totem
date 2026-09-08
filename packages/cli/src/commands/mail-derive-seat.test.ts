@@ -41,7 +41,7 @@ vi.mock('node:fs', async () => {
 
 import * as fs from 'node:fs';
 
-import { envWithoutGitLocation } from '@mmnto/totem';
+import { envWithoutGitLocation, resolveSelfAgents } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -264,6 +264,30 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
       expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
       expect(stderr).not.toContain('this repo hosts: totem-claude');
       expect(stderr).not.toContain('this repo hosts: totem-claude, totem-gemini');
+    });
+
+    it('(F1) the `--as` asymmetry is a PROPERTY, not an accident: the probe refuses where the declaration resolves', async () => {
+      // Ruled as a disclosure, not an alignment. `--as <seat>` is the
+      // operator's explicit declaration on the command line, and its validator
+      // falls back to the env-declared list when the structural union is empty
+      // (mail.ts, the `--as` arm) — so the poll serves the seat. `--derive-seat`
+      // exists to CORROBORATE an inherited declaration against the repo, and a
+      // hosted set the env feeds corroborates nothing, so it refuses. Both
+      // behaviours are correct for what each flag is; the disagreement is
+      // locked here so a later "consistency" fix cannot quietly re-open the
+      // tautology.
+      const repoRoot = makeWorktreeShape();
+      const env = { TOTEM_SELF_AGENT: 'totem-claude' };
+
+      const { exitCode, stderr } = await run({ repoRoot, env });
+      expect(exitCode).toBe(2);
+      expect(stderr).toContain('this repo hosts no seat — `totem seat add`');
+
+      // The env-inclusive resolution `--as` validates against — same repo, same
+      // env — DOES resolve the seat.
+      const asSeatUnion = resolveSelfAgents(repoRoot, env);
+      expect(asSeatUnion.source).toBe('env');
+      expect(asSeatUnion.agents).toEqual(['totem-claude']);
     });
 
     it('(c) a comma list of two hosted seats still refuses — a session has one identity', async () => {

@@ -4118,6 +4118,12 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(SIGNON_SKILL_CONTENT).toContain(
       'signon is read-only, so `totem seat add` is never run here',
     );
+    // The `--as` asymmetry, disclosed rather than aligned (fold round 3 F1): a
+    // refusal on an unregistered repo is a failure to CORROBORATE, and the poll
+    // still serves the declaration. Without this, a session reads the refusal
+    // as "your seat is wrong" and stops working.
+    expect(SIGNON_SKILL_CONTENT).toContain('the repo cannot CORROBORATE you');
+    expect(SIGNON_SKILL_CONTENT).toContain('still serve your declaration');
     // "STOP and ask the operator" stays the EMPTY arm's wording alone — a
     // second STOP arm would blur which state halts the bring-up.
     expect(SIGNON_SKILL_CONTENT.match(/STOP and ask the operator/g)).toHaveLength(1);
