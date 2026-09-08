@@ -2824,7 +2824,7 @@ For each selected finding, generate a lesson and call \`mcp__totem-dev__add_less
 
 ### \`done\`
 
-Print a summary of actions taken, then — when the round is being dispositioned — assemble and post the single consolidated round-disposition comment (see the section below), which EXECUTES \`totem review --covariate\` to carry the \`local-lane:\` line, on the operator's explicit go. Then exit.
+Print a summary of actions taken, then — when the round is being dispositioned — assemble and post the single consolidated round-disposition comment (see the section below), which EXECUTES \`totem review --covariate\` to carry the \`local-lane:\` line, on the operator's explicit go. Then, as the LAST action of the round, run \`totem resolve-threads\` (step 4 of that section) — dry first, \`--apply\` only on the operator's explicit go. Then exit.
 
 ## CRITICAL: GCA Reply Protocol
 
@@ -2845,6 +2845,20 @@ It resolves the current branch lineage exactly as the review fan does and prints
 2. **Assemble the single body.** One comment: @-tag EVERY bot addressed in the round — exactly ONE tag each (e.g. \`@gemini-code-assist\`, \`@coderabbitai\`, \`@greptileai\`) so each bot registers the disposition, and tags must be present when the comment is POSTED, never edited in (GCA's listener fires on comment-created only). One notification per bot per round: a bot with nothing addressed gets no tag, and a bot already @-tagged in this round's batch comment (the GCA defer/nit batch above) is NOT re-tagged here. ghcq (\`github-code-quality[bot]\`) has no known listener — it is never tagged; its items are dispositioned in the body for the audit trail only (mmnto-ai/totem#2626). Never combine a tag with ANY bot's review trigger — triggers are standalone comments, one trigger and no prose (a trigger embedded in a content-rich comment chat-routes the bot). Then the per-item dispositions (fixed / deferred / nit / extracted) followed by the non-empty \`local-lane:\` line from step 1, verbatim. The local \`review-loop\` holds this line but never posts it, so \`/review-reply\` is the SOLE path that carries it to GitHub.
 
 3. **Post on an explicit go.** Show the assembled body and wait for the operator; on their go, post the ONE comment with \`gh pr comment $ARGUMENTS --body-file -\` (pipe the body via stdin). Never mutate the PR autonomously.
+
+4. **Resolve the threads this round dispositioned — dry first, \`--apply\` on the operator's explicit go.** The comment you just posted IS the evidence the verb reads, so this step runs AFTER it, and it is the LAST action of the round. Print the plan (this never mutates):
+
+\`\`\`bash
+totem resolve-threads $ARGUMENTS
+\`\`\`
+
+Every bot-rooted thread prints one row carrying its REST root comment id and a verdict: \`resolve\`, \`skip:already-resolved\`, \`skip:outdated\`, \`skip:no-evidence\`, \`skip:not-selected\`. A \`skip:no-evidence\` row is a thread this round has not answered — neither an in-thread reply from a human nor a PR-level comment created after that thread's root — and the verb will NEVER resolve it under any flag; give it evidence and re-run rather than working around it. Show the plan and wait. Only on the operator's explicit go, run the mutating half (add \`--ids <comma-separated REST root comment ids>\` to narrow it to named rows; an unmatched id aborts before anything is resolved):
+
+\`\`\`bash
+totem resolve-threads $ARGUMENTS --apply
+\`\`\`
+
+The verb never posts a comment, a reply or a review — the only mutation it can issue is \`resolveReviewThread\`, which is what the merge-ready gate's unresolved-bot-threads predicate reads. Exit \`2\` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence); exit \`1\` means the read did not complete and NOTHING was resolved. Report what it printed, verbatim.
 
 ${SKILL_MARKER_END}
 `;
