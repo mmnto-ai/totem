@@ -281,6 +281,20 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     expect(stderr).not.toContain('is not a seat this repo hosts');
   });
 
+  it('a DUPLICATED env entry is one identity, not two — accepted like the poll accepts it (fold round 2)', async () => {
+    // `pollMail` normalizes duplicates out of its own resolution before it
+    // counts seats; the probe must apply the same normalization or it refuses
+    // an identity the very next command serves.
+    const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
+    const { exitCode, stdout, stderr } = await run({
+      repoRoot,
+      env: { TOTEM_SELF_AGENT: 'seat-alpha,seat-alpha' },
+    });
+    expect(stderr).toBe('');
+    expect(stdout).toBe('seat=seat-alpha source=env\n');
+    expect(exitCode).toBe(0);
+  });
+
   it('an env declaring MULTIPLE seats refuses — a session has one identity (exit 2)', async () => {
     const repoRoot = makeRepo('hostrepo', ['seat-alpha', 'seat-beta']);
     const { exitCode, stdout, stderr } = await run({

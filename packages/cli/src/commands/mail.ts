@@ -1461,7 +1461,13 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
 
   const hostedList = hosted.agents.join(', ');
   const resolution = resolveSelfAgents(repoRoot, env);
-  if (resolution.source !== 'env' || resolution.agents.length !== 1) {
+  // Dedupe before the one-identity test, the same normalization `pollMail`
+  // applies to its own resolution above: `TOTEM_SELF_AGENT=a,a` is one seat
+  // declared clumsily, not two, and the poll serves it. A probe that refused
+  // what the poll then serves is the disagreement class this whole slice is
+  // about.
+  const declaredSeats = [...new Set(resolution.agents)];
+  if (resolution.source !== 'env' || declaredSeats.length !== 1) {
     return {
       ok: false,
       refusal:
@@ -1471,7 +1477,7 @@ export function deriveSeat(opts: MailCommandOptions = {}): DeriveSeatResult {
     };
   }
 
-  const declared = resolution.agents[0]!;
+  const declared = declaredSeats[0]!;
   const seat = hosted.agents.find((a) => a.toLowerCase() === declared.toLowerCase());
   if (seat === undefined) {
     // Two different repairs hide behind one verdict. When config.json
