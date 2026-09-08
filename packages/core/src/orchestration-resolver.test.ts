@@ -588,7 +588,10 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
   }
 
   it('(i) an https origin keys the map — the totem seats resolve from a worktree-named directory', () => {
-    const root = mkGitRepo('totem-totem-claude-build-2801', 'https://github.com/mmnto-ai/totem.git');
+    const root = mkGitRepo(
+      'totem-totem-claude-build-2801',
+      'https://github.com/mmnto-ai/totem.git',
+    );
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
     expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
