@@ -1514,7 +1514,13 @@ for (let i = 0; i < argv.length; i++) {
 // hook cannot import core: quoted (\`<<'EOF'\`, \`<<"EOF"\`, \`<<\\EOF\`) and bare
 // delimiters, \`<<\` and \`<<-\` (whose terminator may be tab-indented), an
 // unterminated body read to the end of the command, and \`<<<\` left alone (a
-// here-string is not a heredoc).
+// here-string is not a heredoc). Round 2 added the two guards that keep the
+// blanker from EATING commands: \`$(( … ))\` / \`(( … ))\` is skipped whole, so a
+// shift (\`$((1<<2))\`) opens nothing, and a \`#\` that begins a word is a comment
+// discarded to end-of-line, so neither its text nor a \`<<note\` inside it is
+// read — before them, either one swallowed the rest of the command and a real
+// merge after it went unjudged. Every \`<<\` on the operator line is queued and
+// its body consumed in order, as bash does for \`cat <<A <<B\`.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny:
@@ -1524,10 +1530,80 @@ for (let i = 0; i < argv.length; i++) {
 //     \`npx\`), for the same reason;
 //   - PowerShell's own quoting (backtick escapes, here-strings) is not
 //     modelled — the walk reads POSIX quoting for both tools.
+// Which characters END a word, so the scanner can say whether the next one
+// BEGINS one. Same set core's scanner uses (mmnto-ai/totem#2800 round 2, F1).
+function isWordBoundary(ch) {
+  return (
+    ch === ' ' ||
+    ch === '\\t' ||
+    ch === '\\r' ||
+    ch === '\\n' ||
+    ch === ';' ||
+    ch === '|' ||
+    ch === '&'
+  );
+}
+
+// The index just past the \`))\` that closes an arithmetic expansion whose
+// opening \`$((\` / \`((\` ends at \`from\`; the end of the command when it is
+// unterminated. A \`<<\` inside is a SHIFT, never a heredoc operator — without
+// this guard \`echo $((1<<2))\` opened a heredoc and swallowed every command
+// after it, so a real \`gh pr merge\` went unjudged (F1).
+function skipArithmetic(command, from) {
+  let depth = 2;
+  let i = from;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+    i += 1;
+  }
+  return command.length;
+}
+
 function blankHeredocBodies(command) {
   let out = '';
   let i = 0;
   let quote = '';
+  let boundary = true;
+  let pending = [];
+
+  // Consume EVERY body queued on the operator line, in order, starting just
+  // past that line's newline — bash reads \`cat <<A <<B\` as two bodies, so a
+  // command sitting in B's body is data too (F2). Terminator lines are kept;
+  // body lines are dropped with their newlines, so the segments around them
+  // stay separated exactly as the shell separates them. An unterminated body
+  // runs to the end and is dropped whole.
+  const consumeBodies = (from) => {
+    let cursor = from;
+    for (let p = 0; p < pending.length; p++) {
+      const h = pending[p];
+      let at = cursor;
+      cursor = command.length;
+      while (at <= command.length) {
+        const nl = command.indexOf('\\n', at);
+        const stop = nl === -1 ? command.length : nl;
+        let line = command.slice(at, stop);
+        if (h.stripTabs) line = line.replace(/^\\t+/, '');
+        line = line.replace(/\\r$/, '');
+        const next = nl === -1 ? command.length : nl + 1;
+        if (line === h.delimiter) {
+          out += command.slice(at, next);
+          cursor = next;
+          break;
+        }
+        if (nl === -1) break;
+        out += '\\n';
+        at = next;
+      }
+    }
+    pending = [];
+    return cursor;
+  };
+
   while (i < command.length) {
     const ch = command[i];
     if (quote !== '') {
@@ -1539,17 +1615,43 @@ function blankHeredocBodies(command) {
       }
       if (ch === quote) quote = '';
       i++;
+      boundary = false;
       continue;
     }
     if (ch === "'" || ch === '"') {
       quote = ch;
       out += ch;
       i++;
+      boundary = false;
       continue;
     }
     if (ch === '\\\\' && i + 1 < command.length) {
       out += ch + command[i + 1];
       i += 2;
+      boundary = false;
+      continue;
+    }
+    // A \`#\` that BEGINS a word is a comment: discarded to the end of the line
+    // WITHOUT quote processing, so neither its text nor a \`<<note\` inside it
+    // reaches the tokenizer (F1). The newline stays — it may end an operator
+    // line whose bodies are still queued.
+    if (ch === '#' && boundary) {
+      const nl = command.indexOf('\\n', i);
+      i = nl === -1 ? command.length : nl;
+      continue;
+    }
+    if (ch === '$' && command.slice(i, i + 3) === '$((') {
+      const end = skipArithmetic(command, i + 3);
+      out += command.slice(i, end);
+      i = end;
+      boundary = false;
+      continue;
+    }
+    if (ch === '(' && command[i + 1] === '(' && boundary) {
+      const end = skipArithmetic(command, i + 2);
+      out += command.slice(i, end);
+      i = end;
+      boundary = false;
       continue;
     }
     // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone.
@@ -1598,39 +1700,20 @@ function blankHeredocBodies(command) {
         break;
       }
       out += head;
-      if (delim === '') {
-        i = j;
-        continue;
-      }
-      const nl = command.indexOf('\\n', j);
-      if (nl === -1) {
-        // A \`<<EOF\` with no newline after it has no body to blank.
-        out += command.slice(j);
-        i = command.length;
-        continue;
-      }
-      out += command.slice(j, nl + 1);
-      let k = nl + 1;
-      while (k < command.length) {
-        const lineEnd = command.indexOf('\\n', k);
-        const line = lineEnd === -1 ? command.slice(k) : command.slice(k, lineEnd);
-        const candidate = (dash ? line.replace(/^\\t+/, '') : line).replace(/\\r$/, '');
-        const next = lineEnd === -1 ? command.length : lineEnd + 1;
-        if (candidate === delim) {
-          out += command.slice(k, next);
-          k = next;
-          break;
-        }
-        // A body line is DROPPED; its newline is kept so the surrounding
-        // segments stay separated exactly as the shell separates them. An
-        // unterminated body runs to the end and is dropped whole.
-        if (lineEnd !== -1) out += '\\n';
-        k = next;
-      }
-      i = k;
+      i = j;
+      boundary = false;
+      if (delim !== '') pending.push({ delimiter: delim, stripTabs: dash });
+      continue;
+    }
+    if (ch === '\\n') {
+      out += '\\n';
+      i += 1;
+      if (pending.length > 0) i = consumeBodies(i);
+      boundary = true;
       continue;
     }
     out += ch;
+    boundary = isWordBoundary(ch);
     i++;
   }
   return out;
@@ -1680,6 +1763,19 @@ function ghPrMergeArgs(rawCommand) {
         i++;
       }
       i++;
+      continue;
+    }
+    // A parameter expansion is ONE word: without this, \`\${PR}\` splits on its
+    // braces and the unresolved-target evidence line reads just "$"
+    // (mmnto-ai/totem#2800 round 2, F10). A \`$( … )\` is deliberately NOT
+    // swallowed the same way — a real \`gh pr merge\` inside a command
+    // substitution has to keep firing, so its parens stay separators.
+    if (ch === '$' && command[i + 1] === '{') {
+      const close = command.indexOf('}', i + 2);
+      const end = close === -1 ? command.length : close + 1;
+      token += command.slice(i, end);
+      hasToken = true;
+      i = end;
       continue;
     }
     if (ch === ' ' || ch === '\\t' || ch === '\\r') {

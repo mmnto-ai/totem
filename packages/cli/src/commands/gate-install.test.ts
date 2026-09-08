@@ -1053,6 +1053,53 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
+    it('an arithmetic shift or a comment does not swallow the merge that follows (fold round 2, F1)', () => {
+      // `$((1<<2))` is a SHIFT and `# see <<note` is a comment: neither opens a
+      // heredoc. Before the guards, each swallowed the rest of the command and
+      // the real merge after it went unjudged — a silent miss on the exact
+      // command this gate exists for.
+      initGitRepo();
+      for (const command of [
+        'echo $((1<<2)); gh pr merge 5',
+        'echo $(( 3<<1 )); gh pr merge 5',
+        '# see <<note\ngh pr merge 5',
+        '(( 1<<3 ))\ngh pr merge 5',
+        'echo hi # <<EOF\ngh pr merge 5',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+    });
+
+    it('a comment is not a command: a merge inside one never fires', () => {
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const { status } = runWrapper(bash('echo hi # gh pr merge 9'), [], 'merge-ready');
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it('EVERY heredoc queued on a line is read as data, not just the first (fold round 2, F2)', () => {
+      // bash reads `cat <<A <<B` as two bodies in order, so a command sitting
+      // in B's body is data too. Consuming only A's body left B's body as
+      // commands — a false deny on text.
+      initGitRepo();
+      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
+      const { status } = runWrapper(
+        bash('cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n'),
+        [],
+        'merge-ready',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+
+      // The complement: a heredoc as the merge's OWN operand still fires.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 5 <<EOF\nnotes\nEOF\n'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
+    });
+
     it('still fires on a real merge that FOLLOWS a heredoc (the blanker keeps the segments)', () => {
       // The heredoc blanker must not swallow the rest of the command: the
       // terminator line ends the body and the next segment is judged normally.
@@ -1078,6 +1125,20 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(payload.pr).toBeNull();
       // NOT the current-branch fallback: that is for a command naming no target.
       expect(payload.branch).toBeUndefined();
+    });
+
+    it('a braced expansion keeps its braces in the evidence (round 2, F10)', () => {
+      // `${PR}` used to reach the engine as bare "$", because the tokenizer
+      // split on the braces. A `$( … )` deliberately still splits — a real
+      // merge inside a command substitution must keep firing.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge ${PR}'), [], 'merge-ready');
+      expect(spawnedPayload().unresolvedTarget).toBe('${PR}');
+
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('echo $(gh pr merge 8)'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 8 });
     });
 
     it('a Write envelope and a PowerShell command are treated by tool, not by text', () => {
