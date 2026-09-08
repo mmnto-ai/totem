@@ -140,6 +140,12 @@ interface RunnerSpec {
   threadsRawBody?: string;
   /** Make the PR-level comment read fail with this gh exit code. */
   prCommentsExitCode?: number;
+  /** Make the `gh --version` probe fail with this exit code (gh absent / broken). */
+  ghVersionExitCode?: number;
+  /** Every thread page reports a followable next page (the MAX_PAGES exhaustion path). */
+  threadsAlwaysHasNext?: boolean;
+  /** Every comment continuation reports a followable next page (the per-thread exhaustion path). */
+  commentsAlwaysHasNext?: boolean;
 }
 
 interface Harness {
@@ -154,6 +160,13 @@ function makeRunner(spec: RunnerSpec): Harness {
   const queries: string[] = [];
   const runner: GhRunner = (args: string[]) => {
     calls.push([...args]);
+
+    // The gh precondition probe: a non-zero answer models gh absent or broken.
+    if (args[0] === '--version') {
+      return spec.ghVersionExitCode !== undefined && spec.ghVersionExitCode !== 0
+        ? { stdout: 'spawn gh ENOENT', exitCode: spec.ghVersionExitCode }
+        : { stdout: 'gh version 2.99.0 (2026-09-01)\n', exitCode: 0 };
+    }
 
     if (args[0] === 'repo') return { stdout: 'mmnto-ai/totem\n', exitCode: 0 };
 
@@ -189,7 +202,10 @@ function makeRunner(spec: RunnerSpec): Harness {
             data: {
               node: {
                 comments: {
-                  pageInfo: { hasNextPage: false, endCursor: null },
+                  pageInfo:
+                    spec.commentsAlwaysHasNext === true
+                      ? { hasNextPage: true, endCursor: 'c-more' }
+                      : { hasNextPage: false, endCursor: null },
                   nodes: (thread?.commentsNextPage ?? []).map(commentNode),
                 },
               },
@@ -220,14 +236,17 @@ function makeRunner(spec: RunnerSpec): Harness {
             repository: {
               pullRequest: {
                 reviewThreads: {
-                  pageInfo: {
-                    hasNextPage: first ? (spec.threadsHasNext ?? false) : false,
-                    endCursor: first
-                      ? spec.threadsCursor === undefined
-                        ? 't0'
-                        : spec.threadsCursor
-                      : null,
-                  },
+                  pageInfo:
+                    spec.threadsAlwaysHasNext === true
+                      ? { hasNextPage: true, endCursor: `t-${calls.length}` }
+                      : {
+                          hasNextPage: first ? (spec.threadsHasNext ?? false) : false,
+                          endCursor: first
+                            ? spec.threadsCursor === undefined
+                              ? 't0'
+                              : spec.threadsCursor
+                            : null,
+                        },
                   nodes: nodes.map(threadNode),
                 },
               },
@@ -298,18 +317,27 @@ function mutationCalls(calls: string[][]): string[][] {
 // no `/reviews`" only refuses the write shapes someone thought to enumerate, and
 // a write nobody listed (`gh pr review --approve`, `gh api -X POST …`,
 // `gh api --method PUT …`, an `addComment` GraphQL mutation) sails through. So
-// every argv the seam records must match exactly ONE of the five shapes this
+// every argv the seam records must match exactly ONE of the six shapes this
 // verb is allowed to send; anything else THROWS, including a mutation under
 // dry-run. `rejects a write argv` below is the mutant check that this predicate
 // actually refuses writes.
 
-/** The five exec shapes the verb may send. */
-type ExecShape = 'repo-view' | 'threads-read' | 'comments-read' | 'mutation' | 'issue-comments';
+/** The six exec shapes the verb may send (the `--version` probe joined in the PR's review round). */
+type ExecShape =
+  | 'gh-version'
+  | 'repo-view'
+  | 'threads-read'
+  | 'comments-read'
+  | 'mutation'
+  | 'issue-comments';
 
 const ISSUE_COMMENTS_PATH = /^repos\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\/issues\/\d+\/comments$/;
 
 /** Variables each declared document is allowed to carry. */
-const ALLOWED_VARIABLES: Record<Exclude<ExecShape, 'repo-view' | 'issue-comments'>, string[]> = {
+const ALLOWED_VARIABLES: Record<
+  Exclude<ExecShape, 'gh-version' | 'repo-view' | 'issue-comments'>,
+  string[]
+> = {
   'threads-read': ['owner', 'name', 'number', 'threadsAfter'],
   'comments-read': ['threadId', 'commentsAfter'],
   mutation: ['threadId'],
@@ -320,6 +348,12 @@ function classifyExecShape(args: readonly string[]): ExecShape {
     throw new Error(`argv is not a declared exec shape (${why}): ${JSON.stringify(args)}`);
   };
 
+  // The precondition probe: exactly `gh --version`, nothing riding on it.
+  if (args[0] === '--version') {
+    if (args.length !== 1) return reject('the version probe takes no other argument');
+    return 'gh-version';
+  }
+
   if (args[0] === 'repo') {
     if (args.join(' ') !== 'repo view --json nameWithOwner --jq .nameWithOwner') {
       return reject('unexpected `gh repo` argv');
@@ -327,7 +361,8 @@ function classifyExecShape(args: readonly string[]): ExecShape {
     return 'repo-view';
   }
 
-  if (args[0] !== 'api') return reject('only `gh repo view` and `gh api` are declared');
+  if (args[0] !== 'api')
+    return reject('only `gh --version`, `gh repo view` and `gh api` are declared');
 
   if (args[1] === 'graphql') {
     if (args[2] !== '-f' || args[3]?.startsWith('query=') !== true) {
@@ -787,7 +822,9 @@ describe('resolve-threads mutation discipline', () => {
     // AND none of them is the mutation.
     const shapes = assertOnlyDeclaredExecShapes(result.calls, { apply: false });
     expect(shapes).not.toContain('mutation');
-    expect(new Set(shapes)).toEqual(new Set(['repo-view', 'threads-read', 'issue-comments']));
+    expect(new Set(shapes)).toEqual(
+      new Set(['gh-version', 'repo-view', 'threads-read', 'issue-comments']),
+    );
     expect(result.rows.every((r) => r.applied === null)).toBe(true);
     expect(result.stdout).toContain('dry-run');
     expect(result.exitCode).toBe(0);
@@ -809,13 +846,21 @@ describe('resolve-threads mutation discipline', () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it('every argv it sends is one of the five declared exec shapes (allowlist)', async () => {
+  it('every argv it sends is one of the six declared exec shapes (allowlist)', async () => {
     const result = await run(evidenced, { apply: true });
     const shapes = assertOnlyDeclaredExecShapes(result.calls, { apply: true });
-    // The whole run is: one repo read, one thread page, one issue-comment read,
-    // two mutations. Nothing else was sent — not by omission from a denylist,
-    // but because nothing else is representable in the allowlist.
-    expect(shapes).toEqual(['repo-view', 'threads-read', 'issue-comments', 'mutation', 'mutation']);
+    // The whole run is: the version probe, one repo read, one thread page, one
+    // issue-comment read, two mutations. Nothing else was sent — not by
+    // omission from a denylist, but because nothing else is representable in
+    // the allowlist.
+    expect(shapes).toEqual([
+      'gh-version',
+      'repo-view',
+      'threads-read',
+      'issue-comments',
+      'mutation',
+      'mutation',
+    ]);
     expect(result.queries.filter((q) => q === RESOLVE_THREAD_MUTATION)).toHaveLength(2);
   });
 
@@ -1145,6 +1190,9 @@ describe('resolve-threads read failures', () => {
     const result = await resolveThreadsCommand('2839', {
       runner: (args: string[]) => {
         calls.push([...args]);
+        // gh IS present (the probe answers); it is the repository read that
+        // fails — an unauthenticated gh, the cure named is `gh auth status`.
+        if (args[0] === '--version') return { stdout: 'gh version 2.99.0\n', exitCode: 0 };
         return { stdout: 'gh: not authenticated', exitCode: 4 };
       },
       out: (t) => {
@@ -1157,8 +1205,11 @@ describe('resolve-threads read failures', () => {
     expect(result.exitCode).toBe(1);
     expect(stderr).toContain('gh auth status');
     expect(stdout).toBe('');
-    // It gave up on the FIRST call — no read, no mutation.
-    expect(calls).toHaveLength(1);
+    // It gave up on the FIRST call after the probe — no read, no mutation.
+    expect(calls).toEqual([
+      ['--version'],
+      ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
+    ]);
   });
 
   it('reports nothing to resolve when the PR has no bot-rooted thread', async () => {
@@ -1277,6 +1328,71 @@ describe('resolve-threads output', () => {
     expect(Object.keys(idDoc).sort()).toEqual(['error', 'exitCode', 'rows']);
     expect(idDoc.exitCode).toBe(2);
     expect(idDoc.rows).toHaveLength(3);
+  });
+
+  it('gh absent fails IN CONTRACT — the text line in text mode, the {error, rows, exitCode} document under --json, and no further gh call (PR round 1, greptile)', async () => {
+    // The precondition used to be an action-level `process.exit(1)` before the
+    // command ran, which gave a `--json` script nothing to parse. The probe now
+    // goes through the seam: it is the FIRST and only call when gh is missing.
+    const text = await run({ threads: [], ghVersionExitCode: 127 });
+    expect(text.exitCode).toBe(1);
+    expect(text.stderr).toMatch(/requires the GitHub CLI \(gh\)/);
+    expect(text.stdout).toBe('');
+    expect(text.calls).toEqual([['--version']]);
+
+    const json = await run({ threads: [], ghVersionExitCode: 127 }, { json: true });
+    expect(json.exitCode).toBe(1);
+    const doc = JSON.parse(json.stdout) as Record<string, unknown>;
+    expect(Object.keys(doc).sort()).toEqual(['error', 'exitCode', 'rows']);
+    expect(doc['error']).toMatch(/requires the GitHub CLI/);
+    expect(doc['rows']).toEqual([]);
+    expect(doc['exitCode']).toBe(1);
+    expect(json.calls).toEqual([['--version']]);
+  });
+
+  it('MAX_PAGES exhaustion on the thread read fails closed — exit 1, no rows, no mutation (PR round 1, CodeRabbit)', async () => {
+    // Every page reports a followable next page, so the read can never
+    // complete; the cap is the floor against an endless walk, and it is a
+    // named hard failure, never a partial plan.
+    const result = await run(
+      {
+        threads: [{ id: 'T-1', comments: [{ databaseId: 1, ...BOT_ROOT }] }],
+        threadsAlwaysHasNext: true,
+      },
+      { apply: true },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.rows).toEqual([]);
+    expect(result.stderr).toMatch(/more review threads than 20 pages/);
+    expect(mutationCalls(result.calls)).toHaveLength(0);
+    // The probe, the repo read, then exactly MAX_PAGES thread pages.
+    expect(
+      result.calls.filter((c) => c.some((a) => a.includes('TotemResolveThreads'))).length,
+    ).toBe(20);
+  });
+
+  it("MAX_PAGES exhaustion on a thread's comment continuation fails closed the same way (PR round 1, CodeRabbit)", async () => {
+    const result = await run(
+      {
+        threads: [
+          {
+            id: 'T-1',
+            commentsHasNext: true,
+            commentsCursor: 'c1',
+            comments: [{ databaseId: 1, ...BOT_ROOT }],
+          },
+        ],
+        commentsAlwaysHasNext: true,
+      },
+      { apply: true },
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.rows).toEqual([]);
+    expect(result.stderr).toMatch(/more comments than 20 pages/);
+    expect(mutationCalls(result.calls)).toHaveLength(0);
+    expect(
+      result.calls.filter((c) => c.some((a) => a.includes('TotemResolveThreadComments'))).length,
+    ).toBe(20);
   });
 
   it('refuses a non-numeric PR argument before any gh call', async () => {

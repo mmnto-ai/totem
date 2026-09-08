@@ -892,6 +892,20 @@ export async function resolveThreadsCommand(
   };
   const runner = opts.runner ?? (await defaultRunner(opts.cwd ?? process.cwd()));
 
+  // The gh precondition lives HERE, inside the command, not in the CLI action:
+  // `--json` promises one `{ error, rows, exitCode }` document on EVERY
+  // failure, and an action-level `process.exit(1)` before the command ran gave
+  // a script nothing to parse when gh was missing (the PR's review round,
+  // greptile). Probed through the seam so the allowlist names it.
+  const versionRun = runner(['--version']);
+  if (versionRun.exitCode !== 0) {
+    fail(
+      `this command requires the GitHub CLI (gh), which did not answer (exit ${versionRun.exitCode}: ${bounded(versionRun.stdout)}) — nothing was resolved. Install: https://cli.github.com`,
+      1,
+    );
+    return { exitCode: 1, rows: [] };
+  }
+
   const repoRun = runner(['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner']);
   if (repoRun.exitCode !== 0) {
     fail(

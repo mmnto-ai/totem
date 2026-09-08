@@ -701,7 +701,11 @@ program
   .option('--ids <ids>', 'Comma-separated REST root comment ids to narrow the batch')
   .option('--json', 'Emit the plan rows as one JSON document')
   .action(async (prNumber: string, _opts: unknown, cmd: Command) => {
-    requireGhCli();
+    // No `requireGhCli()` here, unlike the sibling actions: this verb's `--json`
+    // contract promises a `{ error, rows, exitCode }` document on every
+    // failure, and an action-level exit before the command ran left a script
+    // nothing to parse when gh was missing. The command probes gh through its
+    // own seam and fails in-contract (the PR's review round, greptile).
     try {
       const { resolveThreadsCommand } = await import('./commands/resolve-threads.js');
       // The program-level `--json` (top of file) swallows the flag when it
