@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { type GhRunner, isBotReviewerLogin, isBotReviewerLoginExact } from '@mmnto/totem';
+import {
+  BOT_REVIEWER_IDENTITIES,
+  type GhRunner,
+  isBotReviewerLogin,
+  isBotReviewerLoginExact,
+} from '@mmnto/totem';
 
 import {
   type BotIdentityPredicates,
@@ -30,13 +35,29 @@ const identity: BotIdentityPredicates = {
 // ─── Fixture builders ────────────────────────────────────────────────────────
 
 /**
- * The GraphQL logins that answer `__typename: "Bot"` on the real API without
- * carrying a `[bot]` suffix — verified read-only on mmnto-ai/totem#2839 at
- * 2026-09-08T06:03:03Z (`greptile-apps` and `coderabbitai` both answered `Bot`).
- * A fixture may override `typename` explicitly; this only keeps the DEFAULT
- * honest so a test does not accidentally model a review bot as a User.
+ * The review-bot logins a fixture models as `__typename: "Bot"` by default,
+ * DERIVED from core's `BOT_REVIEWER_IDENTITIES` (both spellings, with and
+ * without the `[bot]` suffix) rather than hand-listed — a hand-listed copy
+ * drifts the moment core gains or renames an identity, and it already had:
+ * the first version omitted `github-code-quality` while carrying an entry that
+ * is not a review bot at all.
+ *
+ * OBSERVED vs DECLARED, kept honest: only `greptile-apps` and `coderabbitai`
+ * were read from the real API (mmnto-ai/totem#2839, 2026-09-08T06:03:03Z, both
+ * answering `__typename: "Bot"` with no `[bot]` suffix on the login). The other
+ * identities are taken from core's declaration, not from an observation made
+ * here. A fixture may override `typename` explicitly; this only keeps the
+ * DEFAULT honest so a test cannot accidentally model a review bot as a User.
  */
-const KNOWN_BOT_LOGINS = ['coderabbitai', 'gemini-code-assist', 'greptile-apps', 'github-actions'];
+const CORE_BOT_LOGINS = BOT_REVIEWER_IDENTITIES.flatMap((id) => [...id.exactLogins]);
+
+/**
+ * A GitHub App that is NOT one of core's review bots — the whole point of the
+ * three-arm bot test (fold F2): core's list is closed, but any App can reply in
+ * a thread, and an App's comment is not a human answer. Deliberately a SEPARATE
+ * constant from {@link CORE_BOT_LOGINS} so the two ideas cannot be conflated.
+ */
+const APP_NOT_A_REVIEW_BOT = 'github-actions';
 
 interface FakeComment {
   databaseId?: number | null;
@@ -67,7 +88,10 @@ interface FakePrComment {
 }
 
 function defaultTypename(login: string): string {
-  return KNOWN_BOT_LOGINS.includes(login.toLowerCase()) || /\[bot\]$/i.test(login) ? 'Bot' : 'User';
+  const lower = login.toLowerCase();
+  const isCoreReviewBot = CORE_BOT_LOGINS.includes(lower);
+  const isOtherApp = lower === APP_NOT_A_REVIEW_BOT || /\[bot\]$/i.test(login);
+  return isCoreReviewBot || isOtherApp ? 'Bot' : 'User';
 }
 
 function commentNode(c: FakeComment): ReviewThreadNode['comments']['nodes'][number] {
@@ -621,7 +645,7 @@ describe('resolve-threads evidence rule (R2)', () => {
             // `__typename` is the arm that catches it.
             {
               databaseId: 2,
-              login: 'github-actions',
+              login: APP_NOT_A_REVIEW_BOT,
               typename: 'Bot',
               createdAt: '2026-09-08T04:00:00Z',
             },
@@ -1160,11 +1184,69 @@ describe('resolve-threads output', () => {
       rows: ResolveThreadsRow[];
       summary: Record<string, number>;
     };
+    // The SUCCESS shape is as much a contract as the failure shape: pin the key
+    // set exactly (so a field cannot be added or dropped unnoticed) and assert
+    // every summary field, not just the one this fixture happens to exercise.
+    expect(Object.keys(doc).sort()).toEqual(['apply', 'pr', 'repo', 'rows', 'summary']);
     expect(doc.repo).toBe('mmnto-ai/totem');
     expect(doc.pr).toBe(2839);
     expect(doc.apply).toBe(false);
     expect(doc.rows).toEqual(result.rows);
-    expect(doc.summary['resolve']).toBe(3);
+    expect(Object.keys(doc.summary).sort()).toEqual([
+      'applied',
+      'botRooted',
+      'failed',
+      'resolve',
+      'skip:already-resolved',
+      'skip:no-evidence',
+      'skip:not-selected',
+      'skip:outdated',
+    ]);
+    expect(doc.summary).toEqual({
+      botRooted: 3,
+      resolve: 3,
+      'skip:already-resolved': 0,
+      'skip:outdated': 0,
+      'skip:no-evidence': 0,
+      'skip:not-selected': 0,
+      // Dry-run: nothing was attempted, so nothing applied and nothing failed —
+      // `applied` is 0 here even though `resolve` is 3.
+      applied: 0,
+      failed: 0,
+    });
+  });
+
+  it('--json under --apply reports what was applied and what failed', async () => {
+    // The other half of the summary contract: `applied` counts the rows the
+    // mutation CONFIRMED, and a per-thread failure shows up in `failed` rather
+    // than silently inflating `applied`.
+    const result = await run(
+      {
+        threads: [
+          { id: 'T-a', comments: [{ databaseId: 11, ...BOT_ROOT }] },
+          { id: 'T-b', comments: [{ databaseId: 21, ...BOT_ROOT }] },
+        ],
+        prComments: [{ login: 'satur8d', createdAt: '2026-09-08T04:05:00Z' }],
+        mutationFailures: ['T-b'],
+      },
+      { apply: true, json: true },
+    );
+    const doc = JSON.parse(result.stdout) as {
+      apply: boolean;
+      summary: Record<string, number>;
+    };
+    expect(doc.apply).toBe(true);
+    expect(doc.summary).toEqual({
+      botRooted: 2,
+      resolve: 2,
+      'skip:already-resolved': 0,
+      'skip:outdated': 0,
+      'skip:no-evidence': 0,
+      'skip:not-selected': 0,
+      applied: 1,
+      failed: 1,
+    });
+    expect(result.exitCode).toBe(2);
   });
 
   it('the mmnto-ai/totem#2839 capture: three bot threads, all carried by the later human disposition', async () => {
