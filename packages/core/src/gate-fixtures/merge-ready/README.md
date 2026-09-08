@@ -40,6 +40,20 @@ and teed each response, so the query in the capture is `MERGE_READY_QUERY` from
 | `totem-strategy-1251.json` | [mmnto-ai/totem-strategy#1251](https://github.com/mmnto-ai/totem-strategy/pull/1251) | `2026-09-08T03:53:45.685Z` | `af6e2bee1969a8f47cad9aa716a524d2ba8d2243806b8b9cb249f31ceb4499f6` |
 | `totem-2827.json`          | [mmnto-ai/totem#2827](https://github.com/mmnto-ai/totem/pull/2827)                   | `2026-09-08T03:53:47.342Z` | `e5fa5afedcc802a55ace75d30c01aefb569dac1d13d280187112ead072097987` |
 
+A fourth capture is the SEVERITY READ's benign corpus, taken the same way (the exported
+query, one call per PR, instant clock-read in the writing command):
+
+| File                             | What                                                                                 | Captured (UTC)             | sha256                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------ |
+| `benign-corpus-bot-inlines.json` | all 16 bot inline threads on mmnto-ai/totem#2820-2839, each with its bot's own label | `2026-09-08T04:39:18.591Z` | `c14afbe7b982d812fdca148f9c8e46c83b0bcf0035ffced30ad180dabfe1ec82` |
+
+It exists because ADR-109 requires a non-exact-match read to ship a stated false-positive
+budget AND the fixture that measures it. The budget is **ZERO** high reads that disagree
+with a bot's own declaration, and `merge-ready.test.ts` asserts it thread by thread. Each
+row carries `declaredLabel` (the badge or emphasis label as observed), `expectedHigh`
+(derived from that label, not from the code under test) and the full body — the body is
+kept whole on purpose: the prose that fooled the old read is the evidence.
+
 What each one carries, as GitHub answered on its capture instant:
 
 - **mmnto-ai/liquid-city#363** (R4's positive control) — 6 checks, all SUCCESS; one review
@@ -62,22 +76,35 @@ computes mergeability only for open PRs). That is why mmnto-ai/totem-strategy#12
 in the UNEVALUABLE class rather than allowing, and why every `mergeStateStatus` value is
 exercised by a synthetic fixture below. No PR needed synthesizing: all three still answer.
 
-### No real predicate-4-only specimen exists in the searched window
+### The census, and why predicate 4's own case has no real specimen
 
-Predicate 4's own territory is a bot HIGH/Major finding on a **resolved** thread whose
-comment still applies to the head commit. Every pull request in the range
-mmnto-ai/totem#2820 through mmnto-ai/totem#2839 was queried for one (2026-09-08, the same
-`gh api graphql` read); six bot HIGH threads exist, across mmnto-ai/totem#2821,
-mmnto-ai/totem#2827, mmnto-ai/totem#2831 (three of them) and mmnto-ai/totem#2839, and
-**none of them is resolved** — so no real capture can carry that case, and
-`synthetic-head-commit-high-inline.json` stands in for it. Three of the six do show the
-re-pointing the predicate depends on (`commit.oid` = head while `originalCommit.oid` is
-older): mmnto-ai/totem#2827, mmnto-ai/totem#2831 and mmnto-ai/totem#2839.
+Every pull request in the range mmnto-ai/totem#2820 through mmnto-ai/totem#2839 was read
+with the exported query on 2026-09-08 (ten of the twenty numbers are pull requests; the
+rest are issues). They carry **16 bot inline threads**, all of which are in
+`benign-corpus-bot-inlines.json` with the severity each bot declared for itself.
+
+The count of HIGH threads depends on which read you use, so both numbers are recorded:
+
+| read                                          | HIGH threads | per PR                                      |
+| --------------------------------------------- | ------------ | ------------------------------------------- |
+| the WORD-based read (before fold round 2, F4) | 9            | #2821=1, #2827=1, #2830=1, #2831=4, #2839=2 |
+| the EXACT-BY-MARKER read (current)            | 8            | #2821=1, #2827=1, #2830=1, #2831=3, #2839=2 |
+
+The single difference is `mmnto-ai/totem#2831/thread-2`, a greptile finding its own badge
+labels `alt="P2"`: the word-based read flagged it through the word "critical" in its
+explanation, the marker read does not. That thread is the corpus's falsifier row.
+
+Predicate 4's own territory is a bot HIGH finding on a **resolved** thread whose comment
+still applies to the head commit. **None** of the 16 is resolved, so no real capture can
+carry that case and `synthetic-head-commit-high-inline.json` stands in for it. Three of
+the marker-HIGH threads do show the re-pointing the predicate depends on (`commit.oid` =
+head while `originalCommit.oid` is older): mmnto-ai/totem#2827, mmnto-ai/totem#2831 and
+mmnto-ai/totem#2839.
 
 ## The synthetic fixtures
 
-All synthesized `2026-09-08T03:55:11.894Z`, each one covering an invariant the captures
-cannot.
+All synthesized `2026-09-08T03:55:11.894Z`, except the three fold-round-2 rows at the end
+of the table (`2026-09-08T05:42:31.591Z`). Each covers an invariant the captures cannot.
 
 | File                                             | Invariant                                                             | sha256                                                             |
 | ------------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -97,6 +124,9 @@ cannot.
 | `synthetic-no-commits.json`                      | F7 — no commits answered: the head rollup is unreadable               | `bb540fa6de80f49963102d93ee866e2de41e9a07b552f654f051ced8c8e0ed57` |
 | `synthetic-rollup-no-contexts.json`              | F7 — a rollup with no contexts connection is not the zero-checks fact | `53c1ec016ee66b320abdfba2290854e946e0ec0184c7e49250d5f4715de48b69` |
 | `synthetic-rollup-state-without-checks.json`     | F7 — `PENDING` over zero listed checks is unreadable, not R5          | `cc68c1e1dee959430dae88d57175bb3a2e46a9cc76fa2535c6d70b68dea6a5f9` |
+| `synthetic-rollup-state-null.json`               | R2 F3 — a null rollup state over zero checks is unevaluable, not R5   | `99caa79eaae823081c5db081ebc3bbccc970984d14e8f69bf3dd229b152cb763` |
+| `synthetic-rollup-state-non-string.json`         | R2 F3 — a non-string rollup state over zero checks is unevaluable     | `db4854dc93608b69591ad41c26006525c4bf32390a24fae78828ed732406aa1c` |
+| `synthetic-high-inline-null-commit.json`         | R2 F8 — a bot HIGH inline with a null commit is unevaluable, named    | `76ada16983527160448ddc6fe149913914b024bd029027d643216f3c6a7bee27` |
 | `synthetic-unresolved-bot-thread.json`           | an unresolved, non-outdated bot thread denies                         | `f72089d6aab5cee70af916b0d1370918e00ec3150a43e183869655508a58de9b` |
 | `synthetic-resolved-outdated-human-threads.json` | resolved / outdated / HUMAN threads never deny                        | `64381afaa783e059c4d019e60e8fb0735d7048ac7570e975809807f6ba55d349` |
 | `synthetic-stale-commit-high-inline.json`        | F2 — a HIGH inline applying to an OLDER commit does not deny          | `98ca60196f7315602b13822a69b748fe03ca89743db96bf63227e8ec2d8aebf7` |
