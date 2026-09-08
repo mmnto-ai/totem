@@ -2,16 +2,22 @@
  * merge-ready (mmnto-ai/totem#2800) — the gate's invariants, driven by the
  * checked-in fixtures under `gate-fixtures/merge-ready/`.
  *
- * Two of those fixtures are REAL `gh api graphql` captures taken with the
- * exported {@link MERGE_READY_QUERY} (R4): mmnto-ai/liquid-city#363 (green
- * rollup, one unresolved HIGH inline) and mmnto-ai/totem-strategy#1251. The
- * rest are synthetic and labelled `synthetic-` in their names — one per
- * invariant the two captures cannot exercise (both PRs are merged, so GitHub
- * answers `mergeStateStatus: UNKNOWN` for each and no capture can carry a
- * BEHIND / DIRTY / BLOCKED head).
+ * FOUR of those fixtures are REAL `gh api graphql` captures taken with the
+ * exported {@link MERGE_READY_QUERY} (R4): three PR captures —
+ * mmnto-ai/liquid-city#363 (green rollup, one unresolved HIGH inline),
+ * mmnto-ai/totem-strategy#1251, and mmnto-ai/totem#2827 (the comment that
+ * re-pointed to the head) — plus the benign corpus, every bot inline thread on
+ * mmnto-ai/totem#2820-2839, which measures the severity read's ADR-109
+ * false-positive budget. The other 35 are synthetic and labelled `synthetic-`
+ * in their names — one per invariant the captures cannot exercise (all three
+ * PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for each and no
+ * capture can carry a BEHIND / DIRTY / BLOCKED head, or a resolved HIGH thread).
+ * The README beside them lists every file with its sha256 and instant, and a
+ * test recomputes those receipts from the files on disk.
  *
  * The network never runs here: every test injects the {@link GhRunner} seam.
  */
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -102,7 +108,65 @@ function evaluate(
   return { ...evaluation, calls };
 }
 
-// ─── The two real captures (R4) ─────────────────────────────────────────────
+// ─── The README is a RECEIPT, not a claim (round 3, F1) ─────────────────────
+//
+// The corpus row once carried the hash the capture script printed BEFORE
+// `prettier --write` reformatted the JSON, so the README described bytes that
+// never reached a commit. A receipt nobody re-derives is a claim; this test
+// re-derives every one of them from the files on disk.
+
+describe('merge-ready — the fixture README matches the fixtures', () => {
+  const CAPTURES = [
+    'benign-corpus-bot-inlines.json',
+    'liquid-city-363.json',
+    'totem-2827.json',
+    'totem-strategy-1251.json',
+  ];
+
+  it('every sha256 in the README is the sha256 of the file it names', () => {
+    const readme = fs.readFileSync(path.join(FIXTURE_DIR, 'README.md'), 'utf-8');
+    const files = fs
+      .readdirSync(FIXTURE_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .sort();
+
+    const drift: string[] = [];
+    const unlisted: string[] = [];
+    for (const file of files) {
+      const row = new RegExp('`' + file.replace(/\./g, '\\.') + '`[^\\n]*?`([0-9a-f]{64})`');
+      const match = row.exec(readme);
+      if (match === null) {
+        unlisted.push(file);
+        continue;
+      }
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(path.join(FIXTURE_DIR, file)))
+        .digest('hex');
+      if (match[1] !== actual) {
+        drift.push(
+          `${file}: README says ${match[1].slice(0, 12)}…, file is ${actual.slice(0, 12)}…`,
+        );
+      }
+    }
+
+    expect(unlisted, 'fixtures with no README row').toEqual([]);
+    expect(drift, 'README receipts that no longer match their files').toEqual([]);
+  });
+
+  it('the capture / synthetic split is what the README and this header say', () => {
+    const files = fs
+      .readdirSync(FIXTURE_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .sort();
+    const synthetic = files.filter((f) => f.startsWith('synthetic-'));
+    const captures = files.filter((f) => !f.startsWith('synthetic-'));
+    expect(captures.sort()).toEqual(CAPTURES);
+    expect(synthetic.length).toBe(35);
+    expect(files.length).toBe(39);
+  });
+});
+
+// ─── The three real PR captures (R4) ────────────────────────────────────────
 
 describe('merge-ready — the checked-in captures', () => {
   it('mmnto-ai/liquid-city#363 (capture): green rollup, one unresolved HIGH bot inline → deny', () => {
@@ -249,6 +313,20 @@ describe('merge-ready — predicate 1 (checks)', () => {
     expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
   });
 
+  it('a rollup that CLAIMS checks while listing none is unevaluable, not R5 (round 3, F9)', () => {
+    // SUCCESS over an empty list is only the zero-checks fact when the rollup
+    // also says the count is zero. `totalCount: 3` with nothing listed is a
+    // truncated answer, not a PR without checks.
+    const e = evaluate('synthetic-rollup-count-without-checks.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/claims 3 checks but listed none/i);
+    expect(e.notices.some((n) => n.includes('ZERO status checks'))).toBe(false);
+    expect(
+      evaluate('synthetic-rollup-count-without-checks.json', { tier: 'pilot' }).verdict.disposition,
+    ).toBe('warn');
+  });
+
   it('a rollup whose state is null or not a string is unevaluable, not R5 (round 2, F3)', () => {
     // R5's fact needs the rollup to be CONSISTENT about having no checks: absent
     // entirely, or SUCCESS over an empty list. A state that cannot be read is
@@ -337,8 +415,15 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
 
 interface CorpusThread {
   thread: string;
+  pr: number;
   bot: string;
   isResolved: boolean;
+  /** The commit the comment applies to NOW (what predicate 4 reads). */
+  commit: string;
+  /** The commit it was WRITTEN against — equal to `commit` until GitHub re-points it. */
+  originalCommit: string;
+  /** True when the two differ: the gap predicate 4 exists for. */
+  rePointed: boolean;
   declaredLabel: string;
   expectedHigh: boolean;
   body: string;
@@ -369,6 +454,25 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     expect(corpus.threads.filter((t) => t.expectedHigh).length).toBe(8);
   });
 
+  it('states the re-pointing counts the README claims (round 3, F2)', () => {
+    // `comment.commit` moves as the diff moves; `originalCommit` does not.
+    // Predicate 4 exists because of that gap, so the corpus must SHOW it — and
+    // show it where it actually happens. mmnto-ai/totem#2831 re-points nothing
+    // among its HIGH threads, which the README used to claim it did.
+    const rePointed = corpus.threads.filter((t) => t.rePointed);
+    const highRePointed = rePointed.filter((t) => t.expectedHigh);
+    expect(rePointed.length).toBe(8);
+    expect(highRePointed.map((t) => t.pr).sort()).toEqual([2827, 2839, 2839]);
+    expect(corpus.threads.filter((t) => t.pr === 2831 && t.expectedHigh && t.rePointed)).toEqual(
+      [],
+    );
+    // Every row carries both commit fields, so the claim stays checkable.
+    for (const t of corpus.threads) {
+      expect(typeof t.commit, t.thread).toBe('string');
+      expect(typeof t.originalCommit, t.thread).toBe('string');
+    }
+  });
+
   it('the greptile P2 thread on mmnto-ai/totem#2831 reads NOT high (the fold F4 falsifier)', () => {
     // The prose read this replaced flagged it, through the word "critical" in
     // its own explanation: a false deny on a finding its author ranked below
@@ -380,14 +484,51 @@ describe('merge-ready — the severity read over the benign corpus', () => {
     expect(hasHighSeverityMarker(p2!.body)).toBe(false);
   });
 
+  it('CODE is not a label: a marker quoted in a fence or a code span is not high (round 3, F4)', () => {
+    // The firing path this closes: this gate's own docstring carries every
+    // marker, so a CodeRabbit Minor whose suggestion block quotes merge-ready.ts
+    // would read as HIGH and false-deny the gate's own maintenance PR.
+    const quoted = JSON.parse(
+      fs.readFileSync(path.join(FIXTURE_DIR, 'synthetic-benign-fenced-marker-quote.json'), 'utf-8'),
+    ) as { threads: CorpusThread[] };
+    const row = quoted.threads[0]!;
+    expect(row.declaredLabel).toBe('_\u{1F7E1} Minor_');
+    expect(row.body).toContain('```'); // the fence really is in the body
+    expect(hasHighSeverityMarker(row.body)).toBe(false);
+
+    // A4 — an inline code span carrying a label.
+    expect(hasHighSeverityMarker('the arm is `_\u{1F7E0} Major_` in the table')).toBe(false);
+    // A5 — a backtick fence.
+    expect(
+      hasHighSeverityMarker('see below\n\n```md\n_\u{1F534} Critical_ | body\n```\n\ndone'),
+    ).toBe(false);
+    // A6 — a tilde fence.
+    expect(
+      hasHighSeverityMarker('see below\n\n~~~md\n<img alt="P1" src="x.svg">\n~~~\n\ndone'),
+    ).toBe(false);
+    // The complement: the SAME label outside code still reads high.
+    expect(hasHighSeverityMarker('_\u{1F534} Critical_ | body')).toBe(true);
+  });
+
+  it('an em-dash-led line is not a label (round 3, F7)', () => {
+    // LABEL_GLYPH was "any glyph that is not ASCII", so a line opening with an
+    // em dash read as a CodeRabbit heading. It is now the four severity dots
+    // and the warning sign only.
+    expect(hasHighSeverityMarker('— major rewrite of the parser')).toBe(false);
+    expect(hasHighSeverityMarker('– critical path timing')).toBe(false);
+    expect(hasHighSeverityMarker('⚠️ Potential issue\n\nthe error is dropped')).toBe(true);
+  });
+
   it('reads each bot structured label, and no prose that merely uses the words', () => {
     // Positives: the label forms, transcribed from the corpus.
     for (const label of [
       '<a href="#"><img alt="P0" src="x.svg" align="top"></a> **Boom**',
       '<a href="#"><img alt="P1" src="x.svg" align="top"></a> **Boom**',
       '![high](https://www.gstatic.com/codereviewagent/high-priority.svg)',
-      '![critical](https://www.gstatic.com/codereviewagent/critical-priority.svg)',
       '_Potential issue_\n\nthe error is dropped',
+      // Single quotes: HTML permits either, so the read must not turn on the
+      // quote style (round 3, F11).
+      "<a href='#'><img alt='P1' src='x.svg' align='top'></a> **Boom**",
     ]) {
       expect(hasHighSeverityMarker(label), label.slice(0, 40)).toBe(true);
     }
@@ -397,6 +538,10 @@ describe('merge-ready — the severity read over the benign corpus', () => {
       '<a href="#"><img alt="P2" src="x.svg" align="top"></a> **Nit**',
       '<a href="#"><img alt="P3" src="x.svg" align="top"></a> **Nit**',
       '![medium](https://www.gstatic.com/codereviewagent/medium-priority.svg)',
+      // There is deliberately NO GCA `critical` arm: that asset 404s and GCA's
+      // published rubric tops out at `high`, so an arm for it would be
+      // inference rather than transcription (round 3, F5).
+      '![critical](https://www.gstatic.com/codereviewagent/critical-priority.svg)',
       'This is a critical section of the parser, but only a nit.',
       '- critical path issues remain',
       '> major rewrite needed here',
