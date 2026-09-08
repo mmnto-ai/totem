@@ -1471,7 +1471,16 @@ export function deriveSeat(opts: DeriveSeatOptions = {}): DeriveSeatResult {
   }
 
   const hostedList = hosted.agents.join(', ');
-  const resolution = resolveSelfAgents(repoRoot, env);
+  // ONE resolution, not two (fold round 3, F8). The env-inclusive resolution
+  // differs from the structural one only through layer 1, so when
+  // TOTEM_SELF_AGENT is absent or blank the two are provably identical and the
+  // structural answer is reused — which keeps the origin read behind the cohort
+  // map to at most one spawn per probe, on the env-unset path as well as the
+  // env-set one. (The single shape that still resolves twice is a non-blank env
+  // whose every entry fails the path-segment guard; detecting it without a
+  // second resolution would mean duplicating core's own parse.)
+  const envDeclares = typeof rawEnv === 'string' && rawEnv.trim().length > 0;
+  const resolution = envDeclares ? resolveSelfAgents(repoRoot, env) : hosted;
   // Dedupe before the one-identity test, the same normalization `pollMail`
   // applies to its own resolution above: `TOTEM_SELF_AGENT=a,a` is one seat
   // declared clumsily, not two, and the poll serves it. A probe that refused
