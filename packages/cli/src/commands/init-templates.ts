@@ -1506,12 +1506,138 @@ for (let i = 0; i < argv.length; i++) {
 // \`echo "gh pr merge"\` does not fire. Leading shell keywords (\`do\`,
 // \`then\`, \`else\`, \`!\`) are skipped so \`for … ; do gh pr merge; done\` fires.
 //
-// Disclosed, same posture as transport-shield's scanner: PowerShell's own
-// quoting (backtick escapes, here-strings) is not modelled — the walk reads
-// POSIX quoting for both tools; a wrapper program that takes operands before
-// \`gh\` (\`sudo\`, \`timeout 30\`, \`npx\`) hides it from the position anchor.
-// Both are the MISS direction (the gate does not fire), never a false deny.
-function ghPrMergeArgs(command) {
+// HEREDOC BODIES ARE BLANKED FIRST (mmnto-ai/totem#2800 fold F4). A heredoc
+// body is DATA, not commands: \`cat <<EOF\` … \`gh pr merge 5\` … \`EOF\` writes a
+// line of text and merges nothing, and firing there was a false deny — the one
+// direction this projection must not have. The blanker is the shape core's
+// transport-shield scanner uses, in a self-contained form because a distributed
+// hook cannot import core: quoted (\`<<'EOF'\`, \`<<"EOF"\`, \`<<\\EOF\`) and bare
+// delimiters, \`<<\` and \`<<-\` (whose terminator may be tab-indented), an
+// unterminated body read to the end of the command, and \`<<<\` left alone (a
+// here-string is not a heredoc).
+//
+// Disclosed misses, same posture as transport-shield's scanner — the gate does
+// NOT fire, which is the safe direction, never a false deny:
+//   - an env-assignment prefix (\`GH_TOKEN=x gh pr merge 5\`): the assignment is
+//     the segment's first token, so the position anchor does not see \`gh\`;
+//   - a wrapper program that takes operands before \`gh\` (\`sudo\`, \`timeout 30\`,
+//     \`npx\`), for the same reason;
+//   - PowerShell's own quoting (backtick escapes, here-strings) is not
+//     modelled — the walk reads POSIX quoting for both tools.
+function blankHeredocBodies(command) {
+  let out = '';
+  let i = 0;
+  let quote = '';
+  while (i < command.length) {
+    const ch = command[i];
+    if (quote !== '') {
+      out += ch;
+      if (ch === '\\\\' && quote === '"' && i + 1 < command.length) {
+        out += command[i + 1];
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = '';
+      i++;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      out += ch;
+      i++;
+      continue;
+    }
+    if (ch === '\\\\' && i + 1 < command.length) {
+      out += ch + command[i + 1];
+      i += 2;
+      continue;
+    }
+    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone.
+    if (ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+      let j = i + 2;
+      let head = '<<';
+      let dash = false;
+      if (command[j] === '-') {
+        dash = true;
+        head += '-';
+        j++;
+      }
+      while (j < command.length && (command[j] === ' ' || command[j] === '\\t')) {
+        head += command[j];
+        j++;
+      }
+      // The delimiter word, quoted (\`<<'EOF'\`, \`<<"EOF"\`) or bare, with a
+      // backslash-quoted form (\`<<\\EOF\`) read as bash reads it.
+      let delim = '';
+      const q = command[j] === "'" || command[j] === '"' ? command[j] : '';
+      if (q !== '') {
+        head += q;
+        j++;
+      }
+      while (j < command.length) {
+        const c = command[j];
+        if (q !== '') {
+          head += c;
+          j++;
+          if (c === q) break;
+          delim += c;
+          continue;
+        }
+        if (c === '\\\\' && j + 1 < command.length) {
+          head += c + command[j + 1];
+          delim += command[j + 1];
+          j += 2;
+          continue;
+        }
+        if (/[A-Za-z0-9_.\\-\\/]/.test(c)) {
+          head += c;
+          delim += c;
+          j++;
+          continue;
+        }
+        break;
+      }
+      out += head;
+      if (delim === '') {
+        i = j;
+        continue;
+      }
+      const nl = command.indexOf('\\n', j);
+      if (nl === -1) {
+        // A \`<<EOF\` with no newline after it has no body to blank.
+        out += command.slice(j);
+        i = command.length;
+        continue;
+      }
+      out += command.slice(j, nl + 1);
+      let k = nl + 1;
+      while (k < command.length) {
+        const lineEnd = command.indexOf('\\n', k);
+        const line = lineEnd === -1 ? command.slice(k) : command.slice(k, lineEnd);
+        const candidate = (dash ? line.replace(/^\\t+/, '') : line).replace(/\\r$/, '');
+        const next = lineEnd === -1 ? command.length : lineEnd + 1;
+        if (candidate === delim) {
+          out += command.slice(k, next);
+          k = next;
+          break;
+        }
+        // A body line is DROPPED; its newline is kept so the surrounding
+        // segments stay separated exactly as the shell separates them. An
+        // unterminated body runs to the end and is dropped whole.
+        if (lineEnd !== -1) out += '\\n';
+        k = next;
+      }
+      i = k;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
+function ghPrMergeArgs(rawCommand) {
+  const command = blankHeredocBodies(rawCommand);
   const segments = [];
   let current = [];
   let token = '';
@@ -1658,6 +1784,17 @@ function projectMergeReady(argv) {
     if (positional === null) positional = arg;
   }
 
+  // An UNEXPANDED shell variable (\`gh pr merge $PR\`) is not a target this
+  // projection can know (mmnto-ai/totem#2800 fold F13): the shell expands it
+  // after the hook has already decided. Reading it as a branch name would judge
+  // the wrong PR — or none — so it rides as \`unresolvedTarget\`, which the
+  // engine treats as unevaluable (strict denies, pilot warns).
+  let unresolvedTarget = '';
+  if (positional !== null && /[$\`]/.test(positional)) {
+    unresolvedTarget = positional;
+    positional = null;
+  }
+
   if (positional !== null) {
     const url = /^https?:\\/\\/[^/]+\\/([^/]+)\\/([^/]+)\\/pull\\/(\\d+)/.exec(positional);
     if (url) {
@@ -1674,11 +1811,16 @@ function projectMergeReady(argv) {
   // gate reads the SAME pull request the command would merge.
   if (repo === '') repo = (process.env.GH_REPO || '').trim();
   if (repo === '') repo = repoFromRemote(gitRead(['config', '--get', 'remote.origin.url']));
-  if (pr === null && branch === '') branch = gitRead(['rev-parse', '--abbrev-ref', 'HEAD']);
+  // The current-branch fallback is for a command that named NO target. An
+  // unresolved one named a target we could not read, so it must not fall back.
+  if (pr === null && branch === '' && unresolvedTarget === '') {
+    branch = gitRead(['rev-parse', '--abbrev-ref', 'HEAD']);
+  }
 
   const headSha = gitRead(['rev-parse', 'HEAD']);
   const out = { repo: repo, pr: pr };
   if (branch !== '') out.branch = branch;
+  if (unresolvedTarget !== '') out.unresolvedTarget = unresolvedTarget;
   if (/^[0-9a-f]{40}$/i.test(headSha)) out.headSha = headSha;
   return out;
 }
@@ -1854,11 +1996,35 @@ process.stdin.on('end', () => {
   // strict/pilot split for a gate's UNEVALUABLE class (a read that could not
   // derive), while the disposition → exit map below stays the wrapper's. A gate
   // that ignores the tier — freeze-check — still fails closed at both.
-  const result = spawnSync(
-    process.execPath,
-    [cliPath, 'gate', 'check', '--event', event, '--tier', tier, '--payload', '-'],
-    { encoding: 'utf-8', timeout: 30000, input: payload },
-  );
+  //
+  // \`--tier\` is forwarded ONLY when it is NOT the default (fold F3): a CLI at
+  // or below 2.2.1 has no such option and would exit non-zero with
+  // "unknown option", which is the fail-closed arm — and on a
+  // \`Bash|PowerShell\` gate that re-creates the mmnto-ai/totem#2822 bootstrap
+  // self-block through the PATH arm. \`strict\` IS the engine's default, so a
+  // strict wrapper stays runnable against a 2.2.x CLI; a \`--pilot\` install
+  // passes the flag and needs a CLI at 2.3.0 or newer (the install-time
+  // disclosure says so).
+  const checkArgs = [cliPath, 'gate', 'check', '--event', event];
+  if (tier !== 'strict') {
+    checkArgs.push('--tier', tier);
+  }
+  checkArgs.push('--payload', '-');
+  const result = spawnSync(process.execPath, checkArgs, {
+    encoding: 'utf-8',
+    timeout: 30000,
+    input: payload,
+  });
+
+  // ─── The child's stderr IS a gate surface (fold F1) ────────────────────
+  // merge-ready's audited-override line, its zero-checks fact and every
+  // "could not derive" line are written by the ENGINE to stderr. Passing them
+  // through verbatim in EVERY arm — allow included — is what puts them in the
+  // transcript; printing them only on failure hid the override's audit trail,
+  // the one line that must never be silent.
+  if (typeof result.stderr === 'string' && result.stderr !== '') {
+    process.stderr.write(result.stderr);
+  }
 
   // Provenance for the PATH fallback arm (mmnto-ai/totem#2822): a CLI older
   // than 2.2.0 has no \`gate check --payload -\` and lands in the fail-closed
@@ -1866,11 +2032,17 @@ process.stdin.on('end', () => {
   // BEHAVIOUR is unchanged — exit 2 either way — the line only names WHICH CLI
   // evaluated and how to update it. Empty on the repo-local arm. It prints the
   // basename rendering, never the absolute entry: this is transcript-bound text.
+  // The floor NAMED here is the floor this wrapper actually needs: a strict
+  // wrapper sends no \`--tier\`, so 2.2.0 (the \`--payload -\` cut) still answers
+  // it; a pilot wrapper sends \`--tier pilot\`, which only 2.3.0 and newer parse
+  // (mmnto-ai/totem#2800 fold F3).
   const armNote =
     arm === 'PATH'
       ? 'evaluated by the PATH CLI at ' +
         cliDisplay +
-        "; a CLI older than 2.2.0 lacks 'gate check --payload -' — " +
+        (tier === 'strict'
+          ? "; a CLI older than 2.2.0 lacks 'gate check --payload -' — "
+          : "; a CLI older than 2.3.0 lacks 'gate check --tier' (this entry is baked --pilot) — ") +
         'update it: npm i -g @mmnto/cli@latest\\n'
       : '';
 
@@ -1886,8 +2058,9 @@ process.stdin.on('end', () => {
       '[totem gate-wrapper] gate "' +
         event +
         '" evaluation failed (source broken or unavailable) — blocking (fail-closed).\\n' +
-        (result.stderr || (result.error ? String(result.error.message || result.error) : '')) +
-        '\\n' +
+        // The child's stderr already went through verbatim above (fold F1);
+        // only a spawn-level error (no child, so no stderr) is added here.
+        (result.error ? String(result.error.message || result.error) + '\\n' : '') +
         armNote,
     );
     process.exit(2);

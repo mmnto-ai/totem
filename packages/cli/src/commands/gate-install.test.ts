@@ -544,11 +544,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
   const stubRecordPath = (): string => path.join(cwd, 'stub-record.json');
 
   /** Install a stub local CLI that records its argv + stdin and emits a controlled verdict / exit code. */
-  function writeStubCli(opts: { verdict?: unknown; exit?: number }): void {
+  function writeStubCli(opts: { verdict?: unknown; exit?: number; stderr?: string }): void {
     const distDir = path.join(cwd, 'node_modules', '@mmnto', 'cli', 'dist');
     fs.mkdirSync(distDir, { recursive: true });
     const verdictJson = opts.verdict === undefined ? '' : JSON.stringify(opts.verdict);
     const exitCode = opts.exit ?? 0;
+    // `stderr` stands in for the ENGINE's own agent-facing lines (merge-ready's
+    // override audit, its zero-checks fact): the wrapper must pass them through
+    // in every arm, allow included (mmnto-ai/totem#2800 fold F1).
+    const stderrText = opts.stderr ?? '';
     // CommonJS stub (the wrapper invokes via `node <path>`); .js is fine here
     // because there is no package.json type:module in the temp dir. The record
     // is what lets a test assert BOTH that a spawn happened and exactly which
@@ -564,6 +568,8 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       `fs.writeFileSync(${JSON.stringify(
         stubRecordPath(),
       )}, JSON.stringify({ argv: process.argv.slice(2), stdin }));`,
+      `const err = ${JSON.stringify(stderrText)};`,
+      'if (err) process.stderr.write(err + "\\n");',
       'if (out) process.stdout.write(out + "\\n");',
       `process.exit(${exitCode});`,
       '',
@@ -792,16 +798,10 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     expect(status).toBe(0);
     // The baked tier rides along since mmnto-ai/totem#2800 (R1): the engine owns
     // the strict/pilot split for a gate's own unevaluable class.
-    expect(stubArgv()).toEqual([
-      'gate',
-      'check',
-      '--event',
-      'transport-shield',
-      '--tier',
-      'strict',
-      '--payload',
-      '-',
-    ]);
+    // A STRICT wrapper forwards NO `--tier` (fold F3): strict is the engine's
+    // default, and an option a 2.2.x CLI cannot parse would fail the check
+    // closed — re-entering the mmnto-ai/totem#2822 bootstrap self-block.
+    expect(stubArgv()).toEqual(['gate', 'check', '--event', 'transport-shield', '--payload', '-']);
     expect(spawnedPayload()).toEqual({
       tool: 'Bash',
       command: 'git status',
@@ -855,20 +855,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(DECLARED);
 
     expect(status).toBe(0);
-    expect(stubArgv()).toEqual([
-      'gate',
-      'check',
-      '--event',
-      'freeze-check',
-      '--tier',
-      'strict',
-      '--payload',
-      '-',
-    ]);
+    expect(stubArgv()).toEqual(['gate', 'check', '--event', 'freeze-check', '--payload', '-']);
     expect(spawnedPayload()).toEqual({ subsystem: 'rule-compilation' });
   });
 
-  it('the wrapper forwards the tier it was INSTALLED with, not a default', () => {
+  it('a PILOT install forwards --tier pilot; a strict one forwards none (fold F3)', () => {
+    // The tier the ENGINE needs is the non-default one. Forwarding `--tier` on
+    // every entry made a 2.2.x CLI exit "unknown option" — the fail-closed arm —
+    // for every gated command, so only pilot pays that coupling and its
+    // install-time disclosure names the 2.3.0 floor.
     writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
     runWrapper(DECLARED, ['--pilot']);
     expect(stubArgv()).toEqual([
@@ -881,6 +876,36 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       '--payload',
       '-',
     ]);
+
+    writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+    runWrapper(DECLARED, ['--strict']);
+    expect(stubArgv()).not.toContain('--tier');
+  });
+
+  it('the child CLI stderr reaches the transcript on ALLOW, not just on failure (fold F1)', () => {
+    // merge-ready writes its audited-override line and its zero-checks fact to
+    // stderr with an `allow` verdict. Printing the child's stderr only in the
+    // failure arm silently dropped exactly the lines that must never be silent.
+    writeStubCli({
+      verdict: ALLOW_VERDICT,
+      exit: 0,
+      stderr: '[totem merge-ready] OVERRIDE (TOTEM_MERGE_GATE_OVERRIDE=1): allowing repo#1',
+    });
+    const { status, stderr } = runWrapper(DECLARED);
+    expect(status).toBe(0);
+    expect(stderr).toContain('[totem merge-ready] OVERRIDE');
+  });
+
+  it('a warn verdict carries the child stderr through as well (fold F1)', () => {
+    writeStubCli({
+      verdict: { disposition: 'warn', reason: 'heads up', provenance: {} },
+      exit: 0,
+      stderr: '[totem merge-ready] ZERO status checks — predicate 1 passes as a fact',
+    });
+    const { status, stderr } = runWrapper(DECLARED);
+    expect(status).toBe(0);
+    expect(stderr).toContain('ZERO status checks');
+    expect(stderr).toContain('heads up');
   });
 
   it('an --event the wrapper cannot project → exit 2 fail-closed, never spawns', () => {
@@ -934,16 +959,8 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       const { status } = runWrapper(bash('gh pr merge 2800 --squash'), [], 'merge-ready');
 
       expect(status).toBe(0);
-      expect(stubArgv()).toEqual([
-        'gate',
-        'check',
-        '--event',
-        'merge-ready',
-        '--tier',
-        'strict',
-        '--payload',
-        '-',
-      ]);
+      // No `--tier` at the default strict tier (fold F3).
+      expect(stubArgv()).toEqual(['gate', 'check', '--event', 'merge-ready', '--payload', '-']);
       expect(spawnedPayload()).toEqual({ repo: 'mmnto-ai/totem', pr: 2800, headSha: head });
     });
 
@@ -1005,7 +1022,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
-    it('does NOT fire inside a quoted string, or on another gh verb — and never spawns', () => {
+    it('does NOT fire inside a quoted string, a heredoc body, or on another gh verb — and never spawns', () => {
       initGitRepo();
       for (const command of [
         'echo "gh pr merge 5"',
@@ -1013,6 +1030,19 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'gh pr list',
         'gh pr view 3 | grep merge',
         'git commit -m "gh pr merge"',
+        // A heredoc body is DATA, not commands (fold F4): firing here was a
+        // false deny — the direction this projection must not have.
+        'cat <<EOF\ngh pr merge 5\nEOF',
+        "cat <<'EOF'\ngh pr merge 5\nEOF",
+        'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
+        'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
+        // An UNTERMINATED body runs to the end of the command and is still data.
+        'cat <<EOF\ngh pr merge 5',
+        // DISCLOSED misses (the gate does not fire — the safe direction):
+        // an env-assignment prefix and a wrapper program take the first token,
+        // so the position anchor never sees `gh`.
+        'GH_TOKEN=x gh pr merge 5',
+        'sudo gh pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
@@ -1021,6 +1051,33 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         expect(status, command).toBe(0);
         expect(stubArgv(), command).toBeNull();
       }
+    });
+
+    it('still fires on a real merge that FOLLOWS a heredoc (the blanker keeps the segments)', () => {
+      // The heredoc blanker must not swallow the rest of the command: the
+      // terminator line ends the body and the next segment is judged normally.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        bash('cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21'),
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload()).toMatchObject({ pr: 21 });
+    });
+
+    it('an unexpanded shell variable rides as unresolvedTarget, not as a branch (fold F13)', () => {
+      // `gh pr merge $PR` names a target the hook cannot know — the shell
+      // expands it after the gate has already decided. Reading "$PR" as a
+      // branch would judge the wrong PR, or none.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge $PR --squash'), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.unresolvedTarget).toBe('$PR');
+      expect(payload.pr).toBeNull();
+      // NOT the current-branch fallback: that is for a command naming no target.
+      expect(payload.branch).toBeUndefined();
     });
 
     it('a Write envelope and a PowerShell command are treated by tool, not by text', () => {
@@ -1236,6 +1293,28 @@ describe('gate install discloses a Bash-matched gate applies to bootstrap', () =
     expect(again).toContain('already present — no change');
     expect(again).toContain('transport-shield matches Bash|PowerShell:');
     expect(again).toContain('bootstrap a fresh clone from a terminal outside the harness');
+  });
+
+  // ─── Pilot-tier CLI floor (mmnto-ai/totem#2800 fold F3) ───────────────
+  it('a --pilot install names the CLI floor its wrapper needs; a strict one does not', async () => {
+    await gateInstallCommand({ name: 'merge-ready', pilot: true });
+    const pilot = lines.join('\n');
+    expect(pilot).toContain('gate check --tier pilot');
+    expect(pilot).toContain('2.3.0');
+
+    lines = [];
+    await gateInstallCommand({ name: 'freeze-check' });
+    const strict = lines.join('\n');
+    // A strict install forwards no tier, so it carries no floor to disclose.
+    expect(strict).not.toContain('2.3.0');
+    expect(strict).not.toContain('--tier');
+  });
+
+  it('init --gates= discloses the same pilot floor (it prints its own rows)', async () => {
+    await initCommand({ bare: true, gates: 'merge-ready', pilot: true });
+    const out = lines.join('\n');
+    expect(out).toContain('gate check --tier pilot');
+    expect(out).toContain('2.3.0');
   });
 });
 

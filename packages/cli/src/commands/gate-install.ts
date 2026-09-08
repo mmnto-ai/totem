@@ -69,6 +69,31 @@ export function bashMatchedGateDisclosure(gate: GateInstallSpec): string | null 
   );
 }
 
+/**
+ * The install-time disclosure for a PILOT install — one sentence, or `null` at
+ * the default strict tier (mmnto-ai/totem#2800 fold F3).
+ *
+ * A pilot entry bakes `--pilot`, and the wrapper forwards that as
+ * `gate check --tier pilot`. Only a CLI at 2.3.0 or newer parses `--tier`: an
+ * older one exits with "unknown option", which is the wrapper's fail-closed
+ * arm. A strict entry forwards NO `--tier` (strict is the engine default), so
+ * it keeps working against a 2.2.x CLI — which is why only the pilot tier
+ * carries a floor, and why the floor is stated at INSTALL time rather than
+ * discovered by a blocked command.
+ *
+ * Lives here, beside the installer both entry points share, for the same reason
+ * {@link bashMatchedGateDisclosure} does: the verb and `init --gates=` print
+ * their own rows, and a copy in one is a disclosure the other drops.
+ */
+export function pilotTierCliFloorDisclosure(tier: GateTier): string | null {
+  if (tier !== 'pilot') return null;
+  return (
+    'the --pilot tier is forwarded to the engine as `gate check --tier pilot`, which needs a ' +
+    'Totem CLI at 2.3.0 or newer; an older CLI fails the check closed. A default (strict) ' +
+    'install forwards no tier and runs against 2.2.x.'
+  );
+}
+
 /** The wrapper script's repo-relative install path. */
 export const GATE_WRAPPER_REL = '.claude/hooks/gate-wrapper.cjs';
 

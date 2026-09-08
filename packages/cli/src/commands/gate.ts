@@ -7,6 +7,7 @@ import {
   type GateInstallSpec,
   type GateTier,
   installGates,
+  pilotTierCliFloorDisclosure,
 } from './gate-install.js';
 // The tier vocabulary is ONE string union, imported above: the install-time
 // bake and the check-time `--tier` argument cannot drift apart. `GateTier` is
@@ -151,6 +152,14 @@ export async function gateInstallCommand(opts: GateInstallCommandOptions): Promi
     if (disclosure) {
       log.dim(TAG, disclosure);
     }
+  }
+
+  // ─── Pilot-tier CLI floor (mmnto-ai/totem#2800 fold F3) ───────────────
+  // Once per install, not per gate: the floor is the WRAPPER's, and one wrapper
+  // serves every entry it writes.
+  const tierFloor = pilotTierCliFloorDisclosure(tier);
+  if (tierFloor && results.some((r) => !r.err)) {
+    log.dim(TAG, tierFloor);
   }
 }
 
