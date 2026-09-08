@@ -337,9 +337,10 @@ describe('totem mail --derive-seat (mmnto-ai/totem#2801)', () => {
     const orchestration = path.join(repoRoot, '.totem', 'orchestration');
     expect(touched.filter((p) => p.startsWith(orchestration)).length).toBeGreaterThan(0);
     const poked = touched.filter((p) => /outbox|processed/i.test(p));
-    expect(poked, `the config branch must not touch the poll surfaces: ${poked.join(', ')}`).toEqual(
-      [],
-    );
+    expect(
+      poked,
+      `the config branch must not touch the poll surfaces: ${poked.join(', ')}`,
+    ).toEqual([]);
   });
 
   it('a DUPLICATED env entry is one identity, not two — accepted like the poll accepts it (fold round 2)', async () => {
