@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "80ef9cae92860196169ec248db3f1ea54046c9e0",
+  "readAt": "2026-09-08T22:58:56Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/index.ts",
+      "line": 703,
+      "claim": "The fold's guarantee — `totem resolve-threads <pr> --json` yields the {error,rows,exitCode} document when gh is absent — is locked by a test.",
+      "counterexample": "It is locked only at resolve-threads.test.ts:1333, which calls resolveThreadsCommand directly; the CLI action is never exercised (resolve-threads-cli-wiring.test.ts:5-16 states index.ts auto-parses on import and the mirror at :29-55 omits any precondition statement — it omitted requireGhCli before the fold too, so it could not have caught greptile P1). Repo-wide grep for `requireGhCli` outside node_modules/dist returns only index.ts, a doctor.ts comment, three old specs and CHANGELOG — no test, no lint rule. Mutant: re-insert `requireGhCli();` as the action's first statement at index.ts:703 → the defect the changeset (.changeset/resolve-threads-2841.md:13) says is cured returns, and all 54 tests pass. Cure exists in-repo: lesson.test.ts:206-209 reads src/index.ts and asserts structural content for exactly this class of registration-level property. Folded: a structural test in the wiring file reads src/index.ts, isolates the resolve-threads action block and asserts it carries no requireGhCli() while the siblings still do."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 867,
+      "claim": "'the allowlist REJECTS a write argv (the mutant check on the predicate itself)' covers the sixth shape.",
+      "counterexample": "The eight mutant rows are all `pr`/`api` shapes; none is probe-shaped. classifyExecShape (test:351-355) is correct today — ['--version','pr','comment'] hits the length guard, ['--versionx'] falls to the 'only `gh --version`, `gh repo view` and `gh api` are declared' reject — but deleting `if (args.length !== 1)` leaves every test green, because the verb only ever sends the literal ['--version']. One row (e.g. ['--version','--repo','x']) would lock it. Folded: two probe-shaped mutant rows."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": ".changeset/resolve-threads-2841.md",
+      "line": 13,
+      "claim": "The changeset sentence describes the fold accurately.",
+      "counterexample": "Two prose imprecisions in shipped text: (a) '(`gh --version`, the sixth and first shape in its exec allowlist)' — the ExecShape union (resolve-threads.test.ts:326-332) lists `gh-version` FIRST, so 'sixth ... in its exec allowlist' is true only as 'sixth added'; (b) 'where it used to get a bare stderr line' — requireGhCli printed THREE lines (index.ts:43-45), including 'Core commands (init, sync, lint) work without it.' No doc contradicts the shipped text otherwise: docs/wiki/cli-reference.md:340 still reads exit `1` for 'a read that did not complete (nothing resolved) or `gh` absent', which the fold preserves, and the wiki's two --json document shapes are now true in strictly more cases. Folded: 'added as the sixth shape and sent first'; 'three bare stderr lines'."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 561,
+      "claim": "Moving the precondition into the verb is behaviour-preserving apart from the failure channel.",
+      "counterexample": "The old check used `execSync('gh --version', { stdio: 'ignore', timeout: 3000 })` (index.ts:41); the probe inherits GH_TIMEOUT_MS = 60_000 (resolve-threads.ts:80,561). A hung or wedged gh now stalls the verb ~20x longer before the in-contract failure. Fail-safe direction, but named in neither the changeset nor the wiki. Folded: disclosed in the changeset."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 873,
+      "claim": "(fact for the disposition) No sibling action shares the indicted shape.",
+      "counterexample": "`orient` is the only other action carrying both `--json` (index.ts:862) and `requireGhCli()` (index.ts:873, skipped under --session): `totem orient --json` on a gh-less machine still exits 1 with the three bare stderr lines and no JSON. Its wiki entry (docs/wiki/cli-reference.md:437) documents --json only as 'Output the OrientReport as structured JSON' and promises no failure document, so the fold's rationale does not equally indict it; `retrospect --out` (index.ts:809) is the next-nearest surface and writes a file, not stdout. Not a fold."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 582,
+      "claim": "On a missing gh binary the catch arm could map to exitCode 0 or undefined, voiding the probe.",
+      "counterexample": "none found: measured against the built core (packages/core/dist/sys/exec.js) with a verbatim replica of the catch arm — an absent binary returns {exitCode:1, rawStatus:1, code:'ENOENT'} on Windows (cross-spawn falls back to cmd.exe when resolveCommand fails, then verifyENOENTSync synthesizes ENOENT at status 1), and a signal-killed child returns {status:null, signal:'SIGTERM'} → `typeof null !== 'number'` → 1. The only exitCode-0 path would need status===0 with a throw, i.e. status 0 plus a non-null signal (exec.ts:72), which Node never produces. PATH shape: cross-spawn resolves via `which` with PATHEXT (.cmd/.exe shims) and, on Windows, cwd-first — the same set cmd.exe searched for the old execSync; live `gh` answered exit 0 through the replica."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.ts",
+      "line": 900,
+      "claim": "Some path reaches a gh call before the probe, or the probe's failure is misreported as the auth cure.",
+      "counterexample": "none found: `runner(` appears exactly three times (614 inside runJson, 900 the probe, 909 repo view); runJson is reachable only from readReviewThreads/completeThreadComments/readPrIssueComments/the mutation, all called at 924+. Everything before 900 is pure (PR parse, parseIdSelection, the @mmnto/totem import, defaultRunner construction). The gh-present-but-unauthenticated path is separately locked: resolve-threads.test.ts:1190-1213 asserts stderr contains 'gh auth status' and calls === [['--version'],['repo','view',…]]."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/resolve-threads.test.ts",
+      "line": 1353,
+      "claim": "The two MAX_PAGES tests pass without exercising the cap.",
+      "counterexample": "none found: the thread test asserts exactly 20 TotemResolveThreads calls and matches /more review threads than 20 pages/, whose text interpolates MAX_PAGES (resolve-threads.ts:709), so MAX_PAGES=21 fails both assertions and deleting the `page < MAX_PAGES` bound (line 661) hangs the test to timeout. The comment test drives commentsHasNext:true with cursor 'c1' then 'c-more', so the `endCursor === null` arm (line 730) is not taken — proven by the /more comments than 20 pages/ match — and the guard `if (page >= MAX_PAGES)` (line 724) fires only after 20 continuations, which is what the 20-call assertion pins. Query-name filters are disjoint. Both tests also assert exit 1, rows [], zero mutation calls. Suite: 54 passed (48 + 6 wiring)."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4"
+  ],
+  "verdict": "termination named for the review round: no BLOCKING defect; the one MATERIAL item is a regression-sensor gap at the action layer, folded as a structural test on the registration source; F2 (a probe-shaped mutant row), F3 (two prose imprecisions) and F4 (the probe's 60 s timeout disclosed) folded in round 2 as test and prose; F5 a fact for the disposition; F6, F7, F8 held under measurement"
+}
