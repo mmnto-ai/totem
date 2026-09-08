@@ -4220,6 +4220,12 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // Assert PRESENCE first: an absent needle indexes to -1, which is less than
     // everything, so the ordering assertion alone would pass vacuously if the
     // post step were ever removed or reworded.
+    //
+    // PRECISELY WHICH needle lacked that guard, since the fold commit
+    // (mmnto-ai/totem#2841 F9) over-stated it: only the `gh pr comment` one.
+    // The dry/apply pair was already pinned by the two `toContain` fences a few
+    // lines above, so that ordering assertion could not have gone vacuous — the
+    // guard below is belt-and-braces, not a repair.
     const postAt = section.indexOf('gh pr comment $ARGUMENTS --body-file -');
     const resolveAt = section.indexOf('totem resolve-threads');
     expect(postAt).toBeGreaterThanOrEqual(0);
