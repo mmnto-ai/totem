@@ -1,5 +1,9 @@
 # @mmnto/pack-agent-security
 
+## 2.4.0
+
+_Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
+
 ## 2.3.0
 
 _Cohort-link bump (no direct package changes). See `.changeset/config.json` for the fixed-cohort definition._
