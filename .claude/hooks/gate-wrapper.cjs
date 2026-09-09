@@ -317,8 +317,12 @@ function blankHeredocBodies(command, powershell) {
       boundary = false;
       continue;
     }
-    // `<<` opens a heredoc; `<<<` is a here-string and is left alone.
-    if (ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+    // `<<` opens a heredoc; `<<<` is a here-string and is left alone — at
+    // BOTH of its first two characters (the preceding-character guard core's
+    // scanner carries; without it the second `<` of `<<<` opened a heredoc
+    // whose body swallowed every later line, a fail-open path — CodeRabbit on
+    // mmnto-ai/totem#2855).
+    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
       let j = i + 2;
       let head = '<<';
       let dash = false;

@@ -1225,6 +1225,22 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 21 });
     });
 
+    it('a here-string is not a heredoc: a merge on the line after `<<<` still fires (CodeRabbit on mmnto-ai/totem#2855)', () => {
+      // `<<<` was excluded only at its FIRST `<`; the scanner then re-entered
+      // at the second, read `bar` as a heredoc delimiter and blanked every
+      // line after it — the merge below went unjudged, a fail-OPEN path. Core's
+      // scanner (transport-shield.ts) carries the preceding-character guard the
+      // template lacked; this row holds the two scanners equal on that shape.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('grep x <<< bar\ngh pr merge 5'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
+      // The complement: a here-string as the merge's OWN operand still fires.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 6 <<< notes'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 6 });
+    });
+
     it('an unexpanded shell variable rides as unresolvedTarget, not as a branch (fold F13)', () => {
       // `gh pr merge $PR` names a target the hook cannot know — the shell
       // expands it after the gate has already decided. Reading "$PR" as a

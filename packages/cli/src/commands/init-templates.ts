@@ -1706,8 +1706,12 @@ function blankHeredocBodies(command, powershell) {
       boundary = false;
       continue;
     }
-    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone.
-    if (ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone — at
+    // BOTH of its first two characters (the preceding-character guard core's
+    // scanner carries; without it the second \`<\` of \`<<<\` opened a heredoc
+    // whose body swallowed every later line, a fail-open path — CodeRabbit on
+    // mmnto-ai/totem#2855).
+    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
       let j = i + 2;
       let head = '<<';
       let dash = false;
@@ -2860,7 +2864,7 @@ totem resolve-threads $ARGUMENTS --apply
 
 The verb never posts a comment, a reply or a review — the only mutation it can issue is \`resolveReviewThread\`, which is what the merge-ready gate's unresolved-bot-threads predicate reads. Exit \`2\` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence); exit \`1\` means the read did not complete and NOTHING was resolved. Report what it printed, verbatim.
 
-A clean \`--apply\` run over every evidenced thread clears that one predicate (a run narrowed with \`--ids\` clears only the rows it named) and is NOT an allow verdict. The gate re-reads the PR when \`gh pr merge\` runs, and a bot HIGH inline whose commit cannot be read makes the evaluation UNEVALUABLE once every earlier predicate passes — a deny the resolve run does not predict (under the pilot tier it warns; strict denies). After the apply, read the floor itself — \`totem gate check --event merge-ready --payload '{"repo":"<owner/repo>","pr":$ARGUMENTS}'\`, with \`--tier pilot\` where the installed gate is the pilot — and report that verdict beside the resolve rows, before the merge word is asked for.
+A clean \`--apply\` run is NOT an allow verdict, and it clears the unresolved-bot-threads predicate only when no unresolved, non-outdated thread rooted by a known review bot remains: a \`skip:no-evidence\` row stays unresolved, a run narrowed with \`--ids\` leaves its unnamed rows as \`skip:not-selected\`, and both exit 0. The gate re-reads the PR when \`gh pr merge\` runs, and a bot HIGH inline whose commit cannot be read makes the evaluation UNEVALUABLE once every earlier predicate passes — a deny the resolve run does not predict (under the pilot tier it warns; strict denies). After the apply, read the floor itself — \`totem gate check --event merge-ready --payload '{"repo":"<owner/repo>","pr":$ARGUMENTS}'\`, with \`--tier pilot\` where the installed gate is the pilot — and report that verdict beside the resolve rows, before the merge word is asked for.
 
 ${SKILL_MARKER_END}
 `;
