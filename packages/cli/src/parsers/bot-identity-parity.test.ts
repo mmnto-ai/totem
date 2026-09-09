@@ -2,15 +2,17 @@
  * Parity sensor for the ONE bot-reviewer identity definition
  * (mmnto-ai/totem#2800): `@mmnto/totem`'s `bot-identity.ts`.
  *
- * This test FAILS if either consumer grows a list of its own —
- * `packages/cli/src/parsers/bot-review-parser.ts` (triage's loose recognition)
- * or `packages/core/src/capability/review-catch.ts` (the Layer-B actor-id map).
- * A second copy is exactly the failure the module removes: the two lists drift,
- * the stale one reads a real bot as "not a bot", and a finding disappears
- * silently.
+ * This test FAILS if any consumer grows a list of its own —
+ * `packages/cli/src/parsers/bot-review-parser.ts` (triage's loose recognition),
+ * `packages/core/src/capability/review-catch.ts` (the Layer-B actor-id map) or
+ * `packages/cli/src/commands/resolve-threads.ts` (the human-reply test; the
+ * third consumer since mmnto-ai/totem#2841, whose App-suffix rule moved into
+ * the identity module so this scan could take it). A second copy is exactly the
+ * failure the module removes: the lists drift, the stale one reads a real bot
+ * as "not a bot", and a finding disappears silently.
  *
- * It lives in the CLI package because that is the layer that can read BOTH
- * sources (cli depends on core, never the reverse).
+ * It lives in the CLI package because that is the layer that can read every
+ * source (cli depends on core, never the reverse).
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -25,6 +27,7 @@ import { detectBot, isBotComment } from './bot-review-parser.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PARSER_SRC = path.join(HERE, 'bot-review-parser.ts');
 const REVIEW_CATCH_SRC = path.resolve(HERE, '../../../core/src/capability/review-catch.ts');
+const RESOLVE_THREADS_SRC = path.resolve(HERE, '../commands/resolve-threads.ts');
 const IDENTITY_SRC = path.resolve(HERE, '../../../core/src/bot-identity.ts');
 
 /**
@@ -81,6 +84,7 @@ describe('bot identity — exactly one definition', () => {
   for (const [label, file] of [
     ['bot-review-parser.ts', PARSER_SRC],
     ['review-catch.ts', REVIEW_CATCH_SRC],
+    ['resolve-threads.ts', RESOLVE_THREADS_SRC],
   ] as Array<[string, string]>) {
     it(`${label} declares NO bot-login list of its own`, () => {
       const code = codeOnly(fs.readFileSync(file, 'utf-8'));
@@ -125,7 +129,7 @@ describe('bot identity — exactly one definition', () => {
     }
   });
 
-  it('both consumers import the identity module', () => {
+  it('every consumer imports the identity module', () => {
     const parser = fs.readFileSync(PARSER_SRC, 'utf-8');
     expect(parser).toMatch(/import\s*{[^}]*detectBotReviewer[^}]*}\s*from\s*'@mmnto\/totem'/s);
     expect(parser).toMatch(/isBotReviewerLogin/);
@@ -133,6 +137,15 @@ describe('bot identity — exactly one definition', () => {
     const reviewCatch = fs.readFileSync(REVIEW_CATCH_SRC, 'utf-8');
     expect(reviewCatch).toMatch(/from '\.\.\/bot-identity\.js'/);
     expect(reviewCatch).toMatch(/botReviewerActorIds\(\)/);
+
+    // The third consumer loads the barrel lazily inside the command
+    // (mmnto-ai/totem#2339) and injects all three predicates — the exact list,
+    // the loose pattern and the App suffix — into its pure selector.
+    const resolveThreads = fs.readFileSync(RESOLVE_THREADS_SRC, 'utf-8');
+    expect(resolveThreads).toMatch(
+      /const\s*{[^}]*hasBotAppLoginSuffix[^}]*isBotReviewerLoginExact[^}]*}\s*=\s*await import\('@mmnto\/totem'\)/s,
+    );
+    expect(resolveThreads).toMatch(/hasAppSuffix:\s*hasBotAppLoginSuffix/);
   });
 
   it('the greptile login is recorded WITH its observation, not guessed', () => {

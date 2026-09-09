@@ -98,13 +98,15 @@ export type {
   GateVerdict,
   GhRunner,
 } from './gate-types.js';
-// The ONE review-bot identity definition (mmnto-ai/totem#2800) — both consumers
-// import it and neither declares a list of its own.
+// The ONE review-bot identity definition (mmnto-ai/totem#2800) — every consumer
+// imports it (triage's parser, review-catch, resolve-threads) and none declares a
+// list, a pattern or the App suffix of its own.
 export type { BotReviewerIdentity, BotReviewerTool } from './bot-identity.js';
 export {
   BOT_REVIEWER_IDENTITIES,
   botReviewerActorIds,
   detectBotReviewer,
+  hasBotAppLoginSuffix,
   isBotReviewerLogin,
   isBotReviewerLoginExact,
 } from './bot-identity.js';

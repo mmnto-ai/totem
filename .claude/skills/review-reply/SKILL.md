@@ -90,4 +90,6 @@ totem resolve-threads $ARGUMENTS --apply
 
 The verb never posts a comment, a reply or a review — the only mutation it can issue is `resolveReviewThread`, which is what the merge-ready gate's unresolved-bot-threads predicate reads. Exit `2` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence); exit `1` means the read did not complete and NOTHING was resolved. Report what it printed, verbatim.
 
+A clean `--apply` run clears that one predicate and is NOT an allow verdict. The gate re-reads the PR when `gh pr merge` runs, and a bot HIGH inline whose commit cannot be read makes the evaluation UNEVALUABLE once every earlier predicate passes — a deny the resolve run does not predict (under the pilot tier it warns; strict denies). After the apply, read the floor itself — `totem gate check --event merge-ready --payload '{"repo":"<owner/repo>","pr":$ARGUMENTS}'`, with `--tier pilot` where the installed gate is the pilot — and report that verdict beside the resolve rows, before the merge word is asked for.
+
 <!-- totem:skill-end -->

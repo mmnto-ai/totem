@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BOT_REVIEWER_IDENTITIES,
   type GhRunner,
+  hasBotAppLoginSuffix,
   isBotReviewerLogin,
   isBotReviewerLoginExact,
 } from '@mmnto/totem';
@@ -26,10 +27,12 @@ import {
 } from './resolve-threads.js';
 
 // The SHIPPED identity definition (mmnto-ai/totem#2800), not a copy: the exact
-// closed-list test on the GraphQL surface, the loose pattern on REST.
+// closed-list test on the GraphQL surface, the loose pattern on REST, and the
+// App suffix on either (moved into the module by the mmnto-ai/totem#2841 fold).
 const identity: BotIdentityPredicates = {
   isBotLoginExact: isBotReviewerLoginExact,
   isBotLoginLoose: isBotReviewerLogin,
+  hasAppSuffix: hasBotAppLoginSuffix,
 };
 
 // ─── Fixture builders ────────────────────────────────────────────────────────

@@ -6,9 +6,11 @@
  * substring/shape match in `packages/cli/src/parsers/bot-review-parser.ts` and
  * an exact-login actor map in `packages/core/src/capability/review-catch.ts` —
  * so a login that drifted (or a fourth bot) had to be found in two places and
- * a stale copy read as "no bot here", the silent direction. Both consumers now
- * import this array; `bot-identity-parity.test.ts` fails if either declares a
- * list of its own.
+ * a stale copy read as "no bot here", the silent direction. Every consumer now
+ * imports this module — those two and, since mmnto-ai/totem#2841,
+ * `packages/cli/src/commands/resolve-threads.ts` (the App-suffix test below) —
+ * and `bot-identity-parity.test.ts` fails if any of the three declares a list,
+ * a pattern or a suffix of its own.
  *
  * TWO SURFACES, TWO PATTERNS — the trap this module exists to hold:
  * GitHub's REST author is `gemini-code-assist[bot]`, its GraphQL
@@ -135,6 +137,22 @@ export function isBotReviewerLoginExact(author: string): boolean {
   const trimmed = author.trim().toLowerCase();
   if (trimmed.length === 0) return false;
   return BOT_REVIEWER_IDENTITIES.some((id) => id.exactLogins.includes(trimmed));
+}
+
+/**
+ * The GitHub App login suffix, `name[bot]` — how REST spells every App's login
+ * (and how a GraphQL `author.login` never does; see the header). It is a third
+ * bot test beside the two list tests above: `resolve-threads` needs it so a
+ * `github-actions[bot]` or Copilot reply is never read as the human answer that
+ * resolves a thread, and that consumer may not spell `[bot]` in code of its own
+ * (the parity sensor scans it), so the rule lives HERE (mmnto-ai/totem#2841,
+ * the deferred fold).
+ */
+const BOT_APP_LOGIN_SUFFIX = /\[bot\]$/i;
+
+/** Does this login carry the GitHub App suffix (`name[bot]`), on whichever surface spelled it? */
+export function hasBotAppLoginSuffix(login: string): boolean {
+  return BOT_APP_LOGIN_SUFFIX.test(login);
 }
 
 /**
