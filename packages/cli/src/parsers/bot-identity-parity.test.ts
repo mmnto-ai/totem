@@ -178,7 +178,9 @@ describe('bot identity — exactly one definition', () => {
 
     // The gate reads the exact list straight from the module.
     const mergeReady = fs.readFileSync(MERGE_READY_SRC, 'utf-8');
-    expect(mergeReady).toMatch(/import\s*{[^}]*isBotReviewerLoginExact[^}]*}\s*from\s*'\.\/bot-identity\.js'/s);
+    expect(mergeReady).toMatch(
+      /import\s*{[^}]*isBotReviewerLoginExact[^}]*}\s*from\s*'\.\/bot-identity\.js'/s,
+    );
 
     // The fourth consumer loads the barrel lazily inside the command
     // (mmnto-ai/totem#2339) and injects all three predicates — the exact list,

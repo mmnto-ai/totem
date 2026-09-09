@@ -25,7 +25,7 @@ describe('hasBotAppLoginSuffix — the GitHub App login suffix', () => {
     expect(hasBotAppLoginSuffix('GREPTILE-APPS[BOT]')).toBe(true);
   });
 
-  it('never reads the GraphQL spelling (no suffix) as an App — that is the exact list\'s job', () => {
+  it("never reads the GraphQL spelling (no suffix) as an App — that is the exact list's job", () => {
     expect(hasBotAppLoginSuffix('greptile-apps')).toBe(false);
     expect(hasBotAppLoginSuffix('gemini-code-assist')).toBe(false);
     expect(hasBotAppLoginSuffix('')).toBe(false);
