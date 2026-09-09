@@ -7,10 +7,11 @@
  * an exact-login actor map in `packages/core/src/capability/review-catch.ts` —
  * so a login that drifted (or a fourth bot) had to be found in two places and
  * a stale copy read as "no bot here", the silent direction. Every consumer now
- * imports this module — those two and, since mmnto-ai/totem#2841,
- * `packages/cli/src/commands/resolve-threads.ts` (the App-suffix test below) —
- * and `bot-identity-parity.test.ts` fails if any of the three declares a list,
- * a pattern or a suffix of its own.
+ * imports this module — those two, `packages/core/src/merge-ready.ts` (the
+ * gate's predicate reads) and `packages/cli/src/commands/resolve-threads.ts`
+ * (the human-reply test, which takes the App-suffix rule below) — and
+ * `bot-identity-parity.test.ts` scans all four: a list, a pattern or an
+ * escaped `\[bot\]` suffix declared in any of them fails the build.
  *
  * TWO SURFACES, TWO PATTERNS — the trap this module exists to hold:
  * GitHub's REST author is `gemini-code-assist[bot]`, its GraphQL
@@ -144,9 +145,11 @@ export function isBotReviewerLoginExact(author: string): boolean {
  * (and how a GraphQL `author.login` never does; see the header). It is a third
  * bot test beside the two list tests above: `resolve-threads` needs it so a
  * `github-actions[bot]` or Copilot reply is never read as the human answer that
- * resolves a thread, and that consumer may not spell `[bot]` in code of its own
- * (the parity sensor scans it), so the rule lives HERE (mmnto-ai/totem#2841,
- * the deferred fold).
+ * resolves a thread. It lives HERE so the suffix has one home the parity
+ * sensor can hold every consumer to — that sensor's literal scan never saw the
+ * escaped spelling a regex source carries (`\[bot\]`), which is how the verb's
+ * own copy lived unscanned; the fold that moved it also gave the sensor that
+ * arm (mmnto-ai/totem#2841, the deferred fold; the pilot-install leg's F1).
  */
 const BOT_APP_LOGIN_SUFFIX = /\[bot\]$/i;
 
