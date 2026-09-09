@@ -1084,6 +1084,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         // widening the token is mmnto-ai/totem#2856, the strict tier's precondition.
         'gh.exe pr merge 5',
         './gh pr merge 5',
+        // The same round's legs (mmnto-ai/totem#2857): two divergences from
+        // core's scanner that open a heredoc core does not, so the merge on a
+        // later line is blanked — a comment after `(` or an operator `)` (the
+        // template has no paren-boundary arms), and a bare delimiter carrying a
+        // character outside the template's word class (`<<E:F`) parsed as a
+        // prefix so the real terminator never matches. Locked as misses here;
+        // a fix flips these rows to spawnedPayload() rows.
+        '(true)#<<note\ngh pr merge 5',
+        'cat <<E:F\nbody\nE:F\ngh pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },

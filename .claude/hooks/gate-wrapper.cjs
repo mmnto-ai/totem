@@ -153,6 +153,13 @@ for (let i = 0; i < argv.length; i++) {
 //     `./gh pr merge 5`): the anchor reads the bare token `gh` only (greptile
 //     on mmnto-ai/totem#2855; widening it is mmnto-ai/totem#2856, the strict
 //     tier's precondition);
+//   - two places this blanker still diverges from core's scanner, each opening
+//     a heredoc core does not so that a merge on a later line is blanked: a
+//     `#` right after `(` or after an operator `)` (no paren-boundary arms
+//     here — `(true)#<<note` then a merge line), and a bare delimiter carrying
+//     a character outside `[A-Za-z0-9_.-/]` (`<<E:F`, read as the prefix `E`
+//     so the real terminator never matches). Both found by the pilot-install
+//     legs; the cure is one shared scanner, mmnto-ai/totem#2857;
 //   - a skipped word carrying a FLAG (`command -p gh pr merge 5`,
 //     `exec -a x gh pr merge 5`, and the reserved word's own `time -p` /
 //     `time --`): the flag is a token before `gh`, and bash runs the merge
