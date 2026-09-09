@@ -1538,6 +1538,17 @@ for (let i = 0; i < argv.length; i++) {
 //     position anchor does not see \`gh\` (the shell's reserved words and the
 //     \`exec\`/\`command\`/\`eval\` builtins are skipped; an arbitrary program is
 //     not, since the walk cannot know which of its operands is the command);
+//   - the executable spelled with an extension or a path (\`gh.exe pr merge 5\`,
+//     \`./gh pr merge 5\`): the anchor reads the bare token \`gh\` only (greptile
+//     on mmnto-ai/totem#2855; widening it is mmnto-ai/totem#2856, the strict
+//     tier's precondition);
+//   - two places this blanker still diverges from core's scanner, each opening
+//     a heredoc core does not so that a merge on a later line is blanked: a
+//     \`#\` right after \`(\` or after an operator \`)\` (no paren-boundary arms
+//     here — \`(true)#<<note\` then a merge line), and a bare delimiter carrying
+//     a character outside \`[A-Za-z0-9_.-/]\` (\`<<E:F\`, read as the prefix \`E\`
+//     so the real terminator never matches). Both found by the pilot-install
+//     legs; the cure is one shared scanner, mmnto-ai/totem#2857;
 //   - a skipped word carrying a FLAG (\`command -p gh pr merge 5\`,
 //     \`exec -a x gh pr merge 5\`, and the reserved word's own \`time -p\` /
 //     \`time --\`): the flag is a token before \`gh\`, and bash runs the merge
@@ -1699,6 +1710,17 @@ function blankHeredocBodies(command, powershell) {
       boundary = false;
       continue;
     }
+    // A command or process substitution opens a word: a \`#\` glued to \`$(\` is
+    // a comment, as core's scanner reads it. Without this arm the boundary
+    // stayed false, the \`#\` was text, and a \`<<word\` inside it opened a
+    // heredoc whose body swallowed every later line — the same fail-open class
+    // as the here-string (the pilot-install re-arm, R2, mmnto-ai/totem#2855).
+    if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
+      out += ch + '(';
+      i += 2;
+      boundary = true;
+      continue;
+    }
     if (ch === '(' && command[i + 1] === '(' && boundary) {
       const end = skipArithmetic(command, i + 2);
       out += command.slice(i, end);
@@ -1706,8 +1728,12 @@ function blankHeredocBodies(command, powershell) {
       boundary = false;
       continue;
     }
-    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone.
-    if (ch === '<' && command[i + 1] === '<' && command[i + 2] !== '<') {
+    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone — at
+    // BOTH of its first two characters (the preceding-character guard core's
+    // scanner carries; without it the second \`<\` of \`<<<\` opened a heredoc
+    // whose body swallowed every later line, a fail-open path — CodeRabbit on
+    // mmnto-ai/totem#2855).
+    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
       let j = i + 2;
       let head = '<<';
       let dash = false;
@@ -2859,6 +2885,8 @@ totem resolve-threads $ARGUMENTS --apply
 \`\`\`
 
 The verb never posts a comment, a reply or a review — the only mutation it can issue is \`resolveReviewThread\`, which is what the merge-ready gate's unresolved-bot-threads predicate reads. Exit \`2\` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence); exit \`1\` means the read did not complete and NOTHING was resolved. Report what it printed, verbatim.
+
+A clean \`--apply\` run is NOT an allow verdict, and it clears the unresolved-bot-threads predicate only when no unresolved, non-outdated thread rooted by a known review bot remains: a \`skip:no-evidence\` row stays unresolved and, under \`--apply\`, makes the run exit 2; a run narrowed with \`--ids\` leaves its unnamed rows as \`skip:not-selected\` and exits 0. The gate re-reads the PR when \`gh pr merge\` runs, and a bot HIGH inline whose commit cannot be read makes the evaluation UNEVALUABLE once every earlier predicate passes — a deny the resolve run does not predict (under the pilot tier it warns; strict denies). After the apply, read the floor itself — \`totem gate check --event merge-ready --payload '{"repo":"<owner/repo>","pr":$ARGUMENTS}'\`, with \`--tier pilot\` where the installed gate is the pilot — and report that verdict beside the resolve rows, before the merge word is asked for.
 
 ${SKILL_MARKER_END}
 `;

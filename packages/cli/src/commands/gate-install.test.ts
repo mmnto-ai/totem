@@ -1078,6 +1078,21 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'time -- gh pr merge 5',
         'echo `gh pr merge 5`',
         '> out.txt gh pr merge 5',
+        // The pilot-install round (greptile P1 on mmnto-ai/totem#2855): the
+        // executable spelled with an extension or a path is not the bare token
+        // the anchor reads — disclosed here and in the template's comment;
+        // widening the token is mmnto-ai/totem#2856, the strict tier's precondition.
+        'gh.exe pr merge 5',
+        './gh pr merge 5',
+        // The same round's legs (mmnto-ai/totem#2857): two divergences from
+        // core's scanner that open a heredoc core does not, so the merge on a
+        // later line is blanked — a comment after `(` or an operator `)` (the
+        // template has no paren-boundary arms), and a bare delimiter carrying a
+        // character outside the template's word class (`<<E:F`) parsed as a
+        // prefix so the real terminator never matches. Locked as misses here;
+        // a fix flips these rows to spawnedPayload() rows.
+        '(true)#<<note\ngh pr merge 5',
+        'cat <<E:F\nbody\nE:F\ngh pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
@@ -1223,6 +1238,43 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'merge-ready',
       );
       expect(spawnedPayload()).toMatchObject({ pr: 21 });
+    });
+
+    it('a here-string is not a heredoc: a merge on the line after `<<<` still fires (CodeRabbit on mmnto-ai/totem#2855)', () => {
+      // `<<<` was excluded only at its FIRST `<`; the scanner then re-entered
+      // at the second, read `bar` as a heredoc delimiter and blanked every
+      // line after it — the merge below went unjudged, a fail-OPEN path. Core's
+      // scanner (transport-shield.ts) carries the preceding-character guard the
+      // template lacked; this row holds the two scanners equal on that shape.
+      initGitRepo();
+      // Three spellings, every one fail-open before the guard (the re-arm's R6):
+      // spaced, glued, and a here-string that opens the command.
+      for (const command of [
+        'grep x <<< bar\ngh pr merge 5',
+        'grep x <<<bar\ngh pr merge 5',
+        '<<<bar\ngh pr merge 5',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+      // The complement (a non-regression row, not a falsifier): a here-string as
+      // the merge's OWN operand still fires.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge 6 <<< notes'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 6 });
+    });
+
+    it('a # glued to $( is a comment, as in core: a <<word inside it never opens a heredoc (the pilot-install re-arm, R2)', () => {
+      // Core's scanner sets the word boundary after a command substitution
+      // opens, so `$(# …` reads the `#` as a comment. The template had no
+      // substitution arm: the boundary stayed false, the `#` was text, and a
+      // `<<note` inside it opened a heredoc whose unterminated body blanked the
+      // merge on the next line — the same fail-open class as the here-string.
+      initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('echo $(# <<note\ngh pr merge 5\n)'), [], 'merge-ready');
+      expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
     it('an unexpanded shell variable rides as unresolvedTarget, not as a branch (fold F13)', () => {

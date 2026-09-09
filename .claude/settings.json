@@ -18,6 +18,15 @@
             "command": "node .claude/hooks/gate-wrapper.cjs --event transport-shield --strict"
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/gate-wrapper.cjs --event merge-ready --pilot"
+          }
+        ]
       }
     ],
     "SessionStart": [

@@ -294,10 +294,12 @@ export interface ResolveThreadsRow {
 }
 
 /**
- * The two identity predicates, injected so the pure selector stays free of the
- * heavy core barrel (mmnto-ai/totem#2339) and the tests exercise the SHIPPED
- * classification rather than a copy. Both come from
- * `packages/core/src/bot-identity.ts` (mmnto-ai/totem#2800), the one definition.
+ * The three identity predicates, injected so the pure selector stays free of
+ * the heavy core barrel (mmnto-ai/totem#2339) and the tests exercise the
+ * SHIPPED classification rather than a copy. All three come from
+ * `packages/core/src/bot-identity.ts` (mmnto-ai/totem#2800), the one
+ * definition; this file spells no bot name, pattern or suffix of its own, and
+ * `bot-identity-parity.test.ts` scans it to keep it that way.
  */
 export interface BotIdentityPredicates {
   /**
@@ -308,6 +310,8 @@ export interface BotIdentityPredicates {
   isBotLoginExact: (login: string) => boolean;
   /** The REST surface: `isBotReviewerLogin` — the loose pattern over a `name[bot]` login. */
   isBotLoginLoose: (login: string) => boolean;
+  /** Any surface: `hasBotAppLoginSuffix` — the GitHub App suffix (`name[bot]`) on a login. */
+  hasAppSuffix: (login: string) => boolean;
 }
 
 /** Options for {@link resolveThreadsCommand}. */
@@ -336,9 +340,6 @@ export interface ResolveThreadsResult {
 
 // ─── Pure mapping + selection ────────────────────────────────────────────────
 
-/** A login spelled the REST way (`name[bot]`) — the App suffix, on any surface. */
-const BOT_LOGIN_SUFFIX = /\[bot\]$/i;
-
 /**
  * Is this GraphQL comment written by a bot? THREE arms, because core's
  * review-bot list is a closed list of four and any GitHub App can reply in a
@@ -358,7 +359,7 @@ function isBotComment(comment: ReviewCommentNode, identity: BotIdentityPredicate
   const author = comment.author;
   if (author === null) return false;
   if (author.__typename === 'Bot') return true;
-  if (BOT_LOGIN_SUFFIX.test(author.login)) return true;
+  if (identity.hasAppSuffix(author.login)) return true;
   return identity.isBotLoginExact(author.login);
 }
 
@@ -420,7 +421,7 @@ export function toPrCommentRecords(
     const login = c.user?.login ?? '';
     const isBot =
       c.user !== null &&
-      (c.user.type === 'Bot' || BOT_LOGIN_SUFFIX.test(login) || identity.isBotLoginLoose(login));
+      (c.user.type === 'Bot' || identity.hasAppSuffix(login) || identity.isBotLoginLoose(login));
     return { author: login, isBot, createdAt: c.created_at ?? null };
   });
 }
@@ -885,10 +886,12 @@ export async function resolveThreadsCommand(
   }
 
   // The core barrel is loaded HERE, inside the command (mmnto-ai/totem#2339).
-  const { isBotReviewerLogin, isBotReviewerLoginExact } = await import('@mmnto/totem');
+  const { hasBotAppLoginSuffix, isBotReviewerLogin, isBotReviewerLoginExact } =
+    await import('@mmnto/totem');
   const identity: BotIdentityPredicates = {
     isBotLoginExact: isBotReviewerLoginExact,
     isBotLoginLoose: isBotReviewerLogin,
+    hasAppSuffix: hasBotAppLoginSuffix,
   };
   const runner = opts.runner ?? (await defaultRunner(opts.cwd ?? process.cwd()));
 

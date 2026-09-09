@@ -2,15 +2,20 @@
  * Parity sensor for the ONE bot-reviewer identity definition
  * (mmnto-ai/totem#2800): `@mmnto/totem`'s `bot-identity.ts`.
  *
- * This test FAILS if either consumer grows a list of its own —
- * `packages/cli/src/parsers/bot-review-parser.ts` (triage's loose recognition)
- * or `packages/core/src/capability/review-catch.ts` (the Layer-B actor-id map).
- * A second copy is exactly the failure the module removes: the two lists drift,
- * the stale one reads a real bot as "not a bot", and a finding disappears
- * silently.
+ * This test FAILS if any consumer grows a list of its own —
+ * `packages/cli/src/parsers/bot-review-parser.ts` (triage's loose recognition),
+ * `packages/core/src/capability/review-catch.ts` (the Layer-B actor-id map),
+ * `packages/core/src/merge-ready.ts` (the gate's predicate reads) or
+ * `packages/cli/src/commands/resolve-threads.ts` (the human-reply test) — four
+ * consumers; the last two joined the scan with the mmnto-ai/totem#2841 fold,
+ * which also moved the App-suffix rule into the identity module and gave this
+ * sensor the arm that reads an ESCAPED suffix (`\[bot\]` in a regex or string
+ * source — the spelling the literal scan never saw). A second copy is exactly
+ * the failure the module removes: the lists drift, the stale one reads a real
+ * bot as "not a bot", and a finding disappears silently.
  *
- * It lives in the CLI package because that is the layer that can read BOTH
- * sources (cli depends on core, never the reverse).
+ * It lives in the CLI package because that is the layer that can read every
+ * source (cli depends on core, never the reverse).
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -25,6 +30,8 @@ import { detectBot, isBotComment } from './bot-review-parser.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PARSER_SRC = path.join(HERE, 'bot-review-parser.ts');
 const REVIEW_CATCH_SRC = path.resolve(HERE, '../../../core/src/capability/review-catch.ts');
+const RESOLVE_THREADS_SRC = path.resolve(HERE, '../commands/resolve-threads.ts');
+const MERGE_READY_SRC = path.resolve(HERE, '../../../core/src/merge-ready.ts');
 const IDENTITY_SRC = path.resolve(HERE, '../../../core/src/bot-identity.ts');
 
 /**
@@ -68,6 +75,17 @@ const LOCAL_BOT_SUBSTRING =
 const LOCAL_BOT_CONCAT =
   /['"`](?:coderabbit|greptile|gemini|github-code-quality)[^'"`\n]*['"`]\s*\+/i;
 
+/**
+ * The App suffix spelled ESCAPED — `\[bot\]` inside a regex literal or a
+ * RegExp source string — the fourth shape, and the one the arms above never
+ * caught: the literal scan looks for `[bot]`, while a regex source spells the
+ * brackets escaped, so `const BOT_LOGIN_SUFFIX = /\[bot\]$/i;` passed this
+ * sensor for as long as resolve-threads carried it (the pilot-install leg's
+ * F1 on the mmnto-ai/totem#2841 fold). The suffix rule has one home,
+ * `hasBotAppLoginSuffix` in bot-identity.ts.
+ */
+const LOCAL_BOT_SUFFIX = /\\+\[bot\\+\]/i; // one backslash in a regex literal, two in a RegExp source string
+
 describe('bot identity — exactly one definition', () => {
   it('the single source declares the three review bots the charter names', () => {
     const tools = BOT_REVIEWER_IDENTITIES.map((i) => i.tool);
@@ -81,6 +99,8 @@ describe('bot identity — exactly one definition', () => {
   for (const [label, file] of [
     ['bot-review-parser.ts', PARSER_SRC],
     ['review-catch.ts', REVIEW_CATCH_SRC],
+    ['merge-ready.ts', MERGE_READY_SRC],
+    ['resolve-threads.ts', RESOLVE_THREADS_SRC],
   ] as Array<[string, string]>) {
     it(`${label} declares NO bot-login list of its own`, () => {
       const code = codeOnly(fs.readFileSync(file, 'utf-8'));
@@ -91,10 +111,12 @@ describe('bot identity — exactly one definition', () => {
         ).toBe(false);
       }
       // No local regex over a bot name, no local substring test in ANY of the
-      // methods that spell one, and no name assembled by concatenation.
+      // methods that spell one, no name assembled by concatenation, and no
+      // escaped App suffix of its own.
       expect(code).not.toMatch(LOCAL_BOT_REGEX);
       expect(code).not.toMatch(LOCAL_BOT_SUBSTRING);
       expect(code).not.toMatch(LOCAL_BOT_CONCAT);
+      expect(code).not.toMatch(LOCAL_BOT_SUFFIX);
     });
   }
 
@@ -113,6 +135,11 @@ describe('bot identity — exactly one definition', () => {
       // spelling alone and the row proved nothing (round 3, F3). Every letter a
       // consumer could case differently is cased here.
       ['a display-cased Set', "const BOTS = new Set(['CodeRabbitAI[Bot]', 'GREPTILE-APPS[BOT]']);"],
+      // The escaped-suffix spellings — a regex literal and a RegExp source
+      // string. The verbatim line resolve-threads carried until the
+      // mmnto-ai/totem#2841 fold; the pre-fold sensor passed it.
+      ['an escaped-suffix regex', 'const BOT_LOGIN_SUFFIX = /\\[bot\\]$/i;'],
+      ['an escaped-suffix RegExp string', "const SUFFIX = new RegExp('\\\\[bot\\\\]$', 'i');"],
     ];
     for (const [label, mutant] of mutants) {
       const scanned = codeOnly(mutant);
@@ -120,12 +147,27 @@ describe('bot identity — exactly one definition', () => {
         LOCAL_BOT_REGEX.test(scanned) ||
         LOCAL_BOT_SUBSTRING.test(scanned) ||
         LOCAL_BOT_CONCAT.test(scanned) ||
+        LOCAL_BOT_SUFFIX.test(scanned) ||
         LOGIN_SPELLINGS.some((s) => scanned.includes(s));
       expect(caught, `the parity sensor missed the ${label} re-declaration`).toBe(true);
     }
   });
 
-  it('both consumers import the identity module', () => {
+  it('the escaped-suffix arm is what catches the escaped spellings (the literal scan alone does not)', () => {
+    // Pins the arm's reason to exist: without it, the two escaped mutants pass
+    // every other arm — which is how the removed declaration lived unscanned.
+    for (const mutant of [
+      'const BOT_LOGIN_SUFFIX = /\\[bot\\]$/i;',
+      "const SUFFIX = new RegExp('\\\\[bot\\\\]$', 'i');",
+    ]) {
+      const scanned = codeOnly(mutant);
+      expect(LOGIN_SPELLINGS.some((s) => scanned.includes(s))).toBe(false);
+      expect(scanned).not.toMatch(LOCAL_BOT_REGEX);
+      expect(scanned).toMatch(LOCAL_BOT_SUFFIX);
+    }
+  });
+
+  it('every consumer imports the identity module', () => {
     const parser = fs.readFileSync(PARSER_SRC, 'utf-8');
     expect(parser).toMatch(/import\s*{[^}]*detectBotReviewer[^}]*}\s*from\s*'@mmnto\/totem'/s);
     expect(parser).toMatch(/isBotReviewerLogin/);
@@ -133,6 +175,30 @@ describe('bot identity — exactly one definition', () => {
     const reviewCatch = fs.readFileSync(REVIEW_CATCH_SRC, 'utf-8');
     expect(reviewCatch).toMatch(/from '\.\.\/bot-identity\.js'/);
     expect(reviewCatch).toMatch(/botReviewerActorIds\(\)/);
+
+    // The gate reads the exact list straight from the module.
+    const mergeReady = fs.readFileSync(MERGE_READY_SRC, 'utf-8');
+    expect(mergeReady).toMatch(
+      /import\s*{[^}]*isBotReviewerLoginExact[^}]*}\s*from\s*'\.\/bot-identity\.js'/s,
+    );
+
+    // The fourth consumer loads the barrel lazily inside the command
+    // (mmnto-ai/totem#2339) and injects all three predicates — the exact list,
+    // the loose pattern and the App suffix — into its pure selector. Each
+    // symbol is asserted on its own, so the destructure's order is free.
+    const resolveThreads = fs.readFileSync(RESOLVE_THREADS_SRC, 'utf-8');
+    // The file lazy-loads the barrel more than once (safeExec rides its own
+    // import); the identity import is the one that carries all three symbols.
+    const lazyImports = Array.from(
+      resolveThreads.matchAll(/const\s*{([^}]*)}\s*=\s*await import\('@mmnto\/totem'\)/gs),
+      (m) => m[1]!,
+    );
+    const symbols = ['hasBotAppLoginSuffix', 'isBotReviewerLogin', 'isBotReviewerLoginExact'];
+    expect(
+      lazyImports.some((names) => symbols.every((s) => names.includes(s))),
+      `one lazy import of @mmnto/totem carries ${symbols.join(', ')}; saw ${JSON.stringify(lazyImports)}`,
+    ).toBe(true);
+    expect(resolveThreads).toMatch(/hasAppSuffix:\s*hasBotAppLoginSuffix/);
   });
 
   it('the greptile login is recorded WITH its observation, not guessed', () => {

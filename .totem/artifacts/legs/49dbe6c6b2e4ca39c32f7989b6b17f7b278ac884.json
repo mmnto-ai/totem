@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "49dbe6c6b2e4ca39c32f7989b6b17f7b278ac884",
+  "readAt": "2026-09-09T07:35:00Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/parsers/bot-identity-parity.test.ts",
+      "line": 54,
+      "claim": "Changeset line 8: 'resolve-threads used to spell that suffix as a regex of its own, which kept it out of the bot-identity parity sensor (a consumer that spells [bot] in code fails the scan)'; bot-identity.ts:12 'bot-identity-parity.test.ts fails if any of the three declares a list, a pattern or a suffix of its own'; resolve-threads.ts:301-302 'this file spells no bot name, pattern or suffix of its own, and bot-identity-parity.test.ts scans it to keep it that way'.",
+      "counterexample": "The removed line was `const BOT_LOGIN_SUFFIX = /\\[bot\\]$/i;` — the characters are [ b o t \\ ] so the literal '[bot]' never occurs, and codeOnly() only strips comments and lowercases (it cannot introduce a bracket). Running the sensor's own codeOnly + LOGIN_SPELLINGS + LOCAL_BOT_REGEX + LOCAL_BOT_SUBSTRING + LOCAL_BOT_CONCAT over origin/main:packages/cli/src/commands/resolve-threads.ts yields SENSOR_FAILS:false — the pre-fold file would have PASSED the scan, so the deferred leg's stated blocker ('it cannot be added as-is') is false. The same arms over the verbatim removed line yield SENSOR_FAILS:false — so re-adding it today also passes. The mutant corpus at bot-identity-parity.test.ts:109-118 has five name-based rows plus a display-cased Set and NO bare \\[bot\\]$ row. Deciding: git show origin/main:packages/cli/src/commands/resolve-threads.ts > rt-main.ts; grep -nF '[bot]' rt-main.ts (13 hits, ALL comment lines: 32,34,36,219,248,262,305,309,339,347,348,349,410,767; the declaration line 340 not among them); node scan.mjs (codeOnly + the four arms verbatim) → {spellingHits:[],localRegex:false,substring:false,concat:false,SENSOR_FAILS:false} on the file and on the mutant. OBSERVED. Assertion strength: WEAKER than the contract the diff's own comments state. Cure: a LOCAL_BOT_SUFFIX arm plus a mutant row for the escaped-bracket regex spelling."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/bot-identity.ts",
+      "line": 9,
+      "claim": "'Every consumer now imports this module — those two and, since mmnto-ai/totem#2841, packages/cli/src/commands/resolve-threads.ts' (bot-identity.ts:9-13) and 'every consumer imports it (triage's parser, review-catch, resolve-threads)' (packages/core/src/index.ts:101).",
+      "counterexample": "packages/core/src/merge-ready.ts line 1 is `import { isBotReviewerLoginExact } from './bot-identity.js';`. It is a fourth real consumer, NOT in the parity scan loop (bot-identity-parity.test.ts:85-88), and none of the four re-worded comments name it — the same numerically-stale defect the fold set out to cure (2→3 when the true count is 4). Mitigation: merge-ready.ts scans clean today. Deciding: grep -rln \"from './bot-identity.js'\" packages/core/src packages/cli/src --include=*.ts | grep -v .test.ts → review-catch.ts, index.ts (the barrel), merge-ready.ts; barrel-symbol consumers add resolve-threads.ts and bot-review-parser.ts. Four real consumers, three scanned; scan(merge-ready.ts) → SENSOR_FAILS:false. OBSERVED."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-pilot-install.md",
+      "line": 3,
+      "claim": "The changeset declares '@mmnto/cli': patch.",
+      "counterexample": ".changeset/config.json puts all six @mmnto/* packages in one fixed group, so the highest bump applies to every member: the patch line is inert and misstates the release shape (2.3.1 vs the actual 2.4.0). Deciding: cat .changeset/config.json; npx changeset status → 'NO packages to be bumped at patch'; all six at minor. OBSERVED."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 93,
+      "claim": "'A clean --apply run clears that one predicate and is NOT an allow verdict.'",
+      "counterexample": "The same step 4 offers --ids to narrow the run; resolve-threads.ts:463 returns skip:not-selected for un-named rows, the run still exits 0, and merge-ready.ts:1122-1130 counts EVERY unresolved non-outdated bot-rooted thread — so a clean narrowed apply does not clear predicate 2. Direction is safe; the sentence over-credits the run. OBSERVED."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/bot-identity.ts",
+      "line": 154,
+      "claim": "hasBotAppLoginSuffix is a new PUBLIC export of @mmnto/totem.",
+      "counterexample": "No direct assertion in the package that exports it (no bot-identity test file in core); coverage is real but indirect through resolve-threads.test.ts:567 (github-actions[bot]) and :722 (copilot-pull-request-reviewer[bot]). Behaviour byte-preserved (/\\[bot\\]$/i verbatim, non-global). Coverage shape, not a hole. OBSERVED."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/parsers/bot-identity-parity.test.ts",
+      "line": 145,
+      "claim": "The 'every consumer imports the identity module' test locks the third consumer's import and injection.",
+      "counterexample": "The regex requires hasBotAppLoginSuffix to appear BEFORE isBotReviewerLoginExact in the destructure; nothing enforces that order (ESLint 0 diagnostics), so a benign reorder red-lights the sensor. Mutant reasoning otherwise holds; the real guard on the injection is the required TypeScript property BotIdentityPredicates.hasAppSuffix. OBSERVED source, INFERRED consequence."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/bot-identity.ts",
+      "line": 155,
+      "claim": "The brief characterizes the lint result as 'one advisory warning on the new .test(login) line'.",
+      "counterexample": "totem lint reports PASS with NINE warnings: 3 on bot-identity.ts:155, 2 on resolve-threads.ts:424, 2 on bot-identity-parity.test.ts:87, 2 on :144 — all false positives (the regex is non-global and anchored; the || arms are boolean; the rest test-file noise). Deciding: totem lint verdict line 'PASS - 9 warning(s), 0 errors'. OBSERVED."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 1,
+      "claim": "[NOTE] Commit message: 'the committed gate wrapper refreshed to the 2.3.0 template it had drifted from'.",
+      "counterexample": "TRUE and load-bearing, but the drift's origin and recurrence risk are unnamed: last written by 61e3ec0f (mmnto-ai/totem#2822, 337 lines / 16,004 bytes); 7716929b (mmnto-ai/totem#2844) changed CLAUDE_GATE_WRAPPER without refreshing the committed copy. Without the refresh the new settings entry exits 2 on EVERY Bash call — reproduced: the original wrapper on a merge-ready event prints 'no payload projection for event \"merge-ready\"; failing closed.' exit 2. mmnto-ai/totem#2833 is still OPEN and unmentioned in the commit or changeset. OBSERVED."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 858,
+      "claim": "[NOTE] The refresh is scoped to enabling merge-ready.",
+      "counterexample": "The same file serves the already-installed STRICT transport-shield entry and the refresh rewrites its runtime (700 insertions / 70 deletions). Measured no regression: old and new both 0 bytes stderr and exit 0 on an allow envelope; the strict deny path identical; strict forwards no --tier (line 833), so a 2.2.x CLI still answers it. The commit message does not disclose that a live strict gate's runtime was rewritten. OBSERVED."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 731,
+      "claim": "[NOTE] gate-install.ts:63-70 discloses that a Bash-matched gate applies to a fresh clone's bootstrap commands and fails closed when no CLI resolves.",
+      "counterexample": "For merge-ready the merge-ready branch exits 0 at line 731 (`if (merges.length === 0) process.exit(0);`) BEFORE the CLI is resolved, so the fail-closed no-CLI arm cannot fire on a non-merge command; it fires only on an actual gh pr merge. Measured cost on a non-merge Bash call: 81, 62, 67, 62, 63 ms; the transport-shield entry on the same envelope: 570, 551, 561 ms. OBSERVED."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": ".claude/settings.json",
+      "line": 22,
+      "claim": "[QUESTION] The merge-ready entry is installed after the transport-shield entry, both under matcher 'Bash|PowerShell'.",
+      "counterexample": "Could not ground from any source in this repo whether the host runs two same-matcher PreToolUse entries sequentially in array order or concurrently, nor whether a deny from the second still blocks when the first allowed. The install shape is contract-correct (gate-install.ts:23-26; gate-install.test.ts:352-356 pins 'merge-ready writes ONE entry under Bash|PowerShell, beside transport-shield') and reproduced byte-identically. Host semantics are outside this repo's primary sources. QUESTION."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "verdict": "holds in mechanism, refuted in narrative — every reproducible mechanical claim survives (byte-identical wrapper+settings install, --pilot forwards --tier pilot, byte-identical skill render, identical .agents twin, behaviour-preserving predicate move, all gates green), but two claims about the parity sensor are false: the sensor does not catch the very declaration this fold removed (F1), and 'every consumer' enumerates three of four (F2). Both are in the seat's ruling lane; neither breaks runtime behaviour. [Seat's fold, appended: F1–F7 folded in the commit that follows 49dbe6c6 — the escaped-suffix arm with two mutant rows, merge-ready.ts as the fourth scanned consumer, the prose at four, the changeset at minor/minor, the step-4 clause narrowed to an un-narrowed apply, a core test for the export, the import assertion order-free, the PR body at nine warnings; F8–F11 disclosed in the PR body.]"
+}
