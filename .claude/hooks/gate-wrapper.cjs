@@ -149,6 +149,10 @@ for (let i = 0; i < argv.length; i++) {
 //     position anchor does not see `gh` (the shell's reserved words and the
 //     `exec`/`command`/`eval` builtins are skipped; an arbitrary program is
 //     not, since the walk cannot know which of its operands is the command);
+//   - the executable spelled with an extension or a path (`gh.exe pr merge 5`,
+//     `./gh pr merge 5`): the anchor reads the bare token `gh` only (greptile
+//     on mmnto-ai/totem#2855; widening it is mmnto-ai/totem#2856, the strict
+//     tier's precondition);
 //   - a skipped word carrying a FLAG (`command -p gh pr merge 5`,
 //     `exec -a x gh pr merge 5`, and the reserved word's own `time -p` /
 //     `time --`): the flag is a token before `gh`, and bash runs the merge
@@ -308,6 +312,17 @@ function blankHeredocBodies(command, powershell) {
       out += command.slice(i, end);
       i = end;
       boundary = false;
+      continue;
+    }
+    // A command or process substitution opens a word: a `#` glued to `$(` is
+    // a comment, as core's scanner reads it. Without this arm the boundary
+    // stayed false, the `#` was text, and a `<<word` inside it opened a
+    // heredoc whose body swallowed every later line — the same fail-open class
+    // as the here-string (the pilot-install re-arm, R2, mmnto-ai/totem#2855).
+    if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
+      out += ch + '(';
+      i += 2;
+      boundary = true;
       continue;
     }
     if (ch === '(' && command[i + 1] === '(' && boundary) {
