@@ -2970,8 +2970,8 @@ export const AGENTS_FLOOR_BLOCK = `${AGENTS_FLOOR_START}
 1. Run \`totem status\` for health.
 2. **Never guess architecture.** Before modifying a core system, run \`totem search <system>\`.
 3. Before writing code, call \`search_knowledge\` describing what you are changing.
-4. Run \`totem lint\` locally before the first push; front-load the deterministic checks.
-5. Cold start (no session hook injected orientation): after \`/signon\`'s seat-and-assignment step, derive it with \`totem orient\`.
+4. Do not push speculative fixes: run \`totem lint\` locally and front-load every check before the first push.
+5. Cold start (no session hook injected orientation): derive it with \`totem orient\`, after \`/signon\`'s seat-and-assignment step where that skill is installed.
 
 ## Working rules
 
@@ -2987,9 +2987,45 @@ If this repository uses review bots: review triggers are the maintainer's to pos
 
 ## Installed skills
 
-\`totem init\` installs \`/signon\`, \`/signoff\`, \`/review-reply\` and \`/review-loop\`; every later \`totem init\` refreshes each skill's managed span and keeps what you add below its end marker. Private or team-only instructions, when present, resolve from an installed doctrine package and are never committed here.
+Where \`totem init\` installs skills (\`/signon\`, \`/signoff\`, \`/review-reply\`, \`/review-loop\`), every later \`totem init\` refreshes each skill's managed span and keeps what you add below its end marker.
 
 ${AGENTS_FLOOR_END}`;
+
+/** The line terminator a file uses: CRLF when it carries any, else LF. */
+export function detectEol(content: string): '\r\n' | '\n' {
+  return content.includes('\r\n') ? '\r\n' : '\n';
+}
+
+/** The canonical span rendered in a file's own line terminator. */
+export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
+  return eol === '\n' ? AGENTS_FLOOR_BLOCK : AGENTS_FLOOR_BLOCK.replace(/\n/g, '\r\n');
+}
+
+/**
+ * Locate one complete managed span in `content`, searching from `from`: the
+ * FIRST end marker at or after `from`, paired END-anchored with the LAST start
+ * marker before it — the reflex scrub's pairing (mmnto-ai/totem#2602), so an
+ * orphan start marker sitting above a complete span never widens it and the
+ * bytes between an orphan and the real span stay the repository's. `null` when
+ * no complete pair exists at or after `from`. `end` is exclusive.
+ */
+export function locateAgentsFloorSpan(
+  content: string,
+  from = 0,
+): { start: number; end: number } | null {
+  let cursor = from;
+  for (;;) {
+    const endIdx = content.indexOf(AGENTS_FLOOR_END, cursor);
+    if (endIdx === -1) return null;
+    const startIdx = content.lastIndexOf(AGENTS_FLOOR_START, endIdx);
+    if (startIdx !== -1 && startIdx >= from) {
+      return { start: startIdx, end: endIdx + AGENTS_FLOOR_END.length };
+    }
+    // An orphan end marker (no start marker between `from` and it): skip past
+    // it and keep scanning — a later complete pair is still a span.
+    cursor = endIdx + AGENTS_FLOOR_END.length;
+  }
+}
 
 /**
  * The whole file `totem init` writes when a repository has no AGENTS.md yet:
@@ -2999,7 +3035,7 @@ ${AGENTS_FLOOR_END}`;
 export function renderAgentsFloorScaffold(projectName: string): string {
   return `# ${projectName}: Agent Instructions
 
-Canonical instructions for AI coding agents working in this repository. Any agent that reads \`AGENTS.md\` starts here; keep tool-specific instruction files as thin redirects to it.
+Canonical instructions for AI coding agents working in this repository. Any agent that reads \`AGENTS.md\` starts here; tool-specific instruction files carry their tool's own block and point here for everything else.
 
 ${AGENTS_FLOOR_BLOCK}
 

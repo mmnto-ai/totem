@@ -353,6 +353,61 @@ describe('ejectCommand', () => {
     expect(summary.scrubbed).toEqual(['AGENTS.md']);
   });
 
+  // ─── Pairing and line endings (the fold of the pre-merge leg's F2/F3/F4) ──
+
+  it('an orphan start marker above the span never widens the removal — the user text between stays, and the orphan is named as residue', async () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n${AGENTS_FLOOR_START}\nx\n${AGENTS_FLOOR_END}\n\n## Keep\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n\n## Keep\n`,
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+  });
+
+  it('removes every complete span, not just the first', async () => {
+    const content = `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\nMID\n\n${AGENTS_FLOOR_BLOCK}\n\n## Keep\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    const out = fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8');
+    expect(out).toBe('# Mine\n\nMID\n\n## Keep\n');
+    expect(out).not.toContain(AGENTS_FLOOR_START);
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
+  it('an orphan end marker above a complete span is skipped, the span below it removed', async () => {
+    const content = `# Mine\n${AGENTS_FLOOR_END}\nstill mine\n\n${AGENTS_FLOOR_BLOCK}\n\n## Keep\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_END}\nstill mine\n\n## Keep\n`,
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+  });
+
+  it('a CRLF file keeps CRLF at the seam — no bare LF is introduced and no user byte changes', async () => {
+    const lf = `# Mine\n\nintro\n\n${AGENTS_FLOOR_BLOCK}\n\n## Rules\n`;
+    const crlf = lf.replace(/\n/g, '\r\n');
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), crlf);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    const out = fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8');
+    expect(out).toBe('# Mine\r\n\r\nintro\r\n\r\n## Rules\r\n');
+    expect(out.replace(/\r\n/g, '')).not.toContain('\n');
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
   it('removes an AGENTS.md that is nothing but the floor span', async () => {
     fs.writeFileSync(path.join(cwd, 'AGENTS.md'), AGENTS_FLOOR_BLOCK + '\n');
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };

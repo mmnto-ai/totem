@@ -1,0 +1,163 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "cc8c991835203a266166664defab46c6b4c6afbb",
+  "readAt": "2026-09-13T17:58:34Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2990,
+      "claim": "The managed span shipped to every consumer states: \"`totem init` installs `/signon`, `/signoff`, `/review-reply` and `/review-loop`\" — and the changeset (line 5) lists \"the installed skills\" as part of \"the product-valid instruction set any consumer gets.\"",
+      "counterexample": "OBSERVED. The four skills are written only inside `for (const tool of selectedTools) { if (!tool.hookInstaller) continue; ... }` (init.ts:1831-1833 → `installClaudeHooks`, init.ts:512, skills loop at init.ts:583-586), i.e. only when Claude Code is BOTH detected and selected, and only into `.claude/skills/<name>/SKILL.md`. The floor scaffold runs unconditionally at init.ts:1675, BEFORE `if (options?.bare)` at init.ts:1688 — so `totem init --bare` (which logs 'Skipping AI tool and hook installation for bare mode.') writes an AGENTS.md asserting an install that bare mode never performs. Directly visible in the existing suite's own output: `pnpm exec vitest run src/commands/init.test.ts` → 'initCommand non-interactive mode > runs to completion with --yes on a TTY' prints `OK AGENTS.md — Scaffolded the AGENTS.md floor` with NO `.claude/skills/...` row in the same summary. A Gemini-CLI-only or Cursor-only consumer gets the same false sentence, and the `.agents/skills/` twin is a hand copy until mmnto-ai/totem#2788 (AGENTS.md:65, overlay §1 line 12). The sterility test cannot catch this class — it checks lexicon, never product truth."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 717,
+      "claim": "`scrubAgentsFloor`'s doc: \"the repository's own content on either side is kept\" / changeset line 5: \"`totem eject` removes the span ... keeping the repository's content around it byte-exact.\" Its docstring adds \"An unpaired or inverted marker is never attributed and never scrubbed.\"",
+      "counterexample": "OBSERVED. Pairing is `content.indexOf(AGENTS_FLOOR_START)` (717) + `content.indexOf(AGENTS_FLOOR_END)` (718) — first-start/first-end. Ran `scrubAgentsFloor` against `# Mine\\n<START>\\nMY OWN TEXT\\n<START>\\nx\\n<END>\\n\\n## Keep\\n`: result `\"# Mine\\n\\n## Keep\\n\"`, summary `{\"scrubbed\":[\"AGENTS.md\"]}` — the user's line `MY OWN TEXT` was deleted and reported as a clean scrub. The function this one cites as its model deliberately does the opposite: `scrubReflexFiles` pairs END-anchored, `const startIdx = out.lastIndexOf(REFLEX_START, endIdx)` (eject.ts:845), whose comment names this exact hazard — \"an orphan START from that same pre-fix damage sitting ABOVE a complete block never widens the removal span\" (mmnto-ai/totem#2602). A duplicated start marker is a normal git-merge-conflict residue in a markdown file."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 760,
+      "claim": "`totem eject` \"removes the span\" and records `summary.scrubbed.push(AGENTS_FLOOR_REL)`.",
+      "counterexample": "OBSERVED. `scrubAgentsFloor` removes exactly one span (no loop). Input `# Mine\\n\\n<BLOCK>\\n\\nMID\\n\\n<BLOCK>\\n\\n## Keep\\n` → output retains the SECOND complete managed block verbatim (start marker through end marker, all 1,932 bytes) while the summary reports `scrubbed: [\"AGENTS.md\"]`. The cited precedent loops — `for (;;) { const endIdx = out.indexOf(REFLEX_END, searchStart); ... }` (eject.ts:843ff), whose comment states the contract as \"loops until no complete pair remains\". Post-eject, `totem doctor`/a later `totem init` still sees a live managed span in a repo the user was told was ejected."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": ".changeset/agents-public-floor-619.md",
+      "line": 5,
+      "claim": "\"`totem eject` removes the span (and the file, when the span was all it held), keeping the repository's content around it byte-exact.\"",
+      "counterexample": "OBSERVED, two ways. (a) CRLF: scrubbing a CRLF file `# Mine\\r\\n\\r\\nintro\\r\\n\\r\\n<BLOCK>\\r\\n\\r\\n## Rules\\r\\n` yields `\"# Mine\\r\\n\\r\\nintro\\n\\r\\n## Rules\\r\\n\"` — the user's own line `intro\\r\\n` came back as `intro\\n`, a byte of repository content changed and a bare LF injected into an otherwise-CRLF file. Cause: `before = content.slice(0, startIdx).replace(/(?:\\r?\\n)*$/, '\\n')` (eject.ts:745) hardcodes LF. (b) LF: the same line collapses any number of blank lines above the span to one, so a deliberate two-blank-line gap is not preserved. The code comment is honest (\"the seam normalized ... one blank line where the span sat\"); the changeset's \"byte-exact\" is not. Same seam shape as `scrubReflexFiles` (eject.ts:863), so the code matches precedent — the changeset sentence is the defect."
+    },
+    {
+      "id": "F5",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 24,
+      "claim": "\"Every later `totem init` refreshes exactly the span and leaves every other byte alone.\" (changeset line 5 repeats it: \"refreshes exactly the bytes from the start marker through the end marker and leaves every other byte alone\".)",
+      "counterexample": "OBSERVED. `scaffoldAgentsFloor` pairs `existing.indexOf(AGENTS_FLOOR_START)` (init.ts:761) with `existing.indexOf(AGENTS_FLOOR_END)` (init.ts:762). Ran it on `# Mine\\n<START>\\nMY OWN TEXT\\n<START>\\nx\\n<END>\\n` → `{action:'refreshed'}` and the output begins `# Mine\\n<START>\\n<!-- Managed by ...` — `MY OWN TEXT` and the second start marker are gone. So the refresh CAN write outside the intended span and silently eat repository content. (This one matches init.ts's own precedent — `upgradeReflexes` uses the same first-index pairing at init.ts:1131-1132 — so it is the doc claim that is false, and the fix that eject already has, F2, is the one init lacks.) Verified separately: on the ordinary paths the claim holds — a second scaffold on its own output is `unchanged` with byte-identical content, and the documented adoption path (user adds the two bare marker lines, re-runs) produces `refreshed` then `unchanged` with surrounding bytes intact."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2990,
+      "claim": "Shipped template sentence: \"Private or team-only instructions, when present, resolve from an installed doctrine package and are never committed here.\"",
+      "counterexample": "OBSERVED. No shipped code resolves instructions from a doctrine package. The product's only doctrine-package wiring is `totem init --doctrine`, hardcoded to the private cohort package — `export const DOCTRINE_PIN_PACKAGE = '@mmnto/strategy-doctrine'` (init-doctrine.ts:26) pointing `orient.parityManifest` at `node_modules/@mmnto/strategy-doctrine/parity-manifest.yaml` (init-doctrine.ts:34), a parity manifest, not instructions. `grep -rn \"cohort-overlay\" packages/*/src/ --include=*.ts` (non-test) returns only prose comments in wt.ts and estate-scan.ts — nothing reads `cohort-overlay.md`. A consumer cannot act on this sentence; it describes a cohort arrangement in product voice."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 62,
+      "claim": "The test header claims it catches \"a private repository path, a deployment name, an operator fingerprint, a doctrine tag a public reader cannot follow, an unqualified issue reference, or a relative link that does not resolve\".",
+      "counterexample": "OBSERVED by evaluating the exact lexicons against mutants. Caught: `mmnto-ai/totem-strategy:doctrine/x.md`, `#123`, `(#456)`, `strategy#622`, `totem#2801`, `Tenet 20`, `ADR-105`, `Proposal 213`/`Prop 305`, `totem-claude`/`strategy-claude`/`status-claude`/`lc-claude`, `cohort`/`falsification`. NOT caught: `adr-105`, `ADR 105`, `tenet 20`, `Tenet-16`, `proposal 213` (all four DENY_PATTERNS are case-sensitive and hyphen/space-rigid, lines 74-79); `the totem-strategy repo has doctrine` (DENY_SUBSTRINGS has `mmnto-ai/totem-strategy` and `totem-strategy:` but not the bare repo name, line 63-64); `the agy seat ruled it` (AGENT_ID line 82 requires a `<repo>-<vendor>` shape); `the operator runs Windows 11` and `solo-operator repo` — the \"operator fingerprint\" class is three substrings only (`satur8d`, `skynet`, `arhgap`, lines 68-70) while overlay §3 line 29 names the operator environment as \"solo-operator + bot-review repo; Windows 11 host\". Confirmed no false positives: `Properties 3` / `Propose 3` do not match `/\\bProp(?:osal)?\\.? ?\\d+/`, and `mmnto-ai/totem#123` is correctly exempt from BARE_REF while `Closes #NNN` is correctly ignored (non-digit). Enumeration is a legitimate design; the docstring states it as class coverage."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 37,
+      "claim": "Changeset line 7: \"it probes every URL, qualified issue ref and qualified path a file carries without a token and reports the ones a public reader cannot follow.\"",
+      "counterexample": "OBSERVED from the regex set (lines 37-40). Missed shapes a public reader also cannot follow: a bare repo reference `mmnto-ai/totem-strategy` with no `#N` and no `:path` (no regex covers it — this shape is live today at `.gemini/styleguide.md:137`); `owner/repo@sha` (the shape that existed at origin/main in `.claude/docs/contributing.md`, `mmnto-ai/totem-playground@80b4d1b`, and which this diff removed by hand, not by the script); reference-style links `[x]: path`; pure-anchor links `[x](#a)` (MD_LINK_RE's `([^)\\s#]+)` requires ≥1 non-`#` char); qualified paths with no file extension (`owner/repo:adr/**`). Verified clean on the credential question: the code reads no env var, builds only `user-agent`, and Node's global fetch (undici) reads neither `GH_TOKEN` nor `HTTP_PROXY` by default — OBSERVED in source, no leak path. 3xx handling is correct: `redirect: 'follow'` means `response.status` is the terminal status and `ok = status < 400`. Live run over the seven public surfaces: 8 references, 8 resolve, exit 0."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 164,
+      "claim": "\"%s: every relative link resolves to a file in the tree\" — `expect(fs.existsSync(path.resolve(dir, target))).toBe(true)`.",
+      "counterexample": "INFERRED from platform semantics: NTFS is case-insensitive, so `[Architecture](.claude/Docs/architecture.md)` passes `existsSync` on this win32 host and 404s on github.com, which is case-sensitive. The assertion is weaker than the class-5 clause it implements (\"Every ref in the committed file resolves unauthenticated\", 619 comment 10 line 49) on exactly the platform the operator authors on."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "AGENTS.md",
+      "line": 30,
+      "claim": "Row 13 ruled the T0 stanza verbatim: \"The floor keeps what a contributor needs and can verify publicly: this repo uses bot reviewers; review triggers are the maintainer's to post, never an agent's; ...\"",
+      "counterexample": "OBSERVED. The committed floor says \"If this repository uses review bots: review triggers are the maintainer's to post...\" — a conditional where the ruling wrote a statement of fact about this repository. All five ruled elements are present (triggers/maintainer, `/review-reply`, one dispositions comment per round, never cite an unpushed commit, zero private refs, zero section numbers), so the row is substantially applied; the hedge is a consequence of the floor and the generic template being the same bytes, and it means totem's own AGENTS.md no longer asserts that totem uses bot reviewers."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "AGENTS.md",
+      "line": 17,
+      "claim": "Row 4 ruled Session Start items 1, 2, 3, 5 **FLOOR** — \"Product-valid for any consumer\", i.e. kept, not reworded away.",
+      "counterexample": "OBSERVED. Old item 5 was \"Don't push speculative fixes. Run `totem lint` locally — front-load all checks before the first push\" (origin/main AGENTS.md:17). New item 4 is \"Run `totem lint` locally before the first push; front-load the deterministic checks.\" The imperative \"Don't push speculative fixes\" is dropped, and \"all checks\" narrowed to \"the deterministic checks\". Both edits are defensible T0 prose, but row 4 carried no REWORD disposition — it is the one FLOOR row whose content changed."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": "AGENTS.md",
+      "line": 71,
+      "claim": "Row 21 ruled the agent-bus prose **DELETE** — \"Overlay § 4 carries the whole contract; nothing here is floor content\"; the operator block authorized keeping only \"the marker as the single declared exception in the repo block\".",
+      "counterexample": "OBSERVED. The deleted prose is gone (verified: no 'Lane table', no mmnto-ai/totem-strategy#697/#639, no judgment-density classes, no parity-row sentence), and the marker is preserved byte-exact at AGENTS.md:69 — `totem doctor --parity` OBSERVED green: `PASS — agent-bus declared — role \"bus\" → seat \"totem-claude\" in AGENTS.md`, and the marker sits at line 69, OUTSIDE the managed span (end marker at line 36), so an init refresh cannot wipe the sensor. What is new is a replacement sentence: \"The marker above binds this repository's judgment bus\". \"judgment bus\" is Proposal 305's concept name with the tag stripped; the acceptance test's own list of what must not survive includes \"'Proposal 305' ... as words a public reader cannot follow\" (619 comment 10, line 49). Verified true, though: `is read by totem doctor --parity` — `declarationMarkersFor('agent-bus')` returns `path.join(gitRoot, 'AGENTS.md')` + token `totem:agent-bus` (doctor-parity.ts:572-576), consumed by `detectDeclaredContract` (parity-detect.ts:1823)."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2974,
+      "claim": "The dispatch (2026-09-12T17:43Z) asked the cold-start line be worded \"after the seat-and-assignment step\" in the floor; row 22 keeps the cold-start line FLOOR.",
+      "counterexample": "OBSERVED, carried — AGENTS.md:18 / template line 2974 reads \"Cold start (no session hook injected orientation): after `/signon`'s seat-and-assignment step, derive it with `totem orient`.\" The pointer resolves in the product: SIGNON_SKILL_CONTENT step 0 derives the seat and step 1 is \"Assignment mail before orient\" (init-templates.ts:2780, 2782). The scope question the seat owns: the line lives in the TEMPLATE, so cohort vocabulary now ships to every consumer repo, while row 3 ruled \"Seats, assignment mail and the signon skill's step numbering are cohort conduct. The floor keeps no line here.\" The dispatch authorized the wording for this repo's floor; the ruling expressly did not decide the template (comment 10 line 53: \"What this ruling does not decide: The floor's template extraction into `init-templates.ts`\"). Not a misapplication — an un-ruled extension."
+    },
+    {
+      "id": "F14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3003,
+      "claim": "`renderAgentsFloorScaffold` instructs the consumer: \"keep tool-specific instruction files as thin redirects to it.\"",
+      "counterexample": "OBSERVED. The same `totem init` run injects `AI_PROMPT_BLOCK` — 8,564 bytes, measured — into every tool reflex file: `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.junie/guidelines.md`, `.github/copilot-instructions.md` (init-detect.ts:99-123). The scaffold tells the consumer to keep those thin while the tool makes them 8.5 KB. Note the product's own redirect gate sets the threshold at 600 bytes (`CLAUDE_MD_REDIRECT_MAX_BYTES`, doctor.ts:1197)."
+    },
+    {
+      "id": "F15",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 715,
+      "claim": "[NOTE] `deriveProjectName` — \"the package name with any npm scope stripped, else the directory basename ... a title string, never load-bearing\".",
+      "counterexample": "OBSERVED, answering the charge's question (e): it never throws, but it CAN return an empty string — `{\"name\":\"@acme/\"}` → `\"\"` (the `replace(/^@[^/]+\\//, '')` consumes the whole trimmed name), and `deriveProjectName('C:\\\\')` → `\"\"` (path.basename of a drive root), both yielding a title `# : Agent Instructions`. It also does not sanitize: `{\"name\":\"evil\\n# Injected Heading\"}` renders verbatim into the scaffold's H1, minting a second heading. The three `deriveProjectName` tests (init.test.ts:4251-4274) cover scoped / unscoped / missing-or-unparseable and none of these; the sterility test renders only `'example'` and `'widgets'`. Low impact (a local package.json the user owns), disclosed as a coverage shape."
+    },
+    {
+      "id": "F16",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 770,
+      "claim": "[NOTE] \"`unchanged` — markers present, span already canonical (byte no-op)\" / the charge's question (a): is a second scaffold on its own output a byte no-op in every case, including CRLF?",
+      "counterexample": "OBSERVED. On its own output, always yes. On a CRLF working tree (autocrlf checkout of a committed LF span) the FIRST call returns `refreshed` and rewrites the span to LF, leaving a file with CRLF outside the span and LF inside; the second call returns `unchanged` and content is stable. So: converges after one write, no flip-flop, no corruption — but a consumer on a CRLF checkout sees a \"Refreshed the managed AGENTS.md span\" row on the first init after every fresh clone, and gets mixed line endings. Not an issue for this repo: `.gitattributes` is `* text=auto eol=lf`, and `AGENTS.md` on disk has 0 CR bytes, so the byte-identity assertion at agents-floor-sterility.test.ts:113 is safe here."
+    },
+    {
+      "id": "F17",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 116,
+      "claim": "[NOTE] `it('keeps the search_knowledge instruction inside the managed span')`.",
+      "counterexample": "OBSERVED. The body is `expect(AGENTS_FLOOR_BLOCK).toContain('search_knowledge')` — a substring check on the constant, not on the committed file and not on the instruction. It would pass on any stray mention and is wholly subsumed by the byte-identity assertion five lines above (line 113). Zero added strength; harmless."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "F13",
+    "F14",
+    "F15",
+    "F16",
+    "F17"
+  ],
+  "verdict": "The ruling is applied faithfully in substance: I walked all 24 rows of mmnto-ai/totem-strategy#619 comment 10 against the new AGENTS.md, and every DELETE row is carried by the pinned overlay — row 5 and row 24 by cohort-overlay.md §1 bullet 1, row 10 verbatim by §2, row 14 by §1's cr-disclaimer bullet, row 15 by §1's cite map plus §2's memory-pointer bullet, row 21 wholly by §4 (items 2/3/5 plus succession), row 3 by §1's new delta-A bullet and row 9's T1 half by delta B's trailing clause in §1 — so there is no BLOCKING finding: no deleted line is homeless and no byte-corruption path exists on the ordinary scaffold/refresh/eject routes (idempotency, marker-adoption, preserved-file and file-removal paths all verified empirically against the built dist). Row 11's acceptance item is genuinely cured (AI_PROMPT_BLOCK is defined at init-templates.ts:18 and only imported by init.ts), /signon is added per row 16, row 2 uses the ruled A1 line with zero em-dashes in the file, both of strategy-claude's dispatch reads are carried, the class-5 network test passes 8/8 with zero unresolvable refs, mmnto-ai/totem#2866 and #2788 are real and public, and the three named regression gates are green (agents-floor-sterility 28/28, config-drift 58/58 with both crossVendorCanonical and .junie/guidelines.md satisfied, init+eject 382 passed, doctor --claim-discipline PASS non-vacuously over 485 compiled rules, doctor --parity agent-bus PASS). What survives falsification are five MATERIAL items the seat should rule before merge: one false product claim now being written into every consumer's repository (F1 — the template asserts an install that bare mode, and any non-Claude consumer, never performs), two marker-pairing defects in scrubAgentsFloor that delete user content and leave a live span behind a \"scrubbed\" report (F2, F3) where the function's own cited precedent scrubReflexFiles already solved both under mmnto-ai/totem#2602, the same first-index pairing on the init side contradicting the wiki's \"leaves every other byte alone\" (F5), and the changeset's \"byte-exact\" seam claim which CRLF falsifies outright (F4). The sterility sensor does what it says within an enumerated lexicon but is case-sensitive and misses the bare private-repo name and most operator-environment fingerprints (F7); the resolvability script is honest about credentials and redirects but not about \"every\" reference shape (F8). [Seat's fold, appended: all seventeen folded in the commit that follows cc8c9918 — END-anchored pairing shared by init and eject with a loop in eject and a second-span hint in init (F2, F3, F5), EOL-aware spans and seams (F4, F16), the three template sentences corrected and the doctrine line moved to this repository's declared block (F1, F6, F13, F14), the floor's row-4 wording restored and the review-bots fact and the agent-bus sentence restated (F10, F11, F12), the sterility lexicon made case- and separator-insensitive with the bare repository name and the operator token added, the relative-link check made case-exact, the redundant test removed and the docstring narrowed to an enumerated lexicon (F7, F9, F17), the script's commit-ref and reference-style-link shapes added and its non-extracted shapes named in the header with the changeset claim narrowed to match (F8), the project name never empty and never multi-line (F15).]"
+}

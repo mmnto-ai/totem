@@ -9,9 +9,10 @@
  *    test the issue names (design § 3(a), the managed-block == template check).
  * 2. Neither the template nor any public agent-instruction surface of this
  *    repository carries a private repository path, a deployment name, an
- *    operator fingerprint, a doctrine tag a public reader cannot follow, an
+ *    operator fingerprint or a doctrine tag from the ENUMERATED lexicon below
+ *    (design § 3(c) T1-creep lexicon — a deny-list, never class coverage), an
  *    unqualified issue reference, or a relative link that does not resolve
- *    (design § 3(b) offline half + § 3(c) T1-creep lexicon; class 5 acceptance).
+ *    case-exactly on disk (design § 3(b) offline half; class 5 acceptance).
  * 3. The one declared exception is the `totem:agent-bus` marker line
  *    (inventory ruling row 20; the move is mmnto-ai/totem#2866): no other line
  *    of the floor, and no line of the template, names an agent identifier.
@@ -58,23 +59,33 @@ const PUBLIC_SURFACES = [
   '.claude/docs/agent-workflow.md',
 ] as const;
 
-/** Class 5 (private paths that 404 publicly), class 2 (deployments), class 3 (operator). */
+/**
+ * An ENUMERATED lexicon, not class coverage: the private repositories and
+ * doctrine paths that 404 publicly (class 5), the deployment names (class 2)
+ * and the operator fingerprints (class 3) this cohort's surfaces have carried.
+ * A new private name has to be added here to be caught; the network script
+ * catches the resolvable-URL half regardless.
+ */
 const DENY_SUBSTRINGS = [
-  'mmnto-ai/totem-strategy',
-  'totem-strategy:',
+  'totem-strategy',
   'strategy#',
   'totem-playground',
   'liquid-city',
   'satur8d',
   'skynet',
   'arhgap',
+  'solo-operator',
 ] as const;
 
-/** Doctrine tags a public reader cannot follow, and the internal review vocabulary. */
+/**
+ * Doctrine tags a public reader cannot follow, and the internal review
+ * vocabulary — case-insensitive, hyphen or space or nothing between the word
+ * and the number, so `adr-105`, `ADR 105`, `tenet 20` and `Tenet-16` all fire.
+ */
 const DENY_PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
-  { name: 'an ADR tag', re: /\bADR-\d+/ },
-  { name: 'a Proposal tag', re: /\bProp(?:osal)?\.? ?\d+/ },
-  { name: 'a Tenet tag', re: /\bTenet ?\d+/ },
+  { name: 'an ADR tag', re: /\badr[- ]?\d+/i },
+  { name: 'a Proposal tag', re: /\bprop(?:osal)?\.?[- ]?\d+/i },
+  { name: 'a Tenet tag', re: /\btenet[- ]?\d+/i },
   { name: 'internal review vocabulary', re: /\b(?:review-leg|cohort|falsification)\b/i },
 ];
 
@@ -87,6 +98,30 @@ const VENDOR_TOKENS = /\b(?:Claude|Gemini|Cursor|Copilot|Codex|Junie|Windsurf|Ki
 
 const BARE_REF = new RegExp(BARE_REF_REGEX_SOURCE);
 const MD_LINK = /\]\(([^)\s#]+)(?:#[^)]*)?\)/g;
+
+/**
+ * Case-exact existence: `fs.existsSync` answers case-insensitively on NTFS and
+ * on a default macOS volume, while github.com does not, so a link that differs
+ * from the tracked file only by case would pass here and 404 there. Each path
+ * segment is matched against the directory listing byte-for-byte.
+ */
+function existsExact(absPath: string): boolean {
+  const relative = path.relative(ROOT, absPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return false;
+  let cursor = ROOT;
+  for (const segment of relative.split(/[\\/]+/).filter((s) => s !== '')) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(cursor);
+      // totem-context: a missing or unreadable directory means the link does not resolve — the false answer is the finding
+    } catch {
+      return false;
+    }
+    if (!entries.includes(segment)) return false;
+    cursor = path.join(cursor, segment);
+  }
+  return true;
+}
 
 function expectSterile(label: string, content: string): void {
   for (const needle of DENY_SUBSTRINGS) {
@@ -111,10 +146,6 @@ describe('this repository AGENTS.md carries the totem init floor span', () => {
     expect(agentsMd.lastIndexOf(AGENTS_FLOOR_START)).toBe(start);
     expect(agentsMd.lastIndexOf(AGENTS_FLOOR_END)).toBe(end);
     expect(agentsMd.slice(start, end + AGENTS_FLOOR_END.length)).toBe(AGENTS_FLOOR_BLOCK);
-  });
-
-  it('keeps the search_knowledge instruction inside the managed span', () => {
-    expect(AGENTS_FLOOR_BLOCK).toContain('search_knowledge');
   });
 });
 
@@ -161,7 +192,7 @@ describe('every public agent-instruction surface of this repository is sterile',
     for (const match of content.matchAll(MD_LINK)) {
       const target = match[1]!;
       if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue; // an absolute URL or mailto: — the network script's half
-      expect(fs.existsSync(path.resolve(dir, target)), `${rel} links ${target}`).toBe(true);
+      expect(existsExact(path.resolve(dir, target)), `${rel} links ${target}`).toBe(true);
     }
   });
 });

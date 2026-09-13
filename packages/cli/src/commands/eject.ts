@@ -696,34 +696,35 @@ const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
 
 /**
  * Remove the managed AGENTS.md floor span `totem init` scaffolds
- * (mmnto-ai/totem-strategy#619). Removes the span from the floor's start marker
- * through its end marker; the repository's own content on either side is kept,
- * with the seam normalized exactly as the reflex scrub normalizes its own: one
- * blank line where the span sat. A file that is nothing but the span (and
- * whitespace) is removed outright — it was the scaffold and nothing more. An
- * unpaired or inverted marker is never attributed and never scrubbed; the file
- * is reported as skipped with the reason.
+ * (mmnto-ai/totem-strategy#619). Removes every complete span — each paired
+ * END-anchored like the reflex scrub's (mmnto-ai/totem#2602): the first end
+ * marker with the last start marker before it, so an orphan start marker above
+ * a span never widens the removal and the loop runs until no complete pair
+ * remains. The repository's own content on either side is kept, the seam
+ * normalized as the reflex scrub normalizes its own — one blank line where the
+ * span sat, in the file's own line terminator. A file that is nothing but the
+ * span (and whitespace) is removed outright — it was the scaffold and nothing
+ * more. Marker residue (an unpaired marker) is never attributed and never
+ * scrubbed; it is named beside the scrubbed line, or as the skip reason when
+ * nothing else was there to scrub.
  *
  * Exported for the summary-contract tests beside `scrubReflexFiles`.
  */
 export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Promise<void> {
-  const { AGENTS_FLOOR_END, AGENTS_FLOOR_REL, AGENTS_FLOOR_START } =
-    await import('./init-templates.js');
+  const {
+    AGENTS_FLOOR_END,
+    AGENTS_FLOOR_REL,
+    AGENTS_FLOOR_START,
+    detectEol,
+    locateAgentsFloorSpan,
+  } = await import('./init-templates.js');
   const filePath = path.join(cwd, AGENTS_FLOOR_REL);
   try {
     if (!fs.existsSync(filePath)) return;
     const rawContent = fs.readFileSync(filePath);
     const content = rawContent.toString('utf-8');
-    const startIdx = content.indexOf(AGENTS_FLOOR_START);
-    const endIdx = content.indexOf(AGENTS_FLOOR_END);
-    if (startIdx === -1 && endIdx === -1) {
+    if (!content.includes(AGENTS_FLOOR_START) && !content.includes(AGENTS_FLOOR_END)) {
       summary.skipped.push(`${AGENTS_FLOOR_REL} (no Totem block)`);
-      return;
-    }
-    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
-      summary.skipped.push(
-        `${AGENTS_FLOOR_REL} (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)`,
-      );
       return;
     }
     // Same guard as scrubReflexFiles: a file that does not round-trip through
@@ -734,30 +735,47 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       );
       return;
     }
-    // Single-owner seams, mirroring the reflex scrub: the prefix keeps at most
-    // one trailing newline (the blank line above the span was the scaffold's),
-    // and the end marker's own line terminator leaves with the span, so one
-    // blank line remains where the span sat — never two, never zero.
-    let before = content.slice(0, startIdx).replace(/(?:\r?\n)*$/, '\n');
-    if (before === '\n') before = '';
-    let after = content.slice(endIdx + AGENTS_FLOOR_END.length);
-    if (/^[ \t\r\n]*$/.test(after)) {
-      after = '';
-    } else if (after.startsWith('\r\n')) {
-      after = after.slice(2);
-    } else if (after.startsWith('\n')) {
-      after = after.slice(1);
+    const eol = detectEol(content);
+    let out = content;
+    let removedSpans = 0;
+    for (;;) {
+      const span = locateAgentsFloorSpan(out);
+      if (span === null) break;
+      // Single-owner seams, mirroring the reflex scrub: the prefix keeps at
+      // most one trailing terminator (the blank line above the span was the
+      // scaffold's), and the end marker's own terminator leaves with the span,
+      // so one blank line remains where the span sat — never two, never zero.
+      let before = out.slice(0, span.start).replace(/(?:\r?\n)*$/, eol);
+      if (before === eol) before = '';
+      let after = out.slice(span.end);
+      if (/^[ \t\r\n]*$/.test(after)) {
+        after = '';
+      } else if (after.startsWith('\r\n')) {
+        after = after.slice(2);
+      } else if (after.startsWith('\n')) {
+        after = after.slice(1);
+      }
+      // A span at byte 0 must not leave a leading blank line behind it.
+      if (before === '') after = after.replace(/^(?:\r?\n)+/, '');
+      out = before + after;
+      removedSpans++;
     }
-    // A span at byte 0 must not leave a leading blank line behind it.
-    if (before === '') after = after.replace(/^(?:\r?\n)+/, '');
-    const out = before + after;
+    const residue = out.includes(AGENTS_FLOOR_START) || out.includes(AGENTS_FLOOR_END);
+    if (removedSpans === 0) {
+      summary.skipped.push(
+        `${AGENTS_FLOOR_REL} (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)`,
+      );
+      return;
+    }
     if (/^[ \t\r\n]*$/.test(out)) {
       fs.unlinkSync(filePath);
       summary.removed.push(AGENTS_FLOOR_REL);
       return;
     }
     writeFileAtomicSync(filePath, out);
-    summary.scrubbed.push(AGENTS_FLOOR_REL);
+    summary.scrubbed.push(
+      residue ? `${AGENTS_FLOOR_REL} (marker residue remains — remove manually)` : AGENTS_FLOOR_REL,
+    );
     // totem-context: intentional cleanup — per-file best-effort like scrubReflexFiles; a locked or unreadable AGENTS.md degrades to a reported skip, never an abort that strands the remaining eject steps
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

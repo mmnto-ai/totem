@@ -1,6 +1,6 @@
 # Totem: Agent Instructions
 
-Canonical source of truth for how AI coding agents behave in this repository. Following the AGENTS.md convention, `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`; thin per-tool redirect files point each tool here.
+Canonical source of truth for how AI coding agents behave in this repository. Following the AGENTS.md convention, `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`; thin per-tool redirect files point each tool here. Team-only instructions for this repository ride a private doctrine package and are never committed here.
 
 ## What Totem is
 
@@ -14,8 +14,8 @@ Totem is a local-first toolkit that keeps AI-agent work queryable, enforceable, 
 1. Run `totem status` for health.
 2. **Never guess architecture.** Before modifying a core system, run `totem search <system>`.
 3. Before writing code, call `search_knowledge` describing what you are changing.
-4. Run `totem lint` locally before the first push; front-load the deterministic checks.
-5. Cold start (no session hook injected orientation): after `/signon`'s seat-and-assignment step, derive it with `totem orient`.
+4. Do not push speculative fixes: run `totem lint` locally and front-load every check before the first push.
+5. Cold start (no session hook injected orientation): derive it with `totem orient`, after `/signon`'s seat-and-assignment step where that skill is installed.
 
 ## Working rules
 
@@ -31,7 +31,7 @@ If this repository uses review bots: review triggers are the maintainer's to pos
 
 ## Installed skills
 
-`totem init` installs `/signon`, `/signoff`, `/review-reply` and `/review-loop`; every later `totem init` refreshes each skill's managed span and keeps what you add below its end marker. Private or team-only instructions, when present, resolve from an installed doctrine package and are never committed here.
+Where `totem init` installs skills (`/signon`, `/signoff`, `/review-reply`, `/review-loop`), every later `totem init` refreshes each skill's managed span and keeps what you add below its end marker.
 
 <!-- totem:agents-floor:end -->
 
@@ -51,6 +51,7 @@ Not mechanically enforced. Follow because it reduces review noise.
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
 - **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify the compile manifest is current.
 - **Open PRs Ready, not Draft.**
+- **This repository uses review bots.** The review-bots conduct in the managed span above applies here.
 
 ## Contributor principles
 
@@ -68,7 +69,7 @@ Beside the installed ones: `/preflight <issue>` (spec + search before coding), `
 
 <!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" primary="totem-claude" since="2026-08-14" -->
 
-The marker above binds this repository's judgment bus and is read by `totem doctor --parity`. It is the one agent identifier this file carries; its move into a committed config file is mmnto-ai/totem#2866.
+The marker above declares this repository's `agent-bus` binding, the one `totem doctor --parity` reads. It is the one agent identifier this file carries; its move into a committed config file is mmnto-ai/totem#2866.
 
 ## Detailed docs
 

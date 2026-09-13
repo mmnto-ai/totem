@@ -4276,6 +4276,18 @@ describe('deriveProjectName', () => {
     fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"   "}');
     expect(deriveProjectName(tmpDir)).toBe(path.basename(tmpDir));
   });
+
+  it('never returns an empty title and never mints a second heading', () => {
+    // A scope with nothing after it strips to nothing — fall through to the basename.
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"@acme/"}');
+    expect(deriveProjectName(tmpDir)).toBe(path.basename(tmpDir));
+    // Whitespace, a newline included, collapses to one space on the heading line.
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"evil\\n# Injected  Heading"}');
+    expect(deriveProjectName(tmpDir)).toBe('evil # Injected Heading');
+    expect(renderAgentsFloorScaffold(deriveProjectName(tmpDir)).split('\n')[0]).toBe(
+      '# evil # Injected Heading: Agent Instructions',
+    );
+  });
 });
 
 describe('scaffoldAgentsFloor', () => {
@@ -4347,5 +4359,55 @@ describe('scaffoldAgentsFloor', () => {
     expect(AGENTS_FLOOR_BLOCK.indexOf(AGENTS_FLOOR_END)).toBe(
       AGENTS_FLOOR_BLOCK.lastIndexOf(AGENTS_FLOOR_END),
     );
+  });
+
+  // ─── Pairing and line endings (the fold of the pre-merge leg's F2/F4/F5/F16) ──
+
+  it('an orphan start marker above the span never widens the refresh — the bytes between stay', () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n\n## Keep\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x').action).toBe('refreshed');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n${AGENTS_FLOOR_BLOCK}\n\n## Keep\n`,
+    );
+  });
+
+  it('a second complete span after the first is left alone and named in err', () => {
+    const content = `# Mine\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n\nMID\n\n${AGENTS_FLOOR_START}\nother\n${AGENTS_FLOOR_END}\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('refreshed');
+    expect(result.err).toContain('second managed span');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\nMID\n\n${AGENTS_FLOOR_START}\nother\n${AGENTS_FLOOR_END}\n`,
+    );
+  });
+
+  it('an orphan end marker above a complete span is skipped, not attributed', () => {
+    const content = `# Mine\n${AGENTS_FLOOR_END}\nstill mine\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x').action).toBe('refreshed');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_END}\nstill mine\n${AGENTS_FLOOR_BLOCK}\n`,
+    );
+  });
+
+  it('a CRLF file gets the span in CRLF, converges in one write, and stays byte-stable', () => {
+    const crlfScaffold = renderAgentsFloorScaffold('x').replace(/\n/g, '\r\n');
+    fs.writeFileSync(agentsPath(), crlfScaffold, 'utf-8');
+    // Already canonical in its own line terminator: nothing to do.
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'unchanged' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(crlfScaffold);
+
+    // A drifted CRLF span is refreshed WITHOUT introducing a bare LF anywhere.
+    fs.writeFileSync(agentsPath(), crlfScaffold.replace('Never guess', 'Never GUESS'), 'utf-8');
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    const refreshed = fs.readFileSync(agentsPath(), 'utf-8');
+    expect(refreshed).toBe(crlfScaffold);
+    expect(refreshed.replace(/\r\n/g, '')).not.toContain('\n');
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'unchanged' });
   });
 });

@@ -8,15 +8,23 @@
  * Usage:
  *   node tools/public-refs-resolve.mjs AGENTS.md CLAUDE.md GEMINI.md .claude/docs/*.md
  *
- * For each file it extracts
+ * For each file it extracts exactly these shapes
  *   - absolute URLs (`https://…`),
  *   - repository-qualified issue/PR refs (`owner/repo#123`), probed as the
  *     public issue URL (GitHub redirects a PR number to its pull page),
- *   - repository-qualified paths (`owner/repo:path/to/file.md`), probed on the
- *     default branch,
- *   - relative markdown links (`[x](path)`), checked on disk,
+ *   - repository-qualified commits (`owner/repo@sha`), probed as the commit URL,
+ *   - repository-qualified paths (`owner/repo:path/to/file.ext`), probed on
+ *     the default branch,
+ *   - relative markdown links, inline (`[x](path)`) and reference-style
+ *     (`[x]: path`), checked on disk,
  * and prints one row per reference with the observed status. Exit 0 when
  * every reference resolves, 1 when any does not, 2 on usage error.
+ *
+ * Not extracted, by design: a bare repository name with no `#`, `@` or `:`
+ * (indistinguishable from an ordinary `dir/file` path), an anchor-only link
+ * (`[x](#heading)`, a heading question, not a resolvability one), and a
+ * qualified path with no file extension. The sterility test's lexicon covers
+ * the bare private-repository name; this script does not.
  *
  * Network: unauthenticated GETs only. No token is read from the environment or
  * sent — an authenticated probe would pass a private link the public reader
@@ -34,8 +42,10 @@ if (files.length === 0) {
 
 const URL_RE = /https?:\/\/[^\s)<>"'`]+/g;
 const QUALIFIED_ISSUE_RE = /\b([\w.-]+)\/([\w.-]+)#(\d+)\b/g;
+const QUALIFIED_COMMIT_RE = /\b([\w.-]+)\/([\w.-]+)@([0-9a-f]{7,40})\b/g;
 const QUALIFIED_PATH_RE = /\b([\w.-]+)\/([\w.-]+):((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9]+)\b/g;
 const MD_LINK_RE = /\]\(([^)\s#]+)(?:#[^)]*)?\)/g;
+const MD_REF_DEF_RE = /^\s*\[[^\]]+\]:\s*(\S+)/gm;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 const REQUEST_TIMEOUT_MS = 15000;
 const CONCURRENCY = 6;
@@ -65,12 +75,19 @@ for (const file of files) {
     const [ref, owner, repo, n] = match;
     add(file, 'issue', ref, `https://github.com/${owner}/${repo}/issues/${n}`);
   }
+  for (const match of content.matchAll(QUALIFIED_COMMIT_RE)) {
+    const [ref, owner, repo, sha] = match;
+    add(file, 'commit', ref, `https://github.com/${owner}/${repo}/commit/${sha}`);
+  }
   for (const match of content.matchAll(QUALIFIED_PATH_RE)) {
     const [ref, owner, repo, p] = match;
     add(file, 'path', ref, `https://github.com/${owner}/${repo}/blob/HEAD/${p}`);
   }
-  for (const match of content.matchAll(MD_LINK_RE)) {
-    const target = match[1];
+  const relativeTargets = [
+    ...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]),
+    ...[...content.matchAll(MD_REF_DEF_RE)].map((m) => m[1]),
+  ];
+  for (const target of relativeTargets) {
     if (SCHEME_RE.test(target)) continue; // absolute URLs are covered above; mailto: is not a public-resolvability question
     add(file, 'link', target, `file:${path.resolve(path.dirname(file), target)}`);
   }
