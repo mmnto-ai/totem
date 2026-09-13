@@ -489,7 +489,7 @@ describe('ejectCommand', () => {
 
       expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
       expect(summary.skipped).toHaveLength(1);
-      expect(summary.skipped[0]).toContain('unclosed code fence opened at line 3');
+      expect(summary.skipped[0]).toContain('or an HTML comment opened at line 3');
       expect(summary.scrubbed).toEqual([]);
     },
   );
@@ -507,7 +507,7 @@ describe('ejectCommand', () => {
       `# Mine\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`,
     );
     expect(summary.scrubbed).toHaveLength(1);
-    expect(summary.scrubbed[0]).toContain('unclosed code fence opened at line');
+    expect(summary.scrubbed[0]).toContain('or an HTML comment opened at line');
   });
 
   it.each([1, 2, 3])(
@@ -575,7 +575,7 @@ describe('ejectCommand', () => {
     const written = fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8');
     const fenceLineOnDisk = written.split('\n').findIndex((l) => l === '```') + 1;
     expect(summary.scrubbed).toEqual([
-      `AGENTS.md (scrubbed; an unclosed code fence opened at line ${fenceLineOnDisk} makes the floor markers below it ambiguous; nothing below it was touched — close the fence, then re-run \`totem eject\`)`,
+      `AGENTS.md (scrubbed; an unclosed code fence or an HTML comment opened at line ${fenceLineOnDisk} makes the floor markers inside or below it ambiguous; nothing from that line on was touched — close it, then re-run \`totem eject\`)`,
     ]);
   });
 
@@ -589,7 +589,7 @@ describe('ejectCommand', () => {
     await scrubAgentsFloor(cwd, summary);
 
     expect(summary.skipped[0]).toMatch(
-      /^AGENTS\.md \(not scrubbed: an unclosed code fence opened at line 3 /,
+      /^AGENTS\.md \(not scrubbed: an unclosed code fence or an HTML comment opened at line 3 /,
     );
   });
 
@@ -603,7 +603,7 @@ describe('ejectCommand', () => {
     await scrubAgentsFloor(cwd, summary);
 
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
-    expect(summary.skipped[0]).toContain('unclosed code fence opened at line 3');
+    expect(summary.skipped[0]).toContain('or an HTML comment opened at line 3');
   });
 
   it('a fence-looking line inside an HTML comment is raw HTML: the closed quotation below it stays prose', async () => {
@@ -615,6 +615,45 @@ describe('ejectCommand', () => {
 
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
     expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
+  it('a comment opener inside a fenced block is the fence content: the fence still closes and the real span below is removed', async () => {
+    fs.writeFileSync(
+      path.join(cwd, 'AGENTS.md'),
+      `# Mine\n\n\`\`\`html\n<!-- example opener\n\`\`\`\n\n${AGENTS_FLOOR_BLOCK}\n\nafter\n`,
+    );
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      '# Mine\n\n```html\n<!-- example opener\n```\n\nafter\n',
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
+  it('a multi-line comment that reaches a marker swallows it: ambiguous, named, nothing touched', async () => {
+    const content = `# Mine\n\n<!-- TODO revisit\n\n\`\`\`\n${AGENTS_FLOOR_START}\nQUOTED EXAMPLE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toHaveLength(1);
+    expect(summary.skipped[0]).toContain('HTML comment opened at line 3');
+  });
+
+  it('wrapping the span in an HTML comment is named, never silently removed or silently ignored', async () => {
+    const content = `# Mine\n\n<!--\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n-->\n\nafter\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toHaveLength(1);
+    expect(summary.skipped[0]).toContain('HTML comment opened at line 3');
   });
 
   it('the residue-only skip carries the contract', async () => {

@@ -3015,54 +3015,78 @@ export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
  * legs' mirror findings). Neither tool guesses: markers there are AMBIGUOUS,
  * never paired, and both tools name the fence so the maintainer can close it.
  *
- * Two CommonMark rules the scan honours so a quoted example is read the way a
- * renderer reads it: a closing fence carries no info string (a ```sh line
- * never closes an open block — it is text inside it), and a fence-looking line
- * inside an HTML comment block (a line-initial `<!--` through the next `-->`)
- * is raw HTML, not a fence.
+ * Three CommonMark rules the scan honours so a quoted example is read the way
+ * a renderer reads it: a closing fence carries no info string (a ```sh line
+ * never closes an open block — it is text inside it); a multi-line HTML
+ * comment (a line-initial `<!--` whose line carries no `-->`, through the
+ * first line that does) is raw HTML, so a fence-looking line inside it is not
+ * a fence and a floor marker inside it is not a marker; and a `<!--` inside an
+ * open fence is the fence's content. Markers a comment swallows, and markers
+ * below an unclosed fence or comment opener, are ambiguous: excluded from
+ * pairing and named by `agentsFloorAmbiguousFenceLine`, never silently prose.
  *
- * Disclosed limit: this is a line scan, not a markdown parser. A fence-looking
- * line inside any OTHER raw HTML block (a `<div>` … `</div>` wrapper, say) is
- * still counted here, and an odd number of such lines shifts the pairing of
- * every fence below them. The wiki tells maintainers to keep fence-looking
- * lines out of raw HTML in AGENTS.md.
+ * Disclosed limit: this is a line scan for two block kinds, not a markdown
+ * parser. A fence-looking line inside any OTHER raw HTML block (a `<div>` …
+ * `</div>` wrapper, say) is still counted here, and an odd number of such
+ * lines shifts the pairing of every fence below them. The wiki tells
+ * maintainers to keep fence-looking lines out of raw HTML in AGENTS.md.
  */
 function scanFences(content: string): {
+  /** Closed fenced code blocks, opener line start through closer line end. */
   ranges: Array<{ start: number; end: number }>;
+  /** Closed multi-line HTML comment blocks, opener line start through the line carrying `-->`. */
+  comments: Array<{ start: number; end: number }>;
+  /** A fence opener no closer answered, else `null`. */
   unclosedAt: number | null;
+  /** A multi-line comment opener no `-->` answered, else `null`. */
+  unclosedCommentAt: number | null;
 } {
+  // One sequential pass over the lines, the way a block parser reads them: a
+  // fence opener owns every line until its closer (a `<!--` inside it is
+  // content), a multi-line comment opener owns every line until the first
+  // `-->` (a fence-looking line inside it is content). Neither pass can be
+  // computed from the other's output, which is why this is not two regexes.
   const ranges: Array<{ start: number; end: number }> = [];
-  // HTML comment blocks: a line-initial `<!--` (at most three spaces in) up to
-  // and including the next `-->`. The floor markers are single-line comments,
-  // so they are ranges of their own and never swallow a fence.
   const comments: Array<{ start: number; end: number }> = [];
-  for (const open of content.matchAll(/^[ ]{0,3}<!--/gm)) {
-    const close = content.indexOf('-->', open.index + open[0].length);
-    if (close === -1) {
-      comments.push({ start: open.index, end: content.length });
-      break;
+  let state:
+    | { kind: 'fence'; at: number; marker: string }
+    | { kind: 'comment'; at: number }
+    | null = null;
+  let lineStart = 0;
+  while (lineStart <= content.length) {
+    const nl = content.indexOf('\n', lineStart);
+    const lineEnd = nl === -1 ? content.length : nl + 1;
+    const line = content.slice(lineStart, nl === -1 ? content.length : nl).replace(/\r$/, '');
+    if (state === null) {
+      const opener = /^[ ]{0,3}(`{3,}|~{3,})/.exec(line);
+      if (opener !== null) {
+        state = { kind: 'fence', at: lineStart, marker: opener[1]! };
+      } else if (/^[ ]{0,3}<!--/.test(line) && !line.includes('-->')) {
+        state = { kind: 'comment', at: lineStart };
+      }
+    } else if (state.kind === 'fence') {
+      const closer = /^[ ]{0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+      if (
+        closer !== null &&
+        closer[1]![0] === state.marker[0] &&
+        closer[1]!.length >= state.marker.length
+      ) {
+        ranges.push({ start: state.at, end: lineEnd });
+        state = null;
+      }
+    } else if (line.includes('-->')) {
+      comments.push({ start: state.at, end: lineEnd });
+      state = null;
     }
-    comments.push({ start: open.index, end: close + '-->'.length });
+    if (nl === -1) break;
+    lineStart = lineEnd;
   }
-  const inComment = (at: number): boolean => comments.some((c) => at >= c.start && at < c.end);
-  const fence = /^[ ]{0,3}(`{3,}|~{3,})([^\r\n]*)/gm;
-  let open: { at: number; marker: string } | null = null;
-  for (const match of content.matchAll(fence)) {
-    if (inComment(match.index)) continue;
-    const marker = match[1]!;
-    const rest = match[2] ?? '';
-    if (open === null) {
-      open = { at: match.index, marker };
-    } else if (
-      marker[0] === open.marker[0] &&
-      marker.length >= open.marker.length &&
-      rest.trim() === ''
-    ) {
-      ranges.push({ start: open.at, end: match.index + match[0].length });
-      open = null;
-    }
-  }
-  return { ranges, unclosedAt: open === null ? null : open.at };
+  return {
+    ranges,
+    comments,
+    unclosedAt: state !== null && state.kind === 'fence' ? state.at : null,
+    unclosedCommentAt: state !== null && state.kind === 'comment' ? state.at : null,
+  };
 }
 
 /** The code point of the byte-order mark a UTF-8 editor may leave at byte 0. */
@@ -3095,38 +3119,57 @@ function isWholeLineMarker(content: string, at: number, marker: string): boolean
  * mid-sentence, or sitting in an indented code block is prose and never pairs.
  */
 export function agentsFloorMarkerPositions(content: string, marker: string): number[] {
-  const { ranges, unclosedAt } = scanFences(content);
+  const { ranges, comments, unclosedAt, unclosedCommentAt } = scanFences(content);
   const positions: number[] = [];
   let at = content.indexOf(marker);
   while (at !== -1) {
     const fenced = ranges.some((r) => at >= r.start && at < r.end);
+    // A marker inside a multi-line comment block is that block's content (a
+    // renderer never sees it as markup); a marker below an unclosed fence or
+    // comment opener is ambiguous. Both are excluded, and both are named by
+    // `agentsFloorAmbiguousFenceLine` so the exclusion is never silent.
+    const commented =
+      comments.some((c) => at >= c.start && at < c.end) ||
+      (unclosedCommentAt !== null && at > unclosedCommentAt);
     const ambiguous = unclosedAt !== null && at > unclosedAt;
-    if (isWholeLineMarker(content, at, marker) && !fenced && !ambiguous) positions.push(at);
+    if (isWholeLineMarker(content, at, marker) && !fenced && !commented && !ambiguous) {
+      positions.push(at);
+    }
     at = content.indexOf(marker, at + marker.length);
   }
   return positions;
 }
 
 /**
- * Where an unclosed fence opener makes floor markers below it ambiguous: the
- * 1-based line of that opener when at least one whole-line marker (start or
- * end) sits below it, else `null`. Both tools name it instead of guessing —
- * computed on the text they are about to leave on disk, so the line is right
- * after a refresh or a scrub above the fence moved it.
+ * Where an unclosed fence opener, an unclosed HTML comment opener, or a
+ * closed multi-line HTML comment swallows floor markers: the 1-based line of
+ * the earliest such opener that has at least one whole-line marker (start or
+ * end) inside or below it, else `null`. Both tools name it instead of
+ * guessing — computed on the text they are about to leave on disk, so the line
+ * is right after a refresh or a scrub above it moved it.
  */
 export function agentsFloorAmbiguousFenceLine(content: string): number | null {
-  const { unclosedAt } = scanFences(content);
-  if (unclosedAt === null) return null;
-  const markerBelow = [AGENTS_FLOOR_START, AGENTS_FLOOR_END].some((marker) => {
-    let at = content.indexOf(marker, unclosedAt);
-    while (at !== -1) {
-      if (isWholeLineMarker(content, at, marker)) return true;
-      at = content.indexOf(marker, at + marker.length);
-    }
-    return false;
-  });
-  if (!markerBelow) return null;
-  return content.slice(0, unclosedAt).split('\n').length;
+  const { comments, unclosedAt, unclosedCommentAt } = scanFences(content);
+  const hasMarkerIn = (from: number, to: number): boolean =>
+    [AGENTS_FLOOR_START, AGENTS_FLOOR_END].some((marker) => {
+      let at = content.indexOf(marker, from);
+      while (at !== -1 && at < to) {
+        if (isWholeLineMarker(content, at, marker)) return true;
+        at = content.indexOf(marker, at + marker.length);
+      }
+      return false;
+    });
+  const candidates: number[] = [];
+  if (unclosedAt !== null && hasMarkerIn(unclosedAt, content.length)) candidates.push(unclosedAt);
+  if (unclosedCommentAt !== null && hasMarkerIn(unclosedCommentAt, content.length)) {
+    candidates.push(unclosedCommentAt);
+  }
+  for (const c of comments) {
+    if (hasMarkerIn(c.start, c.end)) candidates.push(c.start);
+  }
+  if (candidates.length === 0) return null;
+  const earliest = Math.min(...candidates);
+  return content.slice(0, earliest).split('\n').length;
 }
 
 /**

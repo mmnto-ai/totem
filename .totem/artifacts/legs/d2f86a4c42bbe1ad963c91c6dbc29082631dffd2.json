@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "d2f86a4c42bbe1ad963c91c6dbc29082631dffd2",
+  "readAt": "2026-09-13T20:41:06Z",
+  "findings": [
+    {
+      "id": "L1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4605,
+      "claim": "The drafted test 'a create and a refresh leave no temp-file residue beside AGENTS.md (temp-file-and-rename)' verifies greptile P1 #4000737091 ('Refresh can leave torn files ... every user-file write [must] use a same-volume temporary file and rename').",
+      "counterexample": "OBSERVED. The assertion is `expect(fs.readdirSync(tmpDir)).toEqual(['AGENTS.md'])`, which has zero discriminating power against the pre-fold code: running the pre-fold shape verbatim (`fs.writeFileSync(p,'scaffold','utf-8')` then `fs.writeFileSync(p,'refreshed','utf-8')` in a fresh mkdtemp) prints `readdir = [\"AGENTS.md\"]`. The test passes identically on the code greptile flagged, so it pins nothing about rename semantics. Corroborating: no test in that file observes the writer at all, and the failure path (init.ts:864 throw -> init.ts:867-870 catch -> `preserved` + `[Totem Error]`) is untested. The stronger idiom already exists in the same package and the same fold's other touched test file: packages/cli/src/commands/eject.test.ts:74-87 carries `vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => ...)` as a failure-injection seam, unused on the init side. The PRODUCTION fix is correct — verified at source, packages/core/src/fs-atomic.ts:81 (the temp path), :96 (`openSync(tmpPath,'wx',createMode)`), :98 fsync, :103-105 mode preserved (POSIX; skipped on win32 by :102), :117 `renameSync` — so this is an assertion-strength finding under model-tiering Invariant 2, not a code defect."
+    },
+    {
+      "id": "L2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3039,
+      "claim": "The new HTML-comment masking makes the scan read a quotation 'the way a renderer does' (docs/wiki/cli-reference.md:24), with the only remaining fence limit being 'a fence-looking line inside any OTHER raw HTML block' (init-templates.ts:3024-3028).",
+      "counterexample": "OBSERVED (A/B against `git show 7a94e9b7:packages/cli/src/commands/init-templates.ts`). The masking is computed over the whole file with no fence context, so a line-initial `<!--` INSIDE a fenced code block creates a comment range that swallows that block's own closing fence. Fixture (lines: `# Mine`, ``, '```html', '<!-- example opener', '```', ``, START, 'my real managed span', END, ``, 'after'): OLD -> `locateAgentsFloorSpan` = the live span (init refreshes it); NEW -> `span=null, agentsFloorAmbiguousFenceLine=3`. So `totem init` stops managing a genuinely live span and emits the hint 'has an unclosed code fence ... opened at line 3 ... close the fence' for a fence that IS closed at line 5, and `totem eject` skips it. CommonMark disagrees with the new reading here, so this is the exact mirror of greptile P1 #4000737093, introduced by its remedy — in the safe direction (no data loss, loud) but undisclosed. Reachability is low: an A/B over every committed markdown file in the worktree (1962 files) shows 0 behavior differences."
+    },
+    {
+      "id": "L3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3040,
+      "claim": "`content.indexOf('-->', open.index + open[0].length)` bounds an HTML comment block, and the floor markers 'are ranges of their own and never swallow a fence' (init-templates.ts:3035-3037).",
+      "counterexample": "OBSERVED. The marker clause holds, but a line-initial `<!--` that carries no `-->` on its own line takes the NEXT `-->` anywhere in the file — and in an AGENTS.md carrying the floor, that is normally the START MARKER's own `-->`. Every fence between the stray opener and the marker is therefore masked. Fixture (`# Mine`, ``, `<!-- TODO revisit`, ``, '```', START, 'QUOTED EXAMPLE', END, '```', ``, 'after'): OLD -> `span=null` (the quotation was preserved); NEW -> span = START..END, so `totem init` REWRITES 'QUOTED EXAMPLE' and `totem eject` deletes it. This is renderer-faithful (CommonMark HTML block type 2 ends at the first line containing `-->`), so the new reading is the correct one — but it is a new data-losing outcome on a file the pre-fold code preserved, and it is named nowhere. Trigger requires a malformed (unterminated) line-initial comment opener; 0/1962 committed markdown files are affected."
+    },
+    {
+      "id": "L4",
+      "severity": "MINOR",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 57,
+      "claim": "Both extractors now read 'Inline link destinations, both CommonMark spellings' and the script's header names 'the shapes it does not extract', answering CodeRabbit #4000747293 ('An unresolved local link can pass both validators').",
+      "counterexample": "OBSERVED, live fixture run. `[b](<with space.md>)`, `[c](<missing space.md>)`, `[d](plain.md)` produce rows (the angle form now works, exit=1 on the missing one) and NO row for `[e](titled.md \"a title\")` — a titled inline link is still silently invisible to both validators, which is precisely CR's stated failure mode, closed only on the angle-bracket half. `[m](missing(foo).md)` still mis-extracts as `missing(foo` in both. The header's 'Not extracted, by design' list does not name the title shape. Currently unreachable in-repo: no titled link on any of the seven PUBLIC_SURFACES. Parity verified: the two regexes are byte-identical today."
+    },
+    {
+      "id": "L5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 224,
+      "claim": "[NOTE] The skip comment `// an anchor-only destination — a heading question, not a resolvability one` (mirrored at tools/public-refs-resolve.mjs:114) describes the values it guards.",
+      "counterexample": "OBSERVED. `''` reaches that guard from two distinct shapes: `](<#anchor>)` (an anchor-only destination, as described) AND `](<>)` (an empty destination, which is not an anchor at all). The new unit test's own comment has the same slip. Comment-only; behavior is correct either way (both are skipped)."
+    },
+    {
+      "id": "L6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 794,
+      "claim": "The UTF-8 guard is the 'Same guard as the eject and reflex scrubs' (init.ts:789-791) — a file that does not round-trip is left untouched.",
+      "counterexample": "OBSERVED. The predicate is identical to eject.ts:763 and correctly tolerant — a UTF-8 BOM, a lone `\\r`, a NUL byte and astral characters all round-trip (no false rejection); UTF-16LE-with-BOM, a latin-1 0xE9, a lone surrogate, an overlong C0 80 and a truncated E2 82 are all rejected. But the ORDERING differs from eject: init evaluates the guard BEFORE `locateAgentsFloorSpan`, whereas eject runs its `realMarkers(content) === 0` check FIRST. Consequences: a non-UTF-8 AGENTS.md carrying no markers at all now returns `preserved` and prints the 'not valid UTF-8' hint on EVERY `totem init`, where nothing would ever have been written; the same file is described differently by the two tools. Also: a UTF-16 file with NO BOM is ASCII interleaved with NUL, which IS valid UTF-8 — the guard passes, the markers are invisible, and init reports the 'is yours' hint for a UTF-16 file. No write, no corruption in any case."
+    },
+    {
+      "id": "L7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 797,
+      "claim": "[QUESTION] The hint's reason, `(a refresh would replace the undecodable bytes)`, is honest for every file it fires on.",
+      "counterexample": "OBSERVED. For a fixture whose only invalid byte sits INSIDE the span, the guard rejects — but those bytes are exactly the ones a refresh is entitled to replace wholesale, so the stated reason does not apply to that case. Refusing is still the conservative call and matches eject; the docstring's own rationale ('substituting U+FFFD into the bytes outside the span, which the contract promises to keep') is the accurate one; only the user-facing parenthetical over-generalizes."
+    },
+    {
+      "id": "L8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 10,
+      "claim": "[NOTE] The new static subpath import keeps the no-eager-core-load shape because 'fs-atomic pulls only node builtins ... the same seam eject.ts uses for the same file' (init.ts:5-7).",
+      "counterexample": "HOLDS, verified at source, with two undisclosed behavior deltas. `@mmnto/totem/fs-atomic` resolves through packages/core/package.json `exports` to `./dist/fs-atomic.js`, whose only imports are `node:crypto` and `node:fs`, so no LanceDB reaches CLI startup. eject.ts:7 carries the byte-identical import. The undisclosed part: the changeset's new sentence 'every write to `AGENTS.md` is a temp-file-and-rename' does not carry the writer's own declared boundaries, which now apply to `totem init` for the first time — fs-atomic.ts:58-61 (a cross-uid/gid target the process cannot chown now throws; the parent DIRECTORY must be writable) and fs-atomic.ts:52-54 (the temp suffix adds ~20 chars, which can cross MAX_PATH on already-long target paths on Windows). All three degrade to `preserved` + `[Totem Error]`, i.e. loud and non-destructive, and none is covered by a test (see L1). Separately verified: no production writer of AGENTS.md exists outside init.ts and eject.ts, so the 'every write' claim itself holds."
+    },
+    {
+      "id": "L9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 36,
+      "claim": "[NOTE] The decline of CodeRabbit #4000747291 ('Replace the static imports with dynamic imports ... As per path instructions: \"All imports must be lazy-loaded (dynamic import).\"') is grounded.",
+      "counterexample": "GROUNDED, and on stronger sources than the commit message cites. The instruction is real and unqualified in .coderabbit.yaml:41-42, but the repo states the test carve-out verbatim in two places the fold does not cite: packages/cli/src/commands/spec.test.ts:962-963 ('a static value import from `@mmnto/totem` inside `commands/**` pulls LanceDB into every CLI startup (mmnto-ai/totem#2339); tests may import it statically — that rule excludes `**/*.test.ts`') and packages/cli/src/commands/spine-llm-replay.test.ts:448-449 ('a test MAY static-import core (the rule is about command-file startup, not tests)'). Census: 169 of 169 `packages/cli/src/**/*.test.ts` files use static imports."
+    },
+    {
+      "id": "L10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3048,
+      "claim": "[NOTE] Falsification battery on the fence rules and the two new fence tests — every charged case checked.",
+      "counterexample": "ALL HOLD, OBSERVED. Closer rule: '```sh' never closes; '```   ' and '```\\t' close; '````x' does NOT close a '```' opener; bare '````' DOES; '~~~sh' does not close '~~~' — all CommonMark-exact. Comment masking: a NON-line-initial opener is correctly not masked, a single-line comment followed by a fence leaves that fence counted, a 4-space-indented `<!--` is correctly not a comment opener, a fence sitting between two live markers still pairs, and a comment that masks BOTH fences correctly leaves the markers below live. Both new fence tests are STRONG under Invariant 2 (A/B against 7a94e9b7: each would have FAILED pre-fold). Regression totals: 4 files passed, 525 passed / 4 skipped; pack-agent-security repo-sweep 3 passed. The new inline-link `it` runs green."
+    },
+    {
+      "id": "L11",
+      "severity": "MINOR",
+      "file": ".claude/docs/agent-workflow.md",
+      "line": 62,
+      "claim": "[NOTE] CodeRabbit #4000747281's premise ('`AGENTS.md` states that a maintainer posts review triggers') and the fold's answer are consistent with this branch's AGENTS.md.",
+      "counterexample": "HOLDS on the branch. On `619-t0-floor` the repo's AGENTS.md line 30 reads verbatim 'If this repository uses review bots: review triggers are the maintainer's to post, never an agent's.' — byte-identical to the shipped template. The new sentence at agent-workflow.md:62 therefore agrees with the branch's primary source, and the removed clause ('auto-triggered by CodeRabbit on push') was false against it. Note: the wording is a light rephrase of CR's committable suggestion, so it is a seat adaptation, not a verbatim-as-specified application — which is why this fold is not exempt-class under model-tiering § Review legs anyway."
+    }
+  ],
+  "folded": [
+    "L1",
+    "L2",
+    "L3",
+    "L4",
+    "L5",
+    "L6",
+    "L7",
+    "L8",
+    "L9",
+    "L10",
+    "L11"
+  ],
+  "verdict": "The production half of this fold is sound and could not be broken on any file a consumer plausibly ships: the UTF-8 guard is correctly tolerant, the atomic writer does write a same-volume `wx` temp, fsync, preserve the target's POSIX mode and rename last, the subpath import genuinely pulls only node builtins, the closer-info-string rule is CommonMark-exact across six shapes, the comment masking is CommonMark-correct for line-initial, non-line-initial, single-line, 4-space-indented and span-wrapping comments, both new fence tests would have failed pre-fold, the angle-bracket destination now resolves in a live fixture run, the decline on the dynamic-import ask is grounded in two verbatim in-repo clauses and a 169/169 census, and an A/B of the whole scan over all 1962 committed markdown files shows zero behavior differences. What survives is one assertion-strength gap and a set of narrow, low-reachability notes: L2 and L3 are the mirror misclassification the remedy introduces (a `<!--` inside a fenced block, and an unterminated `<!--` above the span), both undisclosed but neither reachable on any real file here; L4 leaves the half of CodeRabbit's link finding that concerns titled destinations silently open; and L1 — the fold's answer to greptile's torn-file P1 is a `readdirSync` equality that passes byte-for-byte on the code greptile flagged, while the same fold's sibling `eject.test.ts` already carries the `vi.mock('@mmnto/totem/fs-atomic')` seam that would make it discriminating. NOT CONVERGED: L1 survives. [Seat's fold, appended: all eleven folded in the commit that follows d2f86a4c — the atomic-write test injects a failure through the same fs-atomic mock seam and asserts the original bytes survive and `preserved` carries the error (L1); the fence and comment scan is one sequential block pass, so a `<!--` inside an open fence is the fence's content and a multi-line comment that reaches a marker is ambiguous, named by line, nothing touched (L2, L3, with the wiki sentence on commenting the span out corrected to what the scan does); both extractors read titled destinations in the three CommonMark title spellings with a unit test (L4); the anchor-only comment names the empty destination too (L5); the encoding hint says what a refresh does (L7); the L6 ordering, the L8 writer boundaries and the L9 citation are recorded here as disclosed (the guard-before-locate order is the conservative one and stays; the writer's boundaries degrade to a loud `preserved`); L10 and L11 confirmed. The seat names convergence again after this fold: the surviving material was assertion strength, now discriminating, and the remaining notes are disclosed limits.]"
+}

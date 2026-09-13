@@ -746,7 +746,7 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       const line = agentsFloorAmbiguousFenceLine(text);
       return line === null
         ? ''
-        : `an unclosed code fence opened at line ${line} makes the floor markers below it ambiguous; nothing below it was touched — close the fence, then re-run \`totem eject\``;
+        : `an unclosed code fence or an HTML comment opened at line ${line} makes the floor markers inside or below it ambiguous; nothing from that line on was touched — close it, then re-run \`totem eject\``;
     };
     // A marker quoted inside a closed fenced code block is prose, not a block.
     if (realMarkers(content) === 0) {

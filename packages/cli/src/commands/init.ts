@@ -794,7 +794,7 @@ export function scaffoldAgentsFloor(
     if (Buffer.compare(Buffer.from(existing, 'utf-8'), rawExisting) !== 0) {
       return {
         action: 'preserved',
-        err: `${AGENTS_FLOOR_REL} is not valid UTF-8 — left untouched (a refresh would replace the undecodable bytes); convert the file to UTF-8 and re-run \`totem init\`.`,
+        err: `${AGENTS_FLOOR_REL} is not valid UTF-8 — left untouched (a refresh decodes and rewrites the whole file, and bytes it cannot decode would not survive); convert the file to UTF-8 and re-run \`totem init\`.`,
       };
     }
     const span = locateAgentsFloorSpan(existing);
@@ -812,7 +812,7 @@ export function scaffoldAgentsFloor(
         hint:
           line === null
             ? undefined
-            : `${AGENTS_FLOOR_REL} has an unclosed code fence (\`\`\` or ~~~ opened at line ${line}) with floor markers below it, which makes them ambiguous — a quotation the fence never closed, or a real span under a stray fence line. Nothing below that fence is touched: close the fence, then re-run \`totem init\` (if you remove the fence line instead, ${contract}).`,
+            : `${AGENTS_FLOOR_REL} has an unclosed code fence or an HTML comment (opened at line ${line}) with floor markers inside or below it, which makes them ambiguous — a quotation never closed, a comment that swallows a marker, or a real span under a stray opener. Nothing from that line on is touched: close the fence or the comment, then re-run \`totem init\` (if you remove the opener line instead, ${contract}).`,
       };
     };
     const compose = (
@@ -1771,7 +1771,7 @@ export default {
       // refresh: a summary row, not only the dim hint line.
       summary.push({
         file: AGENTS_FLOOR_REL,
-        action: `Floor markers below an unclosed code fence (line ${floor.fenceLine}) are ambiguous — nothing under it was touched; close the fence`,
+        action: `Floor markers inside or below an unclosed code fence or an HTML comment (line ${floor.fenceLine}) are ambiguous — nothing from that line on was touched; close it`,
       });
     }
     if (floor.err) {

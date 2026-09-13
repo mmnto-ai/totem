@@ -109,7 +109,9 @@ const BARE_REF = new RegExp(BARE_REF_REGEX_SOURCE);
  * vitest module and a bare ESM script) and stay in step by this comment and
  * the round that added the angle form to both.
  */
-const MD_LINK = /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)]*)?\)/g;
+const MD_LINK =
+  /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)\s]*)?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
+/** The destination without its fragment; `''` for an anchor-only or empty angle-bracketed destination, which the callers skip. */
 const linkTarget = (match: RegExpMatchArray): string =>
   (match[1] ?? match[2] ?? '').replace(/#.*$/, '');
 
@@ -205,6 +207,11 @@ describe('the inline-link extractor reads both CommonMark destination spellings'
       'docs/z.md',
       '',
     ]);
+    // A link title after the destination (any of the three CommonMark title
+    // spellings) never hides the link.
+    expect(
+      extract('[t](docs/t.md "a title") [u](<docs/u v.md> \'quoted\') [w](docs/w.md (paren))'),
+    ).toEqual(['docs/t.md', 'docs/u v.md', 'docs/w.md']);
   });
 });
 

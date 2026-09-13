@@ -53,7 +53,8 @@ const QUALIFIED_PATH_RE = /\b([\w.-]+)\/([\w.-]+):((?:[\w.-]+\/)*[\w.-]+\.[A-Za-
 // Inline link destinations, both CommonMark spellings: bare (no spaces) and
 // angle-bracketed (`](<path with spaces>)`); a fragment is dropped either way.
 // Kept in step with the sterility test's `MD_LINK` by hand.
-const MD_LINK_RE = /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)]*)?\)/g;
+const MD_LINK_RE =
+  /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)\s]*)?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)/g;
 const MD_REF_DEF_RE = /^\s*\[[^\]]+\]:\s*(\S+)/gm;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 const REQUEST_TIMEOUT_MS = 15000;

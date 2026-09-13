@@ -6,6 +6,19 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { IngestTarget } from '@mmnto/totem';
+
+// Failure-injection seam for the shared atomic writer, the same shape
+// eject.test.ts carries: passthrough to the REAL helper unless a test arms a
+// failure, so every fixture keeps exercising real temp-file-and-rename writes.
+const atomicControl: { failAll?: Error } = {};
+vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mmnto/totem/fs-atomic')>();
+  const writeFileAtomicSync = ((...args: Parameters<typeof actual.writeFileAtomicSync>) => {
+    if (atomicControl.failAll) throw atomicControl.failAll;
+    return actual.writeFileAtomicSync(...args);
+  }) as typeof actual.writeFileAtomicSync;
+  return { ...actual, writeFileAtomicSync };
+});
 import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
@@ -4595,14 +4608,26 @@ describe('scaffoldAgentsFloor', () => {
     expect(Buffer.compare(fs.readFileSync(agentsPath()), raw)).toBe(0);
   });
 
-  it('a create and a refresh leave no temp-file residue beside AGENTS.md (temp-file-and-rename)', () => {
+  it('a write failure leaves the original bytes intact and reports preserved with the error — the atomic writer is the seam', () => {
     expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'created' });
-    fs.writeFileSync(
-      agentsPath(),
-      fs.readFileSync(agentsPath(), 'utf-8').replace('Never guess', 'Never GUESS'),
-    );
+    const drifted = fs.readFileSync(agentsPath(), 'utf-8').replace('Never guess', 'Never GUESS');
+    fs.writeFileSync(agentsPath(), drifted);
+    atomicControl.failAll = new Error('EACCES: simulated');
+    try {
+      const result = scaffoldAgentsFloor(tmpDir, 'x');
+      expect(result.action).toBe('preserved');
+      expect(result.err).toContain('[Totem Error]');
+      expect(result.err).toContain('EACCES: simulated');
+      // Nothing was truncated: the drifted bytes are exactly as written, and
+      // no temp file was left beside them.
+      expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(drifted);
+      expect(fs.readdirSync(tmpDir)).toEqual(['AGENTS.md']);
+    } finally {
+      atomicControl.failAll = undefined;
+    }
+    // With the seam disarmed the same refresh goes through.
     expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
-    expect(fs.readdirSync(tmpDir)).toEqual(['AGENTS.md']);
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).not.toContain('Never GUESS');
   });
 
   it('a closing fence never carries an info string: a ```sh line leaves the quotation open, so it is ambiguous', () => {
@@ -4624,6 +4649,38 @@ describe('scaffoldAgentsFloor', () => {
     expect(result.action).toBe('preserved');
     expect(result.err).toContain('is yours');
     expect(result.fenceLine).toBeUndefined();
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('a comment opener inside a fenced block is the fence content: the fence still closes and the real span below is refreshed', () => {
+    const content = `# Mine\n\n\`\`\`html\n<!-- example opener\n\`\`\`\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n\nafter\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n\n\`\`\`html\n<!-- example opener\n\`\`\`\n\n${AGENTS_FLOOR_BLOCK}\n\nafter\n`,
+    );
+  });
+
+  it('a multi-line comment that reaches a marker swallows it: ambiguous, named, nothing touched', () => {
+    // The stray `<!--` runs to the first `-->`, which is the start marker's own.
+    const content = `# Mine\n\n<!-- TODO revisit\n\n\`\`\`\n${AGENTS_FLOOR_START}\nQUOTED EXAMPLE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('HTML comment');
+    expect(result.fenceLine).toBe(3);
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('wrapping the span in an HTML comment is named, never silently managed or silently ignored', () => {
+    const content = `# Mine\n\n<!--\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n-->\n\nafter\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.fenceLine).toBe(3);
     expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
   });
 
