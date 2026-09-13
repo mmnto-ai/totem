@@ -50,7 +50,10 @@ const URL_RE = /https?:\/\/[^\s)<>"'`]+/g;
 const QUALIFIED_ISSUE_RE = /\b([\w.-]+)\/([\w.-]+)#(\d+)\b/g;
 const QUALIFIED_COMMIT_RE = /\b([\w.-]+)\/([\w.-]+)@([0-9a-f]{7,40})\b/g;
 const QUALIFIED_PATH_RE = /\b([\w.-]+)\/([\w.-]+):((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z0-9]+)\b/g;
-const MD_LINK_RE = /\]\(([^)\s#]+)(?:#[^)]*)?\)/g;
+// Inline link destinations, both CommonMark spellings: bare (no spaces) and
+// angle-bracketed (`](<path with spaces>)`); a fragment is dropped either way.
+// Kept in step with the sterility test's `MD_LINK` by hand.
+const MD_LINK_RE = /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)]*)?\)/g;
 const MD_REF_DEF_RE = /^\s*\[[^\]]+\]:\s*(\S+)/gm;
 const SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i;
 const REQUEST_TIMEOUT_MS = 15000;
@@ -103,8 +106,12 @@ for (const file of files) {
     // end (`x.md`); `1.0`, `e.g.` and a bare word are prose, and an
     // extensionless slash-less target (`subdir`) is a named limit.
     .filter((t) => t !== '' && (t.includes('/') || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(t)));
-  const relativeTargets = [...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]), ...refDefTargets];
+  const inlineTargets = [...content.matchAll(MD_LINK_RE)].map((m) =>
+    (m[1] ?? m[2] ?? '').replace(/#.*$/, ''),
+  );
+  const relativeTargets = [...inlineTargets, ...refDefTargets];
   for (const target of relativeTargets) {
+    if (target === '') continue; // an anchor-only destination — a heading question, not a resolvability one
     if (SCHEME_RE.test(target)) continue; // absolute URLs are covered above; mailto: is not a public-resolvability question
     add(file, 'link', target, `file:${path.resolve(path.dirname(file), target)}`);
   }

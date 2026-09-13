@@ -4,6 +4,10 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import type { IngestTarget } from '@mmnto/totem';
+// Subpath import, NOT the core barrel: fs-atomic pulls only node builtins, so
+// the no-eager-core-load shape holds (the same seam eject.ts uses for the
+// same file — a user-owned AGENTS.md is written by temp-file-and-rename only).
+import { writeFileAtomicSync } from '@mmnto/totem/fs-atomic';
 
 // Type-only (fully erased): the `--gates=` path still loads `gate-install.js`
 // lazily inside the handler, so ADR-072 §3's no-eager-core-load shape holds.
@@ -779,10 +783,20 @@ export function scaffoldAgentsFloor(
   const filePath = path.join(cwd, AGENTS_FLOOR_REL);
   try {
     if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, renderAgentsFloorScaffold(projectName), 'utf-8');
+      writeFileAtomicSync(filePath, renderAgentsFloorScaffold(projectName));
       return { action: 'created' };
     }
-    const existing = fs.readFileSync(filePath, 'utf-8');
+    // Same guard as the eject and reflex scrubs: a file that does not
+    // round-trip through UTF-8 cannot be rewritten without substituting U+FFFD
+    // into the bytes outside the span, which the contract promises to keep.
+    const rawExisting = fs.readFileSync(filePath);
+    const existing = rawExisting.toString('utf-8');
+    if (Buffer.compare(Buffer.from(existing, 'utf-8'), rawExisting) !== 0) {
+      return {
+        action: 'preserved',
+        err: `${AGENTS_FLOOR_REL} is not valid UTF-8 — left untouched (a refresh would replace the undecodable bytes); convert the file to UTF-8 and re-run \`totem init\`.`,
+      };
+    }
     const span = locateAgentsFloorSpan(existing);
     // The one hint every stray-marker path carries, because it is the contract:
     // a start marker followed by an end marker IS a managed span by definition,
@@ -847,7 +861,7 @@ export function scaffoldAgentsFloor(
     if (merged === existing) {
       return compose('unchanged', existing, extraHint);
     }
-    fs.writeFileSync(filePath, merged, 'utf-8');
+    writeFileAtomicSync(filePath, merged);
     return compose('refreshed', merged, extraHint);
     // totem-context: intentional cleanup — preserve the repository's AGENTS.md on any IO failure rather than aborting init mid-flight; mirrors scaffoldClaudeSkill's failure posture
   } catch (err) {

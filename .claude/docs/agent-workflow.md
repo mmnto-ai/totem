@@ -59,7 +59,7 @@ When the agent reports back:
 
 ## Pre-Push Review
 
-Before pushing, run `coderabbit:code-review` to catch issues locally. This is an **early filter** — it does NOT feed the lesson pipeline. The PR review (auto-triggered by CodeRabbit on push) is what feeds `totem lesson extract`.
+Before pushing, run `coderabbit:code-review` to catch issues locally. This is an **early filter** — it does NOT feed the lesson pipeline. After push, the maintainer posts the PR review trigger; that review is what feeds `totem lesson extract`.
 
 Flow: local review → fix → push → PR review → extract lessons
 

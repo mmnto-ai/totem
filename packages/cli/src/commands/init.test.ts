@@ -4579,6 +4579,54 @@ describe('scaffoldAgentsFloor', () => {
     expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
   });
 
+  // ─── The bot round (greptile P1 ×3, CodeRabbit closer rule) ─────────
+
+  it('a file that is not valid UTF-8 is never rewritten — preserved with the encoding hint, bytes untouched', () => {
+    const raw = Buffer.concat([
+      Buffer.from('# Mine ', 'utf-8'),
+      Buffer.from([0xff, 0xfe, 0x0a]),
+      Buffer.from(`${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n`, 'utf-8'),
+    ]);
+    fs.writeFileSync(agentsPath(), raw);
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('not valid UTF-8');
+    expect(Buffer.compare(fs.readFileSync(agentsPath()), raw)).toBe(0);
+  });
+
+  it('a create and a refresh leave no temp-file residue beside AGENTS.md (temp-file-and-rename)', () => {
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'created' });
+    fs.writeFileSync(
+      agentsPath(),
+      fs.readFileSync(agentsPath(), 'utf-8').replace('Never guess', 'Never GUESS'),
+    );
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readdirSync(tmpDir)).toEqual(['AGENTS.md']);
+  });
+
+  it('a closing fence never carries an info string: a ```sh line leaves the quotation open, so it is ambiguous', () => {
+    const content = `# Mine\n\n\`\`\`\n${AGENTS_FLOOR_START}\nQUOTED\n${AGENTS_FLOOR_END}\n\`\`\`sh\necho\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('unclosed code fence');
+    expect(result.fenceLine).toBe(3);
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('a fence-looking line inside an HTML comment is raw HTML: the closed quotation below it stays prose', () => {
+    const content = `# Mine\n\n<!--\n\`\`\`\n-->\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('is yours');
+    expect(result.fenceLine).toBeUndefined();
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
   it.each([
     [
       'markers quoted in inline code spans mid-sentence',

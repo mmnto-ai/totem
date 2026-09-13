@@ -593,6 +593,30 @@ describe('ejectCommand', () => {
     );
   });
 
+  // ─── The bot round (greptile P1 fence shape, CodeRabbit closer rule) ─
+
+  it('a closing fence never carries an info string: a ```sh line leaves the quotation open, so it is ambiguous', async () => {
+    const content = `# Mine\n\n\`\`\`\n${AGENTS_FLOOR_START}\nQUOTED\n${AGENTS_FLOOR_END}\n\`\`\`sh\necho\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped[0]).toContain('unclosed code fence opened at line 3');
+  });
+
+  it('a fence-looking line inside an HTML comment is raw HTML: the closed quotation below it stays prose', async () => {
+    const content = `# Mine\n\n<!--\n\`\`\`\n-->\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
   it('the residue-only skip carries the contract', async () => {
     fs.writeFileSync(path.join(cwd, 'AGENTS.md'), `# Mine\n${AGENTS_FLOOR_START}\nmine\n`);
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };

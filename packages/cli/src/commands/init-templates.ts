@@ -3015,26 +3015,49 @@ export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
  * legs' mirror findings). Neither tool guesses: markers there are AMBIGUOUS,
  * never paired, and both tools name the fence so the maintainer can close it.
  *
+ * Two CommonMark rules the scan honours so a quoted example is read the way a
+ * renderer reads it: a closing fence carries no info string (a ```sh line
+ * never closes an open block — it is text inside it), and a fence-looking line
+ * inside an HTML comment block (a line-initial `<!--` through the next `-->`)
+ * is raw HTML, not a fence.
+ *
  * Disclosed limit: this is a line scan, not a markdown parser. A fence-looking
- * line that CommonMark would not count — one inside an HTML comment block, or
- * inside a raw HTML block — is counted here, and an odd number of such lines
- * shifts the pairing of every fence below them. The wiki tells maintainers to
- * keep fence-looking lines out of comments in AGENTS.md; the markers this
- * scan serves are themselves HTML comments, so the file's audience already
- * reads it as markup.
+ * line inside any OTHER raw HTML block (a `<div>` … `</div>` wrapper, say) is
+ * still counted here, and an odd number of such lines shifts the pairing of
+ * every fence below them. The wiki tells maintainers to keep fence-looking
+ * lines out of raw HTML in AGENTS.md.
  */
 function scanFences(content: string): {
   ranges: Array<{ start: number; end: number }>;
   unclosedAt: number | null;
 } {
   const ranges: Array<{ start: number; end: number }> = [];
-  const fence = /^[ ]{0,3}(`{3,}|~{3,})/gm;
+  // HTML comment blocks: a line-initial `<!--` (at most three spaces in) up to
+  // and including the next `-->`. The floor markers are single-line comments,
+  // so they are ranges of their own and never swallow a fence.
+  const comments: Array<{ start: number; end: number }> = [];
+  for (const open of content.matchAll(/^[ ]{0,3}<!--/gm)) {
+    const close = content.indexOf('-->', open.index + open[0].length);
+    if (close === -1) {
+      comments.push({ start: open.index, end: content.length });
+      break;
+    }
+    comments.push({ start: open.index, end: close + '-->'.length });
+  }
+  const inComment = (at: number): boolean => comments.some((c) => at >= c.start && at < c.end);
+  const fence = /^[ ]{0,3}(`{3,}|~{3,})([^\r\n]*)/gm;
   let open: { at: number; marker: string } | null = null;
   for (const match of content.matchAll(fence)) {
+    if (inComment(match.index)) continue;
     const marker = match[1]!;
+    const rest = match[2] ?? '';
     if (open === null) {
       open = { at: match.index, marker };
-    } else if (marker[0] === open.marker[0] && marker.length >= open.marker.length) {
+    } else if (
+      marker[0] === open.marker[0] &&
+      marker.length >= open.marker.length &&
+      rest.trim() === ''
+    ) {
       ranges.push({ start: open.at, end: match.index + match[0].length });
       open = null;
     }

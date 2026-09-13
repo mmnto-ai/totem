@@ -101,7 +101,17 @@ const AGENT_BUS_MARKER = 'totem:agent-bus';
 const VENDOR_TOKENS = /\b(?:Claude|Gemini|Cursor|Copilot|Codex|Junie|Windsurf|Kimi)\b/;
 
 const BARE_REF = new RegExp(BARE_REF_REGEX_SOURCE);
-const MD_LINK = /\]\(([^)\s#]+)(?:#[^)]*)?\)/g;
+/**
+ * Inline link destinations, the two CommonMark spellings: bare (`](path)`, no
+ * spaces) and angle-bracketed (`](<path with spaces>)`). A fragment is dropped
+ * either way. The same two spellings are the extractor's in
+ * `tools/public-refs-resolve.mjs`; the two live in different runtimes (a
+ * vitest module and a bare ESM script) and stay in step by this comment and
+ * the round that added the angle form to both.
+ */
+const MD_LINK = /\]\((?:<([^>\r\n]*)>|([^)\s#]+))(?:#[^)]*)?\)/g;
+const linkTarget = (match: RegExpMatchArray): string =>
+  (match[1] ?? match[2] ?? '').replace(/#.*$/, '');
 
 /**
  * Case-exact existence: `fs.existsSync` answers case-insensitively on NTFS and
@@ -182,6 +192,22 @@ describe('the floor template is sterile', () => {
   });
 });
 
+describe('the inline-link extractor reads both CommonMark destination spellings', () => {
+  const extract = (text: string): string[] => [...text.matchAll(MD_LINK)].map(linkTarget);
+
+  it('bare, angle-bracketed, fragment-bearing and anchor-only destinations', () => {
+    expect(extract('[a](docs/x.md) and [b](<docs/with space.md>) and [c](docs/y.md#frag)')).toEqual(
+      ['docs/x.md', 'docs/with space.md', 'docs/y.md'],
+    );
+    // A bare anchor-only destination is not a link the extractor sees at all
+    // (the bare spelling requires a path); the angle form extracts as empty.
+    expect(extract('[d](<docs/z.md#frag>) [e](#anchor-only) [f](<#anchor-only>)')).toEqual([
+      'docs/z.md',
+      '',
+    ]);
+  });
+});
+
 describe('every public agent-instruction surface of this repository is sterile', () => {
   it.each(PUBLIC_SURFACES)(
     '%s carries no private path, deployment, operator, doctrine tag or bare reference',
@@ -194,7 +220,8 @@ describe('every public agent-instruction surface of this repository is sterile',
     const content = readRoot(rel);
     const dir = path.dirname(path.join(ROOT, rel));
     for (const match of content.matchAll(MD_LINK)) {
-      const target = match[1]!;
+      const target = linkTarget(match);
+      if (target === '') continue; // an anchor-only destination — a heading question, not a resolvability one
       if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue; // an absolute URL or mailto: — the network script's half
       expect(existsExact(path.resolve(dir, target)), `${rel} links ${target}`).toBe(true);
     }
