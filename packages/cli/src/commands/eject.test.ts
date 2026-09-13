@@ -408,6 +408,58 @@ describe('ejectCommand', () => {
     expect(summary.scrubbed).toEqual(['AGENTS.md']);
   });
 
+  // ─── The re-armed leg's shapes (G1, G5, G10) ────────────────────────
+
+  it('two orphans around a span never re-pair on a later pass — both user texts stay, residue named', async () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n${AGENTS_FLOOR_START}\nx\n${AGENTS_FLOOR_END}\n\nKEEP ME\n${AGENTS_FLOOR_END}\ntail\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n\nKEEP ME\n${AGENTS_FLOOR_END}\ntail\n`,
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+  });
+
+  it('a nested shape removes only the inner pair — the outer orphans and the text they bracket stay', async () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nA\n${AGENTS_FLOOR_START}\nB\n${AGENTS_FLOOR_END}\nC\n${AGENTS_FLOOR_END}\ntail\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nA\nC\n${AGENTS_FLOOR_END}\ntail\n`,
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+  });
+
+  it('markers quoted inside a fenced code block are prose: no block, file byte-untouched', async () => {
+    const content = `# Mine\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\n${AGENTS_FLOOR_END}\n\`\`\`\n\nmore mine\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
+  it('a span that is the only CRLF in an LF file leaves a pure-LF seam', async () => {
+    const crlfBlock = AGENTS_FLOOR_BLOCK.replace(/\n/g, '\r\n');
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), `# Mine\n\nintro\n\n${crlfBlock}\n\n## Rules\n`);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    const out = fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8');
+    expect(out).toBe('# Mine\n\nintro\n\n## Rules\n');
+    expect(out).not.toContain('\r');
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
   it('removes an AGENTS.md that is nothing but the floor span', async () => {
     fs.writeFileSync(path.join(cwd, 'AGENTS.md'), AGENTS_FLOOR_BLOCK + '\n');
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };

@@ -4379,7 +4379,7 @@ describe('scaffoldAgentsFloor', () => {
 
     const result = scaffoldAgentsFloor(tmpDir, 'x');
     expect(result.action).toBe('refreshed');
-    expect(result.err).toContain('second managed span');
+    expect(result.err).toContain('outside the managed span');
     expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
       `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\nMID\n\n${AGENTS_FLOOR_START}\nother\n${AGENTS_FLOOR_END}\n`,
     );
@@ -4409,5 +4409,53 @@ describe('scaffoldAgentsFloor', () => {
     expect(refreshed).toBe(crlfScaffold);
     expect(refreshed.replace(/\r\n/g, '')).not.toContain('\n');
     expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'unchanged' });
+  });
+
+  // ─── The re-armed leg's shapes (G1, G2, G5, G10) ────────────────────
+
+  it('a two-orphan file: the span is refreshed, both user texts stay, and the residue is named', () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nUSER A\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\nUSER C\n${AGENTS_FLOOR_END}\ntail\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('refreshed');
+    expect(result.err).toContain('outside the managed span');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nUSER A\n${AGENTS_FLOOR_BLOCK}\nUSER C\n${AGENTS_FLOOR_END}\ntail\n`,
+    );
+  });
+
+  it('markers quoted inside a fenced code block are prose: the file is preserved with the adoption hint', () => {
+    const content = `# Mine\n\nAdopt it:\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\n${AGENTS_FLOOR_END}\n\`\`\`\n\nmore mine\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('is yours');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('a real span below a fenced quotation is the one refreshed; the quotation is untouched', () => {
+    const quoted = `\`\`\`\n${AGENTS_FLOOR_START}\n${AGENTS_FLOOR_END}\n\`\`\`\n`;
+    const content = `# Mine\n\n${quoted}\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n\n${quoted}\n${AGENTS_FLOOR_BLOCK}\n`,
+    );
+  });
+
+  it('a span that is the only CRLF in an LF file is refreshed to LF — the terminator comes from the rest of the file', () => {
+    const crlfBlock = AGENTS_FLOOR_BLOCK.replace(/\n/g, '\r\n').replace(
+      'Never guess',
+      'Never GUESS',
+    );
+    fs.writeFileSync(agentsPath(), `# Mine\n\n${crlfBlock}\n\n## Rules\n`, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    const out = fs.readFileSync(agentsPath(), 'utf-8');
+    expect(out).toBe(`# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\n## Rules\n`);
+    expect(out).not.toContain('\r');
   });
 });

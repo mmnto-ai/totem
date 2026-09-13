@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "d949abb6b2b7dd28399d296f09294fd8acb85915",
+  "readAt": "2026-09-13T18:28:56Z",
+  "findings": [
+    {
+      "id": "G1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 742,
+      "claim": "Commit d949abb6 subject: \"an orphan start marker never widens a refresh or a scrub\"; scrubAgentsFloor's docstring (eject.ts:699-707): \"each paired END-anchored like the reflex scrub's … so an orphan start marker above a span never widens the removal and the loop runs until no complete pair remains. The repository's own content on either side is kept\"; changeset line 5: \"removes every complete span … keeping the repository's content on either side\".",
+      "counterexample": "OBSERVED. The END-anchored pairing is correct for ONE pass, but the loop re-runs `locateAgentsFloorSpan(out)` from index 0 on the shrunken string (eject.ts:742), so a surviving orphan START re-pairs with a surviving orphan END on the NEXT iteration. Input `# Mine\\n<START>\\nMY OWN TEXT\\n<START>\\nx\\n<END>\\n\\nKEEP ME\\n<END>\\ntail\\n` (both orphans are ordinary merge-conflict residue) → file becomes `# Mine\\ntail\\n`, summary `{\"scrubbed\":[\"AGENTS.md\"]}` — MY OWN TEXT and KEEP ME deleted, and because `residue` (eject.ts:763) is computed AFTER the loop it is false, so the user gets the CLEAN scrub line, not the \"(marker residue remains)\" line. Same for the nested shape `<S>A<S>B<E>C<E>` → `# Mine\\ntail\\n` (A and C gone). Deciding command: node harness over dist/commands/eject.js (dist verified identical to src at eject.ts:738-777), scratchpad probe2/probe5. The drafted eject tests (eject.test.ts:358-408) cover exactly the single-orphan mutants that pass and none of the two-orphan shape, so the suite is green on a claim that is false. Note: the cited precedent `scrubReflexFiles` has the identical `searchStart = 0` reset (eject.ts:886), so this is inherited, not invented — the choice for the seat is hardening the loop (never re-pair across an already-scanned orphan) or narrowing the absolute claim."
+    },
+    {
+      "id": "G2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 792,
+      "claim": "scaffoldAgentsFloor's docstring: \"A second complete span after the first is left as it is and named in `err` … two managed spans is a broken file, and canonicalizing both would hide that\"; the new call-site comment (init.ts:1709-1710): \"The preserved-file hint, the unpaired-marker hint, or the second-span hint beside a refresh — each a no-op the user must be able to see.\"",
+      "counterexample": "OBSERVED. `err` is set only for a second COMPLETE span; orphan-marker residue left behind by a refresh is never named, and init actively manufactures the shape G1 then deletes. Chain, run end to end: `# Mine\\n<START>\\nUSER A\\n<START>\\nstale\\n<END>\\nUSER C\\n<END>\\ntail\\n` → `scaffoldAgentsFloor` returns `{\"action\":\"refreshed\"}` with NO err and writes `# Mine\\n<START>\\nUSER A\\n<BLOCK>\\nUSER C\\n<END>\\ntail\\n` (orphan START above, orphan END below, silently); a second init is `unchanged`; `scrubAgentsFloor` on that exact init output then yields `# Mine\\ntail\\n` with summary `{\"scrubbed\":[\"AGENTS.md\"]}` — USER A and USER C destroyed. The eject side names residue (eject.ts:776-778) and the `preserved` path names an unpaired marker (init.ts:784-787); the refresh path is the one hole."
+    },
+    {
+      "id": "G3",
+      "severity": "MATERIAL",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 48,
+      "claim": "The fold adds `MD_REF_DEF_RE = /^\\s*\\[[^\\]]+\\]:\\s*(\\S+)/gm` and the header (lines 18-19, 23-27) claims it extracts \"relative markdown links, inline (`[x](path)`) and reference-style (`[x]: path`), checked on disk\", with anchor-only links excluded \"by design … a heading question, not a resolvability one\"; changeset line 7 repeats it.",
+      "counterexample": "OBSERVED, three false FAILs introduced by the new regex, none of which MD_LINK_RE would produce. Fixture run `node tools/public-refs-resolve.mjs <fixture>`: (1) `[//]: # (invisible)` — the standard markdown-comment idiom — is extracted as link target `#` and reported `FAIL … link # -> missing`, contradicting the header's own anchor exclusion (MD_LINK_RE structurally cannot match `#`, MD_REF_DEF_RE does not filter it); (2) `[a]: ./exists.md#section` → `FAIL … -> missing` because MD_REF_DEF_RE has no `(?:#[^)]*)?` fragment strip while MD_LINK_RE (line 47) does; (3) `[b]: <./exists.md>` (CommonMark angle-bracket destination) → `FAIL … -> missing`. Each false FAIL flips the script's exit code to 1, i.e. the \"network half of the acceptance test\" reports a resolvable link as one a public reader cannot follow."
+    },
+    {
+      "id": "G4",
+      "severity": "MATERIAL",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 129,
+      "claim": "Header lines 20-21: \"Exit 0 when every reference resolves, 1 when any does not, 2 on usage error.\" The charge asks to \"run the script over the seven public surfaces and confirm exit 0\"; the previous leg's F8 recorded \"Live run over the seven public surfaces: 8 references, 8 resolve, exit 0.\"",
+      "counterexample": "OBSERVED, cannot confirm. `node tools/public-refs-resolve.mjs AGENTS.md CLAUDE.md GEMINI.md .junie/guidelines.md .claude/docs/*.md` prints the right body — `8 reference(s) across 7 file(s): 8 resolve, 0 do not.` — then dies: `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\\win\\async.c, line 94`, EXIT=127, deterministic over three runs (node v24.16.0, win32). `process.exit()` at line 129 races undici's open handles. PRE-EXISTING, not introduced by this fold: the same command on `git show cc8c9918:tools/public-refs-resolve.mjs` also exits 127. No automated consumer today (`grep -rn public-refs-resolve package.json .github/` finds only the test's docstring at agents-floor-sterility.test.ts:21), so the blast radius is a human runner and any future CI wiring — but the stated exit contract is false on the host the floor's author runs it from, and F8's \"exit 0\" was not reproducible."
+    },
+    {
+      "id": "G5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 738,
+      "claim": "Commit subject: \"EOL-aware spans and seams (a CRLF file gets the span in CRLF and keeps CRLF at the seam)\"; changeset line 5: \"keeping the repository's content on either side and leaving one blank line at the seam\". The fold's answer to F4 is `const eol = detectEol(content)` feeding the seam at eject.ts:748.",
+      "counterexample": "OBSERVED. `detectEol` (init-templates.ts:2995) is whole-file — \"CRLF when it carries any\" — and it is computed on the content INCLUDING the span about to be removed. A file that is LF everywhere except inside the managed span (`# Mine\\n\\nintro\\n\\n<CRLF BLOCK>\\n\\n## Rules\\n`) scrubs to `\"# Mine\\n\\nintro\\r\\n\\n## Rules\\n\"` — the user's `intro\\n` came back as `intro\\r\\n`, a lone CRLF injected into a file whose surviving content is pure LF. This is F4's defect with the sign flipped (F4: CRLF→LF; now LF→CRLF), narrower because it needs the span to be the file's only CRLF source. The CRLF-clean and the CRLF-outside/LF-inside cases are genuinely cured: scrub of a whole-CRLF file returns `# Mine\\r\\n\\r\\nintro\\r\\n\\r\\n## Rules\\r\\n` with no bare LF, and a span at byte 0 in a CRLF file leaves no leading blank line (`before` becomes `eol`, is zeroed by the `before === eol` guard at eject.ts:749-750, and the `before === ''` strip at 759 is reached)."
+    },
+    {
+      "id": "G6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 87,
+      "claim": "The fold widens the lexicon: \"case-insensitive, hyphen or space or nothing between the word and the number, so `adr-105`, `ADR 105`, `tenet 20` and `Tenet-16` all fire\" (test docstring, lines 80-83), answering F7.",
+      "counterexample": "OBSERVED, the widening is real and so is a new false-positive surface. Extracting the lexicon from the file and evaluating it: the whole F7 NOT-caught list now fires (`adr-105`, `ADR 105`, `tenet 20`, `Tenet-16`, `proposal 213`, `the totem-strategy repo has doctrine`, `solo-operator repo`) — only `the agy seat ruled it` and `the operator runs Windows 11` still do not, and the fold never claimed them. But `/\\bprop(?:osal)?\\.?[- ]?\\d+/i` now fires on ordinary prose: `\"a CSS prop 1px wide\"` → \"a Proposal tag\", `\"the prop 2 value\"` → fires, `\"prop-9 wide\"` → fires. The pre-fold `/\\bProp(?:osal)?\\.? ?\\d+/` did NOT match lowercase `prop 1`, so the case-insensitive flag is what opened this. No current public surface trips it (all seven surfaces plus the template and the rendered scaffold come back clean except AGENTS.md's declared `totem:agent-bus` exception), so it is a latent false-fail, fail-loud direction."
+    },
+    {
+      "id": "G7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3038,
+      "claim": "F14's answer: the scaffold sentence changes from \"keep tool-specific instruction files as thin redirects to it\" to \"tool-specific instruction files carry their tool's own block and point here for everything else\" — i.e. \"the three template sentences made product-true\".",
+      "counterexample": "OBSERVED. The contradiction is relocated, not removed. (a) The \"point here\" half is not something the product arranges: `AI_PROMPT_BLOCK` — the block init appends to CLAUDE.md/GEMINI.md (init.ts:1214) — contains no `AGENTS.md` reference at all (`grep -n \"AGENTS.md\" packages/cli/src/commands/init-templates.ts` returns only the signoff-skill crown-gate line and the floor constants at 2945+), and `injectReflexes` never creates a tool file, so a consumer's tool files carry the block and point nowhere. (b) The \"carry their tool's own block\" half now contradicts the product's own gate: `checkAgentsMdCanonical` FAILs a CLAUDE.md over `CLAUDE_MD_REDIRECT_MAX_BYTES = 600` (doctor.ts:1197) unless it matches `AGENTS_MD_REDIRECT_PATTERN` (doctor.ts:1205-1206) — \"Lift content to AGENTS.md and replace CLAUDE.md with the redirect template\" (doctor.ts:1272). (c) It also now contradicts this repository's own committed prose one file away: AGENTS.md:3 still reads \"thin per-tool redirect files point each tool here\", and this repo's CLAUDE.md is a 379-byte pure redirect with no tool block."
+    },
+    {
+      "id": "G8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2990,
+      "claim": "F1's answer: \"Where `totem init` installs skills (…), every later `totem init` refreshes each skill's managed span and keeps what you add below its end marker\" — the \"skills install conditional\" the commit subject claims makes the sentence product-true.",
+      "counterexample": "OBSERVED. The hedge closes the bare-mode and Cursor cases (the condition is simply false there), but not the Gemini one, where init DOES install a skill and the sentence's predicate is false of it: `.gemini/skills/totem.md` is written with a marker and NO endMarker (init.ts:334-337), and `scaffoldFile` therefore never refreshes it — it prints \"differs from canonical, but this installer does not manage its whole-file refresh\" (init.ts:147-152). So on the broad reading of \"installs skills\" the refresh-and-keep-below-the-end-marker claim is false for a Gemini consumer; on the narrow reading (the four named, which are `DISTRIBUTED_CLAUDE_SKILLS` at init-templates.ts:2938-2943, written under `.claude/skills/`) the sentence is vacuous there. Which reading governs is prose-ambiguous — the seat's call, not a code defect."
+    },
+    {
+      "id": "G9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2974,
+      "claim": "[NOTE] Charge item 3(c): \"is `/signon`'s step 0–1 actually called a seat-and-assignment step in SIGNON_SKILL_CONTENT, so a consumer WITH the skill can follow the pointer?\"",
+      "counterexample": "OBSERVED, followable but not literal, and it points at unsterilized text. `SIGNON_SKILL_CONTENT` step 0 is \"Derive the seat FIRST\" (init-templates.ts:2780) and step 1 is \"Assignment mail before orient\" (init-templates.ts:2782); the phrase \"seat-and-assignment step\" appears nowhere in the skill — it is this repository's own prior wording (`git show origin/main:AGENTS.md` line 10: \"signon's seat-and-assignment step (`/signon` 0–1)\"). A consumer can follow it, but it names two steps as one. The larger shape: the floor's only outward pointer leads into distributed skill text carrying exactly what the ruling sterilized — \"Tenet 20\", \"Proposal 295\", \"mmnto-ai/totem-strategy#813\", \"mmnto-ai/totem#2801\", the `liquid-city` cohort roster (all inside SIGNON_SKILL_CONTENT, init-templates.ts:2771-2790). The changeset discloses this (\"Not in this cut: the distributed skills' managed text\") and the sensor excludes the skills by design (agents-floor-sterility.test.ts:44-50), so this is a scope note, not a contradiction."
+    },
+    {
+      "id": "G10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3012,
+      "claim": "[NOTE] Charge item 1(d): \"a START inside a fenced code block that quotes the marker — what happens?\"",
+      "counterexample": "OBSERVED, both functions treat a quoted pair as a real span. Input `# Mine\\n\\nAdopt it:\\n\\n```markdown\\n<START>\\n<END>\\n```\\n\\nmore mine\\n`: `scaffoldAgentsFloor` returns `refreshed` and writes the full 1.9 KB canonical block INSIDE the user's fence; `scrubAgentsFloor` deletes the quoted marker lines and reports a clean scrub. `locateAgentsFloorSpan` is a pure string scan with no fence awareness. Pre-existing (cc8c9918's first-index pairing did the same) and unclaimed by any docstring, but the adoption path the product advertises — docs/wiki/cli-reference.md:24 \"add the marker lines where the managed span should sit\" — is exactly what invites a repo to quote those two lines in prose."
+    },
+    {
+      "id": "G11",
+      "severity": "MINOR",
+      "file": ".changeset/agents-public-floor-619.md",
+      "line": 5,
+      "claim": "[NOTE] \"refreshes exactly the bytes of the span (the first end marker, paired with the last start marker before it, so an orphan marker above the span never widens it)\".",
+      "counterexample": "OBSERVED, the parenthetical under-describes the code in the reader's disfavour. `locateAgentsFloorSpan` does not stop at the first end marker: when the last start marker before it is absent (or before `from`), it SKIPS past that end marker and keeps scanning (init-templates.ts:3020-3025). Observed: `# Mine\\n<END>\\nstill mine\\n<START>\\nstale\\n<END>\\n` → `refreshed`, output `# Mine\\n<END>\\nstill mine\\n<BLOCK>\\n`. A reader of the changeset would predict the orphan END blocks the refresh; the function's own docstring is accurate, the changeset's compression is not. Same for docs/wiki/cli-reference.md:24, which the fold edited and left saying eject \"removes the span\" (singular) while the changeset was updated to \"every complete span\"."
+    },
+    {
+      "id": "G12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 104,
+      "claim": "[QUESTION] F9's answer: `existsExact` — \"Each path segment is matched against the directory listing byte-for-byte\", making the offline half case-exact \"on exactly the platform the operator authors on\".",
+      "counterexample": "OBSERVED CORRECT, with one asymmetry worth a ruling. Evaluating the extracted function on this NTFS host: `.claude/Docs/architecture.md` → existsExact=false while existsSync=true; `.claude/docs/ARCHITECTURE.md` → false/true; `agents.md` → false/true; `.claude/docs/../docs/architecture.md` and `./` forms → true (path.resolve normalizes before the call); a path above ROOT (`../totem/AGENTS.md`) and a foreign absolute (`C:/Windows/win.ini`) → false via the `startsWith('..') || path.isAbsolute(relative)` guard. The asymmetry: the case-exactness lives only in the test — `tools/public-refs-resolve.mjs:98` still uses `fs.existsSync` for its on-disk half, so the \"network half of that acceptance test\" would pass the very case-mismatched link the offline half now catches; and the test's `MD_LINK` covers inline links only while the script now also extracts reference definitions. Neither surface is false about itself; the pair is uneven."
+    }
+  ],
+  "folded": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7",
+    "G8",
+    "G9",
+    "G10",
+    "G11",
+    "G12"
+  ],
+  "verdict": "Shape 1 (END-anchored pairing): the previous leg's exact mutants are removed, verified by re-running them against the new code — the orphan-start-above mutant now keeps MY OWN TEXT through both scrub (residue named) and scaffold; two complete spans are both removed by eject and the second is named in init's err; an orphan END above a complete span is skipped and the span below handled; inverted markers preserve the file byte-for-byte with the new unpaired-marker hint; the loop provably terminates and never removes overlapping regions twice. What survives is the adjacent case the drafted tests do not reach: a surviving orphan START re-pairs with a surviving orphan END on the NEXT iteration, deleting user content and reporting a CLEAN scrub (G1), and init's refresh path silently manufactures exactly that file shape (G2) — so F2's class is narrowed, not eliminated, and the commit's absolute \"never widens ... a scrub\" is falsified. Shape 2 (EOL): F4 and F16 are genuinely cured — a CRLF file refreshes to a byte-identical CRLF span with no bare LF and is unchanged on the second call; the mixed CRLF-outside/LF-inside residue converges in one write; a CRLF span at byte 0 leaves no leading blank line; the CRLF seam preserves the user's intro. The residue is the inverse sign: detectEol reads the whole file including the span being removed, so a span that is the file's only CRLF source writes a lone CRLF into an otherwise-LF file (G5). Shape 3 (template sentences): the committed span is still byte-identical to AGENTS_FLOOR_BLOCK (27/27 green); row 4's imperative and \"every check\" are restored; the doctrine-overlay sentence is out of the template and true of this repository and introduces no lexicon-catchable token; the agent-bus sentence drops the Prop-305 concept name and names the real contract id; the review-bots fact is restated outside the span. F6 and F10-F12 are answered; F1 and F14 are answered by hedge and by relocation respectively, and each leaves a smaller residue (G8, G7), while the /signon pointer remains a pointer into unsterilized distributed text (G9). Shape 4 (sensors): the entire F7 NOT-caught list now fires, the docstring is honestly narrowed to an enumerated deny-list, existsExact is correct and safe on this host (G12), and QUALIFIED_COMMIT_RE/MD_REF_DEF_RE do extract owner/repo@sha and [x]: path as the header claims — but the new reference-definition regex false-FAILs three ordinary markdown shapes including the [//]: # comment idiom (G3), the widened Proposal pattern false-fires on lowercase prop <n> prose (G6), and the script's stated exit 0 could not be confirmed: it prints 8/8 resolve then dies with a libuv assertion, exit 127, deterministically — pre-existing at cc8c9918 (G4). Shape 5 (regression): init, eject and config-drift → 3 files, 449 passed, 4 skipped; deriveProjectName is cured on both F15 shapes, and totem legs gate accepts the deposit (nearest ancestor, 3/3 owed paths, blocking=0 material=5 folded=17). [Seat's fold, appended: all twelve folded in the commit that follows d949abb6 — the scrub loop's cursor only moves forward and the refresh names any marker outside the span (G1, G2); the line terminator is read from the bytes outside the span in both functions (G5); markers inside fenced code blocks are prose for both functions (G10); the script strips fragments and angle brackets from reference definitions, ignores the `#`-only comment idiom, checks its on-disk half case-exactly, and sets the exit code instead of exiting under open handles (G3, G4, G12); the Proposal pattern keeps the capitalized abbreviation and any-case `proposal` (G6); the scaffold sentence loses its second half and the skills sentence names the four skills as the subject (G7, G8); the cold-start line names the skill's two steps (G9); the changeset and wiki describe the pairing and the every-span removal exactly (G11).]"
+}

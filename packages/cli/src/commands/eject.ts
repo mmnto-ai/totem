@@ -715,15 +715,20 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     AGENTS_FLOOR_END,
     AGENTS_FLOOR_REL,
     AGENTS_FLOOR_START,
+    agentsFloorMarkerPositions,
     detectEol,
     locateAgentsFloorSpan,
   } = await import('./init-templates.js');
   const filePath = path.join(cwd, AGENTS_FLOOR_REL);
+  const realMarkers = (text: string): number =>
+    agentsFloorMarkerPositions(text, AGENTS_FLOOR_START).length +
+    agentsFloorMarkerPositions(text, AGENTS_FLOOR_END).length;
   try {
     if (!fs.existsSync(filePath)) return;
     const rawContent = fs.readFileSync(filePath);
     const content = rawContent.toString('utf-8');
-    if (!content.includes(AGENTS_FLOOR_START) && !content.includes(AGENTS_FLOOR_END)) {
+    // A marker quoted inside a fenced code block is prose, not a block.
+    if (realMarkers(content) === 0) {
       summary.skipped.push(`${AGENTS_FLOOR_REL} (no Totem block)`);
       return;
     }
@@ -735,12 +740,20 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       );
       return;
     }
-    const eol = detectEol(content);
     let out = content;
     let removedSpans = 0;
+    // The cursor only ever moves forward: after a span is removed the scan
+    // resumes at the seam, so an orphan start marker the pairing left behind
+    // above the seam can never re-pair with an orphan end marker below it on a
+    // later pass (the two-orphan shape the re-armed leg found).
+    let cursor = 0;
     for (;;) {
-      const span = locateAgentsFloorSpan(out);
+      const span = locateAgentsFloorSpan(out, cursor);
       if (span === null) break;
+      // The line terminator is read from the bytes OUTSIDE the span being
+      // removed: a span that is the file's only CRLF source must not decide
+      // the seam of an otherwise-LF file.
+      const eol = detectEol(out.slice(0, span.start) + out.slice(span.end));
       // Single-owner seams, mirroring the reflex scrub: the prefix keeps at
       // most one trailing terminator (the blank line above the span was the
       // scaffold's), and the end marker's own terminator leaves with the span,
@@ -758,9 +771,10 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       // A span at byte 0 must not leave a leading blank line behind it.
       if (before === '') after = after.replace(/^(?:\r?\n)+/, '');
       out = before + after;
+      cursor = before.length;
       removedSpans++;
     }
-    const residue = out.includes(AGENTS_FLOOR_START) || out.includes(AGENTS_FLOOR_END);
+    const residue = realMarkers(out) > 0;
     if (removedSpans === 0) {
       summary.skipped.push(
         `${AGENTS_FLOOR_REL} (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)`,

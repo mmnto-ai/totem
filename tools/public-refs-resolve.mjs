@@ -83,19 +83,47 @@ for (const file of files) {
     const [ref, owner, repo, p] = match;
     add(file, 'path', ref, `https://github.com/${owner}/${repo}/blob/HEAD/${p}`);
   }
-  const relativeTargets = [
-    ...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]),
-    ...[...content.matchAll(MD_REF_DEF_RE)].map((m) => m[1]),
-  ];
+  // A reference definition's destination may be wrapped in angle brackets and
+  // may carry a fragment; a `#`-only destination is the `[//]: #` comment
+  // idiom (or an anchor), neither a resolvability question.
+  const refDefTargets = [...content.matchAll(MD_REF_DEF_RE)]
+    .map((m) => m[1].replace(/^<(.*)>$/, '$1').replace(/#.*$/, ''))
+    .filter((t) => t !== '');
+  const relativeTargets = [...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]), ...refDefTargets];
   for (const target of relativeTargets) {
     if (SCHEME_RE.test(target)) continue; // absolute URLs are covered above; mailto: is not a public-resolvability question
     add(file, 'link', target, `file:${path.resolve(path.dirname(file), target)}`);
   }
 }
 
+/**
+ * Case-exact existence, because github.com is case-sensitive while NTFS and a
+ * default macOS volume are not: every path segment must match a directory
+ * entry byte-for-byte. Mirrors the sterility test's `existsExact`.
+ */
+function existsExact(absPath) {
+  const root = path.parse(absPath).root;
+  const segments = path
+    .relative(root, absPath)
+    .split(/[\\/]+/)
+    .filter((s) => s !== '');
+  let cursor = root;
+  for (const segment of segments) {
+    let entries;
+    try {
+      entries = fs.readdirSync(cursor);
+    } catch {
+      return false;
+    }
+    if (!entries.includes(segment)) return false;
+    cursor = path.join(cursor, segment);
+  }
+  return true;
+}
+
 async function probe(entry) {
   if (entry.target.startsWith('file:')) {
-    const exists = fs.existsSync(entry.target.slice('file:'.length));
+    const exists = existsExact(entry.target.slice('file:'.length));
     return { ...entry, ok: exists, status: exists ? 'exists' : 'missing' };
   }
   try {
@@ -126,4 +154,7 @@ for (const r of results) {
 console.log(
   `\n${results.length} reference(s) across ${files.length} file(s): ${results.length - failed} resolve, ${failed} do not.`,
 );
-process.exit(failed === 0 ? 0 : 1);
+// Set the exit code and let the loop drain: a hard `process.exit()` right after
+// the fetches raced undici's closing handles into a libuv assertion (exit 127)
+// on Windows Node 24, which turned a clean 8/8 run into a crash.
+process.exitCode = failed === 0 ? 0 : 1;

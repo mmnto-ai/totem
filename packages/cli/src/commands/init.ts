@@ -27,6 +27,7 @@ import {
   AGENTS_FLOOR_REL,
   AGENTS_FLOOR_START,
   agentsFloorBlockFor,
+  agentsFloorMarkerPositions,
   AI_PROMPT_BLOCK,
   CLAUDE_PRETOOLUSE_ENTRY,
   CLAUDE_PREWRITESHIELD,
@@ -778,8 +779,11 @@ export function scaffoldAgentsFloor(
     const existing = fs.readFileSync(filePath, 'utf-8');
     const span = locateAgentsFloorSpan(existing);
     if (span === null) {
+      // A marker quoted inside a fenced code block is prose, not an unpaired marker.
       const hasMarker =
-        existing.includes(AGENTS_FLOOR_START) || existing.includes(AGENTS_FLOOR_END);
+        agentsFloorMarkerPositions(existing, AGENTS_FLOOR_START).length +
+          agentsFloorMarkerPositions(existing, AGENTS_FLOOR_END).length >
+        0;
       return {
         action: 'preserved',
         err: hasMarker
@@ -787,11 +791,20 @@ export function scaffoldAgentsFloor(
           : `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines where the managed floor should sit and re-run \`totem init\` to adopt it.`,
       };
     }
-    const canonical = agentsFloorBlockFor(detectEol(existing));
+    // The line terminator is read from the bytes OUTSIDE the span: the span is
+    // about to be replaced, so its own endings must not decide the file's.
+    const outside = existing.slice(0, span.start) + existing.slice(span.end);
+    const canonical = agentsFloorBlockFor(detectEol(outside));
     const merged = existing.slice(0, span.start) + canonical + existing.slice(span.end);
-    const duplicate = locateAgentsFloorSpan(merged, span.start + canonical.length) !== null;
-    const err = duplicate
-      ? `${AGENTS_FLOOR_REL} carries a second managed span after the first — only the first is managed; remove the other.`
+    // Extra markers outside the span — a second complete span, or an unpaired
+    // start or end marker the pairing left alone — are named, never touched:
+    // left silent they would be exactly the shape a later eject re-pairs.
+    const extraMarkers =
+      agentsFloorMarkerPositions(merged, AGENTS_FLOOR_START).length +
+        agentsFloorMarkerPositions(merged, AGENTS_FLOOR_END).length >
+      2;
+    const err = extraMarkers
+      ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed; remove the others.`
       : undefined;
     if (merged === existing) {
       return err === undefined ? { action: 'unchanged' } : { action: 'unchanged', err };

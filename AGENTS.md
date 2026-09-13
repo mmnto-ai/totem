@@ -15,7 +15,7 @@ Totem is a local-first toolkit that keeps AI-agent work queryable, enforceable, 
 2. **Never guess architecture.** Before modifying a core system, run `totem search <system>`.
 3. Before writing code, call `search_knowledge` describing what you are changing.
 4. Do not push speculative fixes: run `totem lint` locally and front-load every check before the first push.
-5. Cold start (no session hook injected orientation): derive it with `totem orient`, after `/signon`'s seat-and-assignment step where that skill is installed.
+5. Cold start (no session hook injected orientation): derive it with `totem orient`, after `/signon`'s seat and assignment-mail steps where that skill is installed.
 
 ## Working rules
 
@@ -31,7 +31,7 @@ If this repository uses review bots: review triggers are the maintainer's to pos
 
 ## Installed skills
 
-Where `totem init` installs skills (`/signon`, `/signoff`, `/review-reply`, `/review-loop`), every later `totem init` refreshes each skill's managed span and keeps what you add below its end marker.
+Where `totem init` installs the `/signon`, `/signoff`, `/review-reply` and `/review-loop` skills, every later `totem init` refreshes each one's managed span and keeps what you add below its end marker.
 
 <!-- totem:agents-floor:end -->
 

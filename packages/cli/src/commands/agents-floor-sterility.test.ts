@@ -84,7 +84,9 @@ const DENY_SUBSTRINGS = [
  */
 const DENY_PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
   { name: 'an ADR tag', re: /\badr[- ]?\d+/i },
-  { name: 'a Proposal tag', re: /\bprop(?:osal)?\.?[- ]?\d+/i },
+  // `Prop 305` (the abbreviation is always capitalized in doctrine prose) or
+  // `proposal 213` in any case — never a lowercase `prop 1` in ordinary prose.
+  { name: 'a Proposal tag', re: /\b(?:Prop\.?|[Pp]roposal)[- ]?\d+/ },
   { name: 'a Tenet tag', re: /\btenet[- ]?\d+/i },
   { name: 'internal review vocabulary', re: /\b(?:review-leg|cohort|falsification)\b/i },
 ];
