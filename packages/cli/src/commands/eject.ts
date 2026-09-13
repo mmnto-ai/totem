@@ -739,18 +739,22 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     const content = rawContent.toString('utf-8');
     // Markers below an unclosed fence opener are ambiguous (a quotation never
     // closed, or a real span under a stray fence line): nothing below it is
-    // touched, and the fence is named so the maintainer can close it.
-    const fenceLine = agentsFloorAmbiguousFenceLine(content);
-    const fenceNote =
-      fenceLine === null
+    // touched, and the fence is named so the maintainer can close it. The note
+    // is computed on the text left on disk, so its line is right after a scrub
+    // above the fence moved it.
+    const fenceNoteFor = (text: string): string => {
+      const line = agentsFloorAmbiguousFenceLine(text);
+      return line === null
         ? ''
-        : ` — and an unclosed code fence opened at line ${fenceLine} makes the floor markers below it ambiguous; nothing below it was touched: close the fence, then re-run \`totem eject\``;
+        : `an unclosed code fence opened at line ${line} makes the floor markers below it ambiguous; nothing below it was touched — close the fence, then re-run \`totem eject\``;
+    };
     // A marker quoted inside a closed fenced code block is prose, not a block.
     if (realMarkers(content) === 0) {
+      const note = fenceNoteFor(content);
       summary.skipped.push(
-        fenceLine === null
+        note === ''
           ? `${AGENTS_FLOOR_REL} (no Totem block)`
-          : `${AGENTS_FLOOR_REL} (not scrubbed${fenceNote})`,
+          : `${AGENTS_FLOOR_REL} (not scrubbed: ${note})`,
       );
       return;
     }
@@ -802,8 +806,9 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     }
     const residue = realMarkers(out) > 0;
     if (removedSpans === 0) {
+      const note = fenceNoteFor(out);
       summary.skipped.push(
-        `${AGENTS_FLOOR_REL} (stray floor markers, no complete span — not scrubbed; remove them: ${contract}${fenceNote})`,
+        `${AGENTS_FLOOR_REL} (stray floor markers, no complete span — not scrubbed; remove them: ${contract}${note === '' ? '' : `; ${note}`})`,
       );
       return;
     }
@@ -813,13 +818,14 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       return;
     }
     writeFileAtomicSync(filePath, out);
+    const note = fenceNoteFor(out);
     if (residue) {
       summary.scrubbed.push(
-        `${AGENTS_FLOOR_REL} (stray floor markers remain — remove them now: ${contract}${fenceNote})`,
+        `${AGENTS_FLOOR_REL} (stray floor markers remain — remove them now: ${contract}${note === '' ? '' : `; ${note}`})`,
       );
     } else {
       summary.scrubbed.push(
-        fenceNote === '' ? AGENTS_FLOOR_REL : `${AGENTS_FLOOR_REL} (scrubbed${fenceNote})`,
+        note === '' ? AGENTS_FLOOR_REL : `${AGENTS_FLOOR_REL} (scrubbed; ${note})`,
       );
     }
     // totem-context: intentional cleanup — per-file best-effort like scrubReflexFiles; a locked or unreadable AGENTS.md degrades to a reported skip, never an abort that strands the remaining eject steps

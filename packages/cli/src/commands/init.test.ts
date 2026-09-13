@@ -4542,6 +4542,43 @@ describe('scaffoldAgentsFloor', () => {
     expect(result.err).toContain('a managed span by definition');
   });
 
+  // ─── The fifth leg's shapes (K1 tab fences, K2 joined hints, K3 fresh line numbers) ──
+
+  it('a tab-indented fence line is indented code, not a fence: a closed quotation below it stays prose', () => {
+    const content = `# Mine\n\n\t\`\`\`\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE LINE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('is yours');
+    expect(result.fenceLine).toBeUndefined();
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('the fence line named after a refresh is the line in the file left on disk', () => {
+    const content = `# Mine\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('refreshed');
+    const written = fs.readFileSync(agentsPath(), 'utf-8');
+    const fenceLineOnDisk = written.split('\n').findIndex((l) => l === '```') + 1;
+    expect(result.fenceLine).toBe(fenceLineOnDisk);
+    expect(result.err).toContain(`opened at line ${fenceLineOnDisk}`);
+  });
+
+  it('a stray marker above an unclosed fence gets both hints: the contract and the fence', () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nstray above\n\n\`\`\`\n${AGENTS_FLOOR_END}\nbelow\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('a managed span by definition');
+    expect(result.err).toContain('unclosed code fence');
+    expect(result.fenceLine).toBe(5);
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
   it.each([
     [
       'markers quoted in inline code spans mid-sentence',

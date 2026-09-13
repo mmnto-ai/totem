@@ -770,7 +770,12 @@ export function deriveProjectName(cwd: string): string {
 export function scaffoldAgentsFloor(
   cwd: string,
   projectName: string,
-): { action: 'created' | 'refreshed' | 'unchanged' | 'preserved'; err?: string } {
+): {
+  action: 'created' | 'refreshed' | 'unchanged' | 'preserved';
+  err?: string;
+  /** The 1-based line of an unclosed code fence with floor markers below it (ambiguous, untouched). */
+  fenceLine?: number;
+} {
   const filePath = path.join(cwd, AGENTS_FLOOR_REL);
   try {
     if (!fs.existsSync(filePath)) {
@@ -784,26 +789,49 @@ export function scaffoldAgentsFloor(
     // so text between stray markers would be refreshed or ejected as one.
     const contract =
       'a start marker followed by an end marker is a managed span by definition, and text between stray markers would be refreshed or ejected as one';
-    const fenceLine = agentsFloorAmbiguousFenceLine(existing);
-    const fenceHint =
-      fenceLine === null
-        ? undefined
-        : `${AGENTS_FLOOR_REL} has an unclosed code fence (\`\`\` or ~~~ opened at line ${fenceLine}) with floor markers below it, which makes them ambiguous — a quotation the fence never closed, or a real span under a stray fence line. Nothing below that fence is touched: close the fence (or remove the stray line) and re-run \`totem init\`.`;
+    // The fence hint is computed on the text left on disk, so the line it
+    // names is right even when a refresh above the fence moved it.
+    const fenceHintFor = (text: string): { line: number | null; hint: string | undefined } => {
+      const line = agentsFloorAmbiguousFenceLine(text);
+      return {
+        line,
+        hint:
+          line === null
+            ? undefined
+            : `${AGENTS_FLOOR_REL} has an unclosed code fence (\`\`\` or ~~~ opened at line ${line}) with floor markers below it, which makes them ambiguous — a quotation the fence never closed, or a real span under a stray fence line. Nothing below that fence is touched: close the fence, then re-run \`totem init\` (if you remove the fence line instead, ${contract}).`,
+      };
+    };
+    const compose = (
+      action: 'refreshed' | 'unchanged' | 'preserved',
+      text: string,
+      ...hints: Array<string | undefined>
+    ): { action: typeof action; err?: string; fenceLine?: number } => {
+      const fence = fenceHintFor(text);
+      const all = [...hints, fence.hint].filter((h): h is string => h !== undefined);
+      const result: { action: typeof action; err?: string; fenceLine?: number } = { action };
+      if (all.length > 0) result.err = all.join(' ');
+      if (fence.line !== null) result.fenceLine = fence.line;
+      return result;
+    };
     if (span === null) {
       // A marker quoted inside a closed fenced code block is prose, not an
-      // unpaired marker; below an unclosed fence it is ambiguous, named above.
+      // unpaired marker; below an unclosed fence it is ambiguous, named by the
+      // fence hint. A stray marker ABOVE such a fence is still a stray marker
+      // and gets its own hint beside the fence's.
       const hasMarker =
         agentsFloorMarkerPositions(existing, AGENTS_FLOOR_START).length +
           agentsFloorMarkerPositions(existing, AGENTS_FLOOR_END).length >
         0;
-      return {
-        action: 'preserved',
-        err:
-          fenceHint ??
-          (hasMarker
-            ? `${AGENTS_FLOOR_REL} carries an unpaired \`${AGENTS_FLOOR_START}\` / \`${AGENTS_FLOOR_END}\` marker — left untouched. Remove it (do not pair it around your own text): ${contract}. Then re-run \`totem init\`.`
-            : `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines (each on its own line, at most three spaces of indent) where the managed floor should sit and re-run \`totem init\` to adopt it.`),
-      };
+      const fence = fenceHintFor(existing);
+      return compose(
+        'preserved',
+        existing,
+        hasMarker
+          ? `${AGENTS_FLOOR_REL} carries an unpaired \`${AGENTS_FLOOR_START}\` / \`${AGENTS_FLOOR_END}\` marker — left untouched. Remove it (do not pair it around your own text): ${contract}. Then re-run \`totem init\`.`
+          : fence.line === null
+            ? `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines (each on its own line, at most three spaces of indent, ending in LF or CRLF) where the managed floor should sit and re-run \`totem init\` to adopt it.`
+            : undefined,
+      );
     }
     const canonical = agentsFloorBlockFor(eolOutsideSpan(existing, span));
     const merged = existing.slice(0, span.start) + canonical + existing.slice(span.end);
@@ -813,18 +841,14 @@ export function scaffoldAgentsFloor(
       agentsFloorMarkerPositions(merged, AGENTS_FLOOR_START).length +
         agentsFloorMarkerPositions(merged, AGENTS_FLOOR_END).length >
       2;
-    const hints = [
-      extraMarkers
-        ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed. Remove the others now: ${contract}.`
-        : undefined,
-      fenceHint,
-    ].filter((h): h is string => h !== undefined);
-    const err = hints.length === 0 ? undefined : hints.join(' ');
+    const extraHint = extraMarkers
+      ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed. Remove the others now: ${contract}.`
+      : undefined;
     if (merged === existing) {
-      return err === undefined ? { action: 'unchanged' } : { action: 'unchanged', err };
+      return compose('unchanged', existing, extraHint);
     }
     fs.writeFileSync(filePath, merged, 'utf-8');
-    return err === undefined ? { action: 'refreshed' } : { action: 'refreshed', err };
+    return compose('refreshed', merged, extraHint);
     // totem-context: intentional cleanup — preserve the repository's AGENTS.md on any IO failure rather than aborting init mid-flight; mirrors scaffoldClaudeSkill's failure posture
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -1727,6 +1751,14 @@ export default {
       summary.push({ file: AGENTS_FLOOR_REL, action: 'Scaffolded the AGENTS.md floor' });
     } else if (floor.action === 'refreshed') {
       summary.push({ file: AGENTS_FLOOR_REL, action: 'Refreshed the managed AGENTS.md span' });
+    }
+    if (floor.fenceLine !== undefined) {
+      // A managed floor that has stopped refreshing must be as loud as a
+      // refresh: a summary row, not only the dim hint line.
+      summary.push({
+        file: AGENTS_FLOOR_REL,
+        action: `Floor markers below an unclosed code fence (line ${floor.fenceLine}) are ambiguous — nothing under it was touched; close the fence`,
+      });
     }
     if (floor.err) {
       if (floor.err.startsWith('[Totem Error]')) {

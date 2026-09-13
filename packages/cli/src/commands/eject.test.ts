@@ -550,6 +550,49 @@ describe('ejectCommand', () => {
     expect(summary.removed).toEqual(['AGENTS.md']);
   });
 
+  // ─── The fifth leg's shapes (K1 tab fences, K3 fresh line numbers, K7 wording) ──
+
+  it('a tab-indented fence line is indented code, not a fence: a closed quotation below it stays prose', async () => {
+    const content = `# Mine\n\n\t\`\`\`\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE LINE\n${AGENTS_FLOOR_END}\n\`\`\`\n\nafter\n`;
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
+  it('the fence line named after a scrub is the line in the file left on disk, and the note reads on its own', async () => {
+    fs.writeFileSync(
+      path.join(cwd, 'AGENTS.md'),
+      `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`,
+    );
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    const written = fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8');
+    const fenceLineOnDisk = written.split('\n').findIndex((l) => l === '```') + 1;
+    expect(summary.scrubbed).toEqual([
+      `AGENTS.md (scrubbed; an unclosed code fence opened at line ${fenceLineOnDisk} makes the floor markers below it ambiguous; nothing below it was touched — close the fence, then re-run \`totem eject\`)`,
+    ]);
+  });
+
+  it('the ambiguity skip reads on its own', async () => {
+    fs.writeFileSync(
+      path.join(cwd, 'AGENTS.md'),
+      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\n`,
+    );
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(summary.skipped[0]).toMatch(
+      /^AGENTS\.md \(not scrubbed: an unclosed code fence opened at line 3 /,
+    );
+  });
+
   it('the residue-only skip carries the contract', async () => {
     fs.writeFileSync(path.join(cwd, 'AGENTS.md'), `# Mine\n${AGENTS_FLOOR_START}\nmine\n`);
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };

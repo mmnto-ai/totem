@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "a389cdb89d4320fcfb96e93bc7436cd0b67ecab3",
+  "readAt": "2026-09-13T19:47:02Z",
+  "findings": [
+    {
+      "id": "K1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3022,
+      "claim": "Fold claim (charge § design decision): \"under this rule NO input deletes user content, splices the canonical block into prose, or reports a clean scrub over a live span; the only cost is a loud no-op.\" Shipped prose asserts the same unconditionally — .changeset/agents-public-floor-619.md:5 and docs/wiki/cli-reference.md:24 both promise that a marker \"inside a closed fenced block … is prose\". The docstring at init-templates.ts:3005-3006 calls the scan \"CLOSED fenced code blocks (``` or ~~~ fences, CommonMark's two shapes)\".",
+      "counterexample": "OBSERVED. `scanFences` is a naive line-parity counter, not a CommonMark scan: `const fence = /^[ \\t]{0,3}(`{3,}|~{3,})/gm` (init-templates.ts:3022) counts as a fence (a) a TAB-indented ``` line and (b) a line-initial ``` inside an HTML comment — neither of which is a fence in CommonMark. One such line above a quotation shifts the pairing, so markers inside a genuinely closed fence are neither fenced nor ambiguous and count as live. Oracle (micromark@4.0.2 from this worktree's node_modules): for input `# Mine\\n\\n\\t```\\n\\n```markdown\\n<S>\\nMY EXAMPLE LINE\\n<E>\\n```\\n\\nafter\\n` micromark renders the tab line as INDENTED CODE and the markers inside a CLOSED fence. Tools: eject writes `# Mine\\n\\n\\t```\\n\\n```markdown\\n```\\n\\nafter\\n` and reports `{\"scrubbed\":[\"AGENTS.md\"]}` — a CLEAN scrub over deleted user content; init splices the 1.9 KB canonical block inside the user's fenced block and returns `{\"action\":\"refreshed\"}` with NO err. Same result for the HTML-comment route. Two further members of the same class: (G) a commented-out fence above a real span makes the bogus range swallow the LIVE span — eject reports `skipped: [\"AGENTS.md (no Totem block)\"]` and init `preserved / \"is yours\"` while the managed block is still in the file; (H) a shifted range that covers E1 and S2 pairs S1 with E2 across `USER TEXT BETWEEN SPANS`, which eject deletes with a clean line and init overwrites, no err. Assertion strength: no test exercises a disturbed-parity file. Not reachable on this repository (AGENTS.md carries 0 fence lines; the template and scaffold carry 0). The destructive half needs an uncommon conjunction (a quotation of the markers PLUS an odd count of miscounted fence lines); the false-prose half is unconditional."
+    },
+    {
+      "id": "K2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 802,
+      "claim": "Charge item 3: \"Every stray-marker path must now carry 'a managed span by definition': init's unpaired-marker hint …, init's extra-markers hint, init's ambiguity hint, eject's residue-only skip, eject's scrubbed-with-residue line, eject's ambiguity skip.\"",
+      "counterexample": "OBSERVED, 4 of 6 carry it, 2 do not. Carrying: init unpaired (`… Remove it (do not pair it around your own text): a start marker followed by an end marker is a managed span by definition …` — J2's instruction is cured), init extra-markers, eject residue-only skip, eject scrubbed-with-residue. NOT carrying: init's ambiguity hint (init.ts:802 `err: fenceHint ?? (hasMarker ? …)` — the `??` drops the unpaired-marker hint whenever a fence ambiguity exists, even when a live stray marker sits ABOVE the fence) and eject's ambiguity skip (eject.ts:753). Consequence chain: file `# Mine\\n\\n```\\n\\n<S>\\nUSER TEXT I CARE ABOUT\\nmore of my rules\\n<E>\\n\\ntail\\n` → init prints only the fence hint, whose two remedies are presented as equivalent; \"close the fence\" preserves the text, \"remove the stray line\" makes it a span and the next init returns `{action:'refreshed'}` with `err=undefined` and the user's two lines are gone. Ranked MINOR because the endpoint is the documented contract acting on a user-authored span (without the fence, init destroys it on the FIRST run with no warning at all, so the fence path is strictly better than baseline)."
+    },
+    {
+      "id": "K3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 744,
+      "claim": "Fold claim: both tools \"name the line\" of the unclosed opener in their hint / summary line, and the charge asks whether the fence line named is correct.",
+      "counterexample": "OBSERVED: correct on every pure no-op, STALE whenever the same run also rewrites the file. `fenceLine`/`fenceNote` are computed once from the PRE-mutation `content` (eject.ts:743-744; init.ts:787 on `existing`), then printed after the write. Input `# Mine\\n\\n<S>\\nstale\\n<E>\\n\\n```\\n<S>\\nquoted\\n` (fence at line 7): eject writes the file and says `… opened at line 7 …` while the fence now sits at line 3; init refreshes and says `… opened at line 7 …` while the fence now sits at line 32. Assertion strength: the two tests for exactly these cases omit the number while the no-op cases do assert it, so the suite is silent precisely where the number is wrong."
+    },
+    {
+      "id": "K4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1728,
+      "claim": "Fold claim: the cost of the ambiguity rule is \"a loud no-op the maintainer can clear by closing or removing the fence.\"",
+      "counterexample": "OBSERVED, the no-op is DIM, not loud, and may need several rounds. init.ts:1726-1730 pushes a summary row only for `created` and `refreshed`, so in the ambiguity case (`preserved`) the Init Summary carries NO AGENTS.md row at all and the only signal is one `log.dim` line amid init's output. On eject the notice rides the dim `Skipped:` list. Clearing can also take N passes: with two stray openers of different characters only the first opener is named; closing it promotes the `~~~` to the unclosed opener and the file is ambiguous again."
+    },
+    {
+      "id": "K5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3060,
+      "claim": "[NOTE] Charge item 2: a marker line ending in a bare `\\r` (old-Mac terminators) — prose or marker, and is the outcome safe?",
+      "counterexample": "OBSERVED, prose, safe, undisclosed. `const lineEnd = /^[ \\t]*(?:\\r?\\n|$)/.test(tail)` requires a LF (or EOF) after the marker, and `lineBegin` is derived with `lastIndexOf('\\n', …)`, so in a CR-only file the whole file is one line and no marker is whole-line. Input `# Mine\\r<S>\\rstale\\r<E>\\rtail\\r`: eject `skipped: ['AGENTS.md (no Totem block)']`, init `preserved / \"is yours\"` — both statements false of the file but both actions are byte no-ops. Nothing in the changeset, the wiki or the hints says the markers must end in LF or CRLF."
+    },
+    {
+      "id": "K6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3081,
+      "claim": "[NOTE] The whole-line predicate is stated once (init-templates.ts:3050-3068 docstring).",
+      "counterexample": "OBSERVED: it is implemented TWICE and the copies differ. `agentsFloorMarkerPositions` at :3056-3060 tolerates a BOM; `agentsFloorAmbiguousFenceLine`'s inline copy at :3081-3083 does not. The divergence is currently unreachable — a marker below an unclosed opener can never be on line 1 — so this is a latent, not a live, defect; the next edit to the whole-line rule has two sites to keep in step."
+    },
+    {
+      "id": "K7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 746,
+      "claim": "[NOTE] eject's ambiguity messages are readable to the maintainer.",
+      "counterexample": "OBSERVED, cosmetic seam: `fenceNote` is authored as a suffix to the contract clause (` — and an unclosed code fence opened at line N …`), so on the two paths where it appears alone it reads with a dangling conjunction: `AGENTS.md (not scrubbed — and an unclosed code fence opened at line 3 makes …)` and `AGENTS.md (scrubbed — and an unclosed code fence opened at line 7 …)`."
+    },
+    {
+      "id": "K8",
+      "severity": "MINOR",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 105,
+      "claim": "[NOTE] Charge item 4: the reference-definition filter, the skipped-shape disclosure, the containment label and the live run.",
+      "counterexample": "OBSERVED, all as claimed. Fixture: `[v]: 1.0`, `[e]: e.g. something`, `[^1]: …`, `[Note]: prose about things`, `[docs]: subdir` → NO rows; `[a]: ./x.md`, `[b]: sub/dir`, `[c]: file.md#frag` → three `OK … exists` rows, exit 0; `[d]: <./exists.md>` alone → a row. Containment: `[up](../escape.md)` and `[abs](/rooted.md)` → `FAIL … -> outside the working directory` (the J7 label cured), and the header names the skipped shape verbatim. Live run over the seven PUBLIC_SURFACES: `8 reference(s) across 7 file(s): 8 resolve, 0 do not.` EXIT=0."
+    },
+    {
+      "id": "K9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4464,
+      "claim": "[NOTE] Charge items 1, 2, 5, 6: the ambiguity rule's own shapes, the whole-line rule's new allowances, the docstrings, and the suites.",
+      "counterexample": "OBSERVED, confirmed. All four J1 shapes and H2a are byte no-ops for BOTH tools, each naming `line 3` correctly. H2b and 'real span above an unclosed fence': the span above is removed/refreshed, everything below the fence is byte-identical, and the fence is named. Adversarial shapes that fail to defeat 'nothing below the fence is touched': a fence opener pasted INSIDE the span; an opener prefixing a marker on the same line; a `~~~` opener at 3-space indent; two unclosed openers; a tab-indented opener above a real span (false ambiguity, safe). Whole-line rule: 1/2/3-space indents count and the indent is normalized away by a refresh with every other byte identical; a TAB-indented marker is prose — CommonMark-exact per micromark; trailing blanks leave with the span; BOM+span only → file removed; BOM+span+tail → no leading blank line. J2 chain: following the hint leaves the user's text intact. Suites: 4 files passed, 512 passed | 4 skipped; pack-agent-security repo-sweep 3 passed. Every new assertion would have failed pre-fold."
+    },
+    {
+      "id": "K10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3100,
+      "claim": "[NOTE] Charge item 5: \"the `eolOutsideSpan` docstring now discloses the mixed-terminator limit.\"",
+      "counterexample": "OBSERVED true, with the disclosure confined to a private docstring. J5's live case still behaves that way: the two-span mixed file ejects to `# Mine\\r\\n\\nmid\\r\\ntail\\n` — two user-owned LF bytes rewritten to CRLF — and init names the second span in its `err`. The changeset's eject sentence remains literally true (content, not terminators); no consumer-facing surface states the limit."
+    }
+  ],
+  "folded": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6",
+    "K7",
+    "K8",
+    "K9",
+    "K10"
+  ],
+  "verdict": "Shape by shape against the previous leg's ten: J1's four unclosed-fence shapes are removed (byte no-ops, correct line named, both tools loud), J2's instruction is inverted to Remove it and following the hint verbatim now preserves the user's text, J3's indent rule is fixed to 1-3 spaces and is CommonMark-exact by micromark's own rendering, J4's BOM and trailing-blank residues are cured on both tools, J5's limit is disclosed verbatim in the helper, J6/J7's script residues are cured or named in the header with the live seven-surface run at 8/8 exit 0, J8's internal inconsistency is deleted from the changeset, J10 is disclosed in the wiki, and the suites are green. What survives is one shape, and it is the one the charge itself pointed at: the closed-fence rule rests on a naive line-parity count, so a fence-looking line CommonMark does not count — a tab-indented ``` or a ``` inside an HTML comment — shifts the pairing and makes markers inside a genuinely closed fence live (K1). Its destructive half needs an uncommon conjunction — a quotation of the markers, which the adoption hint invites, plus an ODD count of miscounted fence lines above it — and it is unreachable on this repository; its false-prose half is unconditional. K2-K7 and K10 are narrower residues; K8 and K9 are clean confirmations. NOT CONVERGED: K1 survives. [Seat's fold and convergence call, appended: all ten folded in the commit that follows a389cdb8 — the tab-indent half of K1 fixed (a fence opens at most three spaces in, CommonMark-exact), the HTML-comment half named as a disclosed limit in the helper, the changeset and the wiki (a marker scan should not carry a markdown parser); the whole-line predicate stated once and shared (K6); every ambiguity hint also carries the stray-marker contract and is computed on the text left on disk (K2, K3); init's ambiguity case gets a summary row (K4); the bare-CR and mixed-terminator limits disclosed on consumer-facing surfaces (K5, K10); the eject notes reworded to stand alone (K7); K8 and K9 confirmed. The seat names CONVERGENCE after this fold: five legs, fifty-seven findings, every reachable data-loss path on an ordinary consumer's AGENTS.md closed or turned into a loud no-op, and the one remaining shape requiring a quotation of the markers plus an odd count of fence-looking lines inside HTML comments above it — unreachable on this repository and named on every consumer-facing surface. A sixth leg is the operator's call, not owed by the contract's convergence rule.]"
+}

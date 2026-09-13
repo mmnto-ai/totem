@@ -3003,23 +3003,32 @@ export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
 
 /**
  * The fence scan: byte ranges of CLOSED fenced code blocks (``` or ~~~ fences,
- * CommonMark's two shapes; a closer must use the same character and be at
- * least as long), `end` exclusive, plus the position of an opener no closer
- * answered (`null` when the fences balance). A floor marker quoted inside a
- * closed fence is prose about the marker, never the marker — the adoption hint
- * tells a maintainer to add the two lines, which is exactly what invites
- * quoting them. Below an UNCLOSED opener the text is undecidable by a scan: a
- * quotation the author never closed, or a real span under a stray fence line
- * — one reading deletes a quotation, the other hides a span (the two legs'
- * mirror findings). Neither tool guesses: markers there are AMBIGUOUS, never
- * paired, and both tools name the fence so the maintainer can close it.
+ * CommonMark's two shapes, opened at most three SPACES in — a tab-indented
+ * fence line is indented code, not a fence; a closer must use the same
+ * character and be at least as long), `end` exclusive, plus the position of an
+ * opener no closer answered (`null` when the fences balance). A floor marker
+ * quoted inside a closed fence is prose about the marker, never the marker —
+ * the adoption hint tells a maintainer to add the two lines, which is exactly
+ * what invites quoting them. Below an UNCLOSED opener the text is undecidable
+ * by a scan: a quotation the author never closed, or a real span under a stray
+ * fence line — one reading deletes a quotation, the other hides a span (two
+ * legs' mirror findings). Neither tool guesses: markers there are AMBIGUOUS,
+ * never paired, and both tools name the fence so the maintainer can close it.
+ *
+ * Disclosed limit: this is a line scan, not a markdown parser. A fence-looking
+ * line that CommonMark would not count — one inside an HTML comment block, or
+ * inside a raw HTML block — is counted here, and an odd number of such lines
+ * shifts the pairing of every fence below them. The wiki tells maintainers to
+ * keep fence-looking lines out of comments in AGENTS.md; the markers this
+ * scan serves are themselves HTML comments, so the file's audience already
+ * reads it as markup.
  */
 function scanFences(content: string): {
   ranges: Array<{ start: number; end: number }>;
   unclosedAt: number | null;
 } {
   const ranges: Array<{ start: number; end: number }> = [];
-  const fence = /^[ \t]{0,3}(`{3,}|~{3,})/gm;
+  const fence = /^[ ]{0,3}(`{3,}|~{3,})/gm;
   let open: { at: number; marker: string } | null = null;
   for (const match of content.matchAll(fence)) {
     const marker = match[1]!;
@@ -3037,30 +3046,39 @@ function scanFences(content: string): {
 const BOM_CODE_POINT = 0xfeff;
 
 /**
- * Every position of `marker` in `content` that counts as a marker: the marker
- * is the WHOLE line — at most three leading spaces (CommonMark's HTML-block
- * indent; four make an indented code block, which is prose), the marker,
- * trailing blanks — and it is neither inside a closed fenced code block nor
- * below an unclosed fence opener (ambiguous, see `scanFences`). The scaffold
- * writes markers at column 0 as whole lines and the adoption hint asks for
- * whole lines, so a marker quoted in an inline code span, mentioned
+ * The whole-line predicate, stated once: `marker` at `at` in `content` is a
+ * whole line when its line carries at most three leading spaces (CommonMark's
+ * HTML-block indent; four make an indented code block, which is prose), the
+ * marker, and trailing blanks before LF, CRLF or the end of the file. A
+ * byte-order mark before a marker on line 1 is tolerated. A file whose lines
+ * end in a bare CR (old-Mac terminators) has no whole lines by this rule and is
+ * therefore never touched — a disclosed limit, not a guess.
+ */
+function isWholeLineMarker(content: string, at: number, marker: string): boolean {
+  const lineBegin = content.lastIndexOf('\n', at - 1) + 1;
+  const prefix = content.slice(lineBegin, at);
+  const afterBom = lineBegin === 0 && content.charCodeAt(0) === BOM_CODE_POINT;
+  const lineStart = /^[ ]{0,3}$/.test(afterBom ? prefix.slice(1) : prefix);
+  const lineEnd = /^[ \t]*(?:\r?\n|$)/.test(content.slice(at + marker.length));
+  return lineStart && lineEnd;
+}
+
+/**
+ * Every position of `marker` in `content` that counts as a marker: a whole
+ * line (see `isWholeLineMarker`) that is neither inside a closed fenced code
+ * block nor below an unclosed fence opener (ambiguous, see `scanFences`). The
+ * scaffold writes markers at column 0 as whole lines and the adoption hint
+ * asks for whole lines, so a marker quoted in an inline code span, mentioned
  * mid-sentence, or sitting in an indented code block is prose and never pairs.
- * A byte-order mark before a marker on line 1 is tolerated.
  */
 export function agentsFloorMarkerPositions(content: string, marker: string): number[] {
   const { ranges, unclosedAt } = scanFences(content);
   const positions: number[] = [];
   let at = content.indexOf(marker);
   while (at !== -1) {
-    const lineBegin = content.lastIndexOf('\n', at - 1) + 1;
-    const prefix = content.slice(lineBegin, at);
-    const afterBom = lineBegin === 0 && content.charCodeAt(0) === BOM_CODE_POINT;
-    const lineStart = /^[ ]{0,3}$/.test(afterBom ? prefix.slice(1) : prefix);
-    const tail = content.slice(at + marker.length);
-    const lineEnd = /^[ \t]*(?:\r?\n|$)/.test(tail);
     const fenced = ranges.some((r) => at >= r.start && at < r.end);
     const ambiguous = unclosedAt !== null && at > unclosedAt;
-    if (lineStart && lineEnd && !fenced && !ambiguous) positions.push(at);
+    if (isWholeLineMarker(content, at, marker) && !fenced && !ambiguous) positions.push(at);
     at = content.indexOf(marker, at + marker.length);
   }
   return positions;
@@ -3069,7 +3087,9 @@ export function agentsFloorMarkerPositions(content: string, marker: string): num
 /**
  * Where an unclosed fence opener makes floor markers below it ambiguous: the
  * 1-based line of that opener when at least one whole-line marker (start or
- * end) sits below it, else `null`. Both tools name it instead of guessing.
+ * end) sits below it, else `null`. Both tools name it instead of guessing —
+ * computed on the text they are about to leave on disk, so the line is right
+ * after a refresh or a scrub above the fence moved it.
  */
 export function agentsFloorAmbiguousFenceLine(content: string): number | null {
   const { unclosedAt } = scanFences(content);
@@ -3077,11 +3097,7 @@ export function agentsFloorAmbiguousFenceLine(content: string): number | null {
   const markerBelow = [AGENTS_FLOOR_START, AGENTS_FLOOR_END].some((marker) => {
     let at = content.indexOf(marker, unclosedAt);
     while (at !== -1) {
-      const lineBegin = content.lastIndexOf('\n', at - 1) + 1;
-      const wholeLine =
-        /^[ ]{0,3}$/.test(content.slice(lineBegin, at)) &&
-        /^[ \t]*(?:\r?\n|$)/.test(content.slice(at + marker.length));
-      if (wholeLine) return true;
+      if (isWholeLineMarker(content, at, marker)) return true;
       at = content.indexOf(marker, at + marker.length);
     }
     return false;
