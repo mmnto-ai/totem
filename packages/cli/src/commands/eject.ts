@@ -37,6 +37,8 @@ const TOTEM_CHECKOUT_END = '[totem] end post-checkout';
 // Comment-shape-agnostic: hooks open `// [totem] auto-generated …`, markdown
 // skills `<!-- [totem] auto-generated … -->` — the first-line gate matches both.
 const TOTEM_FILE_MARKER = '[totem] auto-generated';
+/** The code point of the byte-order mark a UTF-8 editor may leave at byte 0. */
+const BOM_CODE_POINT = 0xfeff;
 
 /** The Totem directory when the repo configures none. */
 export const DEFAULT_TOTEM_DIR = '.totem';
@@ -718,6 +720,7 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     AGENTS_FLOOR_END,
     AGENTS_FLOOR_REL,
     AGENTS_FLOOR_START,
+    agentsFloorAmbiguousFenceLine,
     agentsFloorMarkerPositions,
     eolOutsideSpan,
     locateAgentsFloorSpan,
@@ -726,13 +729,29 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
   const realMarkers = (text: string): number =>
     agentsFloorMarkerPositions(text, AGENTS_FLOOR_START).length +
     agentsFloorMarkerPositions(text, AGENTS_FLOOR_END).length;
+  // The contract every stray-marker line carries: a start marker followed by
+  // an end marker IS a managed span by definition.
+  const contract =
+    'a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one';
   try {
     if (!fs.existsSync(filePath)) return;
     const rawContent = fs.readFileSync(filePath);
     const content = rawContent.toString('utf-8');
-    // A marker quoted inside a fenced code block is prose, not a block.
+    // Markers below an unclosed fence opener are ambiguous (a quotation never
+    // closed, or a real span under a stray fence line): nothing below it is
+    // touched, and the fence is named so the maintainer can close it.
+    const fenceLine = agentsFloorAmbiguousFenceLine(content);
+    const fenceNote =
+      fenceLine === null
+        ? ''
+        : ` — and an unclosed code fence opened at line ${fenceLine} makes the floor markers below it ambiguous; nothing below it was touched: close the fence, then re-run \`totem eject\``;
+    // A marker quoted inside a closed fenced code block is prose, not a block.
     if (realMarkers(content) === 0) {
-      summary.skipped.push(`${AGENTS_FLOOR_REL} (no Totem block)`);
+      summary.skipped.push(
+        fenceLine === null
+          ? `${AGENTS_FLOOR_REL} (no Totem block)`
+          : `${AGENTS_FLOOR_REL} (not scrubbed${fenceNote})`,
+      );
       return;
     }
     // Same guard as scrubReflexFiles: a file that does not round-trip through
@@ -761,8 +780,11 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       // most one trailing terminator (the blank line above the span was the
       // scaffold's), and the end marker's own terminator leaves with the span,
       // so one blank line remains where the span sat — never two, never zero.
-      let before = out.slice(0, span.start).replace(/(?:\r?\n)*$/, eol);
-      if (before === eol) before = '';
+      // A tolerated byte-order mark on line 1 is not a prefix the seam owns.
+      const rawBefore = out.slice(0, span.start);
+      const lead = rawBefore.charCodeAt(0) === BOM_CODE_POINT ? rawBefore.slice(0, 1) : '';
+      let core = rawBefore.slice(lead.length).replace(/(?:\r?\n)*$/, eol);
+      if (core === eol) core = '';
       let after = out.slice(span.end);
       if (/^[ \t\r\n]*$/.test(after)) {
         after = '';
@@ -772,7 +794,8 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
         after = after.slice(1);
       }
       // A span at byte 0 must not leave a leading blank line behind it.
-      if (before === '') after = after.replace(/^(?:\r?\n)+/, '');
+      if (core === '') after = after.replace(/^(?:\r?\n)+/, '');
+      const before = lead + core;
       out = before + after;
       cursor = before.length;
       removedSpans++;
@@ -780,21 +803,25 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     const residue = realMarkers(out) > 0;
     if (removedSpans === 0) {
       summary.skipped.push(
-        `${AGENTS_FLOOR_REL} (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)`,
+        `${AGENTS_FLOOR_REL} (stray floor markers, no complete span — not scrubbed; remove them: ${contract}${fenceNote})`,
       );
       return;
     }
-    if (/^[ \t\r\n]*$/.test(out)) {
+    if (/^[ \t\r\n]*$/.test(out.charCodeAt(0) === BOM_CODE_POINT ? out.slice(1) : out)) {
       fs.unlinkSync(filePath);
       summary.removed.push(AGENTS_FLOOR_REL);
       return;
     }
     writeFileAtomicSync(filePath, out);
-    summary.scrubbed.push(
-      residue
-        ? `${AGENTS_FLOOR_REL} (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)`
-        : AGENTS_FLOOR_REL,
-    );
+    if (residue) {
+      summary.scrubbed.push(
+        `${AGENTS_FLOOR_REL} (stray floor markers remain — remove them now: ${contract}${fenceNote})`,
+      );
+    } else {
+      summary.scrubbed.push(
+        fenceNote === '' ? AGENTS_FLOOR_REL : `${AGENTS_FLOOR_REL} (scrubbed${fenceNote})`,
+      );
+    }
     // totem-context: intentional cleanup — per-file best-effort like scrubReflexFiles; a locked or unreadable AGENTS.md degrades to a reported skip, never an abort that strands the remaining eject steps
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -25,9 +25,12 @@
  *
  * Not extracted, by design: a bare repository name with no `#`, `@` or `:`
  * (indistinguishable from an ordinary `dir/file` path), an anchor-only link
- * (`[x](#heading)`, a heading question, not a resolvability one), and a
- * qualified path with no file extension. The sterility test's lexicon covers
- * the bare private-repository name; this script does not.
+ * (`[x](#heading)`, a heading question, not a resolvability one), a qualified
+ * path with no file extension, and a reference definition whose destination
+ * has neither a slash nor a letter-led extension (`[docs]: subdir` — it reads
+ * as prose, the price of skipping footnotes and prose-shaped definitions). The
+ * sterility test's lexicon covers the bare private-repository name; this
+ * script does not.
  *
  * Network: unauthenticated GETs only. No token is read from the environment or
  * sent — an authenticated probe would pass a private link the public reader
@@ -96,7 +99,10 @@ for (const file of files) {
   const refDefTargets = [...content.matchAll(MD_REF_DEF_RE)]
     .filter((m) => !m[0].trimStart().startsWith('[^'))
     .map((m) => m[1].replace(/^<(.*)>$/, '$1').replace(/#.*$/, ''))
-    .filter((t) => t !== '' && /[/.]/.test(t));
+    // Path-shaped: a slash somewhere, or a letter-led file extension at the
+    // end (`x.md`); `1.0`, `e.g.` and a bare word are prose, and an
+    // extensionless slash-less target (`subdir`) is a named limit.
+    .filter((t) => t !== '' && (t.includes('/') || /\.[A-Za-z][A-Za-z0-9]{0,7}$/.test(t)));
   const relativeTargets = [...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]), ...refDefTargets];
   for (const target of relativeTargets) {
     if (SCHEME_RE.test(target)) continue; // absolute URLs are covered above; mailto: is not a public-resolvability question
@@ -133,10 +139,11 @@ async function probe(entry) {
   if (entry.target.startsWith('file:')) {
     const absPath = entry.target.slice('file:'.length);
     // A link that escapes the working directory is not something a public
-    // reader of the repository can follow, whatever sits there on this disk.
+    // reader can follow from here, whatever sits there on this disk — run the
+    // script from the repository root so the working directory IS the repo.
     const relative = path.relative(process.cwd(), absPath);
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      return { ...entry, ok: false, status: 'outside the repository' };
+      return { ...entry, ok: false, status: 'outside the working directory' };
     }
     const exists = existsExact(absPath);
     return { ...entry, ok: exists, status: exists ? 'exists' : 'missing' };

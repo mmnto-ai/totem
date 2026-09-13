@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "5a135b0328c256b18873325f1f654a0e3327e581",
+  "readAt": "2026-09-13T19:16:12Z",
+  "findings": [
+    {
+      "id": "J1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3012,
+      "claim": "Fold claim 1 / the fencedRanges docstring (init-templates.ts:3005-3014): \"An UNTERMINATED fence is deliberately not a range … so the locator errs toward seeing markers, and the whole-line rule below is what keeps a quoted marker from counting.\" Changeset line 5: \"A marker counts only as a whole line: quoted in an inline code span, mentioned mid-sentence, indented as code or inside a closed fenced block, it is prose.\" Wiki docs/wiki/cli-reference.md:24: \"quoting one … inside a closed fenced block is safe prose.\"",
+      "counterexample": "OBSERVED, and a REGRESSION against 1825a3cd. The whole-line rule does NOT keep a quoted marker from counting when the marker is quoted as a whole line inside a fence the pairing fails to close — which is every unterminated or mispaired fence, now that the `if (open !== null)` tail is gone (init-templates.ts:3028). Side-by-side run of the pre-fold and post-fold `locateAgentsFloorSpan` (scratchpad/b11.mjs): (a) markers quoted in a ```-opened, ~~~-closed block — old `null`, new `SPAN {start:20,end:96}`; (b) quoted in a ````markdown block closed by ``` — old `null`, new `SPAN`; (c) quoted in a block whose closer is indented 4 spaces — old `null`, new `SPAN`; (d) quoted in a block never closed at all — old `null`, new `SPAN`. End to end against the built code: input `# Mine\\n\\n```markdown\\n<S>\\nMY EXAMPLE\\n<N>\\n~~~\\n\\nafter\\n` → eject writes `# Mine\\n\\n```markdown\\n~~~\\n\\nafter\\n` and reports `{\"scrubbed\":[\"AGENTS.md\"]}` — a CLEAN scrub over deleted user content; init writes the 1882-byte canonical block into the middle of the user's code block and returns `{\"action\":\"refreshed\"}` with NO err. One further shape is PRE-EXISTING: a line-initial fence inside an HTML comment above a properly CLOSED quoting block — old and new both return a SPAN, eject deletes the example lines and reports clean, init splices the canonical block in — which directly falsifies the shipped sentence \"inside a closed fenced block … is safe prose\" (the naive parity in fencedRanges consumed its opener as the earlier fence's closer). H2's own mutants ARE cured. Not reachable on this repository today (0 fence lines in AGENTS.md). Assertion strength: the fold's new tests assert only the stray-fence-ABOVE-a-span direction; no test asserts the contract clause against a file whose fence parity is disturbed."
+    },
+    {
+      "id": "J2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 790,
+      "claim": "Fold claim 2: H1 is answered by disclosure — the contract (\"a start marker followed by an end marker is a span by definition\") is named loudly on both sides. Changeset line 5: \"stray markers it leaves behind are named with the warning …\"; eject.ts:706-709: stray markers \"are named beside the scrubbed line (with the warning …), or as the skip reason when nothing else was there to scrub.\"",
+      "counterexample": "OBSERVED. The two paired paths DO carry it: init on the two-orphan file → `err` = \"…Remove the others now: a start marker followed by an end marker is a managed span by definition…\"; eject run 1 → `scrubbed: ['AGENTS.md (stray floor markers remain — remove them now: … a later eject or init would treat the text between them as one)']`. Both residue-ONLY paths carry no warning at all: (a) eject.ts:783 skips with `AGENTS.md (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)` — no mention of the span-by-definition rule; (b) init.ts:790 returns `AGENTS.md carries an unpaired … marker — left untouched; pair it (start above end) or remove it, then re-run totem init.` — no warning, and worse, it instructs the destructive act the rest of the fold warns against. Following that hint literally: file `# Mine\\n<S>\\nUSER TEXT I CARE ABOUT\\nmore of my rules\\n` → init#1 emits that hint → the user pairs it by adding the end marker at the foot of the file → init#2 returns `{\"action\":\"refreshed\"}` with NO err and the file becomes `# Mine\\n<CANONICAL>\\n` — both user lines gone, silently, on the tool's own instruction. Judgment on completeness: the disclosure is NOT complete — it is missing on exactly the two states from which a user most plausibly creates the ambiguous pair, and on one of them the message recommends creating it."
+    },
+    {
+      "id": "J3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3044,
+      "claim": "Fold claim 1 / docstring init-templates.ts:3032-3038: a marker counts as the WHOLE line, \"column 0 through end of line, trailing blanks allowed\", and what is excluded is a marker \"quoted in an inline code span, mentioned mid-sentence, or sitting in an indented code block (four leading spaces)\".",
+      "counterexample": "OBSERVED. `const lineStart = at === 0 || content[at - 1] === '\\n'` (init-templates.ts:3044) rejects ANY leading whitespace, not just the four spaces the docstring names — and 1-3 leading spaces is still an HTML block in CommonMark, i.e. markup, not code. Consequence on a REAL span: with the marker lines indented by 1, 3 or 4 spaces, eject reports `skipped: ['AGENTS.md (no Totem block)']` while the entire managed block is still in the file, and init returns `{action:'preserved', err:'AGENTS.md is yours …'}` while both marker lines are present. Half-indented is worse: `# Mine\\n\\n<S>\\nfloor text\\n  <N>\\n\\nmy rules\\n` → init says `carries an unpaired … marker — … pair it (start above end)` and eject skips with `(agents-floor marker residue …)`, although the markers ARE paired and merely indented. Rated MINOR: the failure is conservative (nothing is deleted or rewritten), and nothing in the product indents the markers. Undisclosed: neither the wiki adoption sentence nor the init hint says the marker lines must start at column 0 with nothing else on them, which is now load-bearing."
+    },
+    {
+      "id": "J4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3044,
+      "claim": "[NOTE] Fold claim 1, new shapes charged: a marker as the last line with no newline; a CRLF-terminated marker line; a marker line with trailing blanks; a span whose START is the first line of the file.",
+      "counterexample": "OBSERVED, all four behave as the fold claims: no-trailing-newline end marker → eject `# Mine\\n` clean, init `refreshed`; CRLF file → span refreshed in CRLF, eject seam `# Mine\\r\\ntail\\r\\n`; trailing blanks → counted, init `refreshed`; span at byte 0 → eject `# Mine\\ntail\\n`, init `refreshed` with no leading blank line. One residue of the `at === 0 || content[at-1] === '\\n'` test: a UTF-8 BOM immediately before a byte-0 start marker makes the whole span invisible — eject `skipped: [… marker residue …]`, init `{action:'preserved', err:'… carries an unpaired … marker … pair it'}`, with both markers present and paired. Non-destructive, and only reachable when the start marker is literally line 1 of a BOM-prefixed file, which the scaffold never produces. Second cosmetic residue: the end marker's trailing blanks are outside the span, so they survive into the seam — `# Mine\\n\\n<S>  \\nstale\\n<N>\\t\\ntail\\n` ejects to `# Mine\\n\\t\\ntail\\n`, a tab-bearing line where the changeset promises \"one blank line at the seam\"."
+    },
+    {
+      "id": "J5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3054,
+      "claim": "Fold claim 3 / the seat's appended fold note in the deposit 1825a3cd….json: \"the terminator falls back to the file's own when nothing outside the span carries one (H4, the multi-span mixed-EOL case disclosed in the helper's docstring as a broken file)\".",
+      "counterexample": "Half OBSERVED-true, half OBSERVED-false. The fallback works: a file that is nothing but a CRLF span with no trailing newline is a byte no-op for init and is removed outright by eject; the trailing-CRLF variant is likewise `unchanged` — H4(2) is cured. The disclosure claim is false: the `eolOutsideSpan` docstring (init-templates.ts:3054-3060) says only \"falling back to the whole file's when nothing outside the span carries a terminator at all\" and never mentions multiple spans or mixed terminators; `grep -n 'broken file'` returns exactly one hit, init.ts:766, which pre-dates this fold and speaks about two managed spans, not about line terminators. H4(1) is therefore undisclosed and still live: `# Mine\\n\\n<LF span>\\n\\nmid\\n\\n<CRLF span>\\ntail\\n` ejects to `\"# Mine\\r\\n\\nmid\\r\\ntail\\n\"` — two CRLFs injected into a pure-LF region — and init refreshes the LF span in CRLF because the other span carries CRLF."
+    },
+    {
+      "id": "J6",
+      "severity": "MINOR",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 99,
+      "claim": "Fold claim 4: footnote definitions and prose-shaped definitions are skipped; a link escaping the working directory FAILS with `outside the repository`; the header names the case-exact check and the containment rule (header lines 18-22).",
+      "counterexample": "OBSERVED, cured with a narrower residue. Fixture in a temp cwd: `[^1]: …` → no row (cured); `[Note]: this line…` → no row (cured); `[a]: ./exists.md`, `[b]: ./exists.md#frag`, `[c]: <./exists.md>` → one deduped row `OK … link ./exists.md -> exists`; `[up](../escape.md)` → `FAIL … -> outside the repository` (cured as claimed); `[x](./Exists.md)` → `FAIL … -> missing` (case-exact holds). Exit code 1, `6 reference(s) across 1 file(s): 1 resolve, 5 do not.` The charge's two probes both produce false rows: `[v]: 1.0` → `FAIL … link 1.0 -> missing`, and the realistic prose shape `[e]: e.g. something` → `FAIL … link e.g. -> missing` — `/[/.]/.test(t)` (line 99) admits any first token containing a dot. The filter is also too strict in the other direction: `[docs]: subdir` carries neither `/` nor `.` and is now skipped entirely (INFERRED). Latent only: the live run over the seven PUBLIC_SURFACES prints `8 reference(s) across 7 file(s): 8 resolve, 0 do not.` with EXIT=0."
+    },
+    {
+      "id": "J7",
+      "severity": "MINOR",
+      "file": "tools/public-refs-resolve.mjs",
+      "line": 137,
+      "claim": "[NOTE] The containment rule at lines 135-140 mirrors the sterility test's guard (the fold's answer to H8): \"A link that escapes the working directory is not something a public reader of the repository can follow.\"",
+      "counterexample": "OBSERVED and correct at the repo root, but the two halves of the acceptance test still measure against different anchors: the test's `existsExact` uses `path.relative(ROOT, absPath)` where ROOT is the repository root, while the script uses `path.relative(process.cwd(), absPath)` (line 137) and labels the failure `outside the repository` (line 139). Run from any subdirectory, an in-repo link resolving above cwd is reported as `outside the repository`, which is a false statement about the repository. The header does say \"only inside the working directory\", so the behaviour is disclosed; the status string is not."
+    },
+    {
+      "id": "J8",
+      "severity": "MINOR",
+      "file": ".changeset/agents-public-floor-619.md",
+      "line": 5,
+      "claim": "Fold claim 6: the eject docstring, the changeset's eject and marker sentences and the wiki paragraph now describe the forward scan, the whole-line rule, the closed-fence rule and the stray-marker contract accurately.",
+      "counterexample": "OBSERVED: the forward-scan and stray-marker halves are now accurate, the marker-rule half is not. Still false of the code, quoted verbatim: (1) init-templates.ts:3011-3013 — \"so the locator errs toward seeing markers, and the whole-line rule below is what keeps a quoted marker from counting\" (falsified by J1); (2) .changeset/agents-public-floor-619.md:5 — \"quoted in an inline code span, mentioned mid-sentence, indented as code or inside a closed fenced block, it is prose\" (the closed-fence clause falsified by J1's HTML-comment-parity shape; \"indented as code\" understates a rule that fires on one space, J3); (3) docs/wiki/cli-reference.md:24 — \"… inside a closed fenced block is safe prose\" (same two, and \"safe\" is the load-bearing word the counterexample removes); (4) init-templates.ts:3037 — \"sitting in an indented code block (four leading spaces)\" versus the implemented any-leading-whitespace test. Also internally inconsistent: the same changeset line still carries the earlier unqualified clause \"markers quoted inside a fenced code block are prose and never pair\" alongside the new \"closed fenced block\" sentence."
+    },
+    {
+      "id": "J9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/agents-floor-sterility.test.ts",
+      "line": 90,
+      "claim": "[NOTE] Fold claim 5 and claim 7: the Proposal pattern takes the all-caps forms without taking ordinary prose; the suites pass.",
+      "counterexample": "OBSERVED, fully confirmed. Pattern read out of the source line: FIRES on `PROP 305`, `PROPOSAL 213`, `Proposal. 9`, `Prop-305`, `Prop 305`, `Prop. 305`, `Prop305`, `proposal 213`, `Proposal-213`, `PROP.305`, `PROP-305`; QUIET on `prop 1px`, `Proper 3`, `Properties 3`, `PROPS 2`, `the prop 2 value`, `prop-9 wide`, `Props 2`, `PROPER 3`, `Propane 4`, `PROPOSALS 3`. Totals: sterility + config-drift → 2 files passed, 85 tests passed (27 + 58); init + eject → 2 files passed, 411 passed, 4 skipped."
+    },
+    {
+      "id": "J10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3039,
+      "claim": "[QUESTION] The charge asks whether a marker line inside an HTML comment block spanning lines is markup or prose under the whole-line rule, and whether it matters.",
+      "counterexample": "OBSERVED: it is a live marker, not prose — the rule looks only at line boundaries and closed fences, and an HTML comment is neither. `# Mine\\n\\n<!--\\n<S>\\nfloor text\\n<N>\\n-->\\n\\ntail\\n` → eject writes `# Mine\\n\\n<!--\\n-->\\n\\ntail\\n` with `{\"scrubbed\":[\"AGENTS.md\"]}` (an empty comment husk left behind, reported clean); init refreshes the canonical block inside the comment and returns `{\"action\":\"refreshed\"}`. It matters in one direction only: a maintainer who tries to disable the managed floor by commenting it out still gets it refreshed by the next init, and eject leaves `<!--\\n-->`. Defensible (the markers are themselves HTML comments, so nesting does not actually comment them out in HTML), and nothing is destroyed that was not Totem's — recorded as a question the seat may want to answer in the wiki paragraph rather than in code."
+    }
+  ],
+  "folded": [
+    "J1",
+    "J2",
+    "J3",
+    "J4",
+    "J5",
+    "J6",
+    "J7",
+    "J8",
+    "J9",
+    "J10"
+  ],
+  "verdict": "Shape by shape against the previous leg's eight. H2's own mutants are removed: the stray-fence-above-a-span shape now locates the real span for both tools, as do the ```/~~~ mismatch, the fence inside an HTML comment and the lone fence between two spans. H3's three quoting shapes are removed. H4(2) is removed. H5's and H8's script shapes are removed — the live seven-surface run 8 resolve, 0 do not at exit 0. H7 is removed and its docstring corrected; H6's eject docstring and the changeset's eject sentence are now true of the forward scan. What survives: H1's answer is disclosure, and the disclosure has a hole at exactly the residue-only paths, where init instructs the user to pair a stray marker — following that instruction verbatim destroys the user's own text with no message (J2); and the H2 remedy was bought by dropping the unterminated-fence range, which converts four previously-protected quoted-marker shapes into live spans that eject deletes and init overwrites while reporting a clean scrub (J1), with the shipped sentence about closed fences falsified outright by the HTML-comment-parity shape. J3-J5 and J7 are narrower residues, J6 a latent sensor fragility, J9 a clean confirmation. This fold has NOT converged: two MATERIAL survive (J1, J2). Neither is BLOCKING on this repository's own surfaces — AGENTS.md carries zero line-initial fences, one span, markers at column 0 with no trailing blanks, LF throughout — but both are reachable on an ordinary consumer's AGENTS.md, J2 through a hint the tool itself prints and J1 through one fence typo above the code block the adoption hint invites. [Seat's fold, appended: all ten folded in the commit that follows 5a135b03 — markers below an unclosed fence opener are ambiguous for both tools, nothing under the fence is touched and its line is named (J1, the seesaw between the two fence readings ended by refusing to choose); every stray-marker hint on both sides carries the contract and the unpaired-marker hint says remove, never pair (J2); up to three spaces of indent count and the span is whole lines with indent and trailing blanks leaving with it, a byte-order mark on line 1 tolerated (J3, J4); the mixed-terminator limit disclosed in the helper's docstring (J5); the script keeps only path-shaped reference definitions and labels its containment as the working directory (J6, J7); the changeset, the wiki and the locator docstrings state the ambiguity rule and the HTML-comment behaviour (J8, J10); J9 confirmed.]"
+}

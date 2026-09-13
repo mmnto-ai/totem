@@ -3002,17 +3002,22 @@ export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
 }
 
 /**
- * Byte ranges of CLOSED fenced code blocks (``` or ~~~ fences, CommonMark's
- * two shapes; a closer must use the same character and be at least as long),
- * `end` exclusive. A floor marker quoted inside such a fence is prose about the
- * marker, never the marker — the adoption hint tells a maintainer to add the
- * two lines, which is exactly what invites quoting them. An UNTERMINATED fence
- * is deliberately not a range: a stray fence line above a real span must never
- * turn the span into prose (the re-armed leg's regression), so the locator
- * errs toward seeing markers, and the whole-line rule below is what keeps a
- * quoted marker from counting.
+ * The fence scan: byte ranges of CLOSED fenced code blocks (``` or ~~~ fences,
+ * CommonMark's two shapes; a closer must use the same character and be at
+ * least as long), `end` exclusive, plus the position of an opener no closer
+ * answered (`null` when the fences balance). A floor marker quoted inside a
+ * closed fence is prose about the marker, never the marker — the adoption hint
+ * tells a maintainer to add the two lines, which is exactly what invites
+ * quoting them. Below an UNCLOSED opener the text is undecidable by a scan: a
+ * quotation the author never closed, or a real span under a stray fence line
+ * — one reading deletes a quotation, the other hides a span (the two legs'
+ * mirror findings). Neither tool guesses: markers there are AMBIGUOUS, never
+ * paired, and both tools name the fence so the maintainer can close it.
  */
-function fencedRanges(content: string): Array<{ start: number; end: number }> {
+function scanFences(content: string): {
+  ranges: Array<{ start: number; end: number }>;
+  unclosedAt: number | null;
+} {
   const ranges: Array<{ start: number; end: number }> = [];
   const fence = /^[ \t]{0,3}(`{3,}|~{3,})/gm;
   let open: { at: number; marker: string } | null = null;
@@ -3025,30 +3030,64 @@ function fencedRanges(content: string): Array<{ start: number; end: number }> {
       open = null;
     }
   }
-  return ranges;
+  return { ranges, unclosedAt: open === null ? null : open.at };
 }
+
+/** The code point of the byte-order mark a UTF-8 editor may leave at byte 0. */
+const BOM_CODE_POINT = 0xfeff;
 
 /**
  * Every position of `marker` in `content` that counts as a marker: the marker
- * is the WHOLE line (column 0 through end of line, trailing blanks allowed) and
- * it is not inside a closed fenced code block. The scaffold writes markers as
- * whole lines and the adoption hint asks for whole lines, so a marker quoted
- * in an inline code span, mentioned mid-sentence, or sitting in an indented
- * code block (four leading spaces) is prose and never pairs.
+ * is the WHOLE line — at most three leading spaces (CommonMark's HTML-block
+ * indent; four make an indented code block, which is prose), the marker,
+ * trailing blanks — and it is neither inside a closed fenced code block nor
+ * below an unclosed fence opener (ambiguous, see `scanFences`). The scaffold
+ * writes markers at column 0 as whole lines and the adoption hint asks for
+ * whole lines, so a marker quoted in an inline code span, mentioned
+ * mid-sentence, or sitting in an indented code block is prose and never pairs.
+ * A byte-order mark before a marker on line 1 is tolerated.
  */
 export function agentsFloorMarkerPositions(content: string, marker: string): number[] {
-  const fences = fencedRanges(content);
+  const { ranges, unclosedAt } = scanFences(content);
   const positions: number[] = [];
   let at = content.indexOf(marker);
   while (at !== -1) {
-    const lineStart = at === 0 || content[at - 1] === '\n';
+    const lineBegin = content.lastIndexOf('\n', at - 1) + 1;
+    const prefix = content.slice(lineBegin, at);
+    const afterBom = lineBegin === 0 && content.charCodeAt(0) === BOM_CODE_POINT;
+    const lineStart = /^[ ]{0,3}$/.test(afterBom ? prefix.slice(1) : prefix);
     const tail = content.slice(at + marker.length);
     const lineEnd = /^[ \t]*(?:\r?\n|$)/.test(tail);
-    const fenced = fences.some((r) => at >= r.start && at < r.end);
-    if (lineStart && lineEnd && !fenced) positions.push(at);
+    const fenced = ranges.some((r) => at >= r.start && at < r.end);
+    const ambiguous = unclosedAt !== null && at > unclosedAt;
+    if (lineStart && lineEnd && !fenced && !ambiguous) positions.push(at);
     at = content.indexOf(marker, at + marker.length);
   }
   return positions;
+}
+
+/**
+ * Where an unclosed fence opener makes floor markers below it ambiguous: the
+ * 1-based line of that opener when at least one whole-line marker (start or
+ * end) sits below it, else `null`. Both tools name it instead of guessing.
+ */
+export function agentsFloorAmbiguousFenceLine(content: string): number | null {
+  const { unclosedAt } = scanFences(content);
+  if (unclosedAt === null) return null;
+  const markerBelow = [AGENTS_FLOOR_START, AGENTS_FLOOR_END].some((marker) => {
+    let at = content.indexOf(marker, unclosedAt);
+    while (at !== -1) {
+      const lineBegin = content.lastIndexOf('\n', at - 1) + 1;
+      const wholeLine =
+        /^[ ]{0,3}$/.test(content.slice(lineBegin, at)) &&
+        /^[ \t]*(?:\r?\n|$)/.test(content.slice(at + marker.length));
+      if (wholeLine) return true;
+      at = content.indexOf(marker, at + marker.length);
+    }
+    return false;
+  });
+  if (!markerBelow) return null;
+  return content.slice(0, unclosedAt).split('\n').length;
 }
 
 /**
@@ -3056,7 +3095,12 @@ export function agentsFloorMarkerPositions(content: string, marker: string): num
  * use (the span is about to be replaced, so its own endings must not decide
  * the file's), falling back to the whole file's when nothing outside the span
  * carries a terminator at all (a file that is nothing but the span keeps its
- * own endings, so it stays a byte no-op).
+ * own endings, so it stays a byte no-op). Disclosed limit: "outside" is the
+ * whole file minus THIS span, so in a file that mixes terminators between two
+ * spans the other span's endings weigh in — a file with two managed spans is
+ * already broken (init names it), and a file mixing CRLF and LF outside the
+ * span is converged toward whichever terminator it carries, not preserved
+ * byte-for-byte.
  */
 export function eolOutsideSpan(
   content: string,
@@ -3073,9 +3117,12 @@ export function eolOutsideSpan(
  * (mmnto-ai/totem#2602), so an orphan start marker sitting above a complete
  * span never widens it, the bytes between an orphan and the real span stay the
  * repository's, and a caller that advances `from` past what it has already
- * handled can never re-pair an orphan it left behind. Markers inside fenced
- * code blocks are prose and never pair. `null` when no complete pair exists at
- * or after `from`. `end` is exclusive.
+ * handled can never re-pair an orphan it left behind. Markers inside closed
+ * fenced code blocks are prose and never pair; markers below an unclosed fence
+ * opener are ambiguous and never pair either (the callers name the fence, see
+ * `agentsFloorAmbiguousFenceLine`). `null` when no complete pair exists at or
+ * after `from`. `end` is exclusive and includes the end-marker line's trailing
+ * blanks.
  */
 export function locateAgentsFloorSpan(
   content: string,
@@ -3090,7 +3137,17 @@ export function locateAgentsFloorSpan(
     for (const s of starts) {
       if (s >= from && s < endIdx) startIdx = s;
     }
-    if (startIdx !== -1) return { start: startIdx, end: endIdx + AGENTS_FLOOR_END.length };
+    if (startIdx !== -1) {
+      // The span is whole lines: it starts at the start-marker line's first
+      // column (a tolerated byte-order mark on line 1 stays outside it, and an
+      // indent of up to three spaces is normalized away by a refresh) and ends
+      // after the end-marker line's trailing blanks, so neither survives into
+      // the seam.
+      const lineBegin = content.lastIndexOf('\n', startIdx - 1) + 1;
+      const start = lineBegin === 0 && content.charCodeAt(0) === BOM_CODE_POINT ? 1 : lineBegin;
+      const trailing = /^[ \t]*/.exec(content.slice(endIdx + AGENTS_FLOOR_END.length))![0].length;
+      return { start, end: endIdx + AGENTS_FLOOR_END.length + trailing };
+    }
     // An orphan end marker: keep scanning — a later complete pair is still a span.
   }
   return null;

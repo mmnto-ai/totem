@@ -4461,14 +4461,85 @@ describe('scaffoldAgentsFloor', () => {
 
   // ─── The third leg's shapes (H1, H2, H3, H4) ────────────────────────
 
-  it('a stray unterminated fence above a real span never turns the span into prose', () => {
-    const content = `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\ntail\n`;
+  it.each([
+    [
+      'a stray unterminated fence above a real span',
+      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\ntail\n`,
+      3,
+    ],
+    [
+      'markers quoted in a fence that the wrong character tries to close',
+      `# Mine\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE\n${AGENTS_FLOOR_END}\n~~~\n\nafter\n`,
+      3,
+    ],
+    [
+      'markers quoted in a fence whose closer is indented as code',
+      `# Mine\n\n\`\`\`\n${AGENTS_FLOOR_START}\n${AGENTS_FLOOR_END}\n    \`\`\`\n\nafter\n`,
+      3,
+    ],
+  ])(
+    '%s is ambiguous: nothing below the fence is touched and the fence line is named',
+    (_name, content, line) => {
+      fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+      const result = scaffoldAgentsFloor(tmpDir, 'x');
+      expect(result.action).toBe('preserved');
+      expect(result.err).toContain(`unclosed code fence`);
+      expect(result.err).toContain(`line ${line}`);
+      expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+    },
+  );
+
+  it('a real span above an unclosed fence is refreshed and the fence below is still named', () => {
+    const content = `# Mine\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`;
     fs.writeFileSync(agentsPath(), content, 'utf-8');
 
-    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('refreshed');
+    expect(result.err).toContain('unclosed code fence');
     expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
-      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\ntail\n`,
+      `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`,
     );
+  });
+
+  it.each([1, 2, 3])(
+    'marker lines indented %s space(s) still count (an HTML block, not code)',
+    (n) => {
+      const pad = ' '.repeat(n);
+      const content = `# Mine\n\n${pad}${AGENTS_FLOOR_START}\nstale\n${pad}${AGENTS_FLOOR_END}\ntail\n`;
+      fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+      expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+      expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+        `# Mine\n\n${AGENTS_FLOOR_BLOCK}\ntail\n`,
+      );
+    },
+  );
+
+  it('a byte-order mark before a marker on line 1 is tolerated', () => {
+    const bom = String.fromCharCode(0xfeff);
+    fs.writeFileSync(
+      agentsPath(),
+      `${bom}${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\ntail\n`,
+      'utf-8',
+    );
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(`${bom}${AGENTS_FLOOR_BLOCK}\ntail\n`);
+  });
+
+  it('the unpaired-marker hint says remove, never pair, and carries the contract', () => {
+    fs.writeFileSync(
+      agentsPath(),
+      `# Mine\n${AGENTS_FLOOR_START}\nUSER TEXT I CARE ABOUT\n`,
+      'utf-8',
+    );
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('Remove it');
+    expect(result.err).not.toContain('start above end');
+    expect(result.err).toContain('a managed span by definition');
   });
 
   it.each([
@@ -4493,12 +4564,12 @@ describe('scaffoldAgentsFloor', () => {
     expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
   });
 
-  it('a marker line with trailing blanks still counts', () => {
+  it('a marker line with trailing blanks still counts, and the blanks leave with the span', () => {
     const content = `# Mine\n\n${AGENTS_FLOOR_START}  \nstale\n${AGENTS_FLOOR_END}\t\n`;
     fs.writeFileSync(agentsPath(), content, 'utf-8');
 
     expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
-    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(`# Mine\n\n${AGENTS_FLOOR_BLOCK}\t\n`);
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(`# Mine\n\n${AGENTS_FLOOR_BLOCK}\n`);
   });
 
   it('a file that is nothing but a CRLF span keeps its own endings (byte no-op)', () => {

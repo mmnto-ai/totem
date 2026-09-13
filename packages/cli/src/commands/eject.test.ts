@@ -470,19 +470,97 @@ describe('ejectCommand', () => {
 
   // ─── The third leg's shapes (H2, H3, H4) ────────────────────────────
 
-  it('a stray unterminated fence above a real span never hides the span from eject', async () => {
+  it.each([
+    [
+      'a stray unterminated fence above a real span',
+      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\n\ntail\n`,
+    ],
+    [
+      'markers quoted in a fence that the wrong character tries to close',
+      `# Mine\n\n\`\`\`markdown\n${AGENTS_FLOOR_START}\nMY EXAMPLE\n${AGENTS_FLOOR_END}\n~~~\n\nafter\n`,
+    ],
+  ])(
+    '%s is ambiguous: nothing below the fence is touched and the fence line is named',
+    async (_name, content) => {
+      fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+      const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+      await scrubAgentsFloor(cwd, summary);
+
+      expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+      expect(summary.skipped).toHaveLength(1);
+      expect(summary.skipped[0]).toContain('unclosed code fence opened at line 3');
+      expect(summary.scrubbed).toEqual([]);
+    },
+  );
+
+  it('a real span above an unclosed fence is removed and the fence below is still named', async () => {
     fs.writeFileSync(
       path.join(cwd, 'AGENTS.md'),
-      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\n\ntail\n`,
+      `# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`,
     );
     const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
 
     await scrubAgentsFloor(cwd, summary);
 
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
-      '# Mine\n\n```sh\necho hi\n\ntail\n',
+      `# Mine\n\n\`\`\`\n${AGENTS_FLOOR_START}\nquoted\n`,
     );
-    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+    expect(summary.scrubbed).toHaveLength(1);
+    expect(summary.scrubbed[0]).toContain('unclosed code fence opened at line');
+  });
+
+  it.each([1, 2, 3])(
+    'marker lines indented %s space(s) still count, and the indent leaves with the span',
+    async (n) => {
+      const pad = ' '.repeat(n);
+      fs.writeFileSync(
+        path.join(cwd, 'AGENTS.md'),
+        `# Mine\n\n${pad}${AGENTS_FLOOR_START}\nfloor\n${pad}${AGENTS_FLOOR_END}\n\ntail\n`,
+      );
+      const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+      await scrubAgentsFloor(cwd, summary);
+
+      expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe('# Mine\n\ntail\n');
+      expect(summary.scrubbed).toEqual(['AGENTS.md']);
+    },
+  );
+
+  it('trailing blanks on the end-marker line leave with the span — one clean blank line at the seam', async () => {
+    fs.writeFileSync(
+      path.join(cwd, 'AGENTS.md'),
+      `# Mine\n\n${AGENTS_FLOOR_START}  \nfloor\n${AGENTS_FLOOR_END}\t\n\ntail\n`,
+    );
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe('# Mine\n\ntail\n');
+  });
+
+  it('a byte-order-marked file that is nothing but the span is removed outright', async () => {
+    const bom = String.fromCharCode(0xfeff);
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), `${bom}${AGENTS_FLOOR_BLOCK}\n`);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.existsSync(path.join(cwd, 'AGENTS.md'))).toBe(false);
+    expect(summary.removed).toEqual(['AGENTS.md']);
+  });
+
+  it('the residue-only skip carries the contract', async () => {
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), `# Mine\n${AGENTS_FLOOR_START}\nmine\n`);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(summary.skipped).toHaveLength(1);
+    expect(summary.skipped[0]).toContain('a managed span by definition');
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      `# Mine\n${AGENTS_FLOOR_START}\nmine\n`,
+    );
   });
 
   it.each([
@@ -554,7 +632,7 @@ describe('ejectCommand', () => {
 
       expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
       expect(summary.skipped).toHaveLength(1);
-      expect(summary.skipped[0]).toContain('marker residue');
+      expect(summary.skipped[0]).toContain('stray floor markers');
     },
   );
 

@@ -26,6 +26,7 @@ import {
   AGENTS_FLOOR_END,
   AGENTS_FLOOR_REL,
   AGENTS_FLOOR_START,
+  agentsFloorAmbiguousFenceLine,
   agentsFloorBlockFor,
   agentsFloorMarkerPositions,
   AI_PROMPT_BLOCK,
@@ -778,33 +779,47 @@ export function scaffoldAgentsFloor(
     }
     const existing = fs.readFileSync(filePath, 'utf-8');
     const span = locateAgentsFloorSpan(existing);
+    // The one hint every stray-marker path carries, because it is the contract:
+    // a start marker followed by an end marker IS a managed span by definition,
+    // so text between stray markers would be refreshed or ejected as one.
+    const contract =
+      'a start marker followed by an end marker is a managed span by definition, and text between stray markers would be refreshed or ejected as one';
+    const fenceLine = agentsFloorAmbiguousFenceLine(existing);
+    const fenceHint =
+      fenceLine === null
+        ? undefined
+        : `${AGENTS_FLOOR_REL} has an unclosed code fence (\`\`\` or ~~~ opened at line ${fenceLine}) with floor markers below it, which makes them ambiguous — a quotation the fence never closed, or a real span under a stray fence line. Nothing below that fence is touched: close the fence (or remove the stray line) and re-run \`totem init\`.`;
     if (span === null) {
-      // A marker quoted inside a fenced code block is prose, not an unpaired marker.
+      // A marker quoted inside a closed fenced code block is prose, not an
+      // unpaired marker; below an unclosed fence it is ambiguous, named above.
       const hasMarker =
         agentsFloorMarkerPositions(existing, AGENTS_FLOOR_START).length +
           agentsFloorMarkerPositions(existing, AGENTS_FLOOR_END).length >
         0;
       return {
         action: 'preserved',
-        err: hasMarker
-          ? `${AGENTS_FLOOR_REL} carries an unpaired \`${AGENTS_FLOOR_START}\` / \`${AGENTS_FLOOR_END}\` marker — left untouched; pair it (start above end) or remove it, then re-run \`totem init\`.`
-          : `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines where the managed floor should sit and re-run \`totem init\` to adopt it.`,
+        err:
+          fenceHint ??
+          (hasMarker
+            ? `${AGENTS_FLOOR_REL} carries an unpaired \`${AGENTS_FLOOR_START}\` / \`${AGENTS_FLOOR_END}\` marker — left untouched. Remove it (do not pair it around your own text): ${contract}. Then re-run \`totem init\`.`
+            : `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines (each on its own line, at most three spaces of indent) where the managed floor should sit and re-run \`totem init\` to adopt it.`),
       };
     }
     const canonical = agentsFloorBlockFor(eolOutsideSpan(existing, span));
     const merged = existing.slice(0, span.start) + canonical + existing.slice(span.end);
     // Extra markers outside the span — a second complete span, or an unpaired
-    // start or end marker the pairing left alone — are named, never touched,
-    // and the hint says why it matters: a start marker followed by an end
-    // marker IS a managed span by definition, so stray markers that come to
-    // bracket the repository's own text would be read as one next time.
+    // start or end marker the pairing left alone — are named, never touched.
     const extraMarkers =
       agentsFloorMarkerPositions(merged, AGENTS_FLOOR_START).length +
         agentsFloorMarkerPositions(merged, AGENTS_FLOOR_END).length >
       2;
-    const err = extraMarkers
-      ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed. Remove the others now: a start marker followed by an end marker is a managed span by definition, and text between stray markers would be refreshed or ejected as one.`
-      : undefined;
+    const hints = [
+      extraMarkers
+        ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed. Remove the others now: ${contract}.`
+        : undefined,
+      fenceHint,
+    ].filter((h): h is string => h !== undefined);
+    const err = hints.length === 0 ? undefined : hints.join(' ');
     if (merged === existing) {
       return err === undefined ? { action: 'unchanged' } : { action: 'unchanged', err };
     }
