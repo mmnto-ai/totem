@@ -79,14 +79,16 @@ const DENY_SUBSTRINGS = [
 
 /**
  * Doctrine tags a public reader cannot follow, and the internal review
- * vocabulary — case-insensitive, hyphen or space or nothing between the word
- * and the number, so `adr-105`, `ADR 105`, `tenet 20` and `Tenet-16` all fire.
+ * vocabulary — hyphen or space or nothing between the word and the number, and
+ * case-insensitive for ADR and Tenet (so `adr-105`, `ADR 105`, `tenet 20` and
+ * `Tenet-16` all fire); the Proposal pattern keeps its case, see its comment.
  */
 const DENY_PATTERNS: ReadonlyArray<{ name: string; re: RegExp }> = [
   { name: 'an ADR tag', re: /\badr[- ]?\d+/i },
-  // `Prop 305` (the abbreviation is always capitalized in doctrine prose) or
-  // `proposal 213` in any case — never a lowercase `prop 1` in ordinary prose.
-  { name: 'a Proposal tag', re: /\b(?:Prop\.?|[Pp]roposal)[- ]?\d+/ },
+  // `Prop 305` / `PROP 305` (the abbreviation is capitalized in doctrine prose)
+  // or `proposal 213` in any case, an optional period after either — never a
+  // lowercase `prop 1` in ordinary prose.
+  { name: 'a Proposal tag', re: /\b(?:Prop|PROP|[Pp]roposal|PROPOSAL)\.?[- ]?\d+/ },
   { name: 'a Tenet tag', re: /\btenet[- ]?\d+/i },
   { name: 'internal review vocabulary', re: /\b(?:review-leg|cohort|falsification)\b/i },
 ];

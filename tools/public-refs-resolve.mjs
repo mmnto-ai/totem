@@ -16,7 +16,10 @@
  *   - repository-qualified paths (`owner/repo:path/to/file.ext`), probed on
  *     the default branch,
  *   - relative markdown links, inline (`[x](path)`) and reference-style
- *     (`[x]: path`), checked on disk,
+ *     (`[x]: path`, a path-shaped destination; footnotes and prose lines that
+ *     merely look like definitions are skipped), checked on disk CASE-EXACTLY
+ *     (github.com is case-sensitive where NTFS and macOS are not) and only
+ *     inside the working directory (a link that escapes it fails),
  * and prints one row per reference with the observed status. Exit 0 when
  * every reference resolves, 1 when any does not, 2 on usage error.
  *
@@ -85,10 +88,15 @@ for (const file of files) {
   }
   // A reference definition's destination may be wrapped in angle brackets and
   // may carry a fragment; a `#`-only destination is the `[//]: #` comment
-  // idiom (or an anchor), neither a resolvability question.
+  // idiom (or an anchor), neither a resolvability question. A footnote
+  // definition (`[^1]: prose`) and a prose line that merely looks like a
+  // definition (`[Note]: this sentence…`) are not links: only a label that is
+  // not a footnote AND a destination shaped like a path (a `/` or a `.` in it)
+  // counts.
   const refDefTargets = [...content.matchAll(MD_REF_DEF_RE)]
+    .filter((m) => !m[0].trimStart().startsWith('[^'))
     .map((m) => m[1].replace(/^<(.*)>$/, '$1').replace(/#.*$/, ''))
-    .filter((t) => t !== '');
+    .filter((t) => t !== '' && /[/.]/.test(t));
   const relativeTargets = [...[...content.matchAll(MD_LINK_RE)].map((m) => m[1]), ...refDefTargets];
   for (const target of relativeTargets) {
     if (SCHEME_RE.test(target)) continue; // absolute URLs are covered above; mailto: is not a public-resolvability question
@@ -123,7 +131,14 @@ function existsExact(absPath) {
 
 async function probe(entry) {
   if (entry.target.startsWith('file:')) {
-    const exists = existsExact(entry.target.slice('file:'.length));
+    const absPath = entry.target.slice('file:'.length);
+    // A link that escapes the working directory is not something a public
+    // reader of the repository can follow, whatever sits there on this disk.
+    const relative = path.relative(process.cwd(), absPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      return { ...entry, ok: false, status: 'outside the repository' };
+    }
+    const exists = existsExact(absPath);
     return { ...entry, ok: exists, status: exists ? 'exists' : 'missing' };
   }
   try {

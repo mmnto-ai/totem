@@ -4458,4 +4458,63 @@ describe('scaffoldAgentsFloor', () => {
     expect(out).toBe(`# Mine\n\n${AGENTS_FLOOR_BLOCK}\n\n## Rules\n`);
     expect(out).not.toContain('\r');
   });
+
+  // ─── The third leg's shapes (H1, H2, H3, H4) ────────────────────────
+
+  it('a stray unterminated fence above a real span never turns the span into prose', () => {
+    const content = `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\ntail\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(
+      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\ntail\n`,
+    );
+  });
+
+  it.each([
+    [
+      'markers quoted in inline code spans mid-sentence',
+      `# Mine\n\nAdd \`${AGENTS_FLOOR_START}\` and \`${AGENTS_FLOOR_END}\` to adopt.\n\nmore\n`,
+    ],
+    [
+      'markers in an indented code block',
+      `# Mine\n\n    ${AGENTS_FLOOR_START}\n    ${AGENTS_FLOOR_END}\n\nmore\n`,
+    ],
+    [
+      'a marker that shares its line with prose',
+      `# Mine\nkeep ${AGENTS_FLOOR_START}\ntext\n${AGENTS_FLOOR_END} more\n`,
+    ],
+  ])('%s are prose: the file is preserved with the adoption hint', (_name, content) => {
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain('is yours');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it('a marker line with trailing blanks still counts', () => {
+    const content = `# Mine\n\n${AGENTS_FLOOR_START}  \nstale\n${AGENTS_FLOOR_END}\t\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(`# Mine\n\n${AGENTS_FLOOR_BLOCK}\t\n`);
+  });
+
+  it('a file that is nothing but a CRLF span keeps its own endings (byte no-op)', () => {
+    const crlf = AGENTS_FLOOR_BLOCK.replace(/\n/g, '\r\n');
+    fs.writeFileSync(agentsPath(), crlf, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'x')).toEqual({ action: 'unchanged' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(crlf);
+  });
+
+  it('the stray-marker hint says why: a start followed by an end is a span by definition', () => {
+    const content = `# Mine\n${AGENTS_FLOOR_START}\nUSER A\n${AGENTS_FLOOR_START}\nstale\n${AGENTS_FLOOR_END}\nUSER C\n${AGENTS_FLOOR_END}\n`;
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+
+    const result = scaffoldAgentsFloor(tmpDir, 'x');
+    expect(result.action).toBe('refreshed');
+    expect(result.err).toContain('a managed span by definition');
+  });
 });

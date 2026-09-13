@@ -3002,11 +3002,15 @@ export function agentsFloorBlockFor(eol: '\r\n' | '\n'): string {
 }
 
 /**
- * Byte ranges of fenced code blocks (``` or ~~~ fences, CommonMark's two
- * shapes), `end` exclusive; an unterminated fence runs to the end of the file.
- * A floor marker quoted inside a fence is prose about the marker, never the
- * marker — the adoption hint tells a maintainer to add the two lines, which is
- * exactly what invites quoting them — so the locator skips these ranges.
+ * Byte ranges of CLOSED fenced code blocks (``` or ~~~ fences, CommonMark's
+ * two shapes; a closer must use the same character and be at least as long),
+ * `end` exclusive. A floor marker quoted inside such a fence is prose about the
+ * marker, never the marker — the adoption hint tells a maintainer to add the
+ * two lines, which is exactly what invites quoting them. An UNTERMINATED fence
+ * is deliberately not a range: a stray fence line above a real span must never
+ * turn the span into prose (the re-armed leg's regression), so the locator
+ * errs toward seeing markers, and the whole-line rule below is what keeps a
+ * quoted marker from counting.
  */
 function fencedRanges(content: string): Array<{ start: number; end: number }> {
   const ranges: Array<{ start: number; end: number }> = [];
@@ -3021,20 +3025,45 @@ function fencedRanges(content: string): Array<{ start: number; end: number }> {
       open = null;
     }
   }
-  if (open !== null) ranges.push({ start: open.at, end: content.length });
   return ranges;
 }
 
-/** Every position of `marker` in `content` that is not inside a fenced code block. */
+/**
+ * Every position of `marker` in `content` that counts as a marker: the marker
+ * is the WHOLE line (column 0 through end of line, trailing blanks allowed) and
+ * it is not inside a closed fenced code block. The scaffold writes markers as
+ * whole lines and the adoption hint asks for whole lines, so a marker quoted
+ * in an inline code span, mentioned mid-sentence, or sitting in an indented
+ * code block (four leading spaces) is prose and never pairs.
+ */
 export function agentsFloorMarkerPositions(content: string, marker: string): number[] {
   const fences = fencedRanges(content);
   const positions: number[] = [];
   let at = content.indexOf(marker);
   while (at !== -1) {
-    if (!fences.some((r) => at >= r.start && at < r.end)) positions.push(at);
+    const lineStart = at === 0 || content[at - 1] === '\n';
+    const tail = content.slice(at + marker.length);
+    const lineEnd = /^[ \t]*(?:\r?\n|$)/.test(tail);
+    const fenced = fences.some((r) => at >= r.start && at < r.end);
+    if (lineStart && lineEnd && !fenced) positions.push(at);
     at = content.indexOf(marker, at + marker.length);
   }
   return positions;
+}
+
+/**
+ * The line terminator to render a span in: the one the bytes OUTSIDE the span
+ * use (the span is about to be replaced, so its own endings must not decide
+ * the file's), falling back to the whole file's when nothing outside the span
+ * carries a terminator at all (a file that is nothing but the span keeps its
+ * own endings, so it stays a byte no-op).
+ */
+export function eolOutsideSpan(
+  content: string,
+  span: { start: number; end: number },
+): '\r\n' | '\n' {
+  const outside = content.slice(0, span.start) + content.slice(span.end);
+  return outside.includes('\n') ? detectEol(outside) : detectEol(content);
 }
 
 /**

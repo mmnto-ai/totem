@@ -365,7 +365,9 @@ describe('ejectCommand', () => {
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
       `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n\n## Keep\n`,
     );
-    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+    expect(summary.scrubbed).toEqual([
+      'AGENTS.md (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)',
+    ]);
   });
 
   it('removes every complete span, not just the first', async () => {
@@ -391,7 +393,9 @@ describe('ejectCommand', () => {
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
       `# Mine\n${AGENTS_FLOOR_END}\nstill mine\n\n## Keep\n`,
     );
-    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+    expect(summary.scrubbed).toEqual([
+      'AGENTS.md (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)',
+    ]);
   });
 
   it('a CRLF file keeps CRLF at the seam — no bare LF is introduced and no user byte changes', async () => {
@@ -420,7 +424,9 @@ describe('ejectCommand', () => {
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
       `# Mine\n${AGENTS_FLOOR_START}\nMY OWN TEXT\n\nKEEP ME\n${AGENTS_FLOOR_END}\ntail\n`,
     );
-    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+    expect(summary.scrubbed).toEqual([
+      'AGENTS.md (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)',
+    ]);
   });
 
   it('a nested shape removes only the inner pair — the outer orphans and the text they bracket stay', async () => {
@@ -433,7 +439,9 @@ describe('ejectCommand', () => {
     expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
       `# Mine\n${AGENTS_FLOOR_START}\nA\nC\n${AGENTS_FLOOR_END}\ntail\n`,
     );
-    expect(summary.scrubbed).toEqual(['AGENTS.md (marker residue remains — remove manually)']);
+    expect(summary.scrubbed).toEqual([
+      'AGENTS.md (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)',
+    ]);
   });
 
   it('markers quoted inside a fenced code block are prose: no block, file byte-untouched', async () => {
@@ -458,6 +466,56 @@ describe('ejectCommand', () => {
     expect(out).toBe('# Mine\n\nintro\n\n## Rules\n');
     expect(out).not.toContain('\r');
     expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
+  // ─── The third leg's shapes (H2, H3, H4) ────────────────────────────
+
+  it('a stray unterminated fence above a real span never hides the span from eject', async () => {
+    fs.writeFileSync(
+      path.join(cwd, 'AGENTS.md'),
+      `# Mine\n\n\`\`\`sh\necho hi\n\n${AGENTS_FLOOR_BLOCK}\n\ntail\n`,
+    );
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      '# Mine\n\n```sh\necho hi\n\ntail\n',
+    );
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
+  it.each([
+    [
+      'markers quoted in inline code spans mid-sentence',
+      `# Mine\n\nAdd \`${AGENTS_FLOOR_START}\` and \`${AGENTS_FLOOR_END}\` to adopt.\n\nmore\n`,
+    ],
+    [
+      'markers in an indented code block',
+      `# Mine\n\n    ${AGENTS_FLOOR_START}\n    ${AGENTS_FLOOR_END}\n\nmore\n`,
+    ],
+    [
+      'a marker that shares its line with prose',
+      `# Mine\nkeep ${AGENTS_FLOOR_START}\ntext\n${AGENTS_FLOOR_END} more\n`,
+    ],
+  ])('%s are prose: no block, file byte-untouched', async (_name, content) => {
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+    expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
+  it('a file that is nothing but a CRLF span is removed outright', async () => {
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), AGENTS_FLOOR_BLOCK.replace(/\n/g, '\r\n'));
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.existsSync(path.join(cwd, 'AGENTS.md'))).toBe(false);
+    expect(summary.removed).toEqual(['AGENTS.md']);
   });
 
   it('removes an AGENTS.md that is nothing but the floor span', async () => {

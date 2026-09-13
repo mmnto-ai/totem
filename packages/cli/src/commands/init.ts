@@ -34,8 +34,8 @@ import {
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
   CLAUDE_SESSION_START_ENTRY,
-  detectEol,
   DISTRIBUTED_CLAUDE_SKILLS,
+  eolOutsideSpan,
   GEMINI_BEFORE_TOOL,
   GEMINI_BEFORE_TOOL_REL,
   GEMINI_SESSION_START,
@@ -791,20 +791,19 @@ export function scaffoldAgentsFloor(
           : `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines where the managed floor should sit and re-run \`totem init\` to adopt it.`,
       };
     }
-    // The line terminator is read from the bytes OUTSIDE the span: the span is
-    // about to be replaced, so its own endings must not decide the file's.
-    const outside = existing.slice(0, span.start) + existing.slice(span.end);
-    const canonical = agentsFloorBlockFor(detectEol(outside));
+    const canonical = agentsFloorBlockFor(eolOutsideSpan(existing, span));
     const merged = existing.slice(0, span.start) + canonical + existing.slice(span.end);
     // Extra markers outside the span — a second complete span, or an unpaired
-    // start or end marker the pairing left alone — are named, never touched:
-    // left silent they would be exactly the shape a later eject re-pairs.
+    // start or end marker the pairing left alone — are named, never touched,
+    // and the hint says why it matters: a start marker followed by an end
+    // marker IS a managed span by definition, so stray markers that come to
+    // bracket the repository's own text would be read as one next time.
     const extraMarkers =
       agentsFloorMarkerPositions(merged, AGENTS_FLOOR_START).length +
         agentsFloorMarkerPositions(merged, AGENTS_FLOOR_END).length >
       2;
     const err = extraMarkers
-      ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed; remove the others.`
+      ? `${AGENTS_FLOOR_REL} carries floor markers outside the managed span (a second span or an unpaired marker) — only the first span is managed. Remove the others now: a start marker followed by an end marker is a managed span by definition, and text between stray markers would be refreshed or ejected as one.`
       : undefined;
     if (merged === existing) {
       return err === undefined ? { action: 'unchanged' } : { action: 'unchanged', err };

@@ -696,17 +696,20 @@ const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
 
 /**
  * Remove the managed AGENTS.md floor span `totem init` scaffolds
- * (mmnto-ai/totem-strategy#619). Removes every complete span — each paired
- * END-anchored like the reflex scrub's (mmnto-ai/totem#2602): the first end
- * marker with the last start marker before it, so an orphan start marker above
- * a span never widens the removal and the loop runs until no complete pair
- * remains. The repository's own content on either side is kept, the seam
- * normalized as the reflex scrub normalizes its own — one blank line where the
- * span sat, in the file's own line terminator. A file that is nothing but the
- * span (and whitespace) is removed outright — it was the scaffold and nothing
- * more. Marker residue (an unpaired marker) is never attributed and never
- * scrubbed; it is named beside the scrubbed line, or as the skip reason when
- * nothing else was there to scrub.
+ * (mmnto-ai/totem-strategy#619). Removes every complete span the forward scan
+ * finds — each paired END-anchored like the reflex scrub's
+ * (mmnto-ai/totem#2602): the first end marker with the last start marker before
+ * it, the scan resuming at the seam after each removal, so an orphan start
+ * marker above a span never widens the removal and never re-pairs with an
+ * orphan end marker below it in this run. The repository's own content on
+ * either side is kept, the seam normalized as the reflex scrub normalizes its
+ * own — one blank line where the span sat, in the line terminator the bytes
+ * outside the span use. A file that is nothing but the span (and whitespace) is
+ * removed outright — it was the scaffold and nothing more. Stray markers are
+ * never attributed and never scrubbed; they are named beside the scrubbed line
+ * (with the warning that a start marker followed by an end marker is a span by
+ * definition, so the text they now bracket would be read as one next time), or
+ * as the skip reason when nothing else was there to scrub.
  *
  * Exported for the summary-contract tests beside `scrubReflexFiles`.
  */
@@ -716,7 +719,7 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     AGENTS_FLOOR_REL,
     AGENTS_FLOOR_START,
     agentsFloorMarkerPositions,
-    detectEol,
+    eolOutsideSpan,
     locateAgentsFloorSpan,
   } = await import('./init-templates.js');
   const filePath = path.join(cwd, AGENTS_FLOOR_REL);
@@ -753,7 +756,7 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
       // The line terminator is read from the bytes OUTSIDE the span being
       // removed: a span that is the file's only CRLF source must not decide
       // the seam of an otherwise-LF file.
-      const eol = detectEol(out.slice(0, span.start) + out.slice(span.end));
+      const eol = eolOutsideSpan(out, span);
       // Single-owner seams, mirroring the reflex scrub: the prefix keeps at
       // most one trailing terminator (the blank line above the span was the
       // scaffold's), and the end marker's own terminator leaves with the span,
@@ -788,7 +791,9 @@ export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Prom
     }
     writeFileAtomicSync(filePath, out);
     summary.scrubbed.push(
-      residue ? `${AGENTS_FLOOR_REL} (marker residue remains — remove manually)` : AGENTS_FLOOR_REL,
+      residue
+        ? `${AGENTS_FLOOR_REL} (stray floor markers remain — remove them now: a start marker followed by an end marker is a managed span by definition, and a later eject or init would treat the text between them as one)`
+        : AGENTS_FLOOR_REL,
     );
     // totem-context: intentional cleanup — per-file best-effort like scrubReflexFiles; a locked or unreadable AGENTS.md degrades to a reported skip, never an abort that strands the remaining eject steps
   } catch (err) {
