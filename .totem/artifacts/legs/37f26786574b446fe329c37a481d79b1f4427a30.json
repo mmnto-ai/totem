@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "37f26786574b446fe329c37a481d79b1f4427a30",
+  "readAt": "2026-09-09T20:30:41Z",
+  "findings": [
+    {
+      "id": "S1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1787,
+      "claim": "observed — the template's scanner ports core's open-substitution arm but not core's `(`-group / `)`-paren-stack arms, so a `#` after `(` or after an operator `)` is read as text; a `<<word` in that text opens a heredoc whose unterminated body blanks every later line, and a merge bash DOES run goes unjudged (third divergence of the same fail-open class; core's rule is stated verbatim at packages/core/src/transport-shield.ts:213-219 and implemented at :367-377)",
+      "counterexample": "(true)#<<note\\ngh pr merge 5 · (#<<note\\ngh pr merge 5\\n) · (true; echo a)#<<note\\ngh pr merge 5 — bash 5.3.15 executes the merge line in all three; the committed wrapper never spawns the CLI and exits 0"
+    },
+    {
+      "id": "S2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1765,
+      "claim": "observed — the template's bare heredoc-delimiter class /[A-Za-z0-9_.\\-\\/]/ is narrower than core's HEREDOC_AT bare word [^\\s'\"\\\\<>()|&;]+ (packages/core/src/transport-shield.ts:210-211), so a delimiter containing any other character is parsed as a PREFIX, the real terminator line never matches, and the body scan blanks to end of input — falsifying the shipped comment at init-templates.ts:1521-1524 that the blanker models bare delimiters 'the shape core's transport-shield scanner uses'",
+      "counterexample": "cat <<E:F\\nbody\\nE:F\\ngh pr merge 5 (also E*F, E+F, E=F, E,F, E@F, E!F, EOF~) — bash terminates the body at the delimiter and runs the merge; the wrapper never spawns"
+    },
+    {
+      "id": "S3",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-pilot-install.md",
+      "line": 10,
+      "claim": "observed — 'Two limits remain disclosed and locked as misses in the suite (… ; the projection's git reads before the aggregate deadline)' overclaims: the deadline limit has zero suite rows, and mmnto-ai/totem#2856 says a stubbed-slow-git row is still needed",
+      "counterexample": "grep -ic deadline packages/cli/src/commands/gate-install.test.ts -> 0; the only 30000 occurrences are spawnSync timeouts at :632,:704,:747,:1403"
+    },
+    {
+      "id": "S4",
+      "severity": "MINOR",
+      "file": "mmnto-ai/totem#2856 (issue body)",
+      "line": 0,
+      "claim": "observed — the issue's line references were exact against the pre-fold wrapper and were made stale by this fold's own +15 lines",
+      "counterexample": "'ghPrMergeArgvs (wrapper line ~531)' and 'evaluation loop (line ~885)' vs the committed wrapper's 546 and 900"
+    },
+    {
+      "id": "S5",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-pilot-install.md",
+      "line": 12,
+      "claim": "inferred (precision nit) — the changeset and PR-body variants drop the '--apply' qualifier the shipped skill sentence carries; a dry-run no-evidence row exits 0",
+      "counterexample": "resolve-threads.ts:1019 is `if (apply && counts['skip:no-evidence'] > 0)`, so without --apply the same row leaves exitCode 0"
+    },
+    {
+      "id": "S6",
+      "severity": "MINOR",
+      "file": "mmnto-ai/totem#2855 (PR body)",
+      "line": 22,
+      "claim": "observed — no blank line between the last Verification bullet and the '## Review leg' heading",
+      "counterexample": "body line 22 '- A changeset (...)' is immediately followed by line 23 '## Review leg (doctrine/model-tiering § Review legs)'"
+    }
+  ],
+  "folded": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6"
+  ],
+  "verdict": "Every cure the fold claims reproduces. Two further fail-opens of the same class survive in the scanner it hardens — both reproduced end-to-end through the shipped wrapper, both undisclosed, one of them falsifying a shipped comment sentence in the very file this fold edits."
+}

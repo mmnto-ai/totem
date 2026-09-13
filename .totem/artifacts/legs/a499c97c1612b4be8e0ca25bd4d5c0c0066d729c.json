@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "a499c97c1612b4be8e0ca25bd4d5c0c0066d729c",
+  "readAt": "2026-09-09T20:08:21Z",
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "BLOCKING",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 93,
+      "claim": "OBSERVED. The fold's new step-4 clause ends 'a `skip:no-evidence` row stays unresolved, a run narrowed with `--ids` leaves its unnamed rows as `skip:not-selected`, and both exit 0'. The no-evidence arm does NOT exit 0: under --apply it exits 2. Same false sentence at .agents/skills/review-reply/SKILL.md:93, packages/cli/src/commands/init-templates.ts:2867, and in the PR 2855 body's round-1 paragraph.",
+      "counterexample": "packages/cli/src/commands/resolve-threads.ts:1019-1024 -- `if (apply && counts['skip:no-evidence'] > 0) { err(...); exitCode = 2; }`; doc block :848-853 -- '2 ... or, under --apply, a SELECTED thread skipped for want of evidence'; a skip:no-evidence verdict implies selected (:463). Pinned by resolve-threads.test.ts:763 ('never resolves an evidence-free thread even under --apply, and exits 2') and :775 ('applies the evidenced rows and STILL exits 2 when a selected row had no evidence'), both expect(result.exitCode).toBe(2). The SKILL contradicts itself at :91 -- 'Exit `2` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence)'."
+    },
+    {
+      "id": "R2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1678,
+      "claim": "OBSERVED. A second divergence from core's scanner of the same fail-open class the cured Major named survives the fold: the template/wrapper scanner has no `$(` substitution arm, so `boundary` stays false and a `#` glued to `$(` is not read as a comment; a `<<word` inside that comment opens a heredoc whose unterminated body blanks every later line, and the merge goes unjudged.",
+      "counterexample": "`echo $(# <<note` NEWLINE `gh pr merge 5` NEWLINE `)` -- folded wrapper never spawns (fail-OPEN); core's findHeredocs returns [] for the same string; bash executes the merge. With a space (`echo $( # <<note`) the folded wrapper fires pr 5, isolating the boundary flag as the cause. Core carries the arm at packages/core/src/transport-shield.ts:359-365 with the comment 'a `#` right after `$(` is a comment'. Neither disclosed at gate-wrapper.cjs:145-175 nor covered in gate-install.test.ts."
+    },
+    {
+      "id": "R3",
+      "severity": "MATERIAL",
+      "file": ".changeset/merge-ready-pilot-install.md",
+      "line": 11,
+      "claim": "OBSERVED. The fold re-rendered three copies of the step-4 clause but left the changeset carrying the pre-fold wording -- the exact formulation CodeRabbit's Minor refuted -- so the published @mmnto/cli CHANGELOG will misdescribe the shipped template.",
+      "counterexample": "Changeset text: 'a clean `resolve-threads --apply` run over every evidenced thread clears the unresolved-bot-threads predicate (a run narrowed with `--ids` clears only the rows it named)'. Shipped template now (init-templates.ts:2867): 'it clears the unresolved-bot-threads predicate only when no unresolved, non-outdated thread rooted by a known review bot remains'. The changeset is a fourth narration surface the fold's 'all three copies' scope missed."
+    },
+    {
+      "id": "R4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1064,
+      "claim": "OBSERVED. The Greptile P1 decline rests on the limits being disclosed and locked; two of P1's three named forms are, the third (`gh.exe pr merge 2855`) is disclosed nowhere in the repo, yet issue 2856's body enumerates it inside the clause 'each a disclosed-miss row in the suite today' (and the PR body inside 'locks as disclosed-miss test rows'). That clause is false for that item.",
+      "counterexample": "grep -rn 'gh\\.exe' --include=*.ts --include=*.cjs --include=*.md over the worktree returns ZERO hits. The rows at gate-install.test.ts:1064-1082 cover sudo / timeout 30 / env GH_TOKEN=x / eval \"...\" / command -p / exec -a x / time -p / time -- / backtick / leading redirection -- and they DO lock the miss strongly (DENY stub, expect(status).toBe(0) AND expect(stubArgv()).toBeNull()). The anchor is exact: gate-wrapper.cjs:531 `tokens[0] === 'gh'`. Greptile P2 verifies clean against gate-wrapper.cjs:873-886 + gitRead :539-540 (timeout 10000), call sites :620/:624/:627, deadline :885."
+    },
+    {
+      "id": "R5",
+      "severity": "MINOR",
+      "file": ".github/pull_request_template.md",
+      "line": 0,
+      "claim": "OBSERVED. PR 2855's body now contains two contradictory descriptions of the same shipped line: the 'How' section's F5 bullet narrates the PRE-fold clause and says 'The review-reply skill's step 4 now says so', while the round-1 paragraph below states the post-fold clause.",
+      "counterexample": "Body F5 bullet: 'A clean `resolve-threads --apply` run over every evidenced thread clears the unresolved-bot-threads predicate (a run narrowed with `--ids` clears only the rows it named) and is not an allow verdict ... The review-reply skill's step 4 now says so.' SKILL.md:93 no longer says that."
+    },
+    {
+      "id": "R6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1228,
+      "claim": "OBSERVED, assertion-strength note, no defect. The regression row locks only the space-separated `<<< bar` shape; two further shapes were equally fail-open pre-fold and are cured but untested. The row's second arm passes on the pre-fold wrapper too, so it is a non-regression assertion, not a falsifier -- honestly labelled as 'the complement' in both the test comment and the PR body.",
+      "counterexample": "Pre-fold wrapper, `grep x <<<bar` NEWLINE `gh pr merge 5` -> payload null (fail-open); post-fold -> pr 5. Pre-fold, `<<<bar` NEWLINE `gh pr merge 5` -> payload null; post-fold -> pr 5. Pre-fold, `gh pr merge 6 <<< notes` -> pr 6 (already passing)."
+    }
+  ],
+  "folded": [
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6"
+  ],
+  "verdict": "Falsification complete. The heredoc half of the fold holds under attack; the skill-clause half ships a false sentence."
+}
