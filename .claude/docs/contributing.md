@@ -8,7 +8,7 @@
 
 ## PR Review Bot Protocol
 
-See [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) — canonical per [ADR-105](https://github.com/mmnto-ai/totem-strategy/blob/main/adr/adr-105-bot-protocol-centralization.md). Doctrine § 8.1 is the consolidated round-comment SOP (reply structure, @-mention rules, XOR Tag Rule, quota management, decline framing). Do not paraphrase here (paraphrases drift). Same retire-to-pointer pattern as `mmnto-ai/totem-playground@80b4d1b`.
+This repository uses review bots. Review triggers are the maintainer's to post, never an agent's. Reply to findings through `/review-reply`: one dispositions comment per round, every addressed bot tagged once, a trigger never combined with a reply, and never cite a commit before it is pushed. The full protocol is maintained outside this repository and is not paraphrased here (paraphrases drift).
 
 ## Publishing
 
@@ -29,5 +29,5 @@ See [`mmnto-ai/totem-strategy:doctrine/bot-protocols.md`](https://github.com/mmn
 
 <!-- totem-ignore-next-line -->
 
-- Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
+- Update `AI_PROMPT_BLOCK` in `init-templates.ts` when changing reflexes/hooks/prompts.
 - No `totem-ignore`, `eslint-disable`, or `--no-verify` without a ticket.

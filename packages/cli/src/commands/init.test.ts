@@ -16,6 +16,7 @@ import {
 import { cleanTmpDir } from '../test-utils.js';
 import {
   buildNpxCommand,
+  deriveProjectName,
   detectEmbeddingTier,
   detectReflexStatus,
   findUnownedHookSibling,
@@ -27,6 +28,7 @@ import {
   probeOllamaFloor,
   REFLEX_VERSION,
   resolveToolSelection,
+  scaffoldAgentsFloor,
   scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
@@ -37,6 +39,9 @@ import {
 } from './init.js';
 import { detectProject } from './init-detect.js';
 import {
+  AGENTS_FLOOR_BLOCK,
+  AGENTS_FLOOR_END,
+  AGENTS_FLOOR_START,
   AI_PROMPT_BLOCK,
   BARE_REF_REGEX_SOURCE,
   CLAUDE_PREWRITESHIELD,
@@ -47,6 +52,7 @@ import {
   GEMINI_BEFORE_TOOL,
   GEMINI_SESSION_START,
   generateConfigForFormat,
+  renderAgentsFloorScaffold,
   REVIEW_LOOP_SKILL_CONTENT,
   REVIEW_REPLY_SKILL_CONTENT,
   SIGNOFF_SKILL_CONTENT,
@@ -4237,5 +4243,109 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(dryAt).toBeGreaterThanOrEqual(0);
     expect(applyAt).toBeGreaterThanOrEqual(0);
     expect(dryAt).toBeLessThan(applyAt);
+  });
+});
+
+// ─── The public AGENTS.md floor (mmnto-ai/totem-strategy#619) ─────────
+
+describe('deriveProjectName', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-floor-name-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('strips the npm scope from package.json name', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"@acme/widgets"}');
+    expect(deriveProjectName(tmpDir)).toBe('widgets');
+  });
+
+  it('keeps an unscoped name as written', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"widgets"}');
+    expect(deriveProjectName(tmpDir)).toBe('widgets');
+  });
+
+  it('falls back to the directory basename without a package.json, or with an unparseable or nameless one', () => {
+    expect(deriveProjectName(tmpDir)).toBe(path.basename(tmpDir));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{not json');
+    expect(deriveProjectName(tmpDir)).toBe(path.basename(tmpDir));
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"   "}');
+    expect(deriveProjectName(tmpDir)).toBe(path.basename(tmpDir));
+  });
+});
+
+describe('scaffoldAgentsFloor', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-floor-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  const agentsPath = () => path.join(tmpDir, 'AGENTS.md');
+
+  it('creates the whole scaffold when no AGENTS.md exists', () => {
+    expect(scaffoldAgentsFloor(tmpDir, 'widgets')).toEqual({ action: 'created' });
+    const written = fs.readFileSync(agentsPath(), 'utf-8');
+    expect(written).toBe(renderAgentsFloorScaffold('widgets'));
+    expect(written.startsWith('# widgets: Agent Instructions')).toBe(true);
+    expect(written).toContain(AGENTS_FLOOR_BLOCK);
+  });
+
+  it('is a byte no-op on its own scaffold (unchanged)', () => {
+    scaffoldAgentsFloor(tmpDir, 'widgets');
+    const before = fs.readFileSync(agentsPath(), 'utf-8');
+    expect(scaffoldAgentsFloor(tmpDir, 'widgets')).toEqual({ action: 'unchanged' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(before);
+  });
+
+  it('refreshes exactly the span between the markers and keeps every other byte', () => {
+    const above = '# Mine\n\nMy intro stays.\n\n';
+    const below = '\n\n## My rules\n\n- keep this\n';
+    const stale = `${AGENTS_FLOOR_START}\nold managed text\n${AGENTS_FLOOR_END}`;
+    fs.writeFileSync(agentsPath(), above + stale + below, 'utf-8');
+
+    expect(scaffoldAgentsFloor(tmpDir, 'ignored')).toEqual({ action: 'refreshed' });
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(above + AGENTS_FLOOR_BLOCK + below);
+    // A second pass is a no-op on the refreshed file.
+    expect(scaffoldAgentsFloor(tmpDir, 'ignored')).toEqual({ action: 'unchanged' });
+  });
+
+  it('preserves a repository-authored AGENTS.md that carries no markers, with the adoption hint', () => {
+    const mine = '# Mine\n\nAll of this is user content.\n';
+    fs.writeFileSync(agentsPath(), mine, 'utf-8');
+    const result = scaffoldAgentsFloor(tmpDir, 'widgets');
+    expect(result.action).toBe('preserved');
+    expect(result.err).toContain(AGENTS_FLOOR_START);
+    expect(result.err).toContain('re-run `totem init`');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(mine);
+  });
+
+  it.each([
+    ['only a start marker', `# Mine\n${AGENTS_FLOOR_START}\ntext\n`],
+    ['only an end marker', `# Mine\ntext\n${AGENTS_FLOOR_END}\n`],
+    ['inverted markers', `# Mine\n${AGENTS_FLOOR_END}\ntext\n${AGENTS_FLOOR_START}\n`],
+  ])('preserves a file with %s byte-untouched', (_name, content) => {
+    fs.writeFileSync(agentsPath(), content, 'utf-8');
+    expect(scaffoldAgentsFloor(tmpDir, 'widgets').action).toBe('preserved');
+    expect(fs.readFileSync(agentsPath(), 'utf-8')).toBe(content);
+  });
+
+  it("the managed span carries no trailing newline, so the seam after the end marker is the file's own", () => {
+    expect(AGENTS_FLOOR_BLOCK.startsWith(AGENTS_FLOOR_START)).toBe(true);
+    expect(AGENTS_FLOOR_BLOCK.endsWith(AGENTS_FLOOR_END)).toBe(true);
+    expect(AGENTS_FLOOR_BLOCK.indexOf(AGENTS_FLOOR_START)).toBe(
+      AGENTS_FLOOR_BLOCK.lastIndexOf(AGENTS_FLOOR_START),
+    );
+    expect(AGENTS_FLOOR_BLOCK.indexOf(AGENTS_FLOOR_END)).toBe(
+      AGENTS_FLOOR_BLOCK.lastIndexOf(AGENTS_FLOOR_END),
+    );
   });
 });

@@ -1,6 +1,6 @@
 # Agent Workflow — Controller/Worker Pattern
 
-## Principle (ADR-063 + Superpowers)
+## Principle
 
 The main conversation is the **Controller**. It plans, dispatches, reviews, and commits.
 It **never** writes implementation code directly when the task involves build/test cycles.
@@ -14,7 +14,7 @@ Delegate to a background agent when:
 
 - The task involves writing code + running tests (build/test cycle)
 - The output would be >5KB of terminal text (test results, lint output)
-- The task is mechanical (format, lint, shield, test)
+- The task is mechanical (format, lint, review, test)
 
 Do NOT delegate when:
 
@@ -22,6 +22,10 @@ Do NOT delegate when:
 - The task needs MCP tool calls (agents can't access MCP)
 - The task needs git push / PR creation (network blocked in sandbox)
 - The task is a 1-2 line change (overhead exceeds benefit)
+
+## Waiting on Work
+
+Prefer the harness's Monitor tool over Bash `sleep` loops; for poll-and-react work, use `/loop <prompt>` self-paced rather than hand-rolled polling.
 
 ## Dispatch Template
 
@@ -48,14 +52,14 @@ When the agent reports back:
 
 1. Read the changed files (agent can't commit)
 2. Verify the changes match the spec
-3. Run totem lint if the agent didn't
-4. Run totem shield (mandatory architectural review)
+3. Run `totem lint` if the agent didn't (the enforcement floor)
+4. Run `totem review` (advisory lanes, never the review of record)
 5. Commit with proper message
 6. Move to next task
 
 ## Pre-Push Review
 
-Before pushing, run `coderabbit:code-review` to catch issues locally. This is an **early filter** — it does NOT feed the lesson pipeline. The PR review (auto-triggered by CodeRabbit on push) is what feeds `totem extract`.
+Before pushing, run `coderabbit:code-review` to catch issues locally. This is an **early filter** — it does NOT feed the lesson pipeline. The PR review (auto-triggered by CodeRabbit on push) is what feeds `totem lesson extract`.
 
 Flow: local review → fix → push → PR review → extract lessons
 

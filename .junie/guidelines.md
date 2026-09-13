@@ -26,9 +26,9 @@
 
 <!-- totem-ignore-next-line -->
 
-- Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
+- Update `AI_PROMPT_BLOCK` in `init-templates.ts` when changing reflexes/hooks/prompts.
 <!-- totem-ignore-next-line -->
-- GCA decline: add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
+- Gemini Code Assist (GCA) decline: add lesson with `review-guidance` tag + update `.gemini/styleguide.md` §6.
 - No `totem-ignore`, `eslint-disable`, or `--no-verify` without a ticket.
 - GCA replies: ONE `@gemini-code-assist` comment per PR.
 

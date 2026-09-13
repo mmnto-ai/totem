@@ -1,20 +1,39 @@
 # Totem: Agent Instructions
 
-Canonical source of truth for how AI coding agents (Claude Code, Gemini CLI, Cursor, etc.) behave in this repo. Per Totem ADR-038 (`mmnto-ai/totem-strategy:adr/adr-038-agents-md-standard.md`), `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`. Thin `CLAUDE.md` / `GEMINI.md` redirects point each tool here.
+Canonical source of truth for how AI coding agents behave in this repository. Following the AGENTS.md convention, `mmnto-ai/totem` consolidates tool-specific instruction files into this single `AGENTS.md`; thin per-tool redirect files point each tool here.
 
 ## What Totem is
 
-Totem is a **deterministic, git-native governance toolkit** — _rules you enforce, state you derive, context you query_. Lead with enforcement (`totem lint` + the gate engine), not recall. Derivation (`totem status` / `orient`, Tenet 20) and the queryable index serve it.
+Totem is a local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase. Lead with enforcement (`totem lint` and the gate engine), not recall; derivation (`totem status`, `totem orient`) and the queryable index serve it.
 
-## Session Start Protocol (MANDATORY)
+<!-- totem:agents-floor:start -->
+<!-- Managed by `totem init`: the span between these markers is refreshed in place; everything outside it is yours. -->
 
-On a hook-less seat, signon's seat-and-assignment step (`/signon` 0–1) precedes every search below (mmnto-ai/totem#2801).
+## Session start
 
 1. Run `totem status` for health.
-2. **NEVER GUESS ARCHITECTURE.** Before modifying any core system, run `totem search <system_name>`.
-3. Before writing code, call `search_knowledge` describing what you're changing.
-4. Before planning, query `totem-strategy:search_knowledge` for ADRs.
-5. Don't push speculative fixes. Run `totem lint` locally — front-load all checks before the first push.
+2. **Never guess architecture.** Before modifying a core system, run `totem search <system>`.
+3. Before writing code, call `search_knowledge` describing what you are changing.
+4. Run `totem lint` locally before the first push; front-load the deterministic checks.
+5. Cold start (no session hook injected orientation): after `/signon`'s seat-and-assignment step, derive it with `totem orient`.
+
+## Working rules
+
+- Before pushing: your formatter, then `totem lint` (the enforcement floor), then `totem review` where configured (advisory lanes, never a merge gate).
+- After a PR merges: `totem lesson extract <pr> --yes`.
+- **Never bypass a quality gate without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or ignore patterns added to pacify CI; a suppression carries a ticket reference.
+- After roughly 15 turns of code changes: run `totem status`, re-query the knowledge index for the system you are modifying, and state your architectural assumption.
+- **Controller, not implementer.** Delegate build-and-test cycles to background agents; keep this thread for decisions.
+
+## Review bots
+
+If this repository uses review bots: review triggers are the maintainer's to post, never an agent's. Reply to findings through `/review-reply`, one dispositions comment per round, and never cite a commit before it is pushed.
+
+## Installed skills
+
+`totem init` installs `/signon`, `/signoff`, `/review-reply` and `/review-loop`; every later `totem init` refreshes each skill's managed span and keeps what you add below its end marker. Private or team-only instructions, when present, resolve from an installed doctrine package and are never committed here.
+
+<!-- totem:agents-floor:end -->
 
 ## Essentials
 
@@ -25,63 +44,32 @@ On a hook-less seat, signon's seat-and-assignment step (`/signon` 0–1) precede
 - **NEVER put secrets in config files.** `.env` only.
 - **Totem is NOT zero-user.** Ships in production for downstream consumers beyond this repo's dogfood. Breaking changes need migration paths, not just "fix in next major."
 
-## Totem Workflow
+## Totem workflow
 
-Not mechanically enforced. Follow because they reduce PR bot noise.
+Not mechanically enforced. Follow because it reduces review noise.
 
 - **Before coding:** `/preflight <issue>`. Create a feature branch.
-- **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify compile manifest is current.
-- **After merging a PR:** `totem lesson extract <pr> --yes`.
-- **NEVER bypass quality gates without a ticket.** No `--no-verify`, `totem-ignore`, `eslint-disable`, `@ts-ignore`, skipped tests, or CI-pacifying ignore patterns. Suppressions need a ticket-ref comment.
-- **Open PRs Ready, not Draft.** Ready signals review-readiness for the operator's trigger word (strategy#622).
-- **Vendor routing.** Claude is the default code executor; Gemini stays strategic (proposals, ADRs, audits). Cross-vendor second-opinion fine both ways; "Gemini implement" is not the default.
+- **Before pushing:** `pnpm run format` → `totem lint` → `totem review` → verify the compile manifest is current.
+- **Open PRs Ready, not Draft.**
 
-## Contributor Principles
+## Contributor principles
 
 <!-- totem-ignore-next-line -->
 
-- Update `AI_PROMPT_BLOCK` in `init.ts` when changing reflexes/hooks/prompts.
-- GCA decline: add a lesson with `review-guidance` tag + update `.gemini/styleguide.md` § 6.
-- Changesets: write `.changeset/` files manually. Use `pnpm run version` (never bare `pnpm version`).
+- Update `AI_PROMPT_BLOCK` in `init-templates.ts` when changing reflexes, hooks or prompts.
+- Gemini Code Assist (GCA) decline: add a lesson with the `review-guidance` tag and update `.gemini/styleguide.md` § 6.
+- Changesets: write `.changeset/` files by hand. Use `pnpm run version` (never bare `pnpm version`).
 
-## Bot-Protocol Gate (load-bearing — ADR-105 Layer 3)
+## Repository skills
 
-Before posting ANY PR comment, replying to ANY bot, or running `gh pr comment` / `gh api .../comments`:
+Beside the installed ones: `/preflight <issue>` (spec + search before coding), `/prepush` (format + lint + review before push), `/postmerge <prs>` (extract lessons after merge). Skills also live under `.agents/skills/` for agents that read that path, a hand-kept copy of the `.claude/skills/` files until `totem init` writes both (mmnto-ai/totem#2788).
 
-<!-- totem:cr-disclaimer: cross-repo doctrine refs into private cohort repos (e.g., mmnto-ai/totem-strategy) remain canonical even when CR's URL-accessibility check returns 404 from the bot account — this is an access-class signal per doctrine § 2.4, not a link-class signal -->
-
-1. **Read** `mmnto-ai/totem-strategy:doctrine/bot-protocols.md` if you haven't this session.
-2. **Apply** the round SOP (doctrine § 8.1) — ONE dispositions comment per round, tag only bots with a role; triggers separate (see 3).
-3. **Invocation is operator-gated; bots are on-demand** (strategy#622): post a trigger only on the operator's per-invocation word — surface _"ready: invoke X, or merge as-is"_ first. Triggers are standalone, triggers-only comments (embedded ⟹ CR chat-mode, totem#2150; Windows: Git-Bash mangles leading `/` — send via PowerShell).
-4. **Never** combine `@gemini-code-assist` + `/gemini review` in one comment (XOR, § 1.2); **never** cite a SHA before pushing (§ 1.1).
-5. **Prefer `/review-reply`** — it operationalizes the SOP end-to-end.
-
-Enforcement stack per ADR-105: skill instructions → **this AGENTS.md** (baseline for all vendor sessions) → auto-memory pointer.
-
-## Skills
-
-Skills: `.claude/skills/` (`/<name>`); signon/signoff/review-reply/review-loop also in `.agents/skills/` (gemini/agy/kimi; kimi: `/skill:<name>`; #2532).
-
-- `/preflight <issue>` — spec + search before coding
-- `/prepush` — format + lint + review before push
-- `/postmerge <prs>` — extract lessons after merge
-- `/signoff` — end-of-session memory + journal
-- `/review-reply <PR>` — doctrine-aligned bot-comment triage
-
-## Context Decay Prevention (Proposal 213)
-
-After >15 turns of code changes: run `totem status`, re-query strategy ADRs for the system you're modifying, and state your architectural assumption.
-
-## Agent Discipline (ADR-063)
-
-**Controller, not implementer.** Delegate code+test tasks to background agents. Keep this thread for decisions. Prefer Monitor over Bash `sleep` loops; use `/loop <prompt>` self-paced for poll-and-react.
-
-## Agent-bus binding (Proposal 305)
+## Agent bus
 
 <!-- totem:agent-bus role="bus" seat="totem-claude" declared="2026-07-16" primary="totem-claude" since="2026-08-14" -->
 
-Bus + crown per the marker above; judgment-density file classes: cohort defaults + `AGENTS.md` · `docs/wiki/**` · `.claude/skills/**`. Lane table: mmnto-ai/totem-strategy#697 (pointer, not a copy). Duties + fail-closed succession: Prop 305 §3/§8 + the mmnto-ai/totem-strategy#639 operating spec. The `agent-bus` parity row senses declaration presence only; duty execution is adherence-class (Tenet 19). Cold-start fallback: no SessionStart hook ⇒ derive orientation via `totem orient`.
+The marker above binds this repository's judgment bus and is read by `totem doctor --parity`. It is the one agent identifier this file carries; its move into a committed config file is mmnto-ai/totem#2866.
 
-## Detailed Docs
+## Detailed docs
 
-- [Architecture](.claude/docs/architecture.md) · [Contributing](.claude/docs/contributing.md) · [Agent workflow](.claude/docs/agent-workflow.md) · [Gemini styleguide](.gemini/styleguide.md) · strategy ADRs via `mcp__totem-strategy__search_knowledge`
+- [Architecture](.claude/docs/architecture.md) · [Contributing](.claude/docs/contributing.md) · [Agent workflow](.claude/docs/agent-workflow.md) · [Gemini styleguide](.gemini/styleguide.md)

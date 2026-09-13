@@ -695,6 +695,77 @@ export const LEGACY_REFLEX_FILES = ['CLAUDE.md', '.gemini/gemini.md', '.cursorru
 const LEGACY_ALT_HEADING = '## Totem Memory Reflexes';
 
 /**
+ * Remove the managed AGENTS.md floor span `totem init` scaffolds
+ * (mmnto-ai/totem-strategy#619). Removes the span from the floor's start marker
+ * through its end marker; the repository's own content on either side is kept,
+ * with the seam normalized exactly as the reflex scrub normalizes its own: one
+ * blank line where the span sat. A file that is nothing but the span (and
+ * whitespace) is removed outright — it was the scaffold and nothing more. An
+ * unpaired or inverted marker is never attributed and never scrubbed; the file
+ * is reported as skipped with the reason.
+ *
+ * Exported for the summary-contract tests beside `scrubReflexFiles`.
+ */
+export async function scrubAgentsFloor(cwd: string, summary: EjectSummary): Promise<void> {
+  const { AGENTS_FLOOR_END, AGENTS_FLOOR_REL, AGENTS_FLOOR_START } =
+    await import('./init-templates.js');
+  const filePath = path.join(cwd, AGENTS_FLOOR_REL);
+  try {
+    if (!fs.existsSync(filePath)) return;
+    const rawContent = fs.readFileSync(filePath);
+    const content = rawContent.toString('utf-8');
+    const startIdx = content.indexOf(AGENTS_FLOOR_START);
+    const endIdx = content.indexOf(AGENTS_FLOOR_END);
+    if (startIdx === -1 && endIdx === -1) {
+      summary.skipped.push(`${AGENTS_FLOOR_REL} (no Totem block)`);
+      return;
+    }
+    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+      summary.skipped.push(
+        `${AGENTS_FLOOR_REL} (agents-floor marker residue — not scrubbed; remove the unpaired marker manually)`,
+      );
+      return;
+    }
+    // Same guard as scrubReflexFiles: a file that does not round-trip through
+    // UTF-8 cannot be rewritten without substituting U+FFFD into kept content.
+    if (Buffer.compare(Buffer.from(content, 'utf-8'), rawContent) !== 0) {
+      summary.skipped.push(
+        `${AGENTS_FLOOR_REL} (non-UTF-8 content — not scrubbed; remove the Totem block manually)`,
+      );
+      return;
+    }
+    // Single-owner seams, mirroring the reflex scrub: the prefix keeps at most
+    // one trailing newline (the blank line above the span was the scaffold's),
+    // and the end marker's own line terminator leaves with the span, so one
+    // blank line remains where the span sat — never two, never zero.
+    let before = content.slice(0, startIdx).replace(/(?:\r?\n)*$/, '\n');
+    if (before === '\n') before = '';
+    let after = content.slice(endIdx + AGENTS_FLOOR_END.length);
+    if (/^[ \t\r\n]*$/.test(after)) {
+      after = '';
+    } else if (after.startsWith('\r\n')) {
+      after = after.slice(2);
+    } else if (after.startsWith('\n')) {
+      after = after.slice(1);
+    }
+    // A span at byte 0 must not leave a leading blank line behind it.
+    if (before === '') after = after.replace(/^(?:\r?\n)+/, '');
+    const out = before + after;
+    if (/^[ \t\r\n]*$/.test(out)) {
+      fs.unlinkSync(filePath);
+      summary.removed.push(AGENTS_FLOOR_REL);
+      return;
+    }
+    writeFileAtomicSync(filePath, out);
+    summary.scrubbed.push(AGENTS_FLOOR_REL);
+    // totem-context: intentional cleanup — per-file best-effort like scrubReflexFiles; a locked or unreadable AGENTS.md degrades to a reported skip, never an abort that strands the remaining eject steps
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    summary.skipped.push(`${AGENTS_FLOOR_REL} (${message})`);
+  }
+}
+
+/**
  * Remove the AI Integration block appended by `totem init` to reflex files.
  *
  * Exported for the summary-contract tests (mmnto-ai/totem#2602).
@@ -1153,6 +1224,10 @@ export async function ejectCommand(options: EjectOptions): Promise<void> {
 
   // 5. Scrub distributed Claude session-utility skills (Phase C slice 3)
   await scrubClaudeSkills(cwd, summary);
+
+  // 5b. Scrub the managed AGENTS.md floor span (mmnto-ai/totem-strategy#619);
+  // the repository's own content around it stays byte-exact.
+  await scrubAgentsFloor(cwd, summary);
 
   // 6. Scrub AI reflex blocks from markdown files. An EJECT_FAILED throw here
   // (the Tenet-4 backstop — and ONLY it, round 2 F1) is DEFERRED past step 7

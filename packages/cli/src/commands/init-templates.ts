@@ -2942,6 +2942,73 @@ export const DISTRIBUTED_CLAUDE_SKILLS = [
   { name: 'review-loop', content: REVIEW_LOOP_SKILL_CONTENT },
 ] as const;
 
+// ─── The public AGENTS.md floor (mmnto-ai/totem-strategy#619 design v1 § 1) ──
+// The product-valid instruction set any consumer gets from `totem init`: a
+// marker-bounded managed span (`AGENTS_FLOOR_BLOCK`) that later inits refresh in
+// place, inside a file whose every other byte is the repository's own. The span
+// is written for ANY consumer, so it names no private repository, no deployment,
+// no operator, no doctrine tag and no agent vendor list — the sterility test in
+// `agents-floor-sterility.test.ts` holds it to that, and holds this repository's
+// committed AGENTS.md to carrying the span byte-identically (the "sterile floor
+// IS the init scaffold" product test the issue names).
+
+export const AGENTS_FLOOR_REL = 'AGENTS.md';
+export const AGENTS_FLOOR_START = '<!-- totem:agents-floor:start -->';
+export const AGENTS_FLOOR_END = '<!-- totem:agents-floor:end -->';
+
+/**
+ * The managed span, start marker through end marker, with NO trailing newline:
+ * a refresh replaces exactly the bytes from the start marker through the end
+ * marker, so everything around the span (the line terminator after it included)
+ * is untouched and a second refresh is a byte no-op.
+ */
+export const AGENTS_FLOOR_BLOCK = `${AGENTS_FLOOR_START}
+<!-- Managed by \`totem init\`: the span between these markers is refreshed in place; everything outside it is yours. -->
+
+## Session start
+
+1. Run \`totem status\` for health.
+2. **Never guess architecture.** Before modifying a core system, run \`totem search <system>\`.
+3. Before writing code, call \`search_knowledge\` describing what you are changing.
+4. Run \`totem lint\` locally before the first push; front-load the deterministic checks.
+5. Cold start (no session hook injected orientation): after \`/signon\`'s seat-and-assignment step, derive it with \`totem orient\`.
+
+## Working rules
+
+- Before pushing: your formatter, then \`totem lint\` (the enforcement floor), then \`totem review\` where configured (advisory lanes, never a merge gate).
+- After a PR merges: \`totem lesson extract <pr> --yes\`.
+- **Never bypass a quality gate without a ticket.** No \`--no-verify\`, \`totem-ignore\`, \`eslint-disable\`, \`@ts-ignore\`, skipped tests, or ignore patterns added to pacify CI; a suppression carries a ticket reference.
+- After roughly 15 turns of code changes: run \`totem status\`, re-query the knowledge index for the system you are modifying, and state your architectural assumption.
+- **Controller, not implementer.** Delegate build-and-test cycles to background agents; keep this thread for decisions.
+
+## Review bots
+
+If this repository uses review bots: review triggers are the maintainer's to post, never an agent's. Reply to findings through \`/review-reply\`, one dispositions comment per round, and never cite a commit before it is pushed.
+
+## Installed skills
+
+\`totem init\` installs \`/signon\`, \`/signoff\`, \`/review-reply\` and \`/review-loop\`; every later \`totem init\` refreshes each skill's managed span and keeps what you add below its end marker. Private or team-only instructions, when present, resolve from an installed doctrine package and are never committed here.
+
+${AGENTS_FLOOR_END}`;
+
+/**
+ * The whole file `totem init` writes when a repository has no AGENTS.md yet:
+ * a title, the managed span, and a stub for the repository's own rules. Only
+ * the span is managed after this first write.
+ */
+export function renderAgentsFloorScaffold(projectName: string): string {
+  return `# ${projectName}: Agent Instructions
+
+Canonical instructions for AI coding agents working in this repository. Any agent that reads \`AGENTS.md\` starts here; keep tool-specific instruction files as thin redirects to it.
+
+${AGENTS_FLOOR_BLOCK}
+
+## Repository conventions
+
+Add this repository's own rules here: environment, branching, code style, publishing. Everything outside the markers above is yours; \`totem init\` never rewrites it.
+`;
+}
+
 // ─── Config generation ──────────────────────────────────
 
 export async function generateConfig(

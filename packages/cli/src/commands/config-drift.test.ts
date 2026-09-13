@@ -348,9 +348,11 @@ describe('all agent instruction files share the same project rules', () => {
     'NEVER use `git push --no-verify`',
     // Publishing
     '`pnpm run version`',
-    // Contributor Principles
-    'Update `AI_PROMPT_BLOCK` in `init.ts`',
-    'GCA decline',
+    // Contributor Principles (the pointer names the file the constant lives in —
+    // `init-templates.ts` since the extraction; the sterilization pass of
+    // mmnto-ai/totem-strategy#619 row 11 cured the dead `init.ts` pointer)
+    'Update `AI_PROMPT_BLOCK` in `init-templates.ts`',
+    'Gemini Code Assist (GCA) decline',
     'without a ticket',
   ];
 

@@ -80,7 +80,7 @@ The following suggestions have been repeatedly declined during code review. Do n
 - **`log.error` + `process.exitCode` vs `throw` in CLI entrypoint guard clauses.** Do not suggest replacing `log.error('Totem Error', '...'); process.exitCode = 1; return;` with `throw new TotemError(...)` in CLI command entrypoints for missing-file, not-found, or ambiguous-prefix classes. The canonical reference is `rulePromoteCommand` at `packages/cli/src/commands/rule.ts:300-394` (and its sibling `lessonArchiveCommand` at `packages/cli/src/commands/lesson.ts`). CLI entrypoints print clean errors and exit non-zero; library-layer code throws. Both styles coexist in the project by design.
 - **Strict SemVer on `package.json` version bumps.** Do not suggest that a `patch` bump (e.g., `1.15.1` → `1.15.2`) carrying new CLI commands, new flags, or new core primitives should be a `minor` bump per strict SemVer. This project uses **milestone-driven versioning**: `minor` bumps reserve for milestone-theme deliveries (e.g., 1.15.0 Pack Distribution, 1.16.0 Ingestion Pipeline headline); `patch` bumps ship incremental features that land between milestones. Precedent: 1.14.1 through 1.14.17 shipped 17 patch releases carrying substantial features including the shell-orchestrator RCE fix (`#1429`), the compile-hardening trio (`#1580 / #1589 / #1581`), and the first compound ast-grep rules (`#1455`).
 
-- **Sigstore-gate enforcement on `@mmnto/pack-*` `private:true` → `private:false` flips.** Do not flag flipping a Totem pack from `private: true` to `private: false` as violating a "security-sensitive packages must remain private until cryptographic signing infrastructure exists" rule. No such rule is in this styleguide. The Sigstore + in-toto verification gate is tracked in `mmnto-ai/totem#1492` and is open / tier-2 / pre-implementation. Alpha-pilot publishes during ADR-097 § Stage 1 (e.g., `@mmnto/pack-rust-architecture` enabling external-consumer onboarding such as `liquid-city`) are explicitly exempted from the gate because the gate isn't built yet. When `#1492` ships, both `@mmnto/pack-*` packages re-flow through the gate as part of normal pack-publish discipline. The exemption is canonical and recorded in the gating ticket (`mmnto-ai/totem#1779`).
+- **Sigstore-gate enforcement on `@mmnto/pack-*` `private:true` → `private:false` flips.** Do not flag flipping a Totem pack from `private: true` to `private: false` as violating a "security-sensitive packages must remain private until cryptographic signing infrastructure exists" rule. No such rule is in this styleguide. The Sigstore + in-toto verification gate is tracked in `mmnto-ai/totem#1492` and is open / tier-2 / pre-implementation. Alpha-pilot publishes during ADR-097 § Stage 1 (e.g., `@mmnto/pack-rust-architecture` enabling an external consumer's onboarding) are explicitly exempted from the gate because the gate isn't built yet. When `#1492` ships, both `@mmnto/pack-*` packages re-flow through the gate as part of normal pack-publish discipline. The exemption is canonical and recorded in the gating ticket (`mmnto-ai/totem#1779`).
 
 - **`workspace:*` references in published-package `package.json`.** Do not flag `workspace:*` dependency references in a public package's `package.json` as producing an "invalid registry package" or as requiring resolution via a changeset before publish. The pnpm + changesets publish pipeline transforms `workspace:*` to the resolved fixed-group version automatically at `pnpm publish` time. Empirical proof on the live registry: `@mmnto/cli@1.23.0` source has `"@mmnto/totem": "workspace:*"` in `dependencies`, and `npm view @mmnto/cli@1.23.0 dependencies` returns `'@mmnto/totem': '1.23.0'`. The same transform applies to every fixed-group cohort member. Additionally, references in `devDependencies` are not installed by registry consumers regardless of the source spec. This is a publish-time mechanic, not a publish-blocker.
 
@@ -134,7 +134,7 @@ All overrides are recorded in the Trap Ledger (`.totem/ledger/events.ndjson`) fo
 
 ## 10. PR Review Reply Protocol
 
-Centralized per ADR-105 in `mmnto-ai/totem-strategy`. See [`doctrine/bot-protocols.md` § 8.1](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) for the canonical consolidated round-comment SOP. The Bot-Protocol Gate § in `CLAUDE.md` is the load-bearing pointer at the agent-context layer.
+Centralized per ADR-105 in `mmnto-ai/totem-strategy`. See [`doctrine/bot-protocols.md` § 8.1](https://github.com/mmnto-ai/totem-strategy/blob/main/doctrine/bot-protocols.md) for the canonical consolidated round-comment SOP. The review-bots section of `AGENTS.md` is the load-bearing pointer at the agent-context layer.
 
 ## 11. Hash Conventions (Do Not Flag as Mismatches)
 
@@ -178,8 +178,8 @@ When reviewing PRs that touch `.totem/compiled-rules.json` or
 `lessonHash` field and the 8-char filename hash. They are independent
 identifiers by design. If a future change unifies them under a single scheme,
 that will be discussed in a strategy proposal under
-`<strategyRoot>/proposals/` (resolved by `resolveStrategyRoot`, typically a
-sibling `../totem-strategy/` clone), not as a code review finding.
+`<strategyRoot>/proposals/` (resolved by `resolveStrategyRoot`), not as a
+code review finding.
 
 ### Curated lessons are exempt from hash-named filenames
 

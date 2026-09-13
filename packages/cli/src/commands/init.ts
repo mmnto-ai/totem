@@ -23,6 +23,10 @@ import {
   type HookInstallerResult,
 } from './init-detect.js';
 import {
+  AGENTS_FLOOR_BLOCK,
+  AGENTS_FLOOR_END,
+  AGENTS_FLOOR_REL,
+  AGENTS_FLOOR_START,
   AI_PROMPT_BLOCK,
   CLAUDE_PRETOOLUSE_ENTRY,
   CLAUDE_PREWRITESHIELD,
@@ -45,6 +49,7 @@ import {
   REFLEX_START,
   REFLEX_VERSION,
   REFLEX_VERSION_RE,
+  renderAgentsFloorScaffold,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
   TOTEM_FILE_END,
@@ -698,6 +703,79 @@ export function scaffoldClaudeSkill(
     fs.writeFileSync(filePath, merged, 'utf-8');
     return { action: 'refreshed' };
     // totem-context: intentional cleanup — preserve user's skill file on any IO failure rather than aborting init mid-flight; mirrors scaffoldFile's failure posture
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { action: 'preserved', err: `[Totem Error] ${message}` };
+  }
+}
+
+/**
+ * The project name the AGENTS.md scaffold's title carries: the package name
+ * with any npm scope stripped, else the directory basename. Read-only; a
+ * missing or unparseable package.json falls back to the basename.
+ */
+export function deriveProjectName(cwd: string): string {
+  const pkgPath = path.join(cwd, 'package.json');
+  try {
+    if (fs.existsSync(pkgPath)) {
+      const parsed: unknown = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      if (parsed !== null && typeof parsed === 'object') {
+        const name = (parsed as { name?: unknown }).name;
+        if (typeof name === 'string' && name.trim() !== '') {
+          return name.trim().replace(/^@[^/]+\//, '');
+        }
+      }
+    }
+    // totem-context: fail-soft backstop=deriveProjectName-basename — a title string, never load-bearing; the directory basename is the honest fallback for any read or parse failure
+  } catch {
+    /* fall through to the basename */
+  }
+  return path.basename(cwd);
+}
+
+/**
+ * Scaffold or refresh the public AGENTS.md floor (mmnto-ai/totem-strategy#619
+ * design v1 § 1 — the sterile floor IS the init scaffold).
+ *
+ * - `created` — no AGENTS.md existed; the whole scaffold (title + managed
+ *   span + repository stub) was written.
+ * - `refreshed` — the file carried both floor markers in order and the span
+ *   between them differed from canonical; exactly the bytes from the start
+ *   marker through the end marker were replaced, everything else untouched.
+ * - `unchanged` — markers present, span already canonical (byte no-op).
+ * - `preserved` — the file exists without both markers in order: it is the
+ *   repository's own (or a pre-marker file) and is never rewritten. `err`
+ *   carries the one-line adoption hint the caller may disclose.
+ */
+export function scaffoldAgentsFloor(
+  cwd: string,
+  projectName: string,
+): { action: 'created' | 'refreshed' | 'unchanged' | 'preserved'; err?: string } {
+  const filePath = path.join(cwd, AGENTS_FLOOR_REL);
+  try {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, renderAgentsFloorScaffold(projectName), 'utf-8');
+      return { action: 'created' };
+    }
+    const existing = fs.readFileSync(filePath, 'utf-8');
+    const startIdx = existing.indexOf(AGENTS_FLOOR_START);
+    const endIdx = existing.indexOf(AGENTS_FLOOR_END);
+    if (startIdx === -1 || endIdx === -1 || startIdx > endIdx) {
+      return {
+        action: 'preserved',
+        err: `${AGENTS_FLOOR_REL} is yours (no \`${AGENTS_FLOOR_START}\` … \`${AGENTS_FLOOR_END}\` span) — left untouched; add the two marker lines where the managed floor should sit and re-run \`totem init\` to adopt it.`,
+      };
+    }
+    const merged =
+      existing.slice(0, startIdx) +
+      AGENTS_FLOOR_BLOCK +
+      existing.slice(endIdx + AGENTS_FLOOR_END.length);
+    if (merged === existing) {
+      return { action: 'unchanged' };
+    }
+    fs.writeFileSync(filePath, merged, 'utf-8');
+    return { action: 'refreshed' };
+    // totem-context: intentional cleanup — preserve the repository's AGENTS.md on any IO failure rather than aborting init mid-flight; mirrors scaffoldClaudeSkill's failure posture
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { action: 'preserved', err: `[Totem Error] ${message}` };
@@ -1585,6 +1663,25 @@ export default {
         baselineRuleCount = Array.isArray(existing?.rules) ? existing.rules.length : 0;
       } catch {
         // Parse failure — leave count as 0
+      }
+    }
+
+    // --- Every mode: the public AGENTS.md floor (mmnto-ai/totem-strategy#619) ---
+    // Vendor-neutral and tool-independent, so it runs in bare mode too and
+    // whether or not any AI tool was detected or selected. A repository's own
+    // AGENTS.md (no floor markers) is never rewritten (Prop 289); the no-op is
+    // disclosed once, dimly, so a consumer who wants the managed span knows how
+    // to adopt it.
+    const floor = scaffoldAgentsFloor(cwd, deriveProjectName(cwd));
+    if (floor.action === 'created') {
+      summary.push({ file: AGENTS_FLOOR_REL, action: 'Scaffolded the AGENTS.md floor' });
+    } else if (floor.action === 'refreshed') {
+      summary.push({ file: AGENTS_FLOOR_REL, action: 'Refreshed the managed AGENTS.md span' });
+    } else if (floor.action === 'preserved' && floor.err) {
+      if (floor.err.startsWith('[Totem Error]')) {
+        log.error('Totem Error', `AGENTS.md floor scaffolding failed: ${floor.err}`); // totem-ignore — internal scaffold error, not LLM output
+      } else {
+        log.dim('Totem', floor.err);
       }
     }
 

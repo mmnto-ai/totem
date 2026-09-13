@@ -17,6 +17,7 @@ import {
   ejectCommand,
   LEGACY_REFLEX_FILES,
   resolveEjectHooksContext,
+  scrubAgentsFloor,
   scrubPostCheckoutHook,
   scrubPostMergeHook,
   scrubReflexFiles,
@@ -24,6 +25,9 @@ import {
 } from './eject.js';
 import { AI_TOOLS } from './init-detect.js';
 import {
+  AGENTS_FLOOR_BLOCK,
+  AGENTS_FLOOR_END,
+  AGENTS_FLOOR_START,
   AI_PROMPT_BLOCK,
   DISTRIBUTED_CLAUDE_SKILLS,
   REFLEX_END,
@@ -321,6 +325,73 @@ describe('ejectCommand', () => {
       expect(fs.readFileSync(path.join(cwd, ...rel.split('/')), 'utf-8'), rel).toBe('# Head\n');
     }
   });
+
+  // ─── The managed AGENTS.md floor span (mmnto-ai/totem-strategy#619) ──
+
+  it('scrubs the AGENTS.md floor span, keeps the repository content around it, and leaves one blank line at the seam', async () => {
+    // The scaffold's own shape: a blank line above the span, the end marker's
+    // line terminator, a blank line below. The seam normalizes exactly as the
+    // reflex scrub's does — one blank line where the span sat, never two.
+    const above = '# Mine\n\nMy intro.\n\n';
+    const below = '\n## My rules\n\n- keep this\n';
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), above + AGENTS_FLOOR_BLOCK + '\n' + below);
+
+    await ejectCommand({ force: true });
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(
+      '# Mine\n\nMy intro.\n\n## My rules\n\n- keep this\n',
+    );
+  });
+
+  it('scrubs the floor span at byte 0 without growing a leading blank line', async () => {
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), AGENTS_FLOOR_BLOCK + '\n\n## Mine\n');
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe('## Mine\n');
+    expect(summary.scrubbed).toEqual(['AGENTS.md']);
+  });
+
+  it('removes an AGENTS.md that is nothing but the floor span', async () => {
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), AGENTS_FLOOR_BLOCK + '\n');
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.existsSync(path.join(cwd, 'AGENTS.md'))).toBe(false);
+    expect(summary.removed).toEqual(['AGENTS.md']);
+    expect(summary.scrubbed).toEqual([]);
+  });
+
+  it('leaves a repository-authored AGENTS.md (no markers) byte-untouched and reports no block', async () => {
+    const mine = '# Mine\n\nAll user content.\n';
+    fs.writeFileSync(path.join(cwd, 'AGENTS.md'), mine);
+    const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+    await scrubAgentsFloor(cwd, summary);
+
+    expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(mine);
+    expect(summary.skipped).toEqual(['AGENTS.md (no Totem block)']);
+  });
+
+  it.each([
+    ['an orphan start marker', `# Mine\n${AGENTS_FLOOR_START}\ntext\n`],
+    ['an orphan end marker', `# Mine\ntext\n${AGENTS_FLOOR_END}\n`],
+    ['inverted markers', `# Mine\n${AGENTS_FLOOR_END}\ntext\n${AGENTS_FLOOR_START}\n`],
+  ])(
+    'never attributes %s — the file stays byte-untouched and is reported as residue',
+    async (_name, content) => {
+      fs.writeFileSync(path.join(cwd, 'AGENTS.md'), content);
+      const summary: EjectSummary = { removed: [], scrubbed: [], skipped: [] };
+
+      await scrubAgentsFloor(cwd, summary);
+
+      expect(fs.readFileSync(path.join(cwd, 'AGENTS.md'), 'utf-8')).toBe(content);
+      expect(summary.skipped).toHaveLength(1);
+      expect(summary.skipped[0]).toContain('marker residue');
+    },
+  );
 
   it('deletes .lancedb, .totem, and totem.config.ts', async () => {
     fs.mkdirSync(path.join(cwd, '.lancedb'), { recursive: true });
