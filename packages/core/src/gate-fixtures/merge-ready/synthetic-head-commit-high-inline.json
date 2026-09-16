@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL in the field shape: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4 — the only PR-level review-reply disposition PRE-dates the root; the post-dating comments are a bot summary, a [bot]-suffixed login carrying the line, human chatter without the line, and a human comment QUOTING the line inside a fence; the only in-thread reply is the bot own",
+  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL in the field shape: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4. PR-level: one review-reply disposition that PRE-dates the root, then three post-dating comments — a bot summary, a [bot]-suffixed login carrying the line (encoded __typename User: a counterfactual shape no observed read produces, GraphQL answers Bot for github-actions; it exercises the suffix arm), and human chatter without the line. In-thread: only the bot's own reply. A human comment QUOTING the line in a fence would count as a disposition line (the disclosed residue of accepting fenced lines) and is pinned in the marker matrix test, not here.",
   "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -140,14 +140,6 @@
                     },
                     "body": "Pushed the follow-up; please take another look at the head.",
                     "createdAt": "2026-09-08T03:40:00Z"
-                  },
-                  {
-                    "author": {
-                      "__typename": "User",
-                      "login": "satur8d"
-                    },
-                    "body": "For the record, the round disposition read:\n\n```\nlocal-lane: none leg: none\n```\n\nNothing else changed.",
-                    "createdAt": "2026-09-08T03:45:00Z"
                   }
                 ]
               }

@@ -36,6 +36,7 @@ import { describe, expect, it } from 'vitest';
 import { TotemError } from './errors.js';
 import type { GateTier, GhRunner } from './gate-types.js';
 import {
+  carriesDispositionLine,
   evaluateMergeReady,
   hasHighSeverityMarker,
   MERGE_READY_BRANCH_QUERY,
@@ -312,8 +313,9 @@ describe('merge-ready — the checked-in captures', () => {
     expect(humanAfterRoot.length).toBeGreaterThan(0);
 
     // The one human comment after the root IS the round disposition: it
-    // carries the review-reply `local-lane:` line (read off the capture).
-    expect(humanAfterRoot.some((c) => /^[ \t]*local-lane:/m.test(c.body))).toBe(true);
+    // carries the review-reply `local-lane:` line — asserted through the
+    // SHIPPED predicate, never a copy of it (r2-f8).
+    expect(humanAfterRoot.some((c) => carriesDispositionLine(c.body))).toBe(true);
 
     const e = evaluate('totem-2871.json', { tier: 'pilot' });
     expect(e.detail.checks).toEqual({ total: 17, success: 17, pending: 0, failing: 0 });
@@ -508,11 +510,12 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     // the 2861 ruling), in the FIELD shape the first leg constructed (f1): a
     // bare UI resolve on a PR that keeps accumulating human comments. The only
     // review-reply disposition PRE-dates the root; after it come a Bot's
-    // summary, a `[bot]`-suffixed login carrying the line, human chatter
-    // WITHOUT the line, and a human comment QUOTING the line inside a fence;
-    // the only in-thread reply is the bot's own. Predicate 2 passes, nothing
-    // discharges, the finding still applies, and the reason names the bare
-    // resolve AHEAD of the quoted body so it survives the matched bound (f6).
+    // summary, a `[bot]`-suffixed login carrying the line (a counterfactual
+    // shape — GraphQL answers `Bot` for every App — kept to exercise the
+    // suffix arm) and human chatter WITHOUT the line; the only in-thread reply
+    // is the bot's own. Predicate 2 passes, nothing discharges, the finding
+    // still applies, and the reason names the line it looked for AHEAD of the
+    // quoted body so it survives the matched bound (f6).
     const e = evaluate('synthetic-head-commit-high-inline.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('high-severity-inline');
@@ -520,9 +523,12 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.detail.highInline).toBe(1);
     expect(e.detail.dischargedHigh).toBe(0);
     expect(e.detail.dischargedBy).toEqual({ inThreadReply: 0, prLevelDisposition: 0 });
-    expect(e.verdict.reason).toMatch(/resolved without a disposition on record/);
-    expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
-    expect(e.verdict.provenance.matched).toMatch(/resolved without a disposition on record/);
+    // The reason names the MARKER the read looked for, never "no disposition
+    // exists" (r2-f3: a disposition posted without the line is a real event).
+    expect(e.verdict.reason).toMatch(/resolved, but no non-bot reply in its thread/);
+    expect(e.verdict.reason).toMatch(/carrying the review-reply local-lane line/);
+    expect(e.verdict.reason).toMatch(/a bare resolve, or a disposition without the line/);
+    expect(e.verdict.provenance.matched).toMatch(/resolved, but no non-bot reply in its thread/);
     expect(e.notices.some((n) => n.includes('discharged'))).toBe(false);
     // The fixture really carries the post-dating human chatter the field has.
     const fixture = loadFixture('synthetic-head-commit-high-inline.json');
@@ -546,8 +552,18 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     const humanAfterRoot = pr.comments.nodes.filter(
       (c) => c.author.__typename === 'User' && c.createdAt > '2026-09-08T03:00:00Z',
     );
-    expect(humanAfterRoot.length).toBeGreaterThanOrEqual(2);
-    expect(humanAfterRoot.some((c) => c.body.includes('local-lane:'))).toBe(true); // the fenced quote
+    // Two post-dating User-typed nodes: the `[bot]`-suffixed login CARRYING
+    // the line (skipped by the suffix arm, not by content) and the human
+    // chatter WITHOUT it — asserted through the shipped predicate. (A fenced
+    // QUOTE of a disposition would count since the fold that accepts fenced
+    // lines, r2-f2; that residue is pinned in the marker matrix below, not
+    // smuggled into this control.)
+    const suffixed = humanAfterRoot.filter((c) => /\[bot\]$/i.test(c.author.login));
+    const chatter = humanAfterRoot.filter((c) => !/\[bot\]$/i.test(c.author.login));
+    expect(suffixed.length).toBe(1);
+    expect(carriesDispositionLine(suffixed[0]!.body)).toBe(true);
+    expect(chatter.length).toBeGreaterThanOrEqual(1);
+    expect(chatter.every((c) => !carriesDispositionLine(c.body))).toBe(true);
   });
 
   // ─── The discharge read (mmnto-ai/totem#2861) ────────────────────────────
@@ -613,7 +629,7 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.detail.dischargedHigh).toBe(1);
     expect(e.detail.dischargedBy).toEqual({ inThreadReply: 1, prLevelDisposition: 0 });
     expect(e.verdict.reason).toContain('coderabbitai');
-    expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
+    expect(e.verdict.reason).toMatch(/a bare resolve, or a disposition without the line/);
   });
 
   it('a PR-level comment without the review-reply line, and a bot comment carrying it, are not dispositions — but the line outside code is (the marker)', () => {
@@ -636,7 +652,37 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     ).data.repository.pullRequest;
     const human = pr.comments.nodes.filter((c) => c.author.__typename === 'User');
     expect(human).toHaveLength(1);
-    expect(human[0]!.body).toMatch(/^local-lane:/m);
+    expect(carriesDispositionLine(human[0]!.body)).toBe(true);
+  });
+
+  it('the disposition line is read at line start anywhere in the body, fenced included, and never inside an HTML comment, a quote, a list or a span (r2-f2, r2-f4, r2-f5)', () => {
+    const line =
+      'local-lane: 93738bdc round=3 settled=true lanes=2/2 leg: 3d79bd0a blocking=0 material=2 folded=5';
+    // The skills render the line inside a text fence; mmnto-ai/totem-strategy#1330's
+    // disposition carries it that way, and the first fold's stripper rejected it.
+    expect(carriesDispositionLine(`## Round 1 disposition\n\n\`\`\`text\n${line}\n\`\`\`\n`)).toBe(
+      true,
+    );
+    expect(carriesDispositionLine(`prose\n\n${line}`)).toBe(true);
+    expect(carriesDispositionLine(`   ${line}`)).toBe(true);
+    expect(carriesDispositionLine(`\t${line}`)).toBe(true);
+    expect(carriesDispositionLine(`## Round 1 disposition\r\n\r\n${line}\r\n`)).toBe(true);
+    // Not at line start: an inline span mid-sentence (the 1331 shape), a
+    // blockquote, a list item, a table cell.
+    expect(carriesDispositionLine(`no settled line is claimed. \`${line}\`.`)).toBe(false);
+    expect(carriesDispositionLine(`> ${line}`)).toBe(false);
+    expect(carriesDispositionLine(`- ${line}`)).toBe(false);
+    expect(carriesDispositionLine(`| ${line} |`)).toBe(false);
+    // An HTML comment is stripped before the read.
+    expect(carriesDispositionLine(`<!--\n${line}\n-->`)).toBe(false);
+    expect(carriesDispositionLine('no line at all')).toBe(false);
+    // The disclosed residue of accepting fenced lines: a human comment that
+    // QUOTES a prior disposition in a fence reads as a disposition line too.
+    expect(
+      carriesDispositionLine(
+        `For the record, the round disposition read:\n\n\`\`\`\n${line}\n\`\`\``,
+      ),
+    ).toBe(true);
   });
 
   it('PR-level evidence on the SECOND comments page is found, with the cursor sent', () => {
@@ -658,11 +704,11 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
       expect(e.verdict.disposition, tier).toBe('deny');
       expect(e.verdict.provenance.ref, tier).toBe('high-severity-inline');
       expect(e.verdict.reason, tier).toMatch(
-        /no disposition in the ten comments read \(the thread has more\)/,
+        /no non-bot reply in the ten comments read \(the thread has more\)/,
       );
       // The discriminator sits inside the 160-character bound on `matched`.
       expect(e.verdict.provenance.matched, tier).toMatch(
-        /no disposition in the ten comments read \(the thread has more\)/,
+        /no non-bot reply in the ten comments read \(the thread has more\)/,
       );
       expect(e.detail.highInline, tier).toBe(1);
       expect(e.detail.dischargedHigh, tier).toBe(0);

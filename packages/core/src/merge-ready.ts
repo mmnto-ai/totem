@@ -161,12 +161,13 @@ export interface MergeReadyOptions {
  * reply after the root discharges a resolved HIGH (mmnto-ai/totem#2861) — and
  * the window's `pageInfo` is selected too, so a thread with more replies than
  * the window is judged on what was read and SAYS so in the reason, never read
- * as "no reply" silently. The root is `comments.nodes[0]`: every capture in
- * `gate-fixtures/merge-ready/` answers root first, then the replies in creation
- * order, and `resolve-threads` reads the same position — a positional
- * assumption shared by both consumers, not a transcribed schema guarantee,
- * which is why the reply test below is ALSO temporal (a reply counts only when
- * its `createdAt` follows the root's). The PR-level `comments` connection is
+ * as "no reply" silently. The root is `comments.nodes[0]`: the one capture in
+ * `gate-fixtures/merge-ready/` with a multi-comment thread (liquid-city-363)
+ * answers root first, then the reply, and `resolve-threads` reads the same
+ * position — a positional assumption shared by both consumers and resting on
+ * that one observation, not a transcribed schema guarantee, which is why the
+ * reply test below is ALSO temporal (a reply counts only when its `createdAt`
+ * follows the root's; across sixteen live PRs no reply preceded its root). The PR-level `comments` connection is
  * the other evidence surface: a non-bot comment created after a thread's root
  * whose BODY carries the review-reply skill's `local-lane:` line — the
  * machine-emitted line every disposition posted through `/review-reply`
@@ -402,26 +403,36 @@ interface PrCommentEntry {
 }
 
 /**
- * The signature of a disposition posted through the review-reply skill: its
- * step 2 ends every round disposition with the machine-rendered
- * `local-lane:` line, verbatim, on its own line — and `/review-reply` is the
- * sole path that carries that line to GitHub. A trigger comment, a gate-read
- * note, a merge note or a bot's own summary never carries it, which is what
- * lets predicate 4 tell a disposition from the PR-level chatter every round
- * accumulates (mmnto-ai/totem#2861 leg f1: with post-dating alone, one human
- * comment of any content after a bare resolve discharged it). Read against the
- * body with fenced, `<pre>` and indented code stripped ({@link withoutCode}),
- * so a comment that QUOTES a disposition in a fence is not one; a line that
- * starts with the token — leading blanks allowed — is. A disposition whose
- * line rides inside prose or an inline code span (observed once, on
- * mmnto-ai/totem-strategy#1331) is not in the template's shape and does not
- * count: the cure is the template's own line, or an in-thread reply.
+ * The signature the PR-level arm reads: the review-reply skill's step 2 ends a
+ * round disposition with the `local-lane:` line the local lane rendered, on
+ * its own line (the skills show it inside a text fence, and a fenced line
+ * counts). It is what lets predicate 4 tell a disposition from the PR-level
+ * chatter every round accumulates (mmnto-ai/totem#2861 leg f1: with
+ * post-dating alone, one human comment of any content after a bare resolve
+ * discharged it). Measured on the fourteen calibration rows: no trigger,
+ * gate-read note or merge note carried the line; every round disposition
+ * posted through the skill did, except one whose local lane reported no line
+ * (the shape step 1 sanctions — "there is none to carry") and one that wrote
+ * the line inside an inline code span mid-sentence. So the line is the
+ * disposition's USUAL shape, not a guarantee, and the reason a deny gives
+ * names the line rather than asserting that no disposition exists
+ * (re-armed leg r2-f3). The same leg's matrix: a seat that pastes the lane's
+ * stdout into a gate-read note would make that note count — an inference
+ * about habit, not a property of the world, and the census found no such
+ * comment on this cohort.
+ *
+ * Read against the raw body with HTML comments removed, at line start with
+ * leading blanks allowed, anywhere in the body — fenced included, because the
+ * skills render it fenced (r2-f2: the stripper that ate fences rejected the
+ * mmnto-ai/totem-strategy#1330 disposition). A blockquoted, listed or
+ * tabled line, or one inside an inline span, is not at line start and does
+ * not count.
  */
 const DISPOSITION_LINE = /^[ \t]*local-lane:/m;
 
-/** Whether a PR-level comment body is a review-reply disposition. */
-function carriesDispositionLine(body: string): boolean {
-  return DISPOSITION_LINE.test(withoutCode(body));
+/** Whether a PR-level comment body carries the review-reply disposition line. Exported for the tests, so they assert the shipped predicate and not a copy of it. */
+export function carriesDispositionLine(body: string): boolean {
+  return DISPOSITION_LINE.test(body.replace(/<!--[\s\S]*?-->/g, ''));
 }
 
 /** One page of the read, already classified. */
@@ -1393,15 +1404,29 @@ type Discharge = 'in-thread-reply' | 'pr-level-disposition' | 'none';
  * unresolved thread alike; predicate 2 catches the unresolved one first, so
  * the resolve is a REQUIRED step of the path, never an optional one.
  *
+ * DISCLOSED, and not closed by this read: the PR-level arm is keyed to the
+ * ROUND, not to the thread. It reads "a disposition was posted after this
+ * finding", not "this finding was dispositioned" — no deterministic per-thread
+ * reference exists in a round disposition today (the tables name findings in
+ * prose). So a HIGH rooted before a round's disposition that the disposition
+ * did not address is discharged if someone then resolves it by hand: the
+ * re-armed leg (r2-f1) constructed exactly that, two bare resolves discharged
+ * by a comment saying it had not addressed them. Closing that class needs a
+ * thread-level linkage the read can see — a machine-rendered per-thread line
+ * in the disposition, or the in-thread reply the other arm already reads —
+ * and neither exists on the ruled calibration rows; which linkage to require,
+ * and how the acceptance replays under it, is the operator's ruling on
+ * mmnto-ai/totem#2861, not this predicate's guess.
+ *
  * Two deliberate differences from the `totem resolve-threads` evidence rule
  * (mmnto-ai/totem#2841 R2), which this otherwise mirrors. The verb decides
  * whether a thread MAY be resolved and accepts any non-bot PR-level comment
  * after the root, disclosing that an operator's trigger comment counts; this
  * predicate decides whether a resolved HIGH is DISPOSITIONED, and a trigger,
  * a gate-read note or merge chatter must not discharge it — so the PR-level
- * arm reads the disposition's own signature. A thread the verb resolved on the
- * strength of a trigger therefore stays applying here until a disposition is
- * posted: the stricter side of the asymmetry, by design. And an unparseable
+ * arm reads the round disposition's usual signature. A thread the verb
+ * resolved on the strength of a trigger therefore stays applying here until
+ * a disposition is posted: the stricter side of the asymmetry, by design. And an unparseable
  * instant on either side is `none` here as it is there — the conservative
  * direction — never an unreadable page (the strict reader has already refused
  * a root without a string `createdAt`).
@@ -1776,8 +1801,8 @@ function firstFailure(
     const bareResolve = !first.isResolved
       ? ''
       : first.commentsComplete
-        ? ' — resolved without a disposition on record (no non-bot reply in the thread, no PR-level review-reply disposition after its root; a bare resolve does not discharge a HIGH, mmnto-ai/totem#2861)'
-        : ' — resolved, no disposition in the ten comments read (the thread has more) nor a PR-level review-reply disposition after its root (mmnto-ai/totem#2861)';
+        ? ' — resolved, but no non-bot reply in its thread and no PR-level comment after its root carrying the review-reply local-lane line (a bare resolve, or a disposition without the line, does not discharge a HIGH; mmnto-ai/totem#2861)'
+        : ' — resolved, no non-bot reply in the ten comments read (the thread has more) and no PR-level comment after its root carrying the review-reply local-lane line (mmnto-ai/totem#2861)';
     return {
       predicate: 'high-severity-inline',
       evidence: `${applyingHigh.length} HIGH/Major bot inline(s) still applying to the head commit${bareResolve} — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,

@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "575483515de157b633fee9b23e4a598a9a3ae6fa",
+  "readAt": "2026-09-16T01:41:02Z",
+  "findings": [
+    {
+      "id": "r2-f1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1421,
+      "claim": "The marker NARROWS f1's class but does not close it: the PR-level arm is keyed to (non-bot) AND (createdAt > root) AND (body carries the marker) — never to the THREAD. The ruling requires a posted disposition NAMING it; the code discharges a bare UI resolve whenever ANY line-carrying comment anywhere on the PR post-dates that thread's root, regardless of content. Because every round posts such a comment as its first act, every HIGH root that predates the round's disposition is one click from discharged — the same vacuity, now gated on 'has this PR ever had a disposition'. Verified live: mmnto-ai/liquid-city#1278 has exactly ONE marker-carrying comment and it discharges all three earlier roots at once. The fold also removed the earlier docstring disclosure that the arm is not keyed to the round-disposition comment and replaced it with 'reads the disposition's own signature', which reads as if the arm identifies the disposition FOR THAT THREAD.",
+      "counterexample": "Executed against the shipped build: synthetic-high-inline-mixed-discharge.json with the one human in-thread reply stripped so BOTH HIGH threads are bare UI resolves, the single PR-level human comment moved after both roots and its body set to a disposition about an unrelated nit ending 'Nothing else was addressed this round; the two HIGH threads are untouched.' plus a local-lane line. Result: allow, highInline 0, dischargedHigh 2, prLevelDisposition 2. The gate discharges two HIGHs on the strength of a comment that says in words it did not address them. NOT FOLDED: a fork for the operator — closing the class needs thread-level linkage the read can see (a per-thread machine line in the disposition, or the in-thread reply), and neither exists on the ruled calibration rows, so the ruled acceptance and the ruling's letter cannot both hold under today's disposition shape."
+    },
+    {
+      "id": "r2-f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 420,
+      "claim": "The stripper rejects a genuinely well-formed disposition, and the measurement that justified the marker was taken with a DIFFERENT predicate than the one shipped. carriesDispositionLine runs withoutCode first, which replaces fenced blocks with CODE; but the fenced block is how the skills RENDER the line (review-loop and the template present it inside a text fence), and review-reply step 2 requires only 'the non-empty local-lane: line from step 1, verbatim' — never 'outside code'. Measured with the shipped predicate against every non-bot PR-level comment on all fourteen rows beside the census regex: they disagree on mmnto-ai/totem-strategy#1330 comment 5655164301, whose line sits at line start inside a text fence — raw regex true, shipped predicate FALSE. The spec's 'twelve of thirteen' survives under the shipped predicate too, but by luck.",
+      "counterexample": "Fetched the LIVE body of that 1330 comment and substituted it for the disposition body in synthetic-high-inline-discharged-pr-level.json: deny / high-severity-inline, dischargedHigh 0. Matrix under the shipped predicate: own line COUNTS; own line inside a text fence REJECTED; inline span REJECTED; blockquote, list item, table cell, pre REJECTED; a line between an unpaired backtick and any later backtick REJECTED."
+    },
+    {
+      "id": "r2-f3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1779,
+      "claim": "The deny reason is a FALSE description of the event for both calibration rows the fold newly denies, and the changeset's supporting claim is falsified by the template it cites. mmnto-ai/totem-strategy#1331's comment 5655308977 is a full round disposition whose line rides inside an inline code span; mmnto-ai/liquid-city#1278's comment 5686674124 is a full second-round disposition with NO line — a shape review-reply step 1 EXPLICITLY sanctions ('If it reports no line at all, there is none to carry'). Both read 'resolved without a disposition on record ... a bare resolve does not discharge a HIGH', which is untrue on both, and the changeset's 'the machine-emitted line every disposition posted through /review-reply carries' is false: dispositions are NOT guaranteed to carry it. The reason should name the marker rather than assert that no disposition exists.",
+      "counterexample": "Primary-source read: 1331's line at index 2396 inside an inline span (line-start false); 1278 round-2 disposition token absent. Replay confirms both deny with the bare-resolve wording."
+    },
+    {
+      "id": "r2-f4",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 407,
+      "claim": "'/review-reply is the sole path that carries that line to GitHub' and 'a trigger comment, a gate-read note, a merge note or a bot's own summary never carries it' are inferences about operator habit stated as fact. The line is printed to stdout by shield and review-fan and the --covariate read; nothing stops a seat pasting that stdout into a gate-read note. The review-loop half of the claim IS verified. The census over fourteen rows found no non-disposition human comment carrying the line: the claim is empirically supported on this cohort but stated as a property of the world.",
+      "counterexample": "Matrix under the shipped predicate: a gate-read note body ending with the line COUNTS; a body that is only pasted verb output COUNTS; a re-quoted prior disposition un-fenced COUNTS; a line inside a multi-line HTML comment COUNTS (withoutCode strips pre but not HTML comments)."
+    },
+    {
+      "id": "r2-f5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 420,
+      "claim": "The [ \\t]* allowance in DISPOSITION_LINE is partly dead code: withoutCode's indented-code arm replaces any line beginning with a TAB or four spaces with CODE first, so the tab alternative never matches and a four-space-indented line is silently refused.",
+      "counterexample": "Matrix: 1 leading space COUNTS, 3 COUNT, 4 rejected, TAB rejected."
+    },
+    {
+      "id": "r2-f6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 608,
+      "claim": "A null-author (deleted / removed-App) PR-level comment carrying the marker DOES discharge; the spec's f13 answer ('cannot discharge anything: it carries no disposition line') is a claim about content, not a structural guard.",
+      "counterexample": "synthetic-high-inline-discharged-pr-level.json with the disposition comment's author set to null -> allow, dischargedHigh 1."
+    },
+    {
+      "id": "r2-f7",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 584,
+      "claim": "synthetic-high-inline-discharged-window-incomplete.json and its test PASS on the pre-fold code 9380a041 — a regression pin for behaviour both revisions had, not a witness of the fold. The negative control and the renamed window fixture DO differ pre/post fold. It kills the named mutant, so the coverage is worth keeping; the README row and the spec's f7 line should say it pins an invariant.",
+      "counterexample": "NOT CONSTRUCTED: coverage-strength observation."
+    },
+    {
+      "id": "r2-f8",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 316,
+      "claim": "Three tests re-implement the marker with a WEAKER predicate than the shipped one (raw-body regexes, no withoutCode) instead of importing it; a capture whose line moved into a fence would keep these green while the gate denied. carriesDispositionLine is not exported.",
+      "counterexample": "NOT CONSTRUCTED as a failing test. The raw regex and the shipped predicate disagree on 1 of 14 live rows; the tests use the raw side."
+    },
+    {
+      "id": "r2-f9",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 163,
+      "claim": "The fragment docstring over-states its sample: 'every capture answers root first, then the replies in creation order' — of the four PR captures only liquid-city-363 has a thread with more than one comment; the positional assumption rests on one observation. The temporal test is sound: zero in-thread replies with createdAt <= root across 16 live PRs and every fixture.",
+      "counterexample": "NOT CONSTRUCTED (documentation over-claim). totem-2871 threads=7 multi=0; totem-2827 2/0; liquid-city-363 1/1; totem-strategy-1251 0."
+    },
+    {
+      "id": "r2-f10",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/synthetic-head-commit-high-inline.json",
+      "line": 3,
+      "claim": "Fixture-role prose: the negative control's role ends 'the bot own' (no possessive); it names four post-dating shapes plus one pre-dating disposition (the role reads as five post-dating); the 03:06 node encodes __typename User for github-actions[bot], a shape no observed read produces (GraphQL answers Bot / github-actions without suffix) — it legitimately exercises the suffix arm but should be marked counterfactual.",
+      "counterexample": "NOT CONSTRUCTED. Live census: 42 Bot/coderabbitai, 27 Bot/greptile-apps, 8 Bot/gemini-code-assist, 1 Bot/github-actions, 52 User/satur8d."
+    },
+    {
+      "id": "r2-f11",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 151,
+      "claim": "The instants sentence mis-describes the tenth row: grouping by synthesizedAt gives SEVEN at 00:47:11.787Z and THREE at 01:17:05.889Z, and synthetic-high-inline-discharged-window-incomplete.json is CREATED in this diff, not re-authored. Every sha256 row and every capturedAt matches the bytes; the 2871 bullet and the DIRTY sentence match. QUESTION: liquid-city-363.json's capturedAt has zero milliseconds.",
+      "counterexample": "NOT CONSTRUCTED (receipt arithmetic)."
+    }
+  ],
+  "folded": [
+    "r2-f2",
+    "r2-f3",
+    "r2-f4",
+    "r2-f5",
+    "r2-f7",
+    "r2-f8",
+    "r2-f9",
+    "r2-f10",
+    "r2-f11"
+  ],
+  "verdict": "Leg 2, re-armed on the fold (9380a041..57548351): 1 BLOCKING (r2-f1 — the marker narrows the class but does not close it: the PR-level arm is keyed to the round, never the thread, so a bare resolve of a HIGH the round disposition did not address is discharged; executed on the built core), 2 MATERIAL (r2-f2 — the code stripper rejected a fenced line the skills themselves render, disagreeing with the census regex on 1 of 14 live rows; r2-f3 — the deny reason asserted no disposition on record where one existed without the line), 8 MINOR. Nine folded in the fold-2 commit: fenced lines accepted, HTML comments stripped, the predicate exported and asserted through by the tests with a shape matrix, the reason names the line it looked for, docstrings and the changeset say the line is the usual shape not a guarantee, the round-first claim scoped to its one observation, fixture roles and the README instants corrected. r2-f6 answered as not guarded, judged unreachable. r2-f1 NOT folded: it is a fork the seat does not own — closing the class needs a thread-level linkage (a per-thread machine line in the disposition, or the in-thread reply alone) and neither exists on the ruled calibration rows, so the ruling letter and the ruled acceptance cannot both hold under today disposition shape; presented to the operator with a recommendation. Convergence NAMED by the leg on the marker class: no further marker refinement closes it; the seat names convergence on the read as it stands and stops here pending the ruling."
+}

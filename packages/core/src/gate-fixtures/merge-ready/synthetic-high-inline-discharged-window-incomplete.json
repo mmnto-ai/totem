@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — evidence FOUND discharges even when the thread window is incomplete: the resolved HIGH on the head has more comments than the ten read (comments.pageInfo.hasNextPage) and only the bot own reply inside the window, but a non-bot PR-level review-reply disposition after its root is on record: allow, dischargedHigh 1",
+  "role": "mmnto-ai/totem#2861 — evidence FOUND discharges even when the thread window is incomplete: the resolved HIGH on the head has more comments than the ten read (comments.pageInfo.hasNextPage) and only the bot's own reply inside the window, but a non-bot PR-level review-reply disposition after its root is on record: allow, dischargedHigh 1. Pins the invariant (both the pre-fold and post-fold reads pass it); it kills the mutant that tests completeness before evidence.",
   "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [

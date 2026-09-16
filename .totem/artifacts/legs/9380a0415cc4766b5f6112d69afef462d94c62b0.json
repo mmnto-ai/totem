@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "9380a0415cc4766b5f6112d69afef462d94c62b0",
+  "readAt": "2026-09-16T01:07:40Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1354,
+      "claim": "FAIL-OPEN against the ruled contract: the PR-level evidence arm discharges a HIGH on ANY non-bot PR-level comment that post-dates the thread root, so a bare GitHub-UI resolve DOES discharge whenever the PR carries any human comment after the finding — no disposition required, nothing naming the thread. The ruling (issue comment 5654663579) says a HIGH resolved THROUGH THE DISPOSITION PATH (a posted disposition naming it, plus the resolve) is discharged and a bare resolve with no disposition on record still applies, fail-closed, otherwise the predicate is one click from vacuous. The implemented rule keys on post-dating alone, reusing resolve-threads deriveEvidence. The ruled negative control passes ONLY because the fixture was built with the extra premise that the sole human PR-level comment PRE-dates the root; that premise is false on real rounds. Verified live: mmnto-ai/liquid-city#1278 returns six User PR-level comments all post-dating every bot root; on the 2871 capture the operator's first PR-level comment is a bare trigger which on a second round necessarily post-dates round-1 roots. The seat discloses the divergence in three places; recorded because the ruling's stated purpose is not achieved in the field.",
+      "counterexample": "Ran the branch's built core against the negative-control fixture with ONE node appended to pullRequest.comments.nodes: {author:{__typename:'User',login:'satur8d'},createdAt:'2026-09-08T04:00:00Z'} (root 03:00:00Z; the thread carries only the bot's own reply and isResolved:true). Result: allow / ref merge-ready / highInline 0 / dischargedHigh 1, with the discharge notice. Unmodified fixture: deny / high-severity-inline / highInline 1. One human comment of any content flips the ruled negative control. FOLDED (57548351): the PR-level arm requires the review-reply local-lane line on a non-bot comment created strictly after the root; measured on the fourteen calibration rows first (twelve of thirteen deny rows carry it at line start)."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1359,
+      "claim": "FAIL-CLOSED CLAIM FALSIFIED under pilot: `return thread.commentsComplete ? 'none' : 'unread'` routes a bare-resolved HIGH whose thread window is incomplete into the UNEVALUABLE class, which gate-types defines as advisory under pilot. Pre-cure that same input was a predicate-4 FACT and denied at every tier. So the module header's own sentence — a bare resolve with no evidence on record still applies (fail-closed) — and the changeset's equivalent are false for this shape: on the PILOT install it stops blocking. Reachable input: a CodeRabbit/Greptile thread with more than ten comments, none of comments[1..9] non-bot, and no human PR-level comment after the root.",
+      "counterexample": "Same harness: negative-control fixture with reviewThreads.nodes[0].comments.pageInfo.hasNextPage flipped to true and the non-bot PR-level comment removed. tier=strict -> deny ref unevaluable; tier=pilot -> warn ref unevaluable, highInline 0. Pre-cure (main) the same PR is deny ref high-severity-inline at BOTH tiers. FOLDED (57548351): the unread arm is removed; the shape is a fact-side deny at both tiers whose reason names the window; evidence found inside an incomplete window still discharges (new fixture)."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2861.md",
+      "line": 207,
+      "claim": "The replay acceptance claim is false for one of the thirteen rows: the spec and the issue comment say every merged PR answers mergeStateStatus UNKNOWN and the UNKNOWN arm is the witness, but mmnto-ai/liquid-city#1279 reads deny ref=merge-state highInline=0 dischargedHigh=2 msst=DIRTY — merged, and DIRTY. The underlying inference survives by a DIFFERENT witness — firstFailure reaches predicate 5 only after predicates 1-4 return nothing — but the acceptance record must say that for 1279. The counts check out: baseline 13 rows deny with highInline 1/1/1/1/1/5/5/4/1/2/1/2/5 (sum 30), cured the same 13 at highInline 0 with dischargedHigh identical, 1330 stays 0/0.",
+      "counterexample": "node summarize.cjs on cured.jsonl prints mmnto-ai/liquid-city#1279 head=50d01c37 deny ref=merge-state highInline=0 dischargedHigh=2 msst=DIRTY; a live GraphQL read returns {state:MERGED, merged:true, mergeStateStatus:DIRTY}. FOLDED (57548351): the spec's fold section, the README and the PR body read each row by the arm it reached (UNKNOWN arm or predicate 5), both reachable only past predicate 4."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 98,
+      "claim": "A claim about GitHub that is inference, not transcription: 'All four PRs are merged, so GitHub answers mergeStateStatus: UNKNOWN for them (it computes mergeability only for open PRs)'. The observation about the four captures is true; the generalisation is false — merged mmnto-ai/liquid-city#1279 answers DIRTY.",
+      "counterexample": "Live read: merged lc#1279 -> mergeStateStatus DIRTY. FOLDED (57548351): the README transcribes the observation and names the DIRTY counterexample."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 89,
+      "claim": "The README's description of the discharge specimen is false against the capture bytes: it says mmnto-ai/totem#2871 has every bot thread resolved. The capture carries SEVEN review threads; SIX are isResolved:false, isOutdated:true and only one (the CodeRabbit Major) is resolved. Everything else in that bullet checks out (17/17 checks, the on-head thread, commit.oid equal to headRefOid while originalCommit is 7a94e9b7, exactly one non-bot PR-level comment post-dating the root which IS the round disposition).",
+      "counterexample": "Parsing totem-2871.json: threads[0..3,5,6] outdated and unresolved; threads[4] resolved on head. FOLDED (57548351)."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1709,
+      "claim": "The new bare-resolve clause never reaches provenance.matched: firstFailure appends the ~170-character clause AFTER the already-bounded quoted body, and the call site re-bounds the whole string to 160, so the distinguishing clause is truncated away in every realistic case.",
+      "counterexample": "Built gate on the negative control: reason ends with the clause while provenance.matched is exactly 160 chars and ends inside the quoted body. FOLDED (57548351): the clause precedes the quoted body; tests assert it on matched."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2861.md",
+      "line": 191,
+      "claim": "An invariant the spec lists is not locked by any test: a candidate whose evidence is found inside the window is discharged even when the window is incomplete. Every discharge fixture carries hasNextPage:false and the only incomplete-window fixture carries no evidence; a mutant moving the completeness test ahead of the evidence tests passes all 82 tests.",
+      "counterexample": "Scan of all fixtures: {hasNextPage:true} ∩ {evidence present} is EMPTY. FOLDED (57548351): synthetic-high-inline-discharged-window-incomplete.json and its test."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 579,
+      "claim": "Two arms of the new reader are unwitnessed: isBotReviewerLoginExact in readAuthor is never the deciding arm in any fixture (every exact-list login also carries __typename Bot); the Number.isNaN(rootAt) -> 'unread' branch has no fixture and cannot be reached from a real answer, and diverges from resolve-threads which returns 'none' there.",
+      "counterexample": "Author-shape census over all fixtures returns six distinct tuples; none has on-exact-list true with __typename != Bot. FOLDED (57548351): the NaN branch returns 'none' as the verb does; the exact-list arm stays as belt-and-braces with a comment saying the typename arm decides on every capture."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-types.ts",
+      "line": 34,
+      "claim": "GateProvenance.detail's docstring enumerates merge-ready's detail keys and was not updated with dischargedHigh.",
+      "counterexample": "NOT CONSTRUCTED: docstring only. FOLDED (57548351)."
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1568,
+      "claim": "The unsettled-evidence set is invisible in provenance whenever a predicate 1-3 failure wins: high.unread is counted in neither highInline nor dischargedHigh.",
+      "counterexample": "NOT CONSTRUCTED. CLOSED by the f2 fold: the set no longer exists; it is counted in highInline."
+    },
+    {
+      "id": "f11",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1328,
+      "claim": "Computed-then-discarded information: the Discharge type distinguishes in-thread-reply from pr-level-disposition but triageHighInlines collapses both, and neither provenance nor the notice names which arm fired.",
+      "counterexample": "NOT CONSTRUCTED. FOLDED (57548351): dischargedBy in provenance; the notice names both counts."
+    },
+    {
+      "id": "f12",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1630,
+      "claim": "QUESTION: the reader assumes PullRequestReviewThread.comments is returned root-first; no GitHub guarantee grounded; pre-existing and shared with resolve-threads; humanReplies applied no timestamp test.",
+      "counterexample": "NOT CONSTRUCTED. ANSWERED (57548351): the docstring discloses the positional assumption; the in-thread reply test is temporal as well as positional."
+    },
+    {
+      "id": "f13",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 575,
+      "claim": "QUESTION: readAuthor treats author: null as HUMAN on both surfaces including PR-level comments; a removed App's summary would be discharge evidence for every thread it post-dates.",
+      "counterexample": "Synthetically the path is live: appending {author:null, createdAt:'2026-09-08T04:00:00Z'} to the negative control's PR comments yields allow. NOT CONSTRUCTED against a real GitHub answer. NARROWED (57548351): such a comment now also needs the disposition line; the re-armed leg records it as not guarded, judged unreachable."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "f11",
+    "f12"
+  ],
+  "verdict": "Leg 1 on the predicate-4 discharge (9380a041, mmnto-ai/totem#2861): 1 BLOCKING (f1 — post-dating alone let any later human comment discharge a bare resolve; counterexample executed on the built core), 2 MATERIAL (f2 — the unread arm downgraded a fact-side deny to pilot warn; f3 — the UNKNOWN-for-every-merged-PR replay claim false for lc#1279), 10 MINOR. Twelve folded in 57548351: the PR-level arm reads the review-reply local-lane line, the unread arm removed, the replay witness restated by the arm reached, the README and docstrings corrected, provenance names the arm, the in-thread test made temporal. f13 (a null-author PR-level comment as evidence) narrowed by the marker and left as a question. Convergence NOT named by this leg: it enumerated the fail-open surface and asked for a re-arm on the fold."
+}
