@@ -12,7 +12,9 @@
  * which this test cannot read and does not claim to): the map's Kimi
  * propagation moves the mail-accounting fixtures and is its own change,
  * mmnto-ai/totem#2875. When the map gains them, `tableOnly` below becomes
- * empty and the assertion tightens to equality.
+ * empty and the pinned `KIMI_SEATS` assertion goes RED on purpose — the
+ * tripwire that issue's second ask names: a human then empties `KIMI_SEATS`
+ * and the lock becomes an equality. Nothing tightens by itself.
  */
 import { describe, expect, it } from 'vitest';
 
