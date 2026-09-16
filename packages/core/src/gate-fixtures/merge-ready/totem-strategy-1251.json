@@ -2,10 +2,9 @@
   "kind": "capture",
   "repo": "mmnto-ai/totem-strategy",
   "pr": 1251,
-  "role": "negative control (R4)",
-  "capturedAt": "2026-09-08T03:53:45.685Z",
+  "role": "R4's negative control — re-captured with the mmnto-ai/totem#2861 evidence query",
+  "capturedAt": "2026-09-16T00:47:37.566Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
-  "query": "MERGE_READY_QUERY (packages/core/src/merge-ready.ts) — sent verbatim by evaluateMergeReady",
   "pages": [
     {
       "exitCode": 0,
@@ -65,6 +64,13 @@
                 "nodes": []
               },
               "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "comments": {
                 "pageInfo": {
                   "hasNextPage": false,
                   "endCursor": null

@@ -181,6 +181,10 @@ function ghRunnerStub(mergeStateStatus: string): GhRunner {
     },
     reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
     reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    // The PR-level comments connection — the discharge's evidence surface
+    // (mmnto-ai/totem#2861), read as strictly as the other three: absent, the
+    // page is unreadable and the evaluator lands in the UNEVALUABLE class.
+    comments: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
   };
   return (args) =>
     args[0] === '--version'

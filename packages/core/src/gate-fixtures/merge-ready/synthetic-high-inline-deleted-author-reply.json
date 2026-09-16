@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "F9 — CodeRabbit \"Potential issue\" reads as HIGH; resolved, still on head, so predicate 4 denies",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2861 — an in-thread reply whose author is a DELETED account (author: null) is a human reply (the resolve-threads rule, item 6 of .totem/specs/2841.md): the resolved HIGH on the head is discharged",
+  "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -24,18 +24,9 @@
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": 2,
-                          "pageInfo": {
-                            "hasNextPage": false,
-                            "endCursor": null
-                          },
+                          "totalCount": 1,
+                          "pageInfo": { "hasNextPage": false, "endCursor": null },
                           "nodes": [
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Verify (ubuntu-latest)",
-                              "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
-                            },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
@@ -49,40 +40,29 @@
                   }
                 ]
               },
-              "reviews": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
-                "nodes": []
-              },
+              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
               "reviewThreads": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
                 "nodes": [
                   {
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
-                      "pageInfo": {
-                        "hasNextPage": false
-                      },
+                      "pageInfo": { "hasNextPage": false },
                       "nodes": [
                         {
-                          "author": {
-                            "__typename": "Bot",
-                            "login": "coderabbitai"
-                          },
-                          "body": "_Potential issue_\n\nThe early return drops the error without a rethrow.",
+                          "author": { "__typename": "Bot", "login": "greptile-apps" },
+                          "body": "<a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9\" align=\"top\"></a> **The exact gh token is projected**",
                           "createdAt": "2026-09-08T03:00:00Z",
-                          "commit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          },
-                          "originalCommit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          }
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                        },
+                        {
+                          "author": null,
+                          "body": "Declined as a disclosed limit; filed.",
+                          "createdAt": "2026-09-08T03:10:00Z",
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
                         }
                       ]
                     }
@@ -90,10 +70,7 @@
                 ]
               },
               "comments": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
                 "nodes": []
               }
             }

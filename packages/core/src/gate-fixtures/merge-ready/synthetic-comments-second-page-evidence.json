@@ -1,0 +1,152 @@
+{
+  "kind": "synthetic",
+  "role": "mmnto-ai/totem#2861 — the PR-level evidence sits on the SECOND comments page: page 1 carries only a bot comment and hasNextPage, page 2 (fetched with commentsAfter=CURSOR-C1) carries the non-bot comment that discharges the resolved HIGH on the head",
+  "synthesizedAt": "2026-09-16T00:47:11.787Z",
+  "ghVersion": "gh version 2.99.0 (2026-09-01)",
+  "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "CLEAN",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 1,
+                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
+              "reviewThreads": {
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "nodes": [
+                  {
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "comments": {
+                      "pageInfo": { "hasNextPage": false },
+                      "nodes": [
+                        {
+                          "author": { "__typename": "Bot", "login": "coderabbitai" },
+                          "body": "_📐 Maintainability & Code Quality_ | _🟠 Major_ | _⚡ Quick win_\n\n**The rethrow drops `cause`.**",
+                          "createdAt": "2026-09-08T03:00:00Z",
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "comments": {
+                "pageInfo": { "hasNextPage": true, "endCursor": "CURSOR-C1" },
+                "nodes": [
+                  {
+                    "author": { "__typename": "Bot", "login": "coderabbitai" },
+                    "createdAt": "2026-09-08T03:05:00Z"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "CLEAN",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "SUCCESS",
+                        "contexts": {
+                          "totalCount": 1,
+                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
+              "reviewThreads": {
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "nodes": [
+                  {
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "comments": {
+                      "pageInfo": { "hasNextPage": false },
+                      "nodes": [
+                        {
+                          "author": { "__typename": "Bot", "login": "coderabbitai" },
+                          "body": "_📐 Maintainability & Code Quality_ | _🟠 Major_ | _⚡ Quick win_\n\n**The rethrow drops `cause`.**",
+                          "createdAt": "2026-09-08T03:00:00Z",
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              "comments": {
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "nodes": [
+                  {
+                    "author": { "__typename": "User", "login": "satur8d" },
+                    "createdAt": "2026-09-08T03:30:00Z"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

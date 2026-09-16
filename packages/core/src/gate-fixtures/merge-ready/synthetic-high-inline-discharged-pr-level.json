@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "F2 — a RESOLVED bot HIGH inline whose comment.commit.oid is an OLDER commit does not deny",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2861 — a RESOLVED bot HIGH inline still on the HEAD commit is DISCHARGED by a non-bot PR-level comment created after its root: predicate 4 passes, highInline 0, dischargedHigh 1 (the bot's own later PR-level comment is not the evidence)",
+  "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -25,10 +25,7 @@
                         "state": "SUCCESS",
                         "contexts": {
                           "totalCount": 2,
-                          "pageInfo": {
-                            "hasNextPage": false,
-                            "endCursor": null
-                          },
+                          "pageInfo": { "hasNextPage": false, "endCursor": null },
                           "nodes": [
                             {
                               "__typename": "CheckRun",
@@ -49,40 +46,22 @@
                   }
                 ]
               },
-              "reviews": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
-                "nodes": []
-              },
+              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
               "reviewThreads": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
                 "nodes": [
                   {
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
-                      "pageInfo": {
-                        "hasNextPage": false
-                      },
+                      "pageInfo": { "hasNextPage": false },
                       "nodes": [
                         {
-                          "author": {
-                            "__typename": "Bot",
-                            "login": "gemini-code-assist"
-                          },
+                          "author": { "__typename": "Bot", "login": "gemini-code-assist" },
                           "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe engines range and the dependency range disagree.",
                           "createdAt": "2026-09-08T03:00:00Z",
-                          "commit": {
-                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                          },
-                          "originalCommit": {
-                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                          }
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
                         }
                       ]
                     }
@@ -90,11 +69,17 @@
                 ]
               },
               "comments": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
-                "nodes": []
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "nodes": [
+                  {
+                    "author": { "__typename": "Bot", "login": "coderabbitai" },
+                    "createdAt": "2026-09-08T03:05:00Z"
+                  },
+                  {
+                    "author": { "__typename": "User", "login": "satur8d" },
+                    "createdAt": "2026-09-08T03:30:00Z"
+                  }
+                ]
               }
             }
           }

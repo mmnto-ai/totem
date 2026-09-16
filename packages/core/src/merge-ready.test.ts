@@ -2,18 +2,24 @@
  * merge-ready (mmnto-ai/totem#2800) — the gate's invariants, driven by the
  * checked-in fixtures under `gate-fixtures/merge-ready/`.
  *
- * FOUR of those fixtures are REAL `gh api graphql` captures taken with the
- * exported {@link MERGE_READY_QUERY} (R4): three PR captures —
+ * FIVE of those fixtures are REAL `gh api graphql` captures taken with the
+ * exported {@link MERGE_READY_QUERY} (R4): four PR captures —
  * mmnto-ai/liquid-city#363 (green rollup, one unresolved HIGH inline),
- * mmnto-ai/totem-strategy#1251, and mmnto-ai/totem#2827 (the comment that
- * re-pointed to the head) — plus the benign corpus, every bot inline thread on
- * mmnto-ai/totem#2820-2839, which measures the severity read's ADR-109
- * false-positive budget. The other 44 are synthetic and labelled `synthetic-`
- * in their names — one per invariant the captures cannot exercise (all three
- * PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for each and no
- * capture can carry a BEHIND / DIRTY / BLOCKED head, or a resolved HIGH thread);
- * the five PR-round-1 rows (mmnto-ai/totem#2844) cover the strict connection
- * reads and the predicate order ahead of the unreadable-commit arm.
+ * mmnto-ai/totem-strategy#1251, mmnto-ai/totem#2827 (the comment that
+ * re-pointed to the head) and mmnto-ai/totem#2871 (a HIGH resolved through the
+ * disposition path while its anchor survives on the head — the discharge
+ * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
+ * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
+ * ADR-109 false-positive budget. The other 52 are synthetic and labelled
+ * `synthetic-` in their names — one per invariant the captures cannot
+ * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
+ * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
+ * or a bare-resolved HIGH thread); the five PR-round-1 rows
+ * (mmnto-ai/totem#2844) cover the strict connection reads and the predicate
+ * order ahead of the unreadable-commit arm; the nine mmnto-ai/totem#2861 rows
+ * cover the discharge read — its two evidence arms, the bare-resolve negative
+ * control, the required resolve, the per-thread split, the second comments
+ * page, the unread-evidence arm and the strict PR comments connection.
  * The README beside them lists every file with its sha256 and instant, and a
  * test recomputes those receipts from the files on disk.
  *
@@ -122,6 +128,7 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     'benign-corpus-bot-inlines.json',
     'liquid-city-363.json',
     'totem-2827.json',
+    'totem-2871.json',
     'totem-strategy-1251.json',
   ];
 
@@ -163,8 +170,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(44);
-    expect(files.length).toBe(48);
+    expect(synthetic.length).toBe(52);
+    expect(files.length).toBe(57);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -246,6 +253,74 @@ describe('merge-ready — the checked-in captures', () => {
     const e = evaluate('totem-2827.json');
     expect(e.detail.highInline).toBe(1);
     expect(e.verdict.disposition).toBe('deny');
+  });
+
+  it('mmnto-ai/totem#2871 (capture): a CodeRabbit Major resolved THROUGH THE DISPOSITION PATH while its anchor survives on the head is discharged (mmnto-ai/totem#2861)', () => {
+    // The real specimen of predicate 4's own territory: the finding was
+    // declined with reason in the round disposition (a PR-level comment that
+    // post-dates the thread's root), the thread resolved by
+    // `totem resolve-threads --apply`, and the anchored line never changed —
+    // so `comment.commit.oid` IS the head and, before the cure, this read
+    // `deny · high-severity-inline · highInline 1` (calibration row
+    // mmnto-ai/totem#2871 on the issue). Read straight off the capture first,
+    // so the shape stays a statement about GitHub's data.
+    const fixture = loadFixture('totem-2871.json');
+    const body = fixture.pages[0]!.body as {
+      data: {
+        repository: {
+          pullRequest: {
+            headRefOid: string;
+            reviewThreads: {
+              nodes: Array<{
+                isResolved: boolean;
+                comments: {
+                  nodes: Array<{
+                    author: { __typename: string; login: string } | null;
+                    body: string;
+                    createdAt: string;
+                    commit: { oid: string } | null;
+                  }>;
+                };
+              }>;
+            };
+            comments: {
+              nodes: Array<{
+                author: { __typename: string; login: string } | null;
+                createdAt: string;
+              }>;
+            };
+          };
+        };
+      };
+    };
+    const pr = body.data.repository.pullRequest;
+    const onHead = pr.reviewThreads.nodes.filter(
+      (t) =>
+        t.comments.nodes[0]!.commit?.oid === pr.headRefOid &&
+        hasHighSeverityMarker(t.comments.nodes[0]!.body),
+    );
+    expect(onHead).toHaveLength(1);
+    const thread = onHead[0]!;
+    expect(thread.isResolved).toBe(true);
+    expect(thread.comments.nodes[0]!.author?.login).toBe('coderabbitai');
+    const rootAt = Date.parse(thread.comments.nodes[0]!.createdAt);
+    const humanAfterRoot = pr.comments.nodes.filter(
+      (c) => c.author?.__typename !== 'Bot' && Date.parse(c.createdAt) > rootAt,
+    );
+    expect(humanAfterRoot.length).toBeGreaterThan(0);
+
+    const e = evaluate('totem-2871.json', { tier: 'pilot' });
+    expect(e.detail.checks).toEqual({ total: 17, success: 17, pending: 0, failing: 0 });
+    expect(e.detail.threads.unresolvedBot).toBe(0);
+    expect(e.detail.highInline).toBe(0);
+    expect(e.detail.dischargedHigh).toBe(1);
+    // Merged, so GitHub answers UNKNOWN: the read lands on the arm that is
+    // reachable ONLY when predicates 1–4 have passed — the replay's witness.
+    expect(e.verdict.provenance.ref).toBe('unevaluable');
+    expect(e.verdict.reason).toMatch(/mergeStateStatus: UNKNOWN/);
+    expect(
+      e.notices.some((n) => n.includes('1 HIGH/Major bot inline(s) on the head commit discharged')),
+    ).toBe(true);
   });
 
   it('sends the exported query, as argv, with no shell string anywhere', () => {
@@ -421,15 +496,93 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.detail.highInline).toBe(0);
   });
 
-  it('a RESOLVED HIGH inline that still applies to the HEAD commit denies at predicate 4', () => {
-    // Predicate 4's own territory (ruled, fold F2): a human resolved the thread
-    // without changing the code, so predicate 2 passes and the finding still
-    // applies to what would merge. Resolution is IGNORED here by design.
+  it('the NEGATIVE CONTROL — a RESOLVED HIGH inline still on the HEAD commit with no disposition on record denies at predicate 4 (mmnto-ai/totem#2861)', () => {
+    // Predicate 4's own territory (fold F2 of mmnto-ai/totem#2800, narrowed by
+    // the 2861 ruling): a bare UI resolve with no evidence — the only PR-level
+    // human comment PRE-dates the root, the post-dating PR-level comments are a
+    // Bot's and a `[bot]`-suffixed login's, and the only in-thread reply is the
+    // bot's own — so predicate 2 passes, nothing discharges, and the finding
+    // still applies to what would merge. The reason names the bare resolve.
     const e = evaluate('synthetic-head-commit-high-inline.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('high-severity-inline');
     expect(e.detail.threads.unresolvedBot).toBe(0); // predicate 2 did NOT fire
     expect(e.detail.highInline).toBe(1);
+    expect(e.detail.dischargedHigh).toBe(0);
+    expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
+    expect(e.notices.some((n) => n.includes('discharged'))).toBe(false);
+  });
+
+  // ─── The discharge read (mmnto-ai/totem#2861) ────────────────────────────
+  //
+  // A HIGH on the head whose thread was RESOLVED through the disposition path
+  // — the resolve-threads evidence rule on the same read — no longer applies.
+  // The bare resolve above is the fail-closed arm; these are the two evidence
+  // arms and the edges of each.
+
+  it('a resolved HIGH on the head with a non-bot PR-level comment AFTER its root is discharged', () => {
+    const e = evaluate('synthetic-high-inline-discharged-pr-level.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.highInline).toBe(0);
+    expect(e.detail.dischargedHigh).toBe(1);
+    // The audit breadcrumb: what the predicate RELEASED is on stderr.
+    const line = e.notices.find((n) => n.includes('discharged through the disposition path'));
+    expect(line).toBeDefined();
+    expect(line).toContain('1 HIGH/Major bot inline(s)');
+    expect(line).toContain('mmnto-ai/totem#4242');
+  });
+
+  it('a resolved HIGH on the head with a non-bot IN-THREAD reply and no PR-level comment is discharged', () => {
+    const e = evaluate('synthetic-high-inline-discharged-in-thread.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.highInline).toBe(0);
+    expect(e.detail.dischargedHigh).toBe(1);
+  });
+
+  it('a deleted-account reply (author: null) is a human reply — the resolve-threads rule', () => {
+    const e = evaluate('synthetic-high-inline-deleted-author-reply.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.dischargedHigh).toBe(1);
+  });
+
+  it('an UNRESOLVED HIGH with a post-dating disposition is NOT discharged: the resolve is required, predicate 2 denies first', () => {
+    const e = evaluate('synthetic-high-inline-unresolved-with-disposition.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('unresolved-bot-threads');
+    expect(e.detail.highInline).toBe(1);
+    expect(e.detail.dischargedHigh).toBe(0);
+  });
+
+  it('discharge is judged PER THREAD: one discharged beside one bare denies at predicate 4 naming the bare one', () => {
+    const e = evaluate('synthetic-high-inline-mixed-discharge.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('high-severity-inline');
+    expect(e.detail.highInline).toBe(1);
+    expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.verdict.reason).toContain('coderabbitai');
+    expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
+  });
+
+  it('PR-level evidence on the SECOND comments page is found, with the cursor sent', () => {
+    const e = evaluate('synthetic-comments-second-page-evidence.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.detail.threads.pagesRead).toBe(2);
+    expect(e.calls[2]).toContain('commentsAfter=CURSOR-C1');
+  });
+
+  it('a resolved HIGH whose evidence the read could not settle is UNEVALUABLE, named, at both tiers — never a silent deny, never a discharge', () => {
+    // More replies than the ten-comment window, none of the read ones human,
+    // no PR-level comment after the root: predicate 4's input is missing.
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-high-inline-evidence-unread.json', { tier });
+      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
+      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
+      expect(e.verdict.reason, tier).toMatch(/evidence the read could not settle/);
+      expect(e.detail.highInline, tier).toBe(0);
+      expect(e.detail.dischargedHigh, tier).toBe(0);
+      expect(e.notices.join('\n'), tier).toMatch(/could not derive/);
+    }
   });
 
   it('reads comment.commit (where the finding applies NOW), never originalCommit', () => {
@@ -827,6 +980,8 @@ describe('merge-ready — pagination and the unevaluable class', () => {
       ['synthetic-reviews-connection-missing.json', /reviews connection was missing/],
       ['synthetic-threads-connection-missing.json', /review threads connection was missing/],
       ['synthetic-threads-pageinfo-missing.json', /review threads connection carried no pageInfo/],
+      // The evidence surface (mmnto-ai/totem#2861) is held to the same bar.
+      ['synthetic-comments-connection-missing.json', /PR comments connection was missing/],
     ] as const) {
       const strict = evaluate(file);
       expect(strict.verdict.disposition, file).toBe('deny');
@@ -877,6 +1032,8 @@ describe('merge-ready — pagination and the unevaluable class', () => {
       'synthetic-pagination-second-page-fails.json',
       'synthetic-head-moved.json',
       'synthetic-merge-state-unknown.json',
+      'synthetic-high-inline-evidence-unread.json',
+      'synthetic-comments-connection-missing.json',
     ]) {
       for (const tier of ['strict', 'pilot'] as const) {
         const e = evaluate(file, { tier });

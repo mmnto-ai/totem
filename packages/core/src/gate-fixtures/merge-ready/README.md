@@ -1,13 +1,22 @@
 # merge-ready fixtures (mmnto-ai/totem#2800, ruling R4)
 
 Every file here answers the injected `GhRunner` seam in place of the network, so
-`merge-ready.test.ts` never calls GitHub. FOUR files are REAL captures — three pull
+`merge-ready.test.ts` never calls GitHub. FIVE files are REAL captures — four pull
 requests plus the benign corpus that measures the severity read's false-positive budget —
 and the rest are synthetic, saying so in their name and in their `"kind"` field.
 
 All of them were re-made in the fold round: the query now asks for `comment.commit { oid }`
 (fold F2 — the commit a finding CURRENTLY applies to, beside the `originalCommit` it was
 written against), so every capture and every synthetic body carries the new shape.
+
+They were re-made again for the predicate-4 discharge (mmnto-ai/totem#2861): the query now
+selects the EVIDENCE fields — `pageInfo`, `createdAt` and `author { __typename }` on every
+thread comment, and a fourth paginated connection, the PR-level `comments`, with the same
+two per node. The four PR captures were re-captured with it on 2026-09-16 (the corpus is
+not a page capture and the severity read did not change, so it stands), and every
+synthetic body was reshaped to carry the four fields at `2026-09-16T00:40:43.010Z` —
+`synthesizedAt` keeps the instant each invariant was authored; the reshape added fields
+and changed no verdict.
 
 ## Shape
 
@@ -27,24 +36,27 @@ written against), so every capture and every synthetic body carries the new shap
 `pages` are answered in order, one per `gh api graphql` call the evaluator makes. A page
 with a non-zero `exitCode` carries `stdout` (the text gh wrote) instead of `body`.
 
-## The three captures
+## The four PR captures
 
 Each was taken by running the REAL `evaluateMergeReady` with a runner that spawned `gh`
 and teed each response, so the query in the capture is `MERGE_READY_QUERY` from
 `packages/core/src/merge-ready.ts` verbatim. sha256 of that query string at capture time:
-`f4825687f2c5cf28778f895a82f7c4d575fecda9b0020326e346d48fabe7d7db` — re-derived from the
+`9c0943e461ebd89055e14615e512a5fab62d37c7554d146bedcd6853d4365f61` — re-derived from the
 exported constant by the receipts test, so a query change that skips a re-capture fails
 there. `gh version 2.99.0
-(2026-09-01)` answered all three.
+(2026-09-01)` answered all four.
 
 | File                       | PR                                                                                   | Captured (UTC)             | sha256                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------ | -------------------------- | ------------------------------------------------------------------ |
-| `liquid-city-363.json`     | [mmnto-ai/liquid-city#363](https://github.com/mmnto-ai/liquid-city/pull/363)         | `2026-09-08T03:53:45.077Z` | `422c58f237ce5c0a2d15b3e0675d1bdb2519a75280d1f2016cb0bc676d43df71` |
-| `totem-strategy-1251.json` | [mmnto-ai/totem-strategy#1251](https://github.com/mmnto-ai/totem-strategy/pull/1251) | `2026-09-08T03:53:45.685Z` | `af6e2bee1969a8f47cad9aa716a524d2ba8d2243806b8b9cb249f31ceb4499f6` |
-| `totem-2827.json`          | [mmnto-ai/totem#2827](https://github.com/mmnto-ai/totem/pull/2827)                   | `2026-09-08T03:53:47.342Z` | `e5fa5afedcc802a55ace75d30c01aefb569dac1d13d280187112ead072097987` |
+| `liquid-city-363.json`     | [mmnto-ai/liquid-city#363](https://github.com/mmnto-ai/liquid-city/pull/363)         | `2026-09-16T00:47:34.582Z` | `a2187569ed1ae822316c894622b7ba8516f896f637c9ac2e1fd98daeb93acd0f` |
+| `totem-strategy-1251.json` | [mmnto-ai/totem-strategy#1251](https://github.com/mmnto-ai/totem-strategy/pull/1251) | `2026-09-16T00:47:37.566Z` | `d76c6a14afd31ab1216c1fc459988a3ee33ca41eeafce4069efa54f1c177724c` |
+| `totem-2827.json`          | [mmnto-ai/totem#2827](https://github.com/mmnto-ai/totem/pull/2827)                   | `2026-09-16T00:47:40.732Z` | `7be13a199f587d47955204df0319bab415d1fd11529b0d0a2d2037d64d83ef3b` |
+| `totem-2871.json`          | [mmnto-ai/totem#2871](https://github.com/mmnto-ai/totem/pull/2871)                   | `2026-09-16T00:47:43.858Z` | `b4166b2eaacd9122cbd99df876e6b774a2578d8f1b28b74e2f2219e64b6146ed` |
 
-A fourth capture is the SEVERITY READ's benign corpus, taken the same way (the exported
-query, one call per PR, instant clock-read in the writing command):
+A fifth capture is the SEVERITY READ's benign corpus, taken the same way (the exported
+query as it stood on 2026-09-08, one call per PR, instant clock-read in the writing
+command); it is a per-thread table rather than a page answer, so the 2861 query change did
+not move it:
 
 | File                             | What                                                                                                        | Captured (UTC)             | sha256                                                             |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
@@ -73,13 +85,23 @@ What each one carries, as GitHub answered on its capture instant:
   divergence is the whole reason predicate 4 reads `commit`: keyed on `originalCommit`, a
   real HIGH finding that still applies to what would merge reads as "not on head" and the
   predicate goes inert.
+- **mmnto-ai/totem#2871** (the discharge specimen, mmnto-ai/totem#2861) — 17 checks, all
+  SUCCESS; every bot thread resolved; ONE thread whose root is a `coderabbitai` Major
+  (`_🟠 Major_`, dynamic imports in a test file) with `comment.commit.oid` equal to the
+  head (`a1e89aac…`), declined with reason in the round's consolidated disposition — a
+  non-bot PR-level comment created after the root — and resolved by
+  `totem resolve-threads 2871 --apply`. Before the cure this read
+  `deny · high-severity-inline · highInline 1` (the calibration row on the issue); it now
+  reads `highInline 0`, `dischargedHigh 1`, with the discharge named on stderr, and lands
+  on the UNKNOWN-mergeability arm — reachable only when predicates 1–4 have passed.
 
-All three PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for them (it
-computes mergeability only for open PRs). That is why mmnto-ai/totem-strategy#1251 lands
-in the UNEVALUABLE class rather than allowing, and why every `mergeStateStatus` value is
-exercised by a synthetic fixture below. No PR needed synthesizing: all three still answer.
+All four PRs are merged, so GitHub answers `mergeStateStatus: UNKNOWN` for them (it
+computes mergeability only for open PRs). That is why mmnto-ai/totem-strategy#1251 and
+mmnto-ai/totem#2871 land in the UNEVALUABLE class rather than allowing, and why every
+`mergeStateStatus` value is exercised by a synthetic fixture below. No PR needed
+synthesizing: all four still answer.
 
-### The census, and why predicate 4's own case has no real specimen
+### The census, and where predicate 4's own case has its real specimen
 
 Every pull request in the range mmnto-ai/totem#2820 through mmnto-ai/totem#2839 was read
 with the exported query on 2026-09-08 (ten of the twenty numbers are pull requests; the
@@ -98,8 +120,12 @@ labels `alt="P2"`: the word-based read flagged it through the word "critical" in
 explanation, the marker read does not. That thread is the corpus's falsifier row.
 
 Predicate 4's own territory is a bot HIGH finding on a **resolved** thread whose comment
-still applies to the head commit. **None** of the 16 is resolved, so no real capture can
-carry that case and `synthetic-head-commit-high-inline.json` stands in for it.
+still applies to the head commit. **None** of the 16 corpus threads is resolved, so the
+corpus cannot carry that case; `totem-2871.json` carries its DISCHARGED half (resolved
+through the disposition path — mmnto-ai/totem#2861), and the bare-resolve half — a thread
+resolved with no disposition on record, which still applies — has no real specimen in any
+capture, so `synthetic-head-commit-high-inline.json` stands in for it as the negative
+control.
 
 The RE-POINTING the predicate depends on — `comment.commit.oid` moving while
 `originalCommit.oid` stays put — is now a field on every corpus row, and the counts are
@@ -117,54 +143,64 @@ All synthesized `2026-09-08T03:55:11.894Z`, except the three fold-round-2 rows
 (`2026-09-08T05:42:31.591Z`) and the two fold-round-3 rows
 (`2026-09-08T06:26:38.783Z` and `2026-09-08T06:25:27.919Z`) and the four fold-round-4 rows
 (`2026-09-08T07:05:39.879Z`) and the five PR-round-1 rows (`2026-09-08T21:08:06.765Z`,
-mmnto-ai/totem#2844) at the end of the table. Each covers an invariant the captures cannot.
+mmnto-ai/totem#2844) and the nine mmnto-ai/totem#2861 rows (`2026-09-16T00:47:11.787Z` —
+eight new and the negative control re-authored) at the end of the table. Each covers an
+invariant the captures cannot.
 
-| File                                                     | Invariant                                                                 | sha256                                                             |
-| -------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `synthetic-merge-state-clean.json`                       | `CLEAN` passes; no bot review passes 2–4 as a fact                        | `b73eb718fd3940137b5af261507a142912a0d042e33396ae569da4ba3d22b043` |
-| `synthetic-merge-state-has-hooks.json`                   | `HAS_HOOKS` passes                                                        | `a339d2e3b7af192947a94fe946031cfe584960a5165f92fcf584c6e1175b65fe` |
-| `synthetic-merge-state-unstable.json`                    | `UNSTABLE` passes (a red non-required check is predicate 1's)             | `871b2b0dcd1245668eef9d5a9b99d9ded43e7fbbfd4a4550fffd9fef768bd7c6` |
-| `synthetic-merge-state-behind.json`                      | `BEHIND` denies                                                           | `96ca6fb51b7a7f51220df05945bdb04494591867df06ea1a5ce4b915d412f50b` |
-| `synthetic-merge-state-dirty.json`                       | `DIRTY` denies                                                            | `edbce1a63a84101ad163b63969a4d82c8c47bb3b9f4bcb2b93ead711c429181f` |
-| `synthetic-merge-state-blocked.json`                     | `BLOCKED` denies                                                          | `2df2052990f18d96fd28dc9c65a526eb76fc64052a2491d64e3850c4c5e05c35` |
-| `synthetic-merge-state-draft.json`                       | `DRAFT` denies                                                            | `1489c17ace2ef4e461c684f95faf210180699f16b85289e507620af1cae1734b` |
-| `synthetic-merge-state-unknown.json`                     | `UNKNOWN` is unevaluable (strict deny / pilot warn)                       | `2dda2b7b5422ddda0b2c05d6e54ecbffd4b0684e1f946e95c10e3ee87863de07` |
-| `synthetic-merge-state-unrecognised.json`                | a status this gate does not read is unevaluable, never allow              | `88590b4ca5dcf4da81af195392c37ea8b0342010f0df4a9b7f4bb5c3b121c23d` |
-| `synthetic-zero-checks.json`                             | R5 — zero checks passes as a fact, with the count and one line            | `af6c8abfcdea608e059bc52490fa05b6dd8009a7caba872f595d44e026c7d534` |
-| `synthetic-failing-check.json`                           | a failing check denies at predicate 1                                     | `e74c5fa3c3cafe7a3d6d2ca92d11ab2e4821f6be9953ea56984dbad3433d280f` |
-| `synthetic-pending-check.json`                           | a still-running check denies at predicate 1                               | `40ab1822392998dc16358f881e3b456f7453a7ddcb85cd85244ebcbcf227b855` |
-| `synthetic-rollup-commit-mismatch.json`                  | F7 — a rollup off another commit is unevaluable, never green              | `cd66dc934539762c0eb32daf24b0a2df1c97b2e4157074dd1846f7c2e360a61b` |
-| `synthetic-no-commits.json`                              | F7 — no commits answered: the head rollup is unreadable                   | `bb540fa6de80f49963102d93ee866e2de41e9a07b552f654f051ced8c8e0ed57` |
-| `synthetic-rollup-no-contexts.json`                      | F7 — a rollup with no contexts connection is not the zero-checks fact     | `53c1ec016ee66b320abdfba2290854e946e0ec0184c7e49250d5f4715de48b69` |
-| `synthetic-rollup-state-without-checks.json`             | F7 — `PENDING` over zero listed checks is unreadable, not R5              | `cc68c1e1dee959430dae88d57175bb3a2e46a9cc76fa2535c6d70b68dea6a5f9` |
-| `synthetic-rollup-state-null.json`                       | R2 F3 — a null rollup state over zero checks is unevaluable, not R5       | `99caa79eaae823081c5db081ebc3bbccc970984d14e8f69bf3dd229b152cb763` |
-| `synthetic-rollup-state-non-string.json`                 | R2 F3 — a non-string rollup state over zero checks is unevaluable         | `db4854dc93608b69591ad41c26006525c4bf32390a24fae78828ed732406aa1c` |
-| `synthetic-high-inline-null-commit.json`                 | R2 F8 — a bot HIGH inline with a null commit is unevaluable, named        | `76ada16983527160448ddc6fe149913914b024bd029027d643216f3c6a7bee27` |
-| `synthetic-rollup-count-without-checks.json`             | R3 F9 — SUCCESS with `totalCount: 3` over an empty list is unevaluable    | `634bbc0926996d8b3bdbd7d1e547883b7f6cc46590eced02f0e6499fcb117be8` |
-| `synthetic-benign-fenced-marker-quote.json`              | R3 F4 — a Minor whose FENCE quotes the gate's markers reads NOT high      | `38f3e306d9dc9f25260aaae12c223a7bf57f92f9ffa0d98f32a1641acc0ffd32` |
-| `synthetic-rollup-count-string.json`                     | R4 F3 — a string `totalCount` is not a count: unevaluable                 | `a76902c1a0b972fbcdbf3a28c9664f892fbc5bc4d374846c3b609326b60967f5` |
-| `synthetic-rollup-count-negative.json`                   | R4 F3 — a negative `totalCount` is not a count: unevaluable               | `ecd4cc19d90a0fff7e0a84e285702ba3f138ef51429fba445775e3501c2d385c` |
-| `synthetic-rollup-count-boolean.json`                    | R4 F3 — a boolean `totalCount` is not a count: unevaluable                | `d7c639dc8d4fc3f9038d4ebb1459b09fba434bf40bf896af9d483adf7f151b4f` |
-| `synthetic-rollup-count-mismatch.json`                   | R4 F3 — 3 claimed, 1 materialised: an incomplete read, unevaluable        | `47b6e604bc478756527752e34b98aa4704ea94324f8723a04f83917a071e5664` |
-| `synthetic-unresolved-bot-thread.json`                   | an unresolved, non-outdated bot thread denies                             | `f72089d6aab5cee70af916b0d1370918e00ec3150a43e183869655508a58de9b` |
-| `synthetic-resolved-outdated-human-threads.json`         | resolved / outdated / HUMAN threads never deny                            | `64381afaa783e059c4d019e60e8fb0735d7048ac7570e975809807f6ba55d349` |
-| `synthetic-stale-commit-high-inline.json`                | F2 — a HIGH inline applying to an OLDER commit does not deny              | `98ca60196f7315602b13822a69b748fe03ca89743db96bf63227e8ec2d8aebf7` |
-| `synthetic-head-commit-high-inline.json`                 | F2 — a RESOLVED HIGH inline still on head denies at predicate 4           | `c4774bf85feb6822b0281d59515a77363676a22783e580c4d07f815f4740fc1b` |
-| `synthetic-coderabbit-potential-issue.json`              | F9 — CodeRabbit's "Potential issue" reads as a HIGH marker                | `6ae0c00d2e74e7d8e67dbfc226b08b9c2cf9d1296d58c5fcc3756df49ccc0593` |
-| `synthetic-changes-requested-standing.json`              | F6 — a later COMMENTED from the same reviewer does not supersede          | `5656f2e2e4aa776ca6bed4618509344ee916f27ec16e5cbf8ceb51fbe8d28176` |
-| `synthetic-changes-requested-superseded.json`            | a later `APPROVED` supersedes                                             | `3d420ebcf7d3c0deb5e79197449e93616efa646fad702038e0518e66b7af3ade` |
-| `synthetic-pagination-second-page-deny.json`             | a clean first page + a dirty SECOND page denies                           | `90ec2dd0d53dcc6773791ee0eb9c2d34b3e9f06c2269f49b9b731f5dd8a13276` |
-| `synthetic-pagination-second-page-fails.json`            | a pagination failure is unevaluable, not clean                            | `fa52e5467464ad5d200ca2ad4ba228185b081efb038da6c4021ff4493bf790e9` |
-| `synthetic-head-moved.json`                              | a head sha that moved between pages is unevaluable                        | `5ad7c1b0246c3802e1611adbde33e744541fa75df38874ff1b79ede74b9235b6` |
-| `synthetic-rate-limit-exit.json`                         | a non-zero gh exit is unevaluable, naming what gh said                    | `c1e9b3be0a02f76c47f64b0145f45f7246a75d272601a52378fa5d6cf077aac4` |
-| `synthetic-graphql-error-body.json`                      | a GraphQL error in a 200 body is a failed read                            | `85635617d055f1f0365be1a6cda94e03f3511ed79d4ea43f4606dcac960203c1` |
-| `synthetic-gh-absent.json`                               | gh missing / unauthenticated is unevaluable at both tiers                 | `f1ba11df62549c187f741e4c89efc6f53dd59de1690a25854af1b13ec16a46b1` |
-| `synthetic-branch-resolution.json`                       | `pr: null` + branch resolves via the branch-keyed document                | `531901038599e5af2d797b0ef1f9032047137a9ec88a17832d3921572323f668` |
-| `synthetic-reviews-connection-missing.json`              | PR round 1 — NO `reviews` connection is unreadable, never an empty list   | `e31a29fb9248efce3118b9705c43e3686fbab2e0a8ca8c41b0d213ccb6b99d2d` |
-| `synthetic-threads-connection-missing.json`              | PR round 1 — NO `reviewThreads` connection is unreadable, never empty     | `258cbbf6e035327b06434c6aebf1f520e4bf81edc7f698640aabd95976ba238f` |
-| `synthetic-threads-pageinfo-missing.json`                | PR round 1 — a threads connection with NO `pageInfo` is never complete    | `b894dbbb322aa84274e0ff9c057603d13f6526fd4abf04f674e3d4144ab6a578` |
-| `synthetic-failing-check-and-null-commit-high.json`      | PR round 1 — a failing check beside a null-commit HIGH DENIES, both tiers | `e7b1f28c2f1664e86a9f5db6d5110d30474acd6a3caa3a7e4f310795d0fa8790` |
-| `synthetic-merge-state-behind-and-null-commit-high.json` | PR round 1 — BEHIND beside a null-commit HIGH is unevaluable (4 before 5) | `dc169f68771dd85ab201d4b4ec72eb9a0d07e6d0c48be02a322895ff92b270ca` |
+| File                                                     | Invariant                                                                              | sha256                                                             |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `synthetic-merge-state-clean.json`                       | `CLEAN` passes; no bot review passes 2–4 as a fact                                     | `8136afa01f76bd04ed3e0a3f8690349a2b70ce3f20f05b4077cba6833aded1ed` |
+| `synthetic-merge-state-has-hooks.json`                   | `HAS_HOOKS` passes                                                                     | `8a1b69d9aa25d13982506b1a7ef04d4a1678644c1b4d1713ab8df281483e44ea` |
+| `synthetic-merge-state-unstable.json`                    | `UNSTABLE` passes (a red non-required check is predicate 1's)                          | `dafb78bc277634c8676c3f5c21bcb4c5b67951ace6d09872fe993e22fa06575c` |
+| `synthetic-merge-state-behind.json`                      | `BEHIND` denies                                                                        | `658ce49ae31029acf909dae110eca1c25307e9de51b058f3d083269d1e1607a0` |
+| `synthetic-merge-state-dirty.json`                       | `DIRTY` denies                                                                         | `f37b6fc90cdd565c85f62226d18df9e72d79becf7c417a549fd0bd525312822b` |
+| `synthetic-merge-state-blocked.json`                     | `BLOCKED` denies                                                                       | `e08fd11ecd6bebc232915fd3b66a92a4f3bfdfc44c6352a4b26db098d46ff531` |
+| `synthetic-merge-state-draft.json`                       | `DRAFT` denies                                                                         | `16e3d7e86aaf18a8e9b671bb766a15293a1b3569ddd0ce516d50f68d3da05772` |
+| `synthetic-merge-state-unknown.json`                     | `UNKNOWN` is unevaluable (strict deny / pilot warn)                                    | `2319fedcf3a745ff0ef17d8744e06505d327069f09b267495f54b3d7d929d5b2` |
+| `synthetic-merge-state-unrecognised.json`                | a status this gate does not read is unevaluable, never allow                           | `2fd4497489b2076145eb94e36ce0aeab1a4da57f75d4acd8b36ad5f7dccdb2cc` |
+| `synthetic-zero-checks.json`                             | R5 — zero checks passes as a fact, with the count and one line                         | `66d15b0d2922983cc3440e4107fd1ee383d032c8f4db94406eea13b9abf346ba` |
+| `synthetic-failing-check.json`                           | a failing check denies at predicate 1                                                  | `468ec8090ae9b2864c2d41fba3381ebb8d5d49ccbb4c3d9b8c6bab014cb47af1` |
+| `synthetic-pending-check.json`                           | a still-running check denies at predicate 1                                            | `16eee29f522addf9cd2cbd6533a5847c5009a827056115d9699fae03c89cd15b` |
+| `synthetic-rollup-commit-mismatch.json`                  | F7 — a rollup off another commit is unevaluable, never green                           | `c9332e995e6f7d032509f4cb8c51523d2cd6890f9a44797e4e1ffb1b0a81c57d` |
+| `synthetic-no-commits.json`                              | F7 — no commits answered: the head rollup is unreadable                                | `0e148fa1c4d8033b9120860980ecef74036bcdfb722c22d56039c97e1b37f11f` |
+| `synthetic-rollup-no-contexts.json`                      | F7 — a rollup with no contexts connection is not the zero-checks fact                  | `be30068e3b11de5016e6e55d21de72c3185abf1c4479fea130c99090c0087e99` |
+| `synthetic-rollup-state-without-checks.json`             | F7 — `PENDING` over zero listed checks is unreadable, not R5                           | `5db28fa398dd59bbe441c5dafcc266e891446f483b2be72ce752cd5825ca98d3` |
+| `synthetic-rollup-state-null.json`                       | R2 F3 — a null rollup state over zero checks is unevaluable, not R5                    | `2513e7f7740d4d04403225f29b138c77de7408c321b8df9b2e15b3e3f29bd85c` |
+| `synthetic-rollup-state-non-string.json`                 | R2 F3 — a non-string rollup state over zero checks is unevaluable                      | `e855f687f3ff047c294c8e8dcc0f3a2b693745643111d5bb39f720a7d24c9788` |
+| `synthetic-high-inline-null-commit.json`                 | R2 F8 — a bot HIGH inline with a null commit is unevaluable, named                     | `ea38052619e3f330dbb9e9aa9c17abf4da43e4701883f671ec6d8d8cd185bae4` |
+| `synthetic-rollup-count-without-checks.json`             | R3 F9 — SUCCESS with `totalCount: 3` over an empty list is unevaluable                 | `fe5bd1af38fd7d3bf60711e08c0c8a08380debd18948a79ed7b09e186aa3fcc6` |
+| `synthetic-benign-fenced-marker-quote.json`              | R3 F4 — a Minor whose FENCE quotes the gate's markers reads NOT high                   | `38f3e306d9dc9f25260aaae12c223a7bf57f92f9ffa0d98f32a1641acc0ffd32` |
+| `synthetic-rollup-count-string.json`                     | R4 F3 — a string `totalCount` is not a count: unevaluable                              | `476bdc0e602ce0465b3d5d592ec8920fb16c5d74b689b462e62377a8b6ade21f` |
+| `synthetic-rollup-count-negative.json`                   | R4 F3 — a negative `totalCount` is not a count: unevaluable                            | `8cd319059f3ff4212794992406f336a2632ac794818be24fa01d50b0ecc88dcd` |
+| `synthetic-rollup-count-boolean.json`                    | R4 F3 — a boolean `totalCount` is not a count: unevaluable                             | `5fd985c7ae90517681e8c28225dd11d8b0187530fe0aaee8bcbd7a85f05e481a` |
+| `synthetic-rollup-count-mismatch.json`                   | R4 F3 — 3 claimed, 1 materialised: an incomplete read, unevaluable                     | `dbb3c5247437e1288d3ecb28173f0b1bb30041c8bf2c0f22ff360eabd3cdee27` |
+| `synthetic-unresolved-bot-thread.json`                   | an unresolved, non-outdated bot thread denies                                          | `7c649806438da9aed8e8dee3a66e2b3cfa6b9448456d46f0628dad1b2f879c40` |
+| `synthetic-resolved-outdated-human-threads.json`         | resolved / outdated / HUMAN threads never deny                                         | `888e8463fcbdf3a3f842ef397da197208efd26ad315d301ce2d6a39863e52446` |
+| `synthetic-stale-commit-high-inline.json`                | F2 — a HIGH inline applying to an OLDER commit does not deny                           | `36f5aa2491f589458b3154cd93b6bcf2ab9fb3ffa26d4bf6db77c1514b629fc6` |
+| `synthetic-head-commit-high-inline.json`                 | 2861 — the NEGATIVE CONTROL: a bare-resolved HIGH on head still denies                 | `c63f09074cb17ead40814888830148274888167bc54de4618fc9c1fb21ebeb4e` |
+| `synthetic-coderabbit-potential-issue.json`              | F9 — CodeRabbit's "Potential issue" reads as a HIGH marker                             | `0bfb9e486f7b63ba19b34595e10e96a78a16aaf372214c8c7e508cef60811667` |
+| `synthetic-changes-requested-standing.json`              | F6 — a later COMMENTED from the same reviewer does not supersede                       | `35fd5c9bf0135d4f6ccf4aecda8c491e229bb7549cd873d954ed3ebad1b30a39` |
+| `synthetic-changes-requested-superseded.json`            | a later `APPROVED` supersedes                                                          | `d601ccfaab99d314757f3b873472930a8508e0328463b6f0b8db7610a65dd720` |
+| `synthetic-pagination-second-page-deny.json`             | a clean first page + a dirty SECOND page denies                                        | `9c3c5b6514eec535757793a56439e67186c46f04925f677b6a0a680bf411a3db` |
+| `synthetic-pagination-second-page-fails.json`            | a pagination failure is unevaluable, not clean                                         | `d29b58119dca858c816c4cc0ef67fbdf5100157249bee9abea235216655e00e1` |
+| `synthetic-head-moved.json`                              | a head sha that moved between pages is unevaluable                                     | `85d47a690695eccc2001cbdcda01d7dfe595399c7653cae49fcb77ad908697c9` |
+| `synthetic-rate-limit-exit.json`                         | a non-zero gh exit is unevaluable, naming what gh said                                 | `c1e9b3be0a02f76c47f64b0145f45f7246a75d272601a52378fa5d6cf077aac4` |
+| `synthetic-graphql-error-body.json`                      | a GraphQL error in a 200 body is a failed read                                         | `85635617d055f1f0365be1a6cda94e03f3511ed79d4ea43f4606dcac960203c1` |
+| `synthetic-gh-absent.json`                               | gh missing / unauthenticated is unevaluable at both tiers                              | `f1ba11df62549c187f741e4c89efc6f53dd59de1690a25854af1b13ec16a46b1` |
+| `synthetic-branch-resolution.json`                       | `pr: null` + branch resolves via the branch-keyed document                             | `cb35d902e84b451db9a97aae771aed73e6e793f79d35ae0dc3f66a115215c683` |
+| `synthetic-reviews-connection-missing.json`              | PR round 1 — NO `reviews` connection is unreadable, never an empty list                | `726154fd448f8cee33f13d0c8ce924c01b90f90ebc1803b412569f029a21e7a4` |
+| `synthetic-threads-connection-missing.json`              | PR round 1 — NO `reviewThreads` connection is unreadable, never empty                  | `19ce999272b4174ec85a815d6e448d58e29e97f3ee059b731ab5d996dfff8b01` |
+| `synthetic-threads-pageinfo-missing.json`                | PR round 1 — a threads connection with NO `pageInfo` is never complete                 | `3d198f5ecf86f8b6992f0958645e89e84c77baea5ff99670d0a126380d55158a` |
+| `synthetic-failing-check-and-null-commit-high.json`      | PR round 1 — a failing check beside a null-commit HIGH DENIES, both tiers              | `8b125551aa4bf3d6bb5412bebc53e3652d2d7b88ac615c23ea3947299b178d00` |
+| `synthetic-merge-state-behind-and-null-commit-high.json` | PR round 1 — BEHIND beside a null-commit HIGH is unevaluable (4 before 5)              | `3cc1fb7e0bf9526eafa157fdf5a51ce717e69564779d21e8db569d618545706d` |
+| `synthetic-high-inline-discharged-pr-level.json`         | 2861 — a resolved HIGH on head + a non-bot PR-level comment after the root: discharged | `7100baddb7a254a43e93c5573e8dc3f67442476923076d0748d404e85c6cb0b0` |
+| `synthetic-high-inline-discharged-in-thread.json`        | 2861 — a resolved HIGH on head + a non-bot in-thread reply, no PR comment: discharged  | `6e0265e357245b4f43293febcbfd789cd13ce1eacf06a8858a3b06cf30ed8e3c` |
+| `synthetic-high-inline-deleted-author-reply.json`        | 2861 — a deleted-account (null author) reply is a human reply: discharged              | `1996d25a3d9655d0255c2ac78234456768e5bd30c6026b61ff802386aab3eb05` |
+| `synthetic-high-inline-unresolved-with-disposition.json` | 2861 — UNRESOLVED + a disposition is not discharged: predicate 2, highInline 1         | `7b0733a878dab565c444ee878d19751edd7838cacea806092ca7244f649a6d79` |
+| `synthetic-high-inline-mixed-discharge.json`             | 2861 — per-thread: one discharged beside one bare denies naming the bare one           | `0a15d048dc9841adb023f0f2c45fa7f3b52d48c3b5010ef777b60d4e4e83b09c` |
+| `synthetic-comments-second-page-evidence.json`           | 2861 — the PR-level evidence on the SECOND comments page, cursor sent                  | `cc59c412870756fa7d0b0f3eb990a0a1a9151b4fae7a6b6fdfbd81535da35265` |
+| `synthetic-high-inline-evidence-unread.json`             | 2861 — a resolved HIGH whose evidence the read could not settle is unevaluable         | `9c848dd9dc2d5883d2232a8f65d8b16ea1c829c2d0dc6c15a08d93a08995fe71` |
+| `synthetic-comments-connection-missing.json`             | 2861 — NO PR `comments` connection is unreadable, never "no evidence"                  | `2a2ffde7bf968bb3753a5e0504b5f08b4cf244fda6072e6c08c74e7d0c33f158` |
 
 ## The receipts in this file are machine-written
 

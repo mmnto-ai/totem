@@ -42,6 +42,13 @@
                   "endCursor": null
                 },
                 "nodes": []
+              },
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
               }
             }
           }

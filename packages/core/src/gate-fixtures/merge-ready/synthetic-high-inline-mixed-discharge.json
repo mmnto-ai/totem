@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4; the PR-level human comment PRE-dates the root and the only post-dating comments are a bot's, so neither is evidence",
+  "role": "mmnto-ai/totem#2861 — discharge is judged PER THREAD: two RESOLVED bot HIGHs on the head, one with a non-bot in-thread reply (discharged) and one bare (the only PR-level human comment PRE-dates both roots), deny at predicate 4 naming the bare one, highInline 1, dischargedHigh 1",
   "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -24,15 +24,9 @@
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": 2,
+                          "totalCount": 1,
                           "pageInfo": { "hasNextPage": false, "endCursor": null },
                           "nodes": [
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Verify (ubuntu-latest)",
-                              "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
-                            },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
@@ -57,18 +51,34 @@
                       "pageInfo": { "hasNextPage": false },
                       "nodes": [
                         {
-                          "author": { "__typename": "Bot", "login": "gemini-code-assist" },
-                          "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe engines range and the dependency range disagree.",
+                          "author": { "__typename": "Bot", "login": "greptile-apps" },
+                          "body": "<a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9\" align=\"top\"></a> **slugList validates only an empty list**",
                           "createdAt": "2026-09-08T03:00:00Z",
                           "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
                         },
                         {
-                          "author": { "__typename": "Bot", "login": "gemini-code-assist" },
-                          "body": "Bumping this finding — still applies.",
-                          "createdAt": "2026-09-08T03:02:00Z",
+                          "author": { "__typename": "User", "login": "satur8d" },
+                          "body": "Fixed — the owner/name check is added below the anchor.",
+                          "createdAt": "2026-09-08T03:15:00Z",
                           "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "isResolved": true,
+                    "isOutdated": false,
+                    "comments": {
+                      "pageInfo": { "hasNextPage": false },
+                      "nodes": [
+                        {
+                          "author": { "__typename": "Bot", "login": "coderabbitai" },
+                          "body": "_🛠️ Refactor suggestion_ | _🟠 Major_\n\n**The same finding from the other side: slugList never checks owner/name.**",
+                          "createdAt": "2026-09-08T03:00:30Z",
+                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
                         }
                       ]
                     }
@@ -81,14 +91,6 @@
                   {
                     "author": { "__typename": "User", "login": "satur8d" },
                     "createdAt": "2026-09-08T02:00:00Z"
-                  },
-                  {
-                    "author": { "__typename": "Bot", "login": "coderabbitai" },
-                    "createdAt": "2026-09-08T03:05:00Z"
-                  },
-                  {
-                    "author": { "__typename": "User", "login": "github-actions[bot]" },
-                    "createdAt": "2026-09-08T03:06:00Z"
                   }
                 ]
               }

@@ -66,12 +66,17 @@
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
                           "author": {
+                            "__typename": "Bot",
                             "login": "coderabbitai"
                           },
                           "body": "nit: consider renaming this local for symmetry with the caller.",
+                          "createdAt": "2026-09-08T03:00:00Z",
                           "commit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                           },
@@ -86,12 +91,17 @@
                     "isResolved": false,
                     "isOutdated": true,
                     "comments": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
                           "author": {
+                            "__typename": "Bot",
                             "login": "greptile-apps"
                           },
                           "body": "nit: consider renaming this local for symmetry with the caller.",
+                          "createdAt": "2026-09-08T03:00:00Z",
                           "commit": {
                             "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                           },
@@ -106,12 +116,17 @@
                     "isResolved": false,
                     "isOutdated": false,
                     "comments": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
                           "author": {
+                            "__typename": "User",
                             "login": "satur8d"
                           },
                           "body": "I would rather keep this as is.",
+                          "createdAt": "2026-09-08T03:00:00Z",
                           "commit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                           },
@@ -123,6 +138,13 @@
                     }
                   }
                 ]
+              },
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
               }
             }
           }

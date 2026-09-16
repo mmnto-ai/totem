@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "R4 F3 — a negative totalCount is not a count: unevaluable",
-  "synthesizedAt": "2026-09-08T07:05:39.879Z",
+  "role": "mmnto-ai/totem#2861 — an answer with NO PR-level `comments` connection is an unreadable page (unevaluable, named), never 'no evidence': the evidence connection is held to the same bar as reviews and reviewThreads",
+  "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -24,37 +24,25 @@
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": -1,
-                          "pageInfo": {
-                            "hasNextPage": false,
-                            "endCursor": null
-                          },
-                          "nodes": []
+                          "totalCount": 1,
+                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Totem Lint",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS"
+                            }
+                          ]
                         }
                       }
                     }
                   }
                 ]
               },
-              "reviews": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
-                "nodes": []
-              },
+              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
               "reviewThreads": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
-                "nodes": []
-              },
-              "comments": {
-                "pageInfo": {
-                  "hasNextPage": false,
-                  "endCursor": null
-                },
+                "pageInfo": { "hasNextPage": false, "endCursor": null },
                 "nodes": []
               }
             }

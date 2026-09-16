@@ -66,12 +66,17 @@
                     "isResolved": false,
                     "isOutdated": false,
                     "comments": {
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
                           "author": {
+                            "__typename": "User",
                             "login": "satur8d"
                           },
                           "body": "looks fine",
+                          "createdAt": "2026-09-08T03:00:00Z",
                           "commit": {
                             "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                           },
@@ -83,6 +88,13 @@
                     }
                   }
                 ]
+              },
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
               }
             }
           }
