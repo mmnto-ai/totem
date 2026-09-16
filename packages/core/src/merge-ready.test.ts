@@ -10,7 +10,7 @@
  * disposition path while its anchor survives on the head — the discharge
  * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
  * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
- * ADR-109 false-positive budget. The other 52 are synthetic and labelled
+ * ADR-109 false-positive budget. The other 54 are synthetic and labelled
  * `synthetic-` in their names — one per invariant the captures cannot
  * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
@@ -172,8 +172,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(53);
-    expect(files.length).toBe(58);
+    expect(synthetic.length).toBe(54);
+    expect(files.length).toBe(59);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -530,10 +530,12 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     // The reason names the LINE the read looked for — with this thread's own
     // id — never "no disposition exists" (r2-f3: a round disposition that
     // answered other threads is a real event).
-    expect(e.verdict.reason).toMatch(/resolved, but no non-bot reply in its thread/);
     expect(e.verdict.reason).toContain('"disposition: 1001 <verb>"');
+    expect(e.verdict.reason).toMatch(/and no non-bot reply in its thread/);
     expect(e.verdict.reason).toMatch(/a round disposition that did not name this thread/);
-    expect(e.verdict.provenance.matched).toMatch(/resolved, but no non-bot reply in its thread/);
+    // The id survives the 160-character bound on `matched` because the line
+    // LEADS the clause (r3-f3: a clause that led with prose cut it off).
+    expect(e.verdict.provenance.matched).toContain('"disposition: 1001 <verb>"');
     expect(e.notices.some((n) => n.includes('discharged'))).toBe(false);
     // The fixture really carries the post-dating human chatter the field has.
     const fixture = loadFixture('synthetic-head-commit-high-inline.json');
@@ -600,6 +602,22 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.detail.dischargedHigh).toBe(1);
     expect(e.detail.dischargedBy).toEqual({ inThreadReply: 1, prLevelDisposition: 0 });
     expect(e.notices.join('\n')).toContain('1 by a non-bot in-thread reply');
+  });
+
+  it('a root with no readable databaseId is a thread no line can name — it stays applying, and the page stays readable (r3-f4)', () => {
+    // The schema types `databaseId` nullable. A page-scoped refusal would
+    // route the PR into the unevaluable class, which pilot maps to `warn` —
+    // the same downgrade fold 1 removed for the incomplete window. So the
+    // thread alone fails closed, at both tiers, and the reason says why.
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-high-inline-root-id-missing.json', { tier });
+      expect(e.verdict.disposition, tier).toBe('deny');
+      expect(e.verdict.provenance.ref, tier).toBe('high-severity-inline');
+      expect(e.verdict.reason, tier).toMatch(/no line can name it/);
+      expect(e.detail.highInline, tier).toBe(1);
+      expect(e.detail.dischargedHigh, tier).toBe(0);
+      expect(e.notices.join('\n'), tier).not.toMatch(/could not derive/);
+    }
   });
 
   it('evidence FOUND discharges even when the thread window is incomplete (f7)', () => {
@@ -684,11 +702,30 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(dispositionedRootIds(`| ${line} |`)).toEqual([]);
     expect(dispositionedRootIds('the disposition: 4000747291 was declined')).toEqual([]);
     expect(dispositionedRootIds('dispositions: 4000747291 declined')).toEqual([]);
-    // An HTML comment is stripped before the read; an id glued to more digits
-    // is that longer id, and a trailing letter ends the id.
+    // An HTML comment is stripped before the read — terminated, or left open
+    // to the end of the body the way a renderer hides it (r3-f9).
     expect(dispositionedRootIds(`<!--\n${line}\n-->`)).toEqual([]);
+    expect(dispositionedRootIds(`<!-- note\n${line}`)).toEqual([]);
+    expect(dispositionedRootIds(`${line}\n<!-- note`)).toEqual([4000747291]);
+    // The id is the exact decimal the seat copied: a longer run of digits is
+    // a different id, and nothing coerced — a leading zero, a fraction, a
+    // glued letter or dash is not this id (r3-f5: `Number()` had equated
+    // `01001`, `1001.5` and `1001x` to 1001).
     expect(dispositionedRootIds('disposition: 40007472911 declined')).toEqual([40007472911]);
-    expect(dispositionedRootIds('disposition: 4000747291x declined')).toEqual([4000747291]);
+    for (const lenient of [
+      'disposition: 04000747291 declined',
+      'disposition: 4000747291.0 declined',
+      'disposition: 4000747291.5 declined',
+      'disposition: 4000747291x declined',
+      'disposition: 4000747291-fixed',
+      'disposition: +4000747291 declined',
+      'disposition:4000747291 declined',
+      'Disposition: 4000747291 declined',
+    ]) {
+      expect(dispositionedRootIds(lenient), lenient).toEqual([]);
+    }
+    expect(dispositionedRootIds('disposition: 4000747291')).toEqual([4000747291]);
+    expect(dispositionedRootIds('disposition: 4000747291\r\n')).toEqual([4000747291]);
     expect(dispositionedRootIds('no line at all')).toEqual([]);
     // A fenced QUOTE of a prior disposition names the same ids it named — the
     // disclosed residue of accepting fenced lines; it can only re-name threads
@@ -719,12 +756,11 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
       expect(e.verdict.disposition, tier).toBe('deny');
       expect(e.verdict.provenance.ref, tier).toBe('high-severity-inline');
       expect(e.verdict.reason, tier).toMatch(
-        /no non-bot reply in the ten comments read \(the thread has more\)/,
+        /no non-bot reply in the ten comments read \(the thread has more/,
       );
-      // The discriminator sits inside the 160-character bound on `matched`.
-      expect(e.verdict.provenance.matched, tier).toMatch(
-        /no non-bot reply in the ten comments read \(the thread has more\)/,
-      );
+      expect(e.verdict.reason, tier).toContain('"disposition: 1001 <verb>"');
+      // The id sits inside the 160-character bound on `matched` (r3-f3).
+      expect(e.verdict.provenance.matched, tier).toContain('"disposition: 1001 <verb>"');
       expect(e.detail.highInline, tier).toBe(1);
       expect(e.detail.dischargedHigh, tier).toBe(0);
       expect(e.notices.join('\n'), tier).not.toMatch(/could not derive/);

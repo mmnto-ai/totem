@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "327504d72f707926d6b08196612f286b64fee61b",
+  "readAt": "2026-09-16T02:43:55Z",
+  "findings": [
+    {
+      "id": "r3-f1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 177,
+      "claim": "Four public surfaces state in the present indicative that the review-reply skill ALREADY emits the per-thread line; at this head the template (init-templates.ts:2871) does not mention it — the grammar exists in exactly one shipped place, the deny string.",
+      "counterexample": "A seat that opens its installed /review-reply skill finds no instruction to write the line. FOLDED (fold 4): the step-2 paragraph lands on this branch and the skill is re-stamped in the same PR."
+    },
+    {
+      "id": "r3-f2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 420,
+      "claim": "The id's provenance sentence names two commands; totem triage-pr carries rootCommentId internally and prints no id (formatTriageOutput has no id column; verified live on 2871). resolve-threads does print id= on every row.",
+      "counterexample": "Live: triage-pr 2871 output contains zero occurrences of 4000747291; resolve-threads 2871 prints id=4000747291. FOLDED (fold 4): every surface names resolve-threads as the printing command and says triage-pr prints none."
+    },
+    {
+      "id": "r3-f3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1817,
+      "claim": "The comment, changeset, spec and commit assert the id survives the 160-char matched bound; executed on the built core the id begins at character 161 (complete window) and 190 (incomplete), so matched ends before it at both tiers, and no test pins matched for predicate 4.",
+      "counterexample": "synthetic-head-commit-high-inline.json strict: matched (160) ends '…naming it (a…'. FOLDED (fold 4): the line leads the clause; tests pin the id on matched for both clauses."
+    },
+    {
+      "id": "r3-f4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 710,
+      "claim": "The strict databaseId arm rejects the whole page when ANY thread root lacks a safe-integer id — including threads predicate 4 never reads — routing the evaluation into the unevaluable class, which pilot maps to warn; the schema types databaseId nullable, unlike body and createdAt.",
+      "counterexample": "synthetic-failing-check.json plus one resolved+outdated human-rooted thread with no databaseId: pilot -> warn/unevaluable where the control with an id denies at predicate 1. FOLDED (fold 4): rootId is nullable; a root without an id is a thread no line can name (fail-closed for that thread), the page stays readable; fixture synthetic-high-inline-root-id-missing.json."
+    },
+    {
+      "id": "r3-f5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 450,
+      "claim": "Number(match) plus a digit-only lookahead equate 01001, 0000001001, 1001.0, 1001.5, 1001x and 1001-fixed to 1001.",
+      "counterexample": "Each of those lines discharges root 1001 on the built core. FOLDED (fold 4): the token is [1-9]\\d* followed by a blank or line end; tests."
+    },
+    {
+      "id": "r3-f6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 667,
+      "claim": "readThreads' docstring omits databaseId from its strict list while the changeset over-states it as required on every comment; the id is required on the ROOT only.",
+      "counterexample": "Deleting a reply's databaseId still discharges; deleting the root's made the page unreadable. FOLDED (fold 4): the docstring and the changeset say root-scoped and thread-scoped."
+    },
+    {
+      "id": "r3-f7",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 13,
+      "claim": "The test header says 52 synthetic fixtures; the assertion says 53 (58 files).",
+      "counterexample": "NOT CONSTRUCTED: arithmetic. FOLDED (fold 4): 54 / 59 after the new fixture, header and assertion agree."
+    },
+    {
+      "id": "r3-f8",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 157,
+      "claim": "The instants sentence says the 00:47 group is six new plus the negative control; the bytes say seven new, with the negative control in the 01:17 group.",
+      "counterexample": "NOT CONSTRUCTED: prose vs bytes. FOLDED (fold 4)."
+    },
+    {
+      "id": "r3-f9",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 449,
+      "claim": "An unterminated <!-- is not stripped so a hidden line counts; and 'nothing else on the PR does' is an inference stated as fact (the gate's own reason inside double quotes is the load-bearing guard).",
+      "counterexample": "dispositionedRootIds('<!-- note\\ndisposition: 1001 fixed') -> [1001]. FOLDED (fold 4): an unterminated comment is stripped to the end of the body; the sentence is hedged and names the guard."
+    },
+    {
+      "id": "r3-f10",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1819,
+      "claim": "The reason names one id (first.rootId) while the record says it names the id each row waits on; six of fourteen rows apply more than one HIGH.",
+      "counterexample": "NOT CONSTRUCTED: module-wide first-failure convention. FOLDED (fold 4): the reason says the first of N and that a resolve-threads dry run lists every root id; the record says 'the first id'."
+    },
+    {
+      "id": "r3-f11",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 625,
+      "claim": "A null-author PR-level comment carrying the line discharges; disclosed only in the fold-2 record, and readAuthor's docstring justifies the rule for in-thread replies only.",
+      "counterexample": "author: null with 'disposition: 1001 declined' after the root -> allow. FOLDED (fold 4): readAuthor's comment discloses the rule on both surfaces and names it unreachable under the id."
+    },
+    {
+      "id": "r3-f12",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1466,
+      "claim": "createdAt is the creation instant and an edit does not move it, so a line edited into a comment created after the root reads as posted then; unstated.",
+      "counterexample": "NOT CONSTRUCTED: an edit is a mutation. FOLDED (fold 4): disclosed in dischargeOf's docstring; the calibration lines were posted as new comments."
+    }
+  ],
+  "folded": [
+    "r3-f1",
+    "r3-f2",
+    "r3-f3",
+    "r3-f4",
+    "r3-f5",
+    "r3-f6",
+    "r3-f7",
+    "r3-f8",
+    "r3-f9",
+    "r3-f10",
+    "r3-f11",
+    "r3-f12"
+  ],
+  "verdict": "Leg 3 on the ruled fold (4022fd30..327504d7, the per-thread disposition line): 0 BLOCKING, 4 MATERIAL, 8 MINOR. The id rule CLOSES the class the two earlier blocking findings named — the leg executed the full fail-open matrix on the built core (pre-root and equal-instant lines, Bot / [bot] / exact-list authors, blockquote / list / table / span shapes, prefix and superstring ids, matchAll lastIndex, dedupe order, the safe-integer boundary) and every arm held; both live calibration lines verify against GitHub and discharge through the built CLI; the negative control goes red on the fold-2 code. What it found is provenance claims and one design surface: r3-f1 the template paragraph was not yet on the branch while four surfaces said the skill emits the line (folded: the paragraph lands in this PR, the skill re-stamped); r3-f2 triage-pr prints no id (folded: resolve-threads is the one printing command); r3-f3 the id did not survive the 160-char matched bound (folded: the line leads the clause; tests pin matched); r3-f4 the databaseId strict arm refused the whole page and mapped to pilot warn (folded: thread-scoped — a root without an id stays applying, the page stays readable; fixture added); r3-f5 Number() coerced 01001 / 1001.5 / 1001x to 1001 (folded: exact decimal token, tests); r3-f6 readThreads docstring and the changeset over-stated the strict list (folded); r3-f7 the test header said 52 (folded: 54 after the new fixture); r3-f8 the README instants sentence miscounted (folded); r3-f9 an unterminated HTML comment was not stripped and the 'nothing else names it' sentence was stated as fact (folded: stripped to end of body; hedged as inference); r3-f10 the reason names one id where several apply (folded: says the first of N and where the rest are listed); r3-f11 the null-author PR-level rule was disclosed only in a fold-2 line (folded: readAuthor docstring); r3-f12 createdAt is the creation instant, an edited-in line reads as posted then (folded: disclosed in dischargeOf). Convergence NAMED by the leg on the gate semantics; the seat names convergence on the provenance class after this fold and presents for merge."
+}

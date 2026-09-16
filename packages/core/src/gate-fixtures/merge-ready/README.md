@@ -153,11 +153,12 @@ All synthesized `2026-09-08T03:55:11.894Z`, except the three fold-round-2 rows
 (`2026-09-08T05:42:31.591Z`) and the two fold-round-3 rows
 (`2026-09-08T06:26:38.783Z` and `2026-09-08T06:25:27.919Z`) and the four fold-round-4 rows
 (`2026-09-08T07:05:39.879Z`) and the five PR-round-1 rows (`2026-09-08T21:08:06.765Z`,
-mmnto-ai/totem#2844) and the ten mmnto-ai/totem#2861 rows — seven at
-`2026-09-16T00:47:11.787Z` (six new and the negative control re-authored), and three at
-`2026-09-16T01:17:05.889Z` for the fold that added the disposition line (the bare-resolve
-window fixture and the negative control re-authored, and the discharged-window fixture
-created) — at the end of the table. Each covers an invariant the captures cannot.
+mmnto-ai/totem#2844) and the eleven mmnto-ai/totem#2861 rows — seven at
+`2026-09-16T00:47:11.787Z` (all new), three at `2026-09-16T01:17:05.889Z` for the fold that
+added the disposition line (the negative control and the bare-resolve window fixture
+re-authored, the discharged-window fixture created), and one at `2026-09-16T02:50:30.916Z`
+for the ruled fold (the missing-root-id fixture) — at the end of the table. Each covers an
+invariant the captures cannot.
 
 | File                                                      | Invariant                                                                                                                                | sha256                                                             |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -212,6 +213,7 @@ created) — at the end of the table. Each covers an invariant the captures cann
 | `synthetic-high-inline-mixed-discharge.json`              | 2861 — per-thread: one discharged beside one bare denies naming the bare one                                                             | `2a94d48942ad0667aaa0bb24cddb9050e85007e0263fb3e25426d06d805d1d0c` |
 | `synthetic-comments-second-page-evidence.json`            | 2861 — the PR-level evidence on the SECOND comments page, cursor sent                                                                    | `6207e1fe862fc2d02e8cccee859a72ab343c205eafad678868070fe563b9c39b` |
 | `synthetic-high-inline-resolved-window-incomplete.json`   | 2861 — a resolved HIGH with more comments than the window and no evidence read DENIES at both tiers, naming the window                   | `c5d93a3d0a0bd7684ae07a73665043bd4c286a60876672032621a78ab4b393a1` |
+| `synthetic-high-inline-root-id-missing.json`              | 2861 — a root with no readable databaseId is a thread no line can name: it stays applying, the page stays readable                       | `628e4cce07477a8ed4258d2d2dd8f45a13ad1ad7e0a1e8dec6176d8095480b77` |
 | `synthetic-high-inline-discharged-window-incomplete.json` | 2861 — evidence FOUND discharges even when the window is incomplete (pins the invariant; kills the completeness-first mutant)            | `e1b4fb2ef801bdac0a6d4d14c8fd884d22dd2353aa87160178b8b4c8c06ef3f0` |
 | `synthetic-comments-connection-missing.json`              | 2861 — NO PR `comments` connection is unreadable, never "no evidence"                                                                    | `2a2ffde7bf968bb3753a5e0504b5f08b4cf244fda6072e6c08c74e7d0c33f158` |
 

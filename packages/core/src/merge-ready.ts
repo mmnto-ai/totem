@@ -169,8 +169,10 @@ export interface MergeReadyOptions {
  * that one observation, not a transcribed schema guarantee, which is why the
  * reply test below is ALSO temporal (a reply counts only when its `createdAt`
  * follows the root's; across sixteen live PRs no reply preceded its root). The
- * root's `databaseId` is its REST comment id — the id `totem triage-pr` and
- * `totem resolve-threads` print, and the id a PR-level disposition line names.
+ * root's `databaseId` is its REST comment id — the `id=` a `totem
+ * resolve-threads` dry-run row prints (`totem triage-pr` carries it internally
+ * and prints none: the third leg's r3-f2), and the id a PR-level disposition
+ * line names.
  * The PR-level `comments` connection is the other evidence surface: a non-bot
  * comment created after a thread's root whose BODY carries a
  * `disposition: <root comment id> <verb>` line for THAT thread (the review-reply
@@ -373,8 +375,15 @@ interface ThreadEntry {
   isOutdated: boolean;
   rootLogin: string | null;
   rootBody: string;
-  /** The root comment's REST id (`databaseId`) — what a PR-level `disposition:` line names (mmnto-ai/totem#2861). */
-  rootId: number;
+  /**
+   * The root comment's REST id (`databaseId`) — what a PR-level `disposition:`
+   * line names (mmnto-ai/totem#2861). Null when the answer carried none: the
+   * schema types the field nullable, so a root without one is a THREAD no
+   * line can name (fail-closed for that thread), never an unreadable page —
+   * a page-scoped refusal would route a PR into the unevaluable class, which
+   * pilot maps to `warn` (the third leg's r3-f4).
+   */
+  rootId: number | null;
   /** The root comment's `createdAt` — the instant a PR-level disposition must post AFTER (mmnto-ai/totem#2861). */
   rootCreatedAt: string;
   /**
@@ -417,36 +426,46 @@ interface PrCommentEntry {
  *     disposition: <root comment id> <verb>
  *
  * — the id being the thread root's REST comment id (`databaseId`; the `id=`
- * on a `totem resolve-threads` row, the `rootCommentId` `totem triage-pr`
- * prints) and the verb the round's word for it (fixed, declined, deferred,
+ * on a `totem resolve-threads` dry-run row, the one command that prints it —
+ * `totem triage-pr` carries it internally and prints none) and the verb the
+ * round's word for it (fixed, declined, deferred,
  * nit, extracted, held). Predicate 4 reads the ID: a PR-level comment names
- * a thread when a line carries that thread's root id, and nothing else on the
- * PR does — not a trigger comment, a gate-read note, a merge note, a bot's
- * summary, or a round disposition that answered OTHER threads. That last case
- * is why the line exists: two earlier reads keyed the arm to the ROUND
+ * a thread when a line carries that thread's root id — and a round
+ * disposition that answered OTHER threads does not name this one. That last
+ * case is why the line exists: two earlier reads keyed the arm to the ROUND
  * (post-dating alone, then post-dating plus the round's `local-lane:` line),
  * and both let a bare resolve of a HIGH the round never addressed discharge —
  * the two falsification legs' blocking findings, executed on the built core.
  * Naming the thread is what the ruling asked for, and an id is exact where a
- * marker was a shape.
+ * marker was a shape. By construction no other surface writes a line of this
+ * shape: a trigger comment, a gate-read note or a merge note carries no id at
+ * line start, and the gate's own deny reason quotes the line inside double
+ * quotes mid-sentence (the third leg tried the reason verbatim, fenced,
+ * unquoted, and a pasted resolve-threads row, and none read as a line) — an
+ * inference about bodies, made safe by the id rather than proven.
  *
- * Read against the raw body with HTML comments removed, at line start with
- * leading blanks allowed, anywhere in the body — fenced included, because the
- * skills render machine lines in text fences. A blockquoted, listed or tabled
- * line, or one inside an inline span, is not at line start and does not
- * count. The verb is not validated here: the gate answers "was this thread
- * dispositioned", not "how".
+ * Read against the raw body with HTML comments removed (a terminated
+ * `<!-- … -->`, and an unterminated `<!--` to the end of the body, the way a
+ * renderer hides it), at line start with leading blanks allowed, anywhere in
+ * the body — fenced included, because the skills render machine lines in text
+ * fences. A blockquoted, listed or tabled line, or one inside an inline span,
+ * is not at line start and does not count. The id is the decimal the seat
+ * copied: no leading zero, no sign, no fraction, nothing glued to it — the
+ * third leg's r3-f5 showed `Number()` equating `01001`, `1001.5` and `1001x`
+ * to 1001, so the token is matched exactly and never coerced. The verb is not
+ * validated here: the gate answers "was this thread dispositioned", not
+ * "how".
  */
-const DISPOSITION_LINE = /^[ \t]*disposition:[ \t]+(\d+)(?![\d])/gm;
+const DISPOSITION_LINE = /^[ \t]*disposition:[ \t]+([1-9]\d*)(?=[ \t]|\r?$)/gm;
 
 /**
- * The root comment ids a PR-level comment body names on disposition lines.
- * Exported for the tests, so they assert the shipped predicate and not a copy
- * of it.
+ * The root comment ids a PR-level comment body names on disposition lines,
+ * in first-seen order, without duplicates. Exported for the tests, so they
+ * assert the shipped predicate and not a copy of it.
  */
 export function dispositionedRootIds(body: string): number[] {
   const ids: number[] = [];
-  const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
+  const stripped = body.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--[\s\S]*$/, '');
   for (const match of stripped.matchAll(DISPOSITION_LINE)) {
     const id = Number(match[1]);
     if (Number.isSafeInteger(id) && !ids.includes(id)) ids.push(id);
@@ -645,7 +664,11 @@ function readAuthor(
   }
   // On every capture the `Bot` typename is the arm that decides for a review
   // bot (their GraphQL logins carry no suffix); the two login arms are the
-  // verb's belt-and-braces, kept so the two consumers of the rule agree.
+  // verb's belt-and-braces, kept so the two consumers of the rule agree. The
+  // null-author rule applies on BOTH surfaces: a deleted account's PR-level
+  // comment carrying a disposition line discharges the thread it names — not
+  // guarded, judged unreachable (a removed App's summary would have to carry
+  // this thread's root id at line start; the third leg's r3-f11).
   return {
     ok: true,
     login,
@@ -668,7 +691,11 @@ function readAuthor(
  * comments window's own `pageInfo`, the root's `createdAt`, and every
  * author's `__typename` — a thread missing any of them is unreadable, never
  * "complete with no reply", because that is the shape a discharge would fail
- * open on.
+ * open on. The root's `databaseId` is the one field read the other way: the
+ * schema types it nullable, and a root without one cannot be named by any
+ * line, so that THREAD stays applying (fail-closed) while the page stays
+ * readable — refusing the page would send a PR into the unevaluable class and
+ * pilot's `warn` (r3-f4).
  */
 function readThreads(connection: Record<string, unknown> | null): {
   entries: ThreadEntry[];
@@ -704,13 +731,13 @@ function readThreads(connection: Record<string, unknown> | null): {
     if (rootCreatedAt === null) {
       return unreadable('carried a thread whose root comment has no createdAt');
     }
-    // The root's REST id is what a disposition line names; a root without one
-    // cannot be matched to any line, so the thread is unreadable — never
-    // "not dispositioned" (mmnto-ai/totem#2861).
-    const rootId = root.databaseId;
-    if (typeof rootId !== 'number' || !Number.isSafeInteger(rootId)) {
-      return unreadable('carried a thread whose root comment has no databaseId');
-    }
+    // The root's REST id is what a disposition line names; a root without a
+    // safe-integer one cannot be matched to any line and its thread stays
+    // applying — thread-scoped, never a page refusal (mmnto-ai/totem#2861).
+    const rootId =
+      typeof root.databaseId === 'number' && Number.isSafeInteger(root.databaseId)
+        ? root.databaseId
+        : null;
     const rootAt = Date.parse(rootCreatedAt);
     let humanReplies = 0;
     for (const reply of comments.slice(1)) {
@@ -1444,7 +1471,11 @@ type Discharge = 'in-thread-reply' | 'pr-level-disposition' | 'none';
  * discharge it — so the PR-level arm reads the line that names this thread.
  * A thread the verb resolved on the strength of a trigger therefore stays
  * applying here until a disposition naming it is posted: the stricter side of
- * the asymmetry, by design. And an unparseable
+ * the asymmetry, by design. `createdAt` is a comment's CREATION instant and an
+ * edit does not move it, so a line edited into a comment created after the
+ * root reads as posted then, and a line edited into one created before the
+ * root never counts (r3-f12) — a late line is posted as a new comment, which
+ * is what the calibration replay did. And an unparseable
  * instant on either side is `none` here as it is there — the conservative
  * direction — never an unreadable page (the strict reader has already refused
  * a root without a string `createdAt`).
@@ -1461,6 +1492,7 @@ function dischargeOf(thread: ThreadEntry, prComments: readonly PrCommentEntry[])
   if (thread.humanReplies > 0) return 'in-thread-reply';
   const rootAt = Date.parse(thread.rootCreatedAt);
   if (Number.isNaN(rootAt)) return 'none';
+  if (thread.rootId === null) return 'none';
   for (const c of prComments) {
     if (c.isBot || !c.dispositions.includes(thread.rootId)) continue;
     const at = Date.parse(c.createdAt);
@@ -1811,19 +1843,30 @@ function firstFailure(
   if (applyingHigh.length > 0) {
     const first = applyingHigh[0]!;
     // Name the bare-resolve shape when that is what the first one is — the
-    // operator's cure differs (post the disposition) from the unanswered
+    // operator's cure differs (post the disposition line) from the unanswered
     // shape's (answer the finding) — and name the window when the thread had
-    // more comments than the read fetched. The clause sits BEFORE the quoted
-    // body so it survives the 160-character bound on `provenance.matched`
-    // (mmnto-ai/totem#2861 leg f6); the body is what gets cut.
+    // more comments than the read fetched. The LINE comes first in the clause
+    // and the clause before the quoted body, so the id survives the
+    // 160-character bound on `provenance.matched` (the third leg's r3-f3: a
+    // clause that led with prose cut the id off at character 161); the tests
+    // pin the id on `matched` for both clauses. With more than one applying,
+    // the reason names the first and says where the rest are listed.
+    const line =
+      first.rootId === null
+        ? 'no line can name it (its root comment id was not readable)'
+        : `no "disposition: ${first.rootId} <verb>" line after its root`;
     const bareResolve = !first.isResolved
       ? ''
       : first.commentsComplete
-        ? ` — resolved, but no non-bot reply in its thread and no PR-level comment after its root naming it (a "disposition: ${first.rootId} <verb>" line; a bare resolve, or a round disposition that did not name this thread, does not discharge a HIGH; mmnto-ai/totem#2861)`
-        : ` — resolved, no non-bot reply in the ten comments read (the thread has more) and no PR-level comment after its root naming it (a "disposition: ${first.rootId} <verb>" line; mmnto-ai/totem#2861)`;
+        ? ` — resolved, ${line} and no non-bot reply in its thread (a bare resolve, or a round disposition that did not name this thread, does not discharge a HIGH; mmnto-ai/totem#2861)`
+        : ` — resolved, ${line} and no non-bot reply in the ten comments read (the thread has more; mmnto-ai/totem#2861)`;
+    const rest =
+      applyingHigh.length > 1
+        ? ` (the first of ${applyingHigh.length}; a \`totem resolve-threads\` dry run lists every root id)`
+        : '';
     return {
       predicate: 'high-severity-inline',
-      evidence: `${applyingHigh.length} HIGH/Major bot inline(s) still applying to the head commit${bareResolve} — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
+      evidence: `${applyingHigh.length} HIGH/Major bot inline(s) still applying to the head commit${bareResolve} — the first is ${first.rootLogin ?? 'a bot'}${rest}: "${bounded(first.rootBody)}"`,
     };
   }
 
