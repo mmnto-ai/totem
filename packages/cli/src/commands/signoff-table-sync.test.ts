@@ -5,7 +5,9 @@
  * Kimi seats read "not seated" in the table for weeks after they were seated
  * (mmnto-ai/totem#2865). This lock holds the two RENDERINGS in this repository
  * to each other so a seat added to one copy alone fails here rather than in a
- * poll.
+ * poll — and holds the ASSOCIATIONS, not just the id sets: a seat in the wrong
+ * repository row or the wrong vendor column fails too (the Greptile P2 on the
+ * first cut: a flat set comparison let a mis-filed seat through green).
  *
  * TODAY the table LEADS the map by exactly the four Kimi seats the roster of
  * record seats (`doctrine/cohort-roles.md` § 1.1 in the strategy repository,
@@ -21,6 +23,24 @@ import { describe, expect, it } from 'vitest';
 import { knownCohortAgents } from '@mmnto/totem';
 
 import { SIGNOFF_SKILL_CONTENT } from './init-templates.js';
+
+/**
+ * The repo → seat-id shorthand of § 1.2 of the roster (`<shorthand>-<vendor>`),
+ * which is how a flat id set is grouped back into repositories. `totem` must
+ * be matched as a whole shorthand, never as a prefix of `totem-strategy`'s
+ * seats — the grouping below splits on the LAST hyphen.
+ */
+const SHORTHAND: Record<string, string> = {
+  totem: 'totem',
+  'totem-strategy': 'strategy',
+  'liquid-city': 'lc',
+  arhgap11: 'arhgap11',
+  'totem-status': 'status',
+  'totem-playground': 'playground',
+};
+
+/** The vendor each column of the table renders, in column order. */
+const COLUMNS = ['claude', 'gemini', 'kimi'] as const;
 
 /** The table rows of step 2a: `| \`repo\` | cell | cell | cell |`, one per repo. */
 function tableRows(): Array<{ repo: string; cells: string[] }> {
@@ -45,42 +65,63 @@ function seatOf(cell: string): string | null {
   return match === null ? null : match[1]!;
 }
 
+/** `<shorthand>-<vendor>` split on the LAST hyphen. */
+function splitSeat(seat: string): { shorthand: string; vendor: string } {
+  const at = seat.lastIndexOf('-');
+  return { shorthand: seat.slice(0, at), vendor: seat.slice(at + 1) };
+}
+
 const KIMI_SEATS = ['lc-kimi', 'status-kimi', 'strategy-kimi', 'totem-kimi'];
 
 describe('signoff step 2a table ↔ COHORT_AGENT_MAP (mmnto-ai/totem#2865)', () => {
   const rows = tableRows();
 
   it('parses the table: one row per cohort repo, three vendor cells each', () => {
-    expect(rows.map((r) => r.repo)).toEqual([
-      'totem',
-      'totem-strategy',
-      'liquid-city',
-      'arhgap11',
-      'totem-status',
-      'totem-playground',
-    ]);
+    expect(rows.map((r) => r.repo)).toEqual(Object.keys(SHORTHAND));
     for (const row of rows) {
       expect(row.cells, row.repo).toHaveLength(3);
     }
   });
 
-  it('every seat the map carries is in the table, and the table leads the map by exactly the four Kimi seats', () => {
-    const inTable = new Set<string>();
+  it('every seat sits in ITS repository row and ITS vendor column', () => {
+    // A seat filed under the wrong repo or the wrong column keeps a flat set
+    // unchanged; the association is what a session reads off the table.
     for (const row of rows) {
-      for (const cell of row.cells) {
+      row.cells.forEach((cell, column) => {
         const seat = seatOf(cell);
-        if (seat !== null) inTable.add(seat);
-      }
+        if (seat === null) return;
+        const { shorthand, vendor } = splitSeat(seat);
+        expect(shorthand, `${row.repo} column ${COLUMNS[column]}: ${seat}`).toBe(
+          SHORTHAND[row.repo],
+        );
+        expect(vendor, `${row.repo} column ${COLUMNS[column]}: ${seat}`).toBe(COLUMNS[column]);
+      });
     }
-    // `knownCohortAgents()` with no workspace is exactly the map's union —
-    // no seat dir on this machine can widen it.
-    const inMap = new Set(knownCohortAgents());
-    const mapOnly = [...inMap].filter((s) => !inTable.has(s)).sort();
-    const tableOnly = [...inTable].filter((s) => !inMap.has(s)).sort();
-    expect(mapOnly, 'seats the map carries that the table does not').toEqual([]);
+  });
+
+  it('per repository, the map seats ⊆ the row, and the row leads the map by exactly its Kimi seat', () => {
+    // `knownCohortAgents()` with no workspace is exactly the map's union — no
+    // seat dir on this machine can widen it — grouped back by shorthand.
+    const mapByRepo = new Map<string, Set<string>>();
+    for (const seat of knownCohortAgents()) {
+      const { shorthand } = splitSeat(seat);
+      const repo = Object.entries(SHORTHAND).find(([, s]) => s === shorthand)?.[0];
+      expect(repo, `map seat with no table row: ${seat}`).toBeDefined();
+      if (!mapByRepo.has(repo!)) mapByRepo.set(repo!, new Set());
+      mapByRepo.get(repo!)!.add(seat);
+    }
+    const tableOnly: string[] = [];
+    for (const row of rows) {
+      const inRow = new Set(row.cells.map(seatOf).filter((s): s is string => s !== null));
+      const inMap = mapByRepo.get(row.repo) ?? new Set<string>();
+      const mapOnly = [...inMap].filter((s) => !inRow.has(s));
+      expect(mapOnly, `${row.repo}: map seats the row does not carry`).toEqual([]);
+      tableOnly.push(...[...inRow].filter((s) => !inMap.has(s)));
+    }
     // The one-directional gap, named: closes to [] when the map's Kimi
-    // propagation lands, at which point this becomes an equality lock.
-    expect(tableOnly, 'seats the table names that the map does not').toEqual(KIMI_SEATS);
+    // propagation lands (mmnto-ai/totem#2875), at which point a human empties
+    // KIMI_SEATS and this becomes an equality lock.
+    expect(tableOnly.sort(), 'seats the table names that the map does not').toEqual(KIMI_SEATS);
   });
 
   it('the Kimi column names the four seats the roster of record seats (2026-07-18 and 2026-07-29)', () => {
