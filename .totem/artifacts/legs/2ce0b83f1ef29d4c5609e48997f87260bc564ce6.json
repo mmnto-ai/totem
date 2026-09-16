@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "2ce0b83f1ef29d4c5609e48997f87260bc564ce6",
+  "readAt": "2026-09-16T01:43:21Z",
+  "findings": [
+    {
+      "id": "r2-f1",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 29,
+      "claim": "The fold's sentence states an absolute the resolver falsifies: 'on a fresh clone with no dirs a dispatch addressed to it is not served until that propagation lands'. resolveSelfAgents returns source env from TOTEM_SELF_AGENT before it reaches the map layer, and env is exempt from the identity gate — the per-shell seat binding (cohort-roles 2026-09-02 discharge) unblocks a fresh-clone Kimi poll without mmnto-ai/totem#2875. The same paragraph names the precedence two clauses later.",
+      "counterexample": "Empty scratchpad directory named totem, no .totem tree: resolveSelfAgents(fresh, {}) -> map without totem-kimi; resolveSelfAgents(fresh, {TOTEM_SELF_AGENT:'totem-kimi'}) -> ['totem-kimi'] source env. FOLDED (fold 2): 'with no TOTEM_SELF_AGENT declared a Kimi seat resolves only where its seat dir exists'."
+    },
+    {
+      "id": "r2-f2",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 18,
+      "claim": "The f9 answer ADDS a publicly unresolvable private reference to a distributed template ('doctrine/cohort-roles.md § 1 in mmnto-ai/totem-strategy'): signoff goes main=4 -> HEAD=5 'totem-strategy' and 1 -> 2 'doctrine/'. agents-floor-sterility.test.ts enumerates totem-strategy and doctrine paths as the private class; the skills are excluded from that sensor by name and the file is pre-existing non-sterile, so this is a directional regression against the ruling the same PR cites, not a false statement.",
+      "counterexample": "An external consumer follows the pointer and gets a 404. FOLDED (fold 2): 'the roster of record is the cohort-roles matrix in the strategy doctrine' — no repo slug, no path."
+    },
+    {
+      "id": "r2-f3",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 75,
+      "claim": "The re-attached purpose clause now reads as own-line -> registration ('each tag on its OWN line (...), so each bot registers the disposition'), the very mechanism the 23:16Z dispatch forbade; mitigated by the explicit disclaimer twelve words earlier.",
+      "counterexample": "Read the clause with the nearer antecedent. FOLDED (fold 2): 'exactly ONE tag each (...) so each bot registers the disposition, each tag on its OWN line (...), and tags must be present...' — the 'so' sits on its subject again."
+    },
+    {
+      "id": "r2-f4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/signoff-table-sync.test.ts",
+      "line": 15,
+      "claim": "'the assertion tightens to equality' reads as automatic; the pinned KIMI_SEATS assertion goes RED when the map gains the seats and a human must empty it — the desired tripwire, named in mmnto-ai/totem#2875 ask 2 but not in the test a future session reads first.",
+      "counterexample": "With the map widened to include the four Kimi seats, tableOnly = [] and the assertion FAILS. FOLDED (fold 2): the docblock says it goes red on purpose and a human empties KIMI_SEATS."
+    },
+    {
+      "id": "r2-f5",
+      "severity": "MINOR",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 29,
+      "claim": "'the three Kimi cells above read not seated' points at a table where exactly one cell now reads not seated (arhgap11's, correctly); the past-tense count is true but one glance from a miscount.",
+      "counterexample": "Read the sentence against the table it sits under. FOLDED (fold 2): 'three of its four Kimi cells read not seated for weeks after those seats were seated (filled here)'."
+    },
+    {
+      "id": "r2-f6",
+      "severity": "MINOR",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 29,
+      "claim": "The step-2a paragraph grew from 831 bytes (main) to 1573 (HEAD), the added bytes being propagation state rather than instruction; the review-reply half moved the right way.",
+      "counterexample": "NOT CONSTRUCTED: editorial. FOLDED (fold 2): the paragraph is shortened to the fallback statement, the propagation pointer and the derivation line."
+    },
+    {
+      "id": "r2-f7",
+      "severity": "MINOR",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 31,
+      "claim": "PRE-EXISTING: the Visiting case names a cell value ('no Claude variant') no table cell carries; no contradiction with the new sentence.",
+      "counterexample": "The Claude column carries no such cell at main or HEAD. NOT FOLDED: pre-existing, outside this cut."
+    },
+    {
+      "id": "r2-f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2740,
+      "claim": "mmnto-ai/totem#2875's body renders the map as four repositories; it has six keys (arhgap11 with its pair, totem-playground empty), and repeats the env-layer overstatement.",
+      "counterexample": "knownCohortAgents() returns ten seats over six keys. FOLDED (fold 2): the issue body edited to six keys and the env qualifier; the stamped text no longer claims 'the pair only'."
+    },
+    {
+      "id": "r2-f9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/signoff-table-sync.test.ts",
+      "line": 13,
+      "claim": "QUESTION: the '21 assertions + 6 tests' measurement is not re-derivable under the leg's no-mutation rule; a bounded read of the resolver test finds an order of magnitude consistent with it.",
+      "counterexample": "NOT CONSTRUCTED. ANSWERED (fold 2): the issue body names the number as the seat's measurement for the implementer to re-derive."
+    }
+  ],
+  "folded": [
+    "r2-f1",
+    "r2-f2",
+    "r2-f3",
+    "r2-f4",
+    "r2-f5",
+    "r2-f6",
+    "r2-f8",
+    "r2-f9"
+  ],
+  "verdict": "Leg 2, re-armed on the skill-text fold (30233c1a..2ce0b83f): 0 BLOCKING, 2 MATERIAL (r2-f1 — the fresh-clone sentence ignored the env layer; r2-f2 — a private doctrine pointer added to a distributed file), 7 MINOR. Eight folded in cf4ceee7: the env qualifier, the pointer dropped (private-reference counts back to main), the purpose clause re-seated, the tripwire named as manual, the cell count and paragraph length, mmnto-ai/totem#2875 body corrected to six keys with the env qualifier and the measurement named as the seat own. r2-f7 pre-existing, left. Convergence NAMED by the leg: mechanically closed (eight parser mutants of the sync test fail as designed, the stamp is exact, no spelled trigger, no wrong seat id); the remaining class is editorial and ruled here."
+}

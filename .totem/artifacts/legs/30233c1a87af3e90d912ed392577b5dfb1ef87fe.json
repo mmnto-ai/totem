@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "30233c1a87af3e90d912ed392577b5dfb1ef87fe",
+  "readAt": "2026-09-16T01:11:21Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2735,
+      "claim": "The diff changes the PROSE half of a declared two-way sync contract and leaves the CODE half behind: orchestration-resolver.ts says keep COHORT_AGENT_MAP in sync with the signoff skill's table, and the map still reads the Claude+Gemini pair for totem-strategy and liquid-city, so after this diff the table names strategy-kimi/lc-kimi as hosted seats while the resolver's map layer returns neither. No test cross-checks the two.",
+      "counterexample": "Fresh clone of liquid-city (orchestration tree gitignored, no config.json host_agents): resolveSelfAgents layer 3 = seat dirs ∪ COHORT_AGENT_MAP['liquid-city'] = ['lc-claude','lc-gemini'] — lc-kimi absent, so a dispatch to: lc-kimi is invisible to the CLI poll while the stamped table says the seat exists. ROUTED (ce87fddc): the map propagation was built and measured (21 resolver assertions + 6 mail-accounting tests move), reverted, and filed as mmnto-ai/totem#2875; the table's sentence says the Kimi column leads the map; signoff-table-sync.test.ts holds map ⊆ table and the table leading by exactly the four Kimi seats."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 26,
+      "claim": "The totem-status row's Kimi cell reads not seated while the roster of record seats status-kimi (cohort-roles § 1.1 line 51, § 1.4 2026-07-29 seating entry, § 5.5). The diff inherited a stale premise from the issue (the 2026-07-18 entry, superseded eleven days later).",
+      "counterexample": "A status-kimi session running signoff in totem-status finds its row's Kimi column reading not seated — the harm issue 2865 names for the cells it DID ask to fix. FOLDED (ce87fddc): cell filled."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2740,
+      "claim": "The new sentence's claim that the table is a RENDERING of the roster of record is false three ways: the status Kimi cell contradicted the roster; the table carries rows the roster does not have (arhgap11, totem-playground — archived per ADR-106); the table renders three vendor columns where the roster has five. The changeset repeated the claim.",
+      "counterexample": "grep -c arhgap11 doctrine/cohort-roles.md = 0 while the table asserts arhgap11 seats. FOLDED (ce87fddc): the table is named the BOOTSTRAP FALLBACK — three of five vendor columns plus two archived repositories."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 75,
+      "claim": "The datum 'acknowledged by GCA on liquid-city#1253 and #1263 two days earlier' disagrees with the doctrine as merged (which pins dates) and with the comment bytes: #1253 is ~3.4 days earlier. The phrase was carried from the SUPERSEDED 20:04Z dispatch's offered sentence, not the 23:16Z final form.",
+      "counterexample": "2026-09-15T19:03:21Z minus 2026-09-12T08:30:36Z = 3 days 10h 33m. FOLDED (ce87fddc): the blessed short form carries no datum."
+    },
+    {
+      "id": "f5",
+      "severity": "MATERIAL",
+      "file": ".changeset/skill-text-tag-lines-kimi-seats.md",
+      "line": 5,
+      "claim": "The changeset and commit message assert the template sentence IS the doctrine's sentence; a byte comparison refutes it (the doctrine reads 'not an established mechanism', carries the no-positive-control clause and the dates).",
+      "counterexample": "grep -c 'positive control' .claude/skills/review-reply/SKILL.md = 0. FOLDED (ce87fddc): the changeset says the template binds the practice the doctrine binds."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 75,
+      "claim": "Of the doctrine's two-sided datum the template kept the side supporting the practice and dropped the hedge ('so the own-line shape has no positive control'); a reader could infer the own-line shape is evidenced.",
+      "counterexample": "liquid-city#1278 carries a second-round disposition with a single own-line tag that the one GCA reply actually answered. FOLDED (ce87fddc): the short form carries no datum, so no one-sided datum."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 75,
+      "claim": "The insertion severed the purpose clause from its subject: 'position within the comment is unruled — so each bot registers the disposition'.",
+      "counterexample": "NOT CONSTRUCTED: readability. FOLDED (ce87fddc, then the re-armed leg's r2-f3 re-attachment in fold 2)."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 75,
+      "claim": "The diff moved review-reply from ZERO private-repo references to four (liquid-city issue refs), in a file totem init stamps into every consumer; the 23:16Z short form would have added none.",
+      "counterexample": "An external consumer reads step 2 citing four 404-to-them issue numbers. FOLDED (ce87fddc): zero private refs in review-reply at HEAD."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": ".claude/skills/signoff/SKILL.md",
+      "line": 29,
+      "claim": "Two different sources of record named for one table (line 18's ADR-106 cohort list vs the new cohort-roles pointer), and the pre-existing dead Visiting-case branch ('no Claude variant' matches no cell) sits under a table whose authority the sentence raised.",
+      "counterexample": "NOT CONSTRUCTED. FOLDED (ce87fddc): one source of record named; the dead branch is pre-existing and left."
+    }
+  ],
+  "folded": [
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9"
+  ],
+  "verdict": "Leg 1 on the skill-text re-stamp (30233c1a, mmnto-ai/totem#2865): 0 BLOCKING, 5 MATERIAL, 4 MINOR. f1 (the core map lacks the Kimi seats the table now names) ROUTED as mmnto-ai/totem#2875 after the propagation was built and measured (21 resolver assertions + 6 mail-accounting tests move) and reverted as its own change; a sync test holds map ⊆ table and the table leading by exactly the four Kimi seats. f2 (status-kimi is seated), f3 (the rendering claim was false), f4/f5/f6/f8 (the review-reply sentence takes the blessed short form: no datum, no private refs, no identity claim), f7 (the purpose clause), f9 (one source of record) folded in ce87fddc. Re-arm requested on the fold."
+}
