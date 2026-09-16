@@ -1,0 +1,5 @@
+---
+'@mmnto/cli': patch
+---
+
+Two distributed skill-text fixes, re-stamped by `totem init`. The `review-reply` skill's step 2 now binds the one-tag-per-line practice: each bot's @-tag on its OWN line — ruled practice (operator, 2026-09-15), not a GCA guarantee, with the observed datum stated rather than a mechanism (a one-line list of three handles drew replies from CodeRabbit and Greptile and none from GCA on two liquid-city rounds, while the same shape had been acknowledged by GCA two days earlier; position within the comment is unruled) — the sentence `doctrine/bot-protocols.md` § Tagging carries, so the two stay aligned. The `signoff` skill's step-2a cohort table fills the two Kimi cells that read "not seated" while `strategy-kimi` and `lc-kimi` were seated (mmnto-ai/totem#2865), and names the table for what it is: a rendering of the roster of record that rots when a seat is added — `totem mail --derive-seat` is the derivation and no cell overrides it. (The packages share one fixed changeset group, so every `@mmnto/*` package takes the same patch bump.)
