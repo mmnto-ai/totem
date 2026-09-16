@@ -14,8 +14,9 @@
  * mmnto-ai/totem#2875. When the map gains them, `tableOnly` below becomes
  * empty and the assertion tightens to equality.
  */
-import { knownCohortAgents } from '@mmnto/totem';
 import { describe, expect, it } from 'vitest';
+
+import { knownCohortAgents } from '@mmnto/totem';
 
 import { SIGNOFF_SKILL_CONTENT } from './init-templates.js';
 
