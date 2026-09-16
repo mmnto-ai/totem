@@ -4245,8 +4245,14 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // The dry/apply pair was already pinned by the two `toContain` fences a few
     // lines above, so that ordering assertion could not have gone vacuous — the
     // guard below is belt-and-braces, not a repair.
+    //
+    // The needle is the EXECUTABLE fence, not the first mention of the verb:
+    // since mmnto-ai/totem#2861 the step-2 paragraph names `totem
+    // resolve-threads` before the post step as the source of the root comment
+    // id each disposition line carries — a reference, not a step. The ordering
+    // this test pins is that the STEP runs after the comment is posted.
     const postAt = section.indexOf('gh pr comment $ARGUMENTS --body-file -');
-    const resolveAt = section.indexOf('totem resolve-threads');
+    const resolveAt = section.indexOf('```bash\ntotem resolve-threads $ARGUMENTS\n```');
     expect(postAt).toBeGreaterThanOrEqual(0);
     expect(resolveAt).toBeGreaterThanOrEqual(0);
     expect(postAt).toBeLessThan(resolveAt);
