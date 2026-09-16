@@ -31,9 +31,10 @@ export interface GateProvenance {
   /**
    * Optional gate-specific evidence, emitted with the verdict and never stored
    * (mmnto-ai/totem#2800): merge-ready carries its head sha, check counts,
-   * thread counts, `changesRequestedBy`, `highInline`, `mergeStateStatus` and
-   * `evaluatedBy` here. Hosts treat it as opaque passthrough — the wrapper
-   * prints it and branches ONLY on `disposition`.
+   * thread counts, `changesRequestedBy`, `highInline`, `dischargedHigh` and
+   * `dischargedBy` (mmnto-ai/totem#2861), `mergeStateStatus` and `evaluatedBy`
+   * here. Hosts treat it as opaque passthrough — the wrapper prints it and
+   * branches ONLY on `disposition`.
    */
   detail?: Readonly<Record<string, unknown>>;
 }

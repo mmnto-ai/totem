@@ -25,7 +25,10 @@
                         "state": "SUCCESS",
                         "contexts": {
                           "totalCount": 1,
-                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
                           "nodes": [
                             {
                               "__typename": "CheckRun",
@@ -40,29 +43,54 @@
                   }
                 ]
               },
-              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
               "reviewThreads": {
-                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
                 "nodes": [
                   {
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
-                      "pageInfo": { "hasNextPage": false },
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
-                          "author": { "__typename": "Bot", "login": "greptile-apps" },
+                          "author": {
+                            "__typename": "Bot",
+                            "login": "greptile-apps"
+                          },
                           "body": "<a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9\" align=\"top\"></a> **slugList validates only an empty list**",
                           "createdAt": "2026-09-08T03:00:00Z",
-                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          }
                         },
                         {
-                          "author": { "__typename": "User", "login": "satur8d" },
+                          "author": {
+                            "__typename": "User",
+                            "login": "satur8d"
+                          },
                           "body": "Fixed — the owner/name check is added below the anchor.",
                           "createdAt": "2026-09-08T03:15:00Z",
-                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          }
                         }
                       ]
                     }
@@ -71,14 +99,23 @@
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
-                      "pageInfo": { "hasNextPage": false },
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
-                          "author": { "__typename": "Bot", "login": "coderabbitai" },
+                          "author": {
+                            "__typename": "Bot",
+                            "login": "coderabbitai"
+                          },
                           "body": "_🛠️ Refactor suggestion_ | _🟠 Major_\n\n**The same finding from the other side: slugList never checks owner/name.**",
                           "createdAt": "2026-09-08T03:00:30Z",
-                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          }
                         }
                       ]
                     }
@@ -86,10 +123,17 @@
                 ]
               },
               "comments": {
-                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
                 "nodes": [
                   {
-                    "author": { "__typename": "User", "login": "satur8d" },
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T02:00:00Z"
                   }
                 ]

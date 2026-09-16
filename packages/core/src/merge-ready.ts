@@ -21,11 +21,13 @@ import { safeExec } from './sys/exec.js';
  *                                to the head commit (`comment.commit.oid`) and
  *                                is not DISCHARGED through the disposition path
  *                                (mmnto-ai/totem#2861): its thread RESOLVED plus
- *                                the resolve-threads evidence rule — a non-bot
- *                                reply after the root inside the thread, or a
+ *                                a disposition on record — a non-bot reply
+ *                                after the root inside the thread, or a
  *                                non-bot PR-level comment created after the
- *                                root. A bare resolve with no evidence on
- *                                record still applies (fail-closed)
+ *                                root that carries the review-reply skill's
+ *                                `local-lane:` line. A bare resolve with no
+ *                                disposition on record still applies, at
+ *                                every tier (fail-closed)
  *   5. `merge-state`           — GitHub's own `mergeStateStatus` is mergeable
  *
  * THE TIER SPLIT (R1): a predicate that FAILS is `deny` at every tier (the
@@ -111,11 +113,13 @@ export type MergeReadyProvenanceDetail = {
   highInline: number;
   /**
    * HIGH/Major bot inlines on the head commit DISCHARGED through the
-   * disposition path (mmnto-ai/totem#2861): thread resolved, and a non-bot
-   * reply or PR-level comment post-dates the root. Carried so the audit
-   * record shows what the predicate released, not only what it kept.
+   * disposition path (mmnto-ai/totem#2861): thread resolved, and a
+   * disposition on record after the root. Carried so the audit record shows
+   * what the predicate released, not only what it kept.
    */
   dischargedHigh: number;
+  /** The discharges split by the arm that carried each: an in-thread non-bot reply, or a PR-level review-reply disposition. */
+  dischargedBy: { inThreadReply: number; prLevelDisposition: number };
   mergeStateStatus: string | null;
   evaluatedAt: string;
   /** `gh <version>`, read from the same binary that answered the query. */
@@ -154,14 +158,23 @@ export interface MergeReadyOptions {
  * `comments(first: 10)` on a thread is deliberate: only the ROOT comment is
  * judged (it is the finding; the rest are the discussion), matching how triage
  * reads a thread. The later comments are read for EVIDENCE only — a non-bot
- * reply after the root discharges a resolved HIGH (mmnto-ai/totem#2861) — so
- * the window's `pageInfo` is selected too: a thread with more replies than the
- * window and no evidence inside it is named unevaluable, never read as "no
- * reply". The PR-level `comments` connection is the other evidence surface (a
- * non-bot comment created after a thread's root), paginated in full like the
- * rest. `author { __typename }` is selected on both because it is the one
- * signal that names EVERY GitHub App a bot (the resolve-threads rule): without
- * it an App's reply would read as the human answer.
+ * reply after the root discharges a resolved HIGH (mmnto-ai/totem#2861) — and
+ * the window's `pageInfo` is selected too, so a thread with more replies than
+ * the window is judged on what was read and SAYS so in the reason, never read
+ * as "no reply" silently. The root is `comments.nodes[0]`: every capture in
+ * `gate-fixtures/merge-ready/` answers root first, then the replies in creation
+ * order, and `resolve-threads` reads the same position — a positional
+ * assumption shared by both consumers, not a transcribed schema guarantee,
+ * which is why the reply test below is ALSO temporal (a reply counts only when
+ * its `createdAt` follows the root's). The PR-level `comments` connection is
+ * the other evidence surface: a non-bot comment created after a thread's root
+ * whose BODY carries the review-reply skill's `local-lane:` line — the
+ * machine-emitted line every disposition posted through `/review-reply`
+ * carries and no trigger, gate-read note or merge note does — paginated in
+ * full like the rest, bodies included. `author { __typename }` is selected on
+ * both because it is the one signal that names EVERY GitHub App a bot (the
+ * resolve-threads rule): without it an App's reply would read as the human
+ * answer.
  */
 const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
   number
@@ -218,6 +231,7 @@ const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
     pageInfo { hasNextPage endCursor }
     nodes {
       author { __typename login }
+      body
       createdAt
     }
   }
@@ -357,9 +371,10 @@ interface ThreadEntry {
   /** The root comment's `createdAt` — the instant a PR-level disposition must post AFTER (mmnto-ai/totem#2861). */
   rootCreatedAt: string;
   /**
-   * Non-bot comments AFTER the root inside the read window — the
-   * resolve-threads in-thread-reply arm. A deleted account (null author)
-   * counts: the reply was human when it was written.
+   * Non-bot comments inside the read window whose `createdAt` follows the
+   * root's — the resolve-threads in-thread-reply arm, with a temporal test
+   * beside the positional one (see the fragment docstring). A deleted account
+   * (null author) counts: the reply was human when it was written.
    */
   humanReplies: number;
   /** False when the thread carries more comments than the window read (`comments.pageInfo.hasNextPage`). */
@@ -382,6 +397,31 @@ interface ThreadEntry {
 interface PrCommentEntry {
   isBot: boolean;
   createdAt: string;
+  /** The body carries the review-reply disposition line ({@link DISPOSITION_LINE}) outside code. */
+  disposition: boolean;
+}
+
+/**
+ * The signature of a disposition posted through the review-reply skill: its
+ * step 2 ends every round disposition with the machine-rendered
+ * `local-lane:` line, verbatim, on its own line — and `/review-reply` is the
+ * sole path that carries that line to GitHub. A trigger comment, a gate-read
+ * note, a merge note or a bot's own summary never carries it, which is what
+ * lets predicate 4 tell a disposition from the PR-level chatter every round
+ * accumulates (mmnto-ai/totem#2861 leg f1: with post-dating alone, one human
+ * comment of any content after a bare resolve discharged it). Read against the
+ * body with fenced, `<pre>` and indented code stripped ({@link withoutCode}),
+ * so a comment that QUOTES a disposition in a fence is not one; a line that
+ * starts with the token — leading blanks allowed — is. A disposition whose
+ * line rides inside prose or an inline code span (observed once, on
+ * mmnto-ai/totem-strategy#1331) is not in the template's shape and does not
+ * count: the cure is the template's own line, or an in-thread reply.
+ */
+const DISPOSITION_LINE = /^[ \t]*local-lane:/m;
+
+/** Whether a PR-level comment body is a review-reply disposition. */
+function carriesDispositionLine(body: string): boolean {
+  return DISPOSITION_LINE.test(withoutCode(body));
 }
 
 /** One page of the read, already classified. */
@@ -573,6 +613,9 @@ function readAuthor(
   if (typename === null || login === null) {
     return { ok: false, detail: 'author has no __typename or no login' };
   }
+  // On every capture the `Bot` typename is the arm that decides for a review
+  // bot (their GraphQL logins carry no suffix); the two login arms are the
+  // verb's belt-and-braces, kept so the two consumers of the rule agree.
   return {
     ok: true,
     login,
@@ -631,13 +674,23 @@ function readThreads(connection: Record<string, unknown> | null): {
     if (rootCreatedAt === null) {
       return unreadable('carried a thread whose root comment has no createdAt');
     }
+    const rootAt = Date.parse(rootCreatedAt);
     let humanReplies = 0;
     for (const reply of comments.slice(1)) {
       const r = asObject(reply);
       if (r === null) return unreadable('carried a thread with a reply that is not an object');
       const author = readAuthor(r.author);
       if (!author.ok) return unreadable(`carried a thread with a reply whose ${author.detail}`);
-      if (!author.isBot) humanReplies++;
+      const replyCreatedAt = asString(r.createdAt);
+      if (replyCreatedAt === null)
+        return unreadable('carried a thread with a reply that has no createdAt');
+      // Positional AND temporal: a non-bot comment after the root in the list
+      // that also post-dates it. An unparseable instant on either side is not
+      // a reply that counts — the conservative direction.
+      const replyAt = Date.parse(replyCreatedAt);
+      if (!author.isBot && !Number.isNaN(rootAt) && !Number.isNaN(replyAt) && replyAt > rootAt) {
+        humanReplies++;
+      }
     }
     entries.push({
       isResolved: n.isResolved === true,
@@ -660,9 +713,9 @@ function readThreads(connection: Record<string, unknown> | null): {
  * The PR-level `comments` connection — the second evidence surface
  * (mmnto-ai/totem#2861), read as strictly as the others: a missing connection,
  * a missing `nodes` array or `pageInfo`, a node that is not an object, an
- * author without `__typename` / `login`, or a comment without `createdAt` is
- * an UNREADABLE page, named — never "no evidence", which would deny a
- * dispositioned HIGH for a reason that misnames its cause.
+ * author without `__typename` / `login`, or a comment without a string `body`
+ * or `createdAt` is an UNREADABLE page, named — never "no evidence", which
+ * would deny a dispositioned HIGH for a reason that misnames its cause.
  */
 function readPrComments(connection: Record<string, unknown> | null): {
   entries: PrCommentEntry[];
@@ -685,9 +738,11 @@ function readPrComments(connection: Record<string, unknown> | null): {
     if (n === null) return unreadable('carried a node that is not an object');
     const author = readAuthor(n.author);
     if (!author.ok) return unreadable(`carried a comment whose ${author.detail}`);
+    const body = asString(n.body);
+    if (body === null) return unreadable('carried a comment with no body');
     const createdAt = asString(n.createdAt);
     if (createdAt === null) return unreadable('carried a comment with no createdAt');
-    entries.push({ isBot: author.isBot, createdAt });
+    entries.push({ isBot: author.isBot, createdAt, disposition: carriesDispositionLine(body) });
   }
   const info = readPageInfo(connection);
   if (!info.ok) return unreadable(info.detail);
@@ -1324,57 +1379,77 @@ function botHighInlinesOnHead(threads: readonly ThreadEntry[], headSha: string):
   );
 }
 
-/** How a HIGH-on-head thread was answered, per the resolve-threads evidence rule (mmnto-ai/totem#2841, R2). */
-type Discharge = 'in-thread-reply' | 'pr-level-disposition' | 'none' | 'unread';
+/** How a HIGH-on-head thread was answered — the two arms of the disposition path, or neither. */
+type Discharge = 'in-thread-reply' | 'pr-level-disposition' | 'none';
 
 /**
  * The disposition path, read off the same page as the predicate
- * (mmnto-ai/totem#2861): a thread is DISCHARGED when it is RESOLVED and the
- * resolve-threads evidence rule holds — a non-bot reply after the root inside
- * the thread, or a non-bot PR-level comment created STRICTLY after the root.
- * `none` is the bare resolve (a click with no disposition on record — the
- * fail-closed arm the ruling names) and an unresolved thread alike. `unread`
- * is a resolved candidate whose evidence the read could not settle: the
- * comments window is incomplete and nothing inside it or at PR level answers,
- * or the root instant does not parse. Evidence FOUND is a fact even when the
- * window is incomplete.
+ * (mmnto-ai/totem#2861): a thread is DISCHARGED when it is RESOLVED and a
+ * disposition is on record — a non-bot reply after the root inside the thread
+ * (it names the thread by being in it), or a non-bot PR-level comment created
+ * STRICTLY after the root that carries the review-reply disposition line
+ * ({@link DISPOSITION_LINE}). `none` is the bare resolve — a click with no
+ * disposition on record, the fail-closed arm the ruling names — and an
+ * unresolved thread alike; predicate 2 catches the unresolved one first, so
+ * the resolve is a REQUIRED step of the path, never an optional one.
  *
- * DISCLOSED, as resolve-threads discloses it: the PR-level arm is not keyed to
- * the round-disposition comment (no deterministic reading distinguishes a
- * disposition from other human prose), so an operator's trigger comment that
- * post-dates the root is evidence too — which is why the disposition is posted
- * BEFORE the resolve. The resolve itself stays the seat's deliberate act, and
- * without it nothing here discharges.
+ * Two deliberate differences from the `totem resolve-threads` evidence rule
+ * (mmnto-ai/totem#2841 R2), which this otherwise mirrors. The verb decides
+ * whether a thread MAY be resolved and accepts any non-bot PR-level comment
+ * after the root, disclosing that an operator's trigger comment counts; this
+ * predicate decides whether a resolved HIGH is DISPOSITIONED, and a trigger,
+ * a gate-read note or merge chatter must not discharge it — so the PR-level
+ * arm reads the disposition's own signature. A thread the verb resolved on the
+ * strength of a trigger therefore stays applying here until a disposition is
+ * posted: the stricter side of the asymmetry, by design. And an unparseable
+ * instant on either side is `none` here as it is there — the conservative
+ * direction — never an unreadable page (the strict reader has already refused
+ * a root without a string `createdAt`).
+ *
+ * A thread with more comments than the ten-comment window is judged on what
+ * was read: evidence found inside the window or at PR level discharges it, and
+ * a window with none is a bare resolve whose reason NAMES the window — a
+ * fact-side deny at every tier, never the unevaluable class, which pilot maps
+ * to `warn` and which would have let the shape pre-cure denied at both tiers
+ * stop blocking (leg f2).
  */
 function dischargeOf(thread: ThreadEntry, prComments: readonly PrCommentEntry[]): Discharge {
   if (!thread.isResolved) return 'none';
   if (thread.humanReplies > 0) return 'in-thread-reply';
   const rootAt = Date.parse(thread.rootCreatedAt);
-  if (Number.isNaN(rootAt)) return 'unread';
+  if (Number.isNaN(rootAt)) return 'none';
   for (const c of prComments) {
-    if (c.isBot) continue;
+    if (c.isBot || !c.disposition) continue;
     const at = Date.parse(c.createdAt);
     if (!Number.isNaN(at) && at > rootAt) return 'pr-level-disposition';
   }
-  return thread.commentsComplete ? 'none' : 'unread';
+  return 'none';
 }
 
-/** Predicate 4's read: the bot HIGH inlines on the head, split by {@link dischargeOf}. */
+/** Predicate 4's read: the bot HIGH inlines on the head, split by {@link dischargeOf}, with the arm counts. */
 function triageHighInlines(
   threads: readonly ThreadEntry[],
   headSha: string,
   prComments: readonly PrCommentEntry[],
-): { applying: ThreadEntry[]; discharged: ThreadEntry[]; unread: ThreadEntry[] } {
+): {
+  applying: ThreadEntry[];
+  discharged: ThreadEntry[];
+  by: { inThreadReply: number; prLevelDisposition: number };
+} {
   const applying: ThreadEntry[] = [];
   const discharged: ThreadEntry[] = [];
-  const unread: ThreadEntry[] = [];
+  const by = { inThreadReply: 0, prLevelDisposition: 0 };
   for (const t of botHighInlinesOnHead(threads, headSha)) {
     const discharge = dischargeOf(t, prComments);
-    if (discharge === 'none') applying.push(t);
-    else if (discharge === 'unread') unread.push(t);
-    else discharged.push(t);
+    if (discharge === 'none') {
+      applying.push(t);
+    } else {
+      discharged.push(t);
+      if (discharge === 'in-thread-reply') by.inThreadReply++;
+      else by.prLevelDisposition++;
+    }
   }
-  return { applying, discharged, unread };
+  return { applying, discharged, by };
 }
 
 /**
@@ -1444,6 +1519,7 @@ export function evaluateMergeReady(
     changesRequestedBy: [],
     highInline: 0,
     dischargedHigh: 0,
+    dischargedBy: { inThreadReply: 0, prLevelDisposition: 0 },
     mergeStateStatus: null,
     evaluatedAt: checkedAt,
     evaluatedBy: 'gh (not read)',
@@ -1529,12 +1605,14 @@ export function evaluateMergeReady(
   const high = triageHighInlines(state.threads, state.headSha, state.prComments);
   detail.highInline = high.applying.length;
   detail.dischargedHigh = high.discharged.length;
+  detail.dischargedBy = { ...high.by };
   // The audit breadcrumb for what the predicate RELEASED (mmnto-ai/totem#2861):
   // a discharged HIGH is a bot finding the round answered, and the record
-  // must show it was read and discharged, never that it was not seen.
+  // must show it was read and discharged — and by which arm — never that it
+  // was not seen.
   if (high.discharged.length > 0) {
     notices.push(
-      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: ${high.discharged.length} HIGH/Major bot inline(s) on the head commit discharged through the disposition path (thread resolved, a non-bot reply or PR-level comment after the root) — no longer applying (mmnto-ai/totem#2861).`,
+      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: ${high.discharged.length} HIGH/Major bot inline(s) on the head commit discharged through the disposition path (thread resolved; ${high.by.inThreadReply} by a non-bot in-thread reply, ${high.by.prLevelDisposition} by a PR-level review-reply disposition after the root) — no longer applying (mmnto-ai/totem#2861).`,
     );
   }
 
@@ -1555,20 +1633,6 @@ export function evaluateMergeReady(
     const first = unreadable[0]!;
     return unevaluable(
       `${unreadable.length} HIGH bot inline(s) carry no commit, so predicate 4 cannot place them against the head — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
-    );
-  }
-
-  // A resolved bot HIGH on the head whose EVIDENCE the read could not settle
-  // (mmnto-ai/totem#2861): the thread carries more replies than the comments
-  // window and none of the read ones is a human's, no PR-level comment follows
-  // the root either — or the root instant does not parse. Predicate 4's input
-  // is missing for it, so it is UNEVALUABLE and named at the same precedence
-  // as the null-commit arm above: never a silent deny (which would misname a
-  // dispositioned finding as a bare resolve) and never a discharge.
-  if ((blocked === null || blocked.predicate === 'merge-state') && high.unread.length > 0) {
-    const first = high.unread[0]!;
-    return unevaluable(
-      `${high.unread.length} resolved HIGH bot inline(s) on the head carry evidence the read could not settle (more replies than the comments window, or an unreadable root instant), so predicate 4 cannot tell a disposition from a bare resolve — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
     );
   }
 
@@ -1703,15 +1767,20 @@ function firstFailure(
   // 4. HIGH/Major bot inline on the head commit, not discharged
   if (applyingHigh.length > 0) {
     const first = applyingHigh[0]!;
-    // Name the bare-resolve shape when that is what the first one is: the
+    // Name the bare-resolve shape when that is what the first one is — the
     // operator's cure differs (post the disposition) from the unanswered
-    // shape's (answer the finding), and the reason must say which.
-    const bareResolve = first.isResolved
-      ? ' (its thread is resolved, but no non-bot reply or PR-level comment post-dates its root — a bare resolve does not discharge a HIGH, mmnto-ai/totem#2861)'
-      : '';
+    // shape's (answer the finding) — and name the window when the thread had
+    // more comments than the read fetched. The clause sits BEFORE the quoted
+    // body so it survives the 160-character bound on `provenance.matched`
+    // (mmnto-ai/totem#2861 leg f6); the body is what gets cut.
+    const bareResolve = !first.isResolved
+      ? ''
+      : first.commentsComplete
+        ? ' — resolved without a disposition on record (no non-bot reply in the thread, no PR-level review-reply disposition after its root; a bare resolve does not discharge a HIGH, mmnto-ai/totem#2861)'
+        : ' — resolved, no disposition in the ten comments read (the thread has more) nor a PR-level review-reply disposition after its root (mmnto-ai/totem#2861)';
     return {
       predicate: 'high-severity-inline',
-      evidence: `${applyingHigh.length} HIGH/Major bot inline(s) still applying to the head commit — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"${bareResolve}`,
+      evidence: `${applyingHigh.length} HIGH/Major bot inline(s) still applying to the head commit${bareResolve} — the first is ${first.rootLogin ?? 'a bot'}: "${bounded(first.rootBody)}"`,
     };
   }
 

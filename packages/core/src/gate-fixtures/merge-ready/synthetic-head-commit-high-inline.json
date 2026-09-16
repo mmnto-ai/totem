@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4; the PR-level human comment PRE-dates the root and the only post-dating comments are a bot's, so neither is evidence",
-  "synthesizedAt": "2026-09-16T00:47:11.787Z",
+  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL in the field shape: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4 — the only PR-level review-reply disposition PRE-dates the root; the post-dating comments are a bot summary, a [bot]-suffixed login carrying the line, human chatter without the line, and a human comment QUOTING the line inside a fence; the only in-thread reply is the bot own",
+  "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -25,7 +25,10 @@
                         "state": "SUCCESS",
                         "contexts": {
                           "totalCount": 2,
-                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
                           "nodes": [
                             {
                               "__typename": "CheckRun",
@@ -46,29 +49,54 @@
                   }
                 ]
               },
-              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
               "reviewThreads": {
-                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
                 "nodes": [
                   {
                     "isResolved": true,
                     "isOutdated": false,
                     "comments": {
-                      "pageInfo": { "hasNextPage": false },
+                      "pageInfo": {
+                        "hasNextPage": false
+                      },
                       "nodes": [
                         {
-                          "author": { "__typename": "Bot", "login": "gemini-code-assist" },
+                          "author": {
+                            "__typename": "Bot",
+                            "login": "gemini-code-assist"
+                          },
                           "body": "![high](https://www.gstatic.com/codereviewagent/high-priority.svg)\n\nThe engines range and the dependency range disagree.",
                           "createdAt": "2026-09-08T03:00:00Z",
-                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                          }
                         },
                         {
-                          "author": { "__typename": "Bot", "login": "gemini-code-assist" },
+                          "author": {
+                            "__typename": "Bot",
+                            "login": "gemini-code-assist"
+                          },
                           "body": "Bumping this finding — still applies.",
                           "createdAt": "2026-09-08T03:02:00Z",
-                          "commit": { "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-                          "originalCommit": { "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
+                          "commit": {
+                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                          },
+                          "originalCommit": {
+                            "oid": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                          }
                         }
                       ]
                     }
@@ -76,19 +104,50 @@
                 ]
               },
               "comments": {
-                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
                 "nodes": [
                   {
-                    "author": { "__typename": "User", "login": "satur8d" },
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T02:00:00Z"
                   },
                   {
-                    "author": { "__typename": "Bot", "login": "coderabbitai" },
+                    "author": {
+                      "__typename": "Bot",
+                      "login": "coderabbitai"
+                    },
+                    "body": "## Walkthrough\n\nOne finding, one major. See the inline threads.",
                     "createdAt": "2026-09-08T03:05:00Z"
                   },
                   {
-                    "author": { "__typename": "User", "login": "github-actions[bot]" },
+                    "author": {
+                      "__typename": "User",
+                      "login": "github-actions[bot]"
+                    },
+                    "body": "local-lane: none leg: none",
                     "createdAt": "2026-09-08T03:06:00Z"
+                  },
+                  {
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "Pushed the follow-up; please take another look at the head.",
+                    "createdAt": "2026-09-08T03:40:00Z"
+                  },
+                  {
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "For the record, the round disposition read:\n\n```\nlocal-lane: none leg: none\n```\n\nNothing else changed.",
+                    "createdAt": "2026-09-08T03:45:00Z"
                   }
                 ]
               }

@@ -16,10 +16,11 @@
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
  * or a bare-resolved HIGH thread); the five PR-round-1 rows
  * (mmnto-ai/totem#2844) cover the strict connection reads and the predicate
- * order ahead of the unreadable-commit arm; the nine mmnto-ai/totem#2861 rows
+ * order ahead of the unreadable-commit arm; the ten mmnto-ai/totem#2861 rows
  * cover the discharge read — its two evidence arms, the bare-resolve negative
- * control, the required resolve, the per-thread split, the second comments
- * page, the unread-evidence arm and the strict PR comments connection.
+ * control in the field shape, the required resolve, the per-thread split, the
+ * second comments page, the incomplete window with and without evidence, the
+ * deleted-account reply and the strict PR comments connection.
  * The README beside them lists every file with its sha256 and instant, and a
  * test recomputes those receipts from the files on disk.
  *
@@ -170,8 +171,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(52);
-    expect(files.length).toBe(57);
+    expect(synthetic.length).toBe(53);
+    expect(files.length).toBe(58);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -286,6 +287,7 @@ describe('merge-ready — the checked-in captures', () => {
             comments: {
               nodes: Array<{
                 author: { __typename: string; login: string } | null;
+                body: string;
                 createdAt: string;
               }>;
             };
@@ -309,11 +311,16 @@ describe('merge-ready — the checked-in captures', () => {
     );
     expect(humanAfterRoot.length).toBeGreaterThan(0);
 
+    // The one human comment after the root IS the round disposition: it
+    // carries the review-reply `local-lane:` line (read off the capture).
+    expect(humanAfterRoot.some((c) => /^[ \t]*local-lane:/m.test(c.body))).toBe(true);
+
     const e = evaluate('totem-2871.json', { tier: 'pilot' });
     expect(e.detail.checks).toEqual({ total: 17, success: 17, pending: 0, failing: 0 });
     expect(e.detail.threads.unresolvedBot).toBe(0);
     expect(e.detail.highInline).toBe(0);
     expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 0, prLevelDisposition: 1 });
     // Merged, so GitHub answers UNKNOWN: the read lands on the arm that is
     // reachable ONLY when predicates 1–4 have passed — the replay's witness.
     expect(e.verdict.provenance.ref).toBe('unevaluable');
@@ -498,19 +505,49 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
 
   it('the NEGATIVE CONTROL — a RESOLVED HIGH inline still on the HEAD commit with no disposition on record denies at predicate 4 (mmnto-ai/totem#2861)', () => {
     // Predicate 4's own territory (fold F2 of mmnto-ai/totem#2800, narrowed by
-    // the 2861 ruling): a bare UI resolve with no evidence — the only PR-level
-    // human comment PRE-dates the root, the post-dating PR-level comments are a
-    // Bot's and a `[bot]`-suffixed login's, and the only in-thread reply is the
-    // bot's own — so predicate 2 passes, nothing discharges, and the finding
-    // still applies to what would merge. The reason names the bare resolve.
+    // the 2861 ruling), in the FIELD shape the first leg constructed (f1): a
+    // bare UI resolve on a PR that keeps accumulating human comments. The only
+    // review-reply disposition PRE-dates the root; after it come a Bot's
+    // summary, a `[bot]`-suffixed login carrying the line, human chatter
+    // WITHOUT the line, and a human comment QUOTING the line inside a fence;
+    // the only in-thread reply is the bot's own. Predicate 2 passes, nothing
+    // discharges, the finding still applies, and the reason names the bare
+    // resolve AHEAD of the quoted body so it survives the matched bound (f6).
     const e = evaluate('synthetic-head-commit-high-inline.json');
     expect(e.verdict.disposition).toBe('deny');
     expect(e.verdict.provenance.ref).toBe('high-severity-inline');
     expect(e.detail.threads.unresolvedBot).toBe(0); // predicate 2 did NOT fire
     expect(e.detail.highInline).toBe(1);
     expect(e.detail.dischargedHigh).toBe(0);
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 0, prLevelDisposition: 0 });
+    expect(e.verdict.reason).toMatch(/resolved without a disposition on record/);
     expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
+    expect(e.verdict.provenance.matched).toMatch(/resolved without a disposition on record/);
     expect(e.notices.some((n) => n.includes('discharged'))).toBe(false);
+    // The fixture really carries the post-dating human chatter the field has.
+    const fixture = loadFixture('synthetic-head-commit-high-inline.json');
+    const pr = (
+      fixture.pages[0]!.body as {
+        data: {
+          repository: {
+            pullRequest: {
+              comments: {
+                nodes: Array<{
+                  author: { __typename: string; login: string };
+                  body: string;
+                  createdAt: string;
+                }>;
+              };
+            };
+          };
+        };
+      }
+    ).data.repository.pullRequest;
+    const humanAfterRoot = pr.comments.nodes.filter(
+      (c) => c.author.__typename === 'User' && c.createdAt > '2026-09-08T03:00:00Z',
+    );
+    expect(humanAfterRoot.length).toBeGreaterThanOrEqual(2);
+    expect(humanAfterRoot.some((c) => c.body.includes('local-lane:'))).toBe(true); // the fenced quote
   });
 
   // ─── The discharge read (mmnto-ai/totem#2861) ────────────────────────────
@@ -520,15 +557,18 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
   // The bare resolve above is the fail-closed arm; these are the two evidence
   // arms and the edges of each.
 
-  it('a resolved HIGH on the head with a non-bot PR-level comment AFTER its root is discharged', () => {
+  it('a resolved HIGH on the head with a non-bot PR-level review-reply disposition AFTER its root is discharged', () => {
     const e = evaluate('synthetic-high-inline-discharged-pr-level.json');
     expect(e.verdict.disposition).toBe('allow');
     expect(e.detail.highInline).toBe(0);
     expect(e.detail.dischargedHigh).toBe(1);
-    // The audit breadcrumb: what the predicate RELEASED is on stderr.
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 0, prLevelDisposition: 1 });
+    // The audit breadcrumb: what the predicate RELEASED, and by which arm, is
+    // on stderr.
     const line = e.notices.find((n) => n.includes('discharged through the disposition path'));
     expect(line).toBeDefined();
     expect(line).toContain('1 HIGH/Major bot inline(s)');
+    expect(line).toContain('1 by a PR-level review-reply disposition');
     expect(line).toContain('mmnto-ai/totem#4242');
   });
 
@@ -537,6 +577,18 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.verdict.disposition).toBe('allow');
     expect(e.detail.highInline).toBe(0);
     expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 1, prLevelDisposition: 0 });
+    expect(e.notices.join('\n')).toContain('1 by a non-bot in-thread reply');
+  });
+
+  it('evidence FOUND discharges even when the thread window is incomplete (f7)', () => {
+    // The window is incomplete (`hasNextPage`) and carries only the bot's own
+    // reply, but the PR-level disposition after the root is on record: the
+    // completeness test never precedes the evidence tests.
+    const e = evaluate('synthetic-high-inline-discharged-window-incomplete.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 0, prLevelDisposition: 1 });
   });
 
   it('a deleted-account reply (author: null) is a human reply — the resolve-threads rule', () => {
@@ -559,8 +611,32 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.verdict.provenance.ref).toBe('high-severity-inline');
     expect(e.detail.highInline).toBe(1);
     expect(e.detail.dischargedHigh).toBe(1);
+    expect(e.detail.dischargedBy).toEqual({ inThreadReply: 1, prLevelDisposition: 0 });
     expect(e.verdict.reason).toContain('coderabbitai');
     expect(e.verdict.reason).toMatch(/a bare resolve does not discharge a HIGH/);
+  });
+
+  it('a PR-level comment without the review-reply line, and a bot comment carrying it, are not dispositions — but the line outside code is (the marker)', () => {
+    // Read straight off the fixtures rather than only through the verdicts:
+    // the negative control's post-dating human chatter and its `[bot]`-suffixed
+    // line-carrier discharge nothing (asserted above), while the pr-level
+    // fixture's disposition body carries the line at line start.
+    const pr = (
+      loadFixture('synthetic-high-inline-discharged-pr-level.json').pages[0]!.body as {
+        data: {
+          repository: {
+            pullRequest: {
+              comments: {
+                nodes: Array<{ author: { __typename: string }; body: string }>;
+              };
+            };
+          };
+        };
+      }
+    ).data.repository.pullRequest;
+    const human = pr.comments.nodes.filter((c) => c.author.__typename === 'User');
+    expect(human).toHaveLength(1);
+    expect(human[0]!.body).toMatch(/^local-lane:/m);
   });
 
   it('PR-level evidence on the SECOND comments page is found, with the cursor sent', () => {
@@ -571,17 +647,26 @@ describe('merge-ready — predicates 2 and 4 (bot threads)', () => {
     expect(e.calls[2]).toContain('commentsAfter=CURSOR-C1');
   });
 
-  it('a resolved HIGH whose evidence the read could not settle is UNEVALUABLE, named, at both tiers — never a silent deny, never a discharge', () => {
-    // More replies than the ten-comment window, none of the read ones human,
-    // no PR-level comment after the root: predicate 4's input is missing.
+  it('a resolved HIGH with more comments than the window and no evidence in what was read is a bare resolve that DENIES at both tiers, the reason naming the window (f2)', () => {
+    // Pre-cure this shape was a predicate-4 FACT that denied at every tier; a
+    // first fold routed it to the unevaluable class, which pilot maps to
+    // `warn` — a downgrade the first leg caught (f2). It is a fact-side deny
+    // again, judged on what was read, and the reason says the window was
+    // incomplete rather than calling the thread unanswered outright.
     for (const tier of ['strict', 'pilot'] as const) {
-      const e = evaluate('synthetic-high-inline-evidence-unread.json', { tier });
-      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
-      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
-      expect(e.verdict.reason, tier).toMatch(/evidence the read could not settle/);
-      expect(e.detail.highInline, tier).toBe(0);
+      const e = evaluate('synthetic-high-inline-resolved-window-incomplete.json', { tier });
+      expect(e.verdict.disposition, tier).toBe('deny');
+      expect(e.verdict.provenance.ref, tier).toBe('high-severity-inline');
+      expect(e.verdict.reason, tier).toMatch(
+        /no disposition in the ten comments read \(the thread has more\)/,
+      );
+      // The discriminator sits inside the 160-character bound on `matched`.
+      expect(e.verdict.provenance.matched, tier).toMatch(
+        /no disposition in the ten comments read \(the thread has more\)/,
+      );
+      expect(e.detail.highInline, tier).toBe(1);
       expect(e.detail.dischargedHigh, tier).toBe(0);
-      expect(e.notices.join('\n'), tier).toMatch(/could not derive/);
+      expect(e.notices.join('\n'), tier).not.toMatch(/could not derive/);
     }
   });
 
@@ -1032,7 +1117,6 @@ describe('merge-ready — pagination and the unevaluable class', () => {
       'synthetic-pagination-second-page-fails.json',
       'synthetic-head-moved.json',
       'synthetic-merge-state-unknown.json',
-      'synthetic-high-inline-evidence-unread.json',
       'synthetic-comments-connection-missing.json',
     ]) {
       for (const tier of ['strict', 'pilot'] as const) {
