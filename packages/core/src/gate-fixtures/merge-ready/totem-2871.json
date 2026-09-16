@@ -2,8 +2,8 @@
   "kind": "capture",
   "repo": "mmnto-ai/totem",
   "pr": 2871,
-  "role": "mmnto-ai/totem#2861 calibration row: the declined-with-reason shape — a CodeRabbit Major resolved through the disposition path (the round disposition carries the review-reply local-lane line) while its anchor survives on the head; the real discharge specimen",
-  "capturedAt": "2026-09-16T01:17:38.911Z",
+  "role": "mmnto-ai/totem#2861 calibration row: the declined-with-reason shape — a CodeRabbit Major resolved through the disposition path (the round disposition in prose, then the per-thread line posted on the PR under the 2026-09-16 ruling) while its anchor survives on the head; the real discharge specimen",
+  "capturedAt": "2026-09-16T02:22:52.539Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -184,6 +184,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000737089,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -209,6 +210,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000737091,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -234,6 +236,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000737093,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -259,6 +262,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000747281,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -284,6 +288,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000747291,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -309,6 +314,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000747293,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -334,6 +340,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 4000747296,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -355,7 +362,7 @@
               "comments": {
                 "pageInfo": {
                   "hasNextPage": false,
-                  "endCursor": "Y3Vyc29yOnYyOpHPAAAAAVEoez0="
+                  "endCursor": "Y3Vyc29yOnYyOpHPAAAAAVM2LsY="
                 },
                 "nodes": [
                   {
@@ -413,6 +420,14 @@
                     },
                     "body": "The round disposition is sound. The six folded findings address the concrete integrity, atomic-write, block-scan, wording, and link-extraction issues; the dynamic-import finding is correctly declined because it targets CLI command cold-start behavior and the test is outside that path. The re-armed leg's assertion-strength issue and the sequential fence/comment scan are also covered by `a1e89aac`. I have no additional blocking or material findings.",
                     "createdAt": "2026-09-13T22:23:47Z"
+                  },
+                  {
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "## Calibration replay line — mmnto-ai/totem#2861, Option B (operator-ruled 2026-09-16)\n\nUnder the ruling, the merge-ready gate's predicate 4 reads a resolved HIGH as dispositioned only when a non-bot PR-level comment after its root NAMES it on a per-thread line. The round disposition on this PR (2026-09-13T22:23:22Z) declined the CodeRabbit Major on `agents-floor-sterility.test.ts` in prose; this comment carries the machine line the review-reply template now emits for it, so the calibration replay can read this row:\n\ndisposition: 4000747291 declined\n",
+                    "createdAt": "2026-09-16T02:18:53Z"
                   }
                 ]
               }

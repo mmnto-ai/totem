@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — a RESOLVED bot HIGH inline on the HEAD commit whose thread has MORE comments than the ten read (comments.pageInfo.hasNextPage), no non-bot reply among them and no PR-level review-reply disposition after its root, is a bare resolve judged on what was read: deny at predicate 4 at BOTH tiers, the reason naming the window — never the unevaluable class",
+  "role": "mmnto-ai/totem#2861 — a RESOLVED bot HIGH inline (1001) on the HEAD commit whose thread has MORE comments than the ten read (comments.pageInfo.hasNextPage), no non-bot reply among them and no PR-level disposition naming it after its root, is a bare resolve judged on what was read: deny at predicate 4 at BOTH tiers, the reason naming the window and the id — never the unevaluable class",
   "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -85,6 +86,7 @@
                           }
                         },
                         {
+                          "databaseId": 2001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"

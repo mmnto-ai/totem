@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — the PR-level evidence sits on the SECOND comments page: page 1 carries only a bot comment and hasNextPage, page 2 (fetched with commentsAfter=CURSOR-C1) carries the non-bot comment that discharges the resolved HIGH on the head",
+  "role": "mmnto-ai/totem#2861 — the PR-level evidence sits on the SECOND comments page: page 1 carries only a bot comment and hasNextPage, page 2 (fetched with commentsAfter=CURSOR-C1) carries the non-bot disposition naming root 1001 that discharges the resolved HIGH on the head",
   "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -65,6 +65,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -165,6 +166,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -194,7 +196,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 fixed\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T03:30:00Z"
                   }
                 ]

@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL in the field shape: a RESOLVED bot HIGH inline still on the HEAD commit with no disposition on record (a bare UI resolve) denies at predicate 4. PR-level: one review-reply disposition that PRE-dates the root, then three post-dating comments — a bot summary, a [bot]-suffixed login carrying the line (encoded __typename User: a counterfactual shape no observed read produces, GraphQL answers Bot for github-actions; it exercises the suffix arm), and human chatter without the line. In-thread: only the bot's own reply. A human comment QUOTING the line in a fence would count as a disposition line (the disclosed residue of accepting fenced lines) and is pinned in the marker matrix test, not here.",
+  "role": "mmnto-ai/totem#2861 — the NEGATIVE CONTROL in the field shape: a RESOLVED bot HIGH inline (root id 1001) still on the HEAD commit with no disposition naming it after its root denies at predicate 4. PR-level: one disposition naming 1001 that PRE-dates the root, then four post-dating comments — a bot summary, a [bot]-suffixed login naming 1001 (encoded __typename User: a counterfactual shape no observed read produces, GraphQL answers Bot for github-actions; it exercises the suffix arm), human chatter, and a later round's disposition that names ANOTHER thread (9999) and says the HIGH is untouched — the shape a round-keyed read discharged on (the re-armed leg's r2-f1). In-thread: only the bot's own reply.",
   "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -85,6 +86,7 @@
                           }
                         },
                         {
+                          "databaseId": 2001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -114,7 +116,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 declined\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T02:00:00Z"
                   },
                   {
@@ -130,7 +132,7 @@
                       "__typename": "User",
                       "login": "github-actions[bot]"
                     },
-                    "body": "local-lane: none leg: none",
+                    "body": "disposition: 1001 fixed\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T03:06:00Z"
                   },
                   {
@@ -140,6 +142,14 @@
                     },
                     "body": "Pushed the follow-up; please take another look at the head.",
                     "createdAt": "2026-09-08T03:40:00Z"
+                  },
+                  {
+                    "author": {
+                      "__typename": "User",
+                      "login": "satur8d"
+                    },
+                    "body": "## Round 2 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | a nit on another file | **fixed** |\n\nNothing else was addressed this round; the HIGH thread is untouched.\n\ndisposition: 9999 fixed\n\nlocal-lane: none leg: none",
+                    "createdAt": "2026-09-08T03:50:00Z"
                   }
                 ]
               }

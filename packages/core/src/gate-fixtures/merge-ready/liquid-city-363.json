@@ -2,8 +2,8 @@
   "kind": "capture",
   "repo": "mmnto-ai/liquid-city",
   "pr": 363,
-  "role": "R4's positive control — re-captured with the mmnto-ai/totem#2861 evidence query (fold 1: PR-level comment bodies)",
-  "capturedAt": "2026-09-16T01:17:29.000Z",
+  "role": "R4's positive control — re-captured with the mmnto-ai/totem#2861 per-thread query",
+  "capturedAt": "2026-09-16T02:22:48.944Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -111,6 +111,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 3262823425,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -125,6 +126,7 @@
                           }
                         },
                         {
+                          "databaseId": 3263015571,
                           "author": {
                             "__typename": "User",
                             "login": "satur8d"

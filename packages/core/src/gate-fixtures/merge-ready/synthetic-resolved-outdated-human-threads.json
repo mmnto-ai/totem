@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -96,6 +97,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1002,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -121,6 +123,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1003,
                           "author": {
                             "__typename": "User",
                             "login": "satur8d"

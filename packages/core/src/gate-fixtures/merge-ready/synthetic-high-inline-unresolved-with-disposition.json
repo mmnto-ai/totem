@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — an UNRESOLVED bot HIGH inline on the HEAD commit with a non-bot PR-level comment after its root is NOT discharged: the resolve is required, so predicate 2 denies first and highInline still counts it",
+  "role": "mmnto-ai/totem#2861 — an UNRESOLVED bot HIGH inline (1001) on the HEAD commit with a non-bot PR-level disposition naming it after its root is NOT discharged: the resolve is required, so predicate 2 denies first and highInline still counts it",
   "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -100,7 +101,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 declined\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T03:30:00Z"
                   }
                 ]

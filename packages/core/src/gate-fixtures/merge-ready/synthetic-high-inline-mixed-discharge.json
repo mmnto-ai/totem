@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — discharge is judged PER THREAD: two RESOLVED bot HIGHs on the head, one with a non-bot in-thread reply (discharged) and one bare (the only PR-level human comment PRE-dates both roots), deny at predicate 4 naming the bare one, highInline 1, dischargedHigh 1",
+  "role": "mmnto-ai/totem#2861 — discharge is judged PER THREAD: two RESOLVED bot HIGHs on the head (1001, 1002), one with a non-bot in-thread reply (discharged) and one bare (the only PR-level disposition naming both PRE-dates both roots), deny at predicate 4 naming the bare one by id, highInline 1, dischargedHigh 1",
   "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -65,6 +65,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -79,6 +80,7 @@
                           }
                         },
                         {
+                          "databaseId": 2001,
                           "author": {
                             "__typename": "User",
                             "login": "satur8d"
@@ -104,6 +106,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1002,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"
@@ -133,7 +136,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 fixed\ndisposition: 1002 fixed\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T02:00:00Z"
                   }
                 ]

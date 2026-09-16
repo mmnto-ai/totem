@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — a RESOLVED bot HIGH inline still on the HEAD commit is DISCHARGED by a non-bot PR-level comment created after its root: predicate 4 passes, highInline 0, dischargedHigh 1 (the bot's own later PR-level comment is not the evidence)",
+  "role": "mmnto-ai/totem#2861 — a RESOLVED bot HIGH inline (root id 1001) still on the HEAD commit is DISCHARGED by a non-bot PR-level comment created after its root that names it on a disposition line (disposition: 1001 declined): predicate 4 passes, highInline 0, dischargedHigh 1 by the PR-level arm (the bot's own later PR-level comment is not the evidence)",
   "synthesizedAt": "2026-09-16T00:47:11.787Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -108,7 +109,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 declined\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T03:30:00Z"
                   }
                 ]

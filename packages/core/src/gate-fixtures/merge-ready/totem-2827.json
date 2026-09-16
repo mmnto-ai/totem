@@ -2,8 +2,8 @@
   "kind": "capture",
   "repo": "mmnto-ai/totem",
   "pr": 2827,
-  "role": "the fold F2 witness (comment re-pointed to the head, originalCommit behind) — re-captured with the mmnto-ai/totem#2861 evidence query (fold 1: PR-level comment bodies)",
-  "capturedAt": "2026-09-16T01:17:35.512Z",
+  "role": "the fold F2 witness (comment re-pointed to the head, originalCommit behind) — re-captured with the mmnto-ai/totem#2861 per-thread query",
+  "capturedAt": "2026-09-16T02:22:51.362Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -178,6 +178,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 3946967475,
                           "author": {
                             "__typename": "Bot",
                             "login": "greptile-apps"
@@ -203,6 +204,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 3946985871,
                           "author": {
                             "__typename": "Bot",
                             "login": "coderabbitai"

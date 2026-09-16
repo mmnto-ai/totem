@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — evidence FOUND discharges even when the thread window is incomplete: the resolved HIGH on the head has more comments than the ten read (comments.pageInfo.hasNextPage) and only the bot's own reply inside the window, but a non-bot PR-level review-reply disposition after its root is on record: allow, dischargedHigh 1. Pins the invariant (both the pre-fold and post-fold reads pass it); it kills the mutant that tests completeness before evidence.",
+  "role": "mmnto-ai/totem#2861 — evidence FOUND discharges even when the thread window is incomplete: the resolved HIGH (1001) on the head has more comments than the ten read (comments.pageInfo.hasNextPage) and only the bot's own reply inside the window, but a non-bot PR-level disposition naming it after its root is on record: allow, dischargedHigh 1. Pins the invariant (both the pre-fold and post-fold reads pass it); it kills the mutant that tests completeness before evidence.",
   "synthesizedAt": "2026-09-16T01:17:05.889Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -71,6 +71,7 @@
                       },
                       "nodes": [
                         {
+                          "databaseId": 1001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -85,6 +86,7 @@
                           }
                         },
                         {
+                          "databaseId": 2001,
                           "author": {
                             "__typename": "Bot",
                             "login": "gemini-code-assist"
@@ -122,7 +124,7 @@
                       "__typename": "User",
                       "login": "satur8d"
                     },
-                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\nlocal-lane: none leg: none",
+                    "body": "## Round 1 disposition\n\n| # | finding | disposition |\n| --- | --- | --- |\n| 1 | the HIGH | **declined** — reason on the thread |\n\ndisposition: 1001 declined\n\nlocal-lane: none leg: none",
                     "createdAt": "2026-09-08T03:30:00Z"
                   }
                 ]
