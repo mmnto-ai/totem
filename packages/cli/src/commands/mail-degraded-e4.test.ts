@@ -76,7 +76,7 @@ let workspace: string;
 
 /**
  * Explicit single-seat identity (mmnto-ai/totem#2204). The `totem` fixture
- * basename resolves TWO seats, so an identity-less poll withholds directed
+ * basename resolves MULTIPLE seats, so an identity-less poll withholds directed
  * dispatches as a count; the faults below are induced on the DIRECTED
  * pipeline, so each such poll declares the seat it reads as — the same
  * per-shell `TOTEM_SELF_AGENT` a real seat exports. Polls whose subject is the
@@ -243,15 +243,20 @@ describe('E4 fault 1 — basename collision is surfaced AND loudly accounted', (
 
 describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/totem#2462, #2509)', () => {
   const BCAST = '2026-07-20T2326Z-broadcast-cohort-note.md';
-  const RESIDENT_SEATS = ['totem-claude', 'totem-gemini'];
+  // One seat dir per `totem` map seat, so the fixture's seat dirs COVER the
+  // map and the default resolution below stays purely structural (source
+  // `dirs`, not `dirs+map`). Kimi joined the map in mmnto-ai/totem#2875; the
+  // dir list follows it so this describe keeps measuring the suppression arm
+  // rather than a resolution difference.
+  const RESIDENT_SEATS = ['totem-claude', 'totem-gemini', 'totem-kimi'];
 
   /**
-   * Default-resolution poll (no env override) over the two-seat fixture. The
-   * union is served BY NAME (`allSeats`, mmnto-ai/totem#2204) because the
+   * Default-resolution poll (no env override) over the resident-seat fixture.
+   * The union is served BY NAME (`allSeats`, mmnto-ai/totem#2204) because the
    * multi-seat resolution IS the #2462 condition under test — the identity
    * gate would otherwise withhold directed mail and mask it.
    */
-  function pollTwoSeat(opts: Parameters<typeof pollMail>[0] = {}) {
+  function pollResidentSeats(opts: Parameters<typeof pollMail>[0] = {}) {
     return pollMail({
       repoRoot: selfRepoRootWithSeats(RESIDENT_SEATS),
       workspace,
@@ -271,11 +276,12 @@ describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/tot
   //
   // Today's actual behavior (regression-documented, NOT locked): mail.ts's
   // own-broadcast exclusion hits `continue` with no warning and no accounting
-  // line, so the default two-seat poll returns `mail: []`, `warnings: []` —
-  // rendered as "No unread mail addressed to totem-claude, totem-gemini or
-  // broadcast." That is the #2462 silent-suppression class: the dispatch is
-  // mark-absent for the resident NON-sender seat (totem-gemini), yet the
-  // render is indistinguishable from a genuinely clean inbox.
+  // line, so the default resident-seat poll returns `mail: []`,
+  // `warnings: []` — rendered as "No unread mail addressed to totem-claude,
+  // totem-gemini, totem-kimi or broadcast." That is the #2462
+  // silent-suppression class: the dispatch is mark-absent for the resident
+  // NON-sender seats (totem-gemini, totem-kimi), yet the render is
+  // indistinguishable from a genuinely clean inbox.
   test.fails(
     'REQUIRED (mmnto-ai/totem#2509): a resident-sender broadcast unread for a non-sender seat is rendered OR loudly accounted — never silently dropped',
     () => {
@@ -285,10 +291,10 @@ describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/tot
       // No sanity assertion in this body, deliberately: `test.fails` is
       // satisfied by ANY failure, so an extra assertion here would let an
       // unrelated seat-resolution regression keep the marker green without
-      // the #2509 assertion ever running (CR round-1 catch). The two-seat
+      // the #2509 assertion ever running (CR round-1 catch). The resident-seat
       // resolution is asserted by the positive control below on the same
       // fixture shape, where a regression fails loudly as a real failure.
-      const result = pollTwoSeat();
+      const result = pollResidentSeats();
 
       // Pack 1 + 2 — accounting fires / degraded envelope: the poll must
       // either render the dispatch (to the non-sender seat) or name the
@@ -302,14 +308,14 @@ describe('E4 fault 2 — own-broadcast suppression is never silent (mmnto-ai/tot
     },
   );
 
-  it('positive control: a NON-resident sender broadcast surfaces to the same two-seat default poll', () => {
+  it('positive control: a NON-resident sender broadcast surfaces to the same resident-seat default poll', () => {
     // Healthy-fixture control: the same poll renders everything it should
     // when the sender is NOT a resident seat (the exclusion arm cannot fire).
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: BCAST, to: 'broadcast', subject: 'theirs' },
     ]);
-    const result = pollTwoSeat();
-    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    const result = pollResidentSeats();
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.file).toBe(BCAST);
     expect(result.warnings).toEqual([]);
@@ -604,7 +610,13 @@ describe('E4 fault 3 addendum — qualified verdict line (mmnto-ai/totem#2516)',
 // narrowing here would be silent and would look exactly like a healthy poll.
 
 describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnto-ai/totem#2511)', () => {
-  const SEATS = ['totem-claude', 'totem-gemini'];
+  // One seat dir per `totem` map seat, so the fixture's seat dirs COVER the
+  // map and the denominator under test is exactly this list (mmnto-ai/totem#2875
+  // added totem-kimi to the map; a fixture short of it would leave an unmarked
+  // seat in the denominator and silently defeat the positive control below).
+  const SEATS = ['totem-claude', 'totem-gemini', 'totem-kimi'];
+  /** Every resident seat but the one the fault is induced on. */
+  const OTHER_SEATS = ['totem-gemini', 'totem-kimi'];
   const BCAST = '2026-08-11T0930Z-broadcast-cohort-note.md';
   const DIRECTED = '2026-08-11T0931Z-totem-claude-directed.md';
 
@@ -620,12 +632,13 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
     const root = selfRepoRootWithSeats(SEATS);
     const markerPath = writeCorruptLifecycleMarker(root, 'totem-claude');
     writeInbound();
-    // Only the OTHER (readable) seat consumed the broadcast. If the corrupt
-    // marker were read as suspended/retired — or if an unreadable marker were
-    // treated as "not in the denominator" — the requirement would drop to 1 and
-    // this broadcast would be silently subtracted: an obligation closed by a
-    // file nobody could parse.
-    writeBroadcastMark(root, 'totem-gemini', [BCAST]);
+    // Every OTHER (readable) seat consumed the broadcast; only the
+    // corrupt-marker seat has not. If the corrupt marker were read as
+    // suspended/retired — or if an unreadable marker were treated as "not in
+    // the denominator" — the requirement would drop to the marked seats alone
+    // and this broadcast would be silently subtracted: an obligation closed by
+    // a file nobody could parse.
+    for (const seat of OTHER_SEATS) writeBroadcastMark(root, seat, [BCAST]);
 
     // The union is served by NAME (`allSeats`, mmnto-ai/totem#2204): the
     // multi-seat denominator IS what this fault probes, so the identity gate
@@ -656,11 +669,11 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
   it('positive control + fault-removed: a VALID suspended marker does exclude the seat; deleting the corrupt marker returns to green', () => {
     const root = selfRepoRootWithSeats(SEATS);
     writeInbound();
-    writeBroadcastMark(root, 'totem-gemini', [BCAST]);
+    for (const seat of OTHER_SEATS) writeBroadcastMark(root, seat, [BCAST]);
 
     // Positive control — NON-VACUITY for the assertion above: with a marker the
     // reader can actually parse, the exclusion really does fire (requirement
-    // drops to 1, totem-gemini's mark closes the broadcast). So "the broadcast
+    // drops to the other seats, whose marks close the broadcast). So "the broadcast
     // stayed unread" under the corrupt marker is a measured difference, not a
     // mechanism that never fires. Directed mail still surfaces — suspension
     // touches the denominator only.
@@ -679,8 +692,8 @@ describe('E4 fault 4 — a corrupt lifecycle marker never silently narrows (mmnt
 
     // Fault-removed-returns-to-green: no marker at all ⇒ active by default, no
     // lifecycle warnings, and the same fixture polls exactly as a pre-#2511 tree
-    // would (both seats in the denominator, so one mark leaves the broadcast
-    // unread).
+    // would (every seat in the denominator, so the unmarked totem-claude leaves
+    // the broadcast unread).
     fs.rmSync(markerPath);
     const recovered = pollMail({ repoRoot: root, workspace, env: {}, allSeats: true });
     expect(recovered.warnings).toEqual([]);

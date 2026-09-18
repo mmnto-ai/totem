@@ -306,32 +306,32 @@ function writeConfig(repoRoot: string, content: string): void {
 }
 
 describe('resolveSelfAgents — basename map (default precedence)', () => {
-  it('returns Claude+Gemini pair for `totem`', () => {
+  it('returns the Claude+Gemini+Kimi seats for `totem`', () => {
     const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
-  it('returns strategy pair for `totem-strategy`', () => {
+  it('returns the strategy seats for `totem-strategy`', () => {
     const strategyRoot = mkDir(path.join(tmpRoot, 'totem-strategy'));
     const result = resolveSelfAgents(strategyRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini', 'strategy-kimi']);
   });
 
-  it('returns lc pair for `liquid-city`', () => {
+  it('returns the lc seats for `liquid-city`', () => {
     const lcRoot = mkDir(path.join(tmpRoot, 'liquid-city'));
     const result = resolveSelfAgents(lcRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini', 'lc-kimi']);
   });
 
-  it('returns Claude + Gemini pair for `totem-status` (status-claude seated, cohort-roles §1.1)', () => {
+  it('returns the Claude + Gemini + Kimi seats for `totem-status` (status-claude seated, cohort-roles §1.1; status-kimi 2026-07-29, §1.4)', () => {
     const statusRoot = mkDir(path.join(tmpRoot, 'totem-status'));
     const result = resolveSelfAgents(statusRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['status-claude', 'status-gemini']);
+    expect(result.agents).toEqual(['status-claude', 'status-gemini', 'status-kimi']);
   });
 
   it("returns source: 'none' and empty list for orphan-stream repo `totem-playground`", () => {
@@ -372,7 +372,7 @@ describe('resolveSelfAgents — config.json host_agents override', () => {
     writeConfig(totemRoot, JSON.stringify({ host_agents: [] }));
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('falls through when host_agents is not an array', () => {
@@ -387,7 +387,7 @@ describe('resolveSelfAgents — config.json host_agents override', () => {
     writeConfig(totemRoot, '{ "host_agents": [not-json]');
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('drops path-traversal entries from host_agents before returning', () => {
@@ -425,7 +425,7 @@ describe('resolveSelfAgents — config.json host_agents override', () => {
     );
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('rejects empty-string entries in host_agents (z.string().min(1))', () => {
@@ -513,14 +513,14 @@ describe('resolveSelfAgents — path-normalization', () => {
     const relative = path.relative(process.cwd(), totemRoot);
     const result = resolveSelfAgents(relative, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('handles trailing path separators in repoRoot', () => {
     const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
     const result = resolveSelfAgents(totemRoot + path.sep, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 });
 
@@ -617,49 +617,49 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     );
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('(ii) an ssh origin keys the map identically', () => {
     const root = mkGitRepo('wt-2801', 'git@github.com:mmnto-ai/totem.git');
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('an origin WITHOUT the .git suffix (and with a trailing slash) parses the same', () => {
     const root = mkGitRepo('wt-2801-plain', 'https://github.com/mmnto-ai/liquid-city/');
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini', 'lc-kimi']);
   });
 
   it('an origin whose CASE differs still keys the map — GitHub repo names are case-insensitive', () => {
     const root = mkGitRepo('wt-2801-cased', 'https://github.com/mmnto-ai/Totem.git');
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('a case-shifted DIRECTORY name keys the map too (the basename arm folds case as well)', () => {
     const root = mkDir(path.join(tmpRoot, 'Totem-Strategy'));
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini', 'strategy-kimi']);
   });
 
   it('(iii) NO origin falls back to the basename — a git repo named `totem` still resolves', () => {
     const root = mkGitRepo('totem');
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('(iii) a non-git directory is unaffected — the basename answers, as it always did', () => {
     const root = mkDir(path.join(tmpRoot, 'totem-strategy'));
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini']);
+    expect(result.agents).toEqual(['strategy-claude', 'strategy-gemini', 'strategy-kimi']);
   });
 
   it('every cohort-map key is reachable through the lower-cased lookup — no key carries upper case (fold F4)', () => {
@@ -715,7 +715,7 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     fs.renameSync(root, path.join(tmpRoot, 'totem-decoy'));
     const renamed = path.join(tmpRoot, 'totem-decoy');
     const result = resolveSelfAgents(renamed, {});
-    expect(result.agents).toEqual(['lc-claude', 'lc-gemini']);
+    expect(result.agents).toEqual(['lc-claude', 'lc-gemini', 'lc-kimi']);
   });
 
   it('seat dirs still UNION the origin-keyed map', () => {
@@ -723,7 +723,7 @@ describe('resolveSelfAgents — cohort map keyed on the origin repository (mmnto
     mkDir(path.join(root, '.totem', 'orchestration', 'totem-codex'));
     const result = resolveSelfAgents(root, {});
     expect(result.source).toBe('dirs+map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini', 'totem-kimi']);
   });
 
   it('env and config win WITHOUT reaching the origin read — zero spawns on layers 1 and 2', () => {
@@ -886,16 +886,21 @@ describe('resolveSelfAgents — seat dirs (mmnto-ai/totem#2141)', () => {
     mkDir(path.join(totemRoot, '.totem', 'orchestration', 'totem-codex'));
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('dirs+map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-codex', 'totem-gemini', 'totem-kimi']);
   });
 
   it("reports source 'dirs' when the map contributes nothing novel", () => {
     const totemRoot = mkDir(path.join(tmpRoot, 'totem'));
+    // The premise is "the seat dirs COVER the map", so the fixture carries one
+    // dir per `totem` map seat — totem-kimi included since mmnto-ai/totem#2875.
+    // A dir short of the map would make this a `dirs+map` case and stop
+    // exercising the branch it names.
     mkOrchestrationTree(totemRoot, 'totem-claude', 'all');
     mkOrchestrationTree(totemRoot, 'totem-gemini', ['outbox']);
+    mkOrchestrationTree(totemRoot, 'totem-kimi', ['outbox']);
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('dirs');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('falls back to the map when the orchestration dir exists but holds no seat dirs', () => {
@@ -903,7 +908,7 @@ describe('resolveSelfAgents — seat dirs (mmnto-ai/totem#2141)', () => {
     mkDir(path.join(totemRoot, '.totem', 'orchestration'));
     const result = resolveSelfAgents(totemRoot, {});
     expect(result.source).toBe('map');
-    expect(result.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('env still shadows the dirs layer entirely', () => {

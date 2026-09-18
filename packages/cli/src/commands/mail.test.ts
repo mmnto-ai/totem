@@ -192,7 +192,8 @@ function poll(opts: Parameters<typeof pollMail>[0] = {}): MailPollResult {
 
 /**
  * Explicit single-seat identity for the pipeline tests (mmnto-ai/totem#2204).
- * The `totem` fixture basename resolves TWO seats via the cohort map, so an
+ * The `totem` fixture basename resolves MULTIPLE seats via the cohort map (a
+ * Claude, a Gemini and, since mmnto-ai/totem#2875, a Kimi seat), so an
  * identity-less poll is identity-AMBIGUOUS: directed dispatches are withheld
  * as a count and the directed verdict is NOT DERIVED. Tests whose subject is
  * the single-recipient pipeline (parse / sort / truncation / workspace
@@ -1194,7 +1195,7 @@ describe('pollMail — outbox roster-validation sensor (mmnto-ai/totem#2335)', (
     });
 
     it('an identity-gated poll says "an outbox this repo hosts" and stays exit 2 (NOT-DERIVED precedence)', () => {
-      // No explicit identity: `totem` resolves two seats via dirs∪map, so the
+      // No explicit identity: `totem` resolves several seats via dirs∪map, so the
       // self-set is a UNION — the poll cannot claim the outbox is YOURS.
       writeOwnOutbox('totem-claude', [{ name: FAULT_FILE, to: COMMA_TO, subject: 'r2 blind' }]);
       const result = poll();
@@ -1373,7 +1374,7 @@ describe('pollMail — SELF_AGENT resolution', () => {
   it('records resolution source = map for a known repo', () => {
     const result = poll();
     expect(result.selfAgents.source).toBe('map');
-    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
   });
 
   it('respects TOTEM_SELF_AGENT env override', () => {
@@ -2330,7 +2331,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
 
     // The poller (sensor) surfaces exactly what the actuator emitted.
     const recipientRepo = markedRepoRoot('totem-strategy');
-    // The recipient repo (`totem-strategy`) hosts TWO seats, so the poll
+    // The recipient repo (`totem-strategy`) hosts MULTIPLE seats, so the poll
     // declares which one it reads as (mmnto-ai/totem#2204) — the round-trip
     // is about the wire shape, not about union resolution.
     const inbox = pollMail({
@@ -3195,8 +3196,9 @@ describe('mailSend — the filename emitter is colon-free / ADS-safe (mmnto-ai/t
 });
 
 // ─── Identity gate (mmnto-ai/totem#2204) ────────────────
-// The fixture repo basename `totem` resolves TWO seats via the cohort map
-// (totem-claude, totem-gemini), so an env-less poll here is exactly the
+// The fixture repo basename `totem` resolves THREE seats via the cohort map
+// (totem-claude, totem-gemini, totem-kimi — the Kimi seat added in
+// mmnto-ai/totem#2875), so an env-less poll here is exactly the
 // ambiguous shape the gate exists for — the 2026-08-13 BLIND-round
 // contamination class: the listing (subjects included) is the exposure
 // surface, so withheld mail is a COUNT, never per-item detail.
@@ -3208,7 +3210,7 @@ describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
       { name: '2026-08-14T0901Z-broadcast-ruling.md', to: 'broadcast', subject: 'ruling' },
     ]);
     const result = poll();
-    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini']);
+    expect(result.selfAgents.agents).toEqual(['totem-claude', 'totem-gemini', 'totem-kimi']);
     expect(result.selfAgents.source).toBe('map');
     expect(result.seatGate).toEqual({ withheldDirected: 1 });
     expect(result.mail).toHaveLength(1);
@@ -3394,10 +3396,16 @@ describe('pollMail — identity gate (mmnto-ai/totem#2204)', () => {
     ]);
     writeBroadcastProcessed('totem', 'totem-claude', ['2026-08-14T0900Z-broadcast-ruling.md']);
     const oneMark = poll();
-    expect(oneMark.mail).toHaveLength(1); // floor is 2 active seats — still unread
+    expect(oneMark.mail).toHaveLength(1); // floor is the 3 active map seats — still unread
     writeBroadcastProcessed('totem', 'totem-gemini', ['2026-08-14T0900Z-broadcast-ruling.md']);
-    const bothMarks = poll();
-    expect(bothMarks.mail).toHaveLength(0); // both marks clear it, same as ungated
+    const twoMarks = poll();
+    // One short of the floor is still unread — the rung that makes the clear
+    // below a measured difference rather than a mark that always clears
+    // (mmnto-ai/totem#2875 moved the floor from 2 seats to 3).
+    expect(twoMarks.mail).toHaveLength(1);
+    writeBroadcastProcessed('totem', 'totem-kimi', ['2026-08-14T0900Z-broadcast-ruling.md']);
+    const allMarks = poll();
+    expect(allMarks.mail).toHaveLength(0); // every seat marked clears it, same as ungated
   });
 
   it('gate + truncation compose: both warnings present', () => {

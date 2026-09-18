@@ -9,14 +9,20 @@
  * repository row or the wrong vendor column fails too (the Greptile P2 on the
  * first cut: a flat set comparison let a mis-filed seat through green).
  *
- * TODAY the table LEADS the map by exactly the four Kimi seats the roster of
- * record seats (`doctrine/cohort-roles.md` § 1.1 in the strategy repository,
- * which this test cannot read and does not claim to): the map's Kimi
- * propagation moves the mail-accounting fixtures and is its own change,
- * mmnto-ai/totem#2875. When the map gains them, `tableOnly` below becomes
- * empty and the pinned `KIMI_SEATS` assertion goes RED on purpose — the
- * tripwire that issue's second ask names: a human then empties `KIMI_SEATS`
- * and the lock becomes an equality. Nothing tightens by itself.
+ * The lock is now an EQUALITY, per repository: the map's Kimi propagation
+ * landed in mmnto-ai/totem#2875, `tableOnly` went empty, the pinned
+ * `KIMI_SEATS` assertion went red exactly as designed, and a human emptied it.
+ * Neither copy may lead the other any more — a seat added to the table alone
+ * fails on `KIMI_SEATS`, a seat added to the map alone fails on `mapOnly`.
+ * (The roster of record behind both is `doctrine/cohort-roles.md` § 1.1 and
+ * § 1.4 in the strategy repository, which this test cannot read and does not
+ * claim to; this lock holds the two RENDERINGS in this repository to each
+ * other, not either of them to the roster.)
+ *
+ * A one-directional gap is expressible again if a future seat must land in one
+ * copy first: name it in `KIMI_SEATS` (whatever it is called then) and the
+ * equality relaxes to "the table leads by exactly these". Nothing tightens by
+ * itself, and nothing loosens by itself either.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -71,7 +77,14 @@ function splitSeat(seat: string): { shorthand: string; vendor: string } {
   return { shorthand: seat.slice(0, at), vendor: seat.slice(at + 1) };
 }
 
-const KIMI_SEATS = ['lc-kimi', 'status-kimi', 'strategy-kimi', 'totem-kimi'];
+/**
+ * The seats the table is ALLOWED to carry that the map does not — empty since
+ * mmnto-ai/totem#2875 added `lc-kimi`, `status-kimi`, `strategy-kimi` and
+ * `totem-kimi` to `COHORT_AGENT_MAP`. Empty is what makes the assertion below
+ * an equality; it is a list, not a boolean, so a deliberate future one-way gap
+ * has somewhere to be declared instead of being silently tolerated.
+ */
+const KIMI_SEATS: string[] = [];
 
 describe('signoff step 2a table ↔ COHORT_AGENT_MAP (mmnto-ai/totem#2865)', () => {
   const rows = tableRows();
@@ -99,7 +112,7 @@ describe('signoff step 2a table ↔ COHORT_AGENT_MAP (mmnto-ai/totem#2865)', () 
     }
   });
 
-  it('per repository, the map seats ⊆ the row, and the row leads the map by exactly its Kimi seat', () => {
+  it('per repository, the map seats and the row are the same set (equality lock)', () => {
     // `knownCohortAgents()` with no workspace is exactly the map's union — no
     // seat dir on this machine can widen it — grouped back by shorthand.
     const mapByRepo = new Map<string, Set<string>>();
@@ -118,9 +131,12 @@ describe('signoff step 2a table ↔ COHORT_AGENT_MAP (mmnto-ai/totem#2865)', () 
       expect(mapOnly, `${row.repo}: map seats the row does not carry`).toEqual([]);
       tableOnly.push(...[...inRow].filter((s) => !inMap.has(s)));
     }
-    // The one-directional gap, named: closes to [] when the map's Kimi
-    // propagation lands (mmnto-ai/totem#2875), at which point a human empties
-    // KIMI_SEATS and this becomes an equality lock.
+    // The other half of the equality. `mapOnly` above already refuses a seat
+    // the map has and the row does not; this refuses a seat the row has and
+    // the map does not. With KIMI_SEATS empty (mmnto-ai/totem#2875 propagated
+    // the four Kimi seats into the map) the two together are set equality per
+    // repository — reverting the map change alone reds this line with the four
+    // Kimi seats named.
     expect(tableOnly.sort(), 'seats the table names that the map does not').toEqual(KIMI_SEATS);
   });
 
