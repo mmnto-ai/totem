@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 - a concurrency-cancelled run beside the LATER success of the same name, the later run LISTED FIRST as GitHub lists them: predicate 1 judges the latest run (greatest databaseId), passes, and counts the superseded run",
-  "synthesizedAt": "2026-09-18T17:03:58.683Z",
+  "role": "mmnto-ai/totem#2879 - a check that ran ONCE with databaseId null is judged on its own conclusion: the id is needed only to order same-named runs, so a single run without one is not unreadable",
+  "synthesizedAt": "2026-09-18T17:31:48.251Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -22,9 +22,9 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "FAILURE",
+                        "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": 3,
+                          "totalCount": 2,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -35,20 +35,13 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5001
+                              "databaseId": null
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Auto-close required check (D1)",
+                              "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5003
-                            },
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Auto-close required check (D1)",
-                              "status": "COMPLETED",
-                              "conclusion": "CANCELLED",
                               "databaseId": 5002
                             }
                           ]

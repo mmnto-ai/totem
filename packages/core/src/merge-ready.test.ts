@@ -10,7 +10,7 @@
  * disposition path while its anchor survives on the head — the discharge
  * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
  * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
- * ADR-109 false-positive budget. The other 54 are synthetic and labelled
+ * ADR-109 false-positive budget. The other 61 are synthetic and labelled
  * `synthetic-` in their names — one per invariant the captures cannot
  * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
@@ -172,8 +172,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(58);
-    expect(files.length).toBe(63);
+    expect(synthetic.length).toBe(61);
+    expect(files.length).toBe(66);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -425,12 +425,12 @@ describe('merge-ready — predicate 1 (checks)', () => {
       failing: 0,
       superseded: 1,
     });
-    const lines = e.notices.filter((n) => n.includes('ran more than once'));
+    const lines = e.notices.filter((n) => n.includes('times on the head commit'));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(
-      '"Auto-close required check (D1)" (2 runs; judged by run 5003, success)',
+      'check "Auto-close required check (D1)" ran 2 times on the head commit — judged by its latest run 5003 (success)',
     );
-    expect(lines[0]).toContain('mmnto-ai/totem#2879');
+    expect(lines[0]).toContain('1 superseded run(s) not counted (mmnto-ai/totem#2879)');
   });
 
   it('2879 — a success and then a LATER cancelled run of the same name DENIES naming the check: the earlier success does not stand in', () => {
@@ -463,7 +463,7 @@ describe('merge-ready — predicate 1 (checks)', () => {
       failing: 1,
       superseded: 0,
     });
-    expect(e.notices.join('\n')).not.toMatch(/ran more than once/);
+    expect(e.notices.join('\n')).not.toMatch(/times on the head commit/);
   });
 
   it('2879 — two runs of one name where one carries no readable databaseId is UNREADABLE at both tiers, never the first or the last one listed', () => {
@@ -485,6 +485,65 @@ describe('merge-ready — predicate 1 (checks)', () => {
 
   it('2879 — the query selects databaseId on CheckRun, so the judgment reads what gh answers', () => {
     expect(MERGE_READY_QUERY).toContain('... on CheckRun { name status conclusion databaseId }');
+  });
+
+  // ─── The fold of the leg's F1–F4, F7: arithmetic and tolerances, not only
+  // the two-run happy path ─────────────────────────────────────────────────
+
+  it('2879 — superseded counts RUNS, one disclosure line per name, and an earlier FAILED run is superseded like a cancelled one (leg F1, F2, F7)', () => {
+    // Three D1 runs (FAILURE, CANCELLED, SUCCESS) beside two Totem Lint runs:
+    // a mutant counting NAMES would say 2; the lines carry their whole names.
+    const e = evaluate('synthetic-check-three-runs-two-names.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.checks).toEqual({
+      total: 3,
+      success: 3,
+      pending: 0,
+      failing: 0,
+      superseded: 3,
+    });
+    const lines = e.notices.filter((n) => n.includes('times on the head commit'));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain(
+      'check "Auto-close required check (D1)" ran 3 times on the head commit — judged by its latest run 5004 (success)',
+    );
+    expect(lines[0]).toContain('2 superseded run(s) not counted');
+    expect(lines[1]).toContain(
+      'check "Totem Lint" ran 2 times on the head commit — judged by its latest run 5006 (success)',
+    );
+    expect(lines[1]).toContain('1 superseded run(s) not counted');
+    for (const line of lines) expect(line).not.toContain('…');
+  });
+
+  it('2879 — a check that ran ONCE with no readable databaseId is judged on its conclusion: the id orders same-named runs and nothing else (leg F3)', () => {
+    const e = evaluate('synthetic-check-single-null-id.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.checks).toEqual({
+      total: 2,
+      success: 2,
+      pending: 0,
+      failing: 0,
+      superseded: 0,
+    });
+    expect(e.notices.join('\n')).not.toMatch(/times on the head commit|could not derive/);
+  });
+
+  it('2879 — same-named runs on different pages of the checks connection are judged together, after the last page (leg F4)', () => {
+    const e = evaluate('synthetic-check-duplicate-across-pages.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.checks).toEqual({
+      total: 2,
+      success: 2,
+      pending: 0,
+      failing: 0,
+      superseded: 1,
+    });
+    const graphql = e.calls.filter((c) => c[0] === 'api');
+    expect(graphql).toHaveLength(2);
+    expect(graphql[1]).toContain('checksAfter=checks-page-1');
+    const lines = e.notices.filter((n) => n.includes('times on the head commit'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('judged by its latest run 5003 (success)');
   });
 
   // ─── The rollup must BELONG to the head commit (fold F7) ────────────────

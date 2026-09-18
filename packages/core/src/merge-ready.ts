@@ -530,6 +530,13 @@ type PageRead = { ok: true; page: PrPage } | { ok: false; detail: string };
  */
 const SUCCESS_CONCLUSIONS = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 const SUCCESS_CONTEXT_STATES = new Set(['SUCCESS']);
+/**
+ * The name a CheckRun gets when GitHub's answer carried none. `CheckRun.name`
+ * is NON_NULL in the schema, so this is reachable only from a malformed or
+ * mocked payload — and two such nodes must never be read as one check ran
+ * twice (leg F10 on mmnto-ai/totem#2879): the latest-run collapse skips it.
+ */
+const UNNAMED_CHECK = '(unnamed check)';
 const PENDING_CONTEXT_STATES = new Set(['PENDING', 'EXPECTED']);
 
 /**
@@ -577,7 +584,7 @@ function readChecks(rollup: Record<string, unknown> | null): {
       return { entries, hasNext: false, cursor: null, detail: 'a check node was not an object' };
     const typename = asString(n.__typename);
     if (typename === 'CheckRun') {
-      const name = asString(n.name) ?? '(unnamed check)';
+      const name = asString(n.name) ?? UNNAMED_CHECK;
       const status = asString(n.status) ?? '';
       const conclusion = asString(n.conclusion);
       const runId = asNonNegativeInteger(n.databaseId);
@@ -1140,14 +1147,19 @@ export function hasHighSeverityMarker(body: string): boolean {
 
 // ─── Evidence helpers ───────────────────────────────────────────────────────
 
-/** Bound and sanitize a fragment for a reason / provenance: no control characters, bounded length. */
-function bounded(text: string): string {
+/** One line: control characters to spaces, runs of whitespace to one, trimmed — never sliced. */
+function oneLine(text: string): string {
   let out = '';
   for (const ch of text) {
     const code = ch.charCodeAt(0);
     out += code < 0x20 || code === 0x7f ? ' ' : ch;
   }
-  out = out.replace(/\s+/g, ' ').trim();
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+/** Bound and sanitize a fragment for a reason / provenance: no control characters, bounded length. */
+function bounded(text: string): string {
+  const out = oneLine(text);
   return out.length > MERGE_READY_EVIDENCE_MAX
     ? out.slice(0, MERGE_READY_EVIDENCE_MAX - 1) + '…'
     : out;
@@ -1176,8 +1188,8 @@ interface ReadState {
    * every page is in and the rollup has accounted for itself.
    */
   judgedChecks: CheckEntry[];
-  /** One line per collapsed name, for the disclosure notice. */
-  supersededRuns: string[];
+  /** One record per collapsed name, for the disclosure notices. */
+  supersededRuns: SupersededRun[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
   /** Every PR-level comment, accumulated across pages — the discharge's evidence surface. */
@@ -1427,13 +1439,24 @@ const MERGE_STATE_DENY = new Map<string, string>([
  * untouched. Output order is first-seen order, so the deny reason's name list
  * reads the way the rollup listed it.
  */
+/** A check name that ran more than once on the head, and the run that judged it. */
+interface SupersededRun {
+  name: string;
+  runs: number;
+  judgedId: number;
+  kind: CheckEntry['kind'];
+}
+
 function judgeLatestRuns(
   checks: readonly CheckEntry[],
-): { ok: true; judged: CheckEntry[]; collapsed: string[] } | { ok: false; detail: string } {
+): { ok: true; judged: CheckEntry[]; collapsed: SupersededRun[] } | { ok: false; detail: string } {
   const groups = new Map<string, CheckEntry[]>();
   const order: Array<{ key: string } | { entry: CheckEntry }> = [];
   for (const c of checks) {
-    if (c.typename !== 'CheckRun') {
+    // A legacy status passes through; so does a run whose name did not read —
+    // grouping the placeholder would fabricate an identity two malformed nodes
+    // never shared (leg F10).
+    if (c.typename !== 'CheckRun' || c.name === UNNAMED_CHECK) {
       order.push({ entry: c });
       continue;
     }
@@ -1446,7 +1469,7 @@ function judgeLatestRuns(
     }
   }
   const judged: CheckEntry[] = [];
-  const collapsed: string[] = [];
+  const collapsed: SupersededRun[] = [];
   for (const slot of order) {
     if ('entry' in slot) {
       judged.push(slot.entry);
@@ -1473,9 +1496,12 @@ function judgeLatestRuns(
       if (latest === null || run.runId > (latest.runId as number)) latest = run;
     }
     judged.push(latest as CheckEntry);
-    collapsed.push(
-      `${JSON.stringify(slot.key)} (${group.length} runs; judged by run ${String((latest as CheckEntry).runId)}, ${(latest as CheckEntry).kind})`,
-    );
+    collapsed.push({
+      name: slot.key,
+      runs: group.length,
+      judgedId: (latest as CheckEntry).runId as number,
+      kind: (latest as CheckEntry).kind,
+    });
   }
   return { ok: true, judged, collapsed };
 }
@@ -1801,10 +1827,14 @@ export function evaluateMergeReady(
   detail.mergeStateStatus = state.mergeStateStatus;
   detail.checks = summarizeChecks(state.judgedChecks, state.checks.length);
   // A superseded run is a check the read SAW and set aside; the record must
-  // say so, and name the run that stood in for it (mmnto-ai/totem#2879).
-  if (state.supersededRuns.length > 0) {
+  // say so, name by name, and name the run that stood in for it
+  // (mmnto-ai/totem#2879). One line per collapsed name, on purpose: a single
+  // line under the evidence bound lost its tail at three names (leg F1; a
+  // head on main carried five), and a disclosure that trails off is not one.
+  // Each line is sanitised, never sliced — it is a notice, not `matched`.
+  for (const run of state.supersededRuns) {
     notices.push(
-      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: ${state.supersededRuns.length} check name(s) ran more than once on the head commit — each judged by its latest run (the greatest check-run id), the superseded run(s) not counted: ${bounded(state.supersededRuns.join('; '))} (mmnto-ai/totem#2879).`,
+      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: check ${oneLine(JSON.stringify(run.name))} ran ${run.runs} times on the head commit — judged by its latest run ${run.judgedId} (${run.kind}), the greatest check-run id; ${run.runs - 1} superseded run(s) not counted (mmnto-ai/totem#2879).`,
     );
   }
   detail.threads = {

@@ -1,9 +1,82 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 - a concurrency-cancelled run beside the LATER success of the same name, the later run LISTED FIRST as GitHub lists them: predicate 1 judges the latest run (greatest databaseId), passes, and counts the superseded run",
-  "synthesizedAt": "2026-09-18T17:03:58.683Z",
+  "role": "mmnto-ai/totem#2879 - the cancelled run of a name on page one of the checks connection and its later success on page two: the collapse runs once every page is in, so the pair is judged together (the second call carries the checks cursor)",
+  "synthesizedAt": "2026-09-18T17:31:48.251Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
+    {
+      "exitCode": 0,
+      "body": {
+        "data": {
+          "repository": {
+            "pullRequest": {
+              "number": 4242,
+              "isDraft": false,
+              "mergeStateStatus": "CLEAN",
+              "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "headRefName": "feat/example",
+              "baseRefName": "main",
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                      "statusCheckRollup": {
+                        "state": "FAILURE",
+                        "contexts": {
+                          "totalCount": 3,
+                          "pageInfo": {
+                            "hasNextPage": true,
+                            "endCursor": "checks-page-1"
+                          },
+                          "nodes": [
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Verify (ubuntu-latest)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5001
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "CANCELLED",
+                              "databaseId": 5002
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "reviewThreads": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
+              "comments": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              }
+            }
+          }
+        }
+      }
+    },
     {
       "exitCode": 0,
       "body": {
@@ -32,24 +105,10 @@
                           "nodes": [
                             {
                               "__typename": "CheckRun",
-                              "name": "Verify (ubuntu-latest)",
-                              "status": "COMPLETED",
-                              "conclusion": "SUCCESS",
-                              "databaseId": 5001
-                            },
-                            {
-                              "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
                               "databaseId": 5003
-                            },
-                            {
-                              "__typename": "CheckRun",
-                              "name": "Auto-close required check (D1)",
-                              "status": "COMPLETED",
-                              "conclusion": "CANCELLED",
-                              "databaseId": 5002
                             }
                           ]
                         }
