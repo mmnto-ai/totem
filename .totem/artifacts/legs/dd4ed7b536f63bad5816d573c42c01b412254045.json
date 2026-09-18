@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "dd4ed7b536f63bad5816d573c42c01b412254045",
+  "readAt": "2026-09-18T20:02:44Z",
+  "findings": [
+    {
+      "id": "r4-F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/merge-ready-latest-run-2879.md",
+      "line": 5,
+      "claim": "The changeset still quotes the pre-fold fragment (checkSuite { app { slug } workflowRun { workflow { name } } }) against the shipped one, opens with 'judges a check NAME', and enumerates only two unreadable arms while the fold added three that move PRs to deny under strict.",
+      "counterexample": "merge-ready.ts:212 versus the changeset paragraph. FOLDED: the changeset rewritten with the shipped fragment, the check definition and every fail-closed arm."
+    },
+    {
+      "id": "r4-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1616,
+      "claim": "The suiteId-null arm and the Actions-with-unreadable-workflow-id arm are unreachable from the corpus: no fixture has a null checkSuite.databaseId or a github-actions run with a null workflow.databaseId, though both are nullable in the schema, the spec's own standard for demanding a fixture.",
+      "counterexample": "Machine scan of 74 fixtures. FOLDED: synthetic-check-rerun-suite-id-missing.json and synthetic-check-actions-workflow-id-missing.json, unevaluable at both tiers naming the missing field."
+    },
+    {
+      "id": "r4-F3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2879.md",
+      "line": 11,
+      "claim": "The safety of the collapse rests on 'two suites imply reruns', but two INDEPENDENT runs of one workflow on one head are ordinary (main 1620d1c8: Analyze (...) twice under workflow 344389391, a push run and a scheduled run, neither superseding the other) and the shipped code collapses them; the class was unnamed.",
+      "counterexample": "REST runs 34405336324 and 34703253102, both SUCCESS. FOLDED: RULED — the latest run of a workflow wins, as gh pr checks and the merge box take it, the earlier counted as superseded and disclosed; named in the spec and the collapse docblock."
+    },
+    {
+      "id": "r4-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1633,
+      "claim": "A non-Actions app has one check suite per head, so its two same-named runs always share a suite and now go unevaluable where round 1 collapsed them — a semantic change the diff did not disclose — with a reason text naming 'two jobs of one workflow run' for a producer that has no workflow run.",
+      "counterexample": "Live: one github-advanced-security suite carrying two check runs on another repository's head. FOLDED: the reason names two checks of one suite (two jobs of one workflow run, or two runs of one app); synthetic-check-app-two-runs-one-suite.json; the class ruled and named in the spec."
+    },
+    {
+      "id": "r4-F5",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2879.md",
+      "line": 31,
+      "claim": "The reusable-workflow residual is groundable: on a repository with uses: jobs every callee check run answers the CALLER's workflow id and name, all in one suite, with callee job names prefixed by the caller job's name — two callers of one reusable workflow differ in both workflow id and check name.",
+      "counterexample": "Live GraphQL on Skyscanner/backpack-ios head 7dcad42a: Build / Install Dependencies and siblings under workflow 28060039 (pr.yml). FOLDED: the spec closes the residual on this receipt."
+    },
+    {
+      "id": "r4-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1525,
+      "claim": "judgeLatestRuns's contract docblock still enumerates the pre-fold arms with no suite rule, and SupersededRun.producer's doc reads as the identity key while it carries the human label.",
+      "counterexample": "FOLDED: the docblock states the suite rule, the ruled two-runs class and the non-Actions class; SupersededRun.producer documented as the display form."
+    },
+    {
+      "id": "r4-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1594,
+      "claim": "The producer-null deny text says '(check suite app)' but the arm now also fires when the app read and only the workflow id did not.",
+      "counterexample": "FOLDED: '(the check suite app, or the workflow id of an Actions run)'; the new fixture asserts it."
+    },
+    {
+      "id": "r4-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 648,
+      "claim": "The producer tests the workflow id before the app, so a non-Actions app that answered a workflow id would key slug/<id> while the JSDoc says 'the app slug alone for another app'; unreachable on live data and fail-closed if it fired.",
+      "counterexample": "FOLDED: the JSDoc says a non-Actions app answering a workflow id is keyed with it too, finer never coarser."
+    },
+    {
+      "id": "r4-F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/synthetic-check-two-jobs-one-suite.json",
+      "line": 3,
+      "claim": "Whether two same-named jobs of one workflow run are observable through statusCheckRollup at all is unproven: filter=latest drops the earlier attempt in one suite, consistent with a per-(suite, name) dedupe that would also drop a second same-named job; a sweep of large repositories found no such run; the fixture presented the shape as real.",
+      "counterexample": "QUESTION. FOLDED as disclosure: the fixture role and the spec say the shape may be unobservable and the arm is defensive and fail-closed either way."
+    },
+    {
+      "id": "r4-F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 417,
+      "claim": "'A job re-run inside one workflow run replaces its check run in place' is literally false: the re-run minted a new id and attempt 1's run still exists under filter=all; what is true is that the rollup lists only the latest attempt.",
+      "counterexample": "REST on the 2877 head, filter=all versus filter=latest. FOLDED: the JSDoc says a re-run mints a new run in the same suite and the rollup lists only the latest attempt."
+    }
+  ],
+  "folded": [
+    "r4-F1",
+    "r4-F2",
+    "r4-F3",
+    "r4-F4",
+    "r4-F5",
+    "r4-F6",
+    "r4-F7",
+    "r4-F8",
+    "r4-F9",
+    "r4-F10"
+  ],
+  "verdict": "Leg 4, re-armed and scoped to the key change a42db73c..dd4ed7b5 (mmnto-ai/totem#2879): 0 BLOCKING, 5 MATERIAL, 5 MINOR, no wrong-allow. The code path converged for the class it was armed on: the suite premise matched the live API on both incident heads to the digit (two suites under one workflow id); only the latest attempt is listed in the rollup while filter=all shows both attempts in one suite; matrix jobs share a suite with distinct names; 25 main heads carry no same-suite collision; CheckSuite.databaseId and Workflow.databaseId are nullable, non-Actions suites carry an id, github-actions is the real slug on 352 of 352 rows; the three fixtures kill their mutants at the spec's strength; the reshape changed nothing but checkSuite across all 71 pre-existing fixtures; the captures unchanged; receipts recomputed. What did not converge was the claim boundary and coverage: r4-F1 the changeset quoted the pre-fold fragment and omitted the new arms (folded: rewritten with the shipped fragment and every fail-closed arm); r4-F2 the null-suite-id arm and the Actions-without-workflow-id arm were unreachable from the corpus (folded: two fixtures); r4-F3 two independent runs of one workflow on one head collapse to the latest, a live class the narration talked past (folded: RULED in the spec and the collapse docblock — the latest run of a workflow wins, as the merge box takes it — and disclosed as superseded); r4-F4 a non-Actions app's same-named pair, always one suite, now goes unevaluable with a reason text naming a workflow run (folded: the reason names two runs of one app too; a fixture; the class named in the spec); r4-F5 the reusable-workflow residual closes on a receipt — workflowRun.workflow is the CALLER and callee job names are prefixed (folded: the spec closes it); r4-F6 the collapse docblock and SupersededRun.producer stated the pre-fold arms (folded); r4-F7 the producer-null reason named only the app field (folded: names the workflow id of an Actions run too); r4-F8 the fallback ordering keyed a non-Actions app with a workflow id where the JSDoc said slug alone (folded: the JSDoc says finer, never coarser); r4-F9 whether two same-named jobs of one run reach the rollup at all is unproven (folded as disclosure in the fixture role and the spec: the arm is defensive and fail-closed); r4-F10 'replaces its check run in place' was literally false (folded: mints a new run in the same suite, the rollup lists only the latest). The leg named its termination condition — fold as prose, docblocks and fixtures without rewiring the key — and the fold is exactly that. Convergence named by the leg and by the seat: no fifth leg."
+}
