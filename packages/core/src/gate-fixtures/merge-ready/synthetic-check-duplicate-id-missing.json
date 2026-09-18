@@ -35,21 +35,51 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5001
+                              "databaseId": 5001,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": null
+                              "databaseId": null,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
                               "conclusion": "CANCELLED",
-                              "databaseId": 5003
+                              "databaseId": 5003,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             }
                           ]
                         }

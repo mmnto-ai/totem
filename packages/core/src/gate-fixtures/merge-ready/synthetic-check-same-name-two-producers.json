@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2861 — an in-thread reply whose author is a DELETED account (author: null) is a human reply (the resolve-threads rule, item 6 of .totem/specs/2841.md): the resolved HIGH on the head is discharged",
-  "synthesizedAt": "2026-09-16T00:47:11.787Z",
+  "role": "mmnto-ai/totem#2879 bot round 1 (Greptile P1) - two INDEPENDENT checks named \"test\", one from workflow A (FAILURE, lower id) and one from workflow B (SUCCESS, greater id): different producers never collapse, the failure stays a failing check and predicate 1 denies naming it; a name-only collapse would have hidden it",
+  "synthesizedAt": "2026-09-18T19:18:14.561Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -22,9 +22,9 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "SUCCESS",
+                        "state": "FAILURE",
                         "contexts": {
-                          "totalCount": 1,
+                          "totalCount": 3,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -32,7 +32,7 @@
                           "nodes": [
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
+                              "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
                               "databaseId": 5001,
@@ -43,6 +43,40 @@
                                 "workflowRun": {
                                   "workflow": {
                                     "name": "CI"
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "test",
+                              "status": "COMPLETED",
+                              "conclusion": "FAILURE",
+                              "databaseId": 5002,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Workflow A"
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "test",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5003,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Workflow B"
                                   }
                                 }
                               }
@@ -66,46 +100,7 @@
                   "hasNextPage": false,
                   "endCursor": null
                 },
-                "nodes": [
-                  {
-                    "isResolved": true,
-                    "isOutdated": false,
-                    "comments": {
-                      "pageInfo": {
-                        "hasNextPage": false
-                      },
-                      "nodes": [
-                        {
-                          "databaseId": 1001,
-                          "author": {
-                            "__typename": "Bot",
-                            "login": "greptile-apps"
-                          },
-                          "body": "<a href=\"#\"><img alt=\"P1\" src=\"https://greptile-static-assets.s3.amazonaws.com/badges/p1.svg?v=9\" align=\"top\"></a> **The exact gh token is projected**",
-                          "createdAt": "2026-09-08T03:00:00Z",
-                          "commit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          },
-                          "originalCommit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          }
-                        },
-                        {
-                          "databaseId": 2001,
-                          "author": null,
-                          "body": "Declined as a disclosed limit; filed.",
-                          "createdAt": "2026-09-08T03:10:00Z",
-                          "commit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          },
-                          "originalCommit": {
-                            "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
+                "nodes": []
               },
               "comments": {
                 "pageInfo": {

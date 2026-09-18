@@ -35,21 +35,51 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": null
+                              "databaseId": null,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5002
+                              "databaseId": 5002,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Doctor (--strict)",
                               "status": "COMPLETED",
                               "conclusion": "FAILURE",
-                              "databaseId": null
+                              "databaseId": null,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             }
                           ]
                         }

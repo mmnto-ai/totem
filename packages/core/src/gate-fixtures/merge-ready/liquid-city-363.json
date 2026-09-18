@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/liquid-city",
   "pr": 363,
   "role": "R4's positive control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-18T17:06:52.875Z",
+  "capturedAt": "2026-09-18T19:19:48.097Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -37,35 +37,85 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 76639031559
+                              "databaseId": 76639031559,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 76639028395
+                              "databaseId": 76639028395,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CodeQL"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Doctor (--strict)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 76639031410
+                              "databaseId": 76639031410,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Doctor"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 76639031170
+                              "databaseId": 76639031170,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Lint"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Verify (windows-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 76639031539
+                              "databaseId": 76639031539,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "StatusContext",

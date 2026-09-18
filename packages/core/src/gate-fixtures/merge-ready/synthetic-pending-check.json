@@ -35,14 +35,34 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5001
+                              "databaseId": 5001,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "IN_PROGRESS",
                               "conclusion": null,
-                              "databaseId": 5002
+                              "databaseId": 5002,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             }
                           ]
                         }

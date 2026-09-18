@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem",
   "pr": 2827,
   "role": "the fold F2 witness (comment re-pointed to the head, originalCommit behind) — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-18T17:06:54.772Z",
+  "capturedAt": "2026-09-18T19:19:49.697Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -37,105 +37,251 @@
                               "name": "Classify the pending cut",
                               "status": "COMPLETED",
                               "conclusion": "SKIPPED",
-                              "databaseId": 101641441853
+                              "databaseId": 101641441853,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "VP-PR Cut Sensor"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440727
+                              "databaseId": 101641440727,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Auto-close guard"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440723
+                              "databaseId": 101641440723,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "CLA Check",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641435778
+                              "databaseId": 101641435778,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CLA Assistant"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (go)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641435800
+                              "databaseId": 101641435800,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CodeQL - Code Quality"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Doctor (--strict)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440778
+                              "databaseId": 101641440778,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Doctor"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440508
+                              "databaseId": 101641440508,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Lint"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Prove the loop (zero LLM)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440934
+                              "databaseId": 101641440934,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Proof Kit"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (windows-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440704
+                              "databaseId": 101641440704,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641435739
+                              "databaseId": 101641435739,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CodeQL - Code Quality"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (macos-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440766
+                              "databaseId": 101641440766,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (python)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641435485
+                              "databaseId": 101641435485,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CodeQL - Code Quality"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Docs Governance (maturity surface drift gate)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440747
+                              "databaseId": 101641440747,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Wind Tunnel SHA Integrity",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641440426
+                              "databaseId": 101641440426,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "totem-lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101641635577
+                              "databaseId": 101641635577,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-advanced-security"
+                                },
+                                "workflowRun": null
+                              }
                             },
                             {
                               "__typename": "StatusContext",

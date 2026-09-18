@@ -35,7 +35,17 @@
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5001
+                              "databaseId": 5001,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             }
                           ]
                         }
@@ -137,7 +147,17 @@
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 5002
+                              "databaseId": 5002,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CI"
+                                  }
+                                }
+                              }
                             }
                           ]
                         }

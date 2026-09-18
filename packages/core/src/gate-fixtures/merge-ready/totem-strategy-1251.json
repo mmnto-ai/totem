@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem-strategy",
   "pr": 1251,
   "role": "R4's negative control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-18T17:06:53.681Z",
+  "capturedAt": "2026-09-18T19:19:48.846Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -37,14 +37,34 @@
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101423396101
+                              "databaseId": 101423396101,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "CodeQL - Code Quality"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": 101423398594
+                              "databaseId": 101423398594,
+                              "checkSuite": {
+                                "app": {
+                                  "slug": "github-actions"
+                                },
+                                "workflowRun": {
+                                  "workflow": {
+                                    "name": "Totem Lint"
+                                  }
+                                }
+                              }
                             },
                             {
                               "__typename": "StatusContext",
