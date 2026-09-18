@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "369303a03fc4c85a465141b1b946e551dfe6f881",
+  "readAt": "2026-09-18T17:29:30Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1807,
+      "claim": "The disclosure notice joined every collapsed name into one bounded() line; at three realistic names (216 chars) the tail is cut at 159 with an ellipsis, so the spec's 'names every collapsed name' is false as worded. Reachable: main commit 1620d1c8 carries five duplicated names on one head.",
+      "counterexample": "Three entries of ~72 chars each exceed MERGE_READY_EVIDENCE_MAX=160; the count outside bounded() stays exact, the name list trails off. FOLDED: one sanitised, unsliced notice per collapsed name (oneLine), pinned by synthetic-check-three-runs-two-names.json (two lines, no ellipsis)."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1506,
+      "claim": "checks.superseded counts runs (materialised minus judged) but every duplicate group in the corpus is exactly two runs, so a mutant returning collapsed.length (names) survives; main commit 167fecdc carries a five-run name (true superseded 4, mutant 1).",
+      "counterexample": "All 63 fixtures scanned: no group larger than two. FOLDED: synthetic-check-three-runs-two-names.json (a three-run group beside a two-run group; superseded 3 asserted, the names mutant would say 2)."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1456,
+      "claim": "'A name that ran once needs no id' is implemented (group.length === 1 short-circuits) but no fixture carries a single CheckRun with a null databaseId, so an over-strict mutant (any unreadable id unevaluable) passes all 91 tests.",
+      "counterexample": "Corpus scan: the only null id sits inside a two-run group. FOLDED: synthetic-check-single-null-id.json (a lone run with databaseId null allows, no notice)."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1356,
+      "claim": "The cross-page collapse (after every page is in) is correct by code path but pinned by zero fixtures: no fixture has contexts.pageInfo.hasNextPage true, so a collapse-per-page mutant survives.",
+      "counterexample": "The three two-page fixtures close the checks connection on page one. FOLDED: synthetic-check-duplicate-across-pages.json (the cancelled run on page one, its later success on page two; the second call carries checksAfter; judged together)."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 13,
+      "claim": "The test file header still says 'The other 54 are synthetic' while the assertion it names expects 58.",
+      "counterexample": "Header 54 vs expect(synthetic.length).toBe(58). FOLDED: header reads 61 with the fold's three fixtures; the assertion 61/66."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".totem/specs/2879.md",
+      "line": 31,
+      "claim": "The spec's Verification line says the capture assertions hold after the re-capture with counts unchanged (6, 3, 16, 17), but the 2871 assertion moved from total 17 to total 16 + superseded 1.",
+      "counterexample": "Test diff on totem-2871: total 17 -> 16, superseded 0 -> 1. FOLDED: the spec says the materialised node counts are unchanged and names the one assertion that moved and why."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-latest-run-2879.md",
+      "line": 5,
+      "claim": "The collapse judges on the id alone, so an earlier FAILURE followed by a later SUCCESS also passes; the changeset, comment and README described only the cancelled shape, and no fixture pinned FAILURE-then-SUCCESS. Live: main 167fecdc, five runs, first FAILURE, greatest id SUCCESS, rollup state FAILURE.",
+      "counterexample": "merge-ready.ts judges purely on runId with no conclusion filter. FOLDED: changeset and spec say 'cancelled or failed'; the three-run fixture's first D1 run is FAILURE."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2879.md",
+      "line": 26,
+      "claim": "The residual named 'two GitHub Apps' but the general collision is two jobs under one app (Actions names a check run after the JOB), so keying on app slug would not fix it.",
+      "counterexample": "Every job name across the thirteen workflows is distinct; the only second app on a live head posts totem-lint beside Totem Lint (case differs). FOLDED: the residual names both shapes and the exact-string key's behaviour."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/synthetic-check-superseded-cancelled.json",
+      "line": 25,
+      "claim": "The fixture pairs a CANCELLED CheckRun with rollup state SUCCESS; live rollups carrying a cancelled or failed run report FAILURE (main 43cb5c16, 7716929b, 167fecdc); its sibling fixture already uses FAILURE.",
+      "counterexample": "No verdict rides on state outside the zero-checks arm; the corpus discipline is fidelity. FOLDED: state set to FAILURE, receipt recomputed."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 580,
+      "claim": "Two CheckRun nodes whose name does not read both become '(unnamed check)' and would collapse into one judged entry, a fabricated identity; unreachable from GitHub (name is NON_NULL) but reachable from a malformed payload.",
+      "counterexample": "Schema introspection: CheckRun.name NON_NULL(String). FOLDED: the placeholder passes through the collapse (UNNAMED_CHECK), documented at the constant."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-latest-run-2879.md",
+      "line": 2,
+      "claim": "MergeReadyProvenanceDetail.checks gains a REQUIRED superseded field and total changes meaning from runs to names, under a patch; no consumer outside core reads the shape (the CLI types detail as an opaque record), but a TS consumer constructing the type breaks at compile time.",
+      "counterexample": "grep over packages/cli/src and packages/mcp/src: only the type re-export. FOLDED: the changeset is a minor, with the reason stated."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11"
+  ],
+  "verdict": "Leg 1 on the latest-run judgment (2be73170..369303a0, mmnto-ai/totem#2879): 0 BLOCKING, 4 MATERIAL, 7 MINOR. The core judgment held every attempt: greatest databaseId equals the latest run on 31 of 31 live same-named groups (60 main commits plus the PR heads); the rollup order is not chronological and not consistently reversed (2877 lists the greater id first, 2871 second); a rerun mints a new greater id and the rollup keeps only the latest attempt, so the bug-time pair reconstructs to CANCELLED 104656626085 beside SUCCESS 104656726470 and the read cures the originating head; the fail-closed arm is reachable (databaseId nullable in the schema); the count check runs on raw nodes before the collapse and R5 is unreachable through it; the reshape moved no verdict and eight hand-recomputed receipts match. What it found was assertion strength and narration: F1 the one-line notice lost its tail at three names (folded: one unsliced line per name); F2 superseded counted runs but no group exceeded two (folded: a three-run fixture); F3 the lone null-id run was unpinned (folded: fixture); F4 the cross-page collapse was unpinned (folded: a paginated fixture with the cursor asserted); F5 the test header said 54 (folded); F6 the spec's verification line overstated (folded); F7 an earlier FAILURE is superseded too and was undisclosed (folded: changeset, spec, fixture); F8 the residual named two apps where two jobs under one app is the general shape (folded); F9 a fixture's rollup state read SUCCESS over a cancelled run (folded: FAILURE); F10 the unnamed-check placeholder could group (folded: pass-through); F11 patch understated a required field and a changed meaning (folded: minor). Convergence named by the leg on the judgment; the fold re-armed a scoped leg on the notice's emission change."
+}
