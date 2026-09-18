@@ -25,13 +25,17 @@
                         "state": "SUCCESS",
                         "contexts": {
                           "totalCount": 1,
-                          "pageInfo": { "hasNextPage": false, "endCursor": null },
+                          "pageInfo": {
+                            "hasNextPage": false,
+                            "endCursor": null
+                          },
                           "nodes": [
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5001
                             }
                           ]
                         }
@@ -40,9 +44,18 @@
                   }
                 ]
               },
-              "reviews": { "pageInfo": { "hasNextPage": false, "endCursor": null }, "nodes": [] },
+              "reviews": {
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
+                "nodes": []
+              },
               "reviewThreads": {
-                "pageInfo": { "hasNextPage": false, "endCursor": null },
+                "pageInfo": {
+                  "hasNextPage": false,
+                  "endCursor": null
+                },
                 "nodes": []
               }
             }

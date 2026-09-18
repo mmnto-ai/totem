@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "a still-running check denies at predicate 1",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2879 - a success and then a LATER cancelled run of the same name (greater databaseId listed second): the latest run is CANCELLED, predicate 1 denies naming the check; the earlier success does not stand in",
+  "synthesizedAt": "2026-09-18T17:03:58.683Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -22,9 +22,9 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "SUCCESS",
+                        "state": "FAILURE",
                         "contexts": {
-                          "totalCount": 2,
+                          "totalCount": 3,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -39,10 +39,17 @@
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
-                              "status": "IN_PROGRESS",
-                              "conclusion": null,
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
                               "databaseId": 5002
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "CANCELLED",
+                              "databaseId": 5003
                             }
                           ]
                         }

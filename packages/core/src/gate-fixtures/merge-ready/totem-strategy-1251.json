@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem-strategy",
   "pr": 1251,
   "role": "R4's negative control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-16T02:22:50.097Z",
+  "capturedAt": "2026-09-18T17:06:53.681Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -36,13 +36,15 @@
                               "__typename": "CheckRun",
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 101423396101
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 101423398594
                             },
                             {
                               "__typename": "StatusContext",

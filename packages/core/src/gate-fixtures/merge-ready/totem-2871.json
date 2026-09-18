@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem",
   "pr": 2871,
   "role": "mmnto-ai/totem#2861 calibration row: the declined-with-reason shape — a CodeRabbit Major resolved through the disposition path (the round disposition in prose, then the per-thread line posted on the PR under the 2026-09-16 ruling) while its anchor survives on the head; the real discharge specimen",
-  "capturedAt": "2026-09-16T02:22:52.539Z",
+  "capturedAt": "2026-09-18T17:06:55.529Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -36,97 +36,113 @@
                               "__typename": "CheckRun",
                               "name": "Classify the pending cut",
                               "status": "COMPLETED",
-                              "conclusion": "SKIPPED"
+                              "conclusion": "SKIPPED",
+                              "databaseId": 103790772824
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771534
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103803324012
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (ubuntu-latest)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771996
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "CLA Check",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790767436
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (go)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790767115
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Doctor (--strict)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771478
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771581
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Prove the loop (zero LLM)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771585
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (windows-latest)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771899
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790767060
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Build & Lint (macos-latest)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790772029
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (python)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790766940
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Docs Governance (maturity surface drift gate)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771813
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Wind Tunnel SHA Integrity",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790771951
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "totem-lint",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 103790889692
                             },
                             {
                               "__typename": "StatusContext",

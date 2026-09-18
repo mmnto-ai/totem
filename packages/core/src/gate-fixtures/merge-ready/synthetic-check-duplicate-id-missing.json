@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "a still-running check denies at predicate 1",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2879 - two runs of one name where one carries databaseId null: the latest cannot be derived, the check state is unreadable (unevaluable at both tiers), never the first or the last one listed",
+  "synthesizedAt": "2026-09-18T17:03:58.686Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -24,7 +24,7 @@
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": 2,
+                          "totalCount": 3,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -39,10 +39,17 @@
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
-                              "status": "IN_PROGRESS",
-                              "conclusion": null,
-                              "databaseId": 5002
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
+                              "databaseId": null
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "CANCELLED",
+                              "databaseId": 5003
                             }
                           ]
                         }

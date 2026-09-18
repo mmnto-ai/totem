@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/liquid-city",
   "pr": 363,
   "role": "R4's positive control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-16T02:22:48.944Z",
+  "capturedAt": "2026-09-18T17:06:52.875Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -36,31 +36,36 @@
                               "__typename": "CheckRun",
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 76639031559
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Analyze (javascript-typescript)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 76639028395
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Doctor (--strict)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 76639031410
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Totem Lint",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 76639031170
                             },
                             {
                               "__typename": "CheckRun",
                               "name": "Verify (windows-latest)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS"
+                              "conclusion": "SUCCESS",
+                              "databaseId": 76639031539
                             },
                             {
                               "__typename": "StatusContext",

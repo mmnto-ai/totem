@@ -36,13 +36,15 @@
                                   "__typename": "CheckRun",
                                   "name": "Verify (ubuntu-latest)",
                                   "status": "COMPLETED",
-                                  "conclusion": "SUCCESS"
+                                  "conclusion": "SUCCESS",
+                                  "databaseId": 5001
                                 },
                                 {
                                   "__typename": "CheckRun",
                                   "name": "Totem Lint",
                                   "status": "COMPLETED",
-                                  "conclusion": "SUCCESS"
+                                  "conclusion": "SUCCESS",
+                                  "databaseId": 5002
                                 }
                               ]
                             }

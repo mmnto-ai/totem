@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "a still-running check denies at predicate 1",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2879 - a concurrency-cancelled run beside the LATER success of the same name, the later run LISTED FIRST as GitHub lists them: predicate 1 judges the latest run (greatest databaseId), passes, and counts the superseded run",
+  "synthesizedAt": "2026-09-18T17:03:58.683Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -24,7 +24,7 @@
                       "statusCheckRollup": {
                         "state": "SUCCESS",
                         "contexts": {
-                          "totalCount": 2,
+                          "totalCount": 3,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -39,9 +39,16 @@
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
-                              "status": "IN_PROGRESS",
-                              "conclusion": null,
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5003
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "Auto-close required check (D1)",
+                              "status": "COMPLETED",
+                              "conclusion": "CANCELLED",
                               "databaseId": 5002
                             }
                           ]

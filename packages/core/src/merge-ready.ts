@@ -107,7 +107,14 @@ export type MergeReadyProvenanceDetail = {
   pr: number | null;
   /** The PR head sha as GitHub answered it, or null when the read never got that far. */
   headSha: string | null;
-  checks: { total: number; success: number; pending: number; failing: number };
+  /**
+   * Predicate 1's count, per check NAME after the latest-run judgment
+   * (mmnto-ai/totem#2879): `total` counts names, the way `gh pr checks` and
+   * the merge box do; `superseded` counts the check runs a later run of the
+   * same name replaced (a concurrency group's cancelled duplicates), which
+   * are read and disclosed but never judged.
+   */
+  checks: { total: number; success: number; pending: number; failing: number; superseded: number };
   threads: { unresolvedBot: number; pagesRead: number; complete: boolean };
   changesRequestedBy: string[];
   /** HIGH/Major bot inlines on the head commit that still APPLY after the discharge read — predicate 4's count. */
@@ -200,7 +207,7 @@ const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
             pageInfo { hasNextPage endCursor }
             nodes {
               __typename
-              ... on CheckRun { name status conclusion }
+              ... on CheckRun { name status conclusion databaseId }
               ... on StatusContext { context state }
             }
           }
@@ -356,10 +363,24 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+/** A non-negative integer as the API typed it; anything else is null, never coerced. */
+function asNonNegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /** One classified status check. */
 interface CheckEntry {
   name: string;
   kind: 'success' | 'pending' | 'failing';
+  /** Which rollup node type answered it: a CheckRun (Actions, apps) or a legacy StatusContext. */
+  typename: 'CheckRun' | 'StatusContext';
+  /**
+   * The CheckRun's `databaseId` — GitHub's check-run id, a single increasing
+   * sequence, so among same-named runs on one head the greatest id IS the
+   * latest run (mmnto-ai/totem#2879). Null on a StatusContext, and on a
+   * CheckRun whose id did not read as a non-negative integer.
+   */
+  runId: number | null;
 }
 
 /** One review, reduced to what predicate 3 reads. */
@@ -559,22 +580,23 @@ function readChecks(rollup: Record<string, unknown> | null): {
       const name = asString(n.name) ?? '(unnamed check)';
       const status = asString(n.status) ?? '';
       const conclusion = asString(n.conclusion);
+      const runId = asNonNegativeInteger(n.databaseId);
       if (status !== 'COMPLETED') {
-        entries.push({ name, kind: 'pending' });
+        entries.push({ name, kind: 'pending', typename, runId });
       } else if (conclusion !== null && SUCCESS_CONCLUSIONS.has(conclusion)) {
-        entries.push({ name, kind: 'success' });
+        entries.push({ name, kind: 'success', typename, runId });
       } else {
-        entries.push({ name, kind: 'failing' });
+        entries.push({ name, kind: 'failing', typename, runId });
       }
     } else if (typename === 'StatusContext') {
       const name = asString(n.context) ?? '(unnamed context)';
       const state = asString(n.state) ?? '';
       if (SUCCESS_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'success' });
+        entries.push({ name, kind: 'success', typename, runId: null });
       } else if (PENDING_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'pending' });
+        entries.push({ name, kind: 'pending', typename, runId: null });
       } else {
-        entries.push({ name, kind: 'failing' });
+        entries.push({ name, kind: 'failing', typename, runId: null });
       }
     } else {
       return {
@@ -1146,7 +1168,16 @@ interface ReadState {
   rollupPresent: boolean;
   rollupState: string | null;
   rollupTotalCount: unknown;
+  /** Every rollup context the read materialised, one entry per node — what the count check judges. */
   checks: CheckEntry[];
+  /**
+   * The checks predicate 1 judges: `checks` with every same-named CheckRun
+   * group collapsed to its latest run (mmnto-ai/totem#2879). Filled once
+   * every page is in and the rollup has accounted for itself.
+   */
+  judgedChecks: CheckEntry[];
+  /** One line per collapsed name, for the disclosure notice. */
+  supersededRuns: string[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
   /** Every PR-level comment, accumulated across pages — the discharge's evidence surface. */
@@ -1189,6 +1220,8 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
     rollupState: null,
     rollupTotalCount: null,
     checks: [],
+    judgedChecks: [],
+    supersededRuns: [],
     reviews: [],
     threads: [],
     prComments: [],
@@ -1312,6 +1345,21 @@ function readPullRequest(payload: MergeReadyPayload, runner: GhRunner): ReadOutc
         }
       }
 
+      // Same-named CheckRuns collapse to their LATEST run before predicate 1
+      // reads them (mmnto-ai/totem#2879): a workflow's concurrency group
+      // cancels the run a later push or body edit superseded, and the rollup
+      // lists BOTH — the cancelled one is not a failing check, it is a
+      // replaced one. The judgment needs every duplicate's id; a group with
+      // an unreadable id is an unreadable check state, never "the first one".
+      // Runs AFTER the count check on purpose: the rollup accounts for the
+      // nodes it listed, and the collapse is a read of those nodes.
+      const judged = judgeLatestRuns(state.checks);
+      if (!judged.ok) {
+        return { ok: false, detail: judged.detail, pagesRead: state.pagesRead };
+      }
+      state.judgedChecks = judged.judged;
+      state.supersededRuns = judged.collapsed;
+
       // R5's zero-checks FACT applies ONLY where the rollup is consistent about
       // it, and that is exactly two shapes: no rollup at all, or a rollup that
       // reports SUCCESS over an empty context list AND counts zero (the count
@@ -1361,21 +1409,102 @@ const MERGE_STATE_DENY = new Map<string, string>([
   ['DRAFT', 'the pull request is still a draft'],
 ]);
 
-function summarizeChecks(checks: readonly CheckEntry[]): {
+/**
+ * Collapse every same-named `CheckRun` group to its LATEST run
+ * (mmnto-ai/totem#2879). GitHub's rollup `contexts` lists EVERY check run on
+ * the head — a concurrency group's cancelled duplicate beside the run that
+ * superseded it — while `gh pr checks` and the merge box show one row per
+ * name, judged by the latest run. The rollup's own order is NOT
+ * chronological (on mmnto-ai/totem#2877's head the later D1 run was listed
+ * before the earlier one), so "last listed wins" is not a rule; the latest
+ * run is the one with the greatest `databaseId`, GitHub's check-run id, a
+ * single increasing sequence.
+ *
+ * A group of two or more whose every member does not carry a readable id is
+ * an unreadable check state (R2): the latest cannot be derived, and picking
+ * one would be a guess dressed as a read. A single run needs no id. Legacy
+ * `StatusContext` nodes carry one state per context already and pass through
+ * untouched. Output order is first-seen order, so the deny reason's name list
+ * reads the way the rollup listed it.
+ */
+function judgeLatestRuns(
+  checks: readonly CheckEntry[],
+): { ok: true; judged: CheckEntry[]; collapsed: string[] } | { ok: false; detail: string } {
+  const groups = new Map<string, CheckEntry[]>();
+  const order: Array<{ key: string } | { entry: CheckEntry }> = [];
+  for (const c of checks) {
+    if (c.typename !== 'CheckRun') {
+      order.push({ entry: c });
+      continue;
+    }
+    const group = groups.get(c.name);
+    if (group === undefined) {
+      groups.set(c.name, [c]);
+      order.push({ key: c.name });
+    } else {
+      group.push(c);
+    }
+  }
+  const judged: CheckEntry[] = [];
+  const collapsed: string[] = [];
+  for (const slot of order) {
+    if ('entry' in slot) {
+      judged.push(slot.entry);
+      continue;
+    }
+    const group = groups.get(slot.key)!;
+    if (group.length === 1) {
+      judged.push(group[0]!);
+      continue;
+    }
+    let latest: CheckEntry | null = null;
+    for (const run of group) {
+      if (run.runId === null) {
+        return {
+          ok: false,
+          detail:
+            'check ' +
+            bounded(JSON.stringify(slot.key)) +
+            ' ran ' +
+            String(group.length) +
+            ' times on the head and one of its runs carries no readable databaseId - the latest run cannot be derived, the check state is unreadable',
+        };
+      }
+      if (latest === null || run.runId > (latest.runId as number)) latest = run;
+    }
+    judged.push(latest as CheckEntry);
+    collapsed.push(
+      `${JSON.stringify(slot.key)} (${group.length} runs; judged by run ${String((latest as CheckEntry).runId)}, ${(latest as CheckEntry).kind})`,
+    );
+  }
+  return { ok: true, judged, collapsed };
+}
+
+function summarizeChecks(
+  judged: readonly CheckEntry[],
+  materialised: number,
+): {
   total: number;
   success: number;
   pending: number;
   failing: number;
+  superseded: number;
 } {
   let success = 0;
   let pending = 0;
   let failing = 0;
-  for (const c of checks) {
+  for (const c of judged) {
     if (c.kind === 'success') success++;
     else if (c.kind === 'pending') pending++;
     else failing++;
   }
-  return { total: checks.length, success, pending, failing };
+  return {
+    total: judged.length,
+    success,
+    pending,
+    failing,
+    superseded: materialised - judged.length,
+  };
 }
 
 /**
@@ -1589,7 +1718,7 @@ export function evaluateMergeReady(
     repo: parsed.repo,
     pr: parsed.pr,
     headSha: null,
-    checks: { total: 0, success: 0, pending: 0, failing: 0 },
+    checks: { total: 0, success: 0, pending: 0, failing: 0, superseded: 0 },
     threads: { unresolvedBot: 0, pagesRead: 0, complete: false },
     changesRequestedBy: [],
     highInline: 0,
@@ -1670,7 +1799,14 @@ export function evaluateMergeReady(
   detail.pr = state.number;
   detail.headSha = state.headSha;
   detail.mergeStateStatus = state.mergeStateStatus;
-  detail.checks = summarizeChecks(state.checks);
+  detail.checks = summarizeChecks(state.judgedChecks, state.checks.length);
+  // A superseded run is a check the read SAW and set aside; the record must
+  // say so, and name the run that stood in for it (mmnto-ai/totem#2879).
+  if (state.supersededRuns.length > 0) {
+    notices.push(
+      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: ${state.supersededRuns.length} check name(s) ran more than once on the head commit — each judged by its latest run (the greatest check-run id), the superseded run(s) not counted: ${bounded(state.supersededRuns.join('; '))} (mmnto-ai/totem#2879).`,
+    );
+  }
   detail.threads = {
     unresolvedBot: unresolvedBotThreads(state.threads).length,
     pagesRead: state.pagesRead,
@@ -1801,7 +1937,7 @@ function firstFailure(
 ): Blocked | null {
   // 1. checks
   if (detail.checks.failing > 0) {
-    const names = state.checks
+    const names = state.judgedChecks
       .filter((c) => c.kind === 'failing')
       .map((c) => c.name)
       .join(', ');
@@ -1811,7 +1947,7 @@ function firstFailure(
     };
   }
   if (detail.checks.pending > 0) {
-    const names = state.checks
+    const names = state.judgedChecks
       .filter((c) => c.kind === 'pending')
       .map((c) => c.name)
       .join(', ');
