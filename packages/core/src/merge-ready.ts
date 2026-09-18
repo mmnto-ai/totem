@@ -108,11 +108,13 @@ export type MergeReadyProvenanceDetail = {
   /** The PR head sha as GitHub answered it, or null when the read never got that far. */
   headSha: string | null;
   /**
-   * Predicate 1's count, per check NAME after the latest-run judgment
-   * (mmnto-ai/totem#2879): `total` counts names, the way `gh pr checks` and
-   * the merge box do; `superseded` counts the check runs a later run of the
-   * same name replaced (a concurrency group's cancelled duplicates), which
-   * are read and disclosed but never judged.
+   * Predicate 1's count, per CHECK after the latest-run judgment
+   * (mmnto-ai/totem#2879): a check is a name under one producer (the app,
+   * and the workflow for Actions), so `total` counts checks the way
+   * `gh pr checks` lists them — one row per name, one per producer when two
+   * producers share a name; `superseded` counts the check runs a later run of
+   * the same check replaced (a concurrency group's cancelled duplicates),
+   * which are read and disclosed but never judged.
    */
   checks: { total: number; success: number; pending: number; failing: number; superseded: number };
   threads: { unresolvedBot: number; pagesRead: number; complete: boolean };
@@ -207,7 +209,7 @@ const MERGE_READY_FRAGMENT = `fragment MergeReadyPr on PullRequest {
             pageInfo { hasNextPage endCursor }
             nodes {
               __typename
-              ... on CheckRun { name status conclusion databaseId checkSuite { app { slug } workflowRun { workflow { name } } } }
+              ... on CheckRun { name status conclusion databaseId checkSuite { databaseId app { slug } workflowRun { workflow { databaseId name } } } }
               ... on StatusContext { context state }
             }
           }
@@ -389,16 +391,33 @@ interface CheckEntry {
    */
   named: boolean;
   /**
-   * The run's PRODUCER: the check suite's app slug, joined with the workflow
-   * name when the app is Actions (`github-actions/Auto-close guard`). Two
-   * runs of one name collapse to the latest ONLY when they share a producer —
-   * a rerun of one job — never when two apps or two workflows happen to name
-   * a job alike, because then a later success would hide an independent
-   * failure (bot round 1 on mmnto-ai/totem#2879, Greptile P1). Null when the
-   * app slug did not read; a same-named group with a null producer is
-   * unreadable, never collapsed by name alone. Null on a StatusContext.
+   * The run's PRODUCER as an identity key: the check suite's app slug joined
+   * with the WORKFLOW's database id when the app is Actions
+   * (`github-actions/12345`), the app slug alone for another app. Two runs of
+   * one name collapse to the latest ONLY when they share a producer — reruns
+   * of one job across two workflow runs — never when two apps, or two
+   * workflows, happen to name a job alike, because then a later success would
+   * hide an independent failure (bot round 1 on mmnto-ai/totem#2879, Greptile
+   * P1). The workflow's ID, not its display name, so two workflow FILES that
+   * share a `name:` stay apart (the re-armed leg's F1). Null when the app slug
+   * did not read, or when the app is Actions and the workflow id did not read
+   * (fail closed, never "every Actions workflow is one producer"); a
+   * same-named group with a null producer is unreadable, never collapsed by
+   * name alone. Null on a StatusContext.
    */
   producer: string | null;
+  /** The producer for humans: app slug plus the workflow's display NAME (`github-actions/Auto-close guard`). */
+  producerLabel: string | null;
+  /**
+   * The CHECK SUITE's database id. A rerun of a job across two workflow runs
+   * sits in two suites; two distinct jobs of ONE workflow run that share a
+   * display name sit in ONE suite — so within a producer, two same-named runs
+   * that share a suite are independent checks the key cannot tell apart, and
+   * the group is unreadable rather than collapsed (the re-armed leg's F1). A
+   * job re-run inside one workflow run replaces its check run in place and
+   * never appears twice. Null when it did not read; null on a StatusContext.
+   */
+  suiteId: number | null;
   /**
    * The CheckRun's `databaseId` — GitHub's check-run id, a single increasing
    * sequence, so among same-named runs of one producer on one head the
@@ -563,6 +582,8 @@ const SUCCESS_CONTEXT_STATES = new Set(['SUCCESS']);
  * twice (leg F10 on mmnto-ai/totem#2879): the latest-run collapse skips it.
  */
 const UNNAMED_CHECK = '(unnamed check)';
+/** The app slug GitHub Actions posts check runs under; its runs carry a workflow, and one without a readable workflow id is a producer that did not read. */
+const ACTIONS_APP = 'github-actions';
 const PENDING_CONTEXT_STATES = new Set(['PENDING', 'EXPECTED']);
 
 /**
@@ -617,28 +638,59 @@ function readChecks(rollup: Record<string, unknown> | null): {
       const conclusion = asString(n.conclusion);
       const runId = asNonNegativeInteger(n.databaseId);
       const suite = asObject(n.checkSuite);
+      const suiteId = asNonNegativeInteger(suite?.databaseId);
       const appSlug = asString(asObject(suite?.app)?.slug);
-      const workflowName = asString(asObject(asObject(suite?.workflowRun)?.workflow)?.name);
+      const workflow = asObject(asObject(suite?.workflowRun)?.workflow);
+      const workflowId = asNonNegativeInteger(workflow?.databaseId);
+      const workflowName = asString(workflow?.name);
+      // Actions without a readable workflow id is NOT "one producer for every
+      // workflow" — it is a producer that did not read (fail closed).
       const producer =
+        appSlug === null
+          ? null
+          : workflowId !== null
+            ? `${appSlug}/${String(workflowId)}`
+            : appSlug === ACTIONS_APP
+              ? null
+              : appSlug;
+      const producerLabel =
         appSlug === null ? null : workflowName === null ? appSlug : `${appSlug}/${workflowName}`;
+      const shared = {
+        name,
+        typename: 'CheckRun' as const,
+        named,
+        producer,
+        producerLabel,
+        suiteId,
+        runId,
+      };
       if (status !== 'COMPLETED') {
-        entries.push({ name, kind: 'pending', typename, named, producer, runId });
+        entries.push({ ...shared, kind: 'pending' });
       } else if (conclusion !== null && SUCCESS_CONCLUSIONS.has(conclusion)) {
-        entries.push({ name, kind: 'success', typename, named, producer, runId });
+        entries.push({ ...shared, kind: 'success' });
       } else {
-        entries.push({ name, kind: 'failing', typename, named, producer, runId });
+        entries.push({ ...shared, kind: 'failing' });
       }
     } else if (typename === 'StatusContext') {
       const readName = asString(n.context);
       const name = readName ?? '(unnamed context)';
       const named = readName !== null;
       const state = asString(n.state) ?? '';
+      const shared = {
+        name,
+        typename: 'StatusContext' as const,
+        named,
+        producer: null,
+        producerLabel: null,
+        suiteId: null,
+        runId: null,
+      };
       if (SUCCESS_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'success', typename, named, producer: null, runId: null });
+        entries.push({ ...shared, kind: 'success' });
       } else if (PENDING_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'pending', typename, named, producer: null, runId: null });
+        entries.push({ ...shared, kind: 'pending' });
       } else {
-        entries.push({ name, kind: 'failing', typename, named, producer: null, runId: null });
+        entries.push({ ...shared, kind: 'failing' });
       }
     } else {
       return {
@@ -1222,12 +1274,13 @@ interface ReadState {
   /** Every rollup context the read materialised, one entry per node — what the count check judges. */
   checks: CheckEntry[];
   /**
-   * The checks predicate 1 judges: `checks` with every same-named CheckRun
-   * group collapsed to its latest run (mmnto-ai/totem#2879). Filled once
-   * every page is in and the rollup has accounted for itself.
+   * The checks predicate 1 judges: `checks` with every group of CheckRuns
+   * that share a name AND a producer collapsed to its latest run
+   * (mmnto-ai/totem#2879). Filled once every page is in and the rollup has
+   * accounted for itself.
    */
   judgedChecks: CheckEntry[];
-  /** One record per collapsed name, for the disclosure notices. */
+  /** One record per collapsed check (a name under one producer), for the disclosure notices. */
   supersededRuns: SupersededRun[];
   reviews: ReviewEntry[];
   threads: ThreadEntry[];
@@ -1545,10 +1598,42 @@ function judgeLatestRuns(
       if (sub === undefined) byProducer.set(run.producer, [run]);
       else sub.push(run);
     }
-    for (const [producer, group] of byProducer) {
+    for (const group of byProducer.values()) {
       if (group.length === 1) {
         judged.push(group[0]!);
         continue;
+      }
+      const label = group[0]!.producerLabel ?? group[0]!.producer ?? '(unreadable producer)';
+      const who =
+        'check ' + bounded(JSON.stringify(slot.key)) + ' from ' + bounded(JSON.stringify(label));
+      // Same name, same producer: reruns sit in DIFFERENT check suites (one
+      // per workflow run). Two members in ONE suite are two distinct jobs of
+      // one run that share a display name — independent checks the key cannot
+      // tell apart — and a member with no readable suite cannot be placed at
+      // all: unreadable either way, never a collapse (the re-armed leg's F1).
+      const suites = new Set<number>();
+      for (const run of group) {
+        if (run.suiteId === null) {
+          return {
+            ok: false,
+            detail:
+              who +
+              ' ran ' +
+              String(group.length) +
+              ' times on the head and one of its runs carries no readable check-suite id - reruns cannot be told from independent jobs, the check state is unreadable',
+          };
+        }
+        if (suites.has(run.suiteId)) {
+          return {
+            ok: false,
+            detail:
+              who +
+              ' ran ' +
+              String(group.length) +
+              ' times on the head and two of its runs sit in one check suite - two jobs of one workflow run share the name, independent checks the key cannot tell apart, the check state is unreadable',
+          };
+        }
+        suites.add(run.suiteId);
       }
       let latest: CheckEntry | null = null;
       for (const run of group) {
@@ -1556,10 +1641,7 @@ function judgeLatestRuns(
           return {
             ok: false,
             detail:
-              'check ' +
-              bounded(JSON.stringify(slot.key)) +
-              ' from ' +
-              bounded(producer) +
+              who +
               ' ran ' +
               String(group.length) +
               ' times on the head and one of its runs carries no readable databaseId - the latest run cannot be derived, the check state is unreadable',
@@ -1570,7 +1652,7 @@ function judgeLatestRuns(
       judged.push(latest as CheckEntry);
       collapsed.push({
         name: slot.key,
-        producer,
+        producer: label,
         runs: group.length,
         judgedId: (latest as CheckEntry).runId as number,
         kind: (latest as CheckEntry).kind,
@@ -1908,7 +1990,7 @@ export function evaluateMergeReady(
   // Each line is sanitised, never sliced — it is a notice, not `matched`.
   for (const run of state.supersededRuns) {
     notices.push(
-      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: check ${oneLine(JSON.stringify(run.name))} from ${oneLine(run.producer)} ran ${run.runs} times on the head commit — judged by its latest run ${run.judgedId} (${run.kind}), the greatest check-run id; ${run.runs - 1} superseded run(s) not counted (mmnto-ai/totem#2879).`,
+      `${MERGE_READY_NOTICE_PREFIX} ${parsed.repo}#${state.number} at ${shortSha(state.headSha)}: check ${oneLine(JSON.stringify(run.name))} from ${oneLine(JSON.stringify(run.producer))} ran ${run.runs} times on the head commit — judged by its latest run ${run.judgedId} (${run.kind}), the greatest check-run id; ${run.runs - 1} superseded run(s) not counted (mmnto-ai/totem#2879).`,
     );
   }
   detail.threads = {

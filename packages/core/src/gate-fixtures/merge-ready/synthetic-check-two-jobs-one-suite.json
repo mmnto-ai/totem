@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "BEHIND denies at predicate 5",
-  "synthesizedAt": "2026-09-08T03:55:11.894Z",
+  "role": "mmnto-ai/totem#2879 re-armed leg F1 - two distinct jobs of ONE workflow run that share a display name: same producer, same check suite - independent checks the key cannot tell apart, so the check state is unreadable (unevaluable at both tiers), never a collapse that hides the failure",
+  "synthesizedAt": "2026-09-18T19:40:52.069Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -12,7 +12,7 @@
             "pullRequest": {
               "number": 4242,
               "isDraft": false,
-              "mergeStateStatus": "BEHIND",
+              "mergeStateStatus": "CLEAN",
               "headRefOid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
               "headRefName": "feat/example",
               "baseRefName": "main",
@@ -22,9 +22,9 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "SUCCESS",
+                        "state": "FAILURE",
                         "contexts": {
-                          "totalCount": 2,
+                          "totalCount": 3,
                           "pageInfo": {
                             "hasNextPage": false,
                             "endCursor": null
@@ -37,35 +37,54 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 5001,
                               "checkSuite": {
+                                "databaseId": 7001,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "CI",
-                                    "databaseId": 9001
+                                    "databaseId": 9001,
+                                    "name": "CI"
                                   }
-                                },
-                                "databaseId": 7001
+                                }
                               }
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
+                              "name": "test",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS",
+                              "conclusion": "FAILURE",
                               "databaseId": 5002,
                               "checkSuite": {
+                                "databaseId": 7002,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "CI",
-                                    "databaseId": 9001
+                                    "databaseId": 9001,
+                                    "name": "CI"
                                   }
+                                }
+                              }
+                            },
+                            {
+                              "__typename": "CheckRun",
+                              "name": "test",
+                              "status": "COMPLETED",
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5003,
+                              "checkSuite": {
+                                "databaseId": 7002,
+                                "app": {
+                                  "slug": "github-actions"
                                 },
-                                "databaseId": 7002
+                                "workflowRun": {
+                                  "workflow": {
+                                    "databaseId": 9001,
+                                    "name": "CI"
+                                  }
+                                }
                               }
                             }
                           ]

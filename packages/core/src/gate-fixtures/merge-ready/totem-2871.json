@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem",
   "pr": 2871,
   "role": "mmnto-ai/totem#2861 calibration row: the declined-with-reason shape — a CodeRabbit Major resolved through the disposition path (the round disposition in prose, then the per-thread line posted on the PR under the 2026-09-16 ruling) while its anchor survives on the head; the real discharge specimen",
-  "capturedAt": "2026-09-18T19:19:50.534Z",
+  "capturedAt": "2026-09-18T19:41:05.203Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -39,11 +39,13 @@
                               "conclusion": "SKIPPED",
                               "databaseId": 103790772824,
                               "checkSuite": {
+                                "databaseId": 94196705490,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 310317092,
                                     "name": "VP-PR Cut Sensor"
                                   }
                                 }
@@ -56,11 +58,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771534,
                               "checkSuite": {
+                                "databaseId": 94196705332,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 317182441,
                                     "name": "Auto-close guard"
                                   }
                                 }
@@ -73,11 +77,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103803324012,
                               "checkSuite": {
+                                "databaseId": 94208037283,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 317182441,
                                     "name": "Auto-close guard"
                                   }
                                 }
@@ -90,11 +96,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771996,
                               "checkSuite": {
+                                "databaseId": 94196705482,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 240710613,
                                     "name": "CI"
                                   }
                                 }
@@ -107,11 +115,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790767436,
                               "checkSuite": {
+                                "databaseId": 94196701786,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 243901869,
                                     "name": "CLA Assistant"
                                   }
                                 }
@@ -124,11 +134,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790767115,
                               "checkSuite": {
+                                "databaseId": 94196699736,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 344389391,
                                     "name": "CodeQL - Code Quality"
                                   }
                                 }
@@ -141,11 +153,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771478,
                               "checkSuite": {
+                                "databaseId": 94196705377,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 276465109,
                                     "name": "Doctor"
                                   }
                                 }
@@ -158,11 +172,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771581,
                               "checkSuite": {
+                                "databaseId": 94196705354,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 250543032,
                                     "name": "Lint"
                                   }
                                 }
@@ -175,11 +191,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771585,
                               "checkSuite": {
+                                "databaseId": 94196705342,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 313435693,
                                     "name": "Proof Kit"
                                   }
                                 }
@@ -192,11 +210,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771899,
                               "checkSuite": {
+                                "databaseId": 94196705482,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 240710613,
                                     "name": "CI"
                                   }
                                 }
@@ -209,11 +229,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790767060,
                               "checkSuite": {
+                                "databaseId": 94196699736,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 344389391,
                                     "name": "CodeQL - Code Quality"
                                   }
                                 }
@@ -226,11 +248,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790772029,
                               "checkSuite": {
+                                "databaseId": 94196705482,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 240710613,
                                     "name": "CI"
                                   }
                                 }
@@ -243,11 +267,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790766940,
                               "checkSuite": {
+                                "databaseId": 94196699736,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 344389391,
                                     "name": "CodeQL - Code Quality"
                                   }
                                 }
@@ -260,11 +286,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771813,
                               "checkSuite": {
+                                "databaseId": 94196705482,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 240710613,
                                     "name": "CI"
                                   }
                                 }
@@ -277,11 +305,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790771951,
                               "checkSuite": {
+                                "databaseId": 94196705482,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 240710613,
                                     "name": "CI"
                                   }
                                 }
@@ -294,6 +324,7 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 103790889692,
                               "checkSuite": {
+                                "databaseId": 94196812991,
                                 "app": {
                                   "slug": "github-advanced-security"
                                 },

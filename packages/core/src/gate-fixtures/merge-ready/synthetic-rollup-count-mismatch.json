@@ -42,9 +42,11 @@
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "CI"
+                                    "name": "CI",
+                                    "databaseId": 9001
                                   }
-                                }
+                                },
+                                "databaseId": 7001
                               }
                             }
                           ]

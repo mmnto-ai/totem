@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/totem-strategy",
   "pr": 1251,
   "role": "R4's negative control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-18T19:19:48.846Z",
+  "capturedAt": "2026-09-18T19:41:03.172Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -39,11 +39,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 101423396101,
                               "checkSuite": {
+                                "databaseId": 92152921873,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 343227204,
                                     "name": "CodeQL - Code Quality"
                                   }
                                 }
@@ -56,11 +58,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 101423398594,
                               "checkSuite": {
+                                "databaseId": 92152925103,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 266478300,
                                     "name": "Totem Lint"
                                   }
                                 }

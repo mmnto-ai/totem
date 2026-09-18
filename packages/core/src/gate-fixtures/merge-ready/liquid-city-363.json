@@ -3,7 +3,7 @@
   "repo": "mmnto-ai/liquid-city",
   "pr": 363,
   "role": "R4's positive control — re-captured with the mmnto-ai/totem#2861 per-thread query",
-  "capturedAt": "2026-09-18T19:19:48.097Z",
+  "capturedAt": "2026-09-18T19:41:02.386Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -39,11 +39,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 76639031559,
                               "checkSuite": {
+                                "databaseId": 69608329837,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 261628868,
                                     "name": "CI"
                                   }
                                 }
@@ -56,11 +58,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 76639028395,
                               "checkSuite": {
+                                "databaseId": 69608325313,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 275051679,
                                     "name": "CodeQL"
                                   }
                                 }
@@ -73,11 +77,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 76639031410,
                               "checkSuite": {
+                                "databaseId": 69608329661,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 276527064,
                                     "name": "Doctor"
                                   }
                                 }
@@ -90,11 +96,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 76639031170,
                               "checkSuite": {
+                                "databaseId": 69608329692,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 261628867,
                                     "name": "Lint"
                                   }
                                 }
@@ -107,11 +115,13 @@
                               "conclusion": "SUCCESS",
                               "databaseId": 76639031539,
                               "checkSuite": {
+                                "databaseId": 69608329837,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
+                                    "databaseId": 261628868,
                                     "name": "CI"
                                   }
                                 }

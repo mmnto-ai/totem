@@ -10,7 +10,7 @@
  * disposition path while its anchor survives on the head — the discharge
  * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
  * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
- * ADR-109 false-positive budget. The other 66 are synthetic and labelled
+ * ADR-109 false-positive budget. The other 69 are synthetic and labelled
  * `synthetic-` in their names — one per invariant the captures cannot
  * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
@@ -172,8 +172,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(66);
-    expect(files.length).toBe(71);
+    expect(synthetic.length).toBe(69);
+    expect(files.length).toBe(74);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -428,7 +428,7 @@ describe('merge-ready — predicate 1 (checks)', () => {
     const lines = e.notices.filter((n) => n.includes('times on the head commit'));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(
-      'check "Auto-close required check (D1)" from github-actions/CI ran 2 times on the head commit — judged by its latest run 5003 (success)',
+      'check "Auto-close required check (D1)" from "github-actions/CI" ran 2 times on the head commit — judged by its latest run 5003 (success)',
     );
     expect(lines[0]).toContain('1 superseded run(s) not counted (mmnto-ai/totem#2879)');
   });
@@ -485,7 +485,7 @@ describe('merge-ready — predicate 1 (checks)', () => {
 
   it('2879 — the query selects databaseId on CheckRun, so the judgment reads what gh answers', () => {
     expect(MERGE_READY_QUERY).toContain(
-      '... on CheckRun { name status conclusion databaseId checkSuite { app { slug } workflowRun { workflow { name } } } }',
+      '... on CheckRun { name status conclusion databaseId checkSuite { databaseId app { slug } workflowRun { workflow { databaseId name } } } }',
     );
   });
 
@@ -523,8 +523,49 @@ describe('merge-ready — predicate 1 (checks)', () => {
       expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
       expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
       expect(e.verdict.reason, tier).toContain('no readable databaseId');
-      expect(e.verdict.reason, tier).toContain('from github-actions/Auto-close guard');
+      expect(e.verdict.reason, tier).toContain('from "github-actions/Auto-close guard"');
     }
+  });
+
+  // ─── The re-armed leg's F1 and F6: the producer is the workflow's ID, and
+  // two same-named runs in one suite fail closed ─────────────────────────────
+
+  it('2879 — two workflow FILES sharing a display name are two producers: their same-named jobs are both judged and the failure denies (re-armed leg F1)', () => {
+    const e = evaluate('synthetic-check-same-name-two-workflow-files.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('checks');
+    expect(e.verdict.reason).toContain('1 of 3 status checks are failing (build)');
+    expect(e.detail.checks).toEqual({
+      total: 3,
+      success: 2,
+      pending: 0,
+      failing: 1,
+      superseded: 0,
+    });
+    expect(e.notices.join('\n')).not.toMatch(/times on the head commit/);
+  });
+
+  it('2879 — two same-named jobs of ONE workflow run share a check suite: independent checks the key cannot tell apart, UNREADABLE at both tiers (re-armed leg F1)', () => {
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-check-two-jobs-one-suite.json', { tier });
+      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
+      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
+      expect(e.verdict.reason, tier).toContain('sit in one check suite');
+      expect(e.verdict.reason, tier).toContain('check "test" from "github-actions/CI"');
+    }
+  });
+
+  it('2879 — two same-named checks from different producers where one has no id are both judged: the id orders reruns and nothing else (re-armed leg F6)', () => {
+    const e = evaluate('synthetic-check-two-producers-one-null-id.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.checks).toEqual({
+      total: 3,
+      success: 3,
+      pending: 0,
+      failing: 0,
+      superseded: 0,
+    });
+    expect(e.notices.join('\n')).not.toMatch(/times on the head commit|could not derive/);
   });
 
   // ─── The fold of the leg's F1–F4, F7: arithmetic and tolerances, not only
@@ -545,11 +586,11 @@ describe('merge-ready — predicate 1 (checks)', () => {
     const lines = e.notices.filter((n) => n.includes('times on the head commit'));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain(
-      'check "Auto-close required check (D1)" from github-actions/CI ran 3 times on the head commit — judged by its latest run 5004 (success)',
+      'check "Auto-close required check (D1)" from "github-actions/CI" ran 3 times on the head commit — judged by its latest run 5004 (success)',
     );
     expect(lines[0]).toContain('2 superseded run(s) not counted');
     expect(lines[1]).toContain(
-      'check "Totem Lint" from github-actions/CI ran 2 times on the head commit — judged by its latest run 5006 (success)',
+      'check "Totem Lint" from "github-actions/CI" ran 2 times on the head commit — judged by its latest run 5006 (success)',
     );
     expect(lines[1]).toContain('1 superseded run(s) not counted');
     for (const line of lines) expect(line).not.toContain('…');
@@ -591,7 +632,7 @@ describe('merge-ready — predicate 1 (checks)', () => {
       'spine-adopt harnesses on ubuntu-latest (specimens, seed20, matrix shard 7 of 12, reusable workflow harness/run-adopt.yml @ main, with the full fixture corpus and the extended timeout budget for cold-store starts)';
     expect(longName.length).toBeGreaterThan(160);
     expect(lines[0]).toContain(
-      `check ${JSON.stringify(longName)} from github-actions/CI ran 2 times on the head commit`,
+      `check ${JSON.stringify(longName)} from "github-actions/CI" ran 2 times on the head commit`,
     );
     expect(lines[0]).not.toContain('…');
   });

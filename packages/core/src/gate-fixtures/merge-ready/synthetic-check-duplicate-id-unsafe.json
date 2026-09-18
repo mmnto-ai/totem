@@ -1,6 +1,6 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 bot round 1 (Greptile P2) - two reruns of one check where one id lies beyond the safe-integer range (9007199254740993, which JSON.parse rounds): the id does not read, so the latest cannot be derived and the check state is unreadable (unevaluable at both tiers), never ordered on a rounded number",
+  "role": "mmnto-ai/totem#2879 bot round 1 (Greptile P2) - two reruns of one check where one id was written as 9007199254740993, beyond the safe-integer range, which JSON.parse rounds to the 9007199254740992 on disk: the id does not read, so the latest cannot be derived and the check state is unreadable (unevaluable at both tiers), never ordered on a rounded number",
   "synthesizedAt": "2026-09-18T19:18:14.562Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
@@ -42,9 +42,11 @@
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "CI"
+                                    "name": "CI",
+                                    "databaseId": 9001
                                   }
-                                }
+                                },
+                                "databaseId": 7001
                               }
                             },
                             {
@@ -59,9 +61,11 @@
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "Auto-close guard"
+                                    "name": "Auto-close guard",
+                                    "databaseId": 9004
                                   }
-                                }
+                                },
+                                "databaseId": 7002
                               }
                             },
                             {
@@ -76,9 +80,11 @@
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "name": "Auto-close guard"
+                                    "name": "Auto-close guard",
+                                    "databaseId": 9004
                                   }
-                                }
+                                },
+                                "databaseId": 7003
                               }
                             }
                           ]
