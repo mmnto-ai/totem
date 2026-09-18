@@ -1103,6 +1103,7 @@ export type { OrchestrationPaths, SelfAgentResolution } from './orchestration-re
 // barrel export with zero consumers would be a permanently-supported API
 // nobody asked for — `deriveSeatStatuses` is the public read surface.
 export {
+  cohortAgentMapRepositories,
   isPathSafeAgentId,
   knownCohortAgents,
   resolveOrchestrationPaths,

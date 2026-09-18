@@ -30,7 +30,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { knownCohortAgents } from '@mmnto/totem';
+import { cohortAgentMapRepositories, knownCohortAgents } from '@mmnto/totem';
 
 import { SIGNOFF_SKILL_CONTENT } from './init-templates.js';
 
@@ -114,6 +114,15 @@ describe('signoff step 2a table ↔ COHORT_AGENT_MAP (mmnto-ai/totem#2865)', () 
         expect(vendor, `${row.repo} column ${COLUMNS[column]}: ${seat}`).toBe(COLUMNS[column]);
       });
     }
+  });
+
+  it("the map carries exactly the table's repositories — a zero-seat entry counts as a row (bot round 1, Greptile P2)", () => {
+    // `knownCohortAgents()` flattens the map to seats, so an entry with NO
+    // seats (`totem-playground`) is invisible through it and a new empty entry
+    // would slip past the seat-level lock below; the map's keys are read
+    // directly so the rows are held equal too.
+    expect(cohortAgentMapRepositories()).toEqual([...Object.keys(SHORTHAND)].sort());
+    expect(cohortAgentMapRepositories()).toEqual(rows.map((r) => r.repo).sort());
   });
 
   it('per repository, the map seats and the row are the same set (equality lock)', () => {

@@ -297,6 +297,18 @@ export function readSeatDirs(repoRoot: string): string[] {
  * `broadcast` is a valid recipient too, but it is a routing literal, not an
  * agent, so callers handle it separately.
  */
+/**
+ * The repositories `COHORT_AGENT_MAP` carries an entry for, sorted — every
+ * key, a zero-seat entry (`totem-playground`) included. `knownCohortAgents()`
+ * flattens the map to its seat values, so an entry with no seats is invisible
+ * through it; the signoff table-to-map lock reads this to hold the map's ROWS
+ * to the table's rows as well as its seats (bot round 1 on
+ * mmnto-ai/totem#2882, Greptile P2).
+ */
+export function cohortAgentMapRepositories(): string[] {
+  return Object.keys(COHORT_AGENT_MAP).sort();
+}
+
 export function knownCohortAgents(workspace?: string): string[] {
   const fromMap = Object.values(COHORT_AGENT_MAP).flat();
   if (workspace === undefined) {
