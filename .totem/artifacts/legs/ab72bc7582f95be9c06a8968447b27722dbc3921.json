@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ab72bc7582f95be9c06a8968447b27722dbc3921",
+  "readAt": "2026-09-18T18:10:56Z",
+  "findings": [
+    {
+      "id": "r2-F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/signoff-visiting-cell-2865.md",
+      "line": 5,
+      "claim": "The re-scoped disjunct matches exactly two of the four non-seat cells (arhgap11/Kimi and totem-playground/Claude); the Gemini and Kimi cells of totem-playground carry the SHORT form (orphan stream) which neither literal names, so the branch is dead for Gemini and undefined for vendors without a column, while the changeset claims it is live for every vendor's session.",
+      "counterexample": "SKILL.md table rows 25 and 27, cell by cell. FOLDED: the sentence states the rule (your own agent-id does not appear in your row), naming both orphan forms, the unseated cell and the no-column case; the changeset and the PR body say so."
+    },
+    {
+      "id": "r2-F2",
+      "severity": "MATERIAL",
+      "file": ".totem/artifacts/legs/8403f93cda43f416d89cf460b93cfbd4af6b88a9.json",
+      "line": 4,
+      "claim": "The committed deposit's readAt 18:23:00Z postdates the commit that adds it (ab72bc75 at 17:59:05Z); the only causal window is 17:36:26Z to 17:59:05Z, and the gate has a sensor that prints 'read 0 days in the FUTURE' for this shape.",
+      "counterexample": "git log --format=%cI; the repo's other committed deposit reads 30 s after its head. FOLDED: readAt re-derived to 17:49:30Z (dispatch after 17:36:26Z plus the leg's 693 s), and the two 2879 deposits corrected the same way (17:26:20Z, 17:52:20Z); this deposit's instant is the clock at return."
+    },
+    {
+      "id": "r2-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 194,
+      "claim": "The docstring, the fold commit and mmnto-ai/totem#2883 attribute the codex/agy form to 'mmnto-ai/totem#2865's second ask'; that issue's ask 2 is derive-by-reference (replace the hardcoded table), the codex/agy point lives in its Why-it-matters, and ask 2 is tracked nowhere since the issue closed.",
+      "counterexample": "gh issue view 2865 § Ask. FOLDED: the docstring and 2883 reworded to the observation; 2865's ask 2 filed as its own issue and cited."
+    },
+    {
+      "id": "r2-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2742,
+      "claim": "The fold de-vendored the gate clause and left 'a native Claude agent' in the same sentence's rationale, so the one case the fold made live (a Kimi session in arhgap11) reads a rationale about Claude.",
+      "counterexample": "FOLDED: 'a native agent of your vendor'."
+    },
+    {
+      "id": "r2-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2742,
+      "claim": "The paragraph's only example (strategy-claude visiting totem-status) does not satisfy the cell-based gate: totem-status seats status-claude, so by that gate strategy-claude was not in the visiting case there.",
+      "counterexample": "SKILL.md table row 26. FOLDED: under the agent-id rule the example satisfies the gate, and the sentence says why."
+    },
+    {
+      "id": "r2-F6",
+      "severity": "MINOR",
+      "file": ".changeset/signoff-visiting-cell-2865.md",
+      "line": 5,
+      "claim": "'a Claude-column cell value that no row carries' is imprecise (a row carries it, in the Kimi column), and the parenthetical 'the Claude column carries only the orphan value' parses as false on one reading.",
+      "counterexample": "FOLDED: rewritten with the sentence."
+    },
+    {
+      "id": "r2-F7",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/legs/8403f93cda43f416d89cf460b93cfbd4af6b88a9.json",
+      "line": 1,
+      "claim": "Every deposited finding's counterexample field appends the seat's FOLDED disposition, mixing the seat's voice into the field a reader treats as the leg's evidence; the designed channel is the folded array, which is populated.",
+      "counterexample": "legs.ts 161 and 187. DISCLOSED, not folded: the repo's earlier committed deposits use the same convention; a split is a corpus-wide change."
+    },
+    {
+      "id": "r2-F8",
+      "severity": "MINOR",
+      "file": ".changeset/cohort-map-kimi-seats-2875.md",
+      "line": 5,
+      "claim": "'takes the same patch bump' is true only if no minor changeset joins the release; the 2.6.0 CHANGELOG already shipped that sentence inside a minor.",
+      "counterexample": "packages/cli/CHANGELOG.md 2.6.0. FOLDED: 'the same bump' in both changesets."
+    }
+  ],
+  "folded": [
+    "r2-F1",
+    "r2-F2",
+    "r2-F3",
+    "r2-F4",
+    "r2-F5",
+    "r2-F6",
+    "r2-F8"
+  ],
+  "verdict": "Leg 2, re-armed and scoped to the fold 8403f93c..ab72bc75 (mmnto-ai/totem#2882): 0 BLOCKING, 3 MATERIAL, 5 MINOR. The fold's mechanical repairs held: the three signoff renderings byte-identical and machine-pinned by init.test.ts, the three named suites green (429 passed), the lock docstring's two new claims exact against the assertions, the map changeset's send-side claim confirmed at both mail.ts call sites, the changesets in house style, the committed deposit schema-valid and gate-resolvable at the new head with full coverage. What did not survive was the fold's prose over-claiming what it fixed, plus one hard defect in the evidence artifact: r2-F1 the vendor-keyed sentence was live for two cells, not every vendor (the Gemini and Kimi cells of totem-playground carry the SHORT orphan form) and the changeset said every vendor (folded: the sentence states the rule itself — you are visiting when your own agent-id does not appear in your row — which subsumes both orphan forms, the unseated cell and the vendors with no column); r2-F2 the committed deposit's readAt (18:23:00Z) postdated the commit containing it (17:59:05Z), an estimated instant stated as fact (folded: every deposit's readAt re-derived from its dispatch commit plus the leg's reported duration, inside the causal window; this deposit's instant is the clock at the leg's return); r2-F3 the docstring, the fold and the new issue attributed the codex/agy form to a 'second ask' of mmnto-ai/totem#2865 that the issue does not contain — its ask 2 is derive-by-reference, untracked since its close (folded: the docstring and mmnto-ai/totem#2883 reworded to the issue's Why-it-matters observation; ask 2 filed as its own issue); r2-F4 the sentence's rationale still said 'a native Claude agent' (folded: 'a native agent of your vendor'); r2-F5 the paragraph's example did not satisfy the gate it illustrated (folded: the example names why it does — totem-status seats status-claude, not strategy-claude); r2-F6 two precision slips in the changeset and the parenthetical (folded: rewritten); r2-F7 the deposit's counterexample fields carry the seat's FOLDED prose (disclosed, kept: the repo's earlier deposits use the same convention); r2-F8 'the same patch bump' is conditional on no minor joining the release (folded: 'the same bump'). Convergence named by the leg conditional on r2-F1/F4/F5 as one sentence and r2-F2 as an amend, both done; the seat names convergence."
+}

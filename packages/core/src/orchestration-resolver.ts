@@ -192,8 +192,8 @@ export function resolveOrchestrationPaths(repoRoot: string, agentId: string): Or
  * dirs alone. They do NOT join in this change, because membership follows the
  * table's COLUMNS and the table has no codex or agy column; they join the map
  * in the same change that gives the table those columns — the roster-complete
- * form that mmnto-ai/totem#2865's second ask points at, filed as
- * mmnto-ai/totem#2883.
+ * form mmnto-ai/totem#2865 observed was missing (its "Why it matters": the
+ * Codex and agy columns render nowhere), filed as mmnto-ai/totem#2883.
  */
 const COHORT_AGENT_MAP: Readonly<Record<string, readonly string[]>> = Object.freeze({
   totem: Object.freeze(['totem-claude', 'totem-gemini', 'totem-kimi']),
