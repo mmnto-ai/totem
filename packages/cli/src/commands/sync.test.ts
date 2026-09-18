@@ -189,8 +189,9 @@ describe('syncCommand', () => {
   it('writes canonical file relative to cwd when using global config profile', async () => {
     // A user running with ~/.totem/totem.config.ts may still customize
     // review.sourceExtensions. Writing the canonical file into ~/.totem/ would
-    // orphan it away from the bash hook (which reads from git-toplevel via
-    // `git rev-parse --show-toplevel`). Falling back to cwd hits the common
+    // orphan it away from this repo's pre-push reader (the bash hook, which
+    // reads from git-toplevel via `git rev-parse --show-toplevel`; a consumer
+    // may have replaced or retired its copy). Falling back to cwd hits the common
     // case where the user invokes totem from the repo root. Preserves TS/bash
     // parity for the typical global-config flow.
     mockIsGlobalConfigPath.mockReturnValue(true);
@@ -329,7 +330,8 @@ describe('syncCommand', () => {
     // Simulates a monorepo user running `totem sync` from a subdirectory such as
     // packages/cli/ while totem.config.ts lives at the repo root. The canonical
     // file must land at <project-root>/.totem/review-extensions.txt, matching
-    // what shield.ts and the bash PreToolUse hook read. Resolving against cwd
+    // what shield.ts and this repo's bash reader read (a consumer may have
+    // retired its copy; shield.ts does not depend on it). Resolving against cwd
     // would orphan the file under the subdirectory (lesson 61975bb96c9bf27f).
     const subdir = path.join(tmpDir, 'packages', 'cli');
     fs.mkdirSync(subdir, { recursive: true });
