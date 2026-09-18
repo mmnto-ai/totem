@@ -604,9 +604,13 @@ export async function computeReviewedContentHash(
 /**
  * Stamp `<totemDir>/cache/.reviewed-content-hash` with EXACTLY the supplied
  * hash — never recomputes (Prop 304 R2, codex fold 1). Also refreshes the
- * canonical `review-extensions.txt` so the bash pre-push hook keys off the
- * same extension set (#1527). Best-effort; a write failure is non-fatal (the
- * flag is a PreToolUse-hook convenience). The caller owns hash provenance:
+ * canonical `review-extensions.txt` so the consumer-side pre-push reader keys
+ * off the same extension set (#1527) — this repo's is
+ * `.claude/hooks/content-hash.sh`, and a consumer may replace or retire its
+ * copy; the JS side's own two effects (this stamp and the shield admission
+ * record's projection-policy hash) do not depend on it. Best-effort; a write
+ * failure is non-fatal (the file is a convenience for that reader, not an
+ * input to either effect). The caller owns hash provenance:
  * pass the pre-fan hash so the stamp authorizes the exact tree that was
  * reviewed, not whatever the tree happens to be at stamp time.
  */

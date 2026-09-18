@@ -790,7 +790,12 @@ export const TotemConfigSchema = z.object({
     .optional(),
 
   /** Review gate configuration. `sourceExtensions` drives the content-hash
-   *  computation in `writeReviewedContentHash()` and `.claude/hooks/content-hash.sh`.
+   *  computation in `writeReviewedContentHash()` and, where a consumer keeps
+   *  one, its pre-push reader of the published `review-extensions.txt` (this
+   *  repo's is `.claude/hooks/content-hash.sh`; a consumer may replace or
+   *  retire its copy — the JS side's own two effects, the reviewed-content-hash
+   *  stamp and the shield admission record's projection-policy hash, do not
+   *  depend on it).
    *  Polyglot repos extend the default `['.ts', '.tsx', '.js', '.jsx']` to cover
    *  additional source languages (e.g., `['.rs', '.gd']` for Rust + Godot). */
   review: ReviewConfigSchema,

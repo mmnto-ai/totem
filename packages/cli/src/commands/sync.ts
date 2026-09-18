@@ -9,10 +9,17 @@ const TAG = 'Sync';
 const PRUNE_LABEL_MAX = 70;
 
 /**
- * Write the canonical review-extensions.txt file consumed by
- * .claude/hooks/content-hash.sh. One extension per line, leading dot,
- * trailing newline. Atomic via temp + rename so a concurrent hook fire
- * sees either the old or new contents, never a partial write. (#1527)
+ * Write the canonical review-extensions.txt file for the consumer-side
+ * pre-push reader — in THIS repo, `.claude/hooks/content-hash.sh`, which
+ * `shield.content-hash-parity.test.ts` locates and holds to the same
+ * extension set. A consumer may replace or retire its copy: the JS side's own
+ * two effects — the reviewed-content-hash stamp and the shield admission
+ * record's projection-policy hash — do not depend on one existing, so the
+ * file is published unconditionally and read by whoever wants it.
+ *
+ * One extension per line, leading dot, trailing newline. Atomic via temp +
+ * rename so a concurrent reader sees either the old or new contents, never a
+ * partial write. (#1527)
  */
 export function writeReviewExtensionsFile(
   totemDirAbs: string,
@@ -187,18 +194,21 @@ export async function syncCommand(options: SyncCommandOptions): Promise<void> {
       onProgress: (msg) => spinner.update(msg),
     });
 
-    // Emit canonical review-extensions.txt for .claude/hooks/content-hash.sh (#1527).
+    // Emit canonical review-extensions.txt for the consumer-side pre-push
+    // reader (#1527) — this repo's `.claude/hooks/content-hash.sh`; a consumer
+    // may replace or retire its copy, and nothing here depends on one existing.
     // Written on every sync, even when the user omits review.sourceExtensions
-    // (default set persisted), so downstream bash consumers see a consistent file.
+    // (default set persisted), so any downstream reader sees a consistent file.
     // Resolves against configRoot for local configs so monorepo users invoking
     // from a subdirectory land the file at <project-root>/.totem/, where shield
-    // and the bash hook read it (lesson 61975bb96c9bf27f / f5a75d98a43e0721).
+    // and any such reader look for it (lesson 61975bb96c9bf27f / f5a75d98a43e0721).
     // Falls back to cwd for global-only configs: if the user customized
     // review.sourceExtensions in ~/.totem/totem.config.ts, skipping the write
-    // would break TS/bash parity (TS uses the custom set, bash defaults). cwd
-    // is the best proxy for git-toplevel available without shelling to git.
+    // would break parity between the TS side and that reader (TS uses the
+    // custom set, a reader with the default set baked in does not). cwd is the
+    // best proxy for git-toplevel available without shelling to git.
     try {
-      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the bash PreToolUse hook
+      writeReviewExtensionsFile(totemDirAbs, config.review.sourceExtensions); // totem-context: intentional cleanup — canonical file write is a convenience for the consumer-side pre-push reader, optional by design
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       log.dim(TAG, `Skipped review-extensions.txt write: ${sanitize(detail)}`);
