@@ -19,10 +19,14 @@
  * claim to; this lock holds the two RENDERINGS in this repository to each
  * other, not either of them to the roster.)
  *
- * A one-directional gap is expressible again if a future seat must land in one
- * copy first: name it in `KIMI_SEATS` (whatever it is called then) and the
- * equality relaxes to "the table leads by exactly these". Nothing tightens by
- * itself, and nothing loosens by itself either.
+ * One direction of gap is expressible again if a future seat must land in the
+ * TABLE first: name it in `KIMI_SEATS` (whatever it is called then) and the
+ * equality relaxes to "the table leads by exactly these". The other direction
+ * — a seat in the map that the table lacks — has no constant on purpose: the
+ * `mapOnly` assertion is a hard empty, so a map-first change (the codex and agy
+ * seats, whose columns the table does not have yet) is a bundled table-plus-map
+ * change by construction, moving `COLUMNS` and the parse assertion with it.
+ * Nothing tightens by itself, and nothing loosens by itself either.
  */
 import { describe, expect, it } from 'vitest';
 

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "8403f93cda43f416d89cf460b93cfbd4af6b88a9",
+  "readAt": "2026-09-18T18:23:00Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2742,
+      "claim": "The Visiting-case repair swaps one unreachable string for another: (not seated) is a Kimi-column cell (arhgap11), never a Claude-agent-id-column cell, so the sentence 'If your row's Claude-agent-id column is (not seated) or (orphan stream ...)' still matches no row on its first disjunct. The original disjunct went dead when status-claude was seated; the .gemini copy names only the orphan value and is live.",
+      "counterexample": "grep 'not seated' over the template returns exactly one table row, the Kimi cell. FOLDED: the sentence re-scoped to the reader's own vendor column ('the cell for your vendor in your row'), so it is live for a Kimi session in arhgap11 and any session in totem-playground; template and both copies; the changeset describes the real fix."
+    },
+    {
+      "id": "F2",
+      "severity": "BLOCKING",
+      "file": ".changeset/cohort-map-kimi-seats-2875.md",
+      "line": 1,
+      "claim": "CI Totem Lint is red at the HARD legs gate: the branch touches five legs-owed globs (.changeset/**, config-schema.ts, init-templates.ts, .claude/skills/**, .agents/skills/**) and carried no falsification-leg deposit, while the PR body said no leg was owed.",
+      "counterexample": "gh run view 35375468453 --log-failed: BLOCKED, exit 3. FOLDED: this deposit recorded at the head the leg read and committed; the PR body's Review-leg paragraph corrected; the fold re-armed a scoped leg whose deposit lands at the new head."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/orchestration-resolver.ts",
+      "line": 195,
+      "claim": "'tracked separately' for the codex/agy roster-complete form names no tracker; mmnto-ai/totem#2865 is CLOSED and no open issue carries it, while the roster seats eight such lanes with the exact fresh-clone defect 2875 was filed for.",
+      "counterexample": "gh search issues finds no open successor. FOLDED: the follow-on issue filed and cited by number in the docstring, the commit and the PR body."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": ".git",
+      "line": 1,
+      "claim": "All four commits carry Co-Authored-By: Claude Fable 5.1 while the PR body attributes commits 1 to 3 to an Opus build leg; two artifacts in one PR state different authoring models.",
+      "counterexample": "git log --format=%B 2be73170..8403f93c. FOLDED: the PR body states both facts explicitly — the trailer is the dispatching seat's session attribution, the labour ran on an Opus build leg under a verbatim brief; pushed history is not rewritten."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/signoff-table-sync.test.ts",
+      "line": 22,
+      "claim": "The lock's docstring says a one-directional gap is expressible again by naming it in KIMI_SEATS, but that constant expresses only table-leads-map; mapOnly is a hardcoded empty, so the map-leads direction (the codex/agy plan) has no expressible gap.",
+      "counterexample": "Line 131 expect(mapOnly).toEqual([]). FOLDED: the docstring says which direction the constant expresses and that the other direction is a bundled table-plus-map change."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "PR body",
+      "line": 1,
+      "claim": "'27 test expectations' conflates the issue's 21 assertions with its 6 tests; the counts themselves match the issue exactly.",
+      "counterexample": "21 changed toEqual sites in the resolver suite; 6 changed tests across the two mail suites. FOLDED: units corrected."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".changeset/signoff-visiting-cell-2865.md",
+      "line": 5,
+      "claim": "The changeset body opens with a conventional-commit prefix no prior CHANGELOG entry carries, ships internal round vocabulary (the leg's r2-f7) to a consumer surface, and both new changesets omit the fixed-group sentence every prior entry carries.",
+      "counterexample": "packages/cli/CHANGELOG.md entries 2.4.0 to 2.6.0. FOLDED: prefix dropped, vocabulary removed, the fixed-group sentence added to both."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".changeset/cohort-map-kimi-seats-2875.md",
+      "line": 5,
+      "claim": "knownCohortAgents() is also the recipient set for mail send's advisory validation and poll's roster-validation sensor; the changeset names only the poll, denominator and floor effects.",
+      "counterexample": "mail.ts 943 and 2097. FOLDED: the send-side and roster-validation effects named; patch stays honest (advisory only)."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/seat.ts",
+      "line": 429,
+      "claim": "The repo's own checklist names a fourth signoff seat-table copy (.gemini/skills/signoff.md) with no mechanical lock that must be checked explicitly; the PR's verification named three.",
+      "counterexample": "Read at head: a Gemini-only table with no Kimi column and no claim about the core map; nothing falsified, no edit owed. FOLDED: the check recorded in the PR body."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "Leg 1 on the small batch (2be73170..8403f93c, mmnto-ai/totem#2882): 1 BLOCKING, 3 MATERIAL, 5 MINOR. The map widening and all 27 re-derivations survived: every moved expectation restated at equal strength, one genuine strengthening (the per-seat floor gained a rung), one correctly declined re-derivation (the env-override addendum), the equality lock bidirectional (a map seat the table lacks and a table seat the map lacks both red), the docstring's roster claims verbatim-accurate against cohort-roles.md, the content-hash comment claims confirmed against shield.ts and sync.ts, the three signoff renderings byte-identical where they should be with no other managed surface moved by the re-stamp. What it found: F2 the armed CI legs gate is red because the branch touches five legs-owed globs and carried no deposit while the PR body claimed no leg was owed (folded: this deposit committed; the body corrected); F1 the Visiting-case repair swapped one unreachable cell value for another — (not seated) is a Kimi-column cell, never a Claude-column cell (folded: the sentence re-scoped to the reader's own vendor column, in the template and both copies; the changeset says so); F3 'tracked separately' for the codex/agy roster-complete form named no tracker and the only issue that carried it is closed (folded: the follow-on issue filed and cited); F4 the four commits carry the session's attribution trailer while the PR body attributes three to an Opus build leg (folded: the body states both facts — the trailer is the dispatching seat's attribution, the labour ran on an Opus leg — rather than rewriting pushed history); F5 the equality lock's escape hatch is one-directional while its docstring claims symmetry (folded: reworded); F6 the PR body's '27 test expectations' conflated 21 assertions with 6 tests (folded); F7 changeset hygiene — a conventional-commit prefix, internal round vocabulary and the missing fixed-group sentence (folded); F8 the changeset omitted the send-side effect of the map widening (folded: named); F9 the fourth signoff copy (.gemini) was not named in the verification (folded: checked and recorded — Gemini-only table, no Kimi claim, no edit owed)."
+}
