@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "e80fdaeae007575eb27387dc5fbc7349fcf8ddee",
+  "readAt": "2026-09-18T18:04:00Z",
+  "findings": [
+    {
+      "id": "r2-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.test.ts",
+      "line": 515,
+      "claim": "'Never sliced' is the fold's headline claim and no fixture pins it: the fixture's longest sanitised fragment is 32 chars against a 160 bound, so substituting bounded() for oneLine() at the call site is byte-identical for every one of the 66 fixtures and the suite stays green.",
+      "counterexample": "A check name longer than 159 chars would lose its tail under the mutant. FOLDED: synthetic-check-long-name-superseded.json (a 200-plus-character name; the notice asserted to contain the whole name and no ellipsis)."
+    },
+    {
+      "id": "r2-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 40,
+      "claim": "The README preface's new sentence 'A rollup that carries a cancelled or failed run reports state: FAILURE on every live specimen, and the synthetic bodies say so' is falsified by synthetic-check-duplicate-id-missing.json (state SUCCESS over a CANCELLED run) in the same directory; the live half is true on four heads.",
+      "counterexample": "state SUCCESS at line 25 beside conclusion CANCELLED at line 51. FOLDED: that fixture's state set to FAILURE; the sentence scoped to every synthetic-check-* body."
+    },
+    {
+      "id": "r2-F3",
+      "severity": "MINOR",
+      "file": ".totem/specs/2879.md",
+      "line": 23,
+      "claim": "The spec says 'eight fixture-backed tests plus a query-shape pin' while the file carried seven fixture-backed 2879 tests plus the pin.",
+      "counterexample": "Seven it('2879 ...') fixture tests plus one pin = 8 total. FOLDED: nine fixture-backed tests plus the pin after the second fold, and the spec says so."
+    },
+    {
+      "id": "r2-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1459,
+      "claim": "The UNNAMED_CHECK pass-through keys on the placeholder string, so a check really named '(unnamed check)' would be exempt from the collapse, and zero fixtures carry a CheckRun without a readable name, so deleting the guard passes all tests.",
+      "counterexample": "Schema: CheckRun.name NON_NULL, so only a malformed payload reaches it. FOLDED: a named flag on CheckEntry set from the read, the guard keyed on it, and synthetic-check-unnamed-runs.json (two null-name runs are two checks, nothing superseded)."
+    },
+    {
+      "id": "r2-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1442,
+      "claim": "The SupersededRun interface was inserted between judgeLatestRuns's 18-line JSDoc and the function, so the doc binds to the interface and the function has none.",
+      "counterexample": "TypeScript binds a leading doc comment to the next declaration. FOLDED: the interface moved above the JSDoc."
+    },
+    {
+      "id": "r2-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 173,
+      "claim": "The synthetic-instants enumeration ends at the 2861 rows and does not cover the seven 2879 rows (17:03:58Z and 17:31:48Z).",
+      "counterexample": "The test header says the README lists every file with its instant. FOLDED: the enumeration names the nine 2879 rows and their instants."
+    },
+    {
+      "id": "r2-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/synthetic-check-single-null-id.json",
+      "line": 1,
+      "claim": "The lone-null-id fixture has both runs SUCCESS, so a mutant that reads a single null-id run as success regardless of conclusion survives; the over-strict mutant is killed.",
+      "counterexample": "FOLDED: a FAILURE null-id run added beside the SUCCESS one; the test asserts deny naming it, failing 1, no notice, no unevaluable."
+    },
+    {
+      "id": "r2-F8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2879.md",
+      "line": 29,
+      "claim": "The residual's reachability basis says 'thirteen workflows' but the Actions API answers 17 (four dynamic ones, CodeQL among them posting Analyze (...) runs on live heads); the conclusion holds empirically over 30 main heads.",
+      "counterexample": "gh api repos/mmnto-ai/totem/actions/workflows: 17. FOLDED: the spec names the thirteen files plus the four dynamic workflows and the 30-head sweep."
+    },
+    {
+      "id": "r2-F9",
+      "severity": "MINOR",
+      "file": ".totem/specs/2879.md",
+      "line": 9,
+      "claim": "'31 of 31 agree' under a 'creation order within a name' framing is ambiguous; full id order equals full start order in only 14 of 15 groups on a 30-commit sample (main 9ce020bb: a lower id started three seconds after a higher one), while the greatest id is the latest start in 15 of 15.",
+      "counterexample": "The spec's own parenthetical explains it (ids minted at queue time). FOLDED: the spec pins the max element and names the counterexample."
+    },
+    {
+      "id": "r2-F10",
+      "severity": "MINOR",
+      "file": ".changeset/merge-ready-latest-run-2879.md",
+      "line": 5,
+      "claim": "The changeset's stated reason ('gains a required field and total changes meaning') is a major-grade rationale under a minor bump; MergeReadyProvenanceDetail is a public export of @mmnto/totem.",
+      "counterexample": "No consumer outside core reads the shape; every consumer we control produces, not constructs, the record. FOLDED: the sentence states why the change is additive at every reader; the seat rules minor under the repo's semver rule."
+    },
+    {
+      "id": "r2-F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1150,
+      "claim": "oneLine's doc says 'control characters to spaces' but the loop maps only C0 and DEL; C1 controls (U+0080 to U+009F) survive raw, pre-existing in bounded, and the notice no longer has a length bound. Unreachable from GitHub.",
+      "counterexample": "FOLDED: the doc names C0 and DEL and says C1 is left as it always was in bounded; behaviour unchanged."
+    }
+  ],
+  "folded": [
+    "r2-F1",
+    "r2-F2",
+    "r2-F3",
+    "r2-F4",
+    "r2-F5",
+    "r2-F6",
+    "r2-F7",
+    "r2-F8",
+    "r2-F9",
+    "r2-F10",
+    "r2-F11"
+  ],
+  "verdict": "Leg 2, re-armed and scoped to the fold 369303a0..e80fdaea (the notice's emission shape, mmnto-ai/totem#2879): 0 BLOCKING, 2 MATERIAL, 9 MINOR. The code path is converged: oneLine is a pure extraction and bounded is byte-identical at every caller; no sink downstream truncates a notice (the CLI passes stderr through, the hook wrapper re-emits it verbatim); the per-name arithmetic is exact and the notice count equals the collapsed-name count in every fixture; the three first-fold fixtures kill the three mutants the first leg named; the rerun reconstruction, the ordering specimen, the five-name head and the five-run name were all re-derived live as true; four hand-recomputed receipts match. What it found: r2-F1 never-sliced was unpinned, the fixture's longest fragment 32 chars against a 160 bound (folded: a fixture whose name exceeds the bound, asserted whole with no ellipsis); r2-F2 the README's universal fidelity sentence was falsified by synthetic-check-duplicate-id-missing (folded: that fixture's state FAILURE and the sentence scoped to synthetic-check-*); r2-F3 the spec miscounted the tests (folded); r2-F4 the unnamed-check pass-through keyed on the placeholder text with zero coverage (folded: a named flag on CheckEntry and a fixture with two unnamed runs); r2-F5 the SupersededRun interface orphaned judgeLatestRuns's JSDoc (folded: moved above it); r2-F6 the README instants enumeration omitted the 2879 rows (folded); r2-F7 the lone-null-id fixture pinned only the success direction (folded: a FAILURE null-id run beside it, deny asserted); r2-F8 the residual's workflow denominator omitted the four dynamic workflows (folded); r2-F9 31-of-31 was ambiguous with a live in-window counterexample for full order (folded: the spec pins the max element and names 9ce020bb); r2-F10 the changeset's sentence argued a major under a minor bump (folded: the sentence states why it is additive at every reader; minor ruled); r2-F11 the sanitiser's doc over-claimed C1 controls (folded: doc). The open question on under-filled pagination pages is answered by a README sentence. The seat names convergence: no third leg."
+}
