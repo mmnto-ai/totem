@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "a42db73c7dd609d4d7abf64df5361c295843e926",
+  "readAt": "2026-09-18T19:37:55Z",
+  "findings": [
+    {
+      "id": "r3-F1",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2879.md",
+      "line": 27,
+      "claim": "The spec declares the residual closed, but a key on the app slug plus the workflow's display NAME still collapses two workflow files that share a name: and two same-named jobs inside one workflow run (identical producer string, greatest id wins); Greptile's P1 named 'or jobs' explicitly and the spec's deleted residual named the same class. Workflow.databaseId and checkSuite.databaseId sit at the same selection depth; reruns sit in different suites, distinct jobs of one run share one.",
+      "counterexample": "Live on 2877: the two collapsing D1 runs are in suites 94924978588 and 94925028704; three independent Build & Lint jobs share suite 94924978757; a job re-run replaces its check run in place. FOLDED: the producer is the app slug plus the workflow's database id; two same-named runs of one producer in one suite are unreadable; fixtures for both classes."
+    },
+    {
+      "id": "r3-F2",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2879.md",
+      "line": 9,
+      "claim": "Only the residual section was rewritten in the bot-round fold: the ruled-design bullet still said 'No other field is added: checkSuite.app.slug would widen the fragment for a collision the cohort does not have' against the shipped fragment; 'non-negative-integer' against safe-integer; 'total counts names' against the fold's own total: 3 over two names; the test and fixture counts and the verification section stale.",
+      "counterexample": "Nothing test-enforces spec prose. FOLDED: the spec rewritten to the shipped design in full, counts re-derived on disk."
+    },
+    {
+      "id": "r3-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 110,
+      "claim": "The exported MergeReadyProvenanceDetail.checks JSDoc still defines total as names and superseded as same-name replacements, contradicted by the fold's fixture asserting total 3 for two names; the changeset's Minor sentence still says total counts names in the same paragraph that says checks; the read-state comments say per collapsed name.",
+      "counterexample": "merge-ready.test.ts asserts total: 3 on synthetic-check-same-name-two-producers.json. FOLDED: checks, a name under one producer, in the JSDoc, the changeset and the read-state comments."
+    },
+    {
+      "id": "r3-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/synthetic-check-duplicate-id-unsafe.json",
+      "line": 3,
+      "claim": "The fixture's role and its README row say the id is 9007199254740993 while the file carries 9007199254740992 (JSON.parse rounded it at authoring); the receipt test hashes bytes, not prose.",
+      "counterexample": "node: JSON.parse('9007199254740993') === 9007199254740992; Number.isSafeInteger of it is false, so the fixture still kills the isInteger mutant. FOLDED: worded as written and rounded to the value on disk."
+    },
+    {
+      "id": "r3-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 620,
+      "claim": "The producer fell back to the app slug alone whenever the workflow name did not read, not when the app is not Actions, so an Actions suite answering workflowRun null would collapse every Actions workflow into one producer — a fail-open direction the JSDoc ('when the app is Actions') denied; unproven live over eight four-month-old PRs.",
+      "counterexample": "FOLDED: an Actions run whose workflow id did not read is a producer that did not read (null), unreadable in a duplicate group."
+    },
+    {
+      "id": "r3-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1553,
+      "claim": "The fold moved the null-id check inside the producer sub-group, so two same-named runs from different producers where one has no id are both judged, but no fixture exercises it; hoisting the check back passes all 99 tests.",
+      "counterexample": "FOLDED: synthetic-check-two-producers-one-null-id.json, both judged, allow, no notice."
+    },
+    {
+      "id": "r3-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/merge-ready.ts",
+      "line": 1911,
+      "claim": "The producer (an untrusted workflow name) is interpolated unquoted into the notice and the deny detail while the check name is JSON-quoted, so it can imitate the notice's own grammar.",
+      "counterexample": "FOLDED: JSON-quoted at both sites; the tests assert the quoted form."
+    },
+    {
+      "id": "r3-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/gate-fixtures/merge-ready/README.md",
+      "line": 45,
+      "claim": "The fourth-re-make sentence said every synthetic CheckRun node was stamped github-actions / CI at 19:18:14Z, but the six new nodes carry other producers and one null app, and 19:18:14Z is the synthesizedAt of the three new fixtures only; the third paragraph's 'synthesizedAt unchanged' guard was dropped.",
+      "counterexample": "Per-file synthesizedAt distribution on disk. FOLDED: the paragraph names the pre-existing nodes' stamp, the new fixtures' producers and instants, and the unchanged verdicts."
+    }
+  ],
+  "folded": [
+    "r3-F1",
+    "r3-F2",
+    "r3-F3",
+    "r3-F4",
+    "r3-F5",
+    "r3-F6",
+    "r3-F7",
+    "r3-F8"
+  ],
+  "verdict": "Leg 3, re-armed and scoped to the bot-round fold be6db60e..a42db73c (mmnto-ai/totem#2879, Greptile P1 and P2): 0 BLOCKING, 3 MATERIAL, 5 MINOR. The code path converged on the fold's own terms: the producer key verified correct for the originating incident from the live API (the two D1 runs share app and workflow name across two check suites and two workflow runs); matrix jobs, two apps and two differently-named workflows closed and grounded; the null-shape read total by code and by schema; the three fixtures kill their mutants (JSON.parse rounds 9007199254740993 and isSafeInteger rejects the rounded value); the reshape machine-verified to have changed no verdict across all 71 fixtures; receipts recomputed. What did not converge was the boundary of the claim: r3-F1 the spec declared the residual closed while two of Greptile's named classes survived a key on the workflow's display NAME — two workflow files sharing a name, and two same-named jobs in one workflow run — and the API exposes the identity fields at the same depth (folded: the producer keys on the workflow's database id; two same-named runs of one producer that share a check suite fail closed; two fixtures); r3-F2 five stale clauses in the spec's ruled design and files-touched, one inverted (folded: the spec rewritten to the shipped design); r3-F3 the exported checks JSDoc and the changeset still defined total as names, the changeset contradicting itself (folded: checks, a name under one producer); r3-F4 the unsafe-id fixture's role and README row named 9007199254740993 while the file carries the rounded 9007199254740992 (folded: worded as written and rounded); r3-F5 the producer fell back on the workflow name not reading rather than on the app not being Actions, a fail-open direction (folded: an Actions run without a readable workflow id is a producer that did not read); r3-F6 the refined null-id arm was unpinned (folded: a two-producers-one-null-id fixture, both judged); r3-F7 the producer interpolated unquoted beside a quoted name (folded: JSON-quoted in the notice and the deny detail); r3-F8 the README's fourth-re-make sentence over-generalised the stamp and dropped the synthesizedAt guard (folded). The key change rewires semantics; a fourth scoped leg follows, then convergence."
+}
