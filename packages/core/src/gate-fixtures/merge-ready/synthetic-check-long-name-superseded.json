@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 - checks that ran ONCE with databaseId null are judged on their own conclusion in both directions (one SUCCESS, one FAILURE): the id is needed only to order same-named runs, so a single run without one is neither unreadable nor a success by default",
-  "synthesizedAt": "2026-09-18T17:31:48.251Z",
+  "role": "mmnto-ai/totem#2879 - a superseded cancel under a check name LONGER than the 160-character evidence bound: the disclosure line carries the whole name and no ellipsis (never sliced)",
+  "synthesizedAt": "2026-09-18T17:53:26.001Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -35,21 +35,21 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": null
+                              "databaseId": 5001
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
+                              "name": "spine-adopt harnesses on ubuntu-latest (specimens, seed20, matrix shard 7 of 12, reusable workflow harness/run-adopt.yml @ main, with the full fixture corpus and the extended timeout budget for cold-store starts)",
                               "status": "COMPLETED",
-                              "conclusion": "SUCCESS",
+                              "conclusion": "CANCELLED",
                               "databaseId": 5002
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Doctor (--strict)",
+                              "name": "spine-adopt harnesses on ubuntu-latest (specimens, seed20, matrix shard 7 of 12, reusable workflow harness/run-adopt.yml @ main, with the full fixture corpus and the extended timeout budget for cold-store starts)",
                               "status": "COMPLETED",
-                              "conclusion": "FAILURE",
-                              "databaseId": null
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5003
                             }
                           ]
                         }

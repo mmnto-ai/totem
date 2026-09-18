@@ -375,6 +375,14 @@ interface CheckEntry {
   /** Which rollup node type answered it: a CheckRun (Actions, apps) or a legacy StatusContext. */
   typename: 'CheckRun' | 'StatusContext';
   /**
+   * Whether the node's name (or context) READ as a string. False means
+   * `name` carries a placeholder and this entry must never be grouped with
+   * another: two malformed nodes share no identity (leg F10 on
+   * mmnto-ai/totem#2879). Keyed on the read, not on the placeholder text, so
+   * a check that is really named like the placeholder still collapses.
+   */
+  named: boolean;
+  /**
    * The CheckRun's `databaseId` — GitHub's check-run id, a single increasing
    * sequence, so among same-named runs on one head the greatest id IS the
    * latest run (mmnto-ai/totem#2879). Null on a StatusContext, and on a
@@ -584,26 +592,30 @@ function readChecks(rollup: Record<string, unknown> | null): {
       return { entries, hasNext: false, cursor: null, detail: 'a check node was not an object' };
     const typename = asString(n.__typename);
     if (typename === 'CheckRun') {
-      const name = asString(n.name) ?? UNNAMED_CHECK;
+      const readName = asString(n.name);
+      const name = readName ?? UNNAMED_CHECK;
+      const named = readName !== null;
       const status = asString(n.status) ?? '';
       const conclusion = asString(n.conclusion);
       const runId = asNonNegativeInteger(n.databaseId);
       if (status !== 'COMPLETED') {
-        entries.push({ name, kind: 'pending', typename, runId });
+        entries.push({ name, kind: 'pending', typename, named, runId });
       } else if (conclusion !== null && SUCCESS_CONCLUSIONS.has(conclusion)) {
-        entries.push({ name, kind: 'success', typename, runId });
+        entries.push({ name, kind: 'success', typename, named, runId });
       } else {
-        entries.push({ name, kind: 'failing', typename, runId });
+        entries.push({ name, kind: 'failing', typename, named, runId });
       }
     } else if (typename === 'StatusContext') {
-      const name = asString(n.context) ?? '(unnamed context)';
+      const readName = asString(n.context);
+      const name = readName ?? '(unnamed context)';
+      const named = readName !== null;
       const state = asString(n.state) ?? '';
       if (SUCCESS_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'success', typename, runId: null });
+        entries.push({ name, kind: 'success', typename, named, runId: null });
       } else if (PENDING_CONTEXT_STATES.has(state)) {
-        entries.push({ name, kind: 'pending', typename, runId: null });
+        entries.push({ name, kind: 'pending', typename, named, runId: null });
       } else {
-        entries.push({ name, kind: 'failing', typename, runId: null });
+        entries.push({ name, kind: 'failing', typename, named, runId: null });
       }
     } else {
       return {
@@ -1147,7 +1159,11 @@ export function hasHighSeverityMarker(body: string): boolean {
 
 // ─── Evidence helpers ───────────────────────────────────────────────────────
 
-/** One line: control characters to spaces, runs of whitespace to one, trimmed — never sliced. */
+/**
+ * One line: C0 control characters and DEL to spaces, runs of whitespace to
+ * one, trimmed — never sliced. (C1 controls are left as they are, as they
+ * always were in `bounded`.)
+ */
 function oneLine(text: string): string {
   let out = '';
   for (const ch of text) {
@@ -1421,6 +1437,14 @@ const MERGE_STATE_DENY = new Map<string, string>([
   ['DRAFT', 'the pull request is still a draft'],
 ]);
 
+/** A check name that ran more than once on the head, and the run that judged it. */
+interface SupersededRun {
+  name: string;
+  runs: number;
+  judgedId: number;
+  kind: CheckEntry['kind'];
+}
+
 /**
  * Collapse every same-named `CheckRun` group to its LATEST run
  * (mmnto-ai/totem#2879). GitHub's rollup `contexts` lists EVERY check run on
@@ -1439,14 +1463,6 @@ const MERGE_STATE_DENY = new Map<string, string>([
  * untouched. Output order is first-seen order, so the deny reason's name list
  * reads the way the rollup listed it.
  */
-/** A check name that ran more than once on the head, and the run that judged it. */
-interface SupersededRun {
-  name: string;
-  runs: number;
-  judgedId: number;
-  kind: CheckEntry['kind'];
-}
-
 function judgeLatestRuns(
   checks: readonly CheckEntry[],
 ): { ok: true; judged: CheckEntry[]; collapsed: SupersededRun[] } | { ok: false; detail: string } {
@@ -1455,8 +1471,8 @@ function judgeLatestRuns(
   for (const c of checks) {
     // A legacy status passes through; so does a run whose name did not read —
     // grouping the placeholder would fabricate an identity two malformed nodes
-    // never shared (leg F10).
-    if (c.typename !== 'CheckRun' || c.name === UNNAMED_CHECK) {
+    // never shared (leg F10). Keyed on `named`, not on the placeholder text.
+    if (c.typename !== 'CheckRun' || !c.named) {
       order.push({ entry: c });
       continue;
     }

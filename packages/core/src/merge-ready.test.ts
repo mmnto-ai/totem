@@ -10,7 +10,7 @@
  * disposition path while its anchor survives on the head — the discharge
  * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
  * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
- * ADR-109 false-positive budget. The other 61 are synthetic and labelled
+ * ADR-109 false-positive budget. The other 63 are synthetic and labelled
  * `synthetic-` in their names — one per invariant the captures cannot
  * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
@@ -172,8 +172,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(61);
-    expect(files.length).toBe(66);
+    expect(synthetic.length).toBe(63);
+    expect(files.length).toBe(68);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -515,12 +515,51 @@ describe('merge-ready — predicate 1 (checks)', () => {
     for (const line of lines) expect(line).not.toContain('…');
   });
 
-  it('2879 — a check that ran ONCE with no readable databaseId is judged on its conclusion: the id orders same-named runs and nothing else (leg F3)', () => {
+  it('2879 — a check that ran ONCE with no readable databaseId is judged on its conclusion, in BOTH directions: the id orders same-named runs and nothing else (leg F3, r2-F7)', () => {
+    // Two lone null-id runs: one SUCCESS, one FAILURE. The over-strict mutant
+    // (any unreadable id is unevaluable) would say "could not derive"; the
+    // lenient mutant (a lone null-id run reads as success) would allow.
     const e = evaluate('synthetic-check-single-null-id.json');
+    expect(e.verdict.disposition).toBe('deny');
+    expect(e.verdict.provenance.ref).toBe('checks');
+    expect(e.verdict.reason).toContain(
+      '1 of 3 status checks are failing (Totem Doctor (--strict))',
+    );
+    expect(e.detail.checks).toEqual({
+      total: 3,
+      success: 2,
+      pending: 0,
+      failing: 1,
+      superseded: 0,
+    });
+    expect(e.notices.join('\n')).not.toMatch(/times on the head commit|could not derive/);
+  });
+
+  it('2879 — a check name longer than the evidence bound is disclosed WHOLE: the notice is sanitised, never sliced (r2-F1)', () => {
+    const e = evaluate('synthetic-check-long-name-superseded.json');
     expect(e.verdict.disposition).toBe('allow');
     expect(e.detail.checks).toEqual({
       total: 2,
       success: 2,
+      pending: 0,
+      failing: 0,
+      superseded: 1,
+    });
+    const lines = e.notices.filter((n) => n.includes('times on the head commit'));
+    expect(lines).toHaveLength(1);
+    const longName =
+      'spine-adopt harnesses on ubuntu-latest (specimens, seed20, matrix shard 7 of 12, reusable workflow harness/run-adopt.yml @ main, with the full fixture corpus and the extended timeout budget for cold-store starts)';
+    expect(longName.length).toBeGreaterThan(160);
+    expect(lines[0]).toContain(`check ${JSON.stringify(longName)} ran 2 times on the head commit`);
+    expect(lines[0]).not.toContain('…');
+  });
+
+  it("2879 — two runs whose name did not read are two checks, never one that ran twice (r2-F4; the first leg's F10)", () => {
+    const e = evaluate('synthetic-check-unnamed-runs.json');
+    expect(e.verdict.disposition).toBe('allow');
+    expect(e.detail.checks).toEqual({
+      total: 3,
+      success: 3,
       pending: 0,
       failing: 0,
       superseded: 0,

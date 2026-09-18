@@ -22,7 +22,7 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "SUCCESS",
+                        "state": "FAILURE",
                         "contexts": {
                           "totalCount": 3,
                           "pageInfo": {

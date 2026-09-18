@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 - checks that ran ONCE with databaseId null are judged on their own conclusion in both directions (one SUCCESS, one FAILURE): the id is needed only to order same-named runs, so a single run without one is neither unreadable nor a success by default",
-  "synthesizedAt": "2026-09-18T17:31:48.251Z",
+  "role": "mmnto-ai/totem#2879 - two CheckRun nodes whose name is null (unreachable from GitHub, where name is NON_NULL; a malformed payload): each is its own check, never one check that ran twice - total counts both, nothing is superseded",
+  "synthesizedAt": "2026-09-18T17:53:26.003Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -22,7 +22,7 @@
                     "commit": {
                       "oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                       "statusCheckRollup": {
-                        "state": "FAILURE",
+                        "state": "SUCCESS",
                         "contexts": {
                           "totalCount": 3,
                           "pageInfo": {
@@ -35,21 +35,21 @@
                               "name": "Verify (ubuntu-latest)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
-                              "databaseId": null
+                              "databaseId": 5001
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Lint",
+                              "name": null,
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
                               "databaseId": 5002
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "Totem Doctor (--strict)",
+                              "name": null,
                               "status": "COMPLETED",
-                              "conclusion": "FAILURE",
-                              "databaseId": null
+                              "conclusion": "SUCCESS",
+                              "databaseId": 5003
                             }
                           ]
                         }

@@ -31,14 +31,16 @@ edit superseded, and the rollup lists both; its order is not chronological, so t
 the only ordinal). The four PR captures were re-captured with the new query on 2026-09-18,
 and every synthetic body's `CheckRun` nodes were stamped with ids (5001, 5002, … in node
 order per fixture) at `2026-09-18T17:03:58Z` — `synthesizedAt` unchanged; the reshape added
-a field and changed no verdict. Seven new synthetic fixtures (`synthetic-check-*.json`) pin
+a field and changed no verdict. Nine new synthetic fixtures (`synthetic-check-*.json`) pin
 the judgment: the superseded cancel, the later cancel, the lone cancel, the duplicate with
-no readable id, and — from the falsification leg's fold — a three-run group beside a
+no readable id, and — from the two falsification legs' folds — a three-run group beside a
 two-run group (superseded counts RUNS; one disclosure line per name; an earlier FAILURE is
-superseded like a cancel), a lone run with no id (judged on its conclusion), and a pair
-split across two pages of the checks connection (judged together after the last page).
+superseded like a cancel), lone runs with no id (judged on their own conclusion, one SUCCESS
+and one FAILURE), a pair split across two pages of the checks connection (judged together
+after the last page), a check name longer than the evidence bound (disclosed whole, never
+sliced), and two runs whose name did not read (two checks, never one that ran twice).
 A rollup that carries a cancelled or failed run reports `state: FAILURE` on every live
-specimen, and the synthetic bodies say so.
+specimen, and every `synthetic-check-*` body says so.
 
 ## Shape
 
@@ -170,6 +172,11 @@ fixture.
 
 ## The synthetic fixtures
 
+Pagination synthetics under-fill their pages on purpose: the query asks for a hundred
+contexts (or threads, or comments) per page, and a fixture that split a real hundred would
+be unreadable, so a second-page fixture closes page one after a node or two with
+`hasNextPage: true` and a cursor. The shape of the walk is what they pin, not the page size.
+
 All synthesized `2026-09-08T03:55:11.894Z`, except the three fold-round-2 rows
 (`2026-09-08T05:42:31.591Z`) and the two fold-round-3 rows
 (`2026-09-08T06:26:38.783Z` and `2026-09-08T06:25:27.919Z`) and the four fold-round-4 rows
@@ -178,8 +185,11 @@ mmnto-ai/totem#2844) and the eleven mmnto-ai/totem#2861 rows — seven at
 `2026-09-16T00:47:11.787Z` (all new), three at `2026-09-16T01:17:05.889Z` for the fold that
 added the disposition line (the negative control and the bare-resolve window fixture
 re-authored, the discharged-window fixture created), and one at `2026-09-16T02:50:30.916Z`
-for the ruled fold (the missing-root-id fixture) — at the end of the table. Each covers an
-invariant the captures cannot.
+for the ruled fold (the missing-root-id fixture) — and the nine mmnto-ai/totem#2879 rows: four at
+`2026-09-18T17:03:58Z` (the judgment), three at `2026-09-18T17:31:48Z` (the first leg's fold;
+two of them re-authored again in the second leg's fold, `synthesizedAt` moved with them) and
+two at `2026-09-18T17:53:26Z` (the long name, the unnamed runs) — at the end of the
+table. Each covers an invariant the captures cannot.
 
 | File                                                      | Invariant                                                                                                                                                                                                                                       | sha256                                                             |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -238,12 +248,14 @@ invariant the captures cannot.
 | `synthetic-high-inline-discharged-window-incomplete.json` | 2861 — evidence FOUND discharges even when the window is incomplete (pins the invariant; kills the completeness-first mutant)                                                                                                                   | `88ec27c2fb1d9f53ce5ed6a4d53ce7babb44beb841db34019dae694917a3bb43` |
 | `synthetic-comments-connection-missing.json`              | 2861 — NO PR `comments` connection is unreadable, never "no evidence"                                                                                                                                                                           | `4b99ab3d318bc2532951e0db30445ff60a1a3f3ad523a4dfa515831a4c4e2cde` |
 | `synthetic-check-cancelled-after-success.json`            | mmnto-ai/totem#2879 - a success and then a LATER cancelled run of the same name (greater databaseId listed second): the latest run is CANCELLED, predicate 1 denies naming the check; the earlier success does not stand in                     | `0b1eaae3dd8499a97bd941420f8453a3af8440fbff7d9a21037c7219479bb728` |
-| `synthetic-check-duplicate-id-missing.json`               | mmnto-ai/totem#2879 - two runs of one name where one carries databaseId null: the latest cannot be derived, the check state is unreadable (unevaluable at both tiers), never the first or the last one listed                                   | `c93337023c058574c6d2a96921f56892430cd3c9ed44f53481a0b6b52b8a9fe1` |
+| `synthetic-check-duplicate-id-missing.json`               | mmnto-ai/totem#2879 - two runs of one name where one carries databaseId null: the latest cannot be derived, the check state is unreadable (unevaluable at both tiers), never the first or the last one listed                                   | `e02e6f9e0ed8535f24afa28c6827fe5d1b00e6e50898e5a5db76bc004239fe0d` |
 | `synthetic-check-single-cancelled.json`                   | mmnto-ai/totem#2879 - the negative that must keep denying: ONE cancelled run with no later run of its name is a check that did not pass                                                                                                         | `7a8ad06bdff3ca3383c742ee0ad54e1a3f8dee85be503b86be657471c0874d21` |
 | `synthetic-check-superseded-cancelled.json`               | mmnto-ai/totem#2879 - a concurrency-cancelled run beside the LATER success of the same name, the later run LISTED FIRST as GitHub lists them: predicate 1 judges the latest run (greatest databaseId), passes, and counts the superseded run    | `bb9a4b52b7ff3f093d415c08f9b2fa3a9f4b64247b39290db092790d540c2be9` |
 | `synthetic-check-duplicate-across-pages.json`             | mmnto-ai/totem#2879 - the cancelled run of a name on page one of the checks connection and its later success on page two: the collapse runs once every page is in, so the pair is judged together (the second call carries the checks cursor)   | `f1443ad6a1f503598caeabc6131b5775bbdef2918afdf0ce41eab1963c172003` |
-| `synthetic-check-single-null-id.json`                     | mmnto-ai/totem#2879 - a check that ran ONCE with databaseId null is judged on its own conclusion: the id is needed only to order same-named runs, so a single run without one is not unreadable                                                 | `482f9a6223c881047aacc3059581a2917cdcdb6f4acf8bc0a3dc344d66661ba9` |
+| `synthetic-check-single-null-id.json`                     | mmnto-ai/totem#2879 - a check that ran ONCE with databaseId null is judged on its own conclusion: the id is needed only to order same-named runs, so a single run without one is not unreadable                                                 | `1ee78779c36c6ef32375e073ed5aaf85ecca1562f684016153d47a5aaf56360d` |
 | `synthetic-check-three-runs-two-names.json`               | mmnto-ai/totem#2879 - two names ran more than once on one head, one of them THREE times with a FAILURE first: superseded counts RUNS (3), not names (2); one disclosure line per name; an earlier failed run is superseded like a cancelled one | `de1bba65eb12fd2fde94d8976842128de21964895de7d9372fe86a0826d7e146` |
+| `synthetic-check-long-name-superseded.json`               | mmnto-ai/totem#2879 - a superseded cancel under a check name LONGER than the 160-character evidence bound: the disclosure line carries the whole name and no ellipsis (never sliced)                                                            | `e14fa216e67c51eb2ce87cf2309c37732da4d6b9cee2190b7bcb3c22537cbbaa` |
+| `synthetic-check-unnamed-runs.json`                       | mmnto-ai/totem#2879 - two CheckRun nodes whose name is null (unreachable from GitHub, where name is NON_NULL; a malformed payload): each is its own check, never one check that ran twice - total counts both, nothing is superseded            | `459783ece4094495b26a9e9d18c41bb725c53c6c3bfb2fa3625ebf5c737b74c6` |
 
 ## The receipts in this file are machine-written
 
