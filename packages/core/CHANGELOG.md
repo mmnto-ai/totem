@@ -1,5 +1,15 @@
 # @mmnto/totem
 
+## 2.7.0
+
+### Minor Changes
+
+- 9974bdb: fix(gates): merge-ready predicate 1 judges a CHECK — a name under one producer — by its latest run: any earlier run of the same check, cancelled by a concurrency group or failed, is superseded by the run that came after it and no longer reads as a failing check (mmnto-ai/totem#2879). The `CheckRun` fragment selects `databaseId` (GitHub's check-run id, the only ordinal: the rollup's listed order is not chronological, and a rerun mints a new, greater id) and the run's producer and suite (`checkSuite { databaseId app { slug } workflowRun { workflow { databaseId name } } }`): only runs that share a name AND a producer (the app, plus the workflow's id for Actions) are reruns of one check and collapse, so a later success from another workflow or app never hides an independent failure under the same name; `checks.total` now counts checks the way `gh pr checks` does, and the new `checks.superseded` counts the replaced runs, each disclosed on its own stderr line with the run that stood in. Fail-closed arms, each an unreadable check state (unevaluable at both tiers), never "the first one listed": a same-named group with an unreadable producer (no app slug, or an Actions run with no workflow id); a rerun group with an unreadable id (anything but a non-negative safe integer) or an unreadable check-suite id; two same-named runs of one producer that sit in ONE check suite (two jobs of one workflow run, or two runs of one non-Actions app). A lone cancelled run still denies. Minor: `MergeReadyProvenanceDetail.checks` gains a `superseded` field and `total` now counts checks rather than runs — a produced record every consumer we control reads and none constructs (the CLI types `detail` as an opaque record), so the change is additive at every reader; a consumer that constructs the type by hand adds one field.
+
+### Patch Changes
+
+- 375835c: Seat the four Kimi agents in `COHORT_AGENT_MAP` — `totem-kimi`, `strategy-kimi`, `lc-kimi` and `status-kimi` — so a dispatch addressed `to: <repo>-kimi` is visible to `totem mail` on a checkout that has no seat dir for it and no `TOTEM_SELF_AGENT` declared. The orchestration tree is gitignored, so on a fresh clone the map IS the roster the poll can see; until now a Kimi seat resolved only where its dir already existed, which meant a `to: lc-kimi` dispatch read as a clean inbox on any other checkout while the `signoff` skill's step-2a table named the seat. The map and that table are now held to each other as an equality by `signoff-table-sync.test.ts`. Also widens the map's union for the four cohort repositories, so an identity-ambiguous poll's broadcast denominator and per-seat floor count the Kimi seat, and the known-agent set that `totem mail send`'s advisory recipient check and the poll's roster-validation warning consult now includes them (mmnto-ai/totem#2875). (The packages share one fixed changeset group, so every `@mmnto/*` package takes the same bump.)
+
 ## 2.6.0
 
 ### Minor Changes
