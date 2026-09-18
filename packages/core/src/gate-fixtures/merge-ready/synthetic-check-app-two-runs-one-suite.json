@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 re-armed leg F1 - two distinct jobs of ONE workflow run that share a display name: same producer, same check suite - independent checks the key cannot tell apart, so the check state is unreadable (unevaluable at both tiers), never a collapse that hides the failure. Possibly unobservable through the rollup (GitHub may list only the latest run per suite and name, the way it lists only the latest attempt); the arm is defensive and fail-closed either way",
-  "synthesizedAt": "2026-09-18T19:40:52.069Z",
+  "role": "mmnto-ai/totem#2879 fourth leg F4 - a non-Actions app (one check suite per head, no workflow run) posts two same-named runs, an earlier FAILURE and a later SUCCESS, in its one suite: same producer, same suite - two checks of one suite share the name and the key cannot tell them apart, so the check state is unreadable (unevaluable at both tiers), never a collapse that hides the failure; the deny reason names the suite, not a workflow run",
+  "synthesizedAt": "2026-09-18T20:06:31.051Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -51,40 +51,30 @@
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "test",
+                              "name": "lint",
                               "status": "COMPLETED",
                               "conclusion": "FAILURE",
                               "databaseId": 5002,
                               "checkSuite": {
                                 "databaseId": 7002,
                                 "app": {
-                                  "slug": "github-actions"
+                                  "slug": "some-ci-app"
                                 },
-                                "workflowRun": {
-                                  "workflow": {
-                                    "databaseId": 9001,
-                                    "name": "CI"
-                                  }
-                                }
+                                "workflowRun": null
                               }
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "test",
+                              "name": "lint",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
                               "databaseId": 5003,
                               "checkSuite": {
                                 "databaseId": 7002,
                                 "app": {
-                                  "slug": "github-actions"
+                                  "slug": "some-ci-app"
                                 },
-                                "workflowRun": {
-                                  "workflow": {
-                                    "databaseId": 9001,
-                                    "name": "CI"
-                                  }
-                                }
+                                "workflowRun": null
                               }
                             }
                           ]

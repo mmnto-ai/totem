@@ -10,7 +10,7 @@
  * disposition path while its anchor survives on the head — the discharge
  * specimen, mmnto-ai/totem#2861) — plus the benign corpus, every bot inline
  * thread on mmnto-ai/totem#2820-2839, which measures the severity read's
- * ADR-109 false-positive budget. The other 69 are synthetic and labelled
+ * ADR-109 false-positive budget. The other 72 are synthetic and labelled
  * `synthetic-` in their names — one per invariant the captures cannot
  * exercise (all four PRs are merged, so GitHub answers `mergeStateStatus:
  * UNKNOWN` for each and no capture can carry a BEHIND / DIRTY / BLOCKED head,
@@ -172,8 +172,8 @@ describe('merge-ready — the fixture README matches the fixtures', () => {
     const synthetic = files.filter((f) => f.startsWith('synthetic-'));
     const captures = files.filter((f) => !f.startsWith('synthetic-'));
     expect(captures.sort()).toEqual(CAPTURES);
-    expect(synthetic.length).toBe(69);
-    expect(files.length).toBe(74);
+    expect(synthetic.length).toBe(72);
+    expect(files.length).toBe(77);
   });
 
   it('the README query sha is the sha of the exported query (round 4, F7)', () => {
@@ -552,6 +552,39 @@ describe('merge-ready — predicate 1 (checks)', () => {
       expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
       expect(e.verdict.reason, tier).toContain('sit in one check suite');
       expect(e.verdict.reason, tier).toContain('check "test" from "github-actions/CI"');
+    }
+  });
+
+  it('2879 — a rerun group where one run has no readable check-suite id is UNREADABLE at both tiers (fourth leg F2)', () => {
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-check-rerun-suite-id-missing.json', { tier });
+      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
+      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
+      expect(e.verdict.reason, tier).toContain('no readable check-suite id');
+      expect(e.verdict.reason, tier).toContain(
+        'check "Auto-close required check (D1)" from "github-actions/Auto-close guard"',
+      );
+    }
+  });
+
+  it('2879 — an Actions run with no readable workflow id in a same-named group is a producer that did not read: UNREADABLE at both tiers, never one producer for every workflow (fourth leg F2, third leg F5)', () => {
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-check-actions-workflow-id-missing.json', { tier });
+      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
+      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
+      expect(e.verdict.reason, tier).toContain('no readable producer');
+      expect(e.verdict.reason, tier).toContain('the workflow id of an Actions run');
+      expect(e.verdict.reason, tier).toContain('Auto-close required check (D1)');
+    }
+  });
+
+  it('2879 — a non-Actions app that posts two same-named runs in its one suite is UNREADABLE at both tiers, and the reason names the suite, not a workflow run (fourth leg F4)', () => {
+    for (const tier of ['strict', 'pilot'] as const) {
+      const e = evaluate('synthetic-check-app-two-runs-one-suite.json', { tier });
+      expect(e.verdict.disposition, tier).toBe(tier === 'pilot' ? 'warn' : 'deny');
+      expect(e.verdict.provenance.ref, tier).toBe('unevaluable');
+      expect(e.verdict.reason, tier).toContain('check "lint" from "some-ci-app"');
+      expect(e.verdict.reason, tier).toContain('two runs of one app');
     }
   });
 

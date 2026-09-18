@@ -1,7 +1,7 @@
 {
   "kind": "synthetic",
-  "role": "mmnto-ai/totem#2879 re-armed leg F1 - two distinct jobs of ONE workflow run that share a display name: same producer, same check suite - independent checks the key cannot tell apart, so the check state is unreadable (unevaluable at both tiers), never a collapse that hides the failure. Possibly unobservable through the rollup (GitHub may list only the latest run per suite and name, the way it lists only the latest attempt); the arm is defensive and fail-closed either way",
-  "synthesizedAt": "2026-09-18T19:40:52.069Z",
+  "role": "mmnto-ai/totem#2879 fourth leg F2 - two runs of one check (same producer) where one carries no readable check-suite id (checkSuite.databaseId null, nullable in the schema): the run cannot be placed as a rerun or as an independent job, so the check state is unreadable (unevaluable at both tiers)",
+  "synthesizedAt": "2026-09-18T20:06:31.049Z",
   "ghVersion": "gh version 2.99.0 (2026-09-01)",
   "pages": [
     {
@@ -51,38 +51,38 @@
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "test",
+                              "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
-                              "conclusion": "FAILURE",
+                              "conclusion": "CANCELLED",
                               "databaseId": 5002,
                               "checkSuite": {
-                                "databaseId": 7002,
+                                "databaseId": null,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "databaseId": 9001,
-                                    "name": "CI"
+                                    "databaseId": 9004,
+                                    "name": "Auto-close guard"
                                   }
                                 }
                               }
                             },
                             {
                               "__typename": "CheckRun",
-                              "name": "test",
+                              "name": "Auto-close required check (D1)",
                               "status": "COMPLETED",
                               "conclusion": "SUCCESS",
                               "databaseId": 5003,
                               "checkSuite": {
-                                "databaseId": 7002,
+                                "databaseId": 7003,
                                 "app": {
                                   "slug": "github-actions"
                                 },
                                 "workflowRun": {
                                   "workflow": {
-                                    "databaseId": 9001,
-                                    "name": "CI"
+                                    "databaseId": 9004,
+                                    "name": "Auto-close guard"
                                   }
                                 }
                               }

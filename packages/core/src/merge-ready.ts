@@ -403,7 +403,9 @@ interface CheckEntry {
    * did not read, or when the app is Actions and the workflow id did not read
    * (fail closed, never "every Actions workflow is one producer"); a
    * same-named group with a null producer is unreadable, never collapsed by
-   * name alone. Null on a StatusContext.
+   * name alone. A non-Actions app that did answer a workflow id would be keyed
+   * with it too (finer, never coarser); none does on live data. Null on a
+   * StatusContext.
    */
   producer: string | null;
   /** The producer for humans: app slug plus the workflow's display NAME (`github-actions/Auto-close guard`). */
@@ -414,8 +416,9 @@ interface CheckEntry {
    * display name sit in ONE suite — so within a producer, two same-named runs
    * that share a suite are independent checks the key cannot tell apart, and
    * the group is unreadable rather than collapsed (the re-armed leg's F1). A
-   * job re-run inside one workflow run replaces its check run in place and
-   * never appears twice. Null when it did not read; null on a StatusContext.
+   * job re-run inside one workflow run mints a new check run in the SAME
+   * suite, and the rollup lists only the latest attempt, so a re-run never
+   * appears twice here. Null when it did not read; null on a StatusContext.
    */
   suiteId: number | null;
   /**
@@ -1516,6 +1519,7 @@ const MERGE_STATE_DENY = new Map<string, string>([
 /** A check that ran more than once on the head (one name, one producer), and the run that judged it. */
 interface SupersededRun {
   name: string;
+  /** The producer for HUMANS (app slug plus the workflow's display name), what the notice prints — not the identity key. */
   producer: string;
   runs: number;
   judgedId: number;
@@ -1536,16 +1540,24 @@ interface SupersededRun {
  * The producer is part of the key on purpose: two apps, or two workflows
  * under one app, may name a job alike, and those are INDEPENDENT checks — a
  * later success from one must never hide a failure from the other (bot
- * round 1, Greptile P1). Same name, different producer: both judged. Same
- * name, same producer: reruns, the latest judged. Same name, and a member
- * whose producer did not read: the runs cannot be told apart as reruns or as
- * independent checks — an unreadable check state (R2), never a collapse by
- * name alone. A group whose members share a producer but one lacks a readable
- * id is unreadable the same way: the latest cannot be derived, and picking one
- * would be a guess dressed as a read. A single run needs neither. Legacy
- * `StatusContext` nodes carry one state per context already and pass through
- * untouched. Output order is first-seen order, so the deny reason's name list
- * reads the way the rollup listed it.
+ * round 1, Greptile P1). The producer is the app plus the WORKFLOW's id for
+ * Actions, so two workflow files that share a display name stay apart. Same
+ * name, different producer: both judged. Same name, same producer, different
+ * check suites: reruns across workflow runs, the latest judged — and, ruled,
+ * two independent runs of one workflow on one head (a push run beside a
+ * scheduled run) collapse the same way, the way `gh pr checks` and the merge
+ * box take the latest run of a workflow. Same name, same producer, ONE check
+ * suite: two checks of one suite share a name (two jobs of one workflow run,
+ * or two runs of one non-Actions app, which has one suite per head) — the key
+ * cannot tell them apart, an unreadable check state (R2), never a collapse.
+ * Same name, and a member whose producer or suite id did not read: the runs
+ * cannot be placed — unreadable the same way. A group whose members share a
+ * producer and a suite pattern but one lacks a readable id is unreadable too:
+ * the latest cannot be derived, and picking one would be a guess dressed as a
+ * read. A single run needs none of it. Legacy `StatusContext` nodes carry one
+ * state per context already and pass through untouched. Output order is
+ * first-seen order, so the deny reason's name list reads the way the rollup
+ * listed it.
  */
 function judgeLatestRuns(
   checks: readonly CheckEntry[],
@@ -1591,7 +1603,7 @@ function judgeLatestRuns(
             bounded(JSON.stringify(slot.key)) +
             ' ran ' +
             String(sameName.length) +
-            ' times on the head and one of its runs carries no readable producer (check suite app) - reruns of one check cannot be told from independent checks that share the name, the check state is unreadable',
+            ' times on the head and one of its runs carries no readable producer (the check suite app, or the workflow id of an Actions run) - reruns of one check cannot be told from independent checks that share the name, the check state is unreadable',
         };
       }
       const sub = byProducer.get(run.producer);
@@ -1630,7 +1642,7 @@ function judgeLatestRuns(
               who +
               ' ran ' +
               String(group.length) +
-              ' times on the head and two of its runs sit in one check suite - two jobs of one workflow run share the name, independent checks the key cannot tell apart, the check state is unreadable',
+              ' times on the head and two of its runs sit in one check suite - two checks of one suite share the name (two jobs of one workflow run, or two runs of one app), independent checks the key cannot tell apart, the check state is unreadable',
           };
         }
         suites.add(run.suiteId);
