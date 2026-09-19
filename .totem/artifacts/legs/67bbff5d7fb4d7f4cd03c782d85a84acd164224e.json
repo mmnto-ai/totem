@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "67bbff5d7fb4d7f4cd03c782d85a84acd164224e",
+  "readAt": "2026-09-19T07:43:46Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "The parenthetical 'a review has landed that late, after the merge' asserts a post-merge REVIEW the cited doctrine record does not contain: bot-protocols.md @16c5694 § Invocation says CodeRabbit 'acknowledged twelve minutes late, past the merge, on mmnto-ai/totem-strategy#1182' — an acknowledgement, not a review. The diff upgraded an ack to a review in text shipped to every consumer.",
+      "counterexample": "gh api repos/mmnto-ai/totem-strategy/pulls/1182/reviews returns ONE review (gemini-code-assist[bot], 2026-09-01T18:42:41Z); pulls/1182/comments is empty; CodeRabbit's 18:50:07Z issue comment says 'Action not completed / Pull request is closed' — merge was 18:48:52Z. FOLDED (4e80e3a8): the parenthetical removed; the window reads 'about 12 minutes from the trigger'."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "'never the head's green status' was a blanket over all bots justified by CodeRabbit alone, dropping the doctrine's carve: Greptile's green `Greptile Review` check run does mark the sha it reviewed; GCA posted neither a status nor a check run (§ Working the findings). Broader in prohibition than the doctrine.",
+      "counterexample": "A seat on a Greptile round sees the green check run on the head — doctrine: confirmation; the old text: not confirmation, another trigger spent. FOLDED (4e80e3a8): 'never a green commit status on the head' with both carve-outs stated."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "'never a re-invoke folded into another comment' redefined the doctrine's contrast term: re-invoke is the cadence's word (re-invoke only for risky rework, reason recorded in the round comment); the doctrine's claim is cadence accounting (the standalone re-trigger IS the first pass), not a comment-shape rule.",
+      "counterexample": "A seat whose trigger chat-routed reads the old tail and either records a risky-rework reason it does not owe, or concludes a standalone re-invoke needs no word. FOLDED (4e80e3a8): 'that bot's first pass, not a re-invoke, which the cadence reserves for risky rework with the reason recorded in the round comment'."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "Trigger ownership stated two ways in one paragraph: 'the operator's to post' at the opening, then 'a standalone re-trigger on the operator's word' (an on-the-word form that reads as the seat posting). The distributed AGENTS floor (init-templates.ts:2996) says triggers are the maintainer's to post, never an agent's.",
+      "counterexample": "One paragraph, two owners of the same act. FOLDED (4e80e3a8): 'a standalone re-trigger, posted by the operator on the same terms'."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "'about 12 minutes' is the doctrine's bound but the text never said what the window is measured FROM.",
+      "counterexample": "On mmnto-ai/totem-strategy#1182 the bound is trigger (18:38:07Z) to acknowledgement (18:50:07Z) = 12m00s; the merge was 10m45s after the trigger. FOLDED (4e80e3a8): 'about 12 minutes from the trigger'."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "The compression of 'it settles green either way' dropped the doctrine's discriminator ('Review completed' on the sha it reviewed, 'Review skipped: automatic reviews are disabled' on every push head it did not) — the one readable status-surface signal the doctrine documents.",
+      "counterexample": "Head shows CodeRabbit green / 'Review completed' — doctrine: that is the sha it reviewed; the old text: green tells you nothing. FOLDED (4e80e3a8): the discriminator stated in the parenthetical."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3963,
+      "claim": "The diff added a distributed contract clause set with zero new assertions: the three existing mechanisms (constant equals the .claude copy; every constant matches its .agents twin; no banned term) all pass if the whole section is deleted from all three copies at once.",
+      "counterexample": "Delete the section from the constant and both copies: init.test.ts + config-drift.test.ts stay at 387 passed. FOLDED (4e80e3a8): a lock test on the section's presence, its position before Phase 1, the three clauses and the fenced read."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "The new mandatory pre-step named no verb while every other step in the skill names an executable; the skill's own Phase-1 verb cannot perform the confirmation (triage-pr never surfaces a review's commit_id although the adapter carries it at github-cli-pr.ts:205).",
+      "counterexample": "A consumer following the old text had to hand-roll the reviews read. FOLDED (4e80e3a8): a fenced `gh api \"repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews\" --jq ...` listing each review with the sha it was submitted against."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "The standalone-trigger rule was stated twice inside one managed span (the new line and the existing step-2 sentence), two copies that could drift.",
+      "counterexample": "New: 'one bot per standalone comment'; existing line 79: 'triggers are standalone comments, one trigger and no prose'. FOLDED (4e80e3a8): the duplicate phrase dropped from the new section."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "1 BLOCKING, 2 MATERIAL, 6 MINOR at 67bbff5d — not fit to present as-is; every finding folded in 4e80e3a8, which a second scoped leg reads."
+}
