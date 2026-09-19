@@ -235,15 +235,30 @@ const WRAPPER_STRIP_ROWS = [
   'sudo -u root gh pr merge 5',
   'sudo --user=root gh pr merge 5',
   'sudo -- gh pr merge 5',
+  // A long option that takes a SEPARATE operand needs its own table entry, or
+  // the operand reads as the program and the merge behind it goes unjudged
+  // (round-5 leg, F2 — an undisclosed miss family inside the closed table).
+  'sudo --user root gh pr merge 5',
+  'sudo --group grp gh pr merge 5',
+  'sudo --prompt p gh pr merge 5',
+  // sudo options that are NOT describe-only: `-E` keeps the environment, `-b`
+  // runs the command in the background. Both still execute the operand.
+  'sudo -E gh pr merge 5',
+  'sudo -b gh pr merge 5',
   'env GH_TOKEN=x gh pr merge 5',
   'env -u X A=1 gh pr merge 5',
+  'env --unset X gh pr merge 5',
+  'env --chdir /tmp gh pr merge 5',
   'timeout 30 gh pr merge 5',
   'timeout 30s gh pr merge 5',
   'timeout -k 5 30 gh pr merge 5',
   'timeout --kill-after=5 30 gh pr merge 5',
+  'timeout --kill-after 5 30 gh pr merge 5',
+  'timeout --signal KILL 30 gh pr merge 5',
   'timeout --foreground 30 gh pr merge 5',
   'nice -n 10 gh pr merge 5',
   'nice --adjustment=10 gh pr merge 5',
+  'nice --adjustment 10 gh pr merge 5',
   'nice -10 gh pr merge 5',
   'nohup gh pr merge 5',
   'command -p gh pr merge 5',
@@ -281,6 +296,33 @@ const REDIRECTION_ROWS = [
 const MUTANT_ROWS = [
   // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
   'sudo -u gh pr merge 5',
+  // sudo's DESCRIBE-only options run nothing at all: `-l`/`--list` prints the
+  // policy, `-v`/`--validate` refreshes the timestamp, `-V`/`--version` prints
+  // a version, `-K`/`--remove-timestamp` clears credentials and may not carry
+  // a command. Projecting a merge there was a FALSE DENY on a command the
+  // shell never runs (round-5 leg, F1).
+  'sudo -l gh pr merge 5',
+  'sudo --list gh pr merge 5',
+  'sudo -v gh pr merge 5',
+  'sudo --validate gh pr merge 5',
+  'sudo -V gh pr merge 5',
+  'sudo --version gh pr merge 5',
+  'sudo -K gh pr merge 5',
+  'sudo --remove-timestamp gh pr merge 5',
+  // `time` is bash's RESERVED WORD (`time [-p] [--] pipeline`), not
+  // `/usr/bin/time`: no option of it takes an operand, and any other `-` token
+  // is a command bash cannot find — nothing runs, so nothing is projected
+  // (round-5 leg, F3). Both spellings were read with GNU time's grammar.
+  'time -f x gh pr merge 5',
+  'time -o out.txt gh pr merge 5',
+  // LOCKED: the PROGRAM spelled by path is not the reserved word, and a
+  // path-spelled wrapper is not on the closed table at all.
+  '/usr/bin/time -f x gh pr merge 5',
+  // LOCKED: `env -S` / `--split-string` splits its OPERAND under env's own
+  // rules and runs that as the command. The operand is consumed with the
+  // option here, so the merge inside it is never read.
+  "env -S 'gh pr merge 5'",
+  "env --split-string='gh pr merge 5'",
   // `timeout` with no duration: the grammar consumes exactly one positional
   // before the command, so `gh` reads as the duration. A disclosed
   // false-negative of the grammar, locked here (the form is invalid to
@@ -2143,28 +2185,61 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     const { ghPrMergeArgvs } = wrapperExports();
     /** [command, the argv after `gh pr merge`, or null when nothing projects] */
     const rows: Array<[string, string[] | null]> = [
-      // sudo: `-u -g -p -C -D -h -r -t -T -U` each take a separate operand.
+      // sudo: `-u -g -p -C -D -h -r -t -T -U` each take a separate operand,
+      // and so does each long spelling (round-5 leg, F2).
       ['sudo gh pr merge 5', ['5']],
       ['sudo -u root gh pr merge 5', ['5']],
       ['sudo -g grp -p prompt gh pr merge 5', ['5']],
       ['sudo -H -E gh pr merge 5', ['5']],
       ['sudo -u gh pr merge 5', null],
+      ['sudo --user root gh pr merge 5', ['5']],
+      ['sudo --group grp --prompt p gh pr merge 5', ['5']],
+      ['sudo --chdir /tmp gh pr merge 5', ['5']],
+      ['sudo --chroot /r gh pr merge 5', ['5']],
+      ['sudo --host h gh pr merge 5', ['5']],
+      ['sudo --role r --type t gh pr merge 5', ['5']],
+      ['sudo --other-user u gh pr merge 5', ['5']],
+      ['sudo --command-timeout 10 gh pr merge 5', ['5']],
+      ['sudo --user gh pr merge 5', null],
+      // sudo's DESCRIBE-only options execute nothing (round-5 leg, F1).
+      ['sudo -l gh pr merge 5', null],
+      ['sudo --list gh pr merge 5', null],
+      ['sudo -v gh pr merge 5', null],
+      ['sudo --validate gh pr merge 5', null],
+      ['sudo -V gh pr merge 5', null],
+      ['sudo --version gh pr merge 5', null],
+      ['sudo -K gh pr merge 5', null],
+      ['sudo --remove-timestamp gh pr merge 5', null],
+      // …but `-E` and `-b` still run the command.
+      ['sudo -E gh pr merge 5', ['5']],
+      ['sudo -b gh pr merge 5', ['5']],
       // env: options, then the assignment strip re-runs.
       ['env gh pr merge 5', ['5']],
       ['env A=1 B=2 gh pr merge 5', ['5']],
       ['env -u X A=1 gh pr merge 5', ['5']],
       ['env -C /tmp gh pr merge 5', ['5']],
       ['env -u gh pr merge 5', null],
+      ['env --unset X gh pr merge 5', ['5']],
+      ['env --chdir /tmp gh pr merge 5', ['5']],
+      ['env --unset gh pr merge 5', null],
+      // LOCKED: `-S` / `--split-string` carries the command as its operand.
+      ["env -S 'gh pr merge 5'", null],
+      ["env --split-string='gh pr merge 5'", null],
       // timeout: exactly ONE positional (the duration) before the command.
       ['timeout 30 gh pr merge 5', ['5']],
       ['timeout -s TERM 30 gh pr merge 5', ['5']],
       ['timeout gh pr merge 5', null],
       ['timeout 30 sudo gh pr merge 5', ['5']],
+      ['timeout --signal KILL 30 gh pr merge 5', ['5']],
+      ['timeout --kill-after 5 30 gh pr merge 5', ['5']],
+      ['timeout --signal 30 gh pr merge 5', null],
       // nice: `-n` takes an operand; a bare `-10` is an adjustment.
       ['nice gh pr merge 5', ['5']],
       ['nice -n 10 gh pr merge 5', ['5']],
       ['nice -10 gh pr merge 5', ['5']],
       ['nice -n gh pr merge 5', null],
+      ['nice --adjustment 10 gh pr merge 5', ['5']],
+      ['nice --adjustment gh pr merge 5', null],
       // nohup: no options of its own.
       ['nohup gh pr merge 5', ['5']],
       // command: `-p` is transparent, `-v`/`-V` describe and never execute.
@@ -2177,12 +2252,18 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       ['exec -a x gh pr merge 5', ['5']],
       ['exec -c -l gh pr merge 5', ['5']],
       ['exec -a gh pr merge 5', null],
-      // time: `-o` and `-f` take an operand; `-p` does not; `--` ends options.
+      // time: bash's RESERVED WORD, `time [-p] [--] pipeline`. `-p` is its one
+      // option, `--` ends options, and ANY other `-` token is a command bash
+      // cannot find — nothing runs, nothing projects (round-5 leg, F3). GNU
+      // `/usr/bin/time`'s `-o`/`-f` grammar is a different program's, and a
+      // path-spelled wrapper is not on the closed table.
       ['time gh pr merge 5', ['5']],
       ['time -p gh pr merge 5', ['5']],
-      ['time -o out.txt gh pr merge 5', ['5']],
       ['time -- gh pr merge 5', ['5']],
+      ['time -o out.txt gh pr merge 5', null],
+      ['time -f x gh pr merge 5', null],
       ['time -o gh pr merge 5', null],
+      ['/usr/bin/time -f x gh pr merge 5', null],
       // eval: depth 1 only.
       ['eval gh pr merge 5', ['5']],
       ['eval "gh pr merge 5"', ['5']],

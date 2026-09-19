@@ -1534,6 +1534,13 @@ function resolveCliFromPath() {
 //   - a wrapper program not on the table (\`npx\`, \`xargs\`, \`bash -c "…"\`) and a
 //     builtin flag not in it: the table is closed on purpose — the walk cannot
 //     know which operand of an arbitrary program is the command;
+//   - a table word spelled by PATH (\`/usr/bin/time -f x gh pr merge 5\`): the
+//     table is keyed on the bare word the shell reads at command position, and
+//     \`/usr/bin/time\` is a PROGRAM with its own option grammar, not the
+//     reserved word this table models;
+//   - \`env -S '<cmd>'\` / \`env --split-string='<cmd>'\`: the option's operand IS
+//     the command, split again under env's own rules. The operand is consumed
+//     with the option here, so the merge inside it is not read;
 //   - \`eval\` nested deeper than ONE level
 //     (\`eval "eval \\"gh pr merge 5\\""\`);
 //   - a redirection operator carrying a tokenizer separator (\`>|\`, \`2>&1\`):
@@ -1917,14 +1924,21 @@ function isGhExecutable(token) {
 //                 the command (only \`timeout\`'s duration);
 //   terminator  — whether a \`--\` ends its options;
 //   describe    — options that make the word DESCRIBE its operand instead of
-//                 executing it (\`command -v\`): the segment ends with NO
-//                 projection, because nothing is executed;
+//                 executing it (\`command -v\`, \`sudo -l\`): the segment ends
+//                 with NO projection, because nothing is executed;
+//   flags       — when present, the ONLY options the word HAS: any other
+//                 \`-\` token is not an option of it, so the shell runs no
+//                 command and there is nothing to project (bash's \`time\`
+//                 reserved word answers \`-f: command not found\`);
 //   evaluates   — the builtin whose operand is a STRING to re-tokenize.
 // Every other \`-\` token is skipped as a flag of the wrapper, so a long option
-// with an attached value (\`--user=x\`, \`--kill-after=5\`, \`--adjustment=10\`)
-// needs no entry and a bare \`-10\` reads as \`nice\`'s adjustment. After a
-// wrapper is consumed the strip loops, so the assignment prefixes of
-// \`env NAME=v gh …\` and a wrapper wrapping a wrapper both resolve.
+// with an ATTACHED value (\`--user=x\`, \`--kill-after=5\`, \`--adjustment=10\`)
+// needs no entry and a bare \`-10\` reads as \`nice\`'s adjustment. A long option
+// that takes a SEPARATE operand does need one, beside its short spelling, or
+// the operand itself reads as the command (\`sudo --user root gh …\` read
+// \`root\` as the program — round-5 leg, F2). After a wrapper is consumed the
+// strip loops, so the assignment prefixes of \`env NAME=v gh …\` and a wrapper
+// wrapping a wrapper both resolve.
 //
 // The table is CLOSED on purpose (ADR-082 A1, Tenet 19): a program that is not
 // on it IS the command, because this walk cannot know which of an arbitrary
@@ -1932,17 +1946,52 @@ function isGhExecutable(token) {
 // own argv. Widening it is a later PR with its own rows, never a guess here.
 const TRANSPARENT_WRAPPERS = {
   sudo: {
-    operand: ['-u', '-g', '-p', '-C', '-D', '-h', '-r', '-t', '-T', '-U'],
+    operand: [
+      '-u',
+      '-g',
+      '-p',
+      '-C',
+      '-D',
+      '-h',
+      '-r',
+      '-t',
+      '-T',
+      '-U',
+      '--user',
+      '--group',
+      '--prompt',
+      '--chdir',
+      '--chroot',
+      '--host',
+      '--role',
+      '--type',
+      '--other-user',
+      '--command-timeout',
+    ],
     positional: 0,
     terminator: true,
+    // sudo's DESCRIBE-only options: \`-l\`/\`--list\` prints what the user may
+    // run, \`-v\`/\`--validate\` refreshes the timestamp, \`-V\`/\`--version\`
+    // prints the version, \`-K\`/\`--remove-timestamp\` clears the credentials
+    // and may not carry a command. None of them executes the operand, so
+    // \`sudo -l gh pr merge 5\` merges nothing — projecting there was a FALSE
+    // DENY (round-5 leg, F1).
+    describe: ['-l', '--list', '-v', '--validate', '-V', '--version', '-K', '--remove-timestamp'],
   },
-  env: { operand: ['-u', '-C', '-S'], positional: 0, terminator: false },
-  timeout: { operand: ['-k', '-s'], positional: 1, terminator: true },
-  nice: { operand: ['-n'], positional: 0, terminator: false },
+  env: { operand: ['-u', '-C', '-S', '--unset', '--chdir'], positional: 0, terminator: false },
+  timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
+  nice: { operand: ['-n', '--adjustment'], positional: 0, terminator: false },
   nohup: { operand: [], positional: 0, terminator: false },
   command: { operand: [], positional: 0, terminator: false, describe: ['-v', '-V'] },
   exec: { operand: ['-a'], positional: 0, terminator: false },
-  time: { operand: ['-o', '-f'], positional: 0, terminator: true },
+  // \`time\` here is BASH'S RESERVED WORD, not \`/usr/bin/time\`: its grammar is
+  // \`time [-p] [--] pipeline\` — no option of it takes an operand, and any
+  // other \`-\` token is not an option at all (bash runs \`-f\` as a command and
+  // answers "command not found", merging nothing). \`time -f x gh pr merge 5\`
+  // was read with GNU time's option grammar and projected a merge the shell
+  // never runs — a false deny (round-5 leg, F3). The PROGRAM \`/usr/bin/time\`
+  // is a path-spelled wrapper, which this closed table does not carry.
+  time: { operand: [], positional: 0, terminator: true, flags: ['-p'] },
   eval: { operand: [], positional: 0, terminator: false, evaluates: true },
 };
 
@@ -2128,8 +2177,17 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           continue;
         }
         if (wrapper.describe !== undefined && wrapper.describe.indexOf(opt) !== -1) {
-          // \`command -v gh …\` prints a path; it runs nothing, so there is
-          // nothing to judge and nothing to project.
+          // \`command -v gh …\` prints a path and \`sudo -l gh …\` prints a
+          // policy line; each runs nothing, so there is nothing to judge and
+          // nothing to project.
+          tokens = [];
+          stripping = false;
+          break;
+        }
+        if (wrapper.flags !== undefined && wrapper.flags.indexOf(opt) === -1) {
+          // A \`-\` token that is not one of this word's OWN options: the shell
+          // has no command to run here (\`time -f x gh pr merge 5\` makes bash
+          // try to run \`-f\`), so the segment ends with no projection.
           tokens = [];
           stripping = false;
           break;
