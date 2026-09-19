@@ -258,6 +258,7 @@ function skipArithmetic(command: string, from: number): number {
  * can say whether the next character begins a word. With `powershell` set the
  * same walk reads PowerShell's grammar where it differs (see `ScanOptions`).
  */
+// sync-anchor: findHeredocs-scanner-upstream (the gate wrapper in packages/cli/src/commands/init-templates.ts carries a verbatim port; gate-install.test.ts is the lock)
 export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSpan[] {
   const ps = opts.powershell === true;
   const spans: HeredocSpan[] = [];

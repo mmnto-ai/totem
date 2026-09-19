@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "e152e37bdd2b0b47c22dcb7a35b28bae1730f227",
+  "readAt": "2026-09-19T08:57:56Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1934,
+      "claim": "The TRANSPARENT_WRAPPERS entry for sudo has no describe list, so sudo's describe-only flags (-l/--list, -v/--validate) are stripped as transparent and the wrapper projects a merge the shell never executes — the false-deny direction the spec forbids widening into; new in this diff.",
+      "counterexample": "Seam: `sudo -l gh pr merge 5` → [['5']]; end-to-end payload {repo, pr: 5, headSha}; pre-PR hook: []. sudo(8): -l with a command prints the path and does not run it. FOLDED (fold 1): a describe list for sudo; rows never spawn."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1933,
+      "claim": "Inside the closed table, every long option taking a SEPARATE operand is skipped as a bare flag and its operand then blocks the anchor, so real invocations of the table's own programs miss silently; env -S misses likewise; none disclosed or locked; the positive rows use only the attached-value spellings.",
+      "counterexample": "Seam: `sudo --user root …`, `timeout --signal KILL 30 …`, `timeout --kill-after 5 30 …`, `env --unset X …`, `nice --adjustment 10 …`, `env -S 'gh pr merge 5'` → all []; coreutils 8.32 runs the command in every one. FOLDED (fold 1): the long forms join the operand lists with rows; env -S locked and disclosed."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 2183,
+      "claim": "The time row encodes GNU /usr/bin/time's grammar but matches bash's reserved word (`time [-p] [--] pipeline`): `time -f x gh pr merge 5` and `time -o out.txt gh pr merge 5` project a merge bash does not run (a new false deny, one pinned by a positive row); `/usr/bin/time -f x gh pr merge 5` misses.",
+      "counterexample": "`bash -c 'time -f x echo HELLO'` → '-f: command not found', exit 127. Wrapper: [['5']] for both; pre-PR []. FOLDED (fold 1): the reserved-word grammar (-p, --, any other flag ends the segment); the row moved to the mutants; the path spelling locked and disclosed."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 211,
+      "claim": "The never-spawns row `echo \"`gh pr merge 5`\"` is justified by a comment that inverts the shell: bash EXECUTES a backtick or $( ) substitution inside double quotes, so the row locks a fail-open while labelling it the safe direction; the $( ) twin is disclosed nowhere. Pre-existing miss; the justification is new.",
+      "counterexample": "`bash -c 'echo \"`echo RAN`\"'` → RAN. Wrapper: `echo \"`gh pr merge 5`\"` and `echo \"$(gh pr merge 5)\"` → [] while the unquoted forms → [['5']]. FOLDED (fold 1): rows moved to the disclosed-miss loop, comments corrected, filed as mmnto-ai/totem#2893."
+    },
+    {
+      "id": "F5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1957,
+      "claim": "The § C redirection strip is front-only, so a trailing redirection rides into argv; when the command names no PR the operator becomes the projected branch and the engine denies with a false reason. Pre-existing, but § C is exactly this surface.",
+      "counterexample": "In a repo on feat/demo: `gh pr merge --squash > merge.log` → payload {pr: null, branch: '>'}; `gate check --event merge-ready` → deny 'no open pull request has that head branch'. FOLDED (fold 1): one redirection strip over the whole segment."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2352,
+      "claim": "The budget's coverage claim is larger than its mechanism: the deadline is consulted only inside the stdin `end` handler, so an un-closed stdin runs to the host's own kill — the fail-open § D exists to close.",
+      "counterexample": "`( printf '<envelope>'; sleep 6 ) | node gate-wrapper.cjs --event merge-ready --budget-ms 1000` → 6071 ms, exit 2. FOLDED (fold 1): a timer at the remaining budget fails closed during the stdin phase."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2346,
+      "claim": "`--budget-ms=<n>` is silently ignored (only the exact token is matched); repeated flags are last-wins but never above the default.",
+      "counterexample": "With the 8 s git shim: `--budget-ms=1500` → exit 0 at 16 192 ms, CLI spawned; `--budget-ms 1500` → exit 2 at 1 581 ms. FOLDED (fold 1): the = spelling accepted; last-wins stated."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".totem/specs/2856.md",
+      "line": 61,
+      "claim": "The spec cites `gate-install.test.ts:187` three times as the lock that fails when the committed hook drifts from the template; no such assertion exists (the only equality test compares a freshly scaffolded temp copy) — the gap is mmnto-ai/totem#2833, deposited by a prior leg.",
+      "counterexample": "Rendered constant vs committed hook: 57 838 chars both, identical — true today by hand only; grep finds no test or CI job reading the committed hook. FOLDED (fold 1): the three sentences corrected to the script check and 2833."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1534,
+      "claim": "The wrapper-only comment-region blanking has no discriminating row in bash mode; the shapes that discriminate it (a comment carrying a separator or a backtick) are absent.",
+      "counterexample": "Mutant with the comment regions kept: `echo hi # ; gh pr merge 9` → [['9']] vs [] current; ``echo hi # use `gh pr merge 5` to merge`` → [['5','`']] vs []. FOLDED (fold 1): both rows added as never-spawns."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1509,
+      "claim": "The PowerShell block-comment row's comment says the single-line row is a companion, not a control; since § C's fused-redirection strip `<#` is skipped as a redirection, so with the `<#` arm removed the inline row fires — it is a control now.",
+      "counterexample": "Mutant `if (false)` on the `<#` arm: `<# gh pr merge 9 #>\\necho hi` (ps) → [['9']]; current → []. FOLDED (fold 1): the comment corrected."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1366,
+      "claim": "The § A/B/C positive loops assert toMatchObject({pr: 5}), weaker than the spec's clause 'exactly {repo, pr: 5, headSha} and nothing else'.",
+      "counterexample": "All 39 rows computed through the seam are clean today; a spurious branch or unresolvedTarget would pass. FOLDED (fold 1): toEqual({repo, pr: 5, headSha})."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1539,
+      "claim": "The disclosed redirection residue names only `>|` and `2>&1`; other leading forms and a mid-command redirection miss the same way, undisclosed and unlocked.",
+      "counterexample": "Seam: `<<<bar gh pr merge 5`, `>& out.txt gh pr merge 5`, `<& 3 gh pr merge 5`, `exec 3>&1 gh pr merge 5`, `2<> file gh pr merge 5`, `gh > out.txt pr merge 5` → all [] though bash runs each. FOLDED (fold 1): the whole-segment strip covers `<<<`, `<>` and mid-command forms; the `|`/`&`-bearing forms disclosed and locked."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1546,
+      "claim": "The PowerShell disclosure omits the backtick escape INSIDE a double-quoted string, which the ported scanner models in ps mode and the tokenizer does not — a false fire absent from the disclosed-false-fires paragraph; pre-existing, its payload changed by this PR.",
+      "counterexample": "ps mode: `Write-Output \"a `\"; gh pr merge 5`\"b\"` → HEAD [['5','`']] (pr 5); pre-PR [['5`b']] (unresolvedTarget); PowerShell sees one string. FOLDED (fold 1): disclosed as a false fire with a row."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "F13"
+  ],
+  "verdict": "0 BLOCKING, 5 MATERIAL, 8 MINOR at e152e37b — internally sound (94 + 86 + 134 tests green, lint PASS, hook byte-identical, scanner parity exact over 40 072 comparisons, the spent-budget arm real at every tier) but two new false denies (F1, F3), an undisclosed miss family inside the closed table (F2), an inverted disclosure (F4) and a trailing-redirection false deny (F5); every finding folded in fold 1, which a re-armed leg reads."
+}

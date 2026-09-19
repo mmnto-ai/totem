@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "47fab6ce6ea90b5948f72b178d590b37c3259525",
+  "readAt": "2026-09-19T11:09:40Z",
+  "findings": [
+    {
+      "id": "H1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2278,
+      "claim": "Fold 2's literal-token rule marks a token literal when ANY part came from quotes, but bash recognises a redirection whenever the OPERATOR characters are unquoted — the filename may be quoted. A leading redirection with a quoted file is no longer stripped, the segment's head is not `gh`, and the merge runs unjudged under strict: the bypass class the PR charters away, a regression against the branch's own fold-1 state (commit 73bab5ec).",
+      "counterexample": "End-to-end, committed hook + envelope + recording stub CLI: `>\"out.txt\" gh pr merge 5` → exit 0, NO CLI spawn; bash runs the merge. Same for `2>\"err.log\"`, `2>\"/dev/null\"`, `<\"in.txt\"`, `<<<'bar'`. Fold-1 hook → [['5']]. FOLDED (fold 4): the strip compares the operator prefix against the token's first literal index."
+    },
+    {
+      "id": "H2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2283,
+      "claim": "Same root, other direction: a trailing or mid-command redirection with a quoted file rides into argv and becomes the target — the fold-1 F5 fabricated-branch defect reintroduced for the quoted-file spelling.",
+      "counterexample": "`gh pr merge --squash >\"merge.log\"` → {pr: null, branch: '>merge.log'}; `2>\"err.log\"` → branch '2>err.log'; `>\"$FILE\"` → unresolvedTarget; each projected correctly on c52ae094. FOLDED (fold 4): the same rule; rows for each spelling."
+    },
+    {
+      "id": "H3",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 706,
+      "claim": "The residue sentence justifying the rule ('a word any part of which came from inside quotes … is data the shell will not read as an operator') and the changeset's twin are false by execution; the shell's rule is operator quoting.",
+      "counterexample": "`bash -c 'gh pr merge 5 >\"out.txt\"'` creates out.txt and runs the merge; `gh pr merge --squash \">\"out.txt` passes `>out.txt` as an argument. FOLDED (fold 4): both sentences rewritten to operator quoting with the two exemplars."
+    },
+    {
+      "id": "H4",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 816,
+      "claim": "PowerShell's backtick-newline is not bash's join mid-word: PowerShell embeds a newline in the argument, so the unconditional join is a new false fire (`merg`+BT+LF+`e 5` projects pr 5 while gh would reject `merg\\ne`); a trailing backtick at end of input is a pwsh parse error while the wrapper projects — undisclosed.",
+      "counterexample": "pwsh 7 with a recording gh.ps1: `gh pr merg`+BT+LF+`e 5` → args <pr> <merg{NL}e> <5>; `g`+BT+LF+`h …` → 'g h' not recognized; the wrapper projects {pr: 5} for both; fold-1 hook []. FOLDED (fold 4): the join only at a word boundary, an embedded newline mid-word, rows; the EOF backtick disclosed as a false fire with a row."
+    },
+    {
+      "id": "H5",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 164,
+      "claim": "The env residue bullet's three clauses: two have no row, one of them fires in the DENY direction inside the miss list (`$VAR` in an -S string: env refuses, the wrapper projects unresolvedTarget), and the code accepts a fourth `-S` spelling the comment denies (`-S=` splits on `=` for a short option: a false fire), while `-Sgh …` (attached short) runs the merge and misses.",
+      "counterexample": "`env -S 'env -S \"gh pr merge 5\"'` → coreutils runs the merge, wrapper []; `env -S 'gh pr merge $PR'` → env: only ${VARNAME} expansion is supported, wrapper {unresolvedTarget: '$PR'}; `env -S='gh pr merge 5'` → wrapper {pr: 5}, env runs no merge; `env -Sgh pr merge 5` → env runs it, wrapper []. FOLDED (fold 4): rows for (a); (b) disclosed as a false fire with a row; the `=` split long-only; the attached short operand read."
+    },
+    {
+      "id": "H6",
+      "severity": "MINOR",
+      "file": ".changeset/gate-wrapper-projection-scanner-2856-2857.md",
+      "line": 5,
+      "claim": "Fold 2 item 2 asserted 'the changeset already says it right' for the five separator-carrying operators; the changeset's clause is byte-identical to c52ae094's and lists them under 'unchanged in the safe direction' with only the tokenizer mechanism — a release-note reader cannot learn five strict-tier bypasses remain; the PowerShell-quoting bullet is also absent.",
+      "counterexample": "word-diff c52ae094...HEAD over the changeset shows no edit to that clause; with a stub gh each of the five (and `&>`) logs GH-RAN. FOLDED (fold 4): the clause rewritten; the PS bullet added."
+    },
+    {
+      "id": "H7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2856.md",
+      "line": 32,
+      "claim": "Fold 3 marked only fold-2 item 6 as superseded; § B's strip-table row still lists `-S` among env's separate-operand options and Fold 1 item 2 still calls `env -S` a locked miss, the opposite of the built behaviour.",
+      "counterexample": "TRANSPARENT_WRAPPERS.env.operand has no `-S`; evaluatesOperand carries it; the locked rows became positives. FOLDED (fold 4): both passages marked superseded, § B's row corrected."
+    }
+  ],
+  "folded": [
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6",
+    "H7"
+  ],
+  "verdict": "1 BLOCKING, 1 MATERIAL, 5 MINOR at 47fab6ce — fold 3 sound on every probe (eight spellings, a 20 000-input fuzz, no throw); H1/H2 one fold-2 regression rooted in the seat's own 'any part' ruling, measured end-to-end as a strict-tier bypass and a fabricated-branch false deny; every finding folded in fold 4, which a fourth scoped leg reads."
+}

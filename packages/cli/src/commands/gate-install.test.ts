@@ -1,9 +1,11 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knownGates, TotemError } from '@mmnto/totem';
 
@@ -83,6 +85,728 @@ function envWithPath(value: string): NodeJS.ProcessEnv {
   env.PATH = value;
   return env;
 }
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+/** Core's scanner of record for the parity lock (spec 2857 § 3). */
+const CORE_TRANSPORT_SHIELD_SRC = path.resolve(HERE, '../../../core/src/transport-shield.ts');
+
+/** Core's span shape; `body` is the one field the wrapper's port drops. */
+type CoreFindHeredocs = (
+  command: string,
+  opts?: { powershell?: boolean },
+) => Array<WrapperSpan & { body: string }>;
+
+/**
+ * Core's `findHeredocs`, loaded from its SOURCE at run time. The specifier is
+ * built at run time ON PURPOSE: the function is not re-exported from core's
+ * index and core's exports map has no subpath for it (mmnto-ai/totem#2851),
+ * while a STATIC relative import of another package's source fails
+ * `tsc --build` with TS6059 (`rootDir`). `bot-identity-parity.test.ts`, the
+ * exemplar, reads its sources as text for the same reason.
+ */
+async function loadCoreFindHeredocs(): Promise<CoreFindHeredocs> {
+  const mod = (await import(pathToFileURL(CORE_TRANSPORT_SHIELD_SRC).href)) as {
+    findHeredocs: CoreFindHeredocs;
+  };
+  return mod.findHeredocs;
+}
+
+/** One heredoc the wrapper's scanner located — core's span minus `body` (spec 2857 § 1). */
+interface WrapperSpan {
+  delimiter: string;
+  quoted: boolean;
+  stripTabs: boolean;
+  unterminated: boolean;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
+/**
+ * The rendered wrapper's export seam (spec `.totem/specs/2856.md` § E): run as a
+ * hook it IS the main module and runs its entry; `require`d it runs no entry and
+ * exports the projection, the scanner and the budget clamp, so the strip table,
+ * the executable test, the clamp and scanner parity can be driven in-process
+ * instead of through a process spawn per row.
+ */
+interface WrapperExports {
+  blankHeredocBodies: (command: string, powershell: boolean) => string;
+  findHeredocSpans: (command: string, powershell: boolean) => WrapperSpan[];
+  ghPrMergeArgvs: (command: string, powershell: boolean) => string[][];
+  isGhExecutable: (token: string) => boolean;
+  projectMergeReady: (argv: string[]) => Record<string, unknown>;
+  clampBudgetMs: (raw: unknown) => number;
+}
+
+const requireCjs = createRequire(import.meta.url);
+let wrapperExportsCache: WrapperExports | null = null;
+
+/**
+ * The rendered template's exports, loaded once from a temp `.cjs` (the file is
+ * removed again as soon as `require` has read it — nothing lands under the
+ * repo). Loading the RENDERED text, not the source, is what makes these rows
+ * read the same bytes the installed hook runs.
+ */
+function wrapperExports(): WrapperExports {
+  if (wrapperExportsCache === null) {
+    const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gate-seam-')));
+    const file = path.join(dir, 'gate-wrapper.cjs');
+    fs.writeFileSync(file, CLAUDE_GATE_WRAPPER);
+    try {
+      wrapperExportsCache = requireCjs(file) as WrapperExports;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  }
+  return wrapperExportsCache;
+}
+
+// ─── The command corpus (spec `.totem/specs/2857.md` § 3) ──────────────
+//
+// Every command string the merge-ready rows below assert on lives here ONCE,
+// so the scanner-parity lock at the foot of this file can walk the same
+// strings through BOTH scanners: a shape worth a projection row is a shape the
+// ported scanner is held equal to core's on. A new heredoc-, comment- or
+// quote-bearing row belongs in one of these lists, not inline in an `it`.
+
+/** Fires at command position: after a separator, a reserved word, an assignment prefix. */
+const COMMAND_POSITION_ROWS = [
+  'git status && gh pr merge 7',
+  'git fetch; gh pr merge 7',
+  'for x in 1; do gh pr merge 7; done',
+  'if true; then gh pr merge 7; fi',
+  'git log |\ngh pr merge 7',
+  // PR round 1 (greptile): a merge used AS the condition, and one behind an
+  // assignment prefix, each left something other than `gh` at the segment's
+  // front and went unjudged.
+  'if gh pr merge 7; then echo merged; fi',
+  'if false; then :; elif gh pr merge 7; then :; fi',
+  'while gh pr merge 7; do break; done',
+  'until gh pr merge 7; do sleep 1; done',
+  'GH_TOKEN=x gh pr merge 7',
+  'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
+  'exec gh pr merge 7',
+  'command gh pr merge 7',
+  // Round 2 (the leg's F1): two more reserved words and the builtin that runs
+  // an unquoted operand as the command.
+  'time gh pr merge 7',
+  'coproc gh pr merge 7',
+  'eval gh pr merge 7',
+];
+
+/** Must NEVER project — the false-deny direction this projection must not have. */
+const NEVER_SPAWNS_ROWS = [
+  'echo "gh pr merge 5"',
+  "echo 'gh pr merge 5'",
+  'gh pr list',
+  'gh pr view 3 | grep merge',
+  'git commit -m "gh pr merge"',
+  // A heredoc body is DATA, not commands (fold F4): firing here was a false
+  // deny — the direction this projection must not have.
+  'cat <<EOF\ngh pr merge 5\nEOF',
+  "cat <<'EOF'\ngh pr merge 5\nEOF",
+  'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
+  'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
+  // An UNTERMINATED body runs to the end of the command and is still data.
+  'cat <<EOF\ngh pr merge 5',
+  // A substitution inside SINGLE quotes really is data: bash does not expand
+  // it, so `echo '`gh pr merge 5`'` prints the text and merges nothing. The
+  // DOUBLE-quoted spellings are a different matter — bash runs those, and they
+  // are a disclosed MISS in MUTANT_ROWS below, not a control here (round-5
+  // leg, F4).
+  "echo '`gh pr merge 5`'",
+  "echo '$(gh pr merge 5)'",
+];
+
+/** § A — the executable spellings that project. */
+const EXECUTABLE_SPELLING_ROWS = [
+  'gh.exe pr merge 5',
+  'gh.EXE pr merge 5',
+  './gh pr merge 5',
+  '/usr/local/bin/gh pr merge 5',
+  // A win32 path reaches the executable test only when it is QUOTED: this walk
+  // reads POSIX quoting for BOTH tools (disclosed since the first round), so an
+  // unquoted `C:\tools\gh.exe` arrives as `C:toolsgh.exe` with its separators
+  // consumed as escapes — locked as a miss in MUTANT_ROWS.
+  "'C:\\tools\\gh.exe' pr merge 5",
+  '"/opt/hub/gh" pr merge 5',
+];
+
+/** § B — the transparent wrapper programs and flag-carrying builtins that project. */
+const WRAPPER_STRIP_ROWS = [
+  'sudo gh pr merge 5',
+  'sudo -u root gh pr merge 5',
+  'sudo --user=root gh pr merge 5',
+  'sudo -- gh pr merge 5',
+  // A long option that takes a SEPARATE operand needs its own table entry, or
+  // the operand reads as the program and the merge behind it goes unjudged
+  // (round-5 leg, F2 — an undisclosed miss family inside the closed table).
+  'sudo --user root gh pr merge 5',
+  'sudo --group grp gh pr merge 5',
+  'sudo --prompt p gh pr merge 5',
+  // sudo options that are NOT describe-only: `-E` keeps the environment, `-b`
+  // runs the command in the background. Both still execute the operand.
+  'sudo -E gh pr merge 5',
+  'sudo -b gh pr merge 5',
+  'env GH_TOKEN=x gh pr merge 5',
+  'env -u X A=1 gh pr merge 5',
+  'env --unset X gh pr merge 5',
+  'env --chdir /tmp gh pr merge 5',
+  // `-S`/`--split-string` hands env the COMMAND as its operand: env splits that
+  // string into words, PREPENDS them to what follows and runs the first word
+  // (measured, coreutils 8.32, with a stub `gh`). Consuming the operand with
+  // the option made every spelling of it a miss — a bypass under the strict
+  // tier — so the words take the option's place now (fold 3).
+  "env -S 'gh pr merge 5'",
+  "env --split-string='gh pr merge 5'",
+  "env -S 'A=1 gh pr merge 5'",
+  // The ATTACHED SHORT spellings (round-7 leg, H5). A short option carries its
+  // operand with no separator at all, and the quote arm joins `-S'…'` into
+  // that same token, so both arrive as `-Sgh pr merge 5`. coreutils runs the
+  // merge in each (measured, 8.32: `GH-RAN argc=3 argv=[pr merge 5]`) and
+  // fold 3 left them a miss — one more bypass under the strict tier.
+  'env -Sgh pr merge 5',
+  "env -S'gh pr merge 5'",
+  // An `=` after a SHORT option's letter is not a separator and not part of an
+  // operand this walk reads: the whole token is dropped as a flag of env, and
+  // that is the route that reads this spelling right (round-8 leg, J2). env
+  // splits `=X` into one word, an assignment with an EMPTY NAME, so the
+  // command is `gh pr merge 5` and the merge RUNS (measured, coreutils 8.32,
+  // with a recording stub: `GH-RAN [pr] [merge] [5]`). On the fold-4 hook the
+  // attached-operand arm read `=X` as the operand, put it at the front of the
+  // strip — neither an assignment this walk accepts nor a command — and
+  // projected NOTHING: a fail-open, which is a bypass under the strict tier.
+  'env -S=X gh pr merge 5',
+  'timeout 30 gh pr merge 5',
+  'timeout 30s gh pr merge 5',
+  'timeout -k 5 30 gh pr merge 5',
+  'timeout --kill-after=5 30 gh pr merge 5',
+  'timeout --kill-after 5 30 gh pr merge 5',
+  'timeout --signal KILL 30 gh pr merge 5',
+  'timeout --foreground 30 gh pr merge 5',
+  'nice -n 10 gh pr merge 5',
+  'nice --adjustment=10 gh pr merge 5',
+  'nice --adjustment 10 gh pr merge 5',
+  'nice -10 gh pr merge 5',
+  'nohup gh pr merge 5',
+  'command -p gh pr merge 5',
+  'exec -a x gh pr merge 5',
+  'time -p gh pr merge 5',
+  'time -- gh pr merge 5',
+  // A wrapper wrapping a wrapper: the strip loops until the head is the
+  // command itself.
+  'sudo -u root timeout 30 gh pr merge 5',
+  'nohup nice -n 5 gh pr merge 5',
+  // `eval` re-tokenizes its operand ONCE (depth 1) and projects from the inner
+  // string — a merge handed over as one quoted word.
+  'eval "gh pr merge 5"',
+  "eval 'gh pr merge 5'",
+];
+
+/** § C — leading redirections and backtick substitutions that project. */
+const REDIRECTION_ROWS = [
+  '> out.txt gh pr merge 5',
+  '>out.txt gh pr merge 5',
+  '>> log.txt gh pr merge 5',
+  '< in.txt gh pr merge 5',
+  '2> err.txt gh pr merge 5',
+  '2>/dev/null gh pr merge 5',
+  // `&>` is not read as one operator — `&` ends the segment — but the segment
+  // AFTER it starts at the `>`, which the arms do read.
+  '&> out.txt gh pr merge 5',
+  // A redirection in front of a wrapper program: both strips run.
+  '> out.txt sudo gh pr merge 5',
+  // The strip runs over the WHOLE segment, not just its front (round-5 leg,
+  // F5 + F12): a redirection BETWEEN the executable and its verb no longer
+  // breaks the anchor, and the here-string and `<>` spellings are operators
+  // too.
+  'gh > out.txt pr merge 5',
+  '<<<bar gh pr merge 5',
+  '<<< bar gh pr merge 5',
+  '2<> file gh pr merge 5',
+  'echo `gh pr merge 5`',
+  '`gh pr merge 5`',
+  // A QUOTED FILENAME does not make the redirection data (round-7 leg, H1):
+  // bash decides on the OPERATOR's quoting, and in every one of these the
+  // operator characters are bare, so the shell truncates the file and runs the
+  // merge. Under the round-6 rule ("any part of the token came from quotes")
+  // the whole word was read as data and each of these projected NOTHING —
+  // the regression that rule introduced against main.
+  '>"out.txt" gh pr merge 5',
+  '2>"err.log" gh pr merge 5',
+  '2>"/dev/null" gh pr merge 5',
+  '<"in.txt" gh pr merge 5',
+  "<<<'bar' gh pr merge 5",
+  // …and the FILENAME may carry whitespace (round-8 leg, J1). A quoted name
+  // with a space in it is ONE token here, so while the fused pattern's
+  // filename class excluded whitespace the token matched neither pattern: it
+  // stood in front of `gh`, broke the anchor, and each of these projected
+  // NOTHING on the fold-4 hook — while bash truncates `out file.txt` (feeds
+  // the here-string `bar baz`) and merges PR 5, measured with a recording stub
+  // on bash 5.3.
+  '>"out file.txt" gh pr merge 5',
+  '<<<"bar baz" gh pr merge 5',
+  // …and the operator prefix is BOUNDED by the first literal index (fold 6).
+  // Bash extends an operator over UNQUOTED characters only, so each of these
+  // is the BARE leading operator with the quoted rest as its filename — a real
+  // redirection with a real merge behind it. On the fold-5 hook the greedy
+  // `[<>]{1,2}` read `>>` / `<<<`, a prefix ending PAST that index, so the
+  // guard kept the word: it stood in front of `gh`, broke the anchor and each
+  // of these projected NOTHING — a bypass under STRICT. Measured on bash 5.3
+  // with a recording stub, each case in its OWN empty directory: gh's argv is
+  // `[pr] [merge] [5]` in all five, the file `>out.txt` (row 4: `>a b`) is
+  // created, and row 5 merges behind a "here-document delimited by
+  // end-of-file" warning.
+  '>">"out.txt gh pr merge 5',
+  ">'>'out.txt gh pr merge 5",
+  '>\\>out.txt gh pr merge 5',
+  '>">a "b gh pr merge 5',
+  '<<"<"bar gh pr merge 5',
+  // The `2<` arm of the same rule, whose bash truth depends on the FILE. With
+  // `>out.txt` present bash reads the operator `2<` and the filename
+  // `>out.txt`, and the merge runs (measured: `[pr] [merge] [5]`, exit 0) —
+  // the fold-5 hook projected nothing for it. With the file absent the
+  // redirection fails ("No such file or directory", exit 1, gh never runs)
+  // and this projection is a disclosed false fire in the DENY direction.
+  // Stripping is right either way: not stripping is a bypass whenever the
+  // file exists.
+  '2<">"out.txt gh pr merge 5',
+];
+
+/**
+ * § F — one mutant per widened form, and the LOCKED disclosed misses; none of
+ * them may project. A mutant is a shape the shell does not run as a merge; a
+ * disclosed miss is one it DOES run and this walk cannot decide — each is
+ * named as which in its comment, so the residue in the template's comment is
+ * read from these rows rather than from memory.
+ */
+const MUTANT_ROWS = [
+  // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
+  'sudo -u gh pr merge 5',
+  // sudo's DESCRIBE-only options run nothing at all: `-l`/`--list` prints the
+  // policy, `-v`/`--validate` refreshes the timestamp, `-V`/`--version` prints
+  // a version, `-K`/`--remove-timestamp` clears credentials and may not carry
+  // a command. Projecting a merge there was a FALSE DENY on a command the
+  // shell never runs (round-5 leg, F1).
+  'sudo -l gh pr merge 5',
+  'sudo --list gh pr merge 5',
+  'sudo -v gh pr merge 5',
+  'sudo --validate gh pr merge 5',
+  'sudo -V gh pr merge 5',
+  'sudo --version gh pr merge 5',
+  'sudo -K gh pr merge 5',
+  'sudo --remove-timestamp gh pr merge 5',
+  // `time` is bash's RESERVED WORD (`time [-p] [--] pipeline`), not
+  // `/usr/bin/time`: no option of it takes an operand, and any other `-` token
+  // is a command bash cannot find — nothing runs, so nothing is projected
+  // (round-5 leg, F3). Both spellings were read with GNU time's grammar.
+  'time -f x gh pr merge 5',
+  'time -o out.txt gh pr merge 5',
+  // LOCKED: the PROGRAM spelled by path is not the reserved word, and a
+  // path-spelled wrapper is not on the closed table at all.
+  '/usr/bin/time -f x gh pr merge 5',
+  // LOCKED, and the BOUNDARY of the `-S` split rather than a mutant (fold 3):
+  // the operand IS read now, but on env's WHITESPACE rule alone. `\_` is env's
+  // own escape for a space, so `env -S 'gh\_pr\_merge\_5'` really runs
+  // `gh pr merge 5` (measured, coreutils 8.32, stub `gh`) while this walk
+  // reads ONE word and projects nothing — a fail-open, disclosed in the
+  // template's comment and read from here. The NESTED spelling is the other
+  // half of the same boundary (round-7 leg, H5): env does not leave the
+  // quotes inside its operand alone, so `env -S 'env -S "gh pr merge 5"'`
+  // runs the merge (measured) while this walk splits on whitespace, reads
+  // `"gh` as the executable and projects nothing.
+  "env -S 'gh\\_pr\\_merge\\_5'",
+  'env -S \'env -S "gh pr merge 5"\'',
+  // NOT a miss: an `=` is not a separator for a SHORT option, so env reads the
+  // operand `=gh pr merge 5`, takes `=gh` as an assignment with an empty name
+  // and runs `pr merge 5` — coreutils `pr`, which answers
+  // `pr: merge: No such file or directory` (measured, coreutils 8.32: the case
+  // exits 1 and the stub `gh` is never reached). No merge runs and none is
+  // projected. The ROUTE is the one J2 rules (round-8 leg): the token is
+  // dropped as a flag of env, where the fold-4 hook reached the same silence
+  // by splitting `=gh pr merge 5` into words and stalling on `=gh` — the same
+  // split that made `env -S=X gh pr merge 5` above a MISS.
+  "env -S='gh pr merge 5'",
+  // LOCKED DISCLOSED MISSES, not mutants (round-8 leg, J4): CLUSTERED short
+  // options. The option test reads the WHOLE `-` token, so `-vu` and `-iS`
+  // match no entry of env's operand list, are dropped as one flag each, and
+  // the operand belonging to the cluster's LAST letter (`X` for `-vu`, the
+  // command string for `-iS`) is left at the front of the strip, where it
+  // blocks the anchor. coreutils RUNS the merge in both (measured, 8.32, with
+  // a recording stub: `env -vu X gh pr merge 5` records `GH-RAN [pr] [merge]
+  // [5]`, and the `-iS` spelling does too when the operand names the stub and
+  // its record file by absolute path, since `-i` clears the environment).
+  // ATTACHMENT is not the gap — `env -uX`, `nice -n10`, `timeout -k5 30` and
+  // `timeout -sTERM 30` all project and all run — CLUSTERING is.
+  'env -vu X gh pr merge 5',
+  "env -iS 'gh pr merge 5'",
+  // `timeout` with no duration: the grammar consumes exactly one positional
+  // before the command, so `gh` reads as the duration. A disclosed
+  // false-negative of the grammar, locked here (the form is invalid to
+  // `timeout` itself).
+  'timeout gh pr merge 5',
+  // `command -v` / `-V` DESCRIBE their operand, they never execute it.
+  'command -v gh pr merge 5',
+  'command -V gh pr merge 5',
+  // Not on the closed list: `npx` runs a package, never the GitHub CLI.
+  'npx gh pr merge 5',
+  'xargs gh pr merge 5',
+  'bash -c "gh pr merge 5"',
+  // `eval` is bounded to ONE level.
+  'eval "eval \\"gh pr merge 5\\""',
+  // § C, LOCKED DISCLOSED MISSES — not mutants, all five of them (round-6
+  // leg, G2). Measured with a stub `gh` on bash 5.3: `>| out.txt`, `2>&1`,
+  // `>& file`, `<& 3` (once that descriptor is open) and `exec 3>&1` each
+  // apply their redirection and then RUN `gh pr merge 5`. The wrapper misses
+  // every one for the same reason: `|` and `&` are its own segment
+  // separators, so the operator never arrives as one token and the segment
+  // they leave starts at the FILE (`out.txt`, `1`, `file`, `3`), not at a
+  // redirection. They sit here because nothing projects, which is what this
+  // loop asserts — but the reason is a fail-open, not text the shell ignores.
+  '>| out.txt gh pr merge 5',
+  '2>&1 gh pr merge 5',
+  '>& file gh pr merge 5',
+  '<& 3 gh pr merge 5',
+  'exec 3>&1 gh pr merge 5',
+  // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
+  // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
+  // wrapper cannot expand.
+  'ghx pr merge 5',
+  'gh.cmd pr merge 5',
+  '$GH pr merge 5',
+  '${GH} pr merge 5',
+  // The unquoted win32 path (see EXECUTABLE_SPELLING_ROWS): its backslashes
+  // are consumed as escapes before the executable test sees the token.
+  'C:\\tools\\gh.exe pr merge 5',
+  // A DISCLOSED MISS, not a control (round-5 leg, F4): bash EXECUTES a
+  // backtick pair and a `$( … )` inside double quotes, so both of these merge
+  // PR 5 — and this walk's quote arms swallow them as one token, so neither is
+  // judged. A fail-open, filed as mmnto-ai/totem#2893; they sit here because
+  // the observable is the same (nothing projects), but the reason is the
+  // opposite of the single-quoted control above.
+  'echo "`gh pr merge 5`"',
+  'echo "$(gh pr merge 5)"',
+];
+
+/**
+ * An INVALID option to a table word is a disclosed FALSE FIRE (round-6 leg,
+ * G4). Measured: `command -x`, `exec -x`, `timeout -Z 30`, `nice -Z`,
+ * `env -Z`, `nohup -x` and `sudo -Z` each make the program print an
+ * invalid-option error and run NOTHING, while the strip reads the unknown `-`
+ * token as one of the word's own options and projects PR 5. Ruled: disclose
+ * it, do not cure it. The cure would be a closed `flags` list per program —
+ * the shape `time` has, whose reserved-word grammar really is two flags — and
+ * measured on a mutant with that list everywhere, it turns `sudo -n`,
+ * `sudo -E` and `timeout --foreground` (REAL flags, real merges) into misses
+ * as well. A miss is a bypass under the strict tier; a false fire on a
+ * command that runs nothing costs one bogus deny, which the override clears.
+ * These rows assert what the wrapper DOES, so the template's false-fires
+ * paragraph is read from rows rather than from memory.
+ */
+const INVALID_OPTION_FALSE_FIRE_ROWS = [
+  'command -x gh pr merge 5',
+  'exec -x gh pr merge 5',
+  'timeout -Z 30 gh pr merge 5',
+  'nice -Z gh pr merge 5',
+  'env -Z gh pr merge 5',
+  'nohup -x gh pr merge 5',
+  'sudo -Z gh pr merge 5',
+];
+
+/** An arithmetic shift or a comment must not swallow the merge that follows. */
+const ARITHMETIC_COMMENT_ROWS = [
+  'echo $((1<<2)); gh pr merge 5',
+  'echo $(( 3<<1 )); gh pr merge 5',
+  '# see <<note\ngh pr merge 5',
+  '(( 1<<3 ))\ngh pr merge 5',
+  'echo hi # <<EOF\ngh pr merge 5',
+];
+
+/** A `<<<` here-string is not a heredoc: the merge after it still fires. */
+const HERESTRING_ROWS = [
+  'grep x <<< bar\ngh pr merge 5',
+  'grep x <<<bar\ngh pr merge 5',
+  '<<<bar\ngh pr merge 5',
+];
+
+/** A backslash-newline joins two halves of one word. */
+const LINE_CONTINUATION_ROWS = ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5'];
+
+/**
+ * PowerShell's line continuation is a trailing BACKTICK — the twin of bash's
+ * trailing backslash AT A WORD BOUNDARY (round-6 leg, G3; bounded by round-7's
+ * H4). In ps mode the backtick and the newline after it are consumed there and
+ * the next line continues the command; in bash a backtick opens a substitution
+ * and stays a segment separator, so this arm is ps-only.
+ * Before it, `gh pr merge <backtick><LF>5` projected `unresolvedTarget: '`'`
+ * and PR 5 was merged on the next segment unjudged — strict denied a target
+ * nobody wrote, pilot warned and let the merge through.
+ */
+const PS_LINE_CONTINUATION_ROWS = [
+  'gh pr merge `\n5',
+  'gh pr merge 5 `\n--admin',
+  'gh pr merge `\r\n5',
+];
+
+/**
+ * …but only AT A WORD BOUNDARY (round-7 leg, H4). PowerShell's backtick is its
+ * ESCAPE character: inside a word it escapes the newline INTO the argument.
+ * Measured on pwsh 7.6.6 through a script that prints its arguments as bytes:
+ * `merg<backtick><LF>e 5` arrives as the two arguments `109,101,114,103,10,101`
+ * (`merg<LF>e`) and `53` (`5`), while the same continuation at a boundary
+ * arrives as `merge` and `5`. So `gh pr merg<backtick><LF>e 5` hands gh the
+ * verb `merg<LF>e`, which is not `merge` and merges nothing, and
+ * `g<backtick><LF>h pr merge 5` names a command `g<LF>h` that does not
+ * resolve. Bash's backslash-newline really joins its halves; this one does
+ * not, and reading it as a join projected a merge the shell never runs. Both
+ * of these projected `[['5']]` on the fold-3 hook.
+ */
+const PS_CONTINUATION_INSIDE_WORD_ROWS = ['gh pr merg`\ne 5', 'g`\nh pr merge 5'];
+
+/**
+ * A disclosed FALSE FIRE (round-7 leg, H4): a backtick that is the LAST
+ * CHARACTER of the input — nothing after it, not even a newline — is a
+ * continuation with nothing to continue, and pwsh answers with a parse error
+ * without running anything. Here the backtick is not followed by a newline, so
+ * it falls through to the segment-separator arm and the merge in front of it
+ * is judged — the deny direction, on text the shell rejects. Narrowed to that
+ * one spelling on a measurement (round-8 leg, J3): give the same input a
+ * trailing newline (`gh pr merge 5 <backtick><LF>`) and pwsh runs the merge
+ * (recorded argv `[pr] [merge] [5]`), while the continuation arm consumes the
+ * pair and projects PR 5 — the two agree, and only this spelling diverges.
+ */
+const ROW_PS_TRAILING_BACKTICK = 'gh pr merge 5 `';
+
+/**
+ * A disclosed FALSE FIRE of the `env -S` re-entry (round-7 leg, H5). env does
+ * its own expansion inside the operand and supports only `${VARNAME}`: given
+ * `$PR` it refuses the whole command — `env: only ${VARNAME} expansion is
+ * supported, error at: $PR` (measured, coreutils 8.32) — and runs nothing.
+ * This walk splits the operand on whitespace, reaches the anchor and reads
+ * `$PR` as a target it cannot expand, so the payload carries
+ * `unresolvedTarget` and the strict tier denies a merge that never happens.
+ * The deny direction, which is the safe one; a row, not a claim.
+ */
+const ROW_ENV_S_UNEXPANDED = "env -S 'gh pr merge $PR'";
+
+// Shapes each asserted by a row of their own below, named here so the parity
+// corpus reads them too.
+const ROW_TWO_HEREDOC_BODIES = 'cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n';
+const ROW_HEREDOC_AS_OPERAND = 'gh pr merge 5 <<EOF\nnotes\nEOF\n';
+const ROW_MERGE_AFTER_HEREDOC = 'cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21';
+const ROW_PS_BLOCK_MULTILINE = '<#\ngh pr merge 9\n#>\necho hi';
+const ROW_PS_BLOCK_INLINE = '<# gh pr merge 9 #>\necho hi';
+const ROW_PS_BLOCK_THEN_MERGE = '<# notes #>\ngh pr merge 4';
+const ROW_BASH_HASH_REDIRECT = 'sort <#tmp\ngh pr merge 8';
+const ROW_SUBSTITUTION_COMMENT = 'echo $(# <<note\ngh pr merge 5\n)';
+const ROW_HERESTRING_AS_OPERAND = 'gh pr merge 6 <<< notes';
+const ROW_TRAILING_COMMENT = 'echo hi # gh pr merge 9';
+/**
+ * The two comments that DISCRIMINATE the comment blanking (round-5 leg, F9).
+ * Each carries a tokenizer SEPARATOR inside the comment — a `;` and a backtick
+ * — so with the comment regions left in place the merge behind it reaches a
+ * segment's front and fires (verified on a rendered copy with the blanker's
+ * comment loop removed: pr 9 and pr 5). `ROW_TRAILING_COMMENT` above does NOT
+ * discriminate: with or without the blanking its merge stays inside the `echo`
+ * segment, so it proves nothing about the comment arms on its own.
+ */
+const ROW_COMMENT_SEPARATOR = 'echo hi # ; gh pr merge 9';
+const ROW_COMMENT_BACKTICK = 'echo hi # use `gh pr merge 5` to merge';
+const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
+const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
+const ROW_PS_CALL_OPERATOR = '& gh pr merge 5';
+/**
+ * A TRAILING redirection (round-5 leg, F5): the shell writes gh's output to
+ * the file and merges the current branch's PR. Read at the segment's FRONT
+ * only, the `>` rode into argv as the merge's first positional and the payload
+ * named a branch `>` — the engine denied a pull request on a branch no one
+ * wrote, a deny with a false reason.
+ */
+const ROW_TRAILING_REDIRECT_BRANCH = 'gh pr merge --squash > merge.log';
+const ROW_TRAILING_REDIRECT_ERR = 'gh pr merge --squash 2> err.log';
+const ROW_TRAILING_REDIRECT_PR = 'gh pr merge 5 > out.txt';
+/**
+ * A redirection LOOKALIKE that came out of quotes or a backslash escape
+ * (round-6 leg, G1). The whole-segment strip above reads a token's TEXT, and
+ * `<br>` spelled as the body of `-b` has the text of a fused redirection — so
+ * stripping it dropped the merge's own argument, and with the value-flag
+ * pairing broken the token AFTER it was swallowed instead: `-b "<br>" 5` lost
+ * PR 5 to the current branch, and `-t ">>" --repo owner/name 5` lost the repo
+ * (a `>>` ALONE takes the next token with it, and that token was `--repo`).
+ * The shell quotes those for exactly this reason — they are data. The
+ * tokenizer now records per token whether any part of it came from inside
+ * quotes or from an escape, and the strip skips a literal token.
+ */
+const ROW_LITERAL_BODY_PR = 'gh pr merge -b "<br>" 5';
+const ROW_LITERAL_BODY_REPO = 'gh pr merge -b "<br>" --repo owner/name 5';
+const ROW_LITERAL_SUBJECT_REPO = 'gh pr merge -t ">>" --repo owner/name 5';
+const ROW_LITERAL_ESCAPED_BODY = 'gh pr merge -b \\<br\\> 5';
+/**
+ * A TRAILING redirection whose FILENAME is quoted (round-7 leg, H1 BLOCKING /
+ * H2 MATERIAL, one root). The round-6 rule above marked a token literal when
+ * ANY part of it came from quotes or an escape; the shell's rule is OPERATOR
+ * quoting — `>"merge.log"` is as real a redirection as `> merge.log`, and only
+ * `">"merge.log`, with the operator itself quoted, is data. Under the round-6
+ * rule each of these rode into argv, so the branch rows reached the engine as
+ * a pull request on a branch named `>merge.log` / `2>err.log` / `>>out.txt` /
+ * `>$FILE` — a deny with a reason no one wrote, which is the exact shape the
+ * whole-segment strip was added to cure.
+ */
+const ROW_QUOTED_REDIRECT_BRANCH = 'gh pr merge --squash >"merge.log"';
+const ROW_QUOTED_REDIRECT_ERR = 'gh pr merge --squash 2>"err.log"';
+const ROW_QUOTED_APPEND_BRANCH = 'gh pr merge --squash >>"out.txt"';
+const ROW_QUOTED_VAR_BRANCH = 'gh pr merge --squash >"$FILE"';
+const ROW_QUOTED_REDIRECT_PR = 'gh pr merge 5 >"out.txt"';
+/**
+ * The other exemplar of the same rule, LOCKED: quote the OPERATOR and bash
+ * passes the word to gh as an ARGUMENT (`>out.txt`), redirecting nothing. The
+ * first literal character is at index 0, on the operator itself, so the prefix
+ * does not lie before it and the token is kept.
+ */
+const ROW_QUOTED_OPERATOR_DATA = 'gh pr merge --squash ">"out.txt';
+/**
+ * The TRAILING twins of the whitespace rule (round-8 leg, J1): the operator is
+ * bare, the filename is quoted and carries a space, so bash redirects and
+ * merges the current branch's PR — while the fold-4 hook, whose fused pattern
+ * excluded whitespace from the filename, kept the whole word and reached the
+ * engine with a branch named `>merge log.txt` / `<<<bar baz`. Measured on
+ * bash 5.3 with a recording stub: gh's argv is `[--squash]` in both.
+ */
+const ROW_WS_REDIRECT_BRANCH = 'gh pr merge --squash >"merge log.txt"';
+const ROW_WS_HERESTRING_BRANCH = 'gh pr merge --squash <<<"bar baz"';
+/**
+ * The RESIDUE of that rule, locked rather than cured (round-8 leg, J5): an
+ * empty quote pair or a QUOTED operator abutting a real one. Bash reads the
+ * quoted part as an ARGUMENT and applies the redirection that follows it —
+ * measured with a recording stub, gh's argv is `[--squash] []` for the first
+ * and `[--squash] [>]` for the second — while this walk keeps each as ONE word
+ * and names it as the target. The divergence is in the argv's TEXT only: both
+ * of those words are targets the engine denies, so nothing gets through, and
+ * the rows assert the current projection rather than a claim in the comment.
+ */
+const ROW_EMPTY_QUOTE_ABUT = 'gh pr merge --squash "">out.txt';
+const ROW_QUOTED_OPERATOR_ABUT = 'gh pr merge --squash ">">out.txt';
+/**
+ * The TRAILING twin of the bounded-prefix rule (fold 6): the operator is the
+ * BARE `>` and `">"merge.log` is its filename, so bash merges the current
+ * branch's PR and writes the file `>merge.log` — measured with a recording
+ * stub, gh's argv is `[--squash]`. On the fold-5 hook the greedy `>>` ended
+ * past the first literal index, the whole word rode into argv, and the engine
+ * was handed a pull request on a branch named `>>merge.log`.
+ */
+const ROW_ABUT_REDIRECT_BRANCH = 'gh pr merge --squash >">"merge.log';
+/**
+ * The keep-row of the same rule, LOCKED: a quoted argument whose text merely
+ * CONTAINS an operator, spaces and all. Its first literal character is at
+ * index 0, so no operator prefix lies before it and nothing is stripped —
+ * measured, gh's argv is `[-b] [a > b] [5]`.
+ */
+const ROW_LITERAL_BODY_SPACED = 'gh pr merge -b "a > b" 5';
+/**
+ * The residue the bounded prefix leaves, disclosed as a FALSE FIRE and locked
+ * both ways round (fold 6): an EMPTY quote pair INSIDE the operator prefix.
+ * The word here is `>>out.txt` with its first literal character at index 1, so
+ * the bounded prefix is `>` and the word strips — while bash reads `>` with an
+ * EMPTY filename and fails the redirection ("No such file or directory", exit
+ * 1, gh never runs, measured in an empty directory). So the wrapper judges a
+ * merge the shell never ran: noise in the deny direction, never a bypass. The
+ * fold-5 hook kept the word instead and projected `['--squash', '>>out.txt']`
+ * trailing / nothing at all leading.
+ */
+const ROW_EMPTY_PAIR_IN_OPERATOR_LEAD = '>"">out.txt gh pr merge 5';
+const ROW_EMPTY_PAIR_IN_OPERATOR = 'gh pr merge --squash >"">out.txt';
+/**
+ * A disclosed FALSE FIRE, PowerShell's third (round-8 leg, J3): a backtick
+ * followed by WHITESPACE and then a newline is not a continuation — the
+ * backtick escapes the SPACE. Measured on pwsh 7 with a recording stub: pwsh
+ * runs `gh pr merge` with NO target (argv `[pr] [merge]`, so the current
+ * branch's PR merges) and evaluates the next line as its own statement. Here
+ * the backtick is not IMMEDIATELY followed by a newline, so the continuation
+ * arm does not take it, the separator arm does, and the walk projects an
+ * `unresolvedTarget` naming the backtick — a target nobody wrote, which the
+ * strict tier denies.
+ */
+const ROW_PS_BACKTICK_SPACE_NEWLINE = 'gh pr merge ` \n5';
+/**
+ * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
+ * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
+ * string to PowerShell — it prints text and merges nothing. This walk reads
+ * POSIX quoting for BOTH tools, so the `"` after the escaping backtick closes
+ * the string, the `;` ends a segment, and `gh pr merge 5` lands at the next
+ * segment's front. The row asserts what the wrapper DOES here, so the
+ * disclosure in the template is read from a row, never from memory.
+ */
+const ROW_PS_DQ_BACKTICK = 'Write-Output "a `"; gh pr merge 5`"b"';
+const ROW_OPEN_PAREN_COMMENT = '(#<<note\ngh pr merge 5\n)';
+const ROW_GROUP_CLOSE_COMMENT = '(true; echo a)#<<note\ngh pr merge 5';
+
+/**
+ * The delimiters mmnto-ai/totem#2857 names — each carrying a character outside
+ * the template's old word class — in a terminated and an unterminated form.
+ */
+const PARITY_DELIMITERS = ['E:F', 'E*F', 'E+F', 'E=F', 'E,F', 'E@F', 'E!F', 'EOF~'];
+const DELIMITER_PARITY_ROWS = PARITY_DELIMITERS.flatMap((d) => [
+  `cat <<${d}\nbody\n${d}\ngh pr merge 5`,
+  `cat <<${d}\nbody\ngh pr merge 5`,
+]);
+
+/** Every string above, the corpus half of the parity lock. */
+const PARITY_COMMAND_CORPUS = [
+  ...COMMAND_POSITION_ROWS,
+  ...NEVER_SPAWNS_ROWS,
+  ...EXECUTABLE_SPELLING_ROWS,
+  ...WRAPPER_STRIP_ROWS,
+  ...REDIRECTION_ROWS,
+  ...MUTANT_ROWS,
+  ...INVALID_OPTION_FALSE_FIRE_ROWS,
+  ...ARITHMETIC_COMMENT_ROWS,
+  ...HERESTRING_ROWS,
+  ...LINE_CONTINUATION_ROWS,
+  ...PS_LINE_CONTINUATION_ROWS,
+  ...PS_CONTINUATION_INSIDE_WORD_ROWS,
+  ROW_PS_TRAILING_BACKTICK,
+  ROW_ENV_S_UNEXPANDED,
+  ...DELIMITER_PARITY_ROWS,
+  ROW_TWO_HEREDOC_BODIES,
+  ROW_HEREDOC_AS_OPERAND,
+  ROW_MERGE_AFTER_HEREDOC,
+  ROW_PS_BLOCK_MULTILINE,
+  ROW_PS_BLOCK_INLINE,
+  ROW_PS_BLOCK_THEN_MERGE,
+  ROW_BASH_HASH_REDIRECT,
+  ROW_SUBSTITUTION_COMMENT,
+  ROW_HERESTRING_AS_OPERAND,
+  ROW_TRAILING_COMMENT,
+  ROW_COMMENT_SEPARATOR,
+  ROW_COMMENT_BACKTICK,
+  ROW_PAREN_COMMENT_HEREDOC,
+  ROW_COLON_DELIMITER,
+  ROW_OPEN_PAREN_COMMENT,
+  ROW_GROUP_CLOSE_COMMENT,
+  ROW_PS_CALL_OPERATOR,
+  ROW_PS_DQ_BACKTICK,
+  ROW_TRAILING_REDIRECT_BRANCH,
+  ROW_TRAILING_REDIRECT_ERR,
+  ROW_TRAILING_REDIRECT_PR,
+  ROW_LITERAL_BODY_PR,
+  ROW_LITERAL_BODY_REPO,
+  ROW_LITERAL_SUBJECT_REPO,
+  ROW_LITERAL_ESCAPED_BODY,
+  ROW_QUOTED_REDIRECT_BRANCH,
+  ROW_QUOTED_REDIRECT_ERR,
+  ROW_QUOTED_APPEND_BRANCH,
+  ROW_QUOTED_VAR_BRANCH,
+  ROW_QUOTED_REDIRECT_PR,
+  ROW_QUOTED_OPERATOR_DATA,
+  ROW_WS_REDIRECT_BRANCH,
+  ROW_WS_HERESTRING_BRANCH,
+  ROW_EMPTY_QUOTE_ABUT,
+  ROW_QUOTED_OPERATOR_ABUT,
+  ROW_ABUT_REDIRECT_BRANCH,
+  ROW_LITERAL_BODY_SPACED,
+  ROW_EMPTY_PAIR_IN_OPERATOR_LEAD,
+  ROW_EMPTY_PAIR_IN_OPERATOR,
+  ROW_PS_BACKTICK_SPACE_NEWLINE,
+];
 
 function readSettings(cwd: string): Record<string, unknown> {
   const raw = fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8');
@@ -1008,37 +1732,58 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     });
 
     it('a value-taking flag does not swallow the PR target (`-b "…" 42`)', () => {
-      initGitRepo();
+      const head = initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
       runWrapper(bash('gh pr merge -b "merge this now" 42'), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 42 });
+
+      // WIDENED to a body WITHOUT spaces (round-6 leg, G1): a multi-word body
+      // can never look like anything else, so this row held the pairing only
+      // for bodies the whole-segment redirection strip would not touch. A
+      // one-word body that reads as a redirection (`<br>`) is where the strip
+      // and the pairing collide.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_LITERAL_BODY_PR), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_LITERAL_BODY_PR).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+    });
+
+    it('a QUOTED or escaped redirection lookalike is an argument, not an operator (round-6 leg, G1)', () => {
+      // The redirection strip reads a token's text, so `-b "<br>"` and
+      // `-t ">>"` — the merge's own data, quoted by the author for exactly
+      // this reason — were dropped as operators. The fused one took the body
+      // and left `-b` to swallow the PR number; the `>>` ALONE took the token
+      // after it, which was `--repo`, and the payload named the wrong
+      // repository. The tokenizer now marks a token whose text came from
+      // inside quotes or from a backslash escape, and the strip skips it.
+      const head = initGitRepo();
+      for (const command of [ROW_LITERAL_BODY_REPO, ROW_LITERAL_SUBJECT_REPO]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'owner/name',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // A backslash escape is the other half of the rule: `\<br\>` is the same
+      // data spelled without quotes.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_LITERAL_ESCAPED_BODY), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_LITERAL_ESCAPED_BODY).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
     });
 
     it("fires at command position after a separator, after the shell's command-position words, and behind an assignment prefix", () => {
       initGitRepo();
-      for (const command of [
-        'git status && gh pr merge 7',
-        'git fetch; gh pr merge 7',
-        'for x in 1; do gh pr merge 7; done',
-        'if true; then gh pr merge 7; fi',
-        'git log |\ngh pr merge 7',
-        // PR round 1 (greptile): a merge used AS the condition, and one behind
-        // an assignment prefix, each left something other than `gh` at the
-        // segment's front and went unjudged.
-        'if gh pr merge 7; then echo merged; fi',
-        'if false; then :; elif gh pr merge 7; then :; fi',
-        'while gh pr merge 7; do break; done',
-        'until gh pr merge 7; do sleep 1; done',
-        'GH_TOKEN=x gh pr merge 7',
-        'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
-        'exec gh pr merge 7',
-        'command gh pr merge 7',
-        // Round 2 (the leg's F1): two more reserved words and the builtin that
-        // runs an unquoted operand as the command.
-        'time gh pr merge 7',
-        'coproc gh pr merge 7',
-        'eval gh pr merge 7',
-      ]) {
+      for (const command of COMMAND_POSITION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 7 });
@@ -1047,59 +1792,133 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
 
     it('does NOT fire inside a quoted string, a heredoc body, or on another gh verb — and never spawns', () => {
       initGitRepo();
-      for (const command of [
-        'echo "gh pr merge 5"',
-        "echo 'gh pr merge 5'",
-        'gh pr list',
-        'gh pr view 3 | grep merge',
-        'git commit -m "gh pr merge"',
-        // A heredoc body is DATA, not commands (fold F4): firing here was a
-        // false deny — the direction this projection must not have.
-        'cat <<EOF\ngh pr merge 5\nEOF',
-        "cat <<'EOF'\ngh pr merge 5\nEOF",
-        'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
-        'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
-        // An UNTERMINATED body runs to the end of the command and is still data.
-        'cat <<EOF\ngh pr merge 5',
-        // DISCLOSED misses (the gate does not fire — the safe direction): a
-        // wrapper PROGRAM takes the first token, so the position anchor never
-        // sees `gh` (an assignment prefix no longer hides it — PR round 1).
-        'sudo gh pr merge 5',
-        'timeout 30 gh pr merge 5',
-        'env GH_TOKEN=x gh pr merge 5',
-        // Round 2 (the leg's F1/F3), disclosed in the template's comment: a
-        // merge handed over as ONE quoted word, a builtin with a flag before
-        // `gh`, a backtick substitution, a leading redirection.
-        'eval "gh pr merge 5"',
-        'command -p gh pr merge 5',
-        'exec -a x gh pr merge 5',
-        // Round 3 (the leg's F1): the reserved word carrying its own flag.
-        'time -p gh pr merge 5',
-        'time -- gh pr merge 5',
-        'echo `gh pr merge 5`',
-        '> out.txt gh pr merge 5',
-        // The pilot-install round (greptile P1 on mmnto-ai/totem#2855): the
-        // executable spelled with an extension or a path is not the bare token
-        // the anchor reads — disclosed here and in the template's comment;
-        // widening the token is mmnto-ai/totem#2856, the strict tier's precondition.
-        'gh.exe pr merge 5',
-        './gh pr merge 5',
-        // The same round's legs (mmnto-ai/totem#2857): two divergences from
-        // core's scanner that open a heredoc core does not, so the merge on a
-        // later line is blanked — a comment after `(` or an operator `)` (the
-        // template has no paren-boundary arms), and a bare delimiter carrying a
-        // character outside the template's word class (`<<E:F`) parsed as a
-        // prefix so the real terminator never matches. Locked as misses here;
-        // a fix flips these rows to spawnedPayload() rows.
-        '(true)#<<note\ngh pr merge 5',
-        'cat <<E:F\nbody\nE:F\ngh pr merge 5',
-      ]) {
+      for (const command of NEVER_SPAWNS_ROWS) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
         });
         const { status } = runWrapper(bash(command), [], 'merge-ready');
         expect(status, command).toBe(0);
         expect(stubArgv(), command).toBeNull();
+      }
+    });
+
+    it('the executable may carry an extension or a path (mmnto-ai/totem#2856 § A)', () => {
+      // The anchor read the bare token `gh`, so every other spelling of the SAME
+      // executable ran unjudged — a bypass under the strict tier (greptile P1 on
+      // mmnto-ai/totem#2855). The basename after the last `/` or `\` is what the
+      // test reads now.
+      // The WHOLE payload, not a subset (round-5 leg, F11): a `toMatchObject`
+      // on `{ pr: 5 }` passes on a payload that also carries a branch, an
+      // `unresolvedTarget` or a repo from the wrong arm — each of which the
+      // engine judges differently. The clause is `{ repo, pr, headSha }`.
+      const head = initGitRepo();
+      for (const command of EXECUTABLE_SPELLING_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+    });
+
+    it('a transparent wrapper program and a flag-carrying builtin are stripped (mmnto-ai/totem#2856 § B)', () => {
+      // A wrapper PROGRAM took the segment's first token, so the anchor never
+      // saw `gh` and the merge ran unjudged. The strip now consumes a CLOSED
+      // list of transparent programs with their option grammar, re-runs the
+      // assignment strip after them, and only then reads the executable.
+      const head = initGitRepo();
+      for (const command of WRAPPER_STRIP_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+    });
+
+    it('a leading redirection and a backtick substitution are judged (mmnto-ai/totem#2856 § C)', () => {
+      // The shell applies a leading redirection and runs what follows, and the
+      // operand of a backtick substitution IS a command — both ran unjudged
+      // while the redirection word was the segment's first token and the
+      // backtick was an ordinary character.
+      const head = initGitRepo();
+      for (const command of REDIRECTION_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // PowerShell's CALL OPERATOR is not a miss and the template says so from
+      // this row, never from memory (§ F): `&` is one of the tokenizer's
+      // segment separators, so the segment after it starts at `gh`.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_CALL_OPERATOR } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_CALL_OPERATOR).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+
+      // The complement: a backtick substitution as the merge's own TARGET is a
+      // target this hook cannot know, exactly as `$( … )` is — it rides as
+      // `unresolvedTarget` rather than falling back to the current branch.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge `cat pr.txt`'), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.pr).toBeNull();
+      expect(payload.unresolvedTarget).toBe('`');
+      expect(payload.branch).toBeUndefined();
+    });
+
+    it('every widened form has a MUTANT that must NOT project, and never spawns (mmnto-ai/totem#2856 § F)', () => {
+      initGitRepo();
+      for (const command of MUTANT_ROWS) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(bash(command), [], 'merge-ready');
+        expect(status, command).toBe(0);
+        expect(stubArgv(), command).toBeNull();
+      }
+    });
+
+    it('the two scanner divergences from mmnto-ai/totem#2855 now project (mmnto-ai/totem#2857 § 4)', () => {
+      // These are the MUTANT PROOF for the parity lock at the foot of this
+      // file: each one is a heredoc the template's hand-copied scanner opened
+      // and core's does not, so the merge on the following line was blanked
+      // and ran unjudged — one lost advisory read under PILOT, a bypass under
+      // STRICT. `(true)#<<note` needs the paren-boundary arms (an operator `)`
+      // ends a word, so the `#` after it begins a comment); `<<E:F` needs
+      // core's bare-delimiter class (`[^\s'"\\<>()|&;]+`), where the template's
+      // narrower one read the delimiter as the prefix `E` so the terminator
+      // line never matched and the body ran to the end of the command.
+      initGitRepo();
+      for (const command of [
+        ROW_PAREN_COMMENT_HEREDOC,
+        ROW_COLON_DELIMITER,
+        // Beside them, the other two shapes the paren arms decide: a `#` right
+        // after an OPENING `(` (which begins a word), and one after the `)` of
+        // a multi-command group. Neither is a comment without those arms, and
+        // the `<<note` inside each opened a body that blanked the merge.
+        ROW_OPEN_PAREN_COMMENT,
+        ROW_GROUP_CLOSE_COMMENT,
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(stubArgv(), JSON.stringify(command)).not.toBeNull();
+        expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
       }
     });
 
@@ -1135,13 +1954,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // the real merge after it went unjudged — a silent miss on the exact
       // command this gate exists for.
       initGitRepo();
-      for (const command of [
-        'echo $((1<<2)); gh pr merge 5',
-        'echo $(( 3<<1 )); gh pr merge 5',
-        '# see <<note\ngh pr merge 5',
-        '(( 1<<3 ))\ngh pr merge 5',
-        'echo hi # <<EOF\ngh pr merge 5',
-      ]) {
+      for (const command of ARITHMETIC_COMMENT_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1153,7 +1966,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // the newline into the token left the segment starting with something
       // other than `gh`, so a real merge went unjudged.
       initGitRepo();
-      for (const command of ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5']) {
+      for (const command of LINE_CONTINUATION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
@@ -1166,6 +1979,50 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
+    it("PowerShell's line continuation joins the LINE at a word boundary, in ps mode only (round-6 leg, G3; round-7 leg, H4)", () => {
+      // A trailing backtick is PowerShell's continuation, the twin of bash's
+      // trailing backslash where no token is open. Read as the segment
+      // separator it is in bash, the
+      // merge's target became the backtick itself: the payload carried
+      // `unresolvedTarget: '`'` (strict denies a target nobody wrote) and the
+      // real target sat in the next segment, merged unjudged.
+      const head = initGitRepo();
+      for (const command of PS_LINE_CONTINUATION_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper({ tool_name: 'PowerShell', tool_input: { command } }, [], 'merge-ready');
+        expect(spawnedPayload(), JSON.stringify(command)).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // INSIDE A WORD it is not a join at all (round-7 leg, H4): PowerShell's
+      // backtick escapes the newline into the argument, so `merg<LF>e` is not
+      // `merge` and pwsh runs nothing. Projecting there was a merge the shell
+      // never performs — and it never spawns now.
+      for (const command of PS_CONTINUATION_INSIDE_WORD_ROWS) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(
+          { tool_name: 'PowerShell', tool_input: { command } },
+          [],
+          'merge-ready',
+        );
+        expect(status, JSON.stringify(command)).toBe(0);
+        expect(stubArgv(), JSON.stringify(command)).toBeNull();
+      }
+
+      // BASH is untouched: there a backtick opens a command substitution, so
+      // it stays a segment separator and the target is unresolvable.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(PS_LINE_CONTINUATION_ROWS[0]), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.pr).toBeNull();
+      expect(payload.unresolvedTarget).toBe('`');
+    });
+
     it('a PowerShell block comment is data, not commands (round 3 F8; round 4 F1, F8)', () => {
       initGitRepo();
       const pwsh = (command: string): Record<string, unknown> => ({
@@ -1173,38 +2030,247 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         tool_input: { command },
       });
 
-      // THE CONTROL (round 4, F1): a MULTI-LINE block comment. Without the
-      // `<#` arm this fires with pr 9 — verified by stripping the arm from a
-      // rendered copy. The single-line row below behaves the same either way
-      // (the `#` word-comment arm already covers it), so it is a companion, not
-      // a control.
+      // TWO CONTROLS (round 4, F1; the second corrected by the round-5 leg's
+      // F10). On a rendered copy with the `<#` arm stripped, BOTH the
+      // multi-line and the inline row fire with pr 9 — the inline one because
+      // its `<#` then reads as a fused REDIRECTION and drops, leaving
+      // `gh pr merge 9` at the segment's front, and its trailing `#>` is eaten
+      // by the `#` word-comment arm. The note this replaces called the inline
+      // row a companion the `#` word-comment arm "already covers": it does not
+      // — nothing there begins a word, so that `#` is text.
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      expect(runWrapper(pwsh('<#\ngh pr merge 9\n#>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(runWrapper(pwsh(ROW_PS_BLOCK_MULTILINE), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      expect(runWrapper(pwsh('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(runWrapper(pwsh(ROW_PS_BLOCK_INLINE), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       // The merge AFTER one is still judged — the blank must not eat it.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(pwsh('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
+      runWrapper(pwsh(ROW_PS_BLOCK_THEN_MERGE), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 4 });
 
       // ROUND 4 F8: the blank is a POWERSHELL rule. In bash `<#tmp` is a
       // redirect from a file named `#tmp`, and blanking from it to a later `#>`
       // would swallow the real merge on the next line.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('sort <#tmp\ngh pr merge 8'), [], 'merge-ready');
+      runWrapper(bash(ROW_BASH_HASH_REDIRECT), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
     });
 
+    it('a trailing redirection never rides into argv as the merge target (round-5 leg, F5 + F12)', () => {
+      // `gh pr merge --squash > merge.log` merges the CURRENT branch's PR and
+      // writes gh's output to a file. With the strip reading only the
+      // segment's FRONT, the `>` arrived as the merge's first positional: the
+      // payload named a branch `>`, and the engine denied a pull request on a
+      // branch no one wrote — a deny with a FALSE reason, the worst shape a
+      // gate can have. The strip now runs over the whole segment.
+      // The four QUOTED-FILENAME spellings join them (round-7 leg, H1/H2):
+      // the operator characters are bare in each, so bash redirects and merges
+      // the current branch's PR — while the round-6 literal rule read the
+      // whole word as data and put `>merge.log`, `2>err.log`, `>>out.txt` and
+      // `>$FILE` into argv as the merge's target.
+      const head = initGitRepo();
+      for (const command of [
+        ROW_TRAILING_REDIRECT_BRANCH,
+        ROW_TRAILING_REDIRECT_ERR,
+        ROW_QUOTED_REDIRECT_BRANCH,
+        ROW_QUOTED_REDIRECT_ERR,
+        ROW_QUOTED_APPEND_BRANCH,
+        ROW_QUOTED_VAR_BRANCH,
+        // And the two whose quoted filename carries WHITESPACE (round-8 leg,
+        // J1): on the fold-4 hook the fused pattern's filename class excluded
+        // whitespace, so neither word was stripped and the engine was handed a
+        // branch named `>merge log.txt` and `<<<bar baz`.
+        ROW_WS_REDIRECT_BRANCH,
+        ROW_WS_HERESTRING_BRANCH,
+        // And the one whose QUOTE sits inside the operator prefix (fold 6):
+        // bash reads the bare `>` with `>merge.log` as its filename and merges
+        // the current branch's PR, while the fold-5 hook's greedy `>>` ended
+        // past the first literal index and the engine read a branch named
+        // `>>merge.log`.
+        ROW_ABUT_REDIRECT_BRANCH,
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: null,
+          branch: 'feat/demo',
+          headSha: head,
+        });
+      }
+
+      // And with a PR named, the number is still the target and nothing of the
+      // redirection reaches the payload. This third row does NOT discriminate
+      // as a payload (round-6 leg, G7): with the strip removed the argv is
+      // `['5', '>', 'out.txt']` and `projectMergeReady` keeps the FIRST
+      // positional, so the payload reads `pr: 5` either way. Its bite is the
+      // exact-argv row in the export seam; it stays here as the complement to
+      // the two branch rows above, not as a sensor.
+      for (const command of [ROW_TRAILING_REDIRECT_PR, ROW_QUOTED_REDIRECT_PR]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // And the LOCKED complement of the rule: with the OPERATOR quoted the
+      // word is an ARGUMENT, so bash hands gh the string `>out.txt` and
+      // redirects nothing. The payload names it as the target because that is
+      // exactly what gh receives — stripping it here would be the mirror error
+      // of the one above, dropping data the shell really passes to the program.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_QUOTED_OPERATOR_DATA), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_QUOTED_OPERATOR_DATA).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: null,
+        branch: '>out.txt',
+        headSha: head,
+      });
+
+      // The RESIDUE of the same rule, asserted rather than claimed (round-8
+      // leg, J5): an empty quote pair or a quoted operator ABUTTING a real
+      // one. Bash passes the quoted part as an argument and redirects the
+      // rest — `[--squash] []` and `[--squash] [>]` with a recording stub —
+      // while this walk keeps each as one word. The divergence is in the
+      // argv's TEXT: the branch it names is one the engine denies either way,
+      // so it costs a bogus deny and lets no merge through.
+      for (const [command, branch] of [
+        [ROW_EMPTY_QUOTE_ABUT, '>out.txt'],
+        [ROW_QUOTED_OPERATOR_ABUT, '>>out.txt'],
+      ] as const) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: null,
+          branch,
+          headSha: head,
+        });
+      }
+    });
+
+    it('an INVALID option to a table word is a DISCLOSED false fire (round-6 leg, G4)', () => {
+      // Each of these makes the program answer "invalid option" and run
+      // nothing, while the strip reads the unknown `-` token as one of the
+      // word's own options and judges a merge the shell never runs. The
+      // alternative — a closed flag list per program — was measured on a
+      // mutant and turns real flags the list omits (`sudo -n`, `sudo -E`,
+      // `timeout --foreground`) into MISSES, which is a bypass under strict.
+      // A false fire on a command that runs nothing costs one bogus deny.
+      const head = initGitRepo();
+      for (const command of INVALID_OPTION_FALSE_FIRE_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+    });
+
+    it('an `env -S` operand env itself REFUSES is a DISCLOSED false fire (round-7 leg, H5)', () => {
+      // env expands only `${VARNAME}` inside a `-S` string: `$PR` makes it
+      // refuse the whole command and run nothing. The re-entry splits the
+      // operand on whitespace, so the anchor is reached and `$PR` rides as an
+      // unresolvable target — which the strict tier denies. A deny on a merge
+      // that never happens is the safe direction, and the residue paragraph
+      // is read from this row rather than from memory.
+      const head = initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_ENV_S_UNEXPANDED), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_ENV_S_UNEXPANDED).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: null,
+        unresolvedTarget: '$PR',
+        headSha: head,
+      });
+    });
+
+    it('a PowerShell backtick escape inside double quotes is a DISCLOSED false fire (round-5 leg, F13)', () => {
+      // PowerShell escapes with a backtick inside a double-quoted string, so
+      // `"a `"; gh pr merge 5`"b"` is ONE string and PowerShell merges nothing.
+      // This walk reads POSIX quoting for BOTH tools — the `"` after the
+      // escaping backtick closes the string and `gh pr merge 5` reaches a
+      // segment's front — so the wrapper judges a merge the shell never runs.
+      // The deny direction on contrived text, disclosed in the template's
+      // false-fires paragraph and asserted here rather than claimed there.
+      const head = initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_DQ_BACKTICK } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_DQ_BACKTICK).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+
+      // The second of PowerShell's own (round-7 leg, H4): a trailing backtick
+      // at the END of the input continues a line that does not exist. pwsh
+      // fails to parse the command and runs nothing; here the backtick is not
+      // followed by a newline, so the continuation arm does not take it, the
+      // separator arm does, and the merge in front of it is judged. Asserted
+      // rather than claimed, like every other entry in that paragraph.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_TRAILING_BACKTICK } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_TRAILING_BACKTICK).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+
+      // The third of PowerShell's own (round-8 leg, J3), and the measurement
+      // that narrows the one above: a backtick followed by WHITESPACE and then
+      // a newline is not a continuation either — the backtick escapes the
+      // space, pwsh runs `gh pr merge` with NO target (the current branch's PR
+      // merges) and reads the next line as its own statement. Here the
+      // backtick is not IMMEDIATELY followed by a newline, so the separator
+      // arm takes it and the walk names the backtick as an unresolvable
+      // target: a strict deny on a target nobody wrote.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_BACKTICK_SPACE_NEWLINE } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_BACKTICK_SPACE_NEWLINE).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: null,
+        unresolvedTarget: '`',
+        headSha: head,
+      });
+    });
+
     it('a comment is not a command: a merge inside one never fires', () => {
+      // The first row is the plain shape; the other two are the ones that
+      // DISCRIMINATE the blanking (round-5 leg, F9). Each of those carries a
+      // tokenizer separator inside the comment, so on a rendered copy with the
+      // blanker's comment loop removed they project pr 9 and pr 5 — while the
+      // plain row projects nothing either way, because its merge never leaves
+      // the `echo` segment. Without them this test held the comment arms to
+      // nothing.
       initGitRepo();
-      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(bash('echo hi # gh pr merge 9'), [], 'merge-ready');
-      expect(status).toBe(0);
-      expect(stubArgv()).toBeNull();
+      for (const command of [ROW_TRAILING_COMMENT, ROW_COMMENT_SEPARATOR, ROW_COMMENT_BACKTICK]) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(bash(command), [], 'merge-ready');
+        expect(status, command).toBe(0);
+        expect(stubArgv(), command).toBeNull();
+      }
     });
 
     it('EVERY heredoc queued on a line is read as data, not just the first (fold round 2, F2)', () => {
@@ -1213,17 +2279,13 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // commands — a false deny on text.
       initGitRepo();
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(
-        bash('cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n'),
-        [],
-        'merge-ready',
-      );
+      const { status } = runWrapper(bash(ROW_TWO_HEREDOC_BODIES), [], 'merge-ready');
       expect(status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       // The complement: a heredoc as the merge's OWN operand still fires.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('gh pr merge 5 <<EOF\nnotes\nEOF\n'), [], 'merge-ready');
+      runWrapper(bash(ROW_HEREDOC_AS_OPERAND), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
@@ -1232,11 +2294,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // terminator line ends the body and the next segment is judged normally.
       initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(
-        bash('cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21'),
-        [],
-        'merge-ready',
-      );
+      runWrapper(bash(ROW_MERGE_AFTER_HEREDOC), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 21 });
     });
 
@@ -1249,11 +2307,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       initGitRepo();
       // Three spellings, every one fail-open before the guard (the re-arm's R6):
       // spaced, glued, and a here-string that opens the command.
-      for (const command of [
-        'grep x <<< bar\ngh pr merge 5',
-        'grep x <<<bar\ngh pr merge 5',
-        '<<<bar\ngh pr merge 5',
-      ]) {
+      for (const command of HERESTRING_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1261,7 +2315,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // The complement (a non-regression row, not a falsifier): a here-string as
       // the merge's OWN operand still fires.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('gh pr merge 6 <<< notes'), [], 'merge-ready');
+      runWrapper(bash(ROW_HERESTRING_AS_OPERAND), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 6 });
     });
 
@@ -1273,7 +2327,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // merge on the next line — the same fail-open class as the here-string.
       initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('echo $(# <<note\ngh pr merge 5\n)'), [], 'merge-ready');
+      runWrapper(bash(ROW_SUBSTITUTION_COMMENT), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
@@ -1323,6 +2377,184 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'merge-ready',
       );
       expect(spawnedPayload()).toMatchObject({ pr: 11 });
+    });
+
+    /**
+     * A `--require` preload that sleeps 8 s and exits 0 in any node process
+     * whose executable IS the `git` shim, and is a no-op in every other node
+     * process — the wrapper and the stub CLI run under the same NODE_OPTIONS,
+     * so the argv0/execPath guard is what keeps the shim from slowing them.
+     */
+    const SLOW_GIT_PRELOAD = [
+      '"use strict";',
+      'const path = require("path");',
+      'const base = (p) => path.basename(String(p || "")).toLowerCase();',
+      'const me = base(process.argv0) + "|" + base(process.execPath);',
+      'if (me.includes("git")) {',
+      '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000);',
+      '  process.exit(0);',
+      '}',
+      '',
+    ].join('\n');
+
+    /**
+     * The slow-git shim on a PATH dir of its own: `spawnSync('git', …)`
+     * without a shell resolves `git.exe` through PATH on win32 (a `.cmd` shim
+     * is NOT resolvable that way), so the shim is a copy — a hard link where
+     * the volume allows — of this node binary named `git`/`git.exe`, slowed by
+     * the argv0-guarded preload above.
+     */
+    function slowGitEnv(): NodeJS.ProcessEnv {
+      const binDir = path.join(cwd, 'slow-git-bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const shim = path.join(binDir, process.platform === 'win32' ? 'git.exe' : 'git');
+      if (!fs.existsSync(shim)) {
+        try {
+          fs.linkSync(process.execPath, shim);
+        } catch {
+          fs.copyFileSync(process.execPath, shim);
+        }
+        if (process.platform !== 'win32') fs.chmodSync(shim, 0o755);
+      }
+      const preload = path.join(cwd, 'slow.cjs');
+      fs.writeFileSync(preload, SLOW_GIT_PRELOAD);
+      const env = envWithPath(binDir + path.delimiter + (process.env.PATH ?? ''));
+      env.NODE_OPTIONS = '--require=' + preload.split(path.sep).join('/');
+      return env;
+    }
+
+    /**
+     * Spawn the rendered wrapper, write the envelope on its stdin and leave
+     * the stream OPEN, then await the exit. The `end` never comes, so only the
+     * wrapper's own budget can end the run — which is the whole assertion.
+     * The kill after 10 s is the harness's own floor, not the wrapper's: if it
+     * fires, the row has failed.
+     */
+    async function runWrapperOpenStdin(
+      envelope: unknown,
+      extraArgs: string[],
+      event: string,
+    ): Promise<{ status: number | null; stderr: string; elapsed: number }> {
+      const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
+      const started = Date.now();
+      const child = spawn(process.execPath, [wrapperPath, '--event', event, ...extraArgs], {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.setEncoding('utf-8');
+      child.stderr.on('data', (chunk: string) => {
+        stderr += chunk;
+      });
+      child.stdout.resume();
+      // A wrapper that exits while the pipe is still open makes this write
+      // EPIPE; that is the expected end of this row, not a failure.
+      child.stdin.on('error', () => {});
+      child.stdin.write(JSON.stringify(envelope));
+      const status = await new Promise<number | null>((resolve, reject) => {
+        const kill = setTimeout(() => {
+          child.kill();
+          reject(new Error('the wrapper did not exit on its own with stdin left open'));
+        }, 10000);
+        child.on('error', (err) => {
+          clearTimeout(kill);
+          reject(err);
+        });
+        child.on('close', (code) => {
+          clearTimeout(kill);
+          resolve(code);
+        });
+      });
+      return { status, stderr, elapsed: Date.now() - started };
+    }
+
+    it('the stdin read is INSIDE the budget: an envelope whose pipe never closes exits 2 (round-5 leg, F6)', async () => {
+      // The budget covered everything after the envelope ARRIVED; reading it
+      // was outside. A host that writes the envelope and holds the pipe open
+      // (or writes nothing at all) left this hook waiting with no deadline of
+      // its own until the HOST killed it — and a killed hook's exit code is
+      // never applied, a fail-OPEN on a gate whose posture is fail-closed, the
+      // same class § D cured for the projection's git reads. The timer is armed
+      // at the entry for what is left of the budget; the `end` handler clears
+      // it before evaluating, so a normal run never sees it (every other row in
+      // this file is that proof).
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status, stderr, elapsed } = await runWrapperOpenStdin(
+        bash('gh pr merge 5'),
+        ['--budget-ms', '1000'],
+        'merge-ready',
+      );
+
+      expect(status).toBe(2);
+      expect(stderr).toContain('the 1000 ms budget was spent before the envelope arrived on stdin');
+      expect(stderr).toContain('fail-closed');
+      // Nothing was evaluated: the envelope never finished arriving.
+      expect(stubArgv()).toBeNull();
+      // It waited for the budget, and only for the budget.
+      expect(elapsed).toBeGreaterThanOrEqual(900);
+      expect(elapsed).toBeLessThan(5000);
+    });
+
+    it('the `--budget-ms=<n>` spelling parses like the separate-token form (round-5 leg, F7)', () => {
+      // `--budget-ms=1500` fell through the argv loop as an unknown argument
+      // and left the full 30 s default in place — silently WIDENING the window
+      // for a caller that wrote the argument to shorten it, the one direction
+      // this argument must never move. End-to-end against the same hung git as
+      // the row above, so what is asserted is the wrapper's real arm.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const env = slowGitEnv();
+
+      const started = Date.now();
+      const { status, stderr } = runWrapper(
+        bash('gh pr merge 5'),
+        ['--budget-ms=1500'],
+        'merge-ready',
+        env,
+      );
+      const elapsed = Date.now() - started;
+
+      expect(status).toBe(2);
+      expect(stderr).toContain(
+        'the 1500 ms budget was spent before gate "merge-ready" could be evaluated',
+      );
+      expect(stubArgv()).toBeNull();
+      expect(elapsed).toBeLessThan(6000);
+    });
+
+    it('a hung git is bounded by the budget: exit 2, the named line, no CLI spawn (mmnto-ai/totem#2856 § G)', () => {
+      // THE FALSIFIER for § D. `spawnSync('git', …)` without a shell resolves
+      // `git.exe` through PATH on win32 (a `.cmd` shim is NOT resolvable that
+      // way), so the shim is a copy — a hard link where the volume allows — of
+      // this node binary named `git`/`git.exe` on a PATH dir of its own.
+      //
+      // Pre-fix the projection's git reads ran on their own 10 s timeouts
+      // BEFORE any deadline existed: the wrapper spent ~20 s in the projection
+      // and then spawned the CLI (and on a multi-merge envelope it reached the
+      // host's own hook timeout, where its exit code is never applied). With
+      // the budget set at the entry, the reads are bounded by what is left of
+      // it and the spent-budget arm fires before the first `gate check`.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const env = slowGitEnv();
+
+      const started = Date.now();
+      const { status, stderr } = runWrapper(
+        bash('gh pr merge 5'),
+        ['--budget-ms', '1500'],
+        'merge-ready',
+        env,
+      );
+      const elapsed = Date.now() - started;
+
+      expect(status).toBe(2);
+      expect(stderr).toContain(
+        'the 1500 ms budget was spent before gate "merge-ready" could be evaluated',
+      );
+      expect(stderr).toContain('fail-closed');
+      // The CLI was never spawned: the budget was gone before the first check.
+      expect(stubArgv()).toBeNull();
+      // Bounded by the budget plus one floor, not by the 8 s sleep and not by
+      // `runWrapper`'s own 30 s timeout.
+      expect(elapsed).toBeLessThan(6000);
     });
 
     it('an evaluation failure on an APPLICABLE merge blocks (fail-closed), pilot exits 0', () => {
@@ -1693,5 +2925,557 @@ describe('init --gates= routes through the shared installer', () => {
     expect(err).toBeInstanceOf(TotemError);
     expect((err as TotemError).code).toBe('GATE_INVALID');
     expect(fs.existsSync(path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs'))).toBe(false);
+  });
+});
+
+// ─── The export seam (mmnto-ai/totem#2856 § E) ─────────────────────────
+//
+// Run as a hook the wrapper IS the main module and runs its entry; `require`d
+// it runs no entry and exports the projection, the scanner and the budget
+// clamp. These rows drive those exports IN-PROCESS — a cell of the strip table
+// through a process spawn costs a second of wall time apiece, and the
+// end-to-end rows above already prove the seam and the hook agree.
+describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
+  it('a required wrapper exports the projection, the scanner and the clamp — and runs no entry', () => {
+    const w = wrapperExports();
+    for (const name of [
+      'blankHeredocBodies',
+      'clampBudgetMs',
+      'findHeredocSpans',
+      'ghPrMergeArgvs',
+      'isGhExecutable',
+      'projectMergeReady',
+    ] as const) {
+      expect(typeof w[name], name).toBe('function');
+    }
+    // The entry reads stdin and exits the process: requiring the module must do
+    // NEITHER — reaching this line is that assertion — and the projection must
+    // answer without a spawn.
+    expect(w.ghPrMergeArgvs('gh pr merge 5', false)).toEqual([['5']]);
+  });
+
+  it('--budget-ms can only LOWER the budget (§ D)', () => {
+    // A malformed or oversized test-only argument must never WIDEN the window
+    // in which a hung git can run the hook into the host's own kill (where the
+    // wrapper's fail-closed exit is never applied). The clamp is silent and
+    // one-directional; the value it settled on is echoed in the budget line
+    // when the arm fires.
+    const { clampBudgetMs } = wrapperExports();
+    const rows: Array<[unknown, number]> = [
+      [1, 1000],
+      ['abc', 30000],
+      [99999, 30000],
+      [1500, 1500],
+      ['1500', 1500],
+      [undefined, 30000],
+      [null, 30000],
+      ['', 30000],
+      [0, 1000],
+      [-5, 1000],
+      [999, 1000],
+      [1000, 1000],
+      [30000, 30000],
+      [30001, 30000],
+      ['20000abc', 20000],
+      [Number.NaN, 30000],
+      [Number.POSITIVE_INFINITY, 30000],
+    ];
+    for (const [raw, expected] of rows) {
+      expect(clampBudgetMs(raw), JSON.stringify(raw ?? String(raw))).toBe(expected);
+    }
+  });
+
+  it('the strip table, cell by cell: what projects and what must not (§ B)', () => {
+    const { ghPrMergeArgvs } = wrapperExports();
+    /** [command, the argv after `gh pr merge`, or null when nothing projects] */
+    const rows: Array<[string, string[] | null]> = [
+      // sudo: `-u -g -p -C -D -h -r -t -T -U` each take a separate operand,
+      // and so does each long spelling (round-5 leg, F2).
+      ['sudo gh pr merge 5', ['5']],
+      ['sudo -u root gh pr merge 5', ['5']],
+      ['sudo -g grp -p prompt gh pr merge 5', ['5']],
+      ['sudo -H -E gh pr merge 5', ['5']],
+      ['sudo -u gh pr merge 5', null],
+      ['sudo --user root gh pr merge 5', ['5']],
+      ['sudo --group grp --prompt p gh pr merge 5', ['5']],
+      ['sudo --chdir /tmp gh pr merge 5', ['5']],
+      ['sudo --chroot /r gh pr merge 5', ['5']],
+      ['sudo --host h gh pr merge 5', ['5']],
+      ['sudo --role r --type t gh pr merge 5', ['5']],
+      ['sudo --other-user u gh pr merge 5', ['5']],
+      ['sudo --command-timeout 10 gh pr merge 5', ['5']],
+      ['sudo --user gh pr merge 5', null],
+      // sudo's DESCRIBE-only options execute nothing (round-5 leg, F1).
+      ['sudo -l gh pr merge 5', null],
+      ['sudo --list gh pr merge 5', null],
+      ['sudo -v gh pr merge 5', null],
+      ['sudo --validate gh pr merge 5', null],
+      ['sudo -V gh pr merge 5', null],
+      ['sudo --version gh pr merge 5', null],
+      ['sudo -K gh pr merge 5', null],
+      ['sudo --remove-timestamp gh pr merge 5', null],
+      // …but `-E` and `-b` still run the command.
+      ['sudo -E gh pr merge 5', ['5']],
+      ['sudo -b gh pr merge 5', ['5']],
+      // env: options, then the assignment strip re-runs.
+      ['env gh pr merge 5', ['5']],
+      ['env A=1 B=2 gh pr merge 5', ['5']],
+      ['env -u X A=1 gh pr merge 5', ['5']],
+      ['env -C /tmp gh pr merge 5', ['5']],
+      ['env -u gh pr merge 5', null],
+      ['env --unset X gh pr merge 5', ['5']],
+      ['env --chdir /tmp gh pr merge 5', ['5']],
+      ['env --unset gh pr merge 5', null],
+      // `-S` / `--split-string` carries the COMMAND as its operand: env splits
+      // that string into words, prepends them to the arguments that follow and
+      // runs the first word. Every row here RUNS `gh pr merge 5` — measured on
+      // coreutils 8.32 with a stub `gh` — and every one of them projected
+      // NOTHING on the fold-2 hook, where the operand was consumed with the
+      // option (fold 3: consistency in the MISS direction was the wrong cure).
+      // The words take the option's place now and the strip reads on from
+      // them, so the assignment strip still runs and the anchor sees `gh`.
+      ["env -S 'gh pr merge 5'", ['5']],
+      ["env --split-string='gh pr merge 5'", ['5']],
+      ["env --split-string 'gh pr merge 5'", ['5']],
+      ['env -S gh pr merge 5', ['5']],
+      ['env --split-string gh pr merge 5', ['5']],
+      ['env -S "gh pr merge" 5', ['5']],
+      ["env -u X -S 'gh pr merge 5'", ['5']],
+      ["env -S 'A=1 gh pr merge 5'", ['5']],
+      // The ATTACHED SHORT spelling carries its operand too (round-7 leg,
+      // H5): a short option takes it with no separator, and the quote arm
+      // joins `-S'…'` into the same token, so both of these arrive as
+      // `-Sgh pr merge 5` and both RUN the merge (measured). Fold 3 dropped
+      // the token as a flag of env and missed them.
+      ['env -Sgh pr merge 5', ['5']],
+      ["env -S'gh pr merge 5'", ['5']],
+      // …but an `=` is NOT a separator for a short option. env reads the
+      // operand `=gh pr merge 5`, takes `=gh` as an assignment with an empty
+      // name and runs `pr merge 5` (coreutils `pr`: `pr: merge: No such file
+      // or directory`). No merge runs, and the walk projects none — it reads
+      // `=gh` as the command. The `=` split is LONG-option-only now; on the
+      // fold-3 hook it applied here too and projected PR 5, a false fire.
+      ["env -S='gh pr merge 5'", null],
+      // The BOUNDARY of that split, locked: it is env's whitespace rule and
+      // nothing else — no env escapes, no `$VAR`, no `#` comment, no quote
+      // stripping inside the string. `\_` is a SPACE to env, so the first row
+      // RUNS `gh pr merge 5` (measured) while this walk reads one word; the
+      // second NESTS `-S`, and env strips the inner quotes and runs the merge
+      // while this walk reads `"gh` as the executable. Both are fail-opens,
+      // disclosed in the template's comment.
+      ["env -S 'gh\\_pr\\_merge\\_5'", null],
+      ['env -S \'env -S "gh pr merge 5"\'', null],
+      // The operand env itself REFUSES: `$VAR` inside a `-S` string is an
+      // error (`only ${VARNAME} expansion is supported`), so coreutils runs
+      // nothing while this walk splits the words and reads `$PR` as an
+      // unresolvable target — a disclosed FALSE FIRE, asserted end-to-end by
+      // its own row below.
+      ["env -S 'gh pr merge $PR'", ['$PR']],
+      // timeout: exactly ONE positional (the duration) before the command.
+      ['timeout 30 gh pr merge 5', ['5']],
+      ['timeout -s TERM 30 gh pr merge 5', ['5']],
+      ['timeout gh pr merge 5', null],
+      ['timeout 30 sudo gh pr merge 5', ['5']],
+      ['timeout --signal KILL 30 gh pr merge 5', ['5']],
+      ['timeout --kill-after 5 30 gh pr merge 5', ['5']],
+      ['timeout --signal 30 gh pr merge 5', null],
+      // nice: `-n` takes an operand; a bare `-10` is an adjustment.
+      ['nice gh pr merge 5', ['5']],
+      ['nice -n 10 gh pr merge 5', ['5']],
+      ['nice -10 gh pr merge 5', ['5']],
+      ['nice -n gh pr merge 5', null],
+      ['nice --adjustment 10 gh pr merge 5', ['5']],
+      ['nice --adjustment gh pr merge 5', null],
+      // nohup: no options of its own.
+      ['nohup gh pr merge 5', ['5']],
+      // command: `-p` is transparent, `-v`/`-V` describe and never execute.
+      ['command gh pr merge 5', ['5']],
+      ['command -p gh pr merge 5', ['5']],
+      ['command -v gh pr merge 5', null],
+      ['command -V gh pr merge 5', null],
+      // exec: `-a` takes the argv[0] operand; `-c` and `-l` do not.
+      ['exec gh pr merge 5', ['5']],
+      ['exec -a x gh pr merge 5', ['5']],
+      ['exec -c -l gh pr merge 5', ['5']],
+      ['exec -a gh pr merge 5', null],
+      // time: bash's RESERVED WORD, `time [-p] [--] pipeline`. `-p` is its one
+      // option, `--` ends options, and ANY other `-` token is a command bash
+      // cannot find — nothing runs, nothing projects (round-5 leg, F3). GNU
+      // `/usr/bin/time`'s `-o`/`-f` grammar is a different program's, and a
+      // path-spelled wrapper is not on the closed table.
+      ['time gh pr merge 5', ['5']],
+      ['time -p gh pr merge 5', ['5']],
+      ['time -- gh pr merge 5', ['5']],
+      ['time -o out.txt gh pr merge 5', null],
+      ['time -f x gh pr merge 5', null],
+      ['time -o gh pr merge 5', null],
+      ['/usr/bin/time -f x gh pr merge 5', null],
+      // eval: depth 1 only.
+      ['eval gh pr merge 5', ['5']],
+      ['eval "gh pr merge 5"', ['5']],
+      ['eval "eval \\"gh pr merge 5\\""', null],
+      // Not on the closed list.
+      ['npx gh pr merge 5', null],
+      ['xargs -n1 gh pr merge 5', null],
+      ['watch gh pr merge 5', null],
+      // The flags of the merge itself still ride through untouched.
+      ['sudo gh pr merge 5 --squash', ['5', '--squash']],
+    ];
+    for (const [command, expected] of rows) {
+      const found = ghPrMergeArgvs(command, false);
+      expect(found, command).toEqual(expected === null ? [] : [expected]);
+    }
+  });
+
+  it('a redirection is dropped with its file ANYWHERE in the segment (§ C, round-5 leg F5 + F12)', () => {
+    // The argv the rows above can only assert through a payload, asserted
+    // exactly: an operator alone takes the file token with it, a fused one
+    // goes alone, and neither ever reaches `gh pr merge`'s argv.
+    const { ghPrMergeArgvs } = wrapperExports();
+    const rows: Array<[string, string[] | null]> = [
+      // Trailing — the shape that rode `>` in as the merge's target. THIS is
+      // where `ROW_TRAILING_REDIRECT_PR` discriminates (round-6 leg, G7):
+      // measured on a copy of the hook with the strip removed, its argv is
+      // `['5', '>', 'out.txt']` — while its PAYLOAD is `pr: 5` either way,
+      // because a positional after the first is ignored. Its two branch-payload
+      // siblings below bite end-to-end as well (`branch: '>'`, `branch: '2>'`);
+      // this one bites only here.
+      [ROW_TRAILING_REDIRECT_PR, ['5']],
+      ['gh pr merge 5 >out.txt', ['5']],
+      [ROW_TRAILING_REDIRECT_BRANCH, ['--squash']],
+      [ROW_TRAILING_REDIRECT_ERR, ['--squash']],
+      // Between the executable and its verb — the shape that broke the anchor.
+      ['gh > out.txt pr merge 5', ['5']],
+      ['gh pr > out.txt merge 5', ['5']],
+      // Leading, alone and fused, in every spelling the two patterns read.
+      ['> out.txt gh pr merge 5', ['5']],
+      ['2>/dev/null gh pr merge 5', ['5']],
+      ['<<<bar gh pr merge 5', ['5']],
+      ['<<< bar gh pr merge 5', ['5']],
+      ['2<> file gh pr merge 5', ['5']],
+      ['2<>file gh pr merge 5', ['5']],
+      // A `<<EOF` head is a fused form and drops harmlessly — its body was
+      // blanked by the scanner long before the tokenizer ran.
+      [ROW_HEREDOC_AS_OPERAND, ['5']],
+      [ROW_HERESTRING_AS_OPERAND, ['6']],
+      // QUOTED or ESCAPED OPERATOR, so not an operator at all (round-6 leg,
+      // G1, corrected by round-7's H1): the argv asserted exactly, which is
+      // what the payload rows can only imply. Without the literal index these
+      // read `['-b', '5']`, `['-t', '--repo', 'owner/name', '5']` and
+      // `['-b', '5']`. In each the first literal character is at index 0 — on
+      // the operator itself — so nothing is stripped.
+      [ROW_LITERAL_BODY_PR, ['-b', '<br>', '5']],
+      [ROW_LITERAL_SUBJECT_REPO, ['-t', '>>', '--repo', 'owner/name', '5']],
+      [ROW_LITERAL_ESCAPED_BODY, ['-b', '<br>', '5']],
+      [ROW_QUOTED_OPERATOR_DATA, ['--squash', '>out.txt']],
+      // …while the UNQUOTED spelling of the same text keeps stripping.
+      ['gh pr merge -b <br> 5', ['-b', '5']],
+      // A QUOTED FILENAME is a redirection all the same, because the operator
+      // characters are bare (round-7 leg, H1/H2): the prefix `>` / `2>` / `<`
+      // / `<<<` / `>>` lies entirely before the token's first literal
+      // character, so the token drops. Every cell here read as DATA under the
+      // round-6 rule — `['--squash', '>merge.log']`, `['5', '>out.txt']`, and
+      // nothing at all for the leading spellings, where the unstripped
+      // operator word sat in front of `gh` and broke the anchor.
+      [ROW_QUOTED_REDIRECT_BRANCH, ['--squash']],
+      [ROW_QUOTED_REDIRECT_ERR, ['--squash']],
+      [ROW_QUOTED_APPEND_BRANCH, ['--squash']],
+      [ROW_QUOTED_VAR_BRANCH, ['--squash']],
+      [ROW_QUOTED_REDIRECT_PR, ['5']],
+      ['>"out.txt" gh pr merge 5', ['5']],
+      ['2>"err.log" gh pr merge 5', ['5']],
+      ['<"in.txt" gh pr merge 5', ['5']],
+      ["<<<'bar' gh pr merge 5", ['5']],
+      // The operator ALONE with a quoted file: the file token goes with it
+      // however it is spelled.
+      ['> "out.txt" gh pr merge 5', ['5']],
+      ['2> "err.log" gh pr merge 5', ['5']],
+      // …and the quoted filename may carry WHITESPACE (round-8 leg, J1): the
+      // operator prefix is what decides, so the fused pattern's filename class
+      // is `[\s\S]+` now. On the fold-4 hook, whose class excluded whitespace,
+      // the leading pair matched neither pattern and projected NOTHING (bash
+      // merges PR 5 in both), and the trailing pair rode the whole word into
+      // argv as `['--squash', '>merge log.txt']` and
+      // `['--squash', '<<<bar baz']`.
+      ['>"out file.txt" gh pr merge 5', ['5']],
+      ['<<<"bar baz" gh pr merge 5', ['5']],
+      [ROW_WS_REDIRECT_BRANCH, ['--squash']],
+      [ROW_WS_HERESTRING_BRANCH, ['--squash']],
+      ['gh pr merge 5 >"out file.txt"', ['5']],
+      // RESIDUE of that rule, locked (round-8 leg, J5): an empty quote pair or
+      // a quoted operator abutting a real one is ONE word here, where bash
+      // passes the quoted part as an argument (`[--squash] []`,
+      // `[--squash] [>]`) and redirects the rest. Text only, and the word this
+      // walk keeps is a target the engine denies.
+      [ROW_EMPTY_QUOTE_ABUT, ['--squash', '>out.txt']],
+      [ROW_QUOTED_OPERATOR_ABUT, ['--squash', '>>out.txt']],
+      // …and the operator prefix is BOUNDED by that same index (fold 6): the
+      // quote or escape sits INSIDE the prefix here, so the operator is the
+      // bare `>` / `<<` / `2<` and the rest is the filename. Each of these
+      // read `[]` on the fold-5 hook — the greedy `>>` / `<<<` / `2<>` ended
+      // past the index, the word was kept, and it stood in front of `gh` —
+      // and the trailing twin read `['--squash', '>>merge.log']`. Bash merges
+      // PR 5 in all six (the `2<` row when the file `>out.txt` exists).
+      ['>">"out.txt gh pr merge 5', ['5']],
+      [">'>'out.txt gh pr merge 5", ['5']],
+      ['>\\>out.txt gh pr merge 5', ['5']],
+      ['>">a "b gh pr merge 5', ['5']],
+      ['<<"<"bar gh pr merge 5', ['5']],
+      ['2<">"out.txt gh pr merge 5', ['5']],
+      [ROW_ABUT_REDIRECT_BRANCH, ['--squash']],
+      // The keep-rows of the bounded prefix: a first literal character at
+      // index 0 leaves no operator prefix before it, so the word is data
+      // whatever its text (`>out.txt` as an argument, `a > b` as a body).
+      [ROW_LITERAL_BODY_SPACED, ['-b', 'a > b', '5']],
+      // The disclosed FALSE FIRE of the bounded prefix, locked both ways
+      // round: an empty quote pair inside the prefix. Bash fails the
+      // redirection on the empty filename and runs NOTHING (exit 1, measured
+      // in an empty directory) while these project a merge — deny direction.
+      // On the fold-5 hook the leading row read `[]` and the trailing one
+      // `['--squash', '>>out.txt']`.
+      [ROW_EMPTY_PAIR_IN_OPERATOR_LEAD, ['5']],
+      [ROW_EMPTY_PAIR_IN_OPERATOR, ['--squash']],
+      // RESIDUE, unreachable rather than claimed: `|` and `&` are the
+      // tokenizer's own separators and end the token before the operator is
+      // whole, so these two never present a redirection to strip.
+      ['>| out.txt gh pr merge 5', null],
+      ['2>&1 gh pr merge 5', null],
+    ];
+    for (const [command, expected] of rows) {
+      const found = ghPrMergeArgvs(command, false);
+      expect(found, JSON.stringify(command)).toEqual(expected === null ? [] : [expected]);
+    }
+  });
+
+  it('a trailing backtick continues the LINE in ps mode, escapes a newline inside a word, and separates in bash (round-6 leg, G3; round-7 leg, H4)', () => {
+    // The argv exactly, because the payload cannot tell the whole story: the
+    // fold-1 hook read `gh pr merge 5 <backtick><LF>--admin` as
+    // `['5', '<backtick>']` — the same PR 5, with the flag lost to the next
+    // segment — so only this assertion bites on that row. The other two rows
+    // were `['<backtick>']` there, an `unresolvedTarget` payload.
+    const { ghPrMergeArgvs } = wrapperExports();
+    const rows: Array<[string, string[]]> = [
+      [PS_LINE_CONTINUATION_ROWS[0], ['5']],
+      [PS_LINE_CONTINUATION_ROWS[1], ['5', '--admin']],
+      [PS_LINE_CONTINUATION_ROWS[2], ['5']],
+    ];
+    for (const [command, expected] of rows) {
+      expect(ghPrMergeArgvs(command, true), JSON.stringify(command)).toEqual([expected]);
+    }
+
+    // INSIDE a word the escaped newline lands in the token, so the anchor
+    // reads `merg<LF>e` (or the executable `g<LF>h`) and matches nothing —
+    // exactly what pwsh does with it (round-7 leg, H4). On the fold-3 hook,
+    // which joined at any position, both of these were `[['5']]`.
+    for (const command of PS_CONTINUATION_INSIDE_WORD_ROWS) {
+      expect(ghPrMergeArgvs(command, true), JSON.stringify(command)).toEqual([]);
+    }
+    // The token really carries the newline rather than losing the characters.
+    expect(ghPrMergeArgvs('gh pr merge 5 x`\ny', true)).toEqual([['5', 'x\ny']]);
+    // A trailing backtick with no newline after it is untouched by the arm —
+    // the disclosed false fire, with the backtick riding on as its own token.
+    expect(ghPrMergeArgvs(ROW_PS_TRAILING_BACKTICK, true)).toEqual([['5', '`']]);
+    // …and the arm wants the newline IMMEDIATELY (round-8 leg, J3): put a
+    // space between the backtick and the newline and pwsh escapes that space
+    // instead, running `gh pr merge` with no target, while the separator arm
+    // here hands the backtick on as the target. The false fire, exactly.
+    expect(ghPrMergeArgvs(ROW_PS_BACKTICK_SPACE_NEWLINE, true)).toEqual([['`']]);
+
+    // Bash: a backtick opens a command substitution whatever follows it, so
+    // the separator stands and the target is the backtick.
+    expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[0], false)).toEqual([['`']]);
+    expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[1], false)).toEqual([['5', '`']]);
+    // …and bash's own backslash-newline still JOINS inside a word, which is
+    // the difference this arm turns on.
+    expect(ghPrMergeArgvs('gh pr mer\\\nge 5', false)).toEqual([['5']]);
+  });
+
+  it('the span blanker replaces a body with spaces and keeps every offset (2857 § 1)', () => {
+    const { blankHeredocBodies, findHeredocSpans } = wrapperExports();
+    const command = 'cat <<EOF\ngh pr merge 5\nEOF\ngh pr merge 7';
+    const blanked = blankHeredocBodies(command, false);
+    // Core's shape: same length, the body's characters replaced by spaces, the
+    // operator line and the terminator line untouched.
+    expect(blanked).toHaveLength(command.length);
+    const [span] = findHeredocSpans(command, false);
+    expect(blanked.slice(span.bodyStart, span.bodyEnd)).toBe(
+      ' '.repeat(span.bodyEnd - span.bodyStart),
+    );
+    expect(blanked.slice(0, span.bodyStart)).toBe(command.slice(0, span.bodyStart));
+    expect(blanked.slice(span.bodyEnd)).toBe(command.slice(span.bodyEnd));
+  });
+
+  it('isGhExecutable reads the basename after the last / or backslash (§ A)', () => {
+    const { isGhExecutable } = wrapperExports();
+    for (const token of [
+      'gh',
+      'gh.exe',
+      'gh.EXE',
+      './gh',
+      '../bin/gh',
+      '/usr/local/bin/gh',
+      'C:\\tools\\gh.exe',
+      '\\\\server\\share\\gh',
+    ]) {
+      expect(isGhExecutable(token), token).toBe(true);
+    }
+    for (const token of [
+      '',
+      'ghx',
+      'gh.cmd',
+      'GH',
+      'github',
+      'gh.exe.bak',
+      'mygh',
+      '$GH',
+      '${GH}',
+      'C:toolsgh.exe',
+    ]) {
+      expect(isGhExecutable(token), token).toBe(false);
+    }
+  });
+});
+
+// ─── Scanner parity with core (spec `.totem/specs/2857.md` § 3) ────────
+//
+// The wrapper's heredoc scanner is a VERBATIM port of core's `findHeredocs`
+// (`packages/core/src/transport-shield.ts`). A distributed, dependency-free
+// hook cannot import core — its exports map carries `import` conditions only
+// and no scanner subpath (mmnto-ai/totem#2851), and the package is not linked
+// at this monorepo's root — so the cohort lesson for an inlined standalone
+// utility applies: port it verbatim, anchor BOTH sites, and back the copy with
+// an executable parity test. This is that test.
+//
+// It compares SPANS, not behaviour: a divergence fails here, naming the input,
+// instead of surfacing later as a heredoc one scanner opens and the other does
+// not — which is a blanked `gh pr merge` on a following line, a lost advisory
+// read under PILOT and a bypass under STRICT. The two rows the fix flips from
+// "never spawns" to projecting (mmnto-ai/totem#2855's locked divergences) are
+// the proof that this lock BITES: they are exactly the behaviour the ported
+// arms add.
+describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
+  let findHeredocs: CoreFindHeredocs | null = null;
+
+  // The ONE async step: core's scanner is a TypeScript source this suite loads
+  // at run time. Loading it here keeps every row below synchronous, which is
+  // what they are.
+  beforeAll(async () => {
+    findHeredocs = await loadCoreFindHeredocs();
+  });
+
+  /** Core's spans in the wrapper's shape — same fields, minus the unused `body`. */
+  function coreSpans(command: string, powershell: boolean): WrapperSpan[] {
+    if (findHeredocs === null) throw new Error('core findHeredocs was not loaded');
+    return findHeredocs(command, { powershell }).map((s) => ({
+      delimiter: s.delimiter,
+      quoted: s.quoted,
+      stripTabs: s.stripTabs,
+      unterminated: s.unterminated,
+      bodyStart: s.bodyStart,
+      bodyEnd: s.bodyEnd,
+    }));
+  }
+
+  /**
+   * A seeded pseudo-random corpus: a 32-bit LCG (Numerical Recipes constants)
+   * with a FIXED seed, so the strings are identical on every machine and every
+   * run and a divergence is reproducible from the seed alone. The alphabet is
+   * the characters the two walks branch on, plus the multi-character tokens
+   * they branch on as a unit.
+   */
+  function fuzzCorpus(count: number): string[] {
+    const alphabet = [
+      'a',
+      'b',
+      '_',
+      '-',
+      '.',
+      ':',
+      '*',
+      '(',
+      ')',
+      '#',
+      '$',
+      '<',
+      '>',
+      "'",
+      '"',
+      '\\',
+      '`',
+      '|',
+      '&',
+      ';',
+      ' ',
+      '\n',
+      '\t',
+      '<<',
+      '<<-',
+      '<<<',
+      '$(',
+      '((',
+      '<#',
+      '#>',
+      'EOF',
+    ];
+    let state = 20260919 >>> 0;
+    const next = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const out: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const draws = 1 + Math.floor(next() * 40);
+      let s = '';
+      for (let j = 0; j < draws; j += 1) {
+        s += alphabet[Math.floor(next() * alphabet.length)];
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  it('agrees with core over every command in this file, in both modes', () => {
+    const { findHeredocSpans } = wrapperExports();
+    for (const command of PARITY_COMMAND_CORPUS) {
+      for (const powershell of [false, true]) {
+        expect(
+          findHeredocSpans(command, powershell),
+          JSON.stringify({ command, powershell }),
+        ).toEqual(coreSpans(command, powershell));
+      }
+    }
+  });
+
+  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', () => {
+    const { findHeredocSpans } = wrapperExports();
+    const corpus = fuzzCorpus(3000);
+    expect(corpus).toHaveLength(3000);
+    for (const command of corpus) {
+      for (const powershell of [false, true]) {
+        expect(
+          findHeredocSpans(command, powershell),
+          JSON.stringify({ command, powershell }),
+        ).toEqual(coreSpans(command, powershell));
+      }
+    }
+  });
+
+  it('the corpus carries the delimiters the issue names, terminated and not', () => {
+    // The guard on the guard: a corpus that silently lost these rows would
+    // pass the two parity rows above while testing nothing about the bare
+    // delimiter class the port widens.
+    expect(DELIMITER_PARITY_ROWS).toHaveLength(PARITY_DELIMITERS.length * 2);
+    for (const delimiter of PARITY_DELIMITERS) {
+      expect(PARITY_COMMAND_CORPUS.some((c) => c.includes('<<' + delimiter))).toBe(true);
+      // Each one really is a heredoc to CORE — otherwise the row would prove
+      // nothing about the delimiter class.
+      const spans = coreSpans(
+        'cat <<' + delimiter + '\nbody\n' + delimiter + '\ngh pr merge 5',
+        false,
+      );
+      expect(spans, delimiter).toHaveLength(1);
+      expect(spans[0].delimiter, delimiter).toBe(delimiter);
+      expect(spans[0].unterminated, delimiter).toBe(false);
+    }
   });
 });
