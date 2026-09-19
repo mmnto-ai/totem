@@ -1781,10 +1781,14 @@ function blankHeredocBodies(command, powershell) {
 // reserved words that introduce a compound command (\`time\` and \`coproc\` are
 // reserved words too — the round-2 leg found them missing), the negation, and
 // the builtins that execute their operand as the command (\`exec\`, \`command\`,
-// and \`eval\` on an UNQUOTED operand — \`eval "gh pr merge 5"\` hands the shell a
-// single quoted word, which this walk reads as data, a disclosed miss below).
-// Stripped from a segment's front, in any run, before the \`gh pr merge\`
-// anchor is read.
+// \`eval\`). Stripped from a segment's front, in any run, before the
+// \`gh pr merge\` anchor is read.
+//
+// Four of them — \`time\`, \`exec\`, \`command\`, \`eval\` — also carry an OPTION
+// grammar, so they appear again in TRANSPARENT_WRAPPERS below and the strip
+// reads them from THERE (the table is consulted first). They stay here so this
+// list still reads as what it is: every word the shell itself skips at command
+// position.
 const COMMAND_POSITION_WORDS = [
   'do',
   'then',
@@ -1826,13 +1830,53 @@ function isGhExecutable(token) {
   return base.length === 6 && base.slice(0, 3) === 'gh.' && base.slice(3).toLowerCase() === 'exe';
 }
 
+// ─── Transparent wrapper programs (mmnto-ai/totem#2856 § B) ─────────────
+// A CLOSED table of words that RUN their operand as the command, with the
+// option grammar needed to find that operand:
+//   operand     — options that take a SEPARATE next token (skip the option AND
+//                 that token);
+//   positional  — how many non-option words the program itself consumes before
+//                 the command (only \`timeout\`'s duration);
+//   terminator  — whether a \`--\` ends its options;
+//   describe    — options that make the word DESCRIBE its operand instead of
+//                 executing it (\`command -v\`): the segment ends with NO
+//                 projection, because nothing is executed;
+//   evaluates   — the builtin whose operand is a STRING to re-tokenize.
+// Every other \`-\` token is skipped as a flag of the wrapper, so a long option
+// with an attached value (\`--user=x\`, \`--kill-after=5\`, \`--adjustment=10\`)
+// needs no entry and a bare \`-10\` reads as \`nice\`'s adjustment. After a
+// wrapper is consumed the strip loops, so the assignment prefixes of
+// \`env NAME=v gh …\` and a wrapper wrapping a wrapper both resolve.
+//
+// The table is CLOSED on purpose (ADR-082 A1, Tenet 19): a program that is not
+// on it IS the command, because this walk cannot know which of an arbitrary
+// program's operands is a command — \`npx\` runs a package, \`xargs\` builds its
+// own argv. Widening it is a later PR with its own rows, never a guess here.
+const TRANSPARENT_WRAPPERS = {
+  sudo: {
+    operand: ['-u', '-g', '-p', '-C', '-D', '-h', '-r', '-t', '-T', '-U'],
+    positional: 0,
+    terminator: true,
+  },
+  env: { operand: ['-u', '-C', '-S'], positional: 0, terminator: false },
+  timeout: { operand: ['-k', '-s'], positional: 1, terminator: true },
+  nice: { operand: ['-n'], positional: 0, terminator: false },
+  nohup: { operand: [], positional: 0, terminator: false },
+  command: { operand: [], positional: 0, terminator: false, describe: ['-v', '-V'] },
+  exec: { operand: ['-a'], positional: 0, terminator: false },
+  time: { operand: ['-o', '-f'], positional: 0, terminator: true },
+  eval: { operand: [], positional: 0, terminator: false, evaluates: true },
+};
+
 /**
  * The argv after EVERY \`gh pr merge\` at command position in the command —
  * one array per merge, in command order — or an empty array when there is
  * none. A compound command that merges twice yields two, and the wrapper
  * judges each (mmnto-ai/totem#2844 round 1).
  */
-function ghPrMergeArgvs(rawCommand, powershell) {
+function ghPrMergeArgvs(rawCommand, powershell, depth) {
+  // \`eval\` re-enters this function ONCE (§ B); every other caller is depth 0.
+  const level = typeof depth === 'number' ? depth : 0;
   const command = blankHeredocBodies(rawCommand, powershell === true);
   const segments = [];
   let current = [];
@@ -1932,11 +1976,61 @@ function ghPrMergeArgvs(rawCommand, powershell) {
   const found = [];
   for (const segment of segments) {
     let tokens = segment;
-    while (
-      tokens.length > 0 &&
-      (COMMAND_POSITION_WORDS.indexOf(tokens[0]) !== -1 || isAssignmentPrefix(tokens[0]))
-    ) {
+    // Strip everything at the segment's front that is NOT the command, in any
+    // run: a transparent wrapper with its options (the table above), a
+    // command-position word, an assignment prefix. The loop re-runs after each
+    // one, so \`env -u X A=1 gh …\` and \`sudo -u root timeout 30 gh …\` both
+    // resolve to the same anchor test.
+    let stripping = true;
+    while (stripping && tokens.length > 0) {
+      const head = tokens[0];
+      const wrapper = Object.prototype.hasOwnProperty.call(TRANSPARENT_WRAPPERS, head)
+        ? TRANSPARENT_WRAPPERS[head]
+        : null;
+      if (wrapper === null) {
+        if (COMMAND_POSITION_WORDS.indexOf(head) !== -1 || isAssignmentPrefix(head)) {
+          tokens = tokens.slice(1);
+          continue;
+        }
+        break;
+      }
       tokens = tokens.slice(1);
+      // \`eval\` hands the shell a STRING: join what is left with one space and
+      // re-tokenize it ONCE. That inner projection IS this segment's, and the
+      // depth bound keeps \`eval "eval \\"gh pr merge 5\\""\` a disclosed miss.
+      if (wrapper.evaluates === true) {
+        if (level < 1 && tokens.length > 0) {
+          const inner = ghPrMergeArgvs(tokens.join(' '), powershell, level + 1);
+          for (let k = 0; k < inner.length; k++) {
+            found.push(inner[k]);
+          }
+        }
+        tokens = [];
+        break;
+      }
+      while (tokens.length > 0 && tokens[0].charAt(0) === '-' && tokens[0].length > 1) {
+        const opt = tokens[0];
+        if (opt === '--') {
+          tokens = tokens.slice(1);
+          if (wrapper.terminator === true) break;
+          continue;
+        }
+        if (wrapper.describe !== undefined && wrapper.describe.indexOf(opt) !== -1) {
+          // \`command -v gh …\` prints a path; it runs nothing, so there is
+          // nothing to judge and nothing to project.
+          tokens = [];
+          stripping = false;
+          break;
+        }
+        if (wrapper.operand.indexOf(opt) !== -1) {
+          tokens = tokens.slice(2);
+          continue;
+        }
+        tokens = tokens.slice(1);
+      }
+      for (let p = 0; stripping && p < wrapper.positional && tokens.length > 0; p++) {
+        tokens = tokens.slice(1);
+      }
     }
     if (
       tokens.length >= 3 &&

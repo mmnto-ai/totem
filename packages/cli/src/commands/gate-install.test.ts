@@ -1111,21 +1111,8 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
         // An UNTERMINATED body runs to the end of the command and is still data.
         'cat <<EOF\ngh pr merge 5',
-        // DISCLOSED misses (the gate does not fire — the safe direction): a
-        // wrapper PROGRAM takes the first token, so the position anchor never
-        // sees `gh` (an assignment prefix no longer hides it — PR round 1).
-        'sudo gh pr merge 5',
-        'timeout 30 gh pr merge 5',
-        'env GH_TOKEN=x gh pr merge 5',
         // Round 2 (the leg's F1/F3), disclosed in the template's comment: a
-        // merge handed over as ONE quoted word, a builtin with a flag before
-        // `gh`, a backtick substitution, a leading redirection.
-        'eval "gh pr merge 5"',
-        'command -p gh pr merge 5',
-        'exec -a x gh pr merge 5',
-        // Round 3 (the leg's F1): the reserved word carrying its own flag.
-        'time -p gh pr merge 5',
-        'time -- gh pr merge 5',
+        // backtick substitution and a leading redirection.
         'echo `gh pr merge 5`',
         '> out.txt gh pr merge 5',
         // The same round's legs (mmnto-ai/totem#2857): two divergences from
@@ -1171,9 +1158,66 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
+    it('a transparent wrapper program and a flag-carrying builtin are stripped (mmnto-ai/totem#2856 § B)', () => {
+      // A wrapper PROGRAM took the segment's first token, so the anchor never
+      // saw `gh` and the merge ran unjudged. The strip now consumes a CLOSED
+      // list of transparent programs with their option grammar, re-runs the
+      // assignment strip after them, and only then reads the executable.
+      initGitRepo();
+      for (const command of [
+        'sudo gh pr merge 5',
+        'sudo -u root gh pr merge 5',
+        'sudo --user=root gh pr merge 5',
+        'sudo -- gh pr merge 5',
+        'env GH_TOKEN=x gh pr merge 5',
+        'env -u X A=1 gh pr merge 5',
+        'timeout 30 gh pr merge 5',
+        'timeout 30s gh pr merge 5',
+        'timeout -k 5 30 gh pr merge 5',
+        'timeout --kill-after=5 30 gh pr merge 5',
+        'timeout --foreground 30 gh pr merge 5',
+        'nice -n 10 gh pr merge 5',
+        'nice --adjustment=10 gh pr merge 5',
+        'nice -10 gh pr merge 5',
+        'nohup gh pr merge 5',
+        'command -p gh pr merge 5',
+        'exec -a x gh pr merge 5',
+        'time -p gh pr merge 5',
+        'time -- gh pr merge 5',
+        // A wrapper wrapping a wrapper: the strip loops until the head is the
+        // command itself.
+        'sudo -u root timeout 30 gh pr merge 5',
+        'nohup nice -n 5 gh pr merge 5',
+        // `eval` re-tokenizes its operand ONCE (depth 1) and projects from the
+        // inner string — a merge handed over as one quoted word.
+        'eval "gh pr merge 5"',
+        "eval 'gh pr merge 5'",
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+    });
+
     it('every widened form has a MUTANT that must NOT project, and never spawns (mmnto-ai/totem#2856 § F)', () => {
       initGitRepo();
       for (const command of [
+        // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
+        'sudo -u gh pr merge 5',
+        // `timeout` with no duration: the grammar consumes exactly one
+        // positional before the command, so `gh` reads as the duration. A
+        // disclosed false-negative of the grammar, locked here (the form is
+        // invalid to `timeout` itself).
+        'timeout gh pr merge 5',
+        // `command -v` / `-V` DESCRIBE their operand, they never execute it.
+        'command -v gh pr merge 5',
+        'command -V gh pr merge 5',
+        // Not on the closed list: `npx` runs a package, never the GitHub CLI.
+        'npx gh pr merge 5',
+        'xargs gh pr merge 5',
+        'bash -c "gh pr merge 5"',
+        // `eval` is bounded to ONE level.
+        'eval "eval \\"gh pr merge 5\\""',
         // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
         // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
         // wrapper cannot expand.
@@ -1809,6 +1853,67 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     // NEITHER — reaching this line is that assertion — and the projection must
     // answer without a spawn.
     expect(w.ghPrMergeArgvs('gh pr merge 5', false)).toEqual([['5']]);
+  });
+
+  it('the strip table, cell by cell: what projects and what must not (§ B)', () => {
+    const { ghPrMergeArgvs } = wrapperExports();
+    /** [command, the argv after `gh pr merge`, or null when nothing projects] */
+    const rows: Array<[string, string[] | null]> = [
+      // sudo: `-u -g -p -C -D -h -r -t -T -U` each take a separate operand.
+      ['sudo gh pr merge 5', ['5']],
+      ['sudo -u root gh pr merge 5', ['5']],
+      ['sudo -g grp -p prompt gh pr merge 5', ['5']],
+      ['sudo -H -E gh pr merge 5', ['5']],
+      ['sudo -u gh pr merge 5', null],
+      // env: options, then the assignment strip re-runs.
+      ['env gh pr merge 5', ['5']],
+      ['env A=1 B=2 gh pr merge 5', ['5']],
+      ['env -u X A=1 gh pr merge 5', ['5']],
+      ['env -C /tmp gh pr merge 5', ['5']],
+      ['env -u gh pr merge 5', null],
+      // timeout: exactly ONE positional (the duration) before the command.
+      ['timeout 30 gh pr merge 5', ['5']],
+      ['timeout -s TERM 30 gh pr merge 5', ['5']],
+      ['timeout gh pr merge 5', null],
+      ['timeout 30 sudo gh pr merge 5', ['5']],
+      // nice: `-n` takes an operand; a bare `-10` is an adjustment.
+      ['nice gh pr merge 5', ['5']],
+      ['nice -n 10 gh pr merge 5', ['5']],
+      ['nice -10 gh pr merge 5', ['5']],
+      ['nice -n gh pr merge 5', null],
+      // nohup: no options of its own.
+      ['nohup gh pr merge 5', ['5']],
+      // command: `-p` is transparent, `-v`/`-V` describe and never execute.
+      ['command gh pr merge 5', ['5']],
+      ['command -p gh pr merge 5', ['5']],
+      ['command -v gh pr merge 5', null],
+      ['command -V gh pr merge 5', null],
+      // exec: `-a` takes the argv[0] operand; `-c` and `-l` do not.
+      ['exec gh pr merge 5', ['5']],
+      ['exec -a x gh pr merge 5', ['5']],
+      ['exec -c -l gh pr merge 5', ['5']],
+      ['exec -a gh pr merge 5', null],
+      // time: `-o` and `-f` take an operand; `-p` does not; `--` ends options.
+      ['time gh pr merge 5', ['5']],
+      ['time -p gh pr merge 5', ['5']],
+      ['time -o out.txt gh pr merge 5', ['5']],
+      ['time -- gh pr merge 5', ['5']],
+      ['time -o gh pr merge 5', null],
+      // eval: depth 1 only.
+      ['eval gh pr merge 5', ['5']],
+      ['eval "gh pr merge 5"', ['5']],
+      ['eval "eval \\"gh pr merge 5\\""', null],
+      // Not on the closed list.
+      ['npx gh pr merge 5', null],
+      ['xargs -n1 gh pr merge 5', null],
+      ['watch gh pr merge 5', null],
+      // The flags of the merge itself still ride through untouched.
+      ['sudo gh pr merge 5 --squash', ['5', '--squash']],
+    ];
+    for (const [command, expected] of rows) {
+      const found = ghPrMergeArgvs(command, false);
+      expect(found, command).toEqual(expected === null ? [] : [expected]);
+    }
   });
 
   it('isGhExecutable reads the basename after the last / or backslash (§ A)', () => {
