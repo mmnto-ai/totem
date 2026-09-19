@@ -221,6 +221,11 @@ const NEVER_SPAWNS_ROWS = [
 const EXECUTABLE_SPELLING_ROWS = [
   'gh.exe pr merge 5',
   'gh.EXE pr merge 5',
+  // win32 resolves file names without case, so the WHOLE `gh.exe` basename
+  // compares case-insensitively — the stem-only lower-casing left these two
+  // unjudged (CodeRabbit on mmnto-ai/totem#2894). The bare `gh` stays exact.
+  'GH.EXE pr merge 5',
+  'Gh.exe pr merge 5',
   './gh pr merge 5',
   '/usr/local/bin/gh pr merge 5',
   // A win32 path reaches the executable test only when it is QUOTED: this walk
@@ -243,6 +248,14 @@ const WRAPPER_STRIP_ROWS = [
   'sudo --user root gh pr merge 5',
   'sudo --group grp gh pr merge 5',
   'sudo --prompt p gh pr merge 5',
+  // The SHORT separate-operand spellings the table omitted (Greptile P1 on
+  // mmnto-ai/totem#2894 named `-R`; `-a` and `-c` are the same class, per
+  // sudo(8)): the generic path dropped the option alone and left its operand
+  // standing at command position, so each of these ran unjudged.
+  'sudo -R /chroot gh pr merge 5',
+  'sudo --chroot /chroot gh pr merge 5',
+  'sudo -a bsdauth gh pr merge 5',
+  'sudo -c staff gh pr merge 5',
   // sudo options that are NOT describe-only: `-E` keeps the environment, `-b`
   // runs the command in the background. Both still execute the operand.
   'sudo -E gh pr merge 5',
@@ -2989,9 +3002,12 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     const { ghPrMergeArgvs } = wrapperExports();
     /** [command, the argv after `gh pr merge`, or null when nothing projects] */
     const rows: Array<[string, string[] | null]> = [
-      // sudo: `-u -g -p -C -D -h -r -t -T -U` each take a separate operand,
-      // and so does each long spelling (round-5 leg, F2).
+      // sudo: `-a -c -u -g -p -C -D -h -R -r -t -T -U` each take a separate
+      // operand, and so does each long spelling (round-5 leg, F2; `-R`, `-a`
+      // and `-c` added on the mmnto-ai/totem#2894 bot round).
       ['sudo gh pr merge 5', ['5']],
+      ['sudo -R /chroot gh pr merge 5', ['5']],
+      ['sudo -a bsdauth -c staff gh pr merge 5', ['5']],
       ['sudo -u root gh pr merge 5', ['5']],
       ['sudo -g grp -p prompt gh pr merge 5', ['5']],
       ['sudo -H -E gh pr merge 5', ['5']],
@@ -3311,6 +3327,11 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       'gh',
       'gh.exe',
       'gh.EXE',
+      // The whole `.exe` basename is case-insensitive (win32 resolves file
+      // names without case); the bare `gh` below stays exact.
+      'GH.EXE',
+      'Gh.exe',
+      'C:\\tools\\GH.EXE',
       './gh',
       '../bin/gh',
       '/usr/local/bin/gh',

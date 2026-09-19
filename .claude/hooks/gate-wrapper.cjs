@@ -610,7 +610,13 @@ function isGhExecutable(token) {
   const cut = slash > back ? slash : back;
   const base = cut === -1 ? token : token.slice(cut + 1);
   if (base === 'gh') return true;
-  return base.length === 6 && base.slice(0, 3) === 'gh.' && base.slice(3).toLowerCase() === 'exe';
+  // The whole `gh.exe` basename compares case-insensitively: win32 resolves
+  // file names without case, so `GH.EXE pr merge 5` and `Gh.exe pr merge 5`
+  // run the same executable as `gh.exe pr merge 5` (CodeRabbit on
+  // mmnto-ai/totem#2894 — the stem-only lower-casing left both unjudged). The
+  // bare `gh` stays EXACT: `GH` is a different name on a POSIX filesystem,
+  // and on win32 it is a disclosed miss locked in the suite.
+  return base.length === 6 && base.toLowerCase() === 'gh.exe';
 }
 
 // ─── Transparent wrapper programs (mmnto-ai/totem#2856 § B) ─────────────
@@ -649,17 +655,31 @@ function isGhExecutable(token) {
 // own argv. Widening it is a later PR with its own rows, never a guess here.
 const TRANSPARENT_WRAPPERS = {
   sudo: {
+    // Every sudo option that takes an argument, per sudo(8): `-a type`,
+    // `-C num`, `-c class`, `-D directory`, `-g group`, `-h host`,
+    // `-p prompt`, `-R directory`, `-r role`, `-t type`, `-T timeout`,
+    // `-u user`, `-U user`, each with its long spelling. `-R`, `-a` and
+    // `-c` were missing (Greptile P1 on mmnto-ai/totem#2894 named `-R`): the
+    // generic path dropped the option alone and left its operand standing at
+    // command position, so `sudo -R /chroot gh pr merge 5` ran unjudged.
+    // `--preserve-env=list` is long-only with an attached operand, so the
+    // generic drop already reads it right.
     operand: [
+      '-a',
+      '-c',
       '-u',
       '-g',
       '-p',
       '-C',
       '-D',
       '-h',
+      '-R',
       '-r',
       '-t',
       '-T',
       '-U',
+      '--auth-type',
+      '--login-class',
       '--user',
       '--group',
       '--prompt',
