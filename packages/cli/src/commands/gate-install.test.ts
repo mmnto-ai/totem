@@ -1111,10 +1111,11 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
         // An UNTERMINATED body runs to the end of the command and is still data.
         'cat <<EOF\ngh pr merge 5',
-        // Round 2 (the leg's F1/F3), disclosed in the template's comment: a
-        // backtick substitution and a leading redirection.
-        'echo `gh pr merge 5`',
-        '> out.txt gh pr merge 5',
+        // A backtick substitution inside QUOTES is data, not a segment of its
+        // own: the quote arms run before the separator (§ C keeps the
+        // false-deny direction closed).
+        'echo "`gh pr merge 5`"',
+        "echo '`gh pr merge 5`'",
         // The same round's legs (mmnto-ai/totem#2857): two divergences from
         // core's scanner that open a heredoc core does not, so the merge on a
         // later line is blanked — a comment after `(` or an operator `)` (the
@@ -1199,6 +1200,43 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
+    it('a leading redirection and a backtick substitution are judged (mmnto-ai/totem#2856 § C)', () => {
+      // The shell applies a leading redirection and runs what follows, and the
+      // operand of a backtick substitution IS a command — both ran unjudged
+      // while the redirection word was the segment's first token and the
+      // backtick was an ordinary character.
+      initGitRepo();
+      for (const command of [
+        '> out.txt gh pr merge 5',
+        '>out.txt gh pr merge 5',
+        '>> log.txt gh pr merge 5',
+        '< in.txt gh pr merge 5',
+        '2> err.txt gh pr merge 5',
+        '2>/dev/null gh pr merge 5',
+        // `&>` is not read as one operator — `&` ends the segment — but the
+        // segment AFTER it starts at the `>`, which the arms do read.
+        '&> out.txt gh pr merge 5',
+        // A redirection in front of a wrapper program: both strips run.
+        '> out.txt sudo gh pr merge 5',
+        'echo `gh pr merge 5`',
+        '`gh pr merge 5`',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+
+      // The complement: a backtick substitution as the merge's own TARGET is a
+      // target this hook cannot know, exactly as `$( … )` is — it rides as
+      // `unresolvedTarget` rather than falling back to the current branch.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash('gh pr merge `cat pr.txt`'), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.pr).toBeNull();
+      expect(payload.unresolvedTarget).toBe('`');
+      expect(payload.branch).toBeUndefined();
+    });
+
     it('every widened form has a MUTANT that must NOT project, and never spawns (mmnto-ai/totem#2856 § F)', () => {
       initGitRepo();
       for (const command of [
@@ -1218,6 +1256,13 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'bash -c "gh pr merge 5"',
         // `eval` is bounded to ONE level.
         'eval "eval \\"gh pr merge 5\\""',
+        // § C, LOCKED: a redirection operator carrying a tokenizer separator.
+        // `|` ends a segment before `>|` is ever read as one word, and the
+        // segment it leaves starts at the FILE, not at a redirection — so this
+        // one is named in the template as unreachable rather than claimed. A
+        // `2>&1` splits the same way and leaves `1` at the front.
+        '>| out.txt gh pr merge 5',
+        '2>&1 gh pr merge 5',
         // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
         // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
         // wrapper cannot expand.

@@ -1868,6 +1868,17 @@ const TRANSPARENT_WRAPPERS = {
   eval: { operand: [], positional: 0, terminator: false, evaluates: true },
 };
 
+// A leading REDIRECTION is not the command either (mmnto-ai/totem#2856 § C):
+// the shell applies it and runs what follows, so \`> out.txt gh pr merge 5\`
+// merges. An operator ALONE (\`>\`, \`>>\`, \`<\`, \`2>\`, \`>|\`) takes the next
+// token — the file — with it; a FUSED form (\`>out.txt\`, \`2>/dev/null\`) is one
+// token and is skipped alone. \`<<\` is excluded: that is the heredoc operator,
+// which the scanner owns. \`&>\` never reaches here as a token, because \`&\` is
+// one of the tokenizer's segment separators — the segment after it starts at
+// the \`>\`, which these two do read.
+const REDIRECTION_ALONE = /^[0-9]*(?:>>|>\\||>|<)$/;
+const REDIRECTION_FUSED = /^[0-9]*(?:>>|>\\||>|<)[^\\s]+$/;
+
 /**
  * The argv after EVERY \`gh pr merge\` at command position in the command —
  * one array per merge, in command order — or an empty array when there is
@@ -1940,6 +1951,21 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
       i++;
       continue;
     }
+    // A BACKTICK command substitution opens a segment of its own
+    // (mmnto-ai/totem#2856 § C): its operand is a command the shell runs, so a
+    // merge inside one has to be judged, exactly as a merge inside \`$( … )\`
+    // is. The backtick is kept as a TOKEN, the way \`$(\` leaves its \`$\` behind:
+    // without it a merge whose TARGET is a backtick substitution would lose
+    // that target and fall back to the current branch — judging a pull request
+    // the command never named. A backtick inside quotes never reaches here (the
+    // quote arms run first) and one inside a heredoc body is already blanked.
+    if (ch === '\`') {
+      endToken();
+      current.push('\`');
+      endSegment();
+      i++;
+      continue;
+    }
     if (
       ch === ';' ||
       ch === '&' ||
@@ -1984,6 +2010,14 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     let stripping = true;
     while (stripping && tokens.length > 0) {
       const head = tokens[0];
+      if (head.slice(0, 2) !== '<<' && REDIRECTION_ALONE.test(head)) {
+        tokens = tokens.slice(2);
+        continue;
+      }
+      if (head.slice(0, 2) !== '<<' && REDIRECTION_FUSED.test(head)) {
+        tokens = tokens.slice(1);
+        continue;
+      }
       const wrapper = Object.prototype.hasOwnProperty.call(TRANSPARENT_WRAPPERS, head)
         ? TRANSPARENT_WRAPPERS[head]
         : null;
