@@ -4232,13 +4232,20 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     const section = REVIEW_REPLY_SKILL_CONTENT.slice(start, phase1);
     // Clause 1: the review object or summary comment for the sha, never a status.
     expect(section).toMatch(/review object for THIS head sha/);
+    // The summary-comment half is the only half that covers Greptile, and it
+    // matches by the sha the comment's body names, never by its timestamp
+    // (an in-place re-review does not advance created_at).
+    expect(section).toMatch(/or the bot's summary comment for that sha/);
+    expect(section).toMatch(/Last reviewed commit/);
+    expect(section).toMatch(/never by the comment's timestamp/);
     expect(section).toMatch(/never a green commit status on the head/);
     // The doctrine's carve-outs travel with the rule.
     expect(section).toMatch(/Greptile Review/);
-    expect(section).toMatch(/GCA posts neither a status nor a check run/);
-    // Executable (a fenced command), not merely mentioned in prose.
+    expect(section).toMatch(/GCA posted neither a status nor a check run/);
+    // Executable (a fenced command), not merely mentioned in prose — and read
+    // in full (the reviews endpoint paginates).
     expect(section).toContain(
-      '```bash\ngh api "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq',
+      '```bash\ngh api --paginate "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq',
     );
     // Clause 2: silence is not a pass; the pass is a standalone re-trigger, not a re-invoke.
     expect(section).toMatch(/not a pass/);
