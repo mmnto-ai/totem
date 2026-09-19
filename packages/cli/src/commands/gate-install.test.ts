@@ -308,6 +308,17 @@ const REDIRECTION_ROWS = [
   '2<> file gh pr merge 5',
   'echo `gh pr merge 5`',
   '`gh pr merge 5`',
+  // A QUOTED FILENAME does not make the redirection data (round-7 leg, H1):
+  // bash decides on the OPERATOR's quoting, and in every one of these the
+  // operator characters are bare, so the shell truncates the file and runs the
+  // merge. Under the round-6 rule ("any part of the token came from quotes")
+  // the whole word was read as data and each of these projected NOTHING —
+  // the regression that rule introduced against main.
+  '>"out.txt" gh pr merge 5',
+  '2>"err.log" gh pr merge 5',
+  '2>"/dev/null" gh pr merge 5',
+  '<"in.txt" gh pr merge 5',
+  "<<<'bar' gh pr merge 5",
 ];
 
 /**
@@ -513,6 +524,29 @@ const ROW_LITERAL_BODY_REPO = 'gh pr merge -b "<br>" --repo owner/name 5';
 const ROW_LITERAL_SUBJECT_REPO = 'gh pr merge -t ">>" --repo owner/name 5';
 const ROW_LITERAL_ESCAPED_BODY = 'gh pr merge -b \\<br\\> 5';
 /**
+ * A TRAILING redirection whose FILENAME is quoted (round-7 leg, H1 BLOCKING /
+ * H2 MATERIAL, one root). The round-6 rule above marked a token literal when
+ * ANY part of it came from quotes or an escape; the shell's rule is OPERATOR
+ * quoting — `>"merge.log"` is as real a redirection as `> merge.log`, and only
+ * `">"merge.log`, with the operator itself quoted, is data. Under the round-6
+ * rule each of these rode into argv, so the branch rows reached the engine as
+ * a pull request on a branch named `>merge.log` / `2>err.log` / `>>out.txt` /
+ * `>$FILE` — a deny with a reason no one wrote, which is the exact shape the
+ * whole-segment strip was added to cure.
+ */
+const ROW_QUOTED_REDIRECT_BRANCH = 'gh pr merge --squash >"merge.log"';
+const ROW_QUOTED_REDIRECT_ERR = 'gh pr merge --squash 2>"err.log"';
+const ROW_QUOTED_APPEND_BRANCH = 'gh pr merge --squash >>"out.txt"';
+const ROW_QUOTED_VAR_BRANCH = 'gh pr merge --squash >"$FILE"';
+const ROW_QUOTED_REDIRECT_PR = 'gh pr merge 5 >"out.txt"';
+/**
+ * The other exemplar of the same rule, LOCKED: quote the OPERATOR and bash
+ * passes the word to gh as an ARGUMENT (`>out.txt`), redirecting nothing. The
+ * first literal character is at index 0, on the operator itself, so the prefix
+ * does not lie before it and the token is kept.
+ */
+const ROW_QUOTED_OPERATOR_DATA = 'gh pr merge --squash ">"out.txt';
+/**
  * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
  * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
  * string to PowerShell — it prints text and merges nothing. This walk reads
@@ -574,6 +608,12 @@ const PARITY_COMMAND_CORPUS = [
   ROW_LITERAL_BODY_REPO,
   ROW_LITERAL_SUBJECT_REPO,
   ROW_LITERAL_ESCAPED_BODY,
+  ROW_QUOTED_REDIRECT_BRANCH,
+  ROW_QUOTED_REDIRECT_ERR,
+  ROW_QUOTED_APPEND_BRANCH,
+  ROW_QUOTED_VAR_BRANCH,
+  ROW_QUOTED_REDIRECT_PR,
+  ROW_QUOTED_OPERATOR_DATA,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1816,8 +1856,20 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // payload named a branch `>`, and the engine denied a pull request on a
       // branch no one wrote — a deny with a FALSE reason, the worst shape a
       // gate can have. The strip now runs over the whole segment.
+      // The four QUOTED-FILENAME spellings join them (round-7 leg, H1/H2):
+      // the operator characters are bare in each, so bash redirects and merges
+      // the current branch's PR — while the round-6 literal rule read the
+      // whole word as data and put `>merge.log`, `2>err.log`, `>>out.txt` and
+      // `>$FILE` into argv as the merge's target.
       const head = initGitRepo();
-      for (const command of [ROW_TRAILING_REDIRECT_BRANCH, ROW_TRAILING_REDIRECT_ERR]) {
+      for (const command of [
+        ROW_TRAILING_REDIRECT_BRANCH,
+        ROW_TRAILING_REDIRECT_ERR,
+        ROW_QUOTED_REDIRECT_BRANCH,
+        ROW_QUOTED_REDIRECT_ERR,
+        ROW_QUOTED_APPEND_BRANCH,
+        ROW_QUOTED_VAR_BRANCH,
+      ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toEqual({
@@ -1835,11 +1887,27 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // positional, so the payload reads `pr: 5` either way. Its bite is the
       // exact-argv row in the export seam; it stays here as the complement to
       // the two branch rows above, not as a sensor.
+      for (const command of [ROW_TRAILING_REDIRECT_PR, ROW_QUOTED_REDIRECT_PR]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // And the LOCKED complement of the rule: with the OPERATOR quoted the
+      // word is an ARGUMENT, so bash hands gh the string `>out.txt` and
+      // redirects nothing. The payload names it as the target because that is
+      // exactly what gh receives — stripping it here would be the mirror error
+      // of the one above, dropping data the shell really passes to the program.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash(ROW_TRAILING_REDIRECT_PR), [], 'merge-ready');
-      expect(spawnedPayload(), ROW_TRAILING_REDIRECT_PR).toEqual({
+      runWrapper(bash(ROW_QUOTED_OPERATOR_DATA), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_QUOTED_OPERATOR_DATA).toEqual({
         repo: 'mmnto-ai/totem',
-        pr: 5,
+        pr: null,
+        branch: '>out.txt',
         headSha: head,
       });
     });
@@ -2770,15 +2838,38 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       // blanked by the scanner long before the tokenizer ran.
       [ROW_HEREDOC_AS_OPERAND, ['5']],
       [ROW_HERESTRING_AS_OPERAND, ['6']],
-      // QUOTED or ESCAPED, so not an operator at all (round-6 leg, G1): the
-      // argv asserted exactly, which is what the payload rows can only imply.
-      // Without the literal flag these read `['-b', '5']`, `['-t', '--repo',
-      // 'owner/name', '5']` and `['-b', '5']`.
+      // QUOTED or ESCAPED OPERATOR, so not an operator at all (round-6 leg,
+      // G1, corrected by round-7's H1): the argv asserted exactly, which is
+      // what the payload rows can only imply. Without the literal index these
+      // read `['-b', '5']`, `['-t', '--repo', 'owner/name', '5']` and
+      // `['-b', '5']`. In each the first literal character is at index 0 — on
+      // the operator itself — so nothing is stripped.
       [ROW_LITERAL_BODY_PR, ['-b', '<br>', '5']],
       [ROW_LITERAL_SUBJECT_REPO, ['-t', '>>', '--repo', 'owner/name', '5']],
       [ROW_LITERAL_ESCAPED_BODY, ['-b', '<br>', '5']],
+      [ROW_QUOTED_OPERATOR_DATA, ['--squash', '>out.txt']],
       // …while the UNQUOTED spelling of the same text keeps stripping.
       ['gh pr merge -b <br> 5', ['-b', '5']],
+      // A QUOTED FILENAME is a redirection all the same, because the operator
+      // characters are bare (round-7 leg, H1/H2): the prefix `>` / `2>` / `<`
+      // / `<<<` / `>>` lies entirely before the token's first literal
+      // character, so the token drops. Every cell here read as DATA under the
+      // round-6 rule — `['--squash', '>merge.log']`, `['5', '>out.txt']`, and
+      // nothing at all for the leading spellings, where the unstripped
+      // operator word sat in front of `gh` and broke the anchor.
+      [ROW_QUOTED_REDIRECT_BRANCH, ['--squash']],
+      [ROW_QUOTED_REDIRECT_ERR, ['--squash']],
+      [ROW_QUOTED_APPEND_BRANCH, ['--squash']],
+      [ROW_QUOTED_VAR_BRANCH, ['--squash']],
+      [ROW_QUOTED_REDIRECT_PR, ['5']],
+      ['>"out.txt" gh pr merge 5', ['5']],
+      ['2>"err.log" gh pr merge 5', ['5']],
+      ['<"in.txt" gh pr merge 5', ['5']],
+      ["<<<'bar' gh pr merge 5", ['5']],
+      // The operator ALONE with a quoted file: the file token goes with it
+      // however it is spelled.
+      ['> "out.txt" gh pr merge 5', ['5']],
+      ['2> "err.log" gh pr merge 5', ['5']],
       // RESIDUE, unreachable rather than claimed: `|` and `&` are the
       // tokenizer's own separators and end the token before the operator is
       // whole, so these two never present a redirection to strip.

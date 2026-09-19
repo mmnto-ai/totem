@@ -2092,13 +2092,25 @@ const TRANSPARENT_WRAPPERS = {
 // leg, G2). \`&>\` splits the same way but leaves a readable \`>\` at the front
 // of the next segment, so that one IS read.
 //
-// A LITERAL token is never a redirection, whatever its text: a word any part
-// of which came from inside quotes or from a backslash escape is data the
-// shell will not read as an operator, and the walk marks it (round-6 leg,
-// G1). Without that, \`gh pr merge -b "<br>" 5\` lost its body to this strip
-// and \`-b\` swallowed PR 5.
+// WHAT MAKES A REDIRECTION REAL IS THE QUOTING OF THE OPERATOR, not of the
+// word it sits in (round-7 leg, H1/H2; the round-6 rule this replaces read
+// "any part of which came from inside quotes or from an escape", which is not
+// the shell's). Bash decides on the operator characters alone: quote the
+// FILENAME and the redirection still happens — \`>"out.txt" gh pr merge 5\`
+// truncates out.txt and merges PR 5 — while quoting the OPERATOR makes the
+// whole word an argument: \`gh pr merge --squash ">"out.txt\` passes the string
+// \`>out.txt\` to gh and redirects nothing. So the walk records, per token, the
+// INDEX of its first character that came from inside quotes or from a
+// backslash escape (\`-1\` when none), and a token is stripped only when the
+// operator prefix this file's two patterns match lies ENTIRELY BEFORE that
+// index. Under the round-6 rule every one of \`>"out.txt"\`, \`2>"err.log"\`,
+// \`<<<'bar'\` and \`>"$FILE"\` rode into argv as data — a merge judged on a
+// target nobody wrote, or (trailing) a branch named \`>merge.log\`. The rows
+// that made the round-6 rule necessary are unchanged by this one, because
+// their operator character is itself quoted or escaped: \`-b "<br>" 5\` and
+// \`-b \\<br\\> 5\` both have their first literal character at index 0.
 const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
-const REDIRECTION_FUSED = /^[0-9]*(?:<<<|[<>]{1,2})[^\\s]+$/;
+const REDIRECTION_FUSED = /^([0-9]*(?:<<<|[<>]{1,2}))[^\\s]+$/;
 
 /**
  * The argv after EVERY \`gh pr merge\` at command position in the command —
@@ -2110,43 +2122,52 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   // \`eval\` re-enters this function ONCE (§ B); every other caller is depth 0.
   const level = typeof depth === 'number' ? depth : 0;
   const command = blankHeredocBodies(rawCommand, powershell === true);
-  // Each segment's tokens, and beside them ONE BOOLEAN PER TOKEN: did any part
-  // of this token's text come from inside quotes or from a backslash escape?
-  // A word the author quoted is DATA — the shell will not read it as an
-  // operator — so the redirection strip below must not read it as one either
-  // (round-6 leg, G1: the strip dropped the body of \`gh pr merge -b "<br>" 5\`
-  // and left \`-b\` to swallow PR 5). The flag rides in a PARALLEL array so
-  // every reader of a token stays a reader of a plain string; only the strip
-  // consults it. It annotates the walk's output; it changes no grammar.
+  // Each segment's tokens, and beside them ONE NUMBER PER TOKEN: the INDEX,
+  // within the token, of the first character that came from inside quotes or
+  // from a backslash escape — \`-1\` when the whole word is bare. The
+  // redirection strip below is its only reader, and it needs the index rather
+  // than a yes/no because the shell decides a redirection on the QUOTING OF
+  // THE OPERATOR: \`>"out.txt"\` redirects (first literal character at 1, past
+  // the \`>\`) while \`">"out.txt\` is the argument \`>out.txt\` (first literal
+  // character at 0, on the operator itself). A yes/no answered both with
+  // "data" and let a real redirection ride into argv (round-7 leg, H1/H2); it
+  // answered \`-b "<br>" 5\` correctly, and so does the index (round-6 leg,
+  // G1). The numbers ride in a PARALLEL array so every reader of a token stays
+  // a reader of a plain string. It annotates the walk's output; it changes no
+  // grammar.
   const segments = [];
-  const literals = [];
+  const literalAts = [];
   let current = [];
-  let currentLiteral = [];
+  let currentLiteralAt = [];
   let token = '';
   let hasToken = false;
-  let tokenLiteral = false;
+  let tokenLiteralAt = -1;
   let i = 0;
+  /** The next character appended to this token is literal: mark the first. */
+  const markLiteral = () => {
+    if (tokenLiteralAt === -1) tokenLiteralAt = token.length;
+  };
   const endToken = () => {
     if (hasToken) {
       current.push(token);
-      currentLiteral.push(tokenLiteral);
+      currentLiteralAt.push(tokenLiteralAt);
       token = '';
       hasToken = false;
-      tokenLiteral = false;
+      tokenLiteralAt = -1;
     }
   };
   const endSegment = () => {
     endToken();
     segments.push(current);
-    literals.push(currentLiteral);
+    literalAts.push(currentLiteralAt);
     current = [];
-    currentLiteral = [];
+    currentLiteralAt = [];
   };
   while (i < command.length) {
     const ch = command[i];
     if (ch === "'") {
       hasToken = true;
-      tokenLiteral = true;
+      markLiteral();
       i++;
       while (i < command.length && command[i] !== "'") {
         token += command[i];
@@ -2157,7 +2178,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     }
     if (ch === '"') {
       hasToken = true;
-      tokenLiteral = true;
+      markLiteral();
       i++;
       while (i < command.length && command[i] !== '"') {
         if (command[i] === '\\\\' && i + 1 < command.length) {
@@ -2223,7 +2244,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     if (ch === '\`') {
       endToken();
       current.push('\`');
-      currentLiteral.push(false);
+      currentLiteralAt.push(-1);
       endSegment();
       i++;
       continue;
@@ -2250,9 +2271,9 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
       continue;
     }
     if (ch === '\\\\' && i + 1 < command.length) {
+      markLiteral();
       token += command[i + 1];
       hasToken = true;
-      tokenLiteral = true;
       i += 2;
       continue;
     }
@@ -2265,22 +2286,26 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   const found = [];
   for (let s = 0; s < segments.length; s++) {
     const segment = segments[s];
-    const literal = literals[s];
+    const literalAt = literalAts[s];
     // FIRST, over the WHOLE segment: drop every redirection (the two patterns
     // above). It runs before the strip below and before the anchor test, so a
     // redirection in front of the command does not hide it, one in the middle
     // does not break the anchor, and a trailing one never rides into argv.
-    // A LITERAL token is never an operator, whatever its text: the shell reads
-    // a quoted or escaped word as data, and so does this (round-6 leg, G1).
+    // The OPERATOR's own quoting decides, as it does in the shell: strip only
+    // when the matched operator prefix lies entirely before the token's first
+    // literal character (round-7 leg, H1/H2).
     let tokens = [];
     for (let r = 0; r < segment.length; r++) {
       const word = segment[r];
-      if (literal[r] !== true && REDIRECTION_ALONE.test(word)) {
-        // The operator and the file it names, both gone.
+      const at = literalAt[r];
+      if (REDIRECTION_ALONE.test(word) && (at === -1 || word.length <= at)) {
+        // The operator and the file it names, both gone — however that file
+        // is spelled: \`> "out.txt"\` is as real a redirection as \`> out.txt\`.
         r += 1;
         continue;
       }
-      if (literal[r] !== true && REDIRECTION_FUSED.test(word)) continue;
+      const fused = REDIRECTION_FUSED.exec(word);
+      if (fused !== null && (at === -1 || fused[1].length <= at)) continue;
       tokens.push(word);
     }
     // Then strip everything at the segment's front that is NOT the command, in
