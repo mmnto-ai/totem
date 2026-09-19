@@ -1941,9 +1941,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       );
 
       expect(status).toBe(2);
-      expect(stderr).toContain(
-        'the 1000 ms budget was spent before the envelope arrived on stdin',
-      );
+      expect(stderr).toContain('the 1000 ms budget was spent before the envelope arrived on stdin');
       expect(stderr).toContain('fail-closed');
       // Nothing was evaluated: the envelope never finished arriving.
       expect(stubArgv()).toBeNull();

@@ -145,8 +145,20 @@ function resolveCliFromPath() {
 //   - a wrapper program not on the table (`npx`, `xargs`, `bash -c "…"`) and a
 //     builtin flag not in it: the table is closed on purpose — the walk cannot
 //     know which operand of an arbitrary program is the command;
+//   - a table word spelled by PATH (`/usr/bin/time -f x gh pr merge 5`): the
+//     table is keyed on the bare word the shell reads at command position, and
+//     `/usr/bin/time` is a PROGRAM with its own option grammar, not the
+//     reserved word this table models;
+//   - `env -S '<cmd>'` / `env --split-string='<cmd>'`: the option's operand IS
+//     the command, split again under env's own rules. The operand is consumed
+//     with the option here, so the merge inside it is not read;
 //   - `eval` nested deeper than ONE level
 //     (`eval "eval \"gh pr merge 5\""`);
+//   - a substitution inside DOUBLE quotes (`echo "`gh pr merge 5`"`,
+//     `echo "$(gh pr merge 5)"`): bash EXECUTES both of those, but the
+//     tokenizer's quote arm swallows the whole string as ONE token, so the
+//     merge inside runs unjudged. Filed as mmnto-ai/totem#2893 (round-5 leg,
+//     F4); the single-quoted spelling really is data and stays a control row;
 //   - a redirection operator carrying a tokenizer separator (`>|`, `2>&1`):
 //     `|` and `&` end the segment before the operator is read as one word. A
 //     `&>` splits the same way but leaves a readable `>` at the front of the
@@ -168,8 +180,12 @@ function resolveCliFromPath() {
 // to be collected, round 2 F6); and a function DEFINITION whose body is a
 // merge (`f() { gh pr merge 5; }`) fires at definition time, because `{` is a
 // separator and the body is its own segment (round 3, F4; it fired before this
-// PR's rounds too). `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past any
-// of them.
+// PR's rounds too). A fourth, PowerShell's own: a double-quoted string whose
+// backtick escapes a quote (`Write-Output "a `"; gh pr merge 5`"b"`) is ONE
+// string to PowerShell and merges nothing, but this walk reads POSIX quoting
+// for both tools, so the `"` after the escaping backtick closes the string and
+// the merge reaches a segment's front (round-5 leg, F13; a row asserts it).
+// `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
 //
@@ -528,14 +544,21 @@ function isGhExecutable(token) {
 //                 the command (only `timeout`'s duration);
 //   terminator  — whether a `--` ends its options;
 //   describe    — options that make the word DESCRIBE its operand instead of
-//                 executing it (`command -v`): the segment ends with NO
-//                 projection, because nothing is executed;
+//                 executing it (`command -v`, `sudo -l`): the segment ends
+//                 with NO projection, because nothing is executed;
+//   flags       — when present, the ONLY options the word HAS: any other
+//                 `-` token is not an option of it, so the shell runs no
+//                 command and there is nothing to project (bash's `time`
+//                 reserved word answers `-f: command not found`);
 //   evaluates   — the builtin whose operand is a STRING to re-tokenize.
 // Every other `-` token is skipped as a flag of the wrapper, so a long option
-// with an attached value (`--user=x`, `--kill-after=5`, `--adjustment=10`)
-// needs no entry and a bare `-10` reads as `nice`'s adjustment. After a
-// wrapper is consumed the strip loops, so the assignment prefixes of
-// `env NAME=v gh …` and a wrapper wrapping a wrapper both resolve.
+// with an ATTACHED value (`--user=x`, `--kill-after=5`, `--adjustment=10`)
+// needs no entry and a bare `-10` reads as `nice`'s adjustment. A long option
+// that takes a SEPARATE operand does need one, beside its short spelling, or
+// the operand itself reads as the command (`sudo --user root gh …` read
+// `root` as the program — round-5 leg, F2). After a wrapper is consumed the
+// strip loops, so the assignment prefixes of `env NAME=v gh …` and a wrapper
+// wrapping a wrapper both resolve.
 //
 // The table is CLOSED on purpose (ADR-082 A1, Tenet 19): a program that is not
 // on it IS the command, because this walk cannot know which of an arbitrary
@@ -543,30 +566,78 @@ function isGhExecutable(token) {
 // own argv. Widening it is a later PR with its own rows, never a guess here.
 const TRANSPARENT_WRAPPERS = {
   sudo: {
-    operand: ['-u', '-g', '-p', '-C', '-D', '-h', '-r', '-t', '-T', '-U'],
+    operand: [
+      '-u',
+      '-g',
+      '-p',
+      '-C',
+      '-D',
+      '-h',
+      '-r',
+      '-t',
+      '-T',
+      '-U',
+      '--user',
+      '--group',
+      '--prompt',
+      '--chdir',
+      '--chroot',
+      '--host',
+      '--role',
+      '--type',
+      '--other-user',
+      '--command-timeout',
+    ],
     positional: 0,
     terminator: true,
+    // sudo's DESCRIBE-only options: `-l`/`--list` prints what the user may
+    // run, `-v`/`--validate` refreshes the timestamp, `-V`/`--version`
+    // prints the version, `-K`/`--remove-timestamp` clears the credentials
+    // and may not carry a command. None of them executes the operand, so
+    // `sudo -l gh pr merge 5` merges nothing — projecting there was a FALSE
+    // DENY (round-5 leg, F1).
+    describe: ['-l', '--list', '-v', '--validate', '-V', '--version', '-K', '--remove-timestamp'],
   },
-  env: { operand: ['-u', '-C', '-S'], positional: 0, terminator: false },
-  timeout: { operand: ['-k', '-s'], positional: 1, terminator: true },
-  nice: { operand: ['-n'], positional: 0, terminator: false },
+  env: { operand: ['-u', '-C', '-S', '--unset', '--chdir'], positional: 0, terminator: false },
+  timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
+  nice: { operand: ['-n', '--adjustment'], positional: 0, terminator: false },
   nohup: { operand: [], positional: 0, terminator: false },
   command: { operand: [], positional: 0, terminator: false, describe: ['-v', '-V'] },
   exec: { operand: ['-a'], positional: 0, terminator: false },
-  time: { operand: ['-o', '-f'], positional: 0, terminator: true },
+  // `time` here is BASH'S RESERVED WORD, not `/usr/bin/time`: its grammar is
+  // `time [-p] [--] pipeline` — no option of it takes an operand, and any
+  // other `-` token is not an option at all (bash runs `-f` as a command and
+  // answers "command not found", merging nothing). `time -f x gh pr merge 5`
+  // was read with GNU time's option grammar and projected a merge the shell
+  // never runs — a false deny (round-5 leg, F3). The PROGRAM `/usr/bin/time`
+  // is a path-spelled wrapper, which this closed table does not carry.
+  time: { operand: [], positional: 0, terminator: true, flags: ['-p'] },
   eval: { operand: [], positional: 0, terminator: false, evaluates: true },
 };
 
-// A leading REDIRECTION is not the command either (mmnto-ai/totem#2856 § C):
-// the shell applies it and runs what follows, so `> out.txt gh pr merge 5`
-// merges. An operator ALONE (`>`, `>>`, `<`, `2>`, `>|`) takes the next
-// token — the file — with it; a FUSED form (`>out.txt`, `2>/dev/null`) is one
-// token and is skipped alone. `<<` is excluded: that is the heredoc operator,
-// which the scanner owns. `&>` never reaches here as a token, because `&` is
-// one of the tokenizer's segment separators — the segment after it starts at
-// the `>`, which these two do read.
-const REDIRECTION_ALONE = /^[0-9]*(?:>>|>\||>|<)$/;
-const REDIRECTION_FUSED = /^[0-9]*(?:>>|>\||>|<)[^\s]+$/;
+// A REDIRECTION is not the command — and it is not an ARGUMENT either
+// (mmnto-ai/totem#2856 § C, widened by the round-5 leg's F5 and F12). The
+// shell applies it wherever it stands and runs the rest, so
+// `> out.txt gh pr merge 5` merges, `gh > out.txt pr merge 5` merges, and
+// `gh pr merge 5 > out.txt` merges PR 5 — while reading it at the segment's
+// FRONT only left `>` riding into argv as the merge's target, where the
+// engine denied a pull request on branch "`>`" with a reason no one wrote.
+// So: ONE strip over the WHOLE segment, ahead of every other strip and of the
+// anchor test.
+//
+// An operator ALONE (`>`, `>>`, `<`, `<>`, `2>`, `<<<`) takes the next
+// token — the file — with it; a FUSED form (`>out.txt`, `2>/dev/null`,
+// `<<<bar`, `2<>file`) is one token and drops alone. A `<<EOF` head is a
+// fused form too and drops harmlessly: the scanner blanked its BODY long
+// before this, so nothing of the heredoc is left to decide here.
+//
+// Residue, disclosed and unreachable rather than claimed: an operator carrying
+// `|` or `&` (`>|`, `2>&1`, `>& file`, `<& 3`, `exec 3>&1 …`) never
+// arrives as ONE token, because those two characters are the tokenizer's own
+// segment separators and end the token first. `&>` splits the same way but
+// leaves a readable `>` at the front of the next segment, so that one IS read.
+const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
+const REDIRECTION_FUSED = /^[0-9]*(?:<<<|[<>]{1,2})[^\s]+$/;
 
 /**
  * The argv after EVERY `gh pr merge` at command position in the command —
@@ -646,8 +717,13 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // is. The backtick is kept as a TOKEN, the way `$(` leaves its `$` behind:
     // without it a merge whose TARGET is a backtick substitution would lose
     // that target and fall back to the current branch — judging a pull request
-    // the command never named. A backtick inside quotes never reaches here (the
-    // quote arms run first) and one inside a heredoc body is already blanked.
+    // the command never named. One inside a heredoc body is already blanked,
+    // and that is correct — a body is data. One inside DOUBLE quotes never
+    // reaches here either, because the quote arm above swallows the whole
+    // string as one token — and that one is NOT data: bash executes a backtick
+    // pair and a `$( … )` inside double quotes, so `echo "`gh pr merge 5`"`
+    // merges PR 5 unjudged. A disclosed fail-open, filed as
+    // mmnto-ai/totem#2893 (round-5 leg, F4).
     if (ch === '`') {
       endToken();
       current.push('`');
@@ -690,23 +766,29 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
 
   const found = [];
   for (const segment of segments) {
-    let tokens = segment;
-    // Strip everything at the segment's front that is NOT the command, in any
-    // run: a transparent wrapper with its options (the table above), a
+    // FIRST, over the WHOLE segment: drop every redirection (the two patterns
+    // above). It runs before the strip below and before the anchor test, so a
+    // redirection in front of the command does not hide it, one in the middle
+    // does not break the anchor, and a trailing one never rides into argv.
+    let tokens = [];
+    for (let r = 0; r < segment.length; r++) {
+      const word = segment[r];
+      if (REDIRECTION_ALONE.test(word)) {
+        // The operator and the file it names, both gone.
+        r += 1;
+        continue;
+      }
+      if (REDIRECTION_FUSED.test(word)) continue;
+      tokens.push(word);
+    }
+    // Then strip everything at the segment's front that is NOT the command, in
+    // any run: a transparent wrapper with its options (the table above), a
     // command-position word, an assignment prefix. The loop re-runs after each
     // one, so `env -u X A=1 gh …` and `sudo -u root timeout 30 gh …` both
     // resolve to the same anchor test.
     let stripping = true;
     while (stripping && tokens.length > 0) {
       const head = tokens[0];
-      if (head.slice(0, 2) !== '<<' && REDIRECTION_ALONE.test(head)) {
-        tokens = tokens.slice(2);
-        continue;
-      }
-      if (head.slice(0, 2) !== '<<' && REDIRECTION_FUSED.test(head)) {
-        tokens = tokens.slice(1);
-        continue;
-      }
       const wrapper = Object.prototype.hasOwnProperty.call(TRANSPARENT_WRAPPERS, head)
         ? TRANSPARENT_WRAPPERS[head]
         : null;
@@ -739,8 +821,17 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           continue;
         }
         if (wrapper.describe !== undefined && wrapper.describe.indexOf(opt) !== -1) {
-          // `command -v gh …` prints a path; it runs nothing, so there is
-          // nothing to judge and nothing to project.
+          // `command -v gh …` prints a path and `sudo -l gh …` prints a
+          // policy line; each runs nothing, so there is nothing to judge and
+          // nothing to project.
+          tokens = [];
+          stripping = false;
+          break;
+        }
+        if (wrapper.flags !== undefined && wrapper.flags.indexOf(opt) === -1) {
+          // A `-` token that is not one of this word's OWN options: the shell
+          // has no command to run here (`time -f x gh pr merge 5` makes bash
+          // try to run `-f`), so the segment ends with no projection.
           tokens = [];
           stripping = false;
           break;
@@ -942,6 +1033,12 @@ if (require.main !== module) {
 // exists so a test can SHORTEN the run's budget, and it is clamped so it can
 // only ever shorten it (§ D). An env var was the alternative and was ruled
 // out for the same reason the tier is argv-only — any shell could set it.
+// BOTH spellings parse: `--budget-ms 1500` and `--budget-ms=1500`. The
+// attached form used to fall through as an unknown argument and silently left
+// the 30 000 ms default standing — a WIDENING on a caller that wrote the
+// argument to shorten the window (round-5 leg, F7). A repeated flag is
+// last-wins, and no spelling of it can ever exceed the default, because every
+// value goes through the same clamp.
 const argv = process.argv.slice(2);
 let event = '';
 let tier = 'strict';
@@ -957,6 +1054,8 @@ for (let i = 0; i < argv.length; i++) {
   } else if (argv[i] === '--budget-ms') {
     budgetMs = clampBudgetMs(argv[i + 1]);
     i++;
+  } else if (argv[i].slice(0, 12) === '--budget-ms=') {
+    budgetMs = clampBudgetMs(argv[i].slice(12));
   }
 }
 
@@ -966,6 +1065,29 @@ for (let i = 0; i < argv.length; i++) {
 // within the budget plus one 1 000 ms floor with its OWN exit code.
 deadline = Date.now() + budgetMs;
 
+// …and the READ of the envelope is inside it too (round-5 leg, F6). The budget
+// used to start counting for everything the hook did AFTER the envelope had
+// arrived; arriving itself was unbounded. A host that writes the envelope and
+// holds the pipe open, or hands this hook a stdin that never ends, left it
+// waiting with no deadline of its own until the HOST's own timeout killed it —
+// and a killed hook's exit code is never applied, which is a fail-OPEN on a
+// gate whose posture is fail-closed. Exactly the class § D cured for the
+// projection's git reads, one step earlier in the run.
+//
+// The timer is cleared by the `end` handler below BEFORE anything is
+// evaluated, so a normal run — every run where stdin closes — never sees it.
+const stdinBudgetTimer = setTimeout(
+  () => {
+    process.stderr.write(
+      '[totem gate-wrapper] the ' +
+        budgetMs +
+        ' ms budget was spent before the envelope arrived on stdin — blocking (fail-closed).\n',
+    );
+    process.exit(2);
+  },
+  Math.max(0, deadline - Date.now()),
+);
+
 // Read the PreToolUse stdin envelope.
 let stdin = '';
 process.stdin.setEncoding('utf-8');
@@ -973,6 +1095,7 @@ process.stdin.on('data', (chunk) => {
   stdin += chunk;
 });
 process.stdin.on('end', () => {
+  clearTimeout(stdinBudgetTimer);
   let parsed;
   try {
     parsed = stdin ? JSON.parse(stdin) : {};
