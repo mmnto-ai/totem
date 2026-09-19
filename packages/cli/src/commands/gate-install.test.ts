@@ -290,6 +290,14 @@ const REDIRECTION_ROWS = [
   '&> out.txt gh pr merge 5',
   // A redirection in front of a wrapper program: both strips run.
   '> out.txt sudo gh pr merge 5',
+  // The strip runs over the WHOLE segment, not just its front (round-5 leg,
+  // F5 + F12): a redirection BETWEEN the executable and its verb no longer
+  // breaks the anchor, and the here-string and `<>` spellings are operators
+  // too.
+  'gh > out.txt pr merge 5',
+  '<<<bar gh pr merge 5',
+  '<<< bar gh pr merge 5',
+  '2<> file gh pr merge 5',
   'echo `gh pr merge 5`',
   '`gh pr merge 5`',
 ];
@@ -407,6 +415,16 @@ const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
 const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
 const ROW_PS_CALL_OPERATOR = '& gh pr merge 5';
 /**
+ * A TRAILING redirection (round-5 leg, F5): the shell writes gh's output to
+ * the file and merges the current branch's PR. Read at the segment's FRONT
+ * only, the `>` rode into argv as the merge's first positional and the payload
+ * named a branch `>` — the engine denied a pull request on a branch no one
+ * wrote, a deny with a false reason.
+ */
+const ROW_TRAILING_REDIRECT_BRANCH = 'gh pr merge --squash > merge.log';
+const ROW_TRAILING_REDIRECT_ERR = 'gh pr merge --squash 2> err.log';
+const ROW_TRAILING_REDIRECT_PR = 'gh pr merge 5 > out.txt';
+/**
  * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
  * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
  * string to PowerShell — it prints text and merges nothing. This walk reads
@@ -457,6 +475,9 @@ const PARITY_COMMAND_CORPUS = [
   ROW_GROUP_CLOSE_COMMENT,
   ROW_PS_CALL_OPERATOR,
   ROW_PS_DQ_BACKTICK,
+  ROW_TRAILING_REDIRECT_BRANCH,
+  ROW_TRAILING_REDIRECT_ERR,
+  ROW_TRAILING_REDIRECT_PR,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1600,6 +1621,36 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
     });
 
+    it('a trailing redirection never rides into argv as the merge target (round-5 leg, F5 + F12)', () => {
+      // `gh pr merge --squash > merge.log` merges the CURRENT branch's PR and
+      // writes gh's output to a file. With the strip reading only the
+      // segment's FRONT, the `>` arrived as the merge's first positional: the
+      // payload named a branch `>`, and the engine denied a pull request on a
+      // branch no one wrote — a deny with a FALSE reason, the worst shape a
+      // gate can have. The strip now runs over the whole segment.
+      const head = initGitRepo();
+      for (const command of [ROW_TRAILING_REDIRECT_BRANCH, ROW_TRAILING_REDIRECT_ERR]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: null,
+          branch: 'feat/demo',
+          headSha: head,
+        });
+      }
+
+      // And with a PR named, the number is still the target and nothing of the
+      // redirection reaches the payload.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_TRAILING_REDIRECT_PR), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_TRAILING_REDIRECT_PR).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+    });
+
     it('a PowerShell backtick escape inside double quotes is a DISCLOSED false fire (round-5 leg, F13)', () => {
       // PowerShell escapes with a backtick inside a double-quoted string, so
       // `"a `"; gh pr merge 5`"b"` is ONE string and PowerShell merges nothing.
@@ -2327,6 +2378,43 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     for (const [command, expected] of rows) {
       const found = ghPrMergeArgvs(command, false);
       expect(found, command).toEqual(expected === null ? [] : [expected]);
+    }
+  });
+
+  it('a redirection is dropped with its file ANYWHERE in the segment (§ C, round-5 leg F5 + F12)', () => {
+    // The argv the rows above can only assert through a payload, asserted
+    // exactly: an operator alone takes the file token with it, a fused one
+    // goes alone, and neither ever reaches `gh pr merge`'s argv.
+    const { ghPrMergeArgvs } = wrapperExports();
+    const rows: Array<[string, string[] | null]> = [
+      // Trailing — the shape that rode `>` in as the merge's target.
+      [ROW_TRAILING_REDIRECT_PR, ['5']],
+      ['gh pr merge 5 >out.txt', ['5']],
+      [ROW_TRAILING_REDIRECT_BRANCH, ['--squash']],
+      [ROW_TRAILING_REDIRECT_ERR, ['--squash']],
+      // Between the executable and its verb — the shape that broke the anchor.
+      ['gh > out.txt pr merge 5', ['5']],
+      ['gh pr > out.txt merge 5', ['5']],
+      // Leading, alone and fused, in every spelling the two patterns read.
+      ['> out.txt gh pr merge 5', ['5']],
+      ['2>/dev/null gh pr merge 5', ['5']],
+      ['<<<bar gh pr merge 5', ['5']],
+      ['<<< bar gh pr merge 5', ['5']],
+      ['2<> file gh pr merge 5', ['5']],
+      ['2<>file gh pr merge 5', ['5']],
+      // A `<<EOF` head is a fused form and drops harmlessly — its body was
+      // blanked by the scanner long before the tokenizer ran.
+      [ROW_HEREDOC_AS_OPERAND, ['5']],
+      [ROW_HERESTRING_AS_OPERAND, ['6']],
+      // RESIDUE, unreachable rather than claimed: `|` and `&` are the
+      // tokenizer's own separators and end the token before the operator is
+      // whole, so these two never present a redirection to strip.
+      ['>| out.txt gh pr merge 5', null],
+      ['2>&1 gh pr merge 5', null],
+    ];
+    for (const [command, expected] of rows) {
+      const found = ghPrMergeArgvs(command, false);
+      expect(found, JSON.stringify(command)).toEqual(expected === null ? [] : [expected]);
     }
   });
 

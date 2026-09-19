@@ -2004,16 +2004,29 @@ const TRANSPARENT_WRAPPERS = {
   eval: { operand: [], positional: 0, terminator: false, evaluates: true },
 };
 
-// A leading REDIRECTION is not the command either (mmnto-ai/totem#2856 § C):
-// the shell applies it and runs what follows, so \`> out.txt gh pr merge 5\`
-// merges. An operator ALONE (\`>\`, \`>>\`, \`<\`, \`2>\`, \`>|\`) takes the next
-// token — the file — with it; a FUSED form (\`>out.txt\`, \`2>/dev/null\`) is one
-// token and is skipped alone. \`<<\` is excluded: that is the heredoc operator,
-// which the scanner owns. \`&>\` never reaches here as a token, because \`&\` is
-// one of the tokenizer's segment separators — the segment after it starts at
-// the \`>\`, which these two do read.
-const REDIRECTION_ALONE = /^[0-9]*(?:>>|>\\||>|<)$/;
-const REDIRECTION_FUSED = /^[0-9]*(?:>>|>\\||>|<)[^\\s]+$/;
+// A REDIRECTION is not the command — and it is not an ARGUMENT either
+// (mmnto-ai/totem#2856 § C, widened by the round-5 leg's F5 and F12). The
+// shell applies it wherever it stands and runs the rest, so
+// \`> out.txt gh pr merge 5\` merges, \`gh > out.txt pr merge 5\` merges, and
+// \`gh pr merge 5 > out.txt\` merges PR 5 — while reading it at the segment's
+// FRONT only left \`>\` riding into argv as the merge's target, where the
+// engine denied a pull request on branch "\`>\`" with a reason no one wrote.
+// So: ONE strip over the WHOLE segment, ahead of every other strip and of the
+// anchor test.
+//
+// An operator ALONE (\`>\`, \`>>\`, \`<\`, \`<>\`, \`2>\`, \`<<<\`) takes the next
+// token — the file — with it; a FUSED form (\`>out.txt\`, \`2>/dev/null\`,
+// \`<<<bar\`, \`2<>file\`) is one token and drops alone. A \`<<EOF\` head is a
+// fused form too and drops harmlessly: the scanner blanked its BODY long
+// before this, so nothing of the heredoc is left to decide here.
+//
+// Residue, disclosed and unreachable rather than claimed: an operator carrying
+// \`|\` or \`&\` (\`>|\`, \`2>&1\`, \`>& file\`, \`<& 3\`, \`exec 3>&1 …\`) never
+// arrives as ONE token, because those two characters are the tokenizer's own
+// segment separators and end the token first. \`&>\` splits the same way but
+// leaves a readable \`>\` at the front of the next segment, so that one IS read.
+const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
+const REDIRECTION_FUSED = /^[0-9]*(?:<<<|[<>]{1,2})[^\\s]+$/;
 
 /**
  * The argv after EVERY \`gh pr merge\` at command position in the command —
@@ -2142,23 +2155,29 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
 
   const found = [];
   for (const segment of segments) {
-    let tokens = segment;
-    // Strip everything at the segment's front that is NOT the command, in any
-    // run: a transparent wrapper with its options (the table above), a
+    // FIRST, over the WHOLE segment: drop every redirection (the two patterns
+    // above). It runs before the strip below and before the anchor test, so a
+    // redirection in front of the command does not hide it, one in the middle
+    // does not break the anchor, and a trailing one never rides into argv.
+    let tokens = [];
+    for (let r = 0; r < segment.length; r++) {
+      const word = segment[r];
+      if (REDIRECTION_ALONE.test(word)) {
+        // The operator and the file it names, both gone.
+        r += 1;
+        continue;
+      }
+      if (REDIRECTION_FUSED.test(word)) continue;
+      tokens.push(word);
+    }
+    // Then strip everything at the segment's front that is NOT the command, in
+    // any run: a transparent wrapper with its options (the table above), a
     // command-position word, an assignment prefix. The loop re-runs after each
     // one, so \`env -u X A=1 gh …\` and \`sudo -u root timeout 30 gh …\` both
     // resolve to the same anchor test.
     let stripping = true;
     while (stripping && tokens.length > 0) {
       const head = tokens[0];
-      if (head.slice(0, 2) !== '<<' && REDIRECTION_ALONE.test(head)) {
-        tokens = tokens.slice(2);
-        continue;
-      }
-      if (head.slice(0, 2) !== '<<' && REDIRECTION_FUSED.test(head)) {
-        tokens = tokens.slice(1);
-        continue;
-      }
       const wrapper = Object.prototype.hasOwnProperty.call(TRANSPARENT_WRAPPERS, head)
         ? TRANSPARENT_WRAPPERS[head]
         : null;
