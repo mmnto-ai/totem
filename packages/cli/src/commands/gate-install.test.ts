@@ -1391,7 +1391,16 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // narrower one read the delimiter as the prefix `E` so the terminator
       // line never matched and the body ran to the end of the command.
       initGitRepo();
-      for (const command of [ROW_PAREN_COMMENT_HEREDOC, ROW_COLON_DELIMITER]) {
+      for (const command of [
+        ROW_PAREN_COMMENT_HEREDOC,
+        ROW_COLON_DELIMITER,
+        // Beside them, the other two shapes the paren arms decide: a `#` right
+        // after an OPENING `(` (which begins a word), and one after the `)` of
+        // a multi-command group. Neither is a comment without those arms, and
+        // the `<<note` inside each opened a body that blanked the merge.
+        ROW_OPEN_PAREN_COMMENT,
+        ROW_GROUP_CLOSE_COMMENT,
+      ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(stubArgv(), JSON.stringify(command)).not.toBeNull();
