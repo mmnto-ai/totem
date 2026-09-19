@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "9b42de084caf43cd0997092647c37ed7c6376298",
+  "readAt": "2026-09-19T12:05:09Z",
+  "findings": [
+    {
+      "id": "J1",
+      "severity": "MATERIAL",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 743,
+      "claim": "The operator-quoting rule is not applied to a fused redirection whose quoted filename contains whitespace: REDIRECTION_FUSED's filename class `[^\\s]+` cannot match a token carrying a space, so the strip never sees it — a STRICT bypass (leading) and a fabricated branch (trailing); not a fold-4 regression (fold 3 and main behave alike) but the strip is new on this branch and the residue is in no comment, row or failure row; a 3 768-case sweep found it the ONLY fail-open family.",
+      "counterexample": "bash: `>\"out file.txt\" gh pr merge 5` → GH-RAN and the file created; the hook end-to-end → exit 0, CLI never spawned. `gh pr merge --squash >\"merge log.txt\"` → hook branch '>merge log.txt' while `>\"merge.log\"` gives the current branch. 160 MISS cases, one shape; 0 over-strips. FOLDED (fold 5): the class becomes `[\\s\\S]+`; four rows; the corpus re-run reads 0 for the family."
+    },
+    {
+      "id": "J2",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 1019,
+      "claim": "The implemented `-S=` route diverges from the ruled clause (drop `-S=…` as a flag) and is not outcome-neutral: the attached-operand arm splices `=X` as the operand, so `env -S=X gh pr merge 5` — which coreutils RUNS (an empty-named assignment) — projects nothing; the ruled spelling is right on both inputs.",
+      "counterexample": "coreutils 8.32: `env -S=X gh pr merge 5` → GH-RAN; hook seam → []; the suite's only cell (`env -S='gh pr merge 5'` → null) passes on both routes. FOLDED (fold 5): the attached arm excludes a following `=`; rows for both spellings."
+    },
+    {
+      "id": "J3",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 876,
+      "claim": "The ps continuation arm requires the newline to be the immediate next character, and the EOF false-fire sentence generalises to any trailing backtick; pwsh with backtick + whitespace + newline RUNS `gh pr merge` with no target while the hook projects `unresolvedTarget: '`'` — deny direction, undisclosed.",
+      "counterexample": "pwsh 7.6.6, script file, recording gh.ps1: `gh pr merge ` + backtick + space + LF + `5` → GH-RAN [pr][merge], `5` evaluated as its own statement; hook → {pr: null, unresolvedTarget: '`'}. FOLDED (fold 5): disclosed as a false fire with a row; the EOF sentence narrowed."
+    },
+    {
+      "id": "J4",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 1043,
+      "claim": "Clustered short options are a miss for evaluating and ordinary operand options alike, disclosed nowhere: the option test reads the whole token, so `-vu` is dropped as one flag and its separate operand then blocks the anchor. The ordinary attached spellings (`env -uX`, `nice -n10`, `timeout -k5 30`) all project and all run — the gap is clustering, not attachment.",
+      "counterexample": "coreutils: `env -vu X gh pr merge 5` → GH-RAN; hook → []; `env -iS '…gh pr merge 5'` → GH-RAN; hook → [] while `env -i -S '…'` → [['5']]. FOLDED (fold 5): a residue bullet naming clustering, two locked rows."
+    },
+    {
+      "id": "J5",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 944,
+      "claim": "The contrived quoting shapes (an empty quote pair, a quoted operator abutting a real one, a partially quoted fd) diverge from bash in argv TEXT only — deny direction, no bypass — and are undisclosed.",
+      "counterexample": "`gh pr merge --squash \"\">out.txt` → bash argv [--squash] [] with a real redirection; hook argv ['--squash','>out.txt'] → branch '>out.txt'. 96 false fires over the corpus, 20 distinct, all deny direction. FOLDED (fold 5): one residue sentence, two rows asserting the current projection."
+    }
+  ],
+  "folded": [
+    "J1",
+    "J2",
+    "J3",
+    "J4",
+    "J5"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 4 MINOR at 9b42de08 — every fold-4 arm true by execution and RED-derivable by mutant; a 10 000-input fuzz with no throw (worst 0.301 ms); an 8 000-input scanner parity with no divergence; one fail-open family left (J1, one regex character) and four residues; every finding folded in fold 5, verified by re-executing this leg's own 3 768-case corpus; convergence named by the seat on fold 5."
+}
