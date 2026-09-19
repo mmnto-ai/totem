@@ -1819,7 +1819,12 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
 
       // And with a PR named, the number is still the target and nothing of the
-      // redirection reaches the payload.
+      // redirection reaches the payload. This third row does NOT discriminate
+      // as a payload (round-6 leg, G7): with the strip removed the argv is
+      // `['5', '>', 'out.txt']` and `projectMergeReady` keeps the FIRST
+      // positional, so the payload reads `pr: 5` either way. Its bite is the
+      // exact-argv row in the export seam; it stays here as the complement to
+      // the two branch rows above, not as a sensor.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
       runWrapper(bash(ROW_TRAILING_REDIRECT_PR), [], 'merge-ready');
       expect(spawnedPayload(), ROW_TRAILING_REDIRECT_PR).toEqual({
@@ -2718,7 +2723,13 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     // goes alone, and neither ever reaches `gh pr merge`'s argv.
     const { ghPrMergeArgvs } = wrapperExports();
     const rows: Array<[string, string[] | null]> = [
-      // Trailing — the shape that rode `>` in as the merge's target.
+      // Trailing — the shape that rode `>` in as the merge's target. THIS is
+      // where `ROW_TRAILING_REDIRECT_PR` discriminates (round-6 leg, G7):
+      // measured on a copy of the hook with the strip removed, its argv is
+      // `['5', '>', 'out.txt']` — while its PAYLOAD is `pr: 5` either way,
+      // because a positional after the first is ignored. Its two branch-payload
+      // siblings below bite end-to-end as well (`branch: '>'`, `branch: '2>'`);
+      // this one bites only here.
       [ROW_TRAILING_REDIRECT_PR, ['5']],
       ['gh pr merge 5 >out.txt', ['5']],
       [ROW_TRAILING_REDIRECT_BRANCH, ['--squash']],
