@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knownGates, TotemError } from '@mmnto/totem';
 
@@ -2266,6 +2266,13 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
 describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
   let findHeredocs: CoreFindHeredocs | null = null;
 
+  // The ONE async step: core's scanner is a TypeScript source this suite loads
+  // at run time. Loading it here keeps every row below synchronous, which is
+  // what they are.
+  beforeAll(async () => {
+    findHeredocs = await loadCoreFindHeredocs();
+  });
+
   /** Core's spans in the wrapper's shape — same fields, minus the unused `body`. */
   function coreSpans(command: string, powershell: boolean): WrapperSpan[] {
     if (findHeredocs === null) throw new Error('core findHeredocs was not loaded');
@@ -2337,8 +2344,7 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     return out;
   }
 
-  it('agrees with core over every command in this file, in both modes', async () => {
-    findHeredocs = await loadCoreFindHeredocs();
+  it('agrees with core over every command in this file, in both modes', () => {
     const { findHeredocSpans } = wrapperExports();
     for (const command of PARITY_COMMAND_CORPUS) {
       for (const powershell of [false, true]) {
@@ -2350,8 +2356,7 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     }
   });
 
-  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', async () => {
-    findHeredocs = await loadCoreFindHeredocs();
+  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', () => {
     const { findHeredocSpans } = wrapperExports();
     const corpus = fuzzCorpus(3000);
     expect(corpus).toHaveLength(3000);
@@ -2365,11 +2370,10 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     }
   });
 
-  it('the corpus carries the delimiters the issue names, terminated and not', async () => {
+  it('the corpus carries the delimiters the issue names, terminated and not', () => {
     // The guard on the guard: a corpus that silently lost these rows would
     // pass the two parity rows above while testing nothing about the bare
     // delimiter class the port widens.
-    findHeredocs = await loadCoreFindHeredocs();
     expect(DELIMITER_PARITY_ROWS).toHaveLength(PARITY_DELIMITERS.length * 2);
     for (const delimiter of PARITY_DELIMITERS) {
       expect(PARITY_COMMAND_CORPUS.some((c) => c.includes('<<' + delimiter))).toBe(true);
