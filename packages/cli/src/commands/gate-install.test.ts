@@ -411,6 +411,17 @@ const ROW_BASH_HASH_REDIRECT = 'sort <#tmp\ngh pr merge 8';
 const ROW_SUBSTITUTION_COMMENT = 'echo $(# <<note\ngh pr merge 5\n)';
 const ROW_HERESTRING_AS_OPERAND = 'gh pr merge 6 <<< notes';
 const ROW_TRAILING_COMMENT = 'echo hi # gh pr merge 9';
+/**
+ * The two comments that DISCRIMINATE the comment blanking (round-5 leg, F9).
+ * Each carries a tokenizer SEPARATOR inside the comment — a `;` and a backtick
+ * — so with the comment regions left in place the merge behind it reaches a
+ * segment's front and fires (verified on a rendered copy with the blanker's
+ * comment loop removed: pr 9 and pr 5). `ROW_TRAILING_COMMENT` above does NOT
+ * discriminate: with or without the blanking its merge stays inside the `echo`
+ * segment, so it proves nothing about the comment arms on its own.
+ */
+const ROW_COMMENT_SEPARATOR = 'echo hi # ; gh pr merge 9';
+const ROW_COMMENT_BACKTICK = 'echo hi # use `gh pr merge 5` to merge';
 const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
 const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
 const ROW_PS_CALL_OPERATOR = '& gh pr merge 5';
@@ -469,6 +480,8 @@ const PARITY_COMMAND_CORPUS = [
   ROW_SUBSTITUTION_COMMENT,
   ROW_HERESTRING_AS_OPERAND,
   ROW_TRAILING_COMMENT,
+  ROW_COMMENT_SEPARATOR,
+  ROW_COMMENT_BACKTICK,
   ROW_PAREN_COMMENT_HEREDOC,
   ROW_COLON_DELIMITER,
   ROW_OPEN_PAREN_COMMENT,
@@ -1436,11 +1449,19 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // executable ran unjudged — a bypass under the strict tier (greptile P1 on
       // mmnto-ai/totem#2855). The basename after the last `/` or `\` is what the
       // test reads now.
-      initGitRepo();
+      // The WHOLE payload, not a subset (round-5 leg, F11): a `toMatchObject`
+      // on `{ pr: 5 }` passes on a payload that also carries a branch, an
+      // `unresolvedTarget` or a repo from the wrong arm — each of which the
+      // engine judges differently. The clause is `{ repo, pr, headSha }`.
+      const head = initGitRepo();
       for (const command of EXECUTABLE_SPELLING_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
-        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
       }
     });
 
@@ -1449,11 +1470,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // saw `gh` and the merge ran unjudged. The strip now consumes a CLOSED
       // list of transparent programs with their option grammar, re-runs the
       // assignment strip after them, and only then reads the executable.
-      initGitRepo();
+      const head = initGitRepo();
       for (const command of WRAPPER_STRIP_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
-        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
       }
     });
 
@@ -1462,11 +1487,15 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // operand of a backtick substitution IS a command — both ran unjudged
       // while the redirection word was the segment's first token and the
       // backtick was an ordinary character.
-      initGitRepo();
+      const head = initGitRepo();
       for (const command of REDIRECTION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
-        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
       }
 
       // PowerShell's CALL OPERATOR is not a miss and the template says so from
@@ -1478,7 +1507,11 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         [],
         'merge-ready',
       );
-      expect(spawnedPayload(), ROW_PS_CALL_OPERATOR).toMatchObject({ pr: 5 });
+      expect(spawnedPayload(), ROW_PS_CALL_OPERATOR).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
 
       // The complement: a backtick substitution as the merge's own TARGET is a
       // target this hook cannot know, exactly as `$( … )` is — it rides as
@@ -1595,11 +1628,14 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         tool_input: { command },
       });
 
-      // THE CONTROL (round 4, F1): a MULTI-LINE block comment. Without the
-      // `<#` arm this fires with pr 9 — verified by stripping the arm from a
-      // rendered copy. The single-line row below behaves the same either way
-      // (the `#` word-comment arm already covers it), so it is a companion, not
-      // a control.
+      // TWO CONTROLS (round 4, F1; the second corrected by the round-5 leg's
+      // F10). On a rendered copy with the `<#` arm stripped, BOTH the
+      // multi-line and the inline row fire with pr 9 — the inline one because
+      // its `<#` then reads as a fused REDIRECTION and drops, leaving
+      // `gh pr merge 9` at the segment's front, and its trailing `#>` is eaten
+      // by the `#` word-comment arm. The note this replaces called the inline
+      // row a companion the `#` word-comment arm "already covers": it does not
+      // — nothing there begins a word, so that `#` is text.
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
       expect(runWrapper(pwsh(ROW_PS_BLOCK_MULTILINE), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
@@ -1674,11 +1710,22 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     });
 
     it('a comment is not a command: a merge inside one never fires', () => {
+      // The first row is the plain shape; the other two are the ones that
+      // DISCRIMINATE the blanking (round-5 leg, F9). Each of those carries a
+      // tokenizer separator inside the comment, so on a rendered copy with the
+      // blanker's comment loop removed they project pr 9 and pr 5 — while the
+      // plain row projects nothing either way, because its merge never leaves
+      // the `echo` segment. Without them this test held the comment arms to
+      // nothing.
       initGitRepo();
-      writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(bash(ROW_TRAILING_COMMENT), [], 'merge-ready');
-      expect(status).toBe(0);
-      expect(stubArgv()).toBeNull();
+      for (const command of [ROW_TRAILING_COMMENT, ROW_COMMENT_SEPARATOR, ROW_COMMENT_BACKTICK]) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(bash(command), [], 'merge-ready');
+        expect(status, command).toBe(0);
+        expect(stubArgv(), command).toBeNull();
+      }
     });
 
     it('EVERY heredoc queued on a line is read as data, not just the first (fold round 2, F2)', () => {
