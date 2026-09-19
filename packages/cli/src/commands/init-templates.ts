@@ -2803,6 +2803,10 @@ ${SKILL_MARKER_START}
 
 Triage PR review comments from all bots for PR $ARGUMENTS.
 
+## Before Phase 1: confirm each invoked review is on the head
+
+A review trigger is the operator's to post, one bot per standalone comment, and what a bot does with it is not ours to control — so before triaging, confirm every invoked bot's review, and confirm it against the review object for THIS head sha or the bot's summary comment for that sha, never the head's green status: CodeRabbit writes a green commit status on every push head whether or not it reviewed that head, and a PENDING status means still reviewing. A chat reply or silence with no review to confirm is not a pass — the cadence is one external pass per chosen bot — so the pass is a standalone re-trigger on the operator's word, never a re-invoke folded into another comment. Before merging on the other reviewers, either wait one acknowledgement window (about 12 minutes; a review has landed that late, after the merge) or merge and record the late acknowledgement as one line on the PR thread naming the bot and the time it acknowledged.
+
 ## Phase 1: Fetch & Categorize (Deterministic)
 
 Run the triage command to fetch, normalize, deduplicate, and categorize all bot comments:
