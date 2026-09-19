@@ -2039,27 +2039,43 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   // \`eval\` re-enters this function ONCE (§ B); every other caller is depth 0.
   const level = typeof depth === 'number' ? depth : 0;
   const command = blankHeredocBodies(rawCommand, powershell === true);
+  // Each segment's tokens, and beside them ONE BOOLEAN PER TOKEN: did any part
+  // of this token's text come from inside quotes or from a backslash escape?
+  // A word the author quoted is DATA — the shell will not read it as an
+  // operator — so the redirection strip below must not read it as one either
+  // (round-6 leg, G1: the strip dropped the body of \`gh pr merge -b "<br>" 5\`
+  // and left \`-b\` to swallow PR 5). The flag rides in a PARALLEL array so
+  // every reader of a token stays a reader of a plain string; only the strip
+  // consults it. It annotates the walk's output; it changes no grammar.
   const segments = [];
+  const literals = [];
   let current = [];
+  let currentLiteral = [];
   let token = '';
   let hasToken = false;
+  let tokenLiteral = false;
   let i = 0;
   const endToken = () => {
     if (hasToken) {
       current.push(token);
+      currentLiteral.push(tokenLiteral);
       token = '';
       hasToken = false;
+      tokenLiteral = false;
     }
   };
   const endSegment = () => {
     endToken();
     segments.push(current);
+    literals.push(currentLiteral);
     current = [];
+    currentLiteral = [];
   };
   while (i < command.length) {
     const ch = command[i];
     if (ch === "'") {
       hasToken = true;
+      tokenLiteral = true;
       i++;
       while (i < command.length && command[i] !== "'") {
         token += command[i];
@@ -2070,6 +2086,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     }
     if (ch === '"') {
       hasToken = true;
+      tokenLiteral = true;
       i++;
       while (i < command.length && command[i] !== '"') {
         if (command[i] === '\\\\' && i + 1 < command.length) {
@@ -2117,6 +2134,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     if (ch === '\`') {
       endToken();
       current.push('\`');
+      currentLiteral.push(false);
       endSegment();
       i++;
       continue;
@@ -2145,6 +2163,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     if (ch === '\\\\' && i + 1 < command.length) {
       token += command[i + 1];
       hasToken = true;
+      tokenLiteral = true;
       i += 2;
       continue;
     }
@@ -2155,20 +2174,24 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   endSegment();
 
   const found = [];
-  for (const segment of segments) {
+  for (let s = 0; s < segments.length; s++) {
+    const segment = segments[s];
+    const literal = literals[s];
     // FIRST, over the WHOLE segment: drop every redirection (the two patterns
     // above). It runs before the strip below and before the anchor test, so a
     // redirection in front of the command does not hide it, one in the middle
     // does not break the anchor, and a trailing one never rides into argv.
+    // A LITERAL token is never an operator, whatever its text: the shell reads
+    // a quoted or escaped word as data, and so does this (round-6 leg, G1).
     let tokens = [];
     for (let r = 0; r < segment.length; r++) {
       const word = segment[r];
-      if (REDIRECTION_ALONE.test(word)) {
+      if (literal[r] !== true && REDIRECTION_ALONE.test(word)) {
         // The operator and the file it names, both gone.
         r += 1;
         continue;
       }
-      if (REDIRECTION_FUSED.test(word)) continue;
+      if (literal[r] !== true && REDIRECTION_FUSED.test(word)) continue;
       tokens.push(word);
     }
     // Then strip everything at the segment's front that is NOT the command, in

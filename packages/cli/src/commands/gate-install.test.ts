@@ -441,6 +441,22 @@ const ROW_TRAILING_REDIRECT_BRANCH = 'gh pr merge --squash > merge.log';
 const ROW_TRAILING_REDIRECT_ERR = 'gh pr merge --squash 2> err.log';
 const ROW_TRAILING_REDIRECT_PR = 'gh pr merge 5 > out.txt';
 /**
+ * A redirection LOOKALIKE that came out of quotes or a backslash escape
+ * (round-6 leg, G1). The whole-segment strip above reads a token's TEXT, and
+ * `<br>` spelled as the body of `-b` has the text of a fused redirection — so
+ * stripping it dropped the merge's own argument, and with the value-flag
+ * pairing broken the token AFTER it was swallowed instead: `-b "<br>" 5` lost
+ * PR 5 to the current branch, and `-t ">>" --repo owner/name 5` lost the repo
+ * (a `>>` ALONE takes the next token with it, and that token was `--repo`).
+ * The shell quotes those for exactly this reason — they are data. The
+ * tokenizer now records per token whether any part of it came from inside
+ * quotes or from an escape, and the strip skips a literal token.
+ */
+const ROW_LITERAL_BODY_PR = 'gh pr merge -b "<br>" 5';
+const ROW_LITERAL_BODY_REPO = 'gh pr merge -b "<br>" --repo owner/name 5';
+const ROW_LITERAL_SUBJECT_REPO = 'gh pr merge -t ">>" --repo owner/name 5';
+const ROW_LITERAL_ESCAPED_BODY = 'gh pr merge -b \\<br\\> 5';
+/**
  * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
  * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
  * string to PowerShell — it prints text and merges nothing. This walk reads
@@ -496,6 +512,10 @@ const PARITY_COMMAND_CORPUS = [
   ROW_TRAILING_REDIRECT_BRANCH,
   ROW_TRAILING_REDIRECT_ERR,
   ROW_TRAILING_REDIRECT_PR,
+  ROW_LITERAL_BODY_PR,
+  ROW_LITERAL_BODY_REPO,
+  ROW_LITERAL_SUBJECT_REPO,
+  ROW_LITERAL_ESCAPED_BODY,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1422,10 +1442,53 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     });
 
     it('a value-taking flag does not swallow the PR target (`-b "…" 42`)', () => {
-      initGitRepo();
+      const head = initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
       runWrapper(bash('gh pr merge -b "merge this now" 42'), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 42 });
+
+      // WIDENED to a body WITHOUT spaces (round-6 leg, G1): a multi-word body
+      // can never look like anything else, so this row held the pairing only
+      // for bodies the whole-segment redirection strip would not touch. A
+      // one-word body that reads as a redirection (`<br>`) is where the strip
+      // and the pairing collide.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_LITERAL_BODY_PR), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_LITERAL_BODY_PR).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+    });
+
+    it('a QUOTED or escaped redirection lookalike is an argument, not an operator (round-6 leg, G1)', () => {
+      // The redirection strip reads a token's text, so `-b "<br>"` and
+      // `-t ">>"` — the merge's own data, quoted by the author for exactly
+      // this reason — were dropped as operators. The fused one took the body
+      // and left `-b` to swallow the PR number; the `>>` ALONE took the token
+      // after it, which was `--repo`, and the payload named the wrong
+      // repository. The tokenizer now marks a token whose text came from
+      // inside quotes or from a backslash escape, and the strip skips it.
+      const head = initGitRepo();
+      for (const command of [ROW_LITERAL_BODY_REPO, ROW_LITERAL_SUBJECT_REPO]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'owner/name',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // A backslash escape is the other half of the rule: `\<br\>` is the same
+      // data spelled without quotes.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_LITERAL_ESCAPED_BODY), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_LITERAL_ESCAPED_BODY).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
     });
 
     it("fires at command position after a separator, after the shell's command-position words, and behind an assignment prefix", () => {
@@ -2570,6 +2633,15 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       // blanked by the scanner long before the tokenizer ran.
       [ROW_HEREDOC_AS_OPERAND, ['5']],
       [ROW_HERESTRING_AS_OPERAND, ['6']],
+      // QUOTED or ESCAPED, so not an operator at all (round-6 leg, G1): the
+      // argv asserted exactly, which is what the payload rows can only imply.
+      // Without the literal flag these read `['-b', '5']`, `['-t', '--repo',
+      // 'owner/name', '5']` and `['-b', '5']`.
+      [ROW_LITERAL_BODY_PR, ['-b', '<br>', '5']],
+      [ROW_LITERAL_SUBJECT_REPO, ['-t', '>>', '--repo', 'owner/name', '5']],
+      [ROW_LITERAL_ESCAPED_BODY, ['-b', '<br>', '5']],
+      // …while the UNQUOTED spelling of the same text keeps stripping.
+      ['gh pr merge -b <br> 5', ['-b', '5']],
       // RESIDUE, unreachable rather than claimed: `|` and `&` are the
       // tokenizer's own separators and end the token before the operator is
       // whole, so these two never present a redirection to strip.
