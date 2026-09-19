@@ -135,11 +135,15 @@ function resolveCliFromPath() {
 // `env -S` / `--split-string` splits its own operand into the words that
 // take the option's place; a leading redirection is skipped with its file;
 // and a backtick substitution is a segment of its own. In POWERSHELL mode a
-// trailing backtick is that shell's LINE CONTINUATION instead — the backtick
-// and the newline are consumed and the word continues, exactly as bash's
-// trailing backslash does (round-6 leg, G3); it was a separator in both modes
-// before, which made the backtick itself the merge's target and left the real
-// one in the next segment.
+// trailing backtick is that shell's LINE CONTINUATION instead — at a WORD
+// BOUNDARY the backtick and the newline are consumed and the next line
+// continues the command, the twin of bash's trailing backslash there
+// (round-6 leg, G3, bounded by round-7's H4); it was a separator in both
+// modes before, which made the backtick itself the merge's target and left
+// the real one in the next segment. INSIDE a word the two shells differ:
+// PowerShell's backtick escapes the newline INTO the argument, so
+// `gh pr merg<backtick><LF>e 5` is the word `merg<LF>e` and merges
+// nothing — and neither does this.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny. Every one of them
@@ -170,13 +174,14 @@ function resolveCliFromPath() {
 //     `\$`), its `$VAR` expansion inside the string and its `#` comment
 //     are not modelled, and quotes INSIDE the string are not stripped.
 //     Measured: `env -S 'gh\_pr\_merge\_5'` runs `gh pr merge 5`, while
-//     the split reads ONE word here and nothing projects (locked row);
-//   - an ATTACHED SHORT `-S` operand (`env -S'gh pr merge 5'`): the quote
-//     arm joins it into one token `-Sgh pr merge 5`, which is not one of the
-//     three spellings fold 3 names (`-S <op>`, `--split-string <op>`,
-//     `--split-string=<op>`), so it is dropped as a flag of env and nothing
-//     projects. env RUNS that merge (measured), so this one is a fail-open
-//     (locked row);
+//     the split reads ONE word here and nothing projects; and
+//     `env -S 'env -S "gh pr merge 5"'` runs it too, because env strips the
+//     quotes inside its own operand while this walk keeps them and reads
+//     `"gh` as the executable (both locked rows, round-7 leg H5). The
+//     ATTACHED SHORT spelling is no longer among them: `env -Sgh pr merge 5`
+//     and `env -S'gh pr merge 5'` both arrive as the token
+//     `-Sgh pr merge 5`, and the rest of that token is now read as the
+//     operand, so both are judged;
 //   - `eval` nested deeper than ONE level
 //     (`eval "eval \"gh pr merge 5\""`);
 //   - a substitution inside DOUBLE quotes (`echo "`gh pr merge 5`"`,
@@ -225,6 +230,16 @@ function resolveCliFromPath() {
 // `timeout --foreground`) into a MISS, which is a bypass under STRICT. A
 // false fire on a command that runs nothing costs one bogus deny; rows assert
 // each of them, so this paragraph is read from the suite.
+// A sixth, PowerShell's again (round-7 leg, H4): a TRAILING BACKTICK AT THE
+// END OF THE INPUT (`gh pr merge 5 <backtick>`) is a continuation with
+// nothing to continue — pwsh answers with a parse error and runs NOTHING —
+// while here the backtick is not followed by a newline, so it falls through
+// to the separator arm and the merge in front of it is judged.
+// A seventh, env's (round-7 leg, H5): a `$VAR` inside a `-S` operand
+// (`env -S 'gh pr merge $PR'`) makes env REFUSE the whole command — it
+// supports only `${VARNAME}` and answers "only ${VARNAME} expansion is
+// supported" — so NOTHING runs, while the split reaches the anchor and
+// `$PR` rides as an `unresolvedTarget` the strict tier denies.
 // `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
@@ -658,7 +673,11 @@ const TRANSPARENT_WRAPPERS = {
     // MISS — consistency in the miss direction, which is a bypass under STRICT
     // (fold 3, on the round-6 fold's own measurement). So the words take the
     // option's place and the strip reads on from them, the way `eval`'s
-    // operand is re-read.
+    // operand is re-read. The ATTACHED SHORT spellings join them (round-7
+    // leg, H5): `env -Sgh pr merge 5` and `env -S'gh pr merge 5'` both
+    // arrive as the one token `-Sgh pr merge 5` and run the merge too. An
+    // `=` is NOT a separator for a short option, so `env -S=x` reads its
+    // operand as `=x` — which is what env does with it.
     evaluatesOperand: ['-S', '--split-string'],
   },
   timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
@@ -703,13 +722,25 @@ const TRANSPARENT_WRAPPERS = {
 // leg, G2). `&>` splits the same way but leaves a readable `>` at the front
 // of the next segment, so that one IS read.
 //
-// A LITERAL token is never a redirection, whatever its text: a word any part
-// of which came from inside quotes or from a backslash escape is data the
-// shell will not read as an operator, and the walk marks it (round-6 leg,
-// G1). Without that, `gh pr merge -b "<br>" 5` lost its body to this strip
-// and `-b` swallowed PR 5.
+// WHAT MAKES A REDIRECTION REAL IS THE QUOTING OF THE OPERATOR, not of the
+// word it sits in (round-7 leg, H1/H2; the round-6 rule this replaces read
+// "any part of which came from inside quotes or from an escape", which is not
+// the shell's). Bash decides on the operator characters alone: quote the
+// FILENAME and the redirection still happens — `>"out.txt" gh pr merge 5`
+// truncates out.txt and merges PR 5 — while quoting the OPERATOR makes the
+// whole word an argument: `gh pr merge --squash ">"out.txt` passes the string
+// `>out.txt` to gh and redirects nothing. So the walk records, per token, the
+// INDEX of its first character that came from inside quotes or from a
+// backslash escape (`-1` when none), and a token is stripped only when the
+// operator prefix this file's two patterns match lies ENTIRELY BEFORE that
+// index. Under the round-6 rule every one of `>"out.txt"`, `2>"err.log"`,
+// `<<<'bar'` and `>"$FILE"` rode into argv as data — a merge judged on a
+// target nobody wrote, or (trailing) a branch named `>merge.log`. The rows
+// that made the round-6 rule necessary are unchanged by this one, because
+// their operator character is itself quoted or escaped: `-b "<br>" 5` and
+// `-b \<br\> 5` both have their first literal character at index 0.
 const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
-const REDIRECTION_FUSED = /^[0-9]*(?:<<<|[<>]{1,2})[^\s]+$/;
+const REDIRECTION_FUSED = /^([0-9]*(?:<<<|[<>]{1,2}))[^\s]+$/;
 
 /**
  * The argv after EVERY `gh pr merge` at command position in the command —
@@ -721,43 +752,52 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   // `eval` re-enters this function ONCE (§ B); every other caller is depth 0.
   const level = typeof depth === 'number' ? depth : 0;
   const command = blankHeredocBodies(rawCommand, powershell === true);
-  // Each segment's tokens, and beside them ONE BOOLEAN PER TOKEN: did any part
-  // of this token's text come from inside quotes or from a backslash escape?
-  // A word the author quoted is DATA — the shell will not read it as an
-  // operator — so the redirection strip below must not read it as one either
-  // (round-6 leg, G1: the strip dropped the body of `gh pr merge -b "<br>" 5`
-  // and left `-b` to swallow PR 5). The flag rides in a PARALLEL array so
-  // every reader of a token stays a reader of a plain string; only the strip
-  // consults it. It annotates the walk's output; it changes no grammar.
+  // Each segment's tokens, and beside them ONE NUMBER PER TOKEN: the INDEX,
+  // within the token, of the first character that came from inside quotes or
+  // from a backslash escape — `-1` when the whole word is bare. The
+  // redirection strip below is its only reader, and it needs the index rather
+  // than a yes/no because the shell decides a redirection on the QUOTING OF
+  // THE OPERATOR: `>"out.txt"` redirects (first literal character at 1, past
+  // the `>`) while `">"out.txt` is the argument `>out.txt` (first literal
+  // character at 0, on the operator itself). A yes/no answered both with
+  // "data" and let a real redirection ride into argv (round-7 leg, H1/H2); it
+  // answered `-b "<br>" 5` correctly, and so does the index (round-6 leg,
+  // G1). The numbers ride in a PARALLEL array so every reader of a token stays
+  // a reader of a plain string. It annotates the walk's output; it changes no
+  // grammar.
   const segments = [];
-  const literals = [];
+  const literalAts = [];
   let current = [];
-  let currentLiteral = [];
+  let currentLiteralAt = [];
   let token = '';
   let hasToken = false;
-  let tokenLiteral = false;
+  let tokenLiteralAt = -1;
   let i = 0;
+  /** The next character appended to this token is literal: mark the first. */
+  const markLiteral = () => {
+    if (tokenLiteralAt === -1) tokenLiteralAt = token.length;
+  };
   const endToken = () => {
     if (hasToken) {
       current.push(token);
-      currentLiteral.push(tokenLiteral);
+      currentLiteralAt.push(tokenLiteralAt);
       token = '';
       hasToken = false;
-      tokenLiteral = false;
+      tokenLiteralAt = -1;
     }
   };
   const endSegment = () => {
     endToken();
     segments.push(current);
-    literals.push(currentLiteral);
+    literalAts.push(currentLiteralAt);
     current = [];
-    currentLiteral = [];
+    currentLiteralAt = [];
   };
   while (i < command.length) {
     const ch = command[i];
     if (ch === "'") {
       hasToken = true;
-      tokenLiteral = true;
+      markLiteral();
       i++;
       while (i < command.length && command[i] !== "'") {
         token += command[i];
@@ -768,7 +808,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     }
     if (ch === '"') {
       hasToken = true;
-      tokenLiteral = true;
+      markLiteral();
       i++;
       while (i < command.length && command[i] !== '"') {
         if (command[i] === '\\' && i + 1 < command.length) {
@@ -813,28 +853,41 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // pair and a `$( … )` inside double quotes, so `echo "`gh pr merge 5`"`
     // merges PR 5 unjudged. A disclosed fail-open, filed as
     // mmnto-ai/totem#2893 (round-5 leg, F4).
-    // POWERSHELL'S LINE CONTINUATION is a trailing BACKTICK — the exact twin
-    // of the backslash-newline arm below, and the reason this one has to be
-    // read first: in ps mode the backtick and the newline after it are
-    // consumed and the word continues, so
+    // POWERSHELL'S LINE CONTINUATION is a trailing BACKTICK — the twin of the
+    // backslash-newline arm below AT A WORD BOUNDARY, and the reason this one
+    // has to be read first: in ps mode the backtick and the newline after it
+    // are consumed and the next line's words continue the command, so
     // `gh pr merge <backtick><LF>5` is `gh pr merge 5`. Read as the segment
     // separator it is in BASH, that command projected the backtick itself as
     // the merge's target (`unresolvedTarget`, a deny on a target nobody wrote
     // under strict) while the real target sat in the next segment and merged
     // unjudged (round-6 leg, G3). Bash keeps the separator: there a backtick
     // opens a command substitution, whatever follows it.
+    //
+    // INSIDE A WORD the two shells part company (round-7 leg, H4). Bash's
+    // backslash-newline really joins the halves — `me\<LF>rge` is `merge`
+    // — while PowerShell's backtick is its ESCAPE character and
+    // `merg<backtick><LF>e` is the single argument `merg<LF>e`, which is not
+    // `merge` and runs nothing. So the join applies only where no token is
+    // open; inside one, the escaped newline lands IN the token, the anchor
+    // fails to match, and nothing is projected — which is what PowerShell
+    // does. Joining there projected a merge the shell never runs.
     if (
       powershell === true &&
       ch === '`' &&
       (command[i + 1] === '\n' || (command[i + 1] === '\r' && command[i + 2] === '\n'))
     ) {
+      if (hasToken) {
+        markLiteral();
+        token += '\n';
+      }
       i += command[i + 1] === '\r' ? 3 : 2;
       continue;
     }
     if (ch === '`') {
       endToken();
       current.push('`');
-      currentLiteral.push(false);
+      currentLiteralAt.push(-1);
       endSegment();
       i++;
       continue;
@@ -861,9 +914,9 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
       continue;
     }
     if (ch === '\\' && i + 1 < command.length) {
+      markLiteral();
       token += command[i + 1];
       hasToken = true;
-      tokenLiteral = true;
       i += 2;
       continue;
     }
@@ -876,22 +929,26 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   const found = [];
   for (let s = 0; s < segments.length; s++) {
     const segment = segments[s];
-    const literal = literals[s];
+    const literalAt = literalAts[s];
     // FIRST, over the WHOLE segment: drop every redirection (the two patterns
     // above). It runs before the strip below and before the anchor test, so a
     // redirection in front of the command does not hide it, one in the middle
     // does not break the anchor, and a trailing one never rides into argv.
-    // A LITERAL token is never an operator, whatever its text: the shell reads
-    // a quoted or escaped word as data, and so does this (round-6 leg, G1).
+    // The OPERATOR's own quoting decides, as it does in the shell: strip only
+    // when the matched operator prefix lies entirely before the token's first
+    // literal character (round-7 leg, H1/H2).
     let tokens = [];
     for (let r = 0; r < segment.length; r++) {
       const word = segment[r];
-      if (literal[r] !== true && REDIRECTION_ALONE.test(word)) {
-        // The operator and the file it names, both gone.
+      const at = literalAt[r];
+      if (REDIRECTION_ALONE.test(word) && (at === -1 || word.length <= at)) {
+        // The operator and the file it names, both gone — however that file
+        // is spelled: `> "out.txt"` is as real a redirection as `> out.txt`.
         r += 1;
         continue;
       }
-      if (literal[r] !== true && REDIRECTION_FUSED.test(word)) continue;
+      const fused = REDIRECTION_FUSED.exec(word);
+      if (fused !== null && (at === -1 || fused[1].length <= at)) continue;
       tokens.push(word);
     }
     // Then strip everything at the segment's front that is NOT the command, in
@@ -950,17 +1007,33 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           break;
         }
         if (wrapper.evaluatesOperand !== undefined) {
-          const eq = opt.indexOf('=');
-          const name = eq === -1 ? opt : opt.slice(0, eq);
+          // Where the operand is: a LONG option carries an attached one after
+          // an `=` (`--split-string='gh pr merge 5'`), a SHORT one carries it
+          // with no separator at all (`-Sgh pr merge 5`, and
+          // `-S'gh pr merge 5'`, which the quote arm joins into that same
+          // token), and otherwise it is the NEXT token. An `=` is not a
+          // separator for a short option — `env -S=x` hands env the operand
+          // `=x` — so the split is long-only (round-7 leg, H5).
+          let name = opt;
+          let attached = null;
+          if (opt.charAt(1) === '-') {
+            const eq = opt.indexOf('=');
+            if (eq !== -1) {
+              name = opt.slice(0, eq);
+              attached = opt.slice(eq + 1);
+            }
+          } else {
+            name = opt.slice(0, 2);
+            if (opt.length > 2) attached = opt.slice(2);
+          }
           if (wrapper.evaluatesOperand.indexOf(name) !== -1) {
             // The operand is a COMMAND STRING, not a value to skip past: env
             // splits it into words and prepends them to what follows. Split
             // on whitespace — env's own rule — put the words where the option
             // stood, and let the strip read on, so the assignment strip runs
             // for `env -S 'A=1 gh pr merge 5'` and the anchor sees `gh`.
-            const operandText =
-              eq === -1 ? (tokens.length > 1 ? tokens[1] : '') : opt.slice(eq + 1);
-            const rest = tokens.slice(eq === -1 ? 2 : 1);
+            const operandText = attached === null ? (tokens.length > 1 ? tokens[1] : '') : attached;
+            const rest = tokens.slice(attached === null ? 2 : 1);
             const words = operandText.split(/\s+/);
             tokens = [];
             for (let w = 0; w < words.length; w++) {
