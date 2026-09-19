@@ -208,11 +208,13 @@ const NEVER_SPAWNS_ROWS = [
   'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
   // An UNTERMINATED body runs to the end of the command and is still data.
   'cat <<EOF\ngh pr merge 5',
-  // A backtick substitution inside QUOTES is data, not a segment of its own:
-  // the quote arms run before the separator (§ C keeps the false-deny
-  // direction closed).
-  'echo "`gh pr merge 5`"',
+  // A substitution inside SINGLE quotes really is data: bash does not expand
+  // it, so `echo '`gh pr merge 5`'` prints the text and merges nothing. The
+  // DOUBLE-quoted spellings are a different matter — bash runs those, and they
+  // are a disclosed MISS in MUTANT_ROWS below, not a control here (round-5
+  // leg, F4).
   "echo '`gh pr merge 5`'",
+  "echo '$(gh pr merge 5)'",
 ];
 
 /** § A — the executable spellings that project. */
@@ -292,7 +294,13 @@ const REDIRECTION_ROWS = [
   '`gh pr merge 5`',
 ];
 
-/** § F — one mutant per widened form; none of them may project. */
+/**
+ * § F — one mutant per widened form, and the LOCKED disclosed misses; none of
+ * them may project. A mutant is a shape the shell does not run as a merge; a
+ * disclosed miss is one it DOES run and this walk cannot decide — each is
+ * named as which in its comment, so the residue in the template's comment is
+ * read from these rows rather than from memory.
+ */
 const MUTANT_ROWS = [
   // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
   'sudo -u gh pr merge 5',
@@ -354,6 +362,14 @@ const MUTANT_ROWS = [
   // The unquoted win32 path (see EXECUTABLE_SPELLING_ROWS): its backslashes
   // are consumed as escapes before the executable test sees the token.
   'C:\\tools\\gh.exe pr merge 5',
+  // A DISCLOSED MISS, not a control (round-5 leg, F4): bash EXECUTES a
+  // backtick pair and a `$( … )` inside double quotes, so both of these merge
+  // PR 5 — and this walk's quote arms swallow them as one token, so neither is
+  // judged. A fail-open, filed as mmnto-ai/totem#2893; they sit here because
+  // the observable is the same (nothing projects), but the reason is the
+  // opposite of the single-quoted control above.
+  'echo "`gh pr merge 5`"',
+  'echo "$(gh pr merge 5)"',
 ];
 
 /** An arithmetic shift or a comment must not swallow the merge that follows. */
@@ -390,6 +406,16 @@ const ROW_TRAILING_COMMENT = 'echo hi # gh pr merge 9';
 const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
 const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
 const ROW_PS_CALL_OPERATOR = '& gh pr merge 5';
+/**
+ * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
+ * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
+ * string to PowerShell — it prints text and merges nothing. This walk reads
+ * POSIX quoting for BOTH tools, so the `"` after the escaping backtick closes
+ * the string, the `;` ends a segment, and `gh pr merge 5` lands at the next
+ * segment's front. The row asserts what the wrapper DOES here, so the
+ * disclosure in the template is read from a row, never from memory.
+ */
+const ROW_PS_DQ_BACKTICK = 'Write-Output "a `"; gh pr merge 5`"b"';
 const ROW_OPEN_PAREN_COMMENT = '(#<<note\ngh pr merge 5\n)';
 const ROW_GROUP_CLOSE_COMMENT = '(true; echo a)#<<note\ngh pr merge 5';
 
@@ -430,6 +456,7 @@ const PARITY_COMMAND_CORPUS = [
   ROW_OPEN_PAREN_COMMENT,
   ROW_GROUP_CLOSE_COMMENT,
   ROW_PS_CALL_OPERATOR,
+  ROW_PS_DQ_BACKTICK,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1571,6 +1598,28 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
       runWrapper(bash(ROW_BASH_HASH_REDIRECT), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
+    });
+
+    it('a PowerShell backtick escape inside double quotes is a DISCLOSED false fire (round-5 leg, F13)', () => {
+      // PowerShell escapes with a backtick inside a double-quoted string, so
+      // `"a `"; gh pr merge 5`"b"` is ONE string and PowerShell merges nothing.
+      // This walk reads POSIX quoting for BOTH tools — the `"` after the
+      // escaping backtick closes the string and `gh pr merge 5` reaches a
+      // segment's front — so the wrapper judges a merge the shell never runs.
+      // The deny direction on contrived text, disclosed in the template's
+      // false-fires paragraph and asserted here rather than claimed there.
+      const head = initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_DQ_BACKTICK } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_DQ_BACKTICK).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
     });
 
     it('a comment is not a command: a merge inside one never fires', () => {

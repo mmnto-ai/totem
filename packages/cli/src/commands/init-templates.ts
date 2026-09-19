@@ -1543,6 +1543,11 @@ function resolveCliFromPath() {
 //     with the option here, so the merge inside it is not read;
 //   - \`eval\` nested deeper than ONE level
 //     (\`eval "eval \\"gh pr merge 5\\""\`);
+//   - a substitution inside DOUBLE quotes (\`echo "\`gh pr merge 5\`"\`,
+//     \`echo "$(gh pr merge 5)"\`): bash EXECUTES both of those, but the
+//     tokenizer's quote arm swallows the whole string as ONE token, so the
+//     merge inside runs unjudged. Filed as mmnto-ai/totem#2893 (round-5 leg,
+//     F4); the single-quoted spelling really is data and stays a control row;
 //   - a redirection operator carrying a tokenizer separator (\`>|\`, \`2>&1\`):
 //     \`|\` and \`&\` end the segment before the operator is read as one word. A
 //     \`&>\` splits the same way but leaves a readable \`>\` at the front of the
@@ -1564,8 +1569,12 @@ function resolveCliFromPath() {
 // to be collected, round 2 F6); and a function DEFINITION whose body is a
 // merge (\`f() { gh pr merge 5; }\`) fires at definition time, because \`{\` is a
 // separator and the body is its own segment (round 3, F4; it fired before this
-// PR's rounds too). \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any
-// of them.
+// PR's rounds too). A fourth, PowerShell's own: a double-quoted string whose
+// backtick escapes a quote (\`Write-Output "a \`"; gh pr merge 5\`"b"\`) is ONE
+// string to PowerShell and merges nothing, but this walk reads POSIX quoting
+// for both tools, so the \`"\` after the escaping backtick closes the string and
+// the merge reaches a segment's front (round-5 leg, F13; a row asserts it).
+// \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
 //
@@ -2084,8 +2093,13 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // is. The backtick is kept as a TOKEN, the way \`$(\` leaves its \`$\` behind:
     // without it a merge whose TARGET is a backtick substitution would lose
     // that target and fall back to the current branch — judging a pull request
-    // the command never named. A backtick inside quotes never reaches here (the
-    // quote arms run first) and one inside a heredoc body is already blanked.
+    // the command never named. One inside a heredoc body is already blanked,
+    // and that is correct — a body is data. One inside DOUBLE quotes never
+    // reaches here either, because the quote arm above swallows the whole
+    // string as one token — and that one is NOT data: bash executes a backtick
+    // pair and a \`$( … )\` inside double quotes, so \`echo "\`gh pr merge 5\`"\`
+    // merges PR 5 unjudged. A disclosed fail-open, filed as
+    // mmnto-ai/totem#2893 (round-5 leg, F4).
     if (ch === '\`') {
       endToken();
       current.push('\`');
