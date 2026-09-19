@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "4e80e3a846aa792b11cc6fa1ae15716b8ccb0759",
+  "readAt": "2026-09-19T07:56:22Z",
+  "findings": [
+    {
+      "id": "G1",
+      "severity": "BLOCKING",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 18,
+      "claim": "The fold's new sentence 'matched to the head by its time against the head's push' prescribes the matching method bot-protocols.md @16c5694 § Working the findings forbids by name ('sweep by content / last-reviewed-commit, never by created_at' — a Greptile in-place re-review does not advance created_at), on the only confirmation path that covers Greptile; no read the skill names exposes a push timestamp.",
+      "counterexample": "The Greptile summary on mmnto-ai/totem-strategy#1182 ends 'Reviews (1): Last reviewed commit: …/commit/b5390152…' — the PR head, named in the body; same on mmnto-ai/totem#2884 (be6db60e, created_at 19:05:43Z while the head advanced to df10a514 at 20:09:08Z). FOLDED (fold 2): 'matched to the head by the `Last reviewed commit` sha its own body names — never by the comment's timestamp, which an in-place re-review does not advance'."
+    },
+    {
+      "id": "G2",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "'`Review completed` names the sha it reviewed' mis-describes the artifact: the status description carries no sha; the sha is the API path it hangs on. The doctrine's preposition is 'on the sha it reviewed'.",
+      "counterexample": "gh api repos/mmnto-ai/totem/commits/be6db60e…/status → 'CodeRabbit | success | Review completed' (no sha in the description). FOLDED (fold 2): 'on the sha it reviewed … on every push head it did not'."
+    },
+    {
+      "id": "G3",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 12,
+      "claim": "'GCA posts neither a status nor a check run' states as a present-tense law what the doctrine states as a bounded measurement ('GCA posted neither … on the four GCA-reviewed shas measured').",
+      "counterexample": "Doctrine line 38 verbatim vs the fold's unbounded phrasing. FOLDED (fold 2): 'GCA posted neither a status nor a check run on any GCA-reviewed sha measured so far'."
+    },
+    {
+      "id": "G4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4236,
+      "claim": "The lock pinned the review-object half and the never-a-status half but not the summary-comment half, the only half that covers Greptile.",
+      "counterexample": "Mutation M9 (remove ', or the bot's summary comment for that sha'): all assertions still pass. FOLDED (fold 2): the lock matches the summary-comment clause, 'Last reviewed commit' and 'never by the comment's timestamp'."
+    },
+    {
+      "id": "G5",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 15,
+      "claim": "The fenced reviews read is head-capped (GitHub's first page, no --paginate) while the doctrine's governing clause is 'read every surface — in full'; the lock cemented the non-paginated string.",
+      "counterexample": "gh api '…/pulls/2884/reviews?per_page=1' --jq length → 1: the endpoint paginates. FOLDED (fold 2): `gh api --paginate …`, the lock's fenced string updated."
+    },
+    {
+      "id": "G6",
+      "severity": "MINOR",
+      "file": ".changeset/review-reply-post-trigger.md",
+      "line": 6,
+      "claim": "The changeset was not carried through fold 1 and restated three formulations the fold corrected ('never the head's green status', 'on the operator's word', '(about 12 minutes)' with no anchor).",
+      "counterexample": "Changeset body vs SKILL.md lines 12 and 18 after fold 1. FOLDED (fold 2): the changeset rewritten to the folded formulations."
+    }
+  ],
+  "folded": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6"
+  ],
+  "verdict": "1 BLOCKING, 0 MATERIAL, 5 MINOR at 4e80e3a8 — eight of nine first-leg folds verified faithful against primary sources; the one blocking finding is the fold's own new sentence; every finding folded in fold 2. Convergence named by the seat on fold 2: it replaces a time-proxy with the datum the artifact carries (verified on two exhibits by this leg), tightens two phrasings to the doctrine's words, paginates a read, extends the lock and refreshes the changeset — no new claim, no third leg."
+}

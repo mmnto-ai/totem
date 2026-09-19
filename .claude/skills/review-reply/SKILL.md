@@ -7,6 +7,16 @@ description: Unified PR review triage — fetch, normalize, and batch-action bot
 
 Triage PR review comments from all bots for PR $ARGUMENTS.
 
+## Before Phase 1: confirm each invoked bot's review is on the head
+
+A review trigger is the operator's to post, and what a bot does with it is not ours to control — so before triaging, confirm every invoked bot's review against the review object for THIS head sha, or the bot's summary comment for that sha, never a green commit status on the head: CodeRabbit's status settles green on every push head whether or not it reviewed that head (`Review completed` on the sha it reviewed, `Review skipped` on every push head it did not), and a PENDING status means still reviewing; Greptile's green `Greptile Review` check run does mark the sha it reviewed; GCA posted neither a status nor a check run on any GCA-reviewed sha measured so far. The read that lists every review with the sha it was submitted against:
+
+```bash
+gh api --paginate "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq '.[] | [.user.login, .commit_id, .state, .submitted_at] | join(" ")'
+```
+
+A summary-comment verdict is read from the PR's issue comments and matched to the head by the `Last reviewed commit` sha its own body names — never by the comment's timestamp, which an in-place re-review does not advance. A chat reply or silence with no review to confirm is not a pass under the cadence of one external pass per chosen bot, so the pass is a standalone re-trigger, posted by the operator on the same terms — that bot's first pass, not a re-invoke, which the cadence reserves for risky rework with the reason recorded in the round comment. Before merging on the other reviewers, either wait one acknowledgement window (about 12 minutes from the trigger) or merge and record the late acknowledgement as one line on the PR thread naming the bot and the time it acknowledged.
+
 ## Phase 1: Fetch & Categorize (Deterministic)
 
 Run the triage command to fetch, normalize, deduplicate, and categorize all bot comments:

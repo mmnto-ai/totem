@@ -4215,6 +4215,47 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(REVIEW_REPLY_SKILL_CONTENT).toMatch(/EXECUTES `totem review --covariate`/);
   });
 
+  // mmnto-ai/totem#2890: what a seat does AFTER a trigger — confirm each invoked
+  // bot's review against the review object (or summary comment) for THIS head,
+  // never a green commit status; a chat reply or silence is not a pass, the pass
+  // is a standalone re-trigger; wait one acknowledgement window or record the
+  // late acknowledgement. The section sits BEFORE Phase 1 (the read precedes the
+  // triage) and names the executable read, like every other step in this skill.
+  it('REVIEW_REPLY_SKILL_CONTENT confirms each invoked review on the head before Phase 1 (mmnto-ai/totem#2890)', () => {
+    const heading = "## Before Phase 1: confirm each invoked bot's review is on the head";
+    const start = REVIEW_REPLY_SKILL_CONTENT.indexOf(heading);
+    const phase1 = REVIEW_REPLY_SKILL_CONTENT.indexOf('## Phase 1: Fetch & Categorize');
+    // Assert PRESENCE first: an absent needle indexes to -1, which is less than
+    // any present one and would pass an ordering check vacuously.
+    expect(start).toBeGreaterThan(-1);
+    expect(phase1).toBeGreaterThan(start);
+    const section = REVIEW_REPLY_SKILL_CONTENT.slice(start, phase1);
+    // Clause 1: the review object or summary comment for the sha, never a status.
+    expect(section).toMatch(/review object for THIS head sha/);
+    // The summary-comment half is the only half that covers Greptile, and it
+    // matches by the sha the comment's body names, never by its timestamp
+    // (an in-place re-review does not advance created_at).
+    expect(section).toMatch(/or the bot's summary comment for that sha/);
+    expect(section).toMatch(/Last reviewed commit/);
+    expect(section).toMatch(/never by the comment's timestamp/);
+    expect(section).toMatch(/never a green commit status on the head/);
+    // The doctrine's carve-outs travel with the rule.
+    expect(section).toMatch(/Greptile Review/);
+    expect(section).toMatch(/GCA posted neither a status nor a check run/);
+    // Executable (a fenced command), not merely mentioned in prose — and read
+    // in full (the reviews endpoint paginates).
+    expect(section).toContain(
+      '```bash\ngh api --paginate "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq',
+    );
+    // Clause 2: silence is not a pass; the pass is a standalone re-trigger, not a re-invoke.
+    expect(section).toMatch(/not a pass/);
+    expect(section).toMatch(/standalone re-trigger/);
+    expect(section).toMatch(/not a re-invoke/);
+    // Clause 3: the window is anchored, and the late acknowledgement is recorded.
+    expect(section).toMatch(/acknowledgement window \(about 12 minutes from the trigger\)/);
+    expect(section).toMatch(/record the late acknowledgement/);
+  });
+
   // mmnto-ai/totem#2841 R3: the round's LAST operator-gated action is resolving
   // the threads the disposition just answered — the disposition comment IS the
   // evidence `totem resolve-threads` reads, so the step sits inside the
