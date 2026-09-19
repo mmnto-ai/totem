@@ -1563,13 +1563,14 @@ function resolveCliFromPath() {
 //     \`\\$\`), its \`$VAR\` expansion inside the string and its \`#\` comment
 //     are not modelled, and quotes INSIDE the string are not stripped.
 //     Measured: \`env -S 'gh\\_pr\\_merge\\_5'\` runs \`gh pr merge 5\`, while
-//     the split reads ONE word here and nothing projects (locked row);
-//   - an ATTACHED SHORT \`-S\` operand (\`env -S'gh pr merge 5'\`): the quote
-//     arm joins it into one token \`-Sgh pr merge 5\`, which is not one of the
-//     three spellings fold 3 names (\`-S <op>\`, \`--split-string <op>\`,
-//     \`--split-string=<op>\`), so it is dropped as a flag of env and nothing
-//     projects. env RUNS that merge (measured), so this one is a fail-open
-//     (locked row);
+//     the split reads ONE word here and nothing projects; and
+//     \`env -S 'env -S "gh pr merge 5"'\` runs it too, because env strips the
+//     quotes inside its own operand while this walk keeps them and reads
+//     \`"gh\` as the executable (both locked rows, round-7 leg H5). The
+//     ATTACHED SHORT spelling is no longer among them: \`env -Sgh pr merge 5\`
+//     and \`env -S'gh pr merge 5'\` both arrive as the token
+//     \`-Sgh pr merge 5\`, and the rest of that token is now read as the
+//     operand, so both are judged;
 //   - \`eval\` nested deeper than ONE level
 //     (\`eval "eval \\"gh pr merge 5\\""\`);
 //   - a substitution inside DOUBLE quotes (\`echo "\`gh pr merge 5\`"\`,
@@ -1623,6 +1624,11 @@ function resolveCliFromPath() {
 // nothing to continue — pwsh answers with a parse error and runs NOTHING —
 // while here the backtick is not followed by a newline, so it falls through
 // to the separator arm and the merge in front of it is judged.
+// A seventh, env's (round-7 leg, H5): a \`$VAR\` inside a \`-S\` operand
+// (\`env -S 'gh pr merge $PR'\`) makes env REFUSE the whole command — it
+// supports only \`\${VARNAME}\` and answers "only \${VARNAME} expansion is
+// supported" — so NOTHING runs, while the split reaches the anchor and
+// \`$PR\` rides as an \`unresolvedTarget\` the strict tier denies.
 // \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
@@ -2056,7 +2062,11 @@ const TRANSPARENT_WRAPPERS = {
     // MISS — consistency in the miss direction, which is a bypass under STRICT
     // (fold 3, on the round-6 fold's own measurement). So the words take the
     // option's place and the strip reads on from them, the way \`eval\`'s
-    // operand is re-read.
+    // operand is re-read. The ATTACHED SHORT spellings join them (round-7
+    // leg, H5): \`env -Sgh pr merge 5\` and \`env -S'gh pr merge 5'\` both
+    // arrive as the one token \`-Sgh pr merge 5\` and run the merge too. An
+    // \`=\` is NOT a separator for a short option, so \`env -S=x\` reads its
+    // operand as \`=x\` — which is what env does with it.
     evaluatesOperand: ['-S', '--split-string'],
   },
   timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
@@ -2386,17 +2396,33 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           break;
         }
         if (wrapper.evaluatesOperand !== undefined) {
-          const eq = opt.indexOf('=');
-          const name = eq === -1 ? opt : opt.slice(0, eq);
+          // Where the operand is: a LONG option carries an attached one after
+          // an \`=\` (\`--split-string='gh pr merge 5'\`), a SHORT one carries it
+          // with no separator at all (\`-Sgh pr merge 5\`, and
+          // \`-S'gh pr merge 5'\`, which the quote arm joins into that same
+          // token), and otherwise it is the NEXT token. An \`=\` is not a
+          // separator for a short option — \`env -S=x\` hands env the operand
+          // \`=x\` — so the split is long-only (round-7 leg, H5).
+          let name = opt;
+          let attached = null;
+          if (opt.charAt(1) === '-') {
+            const eq = opt.indexOf('=');
+            if (eq !== -1) {
+              name = opt.slice(0, eq);
+              attached = opt.slice(eq + 1);
+            }
+          } else {
+            name = opt.slice(0, 2);
+            if (opt.length > 2) attached = opt.slice(2);
+          }
           if (wrapper.evaluatesOperand.indexOf(name) !== -1) {
             // The operand is a COMMAND STRING, not a value to skip past: env
             // splits it into words and prepends them to what follows. Split
             // on whitespace — env's own rule — put the words where the option
             // stood, and let the strip read on, so the assignment strip runs
             // for \`env -S 'A=1 gh pr merge 5'\` and the anchor sees \`gh\`.
-            const operandText =
-              eq === -1 ? (tokens.length > 1 ? tokens[1] : '') : opt.slice(eq + 1);
-            const rest = tokens.slice(eq === -1 ? 2 : 1);
+            const operandText = attached === null ? (tokens.length > 1 ? tokens[1] : '') : attached;
+            const rest = tokens.slice(attached === null ? 2 : 1);
             const words = operandText.split(/\\s+/);
             tokens = [];
             for (let w = 0; w < words.length; w++) {

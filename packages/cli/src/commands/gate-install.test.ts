@@ -259,6 +259,13 @@ const WRAPPER_STRIP_ROWS = [
   "env -S 'gh pr merge 5'",
   "env --split-string='gh pr merge 5'",
   "env -S 'A=1 gh pr merge 5'",
+  // The ATTACHED SHORT spellings (round-7 leg, H5). A short option carries its
+  // operand with no separator at all, and the quote arm joins `-S'…'` into
+  // that same token, so both arrive as `-Sgh pr merge 5`. coreutils runs the
+  // merge in each (measured, 8.32: `GH-RAN argc=3 argv=[pr merge 5]`) and
+  // fold 3 left them a miss — one more bypass under the strict tier.
+  'env -Sgh pr merge 5',
+  "env -S'gh pr merge 5'",
   'timeout 30 gh pr merge 5',
   'timeout 30s gh pr merge 5',
   'timeout -k 5 30 gh pr merge 5',
@@ -357,13 +364,22 @@ const MUTANT_ROWS = [
   // the operand IS read now, but on env's WHITESPACE rule alone. `\_` is env's
   // own escape for a space, so `env -S 'gh\_pr\_merge\_5'` really runs
   // `gh pr merge 5` (measured, coreutils 8.32, stub `gh`) while this walk
-  // reads ONE word and projects nothing. The ATTACHED SHORT spelling misses
-  // for its own reason: the quote arm joins it into the single token
-  // `-Sgh pr merge 5`, which is none of the three spellings fold 3 names
-  // (`-S <op>`, `--split-string <op>`, `--split-string=<op>`). Both are
-  // fail-opens, disclosed in the template's comment and read from here.
+  // reads ONE word and projects nothing — a fail-open, disclosed in the
+  // template's comment and read from here. The NESTED spelling is the other
+  // half of the same boundary (round-7 leg, H5): env does not leave the
+  // quotes inside its operand alone, so `env -S 'env -S "gh pr merge 5"'`
+  // runs the merge (measured) while this walk splits on whitespace, reads
+  // `"gh` as the executable and projects nothing.
   "env -S 'gh\\_pr\\_merge\\_5'",
-  "env -S'gh pr merge 5'",
+  'env -S \'env -S "gh pr merge 5"\'',
+  // NOT a miss: an `=` is not a separator for a SHORT option, so env reads the
+  // operand `=gh pr merge 5`, takes `=gh` as an assignment with an empty name
+  // and runs `pr merge 5` — coreutils `pr`, which answers
+  // `pr: merge: No such file or directory`. No merge runs and none is
+  // projected; the walk reaches the same place by its own route, reading `=gh`
+  // as the command (round-7 leg, H5). On the fold-3 hook the `=` split applied
+  // to short options too, so this projected PR 5: a false fire, now gone.
+  "env -S='gh pr merge 5'",
   // `timeout` with no duration: the grammar consumes exactly one positional
   // before the command, so `gh` reads as the duration. A disclosed
   // false-negative of the grammar, locked here (the form is invalid to
@@ -492,6 +508,18 @@ const PS_CONTINUATION_INSIDE_WORD_ROWS = ['gh pr merg`\ne 5', 'g`\nh pr merge 5'
  */
 const ROW_PS_TRAILING_BACKTICK = 'gh pr merge 5 `';
 
+/**
+ * A disclosed FALSE FIRE of the `env -S` re-entry (round-7 leg, H5). env does
+ * its own expansion inside the operand and supports only `${VARNAME}`: given
+ * `$PR` it refuses the whole command — `env: only ${VARNAME} expansion is
+ * supported, error at: $PR` (measured, coreutils 8.32) — and runs nothing.
+ * This walk splits the operand on whitespace, reaches the anchor and reads
+ * `$PR` as a target it cannot expand, so the payload carries
+ * `unresolvedTarget` and the strict tier denies a merge that never happens.
+ * The deny direction, which is the safe one; a row, not a claim.
+ */
+const ROW_ENV_S_UNEXPANDED = "env -S 'gh pr merge $PR'";
+
 // Shapes each asserted by a row of their own below, named here so the parity
 // corpus reads them too.
 const ROW_TWO_HEREDOC_BODIES = 'cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n';
@@ -605,6 +633,7 @@ const PARITY_COMMAND_CORPUS = [
   ...PS_LINE_CONTINUATION_ROWS,
   ...PS_CONTINUATION_INSIDE_WORD_ROWS,
   ROW_PS_TRAILING_BACKTICK,
+  ROW_ENV_S_UNEXPANDED,
   ...DELIMITER_PARITY_ROWS,
   ROW_TWO_HEREDOC_BODIES,
   ROW_HEREDOC_AS_OPERAND,
@@ -1973,6 +2002,24 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       }
     });
 
+    it('an `env -S` operand env itself REFUSES is a DISCLOSED false fire (round-7 leg, H5)', () => {
+      // env expands only `${VARNAME}` inside a `-S` string: `$PR` makes it
+      // refuse the whole command and run nothing. The re-entry splits the
+      // operand on whitespace, so the anchor is reached and `$PR` rides as an
+      // unresolvable target — which the strict tier denies. A deny on a merge
+      // that never happens is the safe direction, and the residue paragraph
+      // is read from this row rather than from memory.
+      const head = initGitRepo();
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(ROW_ENV_S_UNEXPANDED), [], 'merge-ready');
+      expect(spawnedPayload(), ROW_ENV_S_UNEXPANDED).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: null,
+        unresolvedTarget: '$PR',
+        headSha: head,
+      });
+    });
+
     it('a PowerShell backtick escape inside double quotes is a DISCLOSED false fire (round-5 leg, F13)', () => {
       // PowerShell escapes with a backtick inside a double-quoted string, so
       // `"a `"; gh pr merge 5`"b"` is ONE string and PowerShell merges nothing.
@@ -2801,15 +2848,35 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       ['env -S "gh pr merge" 5', ['5']],
       ["env -u X -S 'gh pr merge 5'", ['5']],
       ["env -S 'A=1 gh pr merge 5'", ['5']],
+      // The ATTACHED SHORT spelling carries its operand too (round-7 leg,
+      // H5): a short option takes it with no separator, and the quote arm
+      // joins `-S'…'` into the same token, so both of these arrive as
+      // `-Sgh pr merge 5` and both RUN the merge (measured). Fold 3 dropped
+      // the token as a flag of env and missed them.
+      ['env -Sgh pr merge 5', ['5']],
+      ["env -S'gh pr merge 5'", ['5']],
+      // …but an `=` is NOT a separator for a short option. env reads the
+      // operand `=gh pr merge 5`, takes `=gh` as an assignment with an empty
+      // name and runs `pr merge 5` (coreutils `pr`: `pr: merge: No such file
+      // or directory`). No merge runs, and the walk projects none — it reads
+      // `=gh` as the command. The `=` split is LONG-option-only now; on the
+      // fold-3 hook it applied here too and projected PR 5, a false fire.
+      ["env -S='gh pr merge 5'", null],
       // The BOUNDARY of that split, locked: it is env's whitespace rule and
       // nothing else — no env escapes, no `$VAR`, no `#` comment, no quote
       // stripping inside the string. `\_` is a SPACE to env, so the first row
-      // RUNS `gh pr merge 5` (measured) while this walk reads one word. The
-      // attached SHORT spelling arrives as the single token
-      // `-Sgh pr merge 5` and is dropped as a flag of env; env runs that merge
-      // too. Both are fail-opens, disclosed in the template's comment.
+      // RUNS `gh pr merge 5` (measured) while this walk reads one word; the
+      // second NESTS `-S`, and env strips the inner quotes and runs the merge
+      // while this walk reads `"gh` as the executable. Both are fail-opens,
+      // disclosed in the template's comment.
       ["env -S 'gh\\_pr\\_merge\\_5'", null],
-      ["env -S'gh pr merge 5'", null],
+      ['env -S \'env -S "gh pr merge 5"\'', null],
+      // The operand env itself REFUSES: `$VAR` inside a `-S` string is an
+      // error (`only ${VARNAME} expansion is supported`), so coreutils runs
+      // nothing while this walk splits the words and reads `$PR` as an
+      // unresolvable target — a disclosed FALSE FIRE, asserted end-to-end by
+      // its own row below.
+      ["env -S 'gh pr merge $PR'", ['$PR']],
       // timeout: exactly ONE positional (the duration) before the command.
       ['timeout 30 gh pr merge 5', ['5']],
       ['timeout -s TERM 30 gh pr merge 5', ['5']],
