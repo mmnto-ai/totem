@@ -490,12 +490,16 @@ const PS_LINE_CONTINUATION_ROWS = [
 
 /**
  * …but only AT A WORD BOUNDARY (round-7 leg, H4). PowerShell's backtick is its
- * ESCAPE character: inside a word it escapes the newline INTO the argument, so
- * `gh pr merg<backtick><LF>e 5` passes the single word `merg<LF>e` — which is
- * not `merge`, and pwsh answers "The term 'gh pr merg\ne' is not recognized"
- * (measured, pwsh 7). Bash's backslash-newline really joins its halves; this
- * one does not, and reading it as a join projected a merge the shell never
- * runs. Both of these projected `[['5']]` on the fold-3 hook.
+ * ESCAPE character: inside a word it escapes the newline INTO the argument.
+ * Measured on pwsh 7.6.6 through a script that prints its arguments as bytes:
+ * `merg<backtick><LF>e 5` arrives as the two arguments `109,101,114,103,10,101`
+ * (`merg<LF>e`) and `53` (`5`), while the same continuation at a boundary
+ * arrives as `merge` and `5`. So `gh pr merg<backtick><LF>e 5` hands gh the
+ * verb `merg<LF>e`, which is not `merge` and merges nothing, and
+ * `g<backtick><LF>h pr merge 5` names a command `g<LF>h` that does not
+ * resolve. Bash's backslash-newline really joins its halves; this one does
+ * not, and reading it as a join projected a merge the shell never runs. Both
+ * of these projected `[['5']]` on the fold-3 hook.
  */
 const PS_CONTINUATION_INSIDE_WORD_ROWS = ['gh pr merg`\ne 5', 'g`\nh pr merge 5'];
 
