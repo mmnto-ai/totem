@@ -251,6 +251,14 @@ const WRAPPER_STRIP_ROWS = [
   'env -u X A=1 gh pr merge 5',
   'env --unset X gh pr merge 5',
   'env --chdir /tmp gh pr merge 5',
+  // `-S`/`--split-string` hands env the COMMAND as its operand: env splits that
+  // string into words, PREPENDS them to what follows and runs the first word
+  // (measured, coreutils 8.32, with a stub `gh`). Consuming the operand with
+  // the option made every spelling of it a miss — a bypass under the strict
+  // tier — so the words take the option's place now (fold 3).
+  "env -S 'gh pr merge 5'",
+  "env --split-string='gh pr merge 5'",
+  "env -S 'A=1 gh pr merge 5'",
   'timeout 30 gh pr merge 5',
   'timeout 30s gh pr merge 5',
   'timeout -k 5 30 gh pr merge 5',
@@ -334,11 +342,17 @@ const MUTANT_ROWS = [
   // LOCKED: the PROGRAM spelled by path is not the reserved word, and a
   // path-spelled wrapper is not on the closed table at all.
   '/usr/bin/time -f x gh pr merge 5',
-  // LOCKED: `env -S` / `--split-string` splits its OPERAND under env's own
-  // rules and runs that as the command. The operand is consumed with the
-  // option here, so the merge inside it is never read.
-  "env -S 'gh pr merge 5'",
-  "env --split-string='gh pr merge 5'",
+  // LOCKED, and the BOUNDARY of the `-S` split rather than a mutant (fold 3):
+  // the operand IS read now, but on env's WHITESPACE rule alone. `\_` is env's
+  // own escape for a space, so `env -S 'gh\_pr\_merge\_5'` really runs
+  // `gh pr merge 5` (measured, coreutils 8.32, stub `gh`) while this walk
+  // reads ONE word and projects nothing. The ATTACHED SHORT spelling misses
+  // for its own reason: the quote arm joins it into the single token
+  // `-Sgh pr merge 5`, which is none of the three spellings fold 3 names
+  // (`-S <op>`, `--split-string <op>`, `--split-string=<op>`). Both are
+  // fail-opens, disclosed in the template's comment and read from here.
+  "env -S 'gh\\_pr\\_merge\\_5'",
+  "env -S'gh pr merge 5'",
   // `timeout` with no duration: the grammar consumes exactly one positional
   // before the command, so `gh` reads as the duration. A disclosed
   // false-negative of the grammar, locked here (the form is invalid to
@@ -2644,19 +2658,31 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       ['env --unset X gh pr merge 5', ['5']],
       ['env --chdir /tmp gh pr merge 5', ['5']],
       ['env --unset gh pr merge 5', null],
-      // LOCKED: `-S` / `--split-string` carries the command as its operand,
-      // split again under env's own rules. `--split-string` joins the operand
-      // list with this fold (round-6 leg, G6), which changes no outcome for
-      // the quoted spellings — the anchor is never re-entered on a single
-      // quoted word — and makes the UNQUOTED one consistent with `-S`: both
-      // are misses now, where `--split-string` alone used to leave its
-      // operand standing and fire (the fold-1 hook projected `['5']` for the
-      // last row here, and `env -S gh pr merge 5` already projected nothing).
-      ["env -S 'gh pr merge 5'", null],
-      ["env --split-string='gh pr merge 5'", null],
-      ["env --split-string 'gh pr merge 5'", null],
-      ['env -S gh pr merge 5', null],
-      ['env --split-string gh pr merge 5', null],
+      // `-S` / `--split-string` carries the COMMAND as its operand: env splits
+      // that string into words, prepends them to the arguments that follow and
+      // runs the first word. Every row here RUNS `gh pr merge 5` — measured on
+      // coreutils 8.32 with a stub `gh` — and every one of them projected
+      // NOTHING on the fold-2 hook, where the operand was consumed with the
+      // option (fold 3: consistency in the MISS direction was the wrong cure).
+      // The words take the option's place now and the strip reads on from
+      // them, so the assignment strip still runs and the anchor sees `gh`.
+      ["env -S 'gh pr merge 5'", ['5']],
+      ["env --split-string='gh pr merge 5'", ['5']],
+      ["env --split-string 'gh pr merge 5'", ['5']],
+      ['env -S gh pr merge 5', ['5']],
+      ['env --split-string gh pr merge 5', ['5']],
+      ['env -S "gh pr merge" 5', ['5']],
+      ["env -u X -S 'gh pr merge 5'", ['5']],
+      ["env -S 'A=1 gh pr merge 5'", ['5']],
+      // The BOUNDARY of that split, locked: it is env's whitespace rule and
+      // nothing else — no env escapes, no `$VAR`, no `#` comment, no quote
+      // stripping inside the string. `\_` is a SPACE to env, so the first row
+      // RUNS `gh pr merge 5` (measured) while this walk reads one word. The
+      // attached SHORT spelling arrives as the single token
+      // `-Sgh pr merge 5` and is dropped as a flag of env; env runs that merge
+      // too. Both are fail-opens, disclosed in the template's comment.
+      ["env -S 'gh\\_pr\\_merge\\_5'", null],
+      ["env -S'gh pr merge 5'", null],
       // timeout: exactly ONE positional (the duration) before the command.
       ['timeout 30 gh pr merge 5', ['5']],
       ['timeout -s TERM 30 gh pr merge 5', ['5']],
