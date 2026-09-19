@@ -2078,9 +2078,49 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
   return found;
 }
 
-/** Run git read-only and return trimmed stdout, or '' when it did not answer. */
+// ─── The one budget for the whole run (mmnto-ai/totem#2856 § D) ─────────
+// The instant this hook must be finished by. It is set as the FIRST thing the
+// entry does — before stdin is read and before any projection — so that EVERY
+// spawn this process makes, the projection's git reads included, is bounded by
+// it. Before this PR the deadline came into being only at the evaluation loop,
+// and the projection ran up to three 10-second git reads per merge ahead of
+// it: a hung git on a multi-merge envelope reached the HOST's hook timeout,
+// where a killed hook's exit code is never applied — a fail-OPEN on a gate
+// whose posture is fail-closed (round 3, F3).
+//
+// Zero until the entry sets it, which reads as "already spent": an exported
+// \`projectMergeReady\` (the seam below) therefore does no git reads at all.
+let deadline = 0;
+
+/** The default budget, and the ceiling \`--budget-ms\` is clamped to. */
+const DEFAULT_BUDGET_MS = 30000;
+
+/**
+ * The budget a \`--budget-ms <n>\` argument asks for, clamped to
+ * [1000, 30000]. The clamp is SILENT and one-directional by design: the
+ * argument exists so a test can shorten the window, and a malformed or
+ * oversized value must never WIDEN it (Tenet 4 keeps the safe direction). The
+ * value it settles on is echoed in the budget line when the arm fires.
+ */
+function clampBudgetMs(raw) {
+  const n = parseInt(String(raw), 10);
+  if (!isFinite(n) || n > DEFAULT_BUDGET_MS) return DEFAULT_BUDGET_MS;
+  if (n < 1000) return 1000;
+  return n;
+}
+
+/**
+ * Run git read-only and return trimmed stdout, or '' when it did not answer.
+ * Bounded by what is LEFT of the budget (never more than 10 s, never less than
+ * a 250 ms floor), and it does not spawn at all once the budget is spent.
+ */
 function gitRead(args) {
-  const res = spawnSync('git', args, { encoding: 'utf-8', timeout: 10000 });
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) return '';
+  const res = spawnSync('git', args, {
+    encoding: 'utf-8',
+    timeout: Math.max(250, Math.min(10000, remaining)),
+  });
   if (res.error || typeof res.status !== 'number' || res.status !== 0) return '';
   return (res.stdout || '').trim();
 }
@@ -2193,6 +2233,7 @@ function projectMergeReady(argv) {
 if (require.main !== module) {
   module.exports = {
     blankHeredocBodies: blankHeredocBodies,
+    clampBudgetMs: clampBudgetMs,
     ghPrMergeArgvs: ghPrMergeArgvs,
     isGhExecutable: isGhExecutable,
     projectMergeReady: projectMergeReady,
@@ -2206,9 +2247,15 @@ if (require.main !== module) {
 // fail-open (any shell with TOTEM_GATE_TIER=pilot could silently downgrade
 // enforcement). Default (no flag) = strict, so a default install is
 // environment-immune; --pilot is an explicit install-time opt-in.
+//
+// \`--budget-ms <n>\` is the one argument the install line never writes: it
+// exists so a test can SHORTEN the run's budget, and it is clamped so it can
+// only ever shorten it (§ D). An env var was the alternative and was ruled
+// out for the same reason the tier is argv-only — any shell could set it.
 const argv = process.argv.slice(2);
 let event = '';
 let tier = 'strict';
+let budgetMs = DEFAULT_BUDGET_MS;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--event') {
     event = argv[i + 1] || '';
@@ -2217,8 +2264,17 @@ for (let i = 0; i < argv.length; i++) {
     tier = 'pilot';
   } else if (argv[i] === '--strict') {
     tier = 'strict';
+  } else if (argv[i] === '--budget-ms') {
+    budgetMs = clampBudgetMs(argv[i + 1]);
+    i++;
   }
 }
+
+// The FIRST thing the entry does after reading its own arguments: from here on
+// every spawn — the projection's git reads and the evaluation loop's gate
+// checks alike — is bounded by one deadline, so the wrapper always terminates
+// within the budget plus one 1 000 ms floor with its OWN exit code.
+deadline = Date.now() + budgetMs;
 
 // Read the PreToolUse stdin envelope.
 let stdin = '';
@@ -2457,21 +2513,32 @@ process.stdin.on('end', () => {
   // merge in the envelope gets its stderr line; exit 0 only once every payload
   // has allowed or warned.
   //
-  // ONE 30-second budget across every payload, not 30 seconds each (round 2,
-  // F5): the hook host kills a PreToolUse hook at its own default budget (60 s
-  // on both Claude Code and Gemini, the same figure the session-hook templates
-  // above cut their legs against) and a killed hook's exit code is never
-  // applied — a fail-OPEN on a gate whose posture is fail-closed. With the
-  // budget shared, the loop's wall time is bounded at 30 s plus the one-second
-  // floor each payload past the budget still gets (round 3, F2), and a merge
-  // that cannot be judged inside it lands in the fail-closed arm below (the
-  // spawn times out → \`result.error\`) rather than in the host's kill. What the
-  // budget does NOT cover, disclosed (round 3, F3): the projection above runs
-  // up to three \`gitRead\`s per merge, each on its own 10 s timeout, before this
-  // deadline exists — a hung git on a multi-merge envelope can still reach the
-  // host's budget through them.
-  const deadline = Date.now() + 30000;
+  // ONE budget across every payload, not one per payload (round 2, F5): the
+  // hook host kills a PreToolUse hook at its own default budget (60 s on both
+  // Claude Code and Gemini, the same figure the session-hook templates above
+  // cut their legs against) and a killed hook's exit code is never applied — a
+  // fail-OPEN on a gate whose posture is fail-closed. The budget is set at the
+  // ENTRY (see \`deadline\` above), so it now covers the projection's git reads
+  // too (mmnto-ai/totem#2856 § D); before that it began here, and a hung git
+  // ahead of it could run the hook into the host's kill through up to three
+  // 10-second reads per merge (round 3, F3).
+  //
+  // Two arms keep the whole run inside it: a payload whose spawn would start
+  // past the deadline gets the fail-closed line below INSTEAD of a spawn, and
+  // a spawn that starts inside it still gets the one-second floor (round 3,
+  // F2) and times out into the evaluation-failed arm. Either way the wrapper
+  // exits with its OWN code, inside the budget plus one floor.
   for (let p = 0; p < payloads.length; p++) {
+    if (Date.now() >= deadline) {
+      process.stderr.write(
+        '[totem gate-wrapper] the ' +
+          budgetMs +
+          ' ms budget was spent before gate "' +
+          event +
+          "\\" could be evaluated (the projection's git reads did not answer in time) — blocking (fail-closed).\\n",
+      );
+      process.exit(2);
+    }
     const result = spawnSync(process.execPath, checkArgs, {
       encoding: 'utf-8',
       timeout: Math.max(1000, deadline - Date.now()),

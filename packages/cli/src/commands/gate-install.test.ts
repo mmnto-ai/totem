@@ -1888,6 +1888,7 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     const w = wrapperExports();
     for (const name of [
       'blankHeredocBodies',
+      'clampBudgetMs',
       'ghPrMergeArgvs',
       'isGhExecutable',
       'projectMergeReady',
@@ -1898,6 +1899,37 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     // NEITHER — reaching this line is that assertion — and the projection must
     // answer without a spawn.
     expect(w.ghPrMergeArgvs('gh pr merge 5', false)).toEqual([['5']]);
+  });
+
+  it('--budget-ms can only LOWER the budget (§ D)', () => {
+    // A malformed or oversized test-only argument must never WIDEN the window
+    // in which a hung git can run the hook into the host's own kill (where the
+    // wrapper's fail-closed exit is never applied). The clamp is silent and
+    // one-directional; the value it settled on is echoed in the budget line
+    // when the arm fires.
+    const { clampBudgetMs } = wrapperExports();
+    const rows: Array<[unknown, number]> = [
+      [1, 1000],
+      ['abc', 30000],
+      [99999, 30000],
+      [1500, 1500],
+      ['1500', 1500],
+      [undefined, 30000],
+      [null, 30000],
+      ['', 30000],
+      [0, 1000],
+      [-5, 1000],
+      [999, 1000],
+      [1000, 1000],
+      [30000, 30000],
+      [30001, 30000],
+      ['20000abc', 20000],
+      [Number.NaN, 30000],
+      [Number.POSITIVE_INFINITY, 30000],
+    ];
+    for (const [raw, expected] of rows) {
+      expect(clampBudgetMs(raw), JSON.stringify(raw ?? String(raw))).toBe(expected);
+    }
   });
 
   it('the strip table, cell by cell: what projects and what must not (§ B)', () => {
