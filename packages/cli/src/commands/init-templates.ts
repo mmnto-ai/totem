@@ -1479,69 +1479,75 @@ function resolveCliFromPath() {
 //
 // One walk over the command text does BOTH jobs, so recognition and argv
 // extraction can never disagree: it tracks quoting, splits on the unquoted
-// command separators (\`;\`, \`&\`, \`|\`, a newline, \`(\`/\`)\`, \`{\`/\`}\`) and
-// tokenizes each segment. A segment whose FIRST token is \`gh\`, followed by
-// \`pr\` and \`merge\`, is a merge at command position; a quoted
-// "gh pr merge" is a single token and never matches, so
-// \`echo "gh pr merge"\` does not fire. The shell's own COMMAND-POSITION words
-// are skipped before the anchor is read — the reserved words \`do\`, \`then\`,
-// \`else\`, \`if\`, \`elif\`, \`while\`, \`until\` and \`!\`, the builtins \`exec\` and
-// \`command\` (which run their operand as the command), and any run of
-// \`NAME=value\` assignment prefixes — so \`for … ; do gh pr merge; done\`,
-// \`if gh pr merge 5; then …\` and \`GH_TOKEN=x gh pr merge 5\` all fire. Before
-// the PR's review round only \`do\`/\`then\`/\`else\`/\`!\` were skipped, so a merge
-// used AS an \`if\` condition, or behind an assignment prefix, went unjudged
-// (mmnto-ai/totem#2844 round 1, greptile). EVERY matching segment is
+// command separators (\`;\`, \`&\`, \`|\`, a newline, \`(\`/\`)\`, \`{\`/\`}\`, and a
+// backtick) and tokenizes each segment. A segment whose FIRST token is the
+// \`gh\` executable, followed by \`pr\` and \`merge\`, is a merge at command
+// position; a quoted "gh pr merge" is a single token and never matches, so
+// \`echo "gh pr merge"\` does not fire. What is NOT the command is stripped from
+// the segment's front before the anchor is read — a leading redirection, the
+// transparent wrapper programs with their options, the shell's reserved words
+// (\`do\`, \`then\`, \`else\`, \`if\`, \`elif\`, \`while\`, \`until\`, \`!\`, \`coproc\`) and
+// any run of \`NAME=value\` assignment prefixes — so \`for … ; do gh pr merge;
+// done\`, \`if gh pr merge 5; then …\` and \`GH_TOKEN=x gh pr merge 5\` all fire.
+// Before the PR's review round only \`do\`/\`then\`/\`else\`/\`!\` were skipped, so a
+// merge used AS an \`if\` condition, or behind an assignment prefix, went
+// unjudged (mmnto-ai/totem#2844 round 1, greptile). EVERY matching segment is
 // collected, not the first: \`gh pr merge 7; gh pr merge 8\` yields two argv
 // lists and the wrapper judges each PR on its own facts (same round).
 //
-// HEREDOC BODIES ARE BLANKED FIRST (mmnto-ai/totem#2800 fold F4). A heredoc
-// body is DATA, not commands: \`cat <<EOF\` … \`gh pr merge 5\` … \`EOF\` writes a
-// line of text and merges nothing, and firing there was a false deny — the one
-// direction this projection must not have. The blanker is the shape core's
-// transport-shield scanner uses, in a self-contained form because a distributed
-// hook cannot import core: quoted (\`<<'EOF'\`, \`<<"EOF"\`, \`<<\\EOF\`) and bare
-// delimiters, \`<<\` and \`<<-\` (whose terminator may be tab-indented), an
-// unterminated body read to the end of the command, and \`<<<\` left alone (a
-// here-string is not a heredoc). Round 2 added the two guards that keep the
-// blanker from EATING commands: \`$(( … ))\` / \`(( … ))\` is skipped whole, so a
-// shift (\`$((1<<2))\`) opens nothing, and a \`#\` that begins a word is a comment
-// discarded to end-of-line, so neither its text nor a \`<<note\` inside it is
-// read — before them, either one swallowed the rest of the command and a real
-// merge after it went unjudged. Every \`<<\` on the operator line is queued and
-// its body consumed in order, as bash does for \`cat <<A <<B\`.
+// HEREDOC BODIES AND COMMENTS ARE BLANKED FIRST (mmnto-ai/totem#2800 fold F4).
+// A heredoc body is DATA, not commands: \`cat <<EOF\` … \`gh pr merge 5\` … \`EOF\`
+// writes a line of text and merges nothing, and firing there was a false deny —
+// the one direction this projection must not have. Since mmnto-ai/totem#2857
+// the scanner that finds those bodies is a VERBATIM port of core's
+// \`findHeredocs\` (see the sync anchor below), not a second reading of the same
+// grammar: quoted (\`<<'EOF'\`, \`<<"EOF"\`, \`<<\\EOF\`) and bare delimiters,
+// \`<<\` and \`<<-\` (whose terminator may be tab-indented), an unterminated body
+// read to the end of the command, \`<<<\` left alone (a here-string is not a
+// heredoc), \`$(( … ))\` / \`(( … ))\` skipped whole so a shift opens nothing, a
+// \`#\` that begins a word discarded to end-of-line, and the paren bookkeeping
+// that says whether a \`)\` ends a word. Every \`<<\` on the operator line is
+// queued and its body consumed in order, as bash does for \`cat <<A <<B\`.
+//
+// WHAT THE ANCHOR NOW READS (mmnto-ai/totem#2856, the strict tier's
+// precondition — under PILOT each of these was one lost advisory read, under
+// STRICT a bypass): the executable may be spelled \`gh\`, \`gh.exe\` or either
+// behind a path; a CLOSED table of transparent wrapper programs (\`sudo\`,
+// \`env\`, \`timeout\`, \`nice\`, \`nohup\`, \`command\`, \`exec\`, \`time\`) is stripped
+// with its option grammar; \`eval\` re-tokenizes its operand once; a leading
+// redirection is skipped with its file; and a backtick substitution is a
+// segment of its own.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
-// NOT fire, which is the safe direction, never a false deny:
-//   - a wrapper PROGRAM that takes operands before \`gh\` (\`sudo\`, \`timeout 30\`,
-//     \`npx\`, \`env\`, \`nohup\`): the program is the segment's first token, so the
-//     position anchor does not see \`gh\` (the shell's reserved words and the
-//     \`exec\`/\`command\`/\`eval\` builtins are skipped; an arbitrary program is
-//     not, since the walk cannot know which of its operands is the command);
-//   - the executable spelled with an extension or a path (\`gh.exe pr merge 5\`,
-//     \`./gh pr merge 5\`): the anchor reads the bare token \`gh\` only (greptile
-//     on mmnto-ai/totem#2855; widening it is mmnto-ai/totem#2856, the strict
-//     tier's precondition);
-//   - two places this blanker still diverges from core's scanner, each opening
-//     a heredoc core does not so that a merge on a later line is blanked: a
-//     \`#\` right after \`(\` or after an operator \`)\` (no paren-boundary arms
-//     here — \`(true)#<<note\` then a merge line), and a bare delimiter carrying
-//     a character outside \`[A-Za-z0-9_.-/]\` (\`<<E:F\`, read as the prefix \`E\`
-//     so the real terminator never matches). Both found by the pilot-install
-//     legs; the cure is one shared scanner, mmnto-ai/totem#2857;
-//   - a skipped word carrying a FLAG (\`command -p gh pr merge 5\`,
-//     \`exec -a x gh pr merge 5\`, and the reserved word's own \`time -p\` /
-//     \`time --\`): the flag is a token before \`gh\`, and bash runs the merge
-//     all the same (round 3, F1);
-//   - a merge handed over as ONE quoted word (\`eval "gh pr merge 5"\`,
-//     \`bash -c "gh pr merge 5"\`): a quoted string is data to this walk;
-//   - a backtick command substitution (\`echo \\\`gh pr merge 5\\\`\`): the walk
-//     splits on \`$( … )\` parens but treats a backtick as an ordinary character,
-//     so the merge inside it stays part of \`echo\`'s segment;
-//   - a leading redirection (\`> out.txt gh pr merge 5\`): the redirection word
-//     is the segment's first token;
-//   - PowerShell's own quoting (backtick escapes, here-strings) is not
-//     modelled — the walk reads POSIX quoting for both tools.
+// NOT fire, which is the safe direction, never a false deny. Every one of them
+// is a LOCKED row in gate-install.test.ts, so this list is read from the suite,
+// not from memory:
+//   - a VARIABLE executable (\`$GH pr merge 5\`, \`\${GH} pr merge 5\`): the walk
+//     cannot expand it, and the \`unresolvedTarget\` arm covers only the PR
+//     argument, not the program;
+//   - an UNQUOTED win32 path (\`C:\\tools\\gh.exe pr merge 5\`): this walk reads
+//     POSIX quoting for BOTH tools, so the separators are consumed as escapes
+//     and the token arrives as \`C:toolsgh.exe\`. Quoted, it projects;
+//   - \`timeout\` with NO duration (\`timeout gh pr merge 5\`): the grammar
+//     consumes exactly one positional before the command, so \`gh\` reads as the
+//     duration. The form is invalid to \`timeout\` itself;
+//   - a wrapper program not on the table (\`npx\`, \`xargs\`, \`bash -c "…"\`) and a
+//     builtin flag not in it: the table is closed on purpose — the walk cannot
+//     know which operand of an arbitrary program is the command;
+//   - \`eval\` nested deeper than ONE level
+//     (\`eval "eval \\"gh pr merge 5\\""\`);
+//   - a redirection operator carrying a tokenizer separator (\`>|\`, \`2>&1\`):
+//     \`|\` and \`&\` end the segment before the operator is read as one word. A
+//     \`&>\` splits the same way but leaves a readable \`>\` at the front of the
+//     next segment, so THAT one projects;
+//   - a PowerShell line continuation (a trailing backtick): the backtick is a
+//     segment separator here, so the halves become two segments — new with
+//     mmnto-ai/totem#2856 § C, and the safe direction;
+//   - PowerShell's own quoting (backtick escapes outside double quotes,
+//     here-strings) is not modelled — the walk reads POSIX quoting for both
+//     tools. PowerShell's call operator is NOT a miss: \`& gh pr merge 5\`
+//     projects, because \`&\` is one of the separators and the segment after it
+//     starts at \`gh\` (row, not memory).
 // Disclosed FALSE FIRES, the deny direction, all contrived — text the shell
 // does not execute as a merge but that sits at a segment's front here: a bash
 // array assignment whose elements spell a merge (\`A=(gh pr merge 8)\`) is judged

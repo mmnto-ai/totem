@@ -3,17 +3,12 @@ import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knownGates, TotemError } from '@mmnto/totem';
 
-// The scanner of record for the parity lock below (spec 2857 § 3). Read from
-// core's SOURCE by relative path, the way `bot-identity-parity.test.ts` reads
-// the definitions it holds its consumers to: `findHeredocs` is not re-exported
-// from core's index, and this is the layer that can read both packages (cli
-// depends on core, never the reverse).
-import { findHeredocs } from '../../../core/src/transport-shield.js';
 import { ejectCommand } from './eject.js';
 import { gateInstallCommand } from './gate.js';
 import {
@@ -89,6 +84,31 @@ function envWithPath(value: string): NodeJS.ProcessEnv {
   }
   env.PATH = value;
   return env;
+}
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+/** Core's scanner of record for the parity lock (spec 2857 § 3). */
+const CORE_TRANSPORT_SHIELD_SRC = path.resolve(HERE, '../../../core/src/transport-shield.ts');
+
+/** Core's span shape; `body` is the one field the wrapper's port drops. */
+type CoreFindHeredocs = (
+  command: string,
+  opts?: { powershell?: boolean },
+) => Array<WrapperSpan & { body: string }>;
+
+/**
+ * Core's `findHeredocs`, loaded from its SOURCE at run time. The specifier is
+ * built at run time ON PURPOSE: the function is not re-exported from core's
+ * index and core's exports map has no subpath for it (mmnto-ai/totem#2851),
+ * while a STATIC relative import of another package's source fails
+ * `tsc --build` with TS6059 (`rootDir`). `bot-identity-parity.test.ts`, the
+ * exemplar, reads its sources as text for the same reason.
+ */
+async function loadCoreFindHeredocs(): Promise<CoreFindHeredocs> {
+  const mod = (await import(pathToFileURL(CORE_TRANSPORT_SHIELD_SRC).href)) as {
+    findHeredocs: CoreFindHeredocs;
+  };
+  return mod.findHeredocs;
 }
 
 /** One heredoc the wrapper's scanner located — core's span minus `body` (spec 2857 § 1). */
@@ -327,6 +347,7 @@ const ROW_HERESTRING_AS_OPERAND = 'gh pr merge 6 <<< notes';
 const ROW_TRAILING_COMMENT = 'echo hi # gh pr merge 9';
 const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
 const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
+const ROW_PS_CALL_OPERATOR = '& gh pr merge 5';
 const ROW_OPEN_PAREN_COMMENT = '(#<<note\ngh pr merge 5\n)';
 const ROW_GROUP_CLOSE_COMMENT = '(true; echo a)#<<note\ngh pr merge 5';
 
@@ -366,6 +387,7 @@ const PARITY_COMMAND_CORPUS = [
   ROW_COLON_DELIMITER,
   ROW_OPEN_PAREN_COMMENT,
   ROW_GROUP_CLOSE_COMMENT,
+  ROW_PS_CALL_OPERATOR,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1357,6 +1379,17 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
       }
 
+      // PowerShell's CALL OPERATOR is not a miss and the template says so from
+      // this row, never from memory (§ F): `&` is one of the tokenizer's
+      // segment separators, so the segment after it starts at `gh`.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_CALL_OPERATOR } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_CALL_OPERATOR).toMatchObject({ pr: 5 });
+
       // The complement: a backtick substitution as the merge's own TARGET is a
       // target this hook cannot know, exactly as `$( … )` is — it rides as
       // `unresolvedTarget` rather than falling back to the current branch.
@@ -2231,8 +2264,11 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
 // the proof that this lock BITES: they are exactly the behaviour the ported
 // arms add.
 describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
+  let findHeredocs: CoreFindHeredocs | null = null;
+
   /** Core's spans in the wrapper's shape — same fields, minus the unused `body`. */
   function coreSpans(command: string, powershell: boolean): WrapperSpan[] {
+    if (findHeredocs === null) throw new Error('core findHeredocs was not loaded');
     return findHeredocs(command, { powershell }).map((s) => ({
       delimiter: s.delimiter,
       quoted: s.quoted,
@@ -2301,7 +2337,8 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     return out;
   }
 
-  it('agrees with core over every command in this file, in both modes', () => {
+  it('agrees with core over every command in this file, in both modes', async () => {
+    findHeredocs = await loadCoreFindHeredocs();
     const { findHeredocSpans } = wrapperExports();
     for (const command of PARITY_COMMAND_CORPUS) {
       for (const powershell of [false, true]) {
@@ -2313,7 +2350,8 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     }
   });
 
-  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', () => {
+  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', async () => {
+    findHeredocs = await loadCoreFindHeredocs();
     const { findHeredocSpans } = wrapperExports();
     const corpus = fuzzCorpus(3000);
     expect(corpus).toHaveLength(3000);
@@ -2327,10 +2365,11 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     }
   });
 
-  it('the corpus carries the delimiters the issue names, terminated and not', () => {
+  it('the corpus carries the delimiters the issue names, terminated and not', async () => {
     // The guard on the guard: a corpus that silently lost these rows would
     // pass the two parity rows above while testing nothing about the bare
     // delimiter class the port widens.
+    findHeredocs = await loadCoreFindHeredocs();
     expect(DELIMITER_PARITY_ROWS).toHaveLength(PARITY_DELIMITERS.length * 2);
     for (const delimiter of PARITY_DELIMITERS) {
       expect(PARITY_COMMAND_CORPUS.some((c) => c.includes('<<' + delimiter))).toBe(true);
