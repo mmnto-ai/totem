@@ -1524,11 +1524,15 @@ function resolveCliFromPath() {
 // \`env -S\` / \`--split-string\` splits its own operand into the words that
 // take the option's place; a leading redirection is skipped with its file;
 // and a backtick substitution is a segment of its own. In POWERSHELL mode a
-// trailing backtick is that shell's LINE CONTINUATION instead — the backtick
-// and the newline are consumed and the word continues, exactly as bash's
-// trailing backslash does (round-6 leg, G3); it was a separator in both modes
-// before, which made the backtick itself the merge's target and left the real
-// one in the next segment.
+// trailing backtick is that shell's LINE CONTINUATION instead — at a WORD
+// BOUNDARY the backtick and the newline are consumed and the next line
+// continues the command, the twin of bash's trailing backslash there
+// (round-6 leg, G3, bounded by round-7's H4); it was a separator in both
+// modes before, which made the backtick itself the merge's target and left
+// the real one in the next segment. INSIDE a word the two shells differ:
+// PowerShell's backtick escapes the newline INTO the argument, so
+// \`gh pr merg<backtick><LF>e 5\` is the word \`merg<LF>e\` and merges
+// nothing — and neither does this.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny. Every one of them
@@ -1614,6 +1618,11 @@ function resolveCliFromPath() {
 // \`timeout --foreground\`) into a MISS, which is a bypass under STRICT. A
 // false fire on a command that runs nothing costs one bogus deny; rows assert
 // each of them, so this paragraph is read from the suite.
+// A sixth, PowerShell's again (round-7 leg, H4): a TRAILING BACKTICK AT THE
+// END OF THE INPUT (\`gh pr merge 5 <backtick>\`) is a continuation with
+// nothing to continue — pwsh answers with a parse error and runs NOTHING —
+// while here the backtick is not followed by a newline, so it falls through
+// to the separator arm and the merge in front of it is judged.
 // \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
@@ -2223,21 +2232,34 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // pair and a \`$( … )\` inside double quotes, so \`echo "\`gh pr merge 5\`"\`
     // merges PR 5 unjudged. A disclosed fail-open, filed as
     // mmnto-ai/totem#2893 (round-5 leg, F4).
-    // POWERSHELL'S LINE CONTINUATION is a trailing BACKTICK — the exact twin
-    // of the backslash-newline arm below, and the reason this one has to be
-    // read first: in ps mode the backtick and the newline after it are
-    // consumed and the word continues, so
+    // POWERSHELL'S LINE CONTINUATION is a trailing BACKTICK — the twin of the
+    // backslash-newline arm below AT A WORD BOUNDARY, and the reason this one
+    // has to be read first: in ps mode the backtick and the newline after it
+    // are consumed and the next line's words continue the command, so
     // \`gh pr merge <backtick><LF>5\` is \`gh pr merge 5\`. Read as the segment
     // separator it is in BASH, that command projected the backtick itself as
     // the merge's target (\`unresolvedTarget\`, a deny on a target nobody wrote
     // under strict) while the real target sat in the next segment and merged
     // unjudged (round-6 leg, G3). Bash keeps the separator: there a backtick
     // opens a command substitution, whatever follows it.
+    //
+    // INSIDE A WORD the two shells part company (round-7 leg, H4). Bash's
+    // backslash-newline really joins the halves — \`me\\<LF>rge\` is \`merge\`
+    // — while PowerShell's backtick is its ESCAPE character and
+    // \`merg<backtick><LF>e\` is the single argument \`merg<LF>e\`, which is not
+    // \`merge\` and runs nothing. So the join applies only where no token is
+    // open; inside one, the escaped newline lands IN the token, the anchor
+    // fails to match, and nothing is projected — which is what PowerShell
+    // does. Joining there projected a merge the shell never runs.
     if (
       powershell === true &&
       ch === '\`' &&
       (command[i + 1] === '\\n' || (command[i + 1] === '\\r' && command[i + 2] === '\\n'))
     ) {
+      if (hasToken) {
+        markLiteral();
+        token += '\\n';
+      }
       i += command[i + 1] === '\\r' ? 3 : 2;
       continue;
     }

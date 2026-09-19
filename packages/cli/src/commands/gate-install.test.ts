@@ -457,10 +457,11 @@ const HERESTRING_ROWS = [
 const LINE_CONTINUATION_ROWS = ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5'];
 
 /**
- * PowerShell's line continuation is a trailing BACKTICK — the exact twin of
- * bash's trailing backslash (round-6 leg, G3). In ps mode the backtick and the
- * newline after it are consumed and the word continues; in bash a backtick
- * opens a substitution and stays a segment separator, so this arm is ps-only.
+ * PowerShell's line continuation is a trailing BACKTICK — the twin of bash's
+ * trailing backslash AT A WORD BOUNDARY (round-6 leg, G3; bounded by round-7's
+ * H4). In ps mode the backtick and the newline after it are consumed there and
+ * the next line continues the command; in bash a backtick opens a substitution
+ * and stays a segment separator, so this arm is ps-only.
  * Before it, `gh pr merge <backtick><LF>5` projected `unresolvedTarget: '`'`
  * and PR 5 was merged on the next segment unjudged — strict denied a target
  * nobody wrote, pilot warned and let the merge through.
@@ -470,6 +471,26 @@ const PS_LINE_CONTINUATION_ROWS = [
   'gh pr merge 5 `\n--admin',
   'gh pr merge `\r\n5',
 ];
+
+/**
+ * …but only AT A WORD BOUNDARY (round-7 leg, H4). PowerShell's backtick is its
+ * ESCAPE character: inside a word it escapes the newline INTO the argument, so
+ * `gh pr merg<backtick><LF>e 5` passes the single word `merg<LF>e` — which is
+ * not `merge`, and pwsh answers "The term 'gh pr merg\ne' is not recognized"
+ * (measured, pwsh 7). Bash's backslash-newline really joins its halves; this
+ * one does not, and reading it as a join projected a merge the shell never
+ * runs. Both of these projected `[['5']]` on the fold-3 hook.
+ */
+const PS_CONTINUATION_INSIDE_WORD_ROWS = ['gh pr merg`\ne 5', 'g`\nh pr merge 5'];
+
+/**
+ * A disclosed FALSE FIRE (round-7 leg, H4): a trailing backtick at the END of
+ * the input is a continuation with nothing to continue, and pwsh answers with
+ * a parse error without running anything. Here the backtick is not followed by
+ * a newline, so it falls through to the segment-separator arm and the merge in
+ * front of it is judged — the deny direction, on text the shell rejects.
+ */
+const ROW_PS_TRAILING_BACKTICK = 'gh pr merge 5 `';
 
 // Shapes each asserted by a row of their own below, named here so the parity
 // corpus reads them too.
@@ -582,6 +603,8 @@ const PARITY_COMMAND_CORPUS = [
   ...HERESTRING_ROWS,
   ...LINE_CONTINUATION_ROWS,
   ...PS_LINE_CONTINUATION_ROWS,
+  ...PS_CONTINUATION_INSIDE_WORD_ROWS,
+  ROW_PS_TRAILING_BACKTICK,
   ...DELIMITER_PARITY_ROWS,
   ROW_TWO_HEREDOC_BODIES,
   ROW_HEREDOC_AS_OPERAND,
@@ -1787,9 +1810,10 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
-    it("PowerShell's line continuation joins the word, in ps mode only (round-6 leg, G3)", () => {
+    it("PowerShell's line continuation joins the LINE at a word boundary, in ps mode only (round-6 leg, G3; round-7 leg, H4)", () => {
       // A trailing backtick is PowerShell's continuation, the twin of bash's
-      // trailing backslash. Read as the segment separator it is in bash, the
+      // trailing backslash where no token is open. Read as the segment
+      // separator it is in bash, the
       // merge's target became the backtick itself: the payload carried
       // `unresolvedTarget: '`'` (strict denies a target nobody wrote) and the
       // real target sat in the next segment, merged unjudged.
@@ -1802,6 +1826,23 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
           pr: 5,
           headSha: head,
         });
+      }
+
+      // INSIDE A WORD it is not a join at all (round-7 leg, H4): PowerShell's
+      // backtick escapes the newline into the argument, so `merg<LF>e` is not
+      // `merge` and pwsh runs nothing. Projecting there was a merge the shell
+      // never performs — and it never spawns now.
+      for (const command of PS_CONTINUATION_INSIDE_WORD_ROWS) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(
+          { tool_name: 'PowerShell', tool_input: { command } },
+          [],
+          'merge-ready',
+        );
+        expect(status, JSON.stringify(command)).toBe(0);
+        expect(stubArgv(), JSON.stringify(command)).toBeNull();
       }
 
       // BASH is untouched: there a backtick opens a command substitution, so
@@ -1948,6 +1989,24 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'merge-ready',
       );
       expect(spawnedPayload(), ROW_PS_DQ_BACKTICK).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: 5,
+        headSha: head,
+      });
+
+      // The second of PowerShell's own (round-7 leg, H4): a trailing backtick
+      // at the END of the input continues a line that does not exist. pwsh
+      // fails to parse the command and runs nothing; here the backtick is not
+      // followed by a newline, so the continuation arm does not take it, the
+      // separator arm does, and the merge in front of it is judged. Asserted
+      // rather than claimed, like every other entry in that paragraph.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_TRAILING_BACKTICK } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_TRAILING_BACKTICK).toEqual({
         repo: 'mmnto-ai/totem',
         pr: 5,
         headSha: head,
@@ -2882,7 +2941,7 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     }
   });
 
-  it('a trailing backtick continues the word in ps mode and separates in bash (round-6 leg, G3)', () => {
+  it('a trailing backtick continues the LINE in ps mode, escapes a newline inside a word, and separates in bash (round-6 leg, G3; round-7 leg, H4)', () => {
     // The argv exactly, because the payload cannot tell the whole story: the
     // fold-1 hook read `gh pr merge 5 <backtick><LF>--admin` as
     // `['5', '<backtick>']` — the same PR 5, with the flag lost to the next
@@ -2897,10 +2956,27 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     for (const [command, expected] of rows) {
       expect(ghPrMergeArgvs(command, true), JSON.stringify(command)).toEqual([expected]);
     }
+
+    // INSIDE a word the escaped newline lands in the token, so the anchor
+    // reads `merg<LF>e` (or the executable `g<LF>h`) and matches nothing —
+    // exactly what pwsh does with it (round-7 leg, H4). On the fold-3 hook,
+    // which joined at any position, both of these were `[['5']]`.
+    for (const command of PS_CONTINUATION_INSIDE_WORD_ROWS) {
+      expect(ghPrMergeArgvs(command, true), JSON.stringify(command)).toEqual([]);
+    }
+    // The token really carries the newline rather than losing the characters.
+    expect(ghPrMergeArgvs('gh pr merge 5 x`\ny', true)).toEqual([['5', 'x\ny']]);
+    // A trailing backtick with no newline after it is untouched by the arm —
+    // the disclosed false fire, with the backtick riding on as its own token.
+    expect(ghPrMergeArgvs(ROW_PS_TRAILING_BACKTICK, true)).toEqual([['5', '`']]);
+
     // Bash: a backtick opens a command substitution whatever follows it, so
     // the separator stands and the target is the backtick.
     expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[0], false)).toEqual([['`']]);
     expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[1], false)).toEqual([['5', '`']]);
+    // …and bash's own backslash-newline still JOINS inside a word, which is
+    // the difference this arm turns on.
+    expect(ghPrMergeArgvs('gh pr mer\\\nge 5', false)).toEqual([['5']]);
   });
 
   it('the span blanker replaces a body with spaces and keeps every offset (2857 § 1)', () => {
