@@ -1,0 +1,5 @@
+---
+'@mmnto/cli': patch
+---
+
+review-reply skill: the distributed text now says what a seat does AFTER a review trigger, in a section before Phase 1 — confirm each invoked bot's review against the review object for the head sha or the bot's summary comment matched by the sha its body names (one fenced block of paginated `gh` reads prints the head sha, every review with the sha it was submitted against, the sha each Greptile summary names as its `Last reviewed commit` and the sha each CodeRabbit summary names as covered), never a green commit status on the head (CodeRabbit's status settles green either way; Greptile's check run does mark its sha; GCA has posted neither on any GCA-reviewed sha measured so far); a chat reply or silence with no review to confirm is not a pass, so the pass is a standalone re-trigger posted by the operator, that bot's first pass rather than a re-invoke; before merging on the other reviewers, wait one acknowledgement window (about 12 minutes from the trigger) or merge and record the late acknowledgement as a line on the PR thread (mmnto-ai/totem#2890).
