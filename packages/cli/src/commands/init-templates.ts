@@ -2422,6 +2422,12 @@ if (require.main !== module) {
 // exists so a test can SHORTEN the run's budget, and it is clamped so it can
 // only ever shorten it (§ D). An env var was the alternative and was ruled
 // out for the same reason the tier is argv-only — any shell could set it.
+// BOTH spellings parse: \`--budget-ms 1500\` and \`--budget-ms=1500\`. The
+// attached form used to fall through as an unknown argument and silently left
+// the 30 000 ms default standing — a WIDENING on a caller that wrote the
+// argument to shorten the window (round-5 leg, F7). A repeated flag is
+// last-wins, and no spelling of it can ever exceed the default, because every
+// value goes through the same clamp.
 const argv = process.argv.slice(2);
 let event = '';
 let tier = 'strict';
@@ -2437,6 +2443,8 @@ for (let i = 0; i < argv.length; i++) {
   } else if (argv[i] === '--budget-ms') {
     budgetMs = clampBudgetMs(argv[i + 1]);
     i++;
+  } else if (argv[i].slice(0, 12) === '--budget-ms=') {
+    budgetMs = clampBudgetMs(argv[i].slice(12));
   }
 }
 
@@ -2446,6 +2454,29 @@ for (let i = 0; i < argv.length; i++) {
 // within the budget plus one 1 000 ms floor with its OWN exit code.
 deadline = Date.now() + budgetMs;
 
+// …and the READ of the envelope is inside it too (round-5 leg, F6). The budget
+// used to start counting for everything the hook did AFTER the envelope had
+// arrived; arriving itself was unbounded. A host that writes the envelope and
+// holds the pipe open, or hands this hook a stdin that never ends, left it
+// waiting with no deadline of its own until the HOST's own timeout killed it —
+// and a killed hook's exit code is never applied, which is a fail-OPEN on a
+// gate whose posture is fail-closed. Exactly the class § D cured for the
+// projection's git reads, one step earlier in the run.
+//
+// The timer is cleared by the \`end\` handler below BEFORE anything is
+// evaluated, so a normal run — every run where stdin closes — never sees it.
+const stdinBudgetTimer = setTimeout(
+  () => {
+    process.stderr.write(
+      '[totem gate-wrapper] the ' +
+        budgetMs +
+        ' ms budget was spent before the envelope arrived on stdin — blocking (fail-closed).\\n',
+    );
+    process.exit(2);
+  },
+  Math.max(0, deadline - Date.now()),
+);
+
 // Read the PreToolUse stdin envelope.
 let stdin = '';
 process.stdin.setEncoding('utf-8');
@@ -2453,6 +2484,7 @@ process.stdin.on('data', (chunk) => {
   stdin += chunk;
 });
 process.stdin.on('end', () => {
+  clearTimeout(stdinBudgetTimer);
   let parsed;
   try {
     parsed = stdin ? JSON.parse(stdin) : {};

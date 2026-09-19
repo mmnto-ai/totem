@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import { createRequire } from 'node:module';
 import * as os from 'node:os';
@@ -1805,6 +1805,132 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       '',
     ].join('\n');
 
+    /**
+     * The slow-git shim on a PATH dir of its own: `spawnSync('git', …)`
+     * without a shell resolves `git.exe` through PATH on win32 (a `.cmd` shim
+     * is NOT resolvable that way), so the shim is a copy — a hard link where
+     * the volume allows — of this node binary named `git`/`git.exe`, slowed by
+     * the argv0-guarded preload above.
+     */
+    function slowGitEnv(): NodeJS.ProcessEnv {
+      const binDir = path.join(cwd, 'slow-git-bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const shim = path.join(binDir, process.platform === 'win32' ? 'git.exe' : 'git');
+      if (!fs.existsSync(shim)) {
+        try {
+          fs.linkSync(process.execPath, shim);
+        } catch {
+          fs.copyFileSync(process.execPath, shim);
+        }
+        if (process.platform !== 'win32') fs.chmodSync(shim, 0o755);
+      }
+      const preload = path.join(cwd, 'slow.cjs');
+      fs.writeFileSync(preload, SLOW_GIT_PRELOAD);
+      const env = envWithPath(binDir + path.delimiter + (process.env.PATH ?? ''));
+      env.NODE_OPTIONS = '--require=' + preload.split(path.sep).join('/');
+      return env;
+    }
+
+    /**
+     * Spawn the rendered wrapper, write the envelope on its stdin and leave
+     * the stream OPEN, then await the exit. The `end` never comes, so only the
+     * wrapper's own budget can end the run — which is the whole assertion.
+     * The kill after 10 s is the harness's own floor, not the wrapper's: if it
+     * fires, the row has failed.
+     */
+    async function runWrapperOpenStdin(
+      envelope: unknown,
+      extraArgs: string[],
+      event: string,
+    ): Promise<{ status: number | null; stderr: string; elapsed: number }> {
+      const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
+      const started = Date.now();
+      const child = spawn(process.execPath, [wrapperPath, '--event', event, ...extraArgs], {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      let stderr = '';
+      child.stderr.setEncoding('utf-8');
+      child.stderr.on('data', (chunk: string) => {
+        stderr += chunk;
+      });
+      child.stdout.resume();
+      // A wrapper that exits while the pipe is still open makes this write
+      // EPIPE; that is the expected end of this row, not a failure.
+      child.stdin.on('error', () => {});
+      child.stdin.write(JSON.stringify(envelope));
+      const status = await new Promise<number | null>((resolve, reject) => {
+        const kill = setTimeout(() => {
+          child.kill();
+          reject(new Error('the wrapper did not exit on its own with stdin left open'));
+        }, 10000);
+        child.on('error', (err) => {
+          clearTimeout(kill);
+          reject(err);
+        });
+        child.on('close', (code) => {
+          clearTimeout(kill);
+          resolve(code);
+        });
+      });
+      return { status, stderr, elapsed: Date.now() - started };
+    }
+
+    it('the stdin read is INSIDE the budget: an envelope whose pipe never closes exits 2 (round-5 leg, F6)', async () => {
+      // The budget covered everything after the envelope ARRIVED; reading it
+      // was outside. A host that writes the envelope and holds the pipe open
+      // (or writes nothing at all) left this hook waiting with no deadline of
+      // its own until the HOST killed it — and a killed hook's exit code is
+      // never applied, a fail-OPEN on a gate whose posture is fail-closed, the
+      // same class § D cured for the projection's git reads. The timer is armed
+      // at the entry for what is left of the budget; the `end` handler clears
+      // it before evaluating, so a normal run never sees it (every other row in
+      // this file is that proof).
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status, stderr, elapsed } = await runWrapperOpenStdin(
+        bash('gh pr merge 5'),
+        ['--budget-ms', '1000'],
+        'merge-ready',
+      );
+
+      expect(status).toBe(2);
+      expect(stderr).toContain(
+        'the 1000 ms budget was spent before the envelope arrived on stdin',
+      );
+      expect(stderr).toContain('fail-closed');
+      // Nothing was evaluated: the envelope never finished arriving.
+      expect(stubArgv()).toBeNull();
+      // It waited for the budget, and only for the budget.
+      expect(elapsed).toBeGreaterThanOrEqual(900);
+      expect(elapsed).toBeLessThan(5000);
+    });
+
+    it('the `--budget-ms=<n>` spelling parses like the separate-token form (round-5 leg, F7)', () => {
+      // `--budget-ms=1500` fell through the argv loop as an unknown argument
+      // and left the full 30 s default in place — silently WIDENING the window
+      // for a caller that wrote the argument to shorten it, the one direction
+      // this argument must never move. End-to-end against the same hung git as
+      // the row above, so what is asserted is the wrapper's real arm.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const env = slowGitEnv();
+
+      const started = Date.now();
+      const { status, stderr } = runWrapper(
+        bash('gh pr merge 5'),
+        ['--budget-ms=1500'],
+        'merge-ready',
+        env,
+      );
+      const elapsed = Date.now() - started;
+
+      expect(status).toBe(2);
+      expect(stderr).toContain(
+        'the 1500 ms budget was spent before gate "merge-ready" could be evaluated',
+      );
+      expect(stubArgv()).toBeNull();
+      expect(elapsed).toBeLessThan(6000);
+    });
+
     it('a hung git is bounded by the budget: exit 2, the named line, no CLI spawn (mmnto-ai/totem#2856 § G)', () => {
       // THE FALSIFIER for § D. `spawnSync('git', …)` without a shell resolves
       // `git.exe` through PATH on win32 (a `.cmd` shim is NOT resolvable that
@@ -1818,19 +1944,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // the budget set at the entry, the reads are bounded by what is left of
       // it and the spent-budget arm fires before the first `gate check`.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      const binDir = path.join(cwd, 'slow-git-bin');
-      fs.mkdirSync(binDir, { recursive: true });
-      const shim = path.join(binDir, process.platform === 'win32' ? 'git.exe' : 'git');
-      try {
-        fs.linkSync(process.execPath, shim);
-      } catch {
-        fs.copyFileSync(process.execPath, shim);
-      }
-      if (process.platform !== 'win32') fs.chmodSync(shim, 0o755);
-      const preload = path.join(cwd, 'slow.cjs');
-      fs.writeFileSync(preload, SLOW_GIT_PRELOAD);
-      const env = envWithPath(binDir + path.delimiter + (process.env.PATH ?? ''));
-      env.NODE_OPTIONS = '--require=' + preload.split(path.sep).join('/');
+      const env = slowGitEnv();
 
       const started = Date.now();
       const { status, stderr } = runWrapper(
