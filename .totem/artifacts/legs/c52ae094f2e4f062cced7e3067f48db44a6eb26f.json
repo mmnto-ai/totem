@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "c52ae094f2e4f062cced7e3067f48db44a6eb26f",
+  "readAt": "2026-09-19T09:58:13Z",
+  "findings": [
+    {
+      "id": "G1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2163,
+      "claim": "The whole-segment redirection strip (fold 1 item 5) is quote-blind: the tokenizer discards quoting, so a QUOTED argument whose token matches the operator regexes is dropped, and because the strip runs before the value-flag pairing the flag then swallows the PR target — a regression against main and the pre-fold head that re-creates the fabricated-target class F5 was chartered to remove, and breaks the invariant the suite names ('a value-taking flag does not swallow the PR target').",
+      "counterexample": "bash: `gh pr merge -b \"<br>\" 5` merges PR 5. Projection: main and e152e37b {pr: 5}; fold head {pr: null, branch: 'feat/demo'}; `gh pr merge -b \"<br>\" --repo owner/name 5` → {repo: '', pr: null, branch: 'owner/name'}. FOLDED (fold 2): a per-token literal flag; the strip skips literal tokens; four rows and the widened invariant row."
+    },
+    {
+      "id": "G2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1553,
+      "claim": "The fold-1 residue sentence says only the last three of the five `&`/`|`-carrying operators are merges the shell runs; all five run the merge, so the strict bypass surface is understated by two, and the test corpus comment classifies `>|` and `2>&1` as mutants (shapes the shell does not run).",
+      "counterexample": "bash with a stub: `>| out.txt gh pr merge 5` → GH-RAN (also under noclobber); `2>&1 gh pr merge 5` → GH-RAN; the wrapper projects nothing for any of the five. FOLDED (fold 2): both sentences corrected; the two rows relabelled as locked disclosed misses."
+    },
+    {
+      "id": "G3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 1556,
+      "claim": "The 'PowerShell line continuation (a trailing backtick)' bullet sits in the disclosed-MISS list whose header says the gate does not fire and every entry is a locked row; the gate DOES fire (with a bogus `unresolvedTarget: '`'` — strict denies a bogus target, pilot warns and lets PR 5 merge unjudged), no row locks it, and it is not new (main projects the identical payload).",
+      "counterexample": "pwsh 7: a script `gh pr merge `<LF>5` with a gh.cmd stub → GH-RAN pr merge 5. Committed hook with a PowerShell envelope: exit 0, CLI spawned, payload {pr: null, unresolvedTarget: '`'}; main in a vm sandbox: the same. FOLDED (fold 2): a ps-mode continuation arm (backtick-newline joins the word, the twin of the bash backslash-newline arm), rows, the bullet removed."
+    },
+    {
+      "id": "G4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2221,
+      "claim": "The `flags` cure of fold 1 item 3 applies to `time` alone; every other table word skips an unknown `-` token as a flag, so the wrapper projects a merge for command lines on which the program runs nothing (invalid option) — the false-deny class, undisclosed.",
+      "counterexample": "`command -x gh pr merge 5` → 'invalid option', nothing runs; `timeout -Z 30 …`, `nice -Z …`, `env -Z …`, `nohup -x …`, `exec -x …` likewise; the seam projects [['5']] for each. FOLDED (fold 2): ruled a disclosed FALSE FIRE with rows — a closed flags list per program would turn every real flag it omitted into a miss, the wrong direction."
+    },
+    {
+      "id": "G5",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 9,
+      "claim": "The hook's load-bearing exit-code contract header enumerates every exit-2 cause and is byte-identical to main's, but the branch added two exit-2 arms (the spent budget; the stdin timer) that it does not name.",
+      "counterexample": "diff of lines 1–25 between main's hook and the committed hook: identical; a not-applicable `echo hi` envelope with the pipe held open exits 2 at 1 057 ms, which the header promises exit 0 for. FOLDED (fold 2): the header names both arms."
+    },
+    {
+      "id": "G6",
+      "severity": "MINOR",
+      "file": ".claude/hooks/gate-wrapper.cjs",
+      "line": 152,
+      "claim": "The `env -S` residue bullet states a mechanism the code does not use for `--split-string=`: only `-S` is in env's operand list; the `=` spelling is skipped as an ordinary flag and the operand SURVIVES; in both spellings the miss comes from the anchor failing on a single quoted word.",
+      "counterexample": "TRANSPARENT_WRAPPERS.env.operand = ['-u','-C','-S','--unset','--chdir']; `env --split-string='gh pr merge 5'` → no projection (right outcome, wrong stated reason); bash `env -S \"gh pr merge 5\"` → GH-RAN. FOLDED (fold 2): the sentence corrected; `--split-string` joins the operand list."
+    },
+    {
+      "id": "G7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/gate-install.test.ts",
+      "line": 1687,
+      "claim": "ROW_TRAILING_REDIRECT_PR (`gh pr merge 5 > out.txt`) is non-discriminating: it passes identically with the whole-segment strip removed.",
+      "counterexample": "Mutant with the strip neutered: the two branch-payload rows go RED ({pr: null, branch: '>'}); the PR row gives {pr: 5} on the mutant and on the fold alike. FOLDED (fold 2): the row asserts argv ['5'] through the seam."
+    }
+  ],
+  "folded": [
+    "G1",
+    "G2",
+    "G3",
+    "G4",
+    "G5",
+    "G6",
+    "G7"
+  ],
+  "verdict": "0 BLOCKING, 3 MATERIAL, 4 MINOR at c52ae094 — fold 1's stdin timer, spec corrections and RED discipline verified (seven mutants, each row bites); G1 is a quote-blind regression fold 1 introduced, G2/G3 are disclosure sentences execution falsifies; every finding folded in fold 2, which a third scoped leg reads."
+}
