@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import { createRequire } from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -82,6 +83,55 @@ function envWithPath(value: string): NodeJS.ProcessEnv {
   }
   env.PATH = value;
   return env;
+}
+
+/** One heredoc the wrapper's scanner located — core's span minus `body` (spec 2857 § 1). */
+interface WrapperSpan {
+  delimiter: string;
+  quoted: boolean;
+  stripTabs: boolean;
+  unterminated: boolean;
+  bodyStart: number;
+  bodyEnd: number;
+}
+
+/**
+ * The rendered wrapper's export seam (spec `.totem/specs/2856.md` § E): run as a
+ * hook it IS the main module and runs its entry; `require`d it runs no entry and
+ * exports the projection, the scanner and the budget clamp, so the strip table,
+ * the executable test, the clamp and scanner parity can be driven in-process
+ * instead of through a process spawn per row.
+ */
+interface WrapperExports {
+  blankHeredocBodies: (command: string, powershell: boolean) => string;
+  findHeredocSpans: (command: string, powershell: boolean) => WrapperSpan[];
+  ghPrMergeArgvs: (command: string, powershell: boolean) => string[][];
+  isGhExecutable: (token: string) => boolean;
+  projectMergeReady: (argv: string[]) => Record<string, unknown>;
+  clampBudgetMs: (raw: unknown) => number;
+}
+
+const requireCjs = createRequire(import.meta.url);
+let wrapperExportsCache: WrapperExports | null = null;
+
+/**
+ * The rendered template's exports, loaded once from a temp `.cjs` (the file is
+ * removed again as soon as `require` has read it — nothing lands under the
+ * repo). Loading the RENDERED text, not the source, is what makes these rows
+ * read the same bytes the installed hook runs.
+ */
+function wrapperExports(): WrapperExports {
+  if (wrapperExportsCache === null) {
+    const dir = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gate-seam-')));
+    const file = path.join(dir, 'gate-wrapper.cjs');
+    fs.writeFileSync(file, CLAUDE_GATE_WRAPPER);
+    try {
+      wrapperExportsCache = requireCjs(file) as WrapperExports;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  }
+  return wrapperExportsCache;
 }
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1078,12 +1128,6 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         'time -- gh pr merge 5',
         'echo `gh pr merge 5`',
         '> out.txt gh pr merge 5',
-        // The pilot-install round (greptile P1 on mmnto-ai/totem#2855): the
-        // executable spelled with an extension or a path is not the bare token
-        // the anchor reads — disclosed here and in the template's comment;
-        // widening the token is mmnto-ai/totem#2856, the strict tier's precondition.
-        'gh.exe pr merge 5',
-        './gh pr merge 5',
         // The same round's legs (mmnto-ai/totem#2857): two divergences from
         // core's scanner that open a heredoc core does not, so the merge on a
         // later line is blanked — a comment after `(` or an operator `)` (the
@@ -1093,6 +1137,53 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         // a fix flips these rows to spawnedPayload() rows.
         '(true)#<<note\ngh pr merge 5',
         'cat <<E:F\nbody\nE:F\ngh pr merge 5',
+      ]) {
+        writeStubCli({
+          verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
+        });
+        const { status } = runWrapper(bash(command), [], 'merge-ready');
+        expect(status, command).toBe(0);
+        expect(stubArgv(), command).toBeNull();
+      }
+    });
+
+    it('the executable may carry an extension or a path (mmnto-ai/totem#2856 § A)', () => {
+      // The anchor read the bare token `gh`, so every other spelling of the SAME
+      // executable ran unjudged — a bypass under the strict tier (greptile P1 on
+      // mmnto-ai/totem#2855). The basename after the last `/` or `\` is what the
+      // test reads now.
+      initGitRepo();
+      for (const command of [
+        'gh.exe pr merge 5',
+        'gh.EXE pr merge 5',
+        './gh pr merge 5',
+        '/usr/local/bin/gh pr merge 5',
+        // A win32 path reaches the executable test only when it is QUOTED: this
+        // walk reads POSIX quoting for BOTH tools (disclosed since the first
+        // round), so an unquoted `C:\tools\gh.exe` arrives as `C:toolsgh.exe`
+        // with its separators consumed as escapes — locked as a miss below.
+        "'C:\\tools\\gh.exe' pr merge 5",
+        '"/opt/hub/gh" pr merge 5',
+      ]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
+      }
+    });
+
+    it('every widened form has a MUTANT that must NOT project, and never spawns (mmnto-ai/totem#2856 § F)', () => {
+      initGitRepo();
+      for (const command of [
+        // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
+        // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
+        // wrapper cannot expand.
+        'ghx pr merge 5',
+        'gh.cmd pr merge 5',
+        '$GH pr merge 5',
+        '${GH} pr merge 5',
+        // The unquoted win32 path (see the row above): its backslashes are
+        // consumed as escapes before the executable test sees the token.
+        'C:\\tools\\gh.exe pr merge 5',
       ]) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
@@ -1693,5 +1784,60 @@ describe('init --gates= routes through the shared installer', () => {
     expect(err).toBeInstanceOf(TotemError);
     expect((err as TotemError).code).toBe('GATE_INVALID');
     expect(fs.existsSync(path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs'))).toBe(false);
+  });
+});
+
+// ─── The export seam (mmnto-ai/totem#2856 § E) ─────────────────────────
+//
+// Run as a hook the wrapper IS the main module and runs its entry; `require`d
+// it runs no entry and exports the projection, the scanner and the budget
+// clamp. These rows drive those exports IN-PROCESS — a cell of the strip table
+// through a process spawn costs a second of wall time apiece, and the
+// end-to-end rows above already prove the seam and the hook agree.
+describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
+  it('a required wrapper exports the projection, the scanner and the clamp — and runs no entry', () => {
+    const w = wrapperExports();
+    for (const name of [
+      'blankHeredocBodies',
+      'ghPrMergeArgvs',
+      'isGhExecutable',
+      'projectMergeReady',
+    ] as const) {
+      expect(typeof w[name], name).toBe('function');
+    }
+    // The entry reads stdin and exits the process: requiring the module must do
+    // NEITHER — reaching this line is that assertion — and the projection must
+    // answer without a spawn.
+    expect(w.ghPrMergeArgvs('gh pr merge 5', false)).toEqual([['5']]);
+  });
+
+  it('isGhExecutable reads the basename after the last / or backslash (§ A)', () => {
+    const { isGhExecutable } = wrapperExports();
+    for (const token of [
+      'gh',
+      'gh.exe',
+      'gh.EXE',
+      './gh',
+      '../bin/gh',
+      '/usr/local/bin/gh',
+      'C:\\tools\\gh.exe',
+      '\\\\server\\share\\gh',
+    ]) {
+      expect(isGhExecutable(token), token).toBe(true);
+    }
+    for (const token of [
+      '',
+      'ghx',
+      'gh.cmd',
+      'GH',
+      'github',
+      'gh.exe.bak',
+      'mygh',
+      '$GH',
+      '${GH}',
+      'C:toolsgh.exe',
+    ]) {
+      expect(isGhExecutable(token), token).toBe(false);
+    }
   });
 });

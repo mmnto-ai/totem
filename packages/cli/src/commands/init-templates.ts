@@ -1475,26 +1475,6 @@ function resolveCliFromPath() {
   return null;
 }
 
-// ─── Parse baked args (--event <name>, optional --pilot / --strict) ─────
-// The tier is read ONLY from argv (baked into the installed command at
-// install time). There is NO env-var override: env sourcing would be a
-// fail-open (any shell with TOTEM_GATE_TIER=pilot could silently downgrade
-// enforcement). Default (no flag) = strict, so a default install is
-// environment-immune; --pilot is an explicit install-time opt-in.
-const argv = process.argv.slice(2);
-let event = '';
-let tier = 'strict';
-for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === '--event') {
-    event = argv[i + 1] || '';
-    i++;
-  } else if (argv[i] === '--pilot') {
-    tier = 'pilot';
-  } else if (argv[i] === '--strict') {
-    tier = 'strict';
-  }
-}
-
 // ─── merge-ready: \`gh pr merge\` at COMMAND POSITION + its payload ──────
 //
 // One walk over the command text does BOTH jobs, so recognition and argv
@@ -1827,6 +1807,25 @@ function isAssignmentPrefix(token) {
   return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
 }
 
+// The executable spellings the anchor accepts (mmnto-ai/totem#2856 § A):
+// \`gh\`, \`gh.exe\`, and either of those behind a path (\`./gh\`,
+// \`/usr/local/bin/gh\`, \`'C:\\tools\\gh.exe'\`). The BASENAME after the last
+// \`/\` or \`\\\` is what is read, and the \`.exe\` suffix is case-insensitive as
+// win32 resolves it. Reading only the bare token \`gh\` left every other
+// spelling of the SAME executable unjudged — one lost advisory read under
+// PILOT, a bypass under STRICT (greptile P1 on mmnto-ai/totem#2855).
+// A VARIABLE executable (\`$GH\`, \`\${GH}\`) is not a spelling this wrapper can
+// expand, and stays a disclosed miss below.
+function isGhExecutable(token) {
+  if (typeof token !== 'string' || token === '') return false;
+  const slash = token.lastIndexOf('/');
+  const back = token.lastIndexOf('\\\\');
+  const cut = slash > back ? slash : back;
+  const base = cut === -1 ? token : token.slice(cut + 1);
+  if (base === 'gh') return true;
+  return base.length === 6 && base.slice(0, 3) === 'gh.' && base.slice(3).toLowerCase() === 'exe';
+}
+
 /**
  * The argv after EVERY \`gh pr merge\` at command position in the command —
  * one array per merge, in command order — or an empty array when there is
@@ -1939,7 +1938,12 @@ function ghPrMergeArgvs(rawCommand, powershell) {
     ) {
       tokens = tokens.slice(1);
     }
-    if (tokens.length >= 3 && tokens[0] === 'gh' && tokens[1] === 'pr' && tokens[2] === 'merge') {
+    if (
+      tokens.length >= 3 &&
+      isGhExecutable(tokens[0]) &&
+      tokens[1] === 'pr' &&
+      tokens[2] === 'merge'
+    ) {
       found.push(tokens.slice(3));
     }
   }
@@ -2041,6 +2045,51 @@ function projectMergeReady(argv) {
   if (unresolvedTarget !== '') out.unresolvedTarget = unresolvedTarget;
   if (/^[0-9a-f]{40}$/i.test(headSha)) out.headSha = headSha;
   return out;
+}
+
+// ─── The export seam (mmnto-ai/totem#2856 § E) ─────────────────────────
+// Everything above is pure and side-effect free; everything below is the
+// hook's ENTRY — it reads argv and stdin and exits the process. A \`require\`
+// of this file (the suite's in-process driver for the strip table, the
+// executable test, the budget clamp and the scanner-parity lock) must run
+// NEITHER, so the entry runs only when this file is the main module. The
+// module-scope \`return\` is CommonJS's own early exit, and it sits AFTER every
+// module-level binding above so the exported functions are all initialized.
+//
+// Nothing else changes when the file runs as a hook: \`require.main\` is this
+// module, the \`return\` is not taken, and the entry below is the same code it
+// has always been. One consequence worth naming: an exported
+// \`projectMergeReady\` runs with no budget set (see \`deadline\`), so it does no
+// git reads — the projection's shape is what the seam is for, the git facts
+// are the entry's.
+if (require.main !== module) {
+  module.exports = {
+    blankHeredocBodies: blankHeredocBodies,
+    ghPrMergeArgvs: ghPrMergeArgvs,
+    isGhExecutable: isGhExecutable,
+    projectMergeReady: projectMergeReady,
+  };
+  return;
+}
+
+// ─── Parse baked args (--event <name>, optional --pilot / --strict) ─────
+// The tier is read ONLY from argv (baked into the installed command at
+// install time). There is NO env-var override: env sourcing would be a
+// fail-open (any shell with TOTEM_GATE_TIER=pilot could silently downgrade
+// enforcement). Default (no flag) = strict, so a default install is
+// environment-immune; --pilot is an explicit install-time opt-in.
+const argv = process.argv.slice(2);
+let event = '';
+let tier = 'strict';
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--event') {
+    event = argv[i + 1] || '';
+    i++;
+  } else if (argv[i] === '--pilot') {
+    tier = 'pilot';
+  } else if (argv[i] === '--strict') {
+    tier = 'strict';
+  }
 }
 
 // Read the PreToolUse stdin envelope.
