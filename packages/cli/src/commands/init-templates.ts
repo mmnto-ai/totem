@@ -1407,6 +1407,12 @@ export const CLAUDE_GATE_WRAPPER = `// [totem] auto-generated — Claude Code ac
 //         or unknown disposition)
 //       | an --event this wrapper has no payload projection for (a baked event
 //         it cannot project is an applicable gate it cannot evaluate)
+//       | the BUDGET spent before a gate could be evaluated — the projection's
+//         git reads did not answer inside it (mmnto-ai/totem#2856 § D)
+//       | the BUDGET spent before the envelope arrived on stdin — the host
+//         opened this hook and never closed its input (same § D, fold F6)
+//     Both budget arms are fail-closed at EVERY tier, --pilot included: an
+//     applicable gate that could not be evaluated is not a softened deny.
 'use strict';
 
 const { spawnSync } = require('child_process');
@@ -1542,9 +1548,16 @@ function resolveCliFromPath() {
 //     table is keyed on the bare word the shell reads at command position, and
 //     \`/usr/bin/time\` is a PROGRAM with its own option grammar, not the
 //     reserved word this table models;
-//   - \`env -S '<cmd>'\` / \`env --split-string='<cmd>'\`: the option's operand IS
-//     the command, split again under env's own rules. The operand is consumed
-//     with the option here, so the merge inside it is not read;
+//   - \`env -S '<cmd>'\`, \`env --split-string '<cmd>'\`, \`--split-string=<cmd>\`:
+//     the option's operand IS the command, split again under env's own rules.
+//     What makes it a miss is not which token the strip drops — it is that the
+//     operand is ONE QUOTED WORD and the anchor is never re-entered on one,
+//     the way \`eval\`'s operand is re-tokenized (round-6 leg, G6). The
+//     separate spellings consume the operand with the option (\`--split-string\`
+//     joins that list with this fold, for consistency with \`-S\` and with no
+//     change in outcome for a quoted operand); the attached spelling arrives
+//     as a single \`-\` token and is dropped whole; and where a strip left the
+//     operand standing, the anchor read one word where it needs three;
 //   - \`eval\` nested deeper than ONE level
 //     (\`eval "eval \\"gh pr merge 5\\""\`);
 //   - a substitution inside DOUBLE quotes (\`echo "\`gh pr merge 5\`"\`,
@@ -1554,9 +1567,14 @@ function resolveCliFromPath() {
 //     F4); the single-quoted spelling really is data and stays a control row;
 //   - a redirection operator carrying a tokenizer separator (\`>|\`, \`2>&1\`,
 //     \`>& file\`, \`<& 3\`, \`exec 3>&1 …\`): \`|\` and \`&\` end the segment before
-//     the operator is read as one word, and the last three of those ARE merges
-//     the shell runs. A \`&>\` splits the same way but leaves a readable \`>\` at
-//     the front of the next segment, so THAT one projects;
+//     the operator is read as one word, and ALL FIVE of those are merges the
+//     shell runs — measured with a stub on bash 5.3, each applies its
+//     redirection and then runs \`gh pr merge 5\` (the \`<& 3\` form once that
+//     descriptor is open). The segment they leave starts at the FILE
+//     (\`out.txt\`, \`1\`, \`file\`, \`3\`), so nothing of the merge is read: a
+//     fail-open, not text the shell ignores (round-6 leg, G2). A \`&>\` splits
+//     the same way but leaves a readable \`>\` at the front of the next
+//     segment, so THAT one projects;
 //   - PowerShell's own quoting (backtick escapes outside double quotes,
 //     here-strings) is not modelled — the walk reads POSIX quoting for both
 //     tools. PowerShell's call operator is NOT a miss: \`& gh pr merge 5\`
@@ -1576,6 +1594,18 @@ function resolveCliFromPath() {
 // string to PowerShell and merges nothing, but this walk reads POSIX quoting
 // for both tools, so the \`"\` after the escaping backtick closes the string and
 // the merge reaches a segment's front (round-5 leg, F13; a row asserts it).
+// A fifth, and the only one that is not contrived: an INVALID OPTION to a
+// word on the table above (\`command -x\`, \`exec -x\`, \`timeout -Z 30\`,
+// \`nice -Z\`, \`env -Z\`, \`nohup -x\`, \`sudo -Z\`). Each makes the program answer
+// "invalid option" and run NOTHING, while the strip below reads any unknown
+// \`-\` token as one of that word's own options and projects the merge behind
+// it. Ruled disclose-not-cure (round-6 leg, G4): the cure is a closed \`flags\`
+// list per program — the shape \`time\` carries, whose reserved-word grammar
+// really is two flags — and on a mutant with that list everywhere it turns
+// every real flag the list omits (\`sudo -n\`, \`sudo -E\`,
+// \`timeout --foreground\`) into a MISS, which is a bypass under STRICT. A
+// false fire on a command that runs nothing costs one bogus deny; rows assert
+// each of them, so this paragraph is read from the suite.
 // \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
@@ -1989,7 +2019,11 @@ const TRANSPARENT_WRAPPERS = {
     // DENY (round-5 leg, F1).
     describe: ['-l', '--list', '-v', '--validate', '-V', '--version', '-K', '--remove-timestamp'],
   },
-  env: { operand: ['-u', '-C', '-S', '--unset', '--chdir'], positional: 0, terminator: false },
+  env: {
+    operand: ['-u', '-C', '-S', '--unset', '--chdir', '--split-string'],
+    positional: 0,
+    terminator: false,
+  },
   timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
   nice: { operand: ['-n', '--adjustment'], positional: 0, terminator: false },
   nohup: { operand: [], positional: 0, terminator: false },
@@ -2025,8 +2059,18 @@ const TRANSPARENT_WRAPPERS = {
 // Residue, disclosed and unreachable rather than claimed: an operator carrying
 // \`|\` or \`&\` (\`>|\`, \`2>&1\`, \`>& file\`, \`<& 3\`, \`exec 3>&1 …\`) never
 // arrives as ONE token, because those two characters are the tokenizer's own
-// segment separators and end the token first. \`&>\` splits the same way but
-// leaves a readable \`>\` at the front of the next segment, so that one IS read.
+// segment separators and end the token first. ALL FIVE of those run the merge
+// — measured with a stub on bash 5.3, each applies its redirection and then
+// runs \`gh pr merge 5\` (the \`<& 3\` form once that descriptor is open) — so
+// every one of them is a fail-open miss, not text the shell ignores (round-6
+// leg, G2). \`&>\` splits the same way but leaves a readable \`>\` at the front
+// of the next segment, so that one IS read.
+//
+// A LITERAL token is never a redirection, whatever its text: a word any part
+// of which came from inside quotes or from a backslash escape is data the
+// shell will not read as an operator, and the walk marks it (round-6 leg,
+// G1). Without that, \`gh pr merge -b "<br>" 5\` lost its body to this strip
+// and \`-b\` swallowed PR 5.
 const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
 const REDIRECTION_FUSED = /^[0-9]*(?:<<<|[<>]{1,2})[^\\s]+$/;
 

@@ -353,13 +353,15 @@ const MUTANT_ROWS = [
   'bash -c "gh pr merge 5"',
   // `eval` is bounded to ONE level.
   'eval "eval \\"gh pr merge 5\\""',
-  // § C, LOCKED: a redirection operator carrying a tokenizer separator. `|`
-  // ends a segment before `>|` is ever read as one word, and the segment it
-  // leaves starts at the FILE, not at a redirection — so this one is named in
-  // the template as unreachable rather than claimed. A `2>&1` splits the same
-  // way and leaves `1` at the front. The `&`-carrying duplication operators go
-  // the same way, and the last three ARE merges the shell runs — disclosed
-  // misses, not mutants (round-5 leg, F5 residue).
+  // § C, LOCKED DISCLOSED MISSES — not mutants, all five of them (round-6
+  // leg, G2). Measured with a stub `gh` on bash 5.3: `>| out.txt`, `2>&1`,
+  // `>& file`, `<& 3` (once that descriptor is open) and `exec 3>&1` each
+  // apply their redirection and then RUN `gh pr merge 5`. The wrapper misses
+  // every one for the same reason: `|` and `&` are its own segment
+  // separators, so the operator never arrives as one token and the segment
+  // they leave starts at the FILE (`out.txt`, `1`, `file`, `3`), not at a
+  // redirection. They sit here because nothing projects, which is what this
+  // loop asserts — but the reason is a fail-open, not text the shell ignores.
   '>| out.txt gh pr merge 5',
   '2>&1 gh pr merge 5',
   '>& file gh pr merge 5',
@@ -383,6 +385,31 @@ const MUTANT_ROWS = [
   // opposite of the single-quoted control above.
   'echo "`gh pr merge 5`"',
   'echo "$(gh pr merge 5)"',
+];
+
+/**
+ * An INVALID option to a table word is a disclosed FALSE FIRE (round-6 leg,
+ * G4). Measured: `command -x`, `exec -x`, `timeout -Z 30`, `nice -Z`,
+ * `env -Z`, `nohup -x` and `sudo -Z` each make the program print an
+ * invalid-option error and run NOTHING, while the strip reads the unknown `-`
+ * token as one of the word's own options and projects PR 5. Ruled: disclose
+ * it, do not cure it. The cure would be a closed `flags` list per program —
+ * the shape `time` has, whose reserved-word grammar really is two flags — and
+ * measured on a mutant with that list everywhere, it turns `sudo -n`,
+ * `sudo -E` and `timeout --foreground` (REAL flags, real merges) into misses
+ * as well. A miss is a bypass under the strict tier; a false fire on a
+ * command that runs nothing costs one bogus deny, which the override clears.
+ * These rows assert what the wrapper DOES, so the template's false-fires
+ * paragraph is read from rows rather than from memory.
+ */
+const INVALID_OPTION_FALSE_FIRE_ROWS = [
+  'command -x gh pr merge 5',
+  'exec -x gh pr merge 5',
+  'timeout -Z 30 gh pr merge 5',
+  'nice -Z gh pr merge 5',
+  'env -Z gh pr merge 5',
+  'nohup -x gh pr merge 5',
+  'sudo -Z gh pr merge 5',
 ];
 
 /** An arithmetic shift or a comment must not swallow the merge that follows. */
@@ -502,6 +529,7 @@ const PARITY_COMMAND_CORPUS = [
   ...WRAPPER_STRIP_ROWS,
   ...REDIRECTION_ROWS,
   ...MUTANT_ROWS,
+  ...INVALID_OPTION_FALSE_FIRE_ROWS,
   ...ARITHMETIC_COMMENT_ROWS,
   ...HERESTRING_ROWS,
   ...LINE_CONTINUATION_ROWS,
@@ -1801,6 +1829,26 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       });
     });
 
+    it('an INVALID option to a table word is a DISCLOSED false fire (round-6 leg, G4)', () => {
+      // Each of these makes the program answer "invalid option" and run
+      // nothing, while the strip reads the unknown `-` token as one of the
+      // word's own options and judges a merge the shell never runs. The
+      // alternative — a closed flag list per program — was measured on a
+      // mutant and turns real flags the list omits (`sudo -n`, `sudo -E`,
+      // `timeout --foreground`) into MISSES, which is a bypass under strict.
+      // A false fire on a command that runs nothing costs one bogus deny.
+      const head = initGitRepo();
+      for (const command of INVALID_OPTION_FALSE_FIRE_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+    });
+
     it('a PowerShell backtick escape inside double quotes is a DISCLOSED false fire (round-5 leg, F13)', () => {
       // PowerShell escapes with a backtick inside a double-quoted string, so
       // `"a `"; gh pr merge 5`"b"` is ONE string and PowerShell merges nothing.
@@ -2595,9 +2643,19 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       ['env --unset X gh pr merge 5', ['5']],
       ['env --chdir /tmp gh pr merge 5', ['5']],
       ['env --unset gh pr merge 5', null],
-      // LOCKED: `-S` / `--split-string` carries the command as its operand.
+      // LOCKED: `-S` / `--split-string` carries the command as its operand,
+      // split again under env's own rules. `--split-string` joins the operand
+      // list with this fold (round-6 leg, G6), which changes no outcome for
+      // the quoted spellings — the anchor is never re-entered on a single
+      // quoted word — and makes the UNQUOTED one consistent with `-S`: both
+      // are misses now, where `--split-string` alone used to leave its
+      // operand standing and fire (the fold-1 hook projected `['5']` for the
+      // last row here, and `env -S gh pr merge 5` already projected nothing).
       ["env -S 'gh pr merge 5'", null],
       ["env --split-string='gh pr merge 5'", null],
+      ["env --split-string 'gh pr merge 5'", null],
+      ['env -S gh pr merge 5', null],
+      ['env --split-string gh pr merge 5', null],
       // timeout: exactly ONE positional (the duration) before the command.
       ['timeout 30 gh pr merge 5', ['5']],
       ['timeout -s TERM 30 gh pr merge 5', ['5']],
