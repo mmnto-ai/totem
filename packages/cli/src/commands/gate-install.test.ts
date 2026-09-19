@@ -8,6 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { knownGates, TotemError } from '@mmnto/totem';
 
+// The scanner of record for the parity lock below (spec 2857 § 3). Read from
+// core's SOURCE by relative path, the way `bot-identity-parity.test.ts` reads
+// the definitions it holds its consumers to: `findHeredocs` is not re-exported
+// from core's index, and this is the layer that can read both packages (cli
+// depends on core, never the reverse).
+import { findHeredocs } from '../../../core/src/transport-shield.js';
 import { ejectCommand } from './eject.js';
 import { gateInstallCommand } from './gate.js';
 import {
@@ -133,6 +139,234 @@ function wrapperExports(): WrapperExports {
   }
   return wrapperExportsCache;
 }
+
+// ─── The command corpus (spec `.totem/specs/2857.md` § 3) ──────────────
+//
+// Every command string the merge-ready rows below assert on lives here ONCE,
+// so the scanner-parity lock at the foot of this file can walk the same
+// strings through BOTH scanners: a shape worth a projection row is a shape the
+// ported scanner is held equal to core's on. A new heredoc-, comment- or
+// quote-bearing row belongs in one of these lists, not inline in an `it`.
+
+/** Fires at command position: after a separator, a reserved word, an assignment prefix. */
+const COMMAND_POSITION_ROWS = [
+  'git status && gh pr merge 7',
+  'git fetch; gh pr merge 7',
+  'for x in 1; do gh pr merge 7; done',
+  'if true; then gh pr merge 7; fi',
+  'git log |\ngh pr merge 7',
+  // PR round 1 (greptile): a merge used AS the condition, and one behind an
+  // assignment prefix, each left something other than `gh` at the segment's
+  // front and went unjudged.
+  'if gh pr merge 7; then echo merged; fi',
+  'if false; then :; elif gh pr merge 7; then :; fi',
+  'while gh pr merge 7; do break; done',
+  'until gh pr merge 7; do sleep 1; done',
+  'GH_TOKEN=x gh pr merge 7',
+  'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
+  'exec gh pr merge 7',
+  'command gh pr merge 7',
+  // Round 2 (the leg's F1): two more reserved words and the builtin that runs
+  // an unquoted operand as the command.
+  'time gh pr merge 7',
+  'coproc gh pr merge 7',
+  'eval gh pr merge 7',
+];
+
+/** Must NEVER project — the false-deny direction this projection must not have. */
+const NEVER_SPAWNS_ROWS = [
+  'echo "gh pr merge 5"',
+  "echo 'gh pr merge 5'",
+  'gh pr list',
+  'gh pr view 3 | grep merge',
+  'git commit -m "gh pr merge"',
+  // A heredoc body is DATA, not commands (fold F4): firing here was a false
+  // deny — the direction this projection must not have.
+  'cat <<EOF\ngh pr merge 5\nEOF',
+  "cat <<'EOF'\ngh pr merge 5\nEOF",
+  'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
+  'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
+  // An UNTERMINATED body runs to the end of the command and is still data.
+  'cat <<EOF\ngh pr merge 5',
+  // A backtick substitution inside QUOTES is data, not a segment of its own:
+  // the quote arms run before the separator (§ C keeps the false-deny
+  // direction closed).
+  'echo "`gh pr merge 5`"',
+  "echo '`gh pr merge 5`'",
+];
+
+/** § A — the executable spellings that project. */
+const EXECUTABLE_SPELLING_ROWS = [
+  'gh.exe pr merge 5',
+  'gh.EXE pr merge 5',
+  './gh pr merge 5',
+  '/usr/local/bin/gh pr merge 5',
+  // A win32 path reaches the executable test only when it is QUOTED: this walk
+  // reads POSIX quoting for BOTH tools (disclosed since the first round), so an
+  // unquoted `C:\tools\gh.exe` arrives as `C:toolsgh.exe` with its separators
+  // consumed as escapes — locked as a miss in MUTANT_ROWS.
+  "'C:\\tools\\gh.exe' pr merge 5",
+  '"/opt/hub/gh" pr merge 5',
+];
+
+/** § B — the transparent wrapper programs and flag-carrying builtins that project. */
+const WRAPPER_STRIP_ROWS = [
+  'sudo gh pr merge 5',
+  'sudo -u root gh pr merge 5',
+  'sudo --user=root gh pr merge 5',
+  'sudo -- gh pr merge 5',
+  'env GH_TOKEN=x gh pr merge 5',
+  'env -u X A=1 gh pr merge 5',
+  'timeout 30 gh pr merge 5',
+  'timeout 30s gh pr merge 5',
+  'timeout -k 5 30 gh pr merge 5',
+  'timeout --kill-after=5 30 gh pr merge 5',
+  'timeout --foreground 30 gh pr merge 5',
+  'nice -n 10 gh pr merge 5',
+  'nice --adjustment=10 gh pr merge 5',
+  'nice -10 gh pr merge 5',
+  'nohup gh pr merge 5',
+  'command -p gh pr merge 5',
+  'exec -a x gh pr merge 5',
+  'time -p gh pr merge 5',
+  'time -- gh pr merge 5',
+  // A wrapper wrapping a wrapper: the strip loops until the head is the
+  // command itself.
+  'sudo -u root timeout 30 gh pr merge 5',
+  'nohup nice -n 5 gh pr merge 5',
+  // `eval` re-tokenizes its operand ONCE (depth 1) and projects from the inner
+  // string — a merge handed over as one quoted word.
+  'eval "gh pr merge 5"',
+  "eval 'gh pr merge 5'",
+];
+
+/** § C — leading redirections and backtick substitutions that project. */
+const REDIRECTION_ROWS = [
+  '> out.txt gh pr merge 5',
+  '>out.txt gh pr merge 5',
+  '>> log.txt gh pr merge 5',
+  '< in.txt gh pr merge 5',
+  '2> err.txt gh pr merge 5',
+  '2>/dev/null gh pr merge 5',
+  // `&>` is not read as one operator — `&` ends the segment — but the segment
+  // AFTER it starts at the `>`, which the arms do read.
+  '&> out.txt gh pr merge 5',
+  // A redirection in front of a wrapper program: both strips run.
+  '> out.txt sudo gh pr merge 5',
+  'echo `gh pr merge 5`',
+  '`gh pr merge 5`',
+];
+
+/** § F — one mutant per widened form; none of them may project. */
+const MUTANT_ROWS = [
+  // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
+  'sudo -u gh pr merge 5',
+  // `timeout` with no duration: the grammar consumes exactly one positional
+  // before the command, so `gh` reads as the duration. A disclosed
+  // false-negative of the grammar, locked here (the form is invalid to
+  // `timeout` itself).
+  'timeout gh pr merge 5',
+  // `command -v` / `-V` DESCRIBE their operand, they never execute it.
+  'command -v gh pr merge 5',
+  'command -V gh pr merge 5',
+  // Not on the closed list: `npx` runs a package, never the GitHub CLI.
+  'npx gh pr merge 5',
+  'xargs gh pr merge 5',
+  'bash -c "gh pr merge 5"',
+  // `eval` is bounded to ONE level.
+  'eval "eval \\"gh pr merge 5\\""',
+  // § C, LOCKED: a redirection operator carrying a tokenizer separator. `|`
+  // ends a segment before `>|` is ever read as one word, and the segment it
+  // leaves starts at the FILE, not at a redirection — so this one is named in
+  // the template as unreachable rather than claimed. A `2>&1` splits the same
+  // way and leaves `1` at the front.
+  '>| out.txt gh pr merge 5',
+  '2>&1 gh pr merge 5',
+  // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
+  // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
+  // wrapper cannot expand.
+  'ghx pr merge 5',
+  'gh.cmd pr merge 5',
+  '$GH pr merge 5',
+  '${GH} pr merge 5',
+  // The unquoted win32 path (see EXECUTABLE_SPELLING_ROWS): its backslashes
+  // are consumed as escapes before the executable test sees the token.
+  'C:\\tools\\gh.exe pr merge 5',
+];
+
+/** An arithmetic shift or a comment must not swallow the merge that follows. */
+const ARITHMETIC_COMMENT_ROWS = [
+  'echo $((1<<2)); gh pr merge 5',
+  'echo $(( 3<<1 )); gh pr merge 5',
+  '# see <<note\ngh pr merge 5',
+  '(( 1<<3 ))\ngh pr merge 5',
+  'echo hi # <<EOF\ngh pr merge 5',
+];
+
+/** A `<<<` here-string is not a heredoc: the merge after it still fires. */
+const HERESTRING_ROWS = [
+  'grep x <<< bar\ngh pr merge 5',
+  'grep x <<<bar\ngh pr merge 5',
+  '<<<bar\ngh pr merge 5',
+];
+
+/** A backslash-newline joins two halves of one word. */
+const LINE_CONTINUATION_ROWS = ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5'];
+
+// Shapes each asserted by a row of their own below, named here so the parity
+// corpus reads them too.
+const ROW_TWO_HEREDOC_BODIES = 'cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n';
+const ROW_HEREDOC_AS_OPERAND = 'gh pr merge 5 <<EOF\nnotes\nEOF\n';
+const ROW_MERGE_AFTER_HEREDOC = 'cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21';
+const ROW_PS_BLOCK_MULTILINE = '<#\ngh pr merge 9\n#>\necho hi';
+const ROW_PS_BLOCK_INLINE = '<# gh pr merge 9 #>\necho hi';
+const ROW_PS_BLOCK_THEN_MERGE = '<# notes #>\ngh pr merge 4';
+const ROW_BASH_HASH_REDIRECT = 'sort <#tmp\ngh pr merge 8';
+const ROW_SUBSTITUTION_COMMENT = 'echo $(# <<note\ngh pr merge 5\n)';
+const ROW_HERESTRING_AS_OPERAND = 'gh pr merge 6 <<< notes';
+const ROW_TRAILING_COMMENT = 'echo hi # gh pr merge 9';
+const ROW_PAREN_COMMENT_HEREDOC = '(true)#<<note\ngh pr merge 5';
+const ROW_COLON_DELIMITER = 'cat <<E:F\nbody\nE:F\ngh pr merge 5';
+const ROW_OPEN_PAREN_COMMENT = '(#<<note\ngh pr merge 5\n)';
+const ROW_GROUP_CLOSE_COMMENT = '(true; echo a)#<<note\ngh pr merge 5';
+
+/**
+ * The delimiters mmnto-ai/totem#2857 names — each carrying a character outside
+ * the template's old word class — in a terminated and an unterminated form.
+ */
+const PARITY_DELIMITERS = ['E:F', 'E*F', 'E+F', 'E=F', 'E,F', 'E@F', 'E!F', 'EOF~'];
+const DELIMITER_PARITY_ROWS = PARITY_DELIMITERS.flatMap((d) => [
+  `cat <<${d}\nbody\n${d}\ngh pr merge 5`,
+  `cat <<${d}\nbody\ngh pr merge 5`,
+]);
+
+/** Every string above, the corpus half of the parity lock. */
+const PARITY_COMMAND_CORPUS = [
+  ...COMMAND_POSITION_ROWS,
+  ...NEVER_SPAWNS_ROWS,
+  ...EXECUTABLE_SPELLING_ROWS,
+  ...WRAPPER_STRIP_ROWS,
+  ...REDIRECTION_ROWS,
+  ...MUTANT_ROWS,
+  ...ARITHMETIC_COMMENT_ROWS,
+  ...HERESTRING_ROWS,
+  ...LINE_CONTINUATION_ROWS,
+  ...DELIMITER_PARITY_ROWS,
+  ROW_TWO_HEREDOC_BODIES,
+  ROW_HEREDOC_AS_OPERAND,
+  ROW_MERGE_AFTER_HEREDOC,
+  ROW_PS_BLOCK_MULTILINE,
+  ROW_PS_BLOCK_INLINE,
+  ROW_PS_BLOCK_THEN_MERGE,
+  ROW_BASH_HASH_REDIRECT,
+  ROW_SUBSTITUTION_COMMENT,
+  ROW_HERESTRING_AS_OPERAND,
+  ROW_TRAILING_COMMENT,
+  ROW_PAREN_COMMENT_HEREDOC,
+  ROW_COLON_DELIMITER,
+  ROW_OPEN_PAREN_COMMENT,
+  ROW_GROUP_CLOSE_COMMENT,
+];
 
 function readSettings(cwd: string): Record<string, unknown> {
   const raw = fs.readFileSync(path.join(cwd, '.claude', 'settings.json'), 'utf-8');
@@ -1066,29 +1300,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
 
     it("fires at command position after a separator, after the shell's command-position words, and behind an assignment prefix", () => {
       initGitRepo();
-      for (const command of [
-        'git status && gh pr merge 7',
-        'git fetch; gh pr merge 7',
-        'for x in 1; do gh pr merge 7; done',
-        'if true; then gh pr merge 7; fi',
-        'git log |\ngh pr merge 7',
-        // PR round 1 (greptile): a merge used AS the condition, and one behind
-        // an assignment prefix, each left something other than `gh` at the
-        // segment's front and went unjudged.
-        'if gh pr merge 7; then echo merged; fi',
-        'if false; then :; elif gh pr merge 7; then :; fi',
-        'while gh pr merge 7; do break; done',
-        'until gh pr merge 7; do sleep 1; done',
-        'GH_TOKEN=x gh pr merge 7',
-        'GH_REPO=mmnto-ai/totem GH_TOKEN="a b" gh pr merge 7',
-        'exec gh pr merge 7',
-        'command gh pr merge 7',
-        // Round 2 (the leg's F1): two more reserved words and the builtin that
-        // runs an unquoted operand as the command.
-        'time gh pr merge 7',
-        'coproc gh pr merge 7',
-        'eval gh pr merge 7',
-      ]) {
+      for (const command of COMMAND_POSITION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 7 });
@@ -1097,35 +1309,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
 
     it('does NOT fire inside a quoted string, a heredoc body, or on another gh verb — and never spawns', () => {
       initGitRepo();
-      for (const command of [
-        'echo "gh pr merge 5"',
-        "echo 'gh pr merge 5'",
-        'gh pr list',
-        'gh pr view 3 | grep merge',
-        'git commit -m "gh pr merge"',
-        // A heredoc body is DATA, not commands (fold F4): firing here was a
-        // false deny — the direction this projection must not have.
-        'cat <<EOF\ngh pr merge 5\nEOF',
-        "cat <<'EOF'\ngh pr merge 5\nEOF",
-        'cat <<-EOF\n\tgh pr merge 5\n\tEOF',
-        'cat <<EOF > notes.txt\ngh pr merge 5\nEOF\necho done',
-        // An UNTERMINATED body runs to the end of the command and is still data.
-        'cat <<EOF\ngh pr merge 5',
-        // A backtick substitution inside QUOTES is data, not a segment of its
-        // own: the quote arms run before the separator (§ C keeps the
-        // false-deny direction closed).
-        'echo "`gh pr merge 5`"',
-        "echo '`gh pr merge 5`'",
-        // The same round's legs (mmnto-ai/totem#2857): two divergences from
-        // core's scanner that open a heredoc core does not, so the merge on a
-        // later line is blanked — a comment after `(` or an operator `)` (the
-        // template has no paren-boundary arms), and a bare delimiter carrying a
-        // character outside the template's word class (`<<E:F`) parsed as a
-        // prefix so the real terminator never matches. Locked as misses here;
-        // a fix flips these rows to spawnedPayload() rows.
-        '(true)#<<note\ngh pr merge 5',
-        'cat <<E:F\nbody\nE:F\ngh pr merge 5',
-      ]) {
+      for (const command of NEVER_SPAWNS_ROWS) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
         });
@@ -1141,18 +1325,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // mmnto-ai/totem#2855). The basename after the last `/` or `\` is what the
       // test reads now.
       initGitRepo();
-      for (const command of [
-        'gh.exe pr merge 5',
-        'gh.EXE pr merge 5',
-        './gh pr merge 5',
-        '/usr/local/bin/gh pr merge 5',
-        // A win32 path reaches the executable test only when it is QUOTED: this
-        // walk reads POSIX quoting for BOTH tools (disclosed since the first
-        // round), so an unquoted `C:\tools\gh.exe` arrives as `C:toolsgh.exe`
-        // with its separators consumed as escapes — locked as a miss below.
-        "'C:\\tools\\gh.exe' pr merge 5",
-        '"/opt/hub/gh" pr merge 5',
-      ]) {
+      for (const command of EXECUTABLE_SPELLING_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1165,35 +1338,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // list of transparent programs with their option grammar, re-runs the
       // assignment strip after them, and only then reads the executable.
       initGitRepo();
-      for (const command of [
-        'sudo gh pr merge 5',
-        'sudo -u root gh pr merge 5',
-        'sudo --user=root gh pr merge 5',
-        'sudo -- gh pr merge 5',
-        'env GH_TOKEN=x gh pr merge 5',
-        'env -u X A=1 gh pr merge 5',
-        'timeout 30 gh pr merge 5',
-        'timeout 30s gh pr merge 5',
-        'timeout -k 5 30 gh pr merge 5',
-        'timeout --kill-after=5 30 gh pr merge 5',
-        'timeout --foreground 30 gh pr merge 5',
-        'nice -n 10 gh pr merge 5',
-        'nice --adjustment=10 gh pr merge 5',
-        'nice -10 gh pr merge 5',
-        'nohup gh pr merge 5',
-        'command -p gh pr merge 5',
-        'exec -a x gh pr merge 5',
-        'time -p gh pr merge 5',
-        'time -- gh pr merge 5',
-        // A wrapper wrapping a wrapper: the strip loops until the head is the
-        // command itself.
-        'sudo -u root timeout 30 gh pr merge 5',
-        'nohup nice -n 5 gh pr merge 5',
-        // `eval` re-tokenizes its operand ONCE (depth 1) and projects from the
-        // inner string — a merge handed over as one quoted word.
-        'eval "gh pr merge 5"',
-        "eval 'gh pr merge 5'",
-      ]) {
+      for (const command of WRAPPER_STRIP_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1206,21 +1351,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // while the redirection word was the segment's first token and the
       // backtick was an ordinary character.
       initGitRepo();
-      for (const command of [
-        '> out.txt gh pr merge 5',
-        '>out.txt gh pr merge 5',
-        '>> log.txt gh pr merge 5',
-        '< in.txt gh pr merge 5',
-        '2> err.txt gh pr merge 5',
-        '2>/dev/null gh pr merge 5',
-        // `&>` is not read as one operator — `&` ends the segment — but the
-        // segment AFTER it starts at the `>`, which the arms do read.
-        '&> out.txt gh pr merge 5',
-        // A redirection in front of a wrapper program: both strips run.
-        '> out.txt sudo gh pr merge 5',
-        'echo `gh pr merge 5`',
-        '`gh pr merge 5`',
-      ]) {
+      for (const command of REDIRECTION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1239,47 +1370,32 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
 
     it('every widened form has a MUTANT that must NOT project, and never spawns (mmnto-ai/totem#2856 § F)', () => {
       initGitRepo();
-      for (const command of [
-        // § B: the operand of `sudo -u` IS `gh`, so the command is `pr`.
-        'sudo -u gh pr merge 5',
-        // `timeout` with no duration: the grammar consumes exactly one
-        // positional before the command, so `gh` reads as the duration. A
-        // disclosed false-negative of the grammar, locked here (the form is
-        // invalid to `timeout` itself).
-        'timeout gh pr merge 5',
-        // `command -v` / `-V` DESCRIBE their operand, they never execute it.
-        'command -v gh pr merge 5',
-        'command -V gh pr merge 5',
-        // Not on the closed list: `npx` runs a package, never the GitHub CLI.
-        'npx gh pr merge 5',
-        'xargs gh pr merge 5',
-        'bash -c "gh pr merge 5"',
-        // `eval` is bounded to ONE level.
-        'eval "eval \\"gh pr merge 5\\""',
-        // § C, LOCKED: a redirection operator carrying a tokenizer separator.
-        // `|` ends a segment before `>|` is ever read as one word, and the
-        // segment it leaves starts at the FILE, not at a redirection — so this
-        // one is named in the template as unreachable rather than claimed. A
-        // `2>&1` splits the same way and leaves `1` at the front.
-        '>| out.txt gh pr merge 5',
-        '2>&1 gh pr merge 5',
-        // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
-        // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
-        // wrapper cannot expand.
-        'ghx pr merge 5',
-        'gh.cmd pr merge 5',
-        '$GH pr merge 5',
-        '${GH} pr merge 5',
-        // The unquoted win32 path (see the row above): its backslashes are
-        // consumed as escapes before the executable test sees the token.
-        'C:\\tools\\gh.exe pr merge 5',
-      ]) {
+      for (const command of MUTANT_ROWS) {
         writeStubCli({
           verdict: { disposition: 'deny', reason: 'should not run', provenance: {} },
         });
         const { status } = runWrapper(bash(command), [], 'merge-ready');
         expect(status, command).toBe(0);
         expect(stubArgv(), command).toBeNull();
+      }
+    });
+
+    it('the two scanner divergences from mmnto-ai/totem#2855 now project (mmnto-ai/totem#2857 § 4)', () => {
+      // These are the MUTANT PROOF for the parity lock at the foot of this
+      // file: each one is a heredoc the template's hand-copied scanner opened
+      // and core's does not, so the merge on the following line was blanked
+      // and ran unjudged — one lost advisory read under PILOT, a bypass under
+      // STRICT. `(true)#<<note` needs the paren-boundary arms (an operator `)`
+      // ends a word, so the `#` after it begins a comment); `<<E:F` needs
+      // core's bare-delimiter class (`[^\s'"\\<>()|&;]+`), where the template's
+      // narrower one read the delimiter as the prefix `E` so the terminator
+      // line never matched and the body ran to the end of the command.
+      initGitRepo();
+      for (const command of [ROW_PAREN_COMMENT_HEREDOC, ROW_COLON_DELIMITER]) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(stubArgv(), JSON.stringify(command)).not.toBeNull();
+        expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
       }
     });
 
@@ -1315,13 +1431,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // the real merge after it went unjudged — a silent miss on the exact
       // command this gate exists for.
       initGitRepo();
-      for (const command of [
-        'echo $((1<<2)); gh pr merge 5',
-        'echo $(( 3<<1 )); gh pr merge 5',
-        '# see <<note\ngh pr merge 5',
-        '(( 1<<3 ))\ngh pr merge 5',
-        'echo hi # <<EOF\ngh pr merge 5',
-      ]) {
+      for (const command of ARITHMETIC_COMMENT_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1333,7 +1443,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // the newline into the token left the segment starting with something
       // other than `gh`, so a real merge went unjudged.
       initGitRepo();
-      for (const command of ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5']) {
+      for (const command of LINE_CONTINUATION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), JSON.stringify(command)).toMatchObject({ pr: 5 });
@@ -1359,30 +1469,30 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // (the `#` word-comment arm already covers it), so it is a companion, not
       // a control.
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      expect(runWrapper(pwsh('<#\ngh pr merge 9\n#>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(runWrapper(pwsh(ROW_PS_BLOCK_MULTILINE), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      expect(runWrapper(pwsh('<# gh pr merge 9 #>\necho hi'), [], 'merge-ready').status).toBe(0);
+      expect(runWrapper(pwsh(ROW_PS_BLOCK_INLINE), [], 'merge-ready').status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       // The merge AFTER one is still judged — the blank must not eat it.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(pwsh('<# notes #>\ngh pr merge 4'), [], 'merge-ready');
+      runWrapper(pwsh(ROW_PS_BLOCK_THEN_MERGE), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 4 });
 
       // ROUND 4 F8: the blank is a POWERSHELL rule. In bash `<#tmp` is a
       // redirect from a file named `#tmp`, and blanking from it to a later `#>`
       // would swallow the real merge on the next line.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('sort <#tmp\ngh pr merge 8'), [], 'merge-ready');
+      runWrapper(bash(ROW_BASH_HASH_REDIRECT), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
     });
 
     it('a comment is not a command: a merge inside one never fires', () => {
       initGitRepo();
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(bash('echo hi # gh pr merge 9'), [], 'merge-ready');
+      const { status } = runWrapper(bash(ROW_TRAILING_COMMENT), [], 'merge-ready');
       expect(status).toBe(0);
       expect(stubArgv()).toBeNull();
     });
@@ -1393,17 +1503,13 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // commands — a false deny on text.
       initGitRepo();
       writeStubCli({ verdict: { disposition: 'deny', reason: 'should not run', provenance: {} } });
-      const { status } = runWrapper(
-        bash('cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n'),
-        [],
-        'merge-ready',
-      );
+      const { status } = runWrapper(bash(ROW_TWO_HEREDOC_BODIES), [], 'merge-ready');
       expect(status).toBe(0);
       expect(stubArgv()).toBeNull();
 
       // The complement: a heredoc as the merge's OWN operand still fires.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('gh pr merge 5 <<EOF\nnotes\nEOF\n'), [], 'merge-ready');
+      runWrapper(bash(ROW_HEREDOC_AS_OPERAND), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
@@ -1412,11 +1518,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // terminator line ends the body and the next segment is judged normally.
       initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(
-        bash('cat <<EOF > body.md\nsome release notes\nEOF\ngh pr merge 21'),
-        [],
-        'merge-ready',
-      );
+      runWrapper(bash(ROW_MERGE_AFTER_HEREDOC), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 21 });
     });
 
@@ -1429,11 +1531,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       initGitRepo();
       // Three spellings, every one fail-open before the guard (the re-arm's R6):
       // spaced, glued, and a here-string that opens the command.
-      for (const command of [
-        'grep x <<< bar\ngh pr merge 5',
-        'grep x <<<bar\ngh pr merge 5',
-        '<<<bar\ngh pr merge 5',
-      ]) {
+      for (const command of HERESTRING_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
         expect(spawnedPayload(), command).toMatchObject({ pr: 5 });
@@ -1441,7 +1539,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // The complement (a non-regression row, not a falsifier): a here-string as
       // the merge's OWN operand still fires.
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('gh pr merge 6 <<< notes'), [], 'merge-ready');
+      runWrapper(bash(ROW_HERESTRING_AS_OPERAND), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 6 });
     });
 
@@ -1453,7 +1551,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       // merge on the next line — the same fail-open class as the here-string.
       initGitRepo();
       writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-      runWrapper(bash('echo $(# <<note\ngh pr merge 5\n)'), [], 'merge-ready');
+      runWrapper(bash(ROW_SUBSTITUTION_COMMENT), [], 'merge-ready');
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
@@ -1955,6 +2053,7 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     for (const name of [
       'blankHeredocBodies',
       'clampBudgetMs',
+      'findHeredocSpans',
       'ghPrMergeArgvs',
       'isGhExecutable',
       'projectMergeReady',
@@ -2059,6 +2158,21 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     }
   });
 
+  it('the span blanker replaces a body with spaces and keeps every offset (2857 § 1)', () => {
+    const { blankHeredocBodies, findHeredocSpans } = wrapperExports();
+    const command = 'cat <<EOF\ngh pr merge 5\nEOF\ngh pr merge 7';
+    const blanked = blankHeredocBodies(command, false);
+    // Core's shape: same length, the body's characters replaced by spaces, the
+    // operator line and the terminator line untouched.
+    expect(blanked).toHaveLength(command.length);
+    const [span] = findHeredocSpans(command, false);
+    expect(blanked.slice(span.bodyStart, span.bodyEnd)).toBe(
+      ' '.repeat(span.bodyEnd - span.bodyStart),
+    );
+    expect(blanked.slice(0, span.bodyStart)).toBe(command.slice(0, span.bodyStart));
+    expect(blanked.slice(span.bodyEnd)).toBe(command.slice(span.bodyEnd));
+  });
+
   it('isGhExecutable reads the basename after the last / or backslash (§ A)', () => {
     const { isGhExecutable } = wrapperExports();
     for (const token of [
@@ -2086,6 +2200,140 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       'C:toolsgh.exe',
     ]) {
       expect(isGhExecutable(token), token).toBe(false);
+    }
+  });
+});
+
+// ─── Scanner parity with core (spec `.totem/specs/2857.md` § 3) ────────
+//
+// The wrapper's heredoc scanner is a VERBATIM port of core's `findHeredocs`
+// (`packages/core/src/transport-shield.ts`). A distributed, dependency-free
+// hook cannot import core — its exports map carries `import` conditions only
+// and no scanner subpath (mmnto-ai/totem#2851), and the package is not linked
+// at this monorepo's root — so the cohort lesson for an inlined standalone
+// utility applies: port it verbatim, anchor BOTH sites, and back the copy with
+// an executable parity test. This is that test.
+//
+// It compares SPANS, not behaviour: a divergence fails here, naming the input,
+// instead of surfacing later as a heredoc one scanner opens and the other does
+// not — which is a blanked `gh pr merge` on a following line, a lost advisory
+// read under PILOT and a bypass under STRICT. The two rows the fix flips from
+// "never spawns" to projecting (mmnto-ai/totem#2855's locked divergences) are
+// the proof that this lock BITES: they are exactly the behaviour the ported
+// arms add.
+describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
+  /** Core's spans in the wrapper's shape — same fields, minus the unused `body`. */
+  function coreSpans(command: string, powershell: boolean): WrapperSpan[] {
+    return findHeredocs(command, { powershell }).map((s) => ({
+      delimiter: s.delimiter,
+      quoted: s.quoted,
+      stripTabs: s.stripTabs,
+      unterminated: s.unterminated,
+      bodyStart: s.bodyStart,
+      bodyEnd: s.bodyEnd,
+    }));
+  }
+
+  /**
+   * A seeded pseudo-random corpus: a 32-bit LCG (Numerical Recipes constants)
+   * with a FIXED seed, so the strings are identical on every machine and every
+   * run and a divergence is reproducible from the seed alone. The alphabet is
+   * the characters the two walks branch on, plus the multi-character tokens
+   * they branch on as a unit.
+   */
+  function fuzzCorpus(count: number): string[] {
+    const alphabet = [
+      'a',
+      'b',
+      '_',
+      '-',
+      '.',
+      ':',
+      '*',
+      '(',
+      ')',
+      '#',
+      '$',
+      '<',
+      '>',
+      "'",
+      '"',
+      '\\',
+      '`',
+      '|',
+      '&',
+      ';',
+      ' ',
+      '\n',
+      '\t',
+      '<<',
+      '<<-',
+      '<<<',
+      '$(',
+      '((',
+      '<#',
+      '#>',
+      'EOF',
+    ];
+    let state = 20260919 >>> 0;
+    const next = (): number => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const out: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const draws = 1 + Math.floor(next() * 40);
+      let s = '';
+      for (let j = 0; j < draws; j += 1) {
+        s += alphabet[Math.floor(next() * alphabet.length)];
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  it('agrees with core over every command in this file, in both modes', () => {
+    const { findHeredocSpans } = wrapperExports();
+    for (const command of PARITY_COMMAND_CORPUS) {
+      for (const powershell of [false, true]) {
+        expect(
+          findHeredocSpans(command, powershell),
+          JSON.stringify({ command, powershell }),
+        ).toEqual(coreSpans(command, powershell));
+      }
+    }
+  });
+
+  it('agrees with core over a seeded 3 000-string fuzz corpus, in both modes', () => {
+    const { findHeredocSpans } = wrapperExports();
+    const corpus = fuzzCorpus(3000);
+    expect(corpus).toHaveLength(3000);
+    for (const command of corpus) {
+      for (const powershell of [false, true]) {
+        expect(
+          findHeredocSpans(command, powershell),
+          JSON.stringify({ command, powershell }),
+        ).toEqual(coreSpans(command, powershell));
+      }
+    }
+  });
+
+  it('the corpus carries the delimiters the issue names, terminated and not', () => {
+    // The guard on the guard: a corpus that silently lost these rows would
+    // pass the two parity rows above while testing nothing about the bare
+    // delimiter class the port widens.
+    expect(DELIMITER_PARITY_ROWS).toHaveLength(PARITY_DELIMITERS.length * 2);
+    for (const delimiter of PARITY_DELIMITERS) {
+      expect(PARITY_COMMAND_CORPUS.some((c) => c.includes('<<' + delimiter))).toBe(true);
+      // Each one really is a heredoc to CORE — otherwise the row would prove
+      // nothing about the delimiter class.
+      const spans = coreSpans(
+        'cat <<' + delimiter + '\nbody\n' + delimiter + '\ngh pr merge 5',
+        false,
+      );
+      expect(spans, delimiter).toHaveLength(1);
+      expect(spans[0].delimiter, delimiter).toBe(delimiter);
+      expect(spans[0].unterminated, delimiter).toBe(false);
     }
   });
 });

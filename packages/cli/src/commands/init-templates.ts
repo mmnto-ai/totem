@@ -1553,19 +1553,45 @@ function resolveCliFromPath() {
 // separator and the body is its own segment (round 3, F4; it fired before this
 // PR's rounds too). \`TOTEM_MERGE_GATE_OVERRIDE=1\` is the audited way past any
 // of them.
-// Which characters END a word, so the scanner can say whether the next one
-// BEGINS one. Same set core's scanner uses (mmnto-ai/totem#2800 round 2, F1).
-function isWordBoundary(ch) {
-  return (
-    ch === ' ' ||
-    ch === '\\t' ||
-    ch === '\\r' ||
-    ch === '\\n' ||
-    ch === ';' ||
-    ch === '|' ||
-    ch === '&'
-  );
-}
+// ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
+// sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
+//
+// A VERBATIM port of core's \`findHeredocs\` and its three tables, not a second
+// reading of the same grammar. The hand copy this replaces had diverged in the
+// FAIL-OPEN direction — it opened heredocs core does not, and each one blanked
+// the \`gh pr merge\` on a following line (a lost advisory read under PILOT, a
+// bypass under STRICT): no paren-boundary arms, so a \`#\` after \`(\` or after an
+// operator \`)\` was text and a \`<<word\` inside it opened a body; a narrower
+// bare-delimiter class, so \`<<E:F\` read as the prefix \`E\` and the terminator
+// line never matched; and a double-quote backslash that escaped ANY next
+// character where core escapes only DQ_ESCAPABLE.
+//
+// A distributed hook cannot import core (its exports map carries \`import\`
+// conditions only and no scanner subpath — mmnto-ai/totem#2851), so the cohort
+// lesson for an inlined standalone utility rules: port verbatim, anchor both
+// sites, lock it with an executable parity test. Change nothing here without
+// changing core's \`findHeredocs\` and re-running that test.
+
+/** Inside double quotes a backslash escapes only these (POSIX); elsewhere it is kept. */
+const DQ_ESCAPABLE = ['$', '\`', '"', '\\\\', '\\n'];
+
+/**
+ * \`<<\` or \`<<-\`, optional blanks, then the delimiter WORD as bash delimits it:
+ * single-quoted, double-quoted, backslash-quoted (\`\\EOF\`) or bare — a bare
+ * word running to the next blank, quote, backslash or operator character, so
+ * \`EOF.TXT\`, \`E:F\` and \`1EOF\` are whole delimiter words. Groups: 1 the dash,
+ * 2 single-quoted, 3 double-quoted, 4 backslash-quoted, 5 bare.
+ */
+const HEREDOC_AT =
+  /^<<(-?)[ \\t]*(?:'([^'\\n]+)'|"([^"\\n]+)"|\\\\([^\\s'"\\\\<>()|&;]+)|([^\\s'"\\\\<>()|&;]+))/;
+
+/**
+ * Characters after which the next character BEGINS a word — where a \`#\` starts
+ * a comment (POSIX 2.3 rule 9). Parentheses are not here: an opening \`(\` and an
+ * OPERATOR \`)\` begin a word, but the \`)\` that closes a \`$( … )\` continues one,
+ * so the walk tracks which \`(\` each \`)\` closes and sets the boundary from that.
+ */
+const WORD_BOUNDARY = [' ', '\\t', '\\r', '\\n', ';', '|', '&'];
 
 // The index just past the \`))\` that closes an arithmetic expansion whose
 // opening \`$((\` / \`((\` ends at \`from\`; the end of the command when it is
@@ -1587,192 +1613,238 @@ function skipArithmetic(command, from) {
   return command.length;
 }
 
-function blankHeredocBodies(command, powershell) {
-  let out = '';
-  let i = 0;
-  let quote = '';
+/**
+ * ONE pass over the command that tracks shell quoting and SKIPS heredoc
+ * bodies, returning every heredoc's span. Core's \`findHeredocs\`, arm for arm:
+ * an operator inside a quoted argument is text, \`<<<\` is a here-string, a
+ * \`#\` that begins a word discards the rest of its line without quote
+ * processing, \`$(( … ))\` / \`(( … ))\` is skipped whole, and \`parens\` records
+ * what each open \`(\` is — a substitution (\`$(\`, \`<(\`, \`>(\`), which is part of
+ * a word, or a grouping operator — so the \`)\` that closes it can say whether
+ * the next character begins a word. A body starts after the newline that ends
+ * the operator's line and runs to the first line that IS the delimiter (an
+ * exact line match, as bash reads it), or to the end of the command.
+ *
+ * The one thing core's scanner does not need and this one does: the COMMENT
+ * regions. Core's tokenizer reads comments itself; this wrapper's does not, so
+ * the blanker below has to blank them exactly as the hand copy dropped them,
+ * or a \`<# … #>\` block or a \`#\` comment whose text begins with a merge would
+ * reach the anchor. They are collected in the SAME two arms that discard them,
+ * so the two readings cannot disagree, and they are NOT part of the span list
+ * the parity lock compares.
+ */
+function scanShell(command, ps) {
+  const spans = [];
+  const comments = [];
+  const pending = [];
+  const parens = [];
+  let inSingle = false;
+  let inDouble = false;
   let boundary = true;
-  let pending = [];
-
+  let i = 0;
   // Consume EVERY body queued on the operator line, in order, starting just
   // past that line's newline — bash reads \`cat <<A <<B\` as two bodies, so a
-  // command sitting in B's body is data too (F2). Terminator lines are kept;
-  // body lines are dropped with their newlines, so the segments around them
-  // stay separated exactly as the shell separates them. An unterminated body
-  // runs to the end and is dropped whole.
+  // command sitting in B's body is data too (F2). An unterminated body runs to
+  // the end of the command and no later heredoc on that line can start.
   const consumeBodies = (from) => {
     let cursor = from;
     for (let p = 0; p < pending.length; p++) {
       const h = pending[p];
-      let at = cursor;
-      cursor = command.length;
+      const bodyStart = cursor;
+      let bodyEnd = command.length;
+      let unterminated = true;
+      let resume = command.length;
+      let at = bodyStart;
       while (at <= command.length) {
         const nl = command.indexOf('\\n', at);
         const stop = nl === -1 ? command.length : nl;
         let line = command.slice(at, stop);
         if (h.stripTabs) line = line.replace(/^\\t+/, '');
-        line = line.replace(/\\r$/, '');
-        const next = nl === -1 ? command.length : nl + 1;
         if (line === h.delimiter) {
-          out += command.slice(at, next);
-          cursor = next;
+          bodyEnd = at;
+          unterminated = false;
+          resume = nl === -1 ? command.length : nl + 1;
           break;
         }
         if (nl === -1) break;
-        out += '\\n';
-        at = next;
+        at = nl + 1;
       }
+      spans.push({
+        delimiter: h.delimiter,
+        quoted: h.quoted,
+        stripTabs: h.stripTabs,
+        unterminated: unterminated,
+        bodyStart: bodyStart,
+        bodyEnd: bodyEnd,
+      });
+      cursor = resume;
+      if (unterminated) break;
     }
-    pending = [];
+    pending.length = 0;
     return cursor;
   };
-
   while (i < command.length) {
     const ch = command[i];
-    if (quote !== '') {
-      out += ch;
-      if (ch === '\\\\' && quote === '"' && i + 1 < command.length) {
-        out += command[i + 1];
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      i += 1;
+      boundary = false;
+      continue;
+    }
+    if (inDouble) {
+      if (ps && ch === '\`' && i + 1 < command.length) {
+        // PowerShell's escape inside a double-quoted string is the backtick.
         i += 2;
+        boundary = false;
         continue;
       }
-      if (ch === quote) quote = '';
-      i++;
+      if (ch === '\\\\' && i + 1 < command.length && DQ_ESCAPABLE.indexOf(command[i + 1]) !== -1) {
+        i += 2;
+        boundary = false;
+        continue;
+      }
+      if (ch === '"') inDouble = false;
+      i += 1;
       boundary = false;
       continue;
     }
-    if (ch === "'" || ch === '"') {
-      quote = ch;
-      out += ch;
-      i++;
-      boundary = false;
-      continue;
-    }
-    // A backslash before a NEWLINE is a line continuation: the shell removes
-    // both characters and the command carries on, so the scanner must too
-    // (mmnto-ai/totem#2800 round 3, F6). Absorbing the newline into a token is
-    // what hid \`gh \\<LF>pr merge 5\` from the position anchor.
-    if (ch === '\\\\' && (command[i + 1] === '\\n' || (command[i + 1] === '\\r' && command[i + 2] === '\\n'))) {
-      i += command[i + 1] === '\\r' ? 3 : 2;
-      continue;
-    }
-    if (ch === '\\\\' && i + 1 < command.length) {
-      out += ch + command[i + 1];
-      i += 2;
-      boundary = false;
-      continue;
-    }
-    // A \`#\` that BEGINS a word is a comment: discarded to the end of the line
-    // WITHOUT quote processing, so neither its text nor a \`<<note\` inside it
-    // reaches the tokenizer (F1). The newline stays — it may end an operator
-    // line whose bodies are still queued.
-    if (ch === '#' && boundary) {
-      const nl = command.indexOf('\\n', i);
-      i = nl === -1 ? command.length : nl;
-      continue;
-    }
-    // PowerShell's \`<# … #>\` block comment is data, not commands: blank it
-    // whole, the way a heredoc body is blanked (round 3, F8). Applied ONLY when
-    // the TOOL is PowerShell (round 4, F8): bash has no such comment, and there
-    // \`sort <#tmp\` is a redirect from a file named \`#tmp\` — blanking from it
-    // to a later \`#>\` would swallow real commands. A \`<#\` inside a quoted
-    // string never reaches here, because the quote arms run first.
-    if (powershell && ch === '<' && command[i + 1] === '#') {
+    if (ps && command.slice(i, i + 2) === '<#') {
+      // PowerShell's block comment, discarded without quote processing; an
+      // unterminated one runs to the end. Applied ONLY for the PowerShell tool
+      // (round 4, F8): in bash \`sort <#tmp\` is a redirect from a file named
+      // \`#tmp\`, and discarding from it to a later \`#>\` would swallow real
+      // commands.
       const close = command.indexOf('#>', i + 2);
-      i = close === -1 ? command.length : close + 2;
+      const end = close === -1 ? command.length : close + 2;
+      comments.push({ start: i, end: end });
+      i = end;
       boundary = true;
+      continue;
+    }
+    if (ch === '#' && boundary) {
+      // A comment: discarded to the end of the line without quote processing;
+      // the newline itself stays (it may end an operator line).
+      const nl = command.indexOf('\\n', i);
+      const end = nl === -1 ? command.length : nl;
+      comments.push({ start: i, end: end });
+      i = end;
       continue;
     }
     if (ch === '$' && command.slice(i, i + 3) === '$((') {
-      const end = skipArithmetic(command, i + 3);
-      out += command.slice(i, end);
-      i = end;
+      i = skipArithmetic(command, i + 3);
       boundary = false;
       continue;
     }
-    // A command or process substitution opens a word: a \`#\` glued to \`$(\` is
-    // a comment, as core's scanner reads it. Without this arm the boundary
-    // stayed false, the \`#\` was text, and a \`<<word\` inside it opened a
-    // heredoc whose body swallowed every later line — the same fail-open class
-    // as the here-string (the pilot-install re-arm, R2, mmnto-ai/totem#2855).
+    if (ch === '(' && command[i + 1] === '(' && boundary) {
+      i = skipArithmetic(command, i + 2);
+      boundary = false;
+      continue;
+    }
     if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
-      out += ch + '(';
+      // A command or process substitution: part of the word that carries it.
+      // Its first character begins a word (a \`#\` right after \`$(\` is a
+      // comment).
+      parens.push('subst');
       i += 2;
       boundary = true;
       continue;
     }
-    if (ch === '(' && command[i + 1] === '(' && boundary) {
-      const end = skipArithmetic(command, i + 2);
-      out += command.slice(i, end);
-      i = end;
-      boundary = false;
-      continue;
-    }
-    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone — at
-    // BOTH of its first two characters (the preceding-character guard core's
-    // scanner carries; without it the second \`<\` of \`<<<\` opened a heredoc
-    // whose body swallowed every later line, a fail-open path — CodeRabbit on
-    // mmnto-ai/totem#2855).
-    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
-      let j = i + 2;
-      let head = '<<';
-      let dash = false;
-      if (command[j] === '-') {
-        dash = true;
-        head += '-';
-        j++;
-      }
-      while (j < command.length && (command[j] === ' ' || command[j] === '\\t')) {
-        head += command[j];
-        j++;
-      }
-      // The delimiter word, quoted (\`<<'EOF'\`, \`<<"EOF"\`) or bare, with a
-      // backslash-quoted form (\`<<\\EOF\`) read as bash reads it.
-      let delim = '';
-      const q = command[j] === "'" || command[j] === '"' ? command[j] : '';
-      if (q !== '') {
-        head += q;
-        j++;
-      }
-      while (j < command.length) {
-        const c = command[j];
-        if (q !== '') {
-          head += c;
-          j++;
-          if (c === q) break;
-          delim += c;
-          continue;
-        }
-        if (c === '\\\\' && j + 1 < command.length) {
-          head += c + command[j + 1];
-          delim += command[j + 1];
-          j += 2;
-          continue;
-        }
-        if (/[A-Za-z0-9_.\\-\\/]/.test(c)) {
-          head += c;
-          delim += c;
-          j++;
-          continue;
-        }
-        break;
-      }
-      out += head;
-      i = j;
-      boundary = false;
-      if (delim !== '') pending.push({ delimiter: delim, stripTabs: dash });
-      continue;
-    }
-    if (ch === '\\n') {
-      out += '\\n';
+    if (ch === '(') {
+      parens.push('group');
       i += 1;
-      if (pending.length > 0) i = consumeBodies(i);
       boundary = true;
       continue;
     }
-    out += ch;
-    boundary = isWordBoundary(ch);
-    i++;
+    if (ch === ')') {
+      // The \`)\` of a substitution continues the word; an operator \`)\` ends one.
+      boundary = parens.pop() !== 'subst';
+      i += 1;
+      continue;
+    }
+    if (ch === '\\\\') {
+      i += 2;
+      boundary = false;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      i += 1;
+      boundary = false;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      i += 1;
+      boundary = false;
+      continue;
+    }
+    if (ch === '\\n') {
+      i = pending.length > 0 ? consumeBodies(i + 1) : i + 1;
+      boundary = true;
+      continue;
+    }
+    // \`<<\` opens a heredoc; \`<<<\` is a here-string and is left alone — at BOTH
+    // of its first two characters (without the preceding-character guard the
+    // second \`<\` of \`<<<\` opened a heredoc whose body swallowed every later
+    // line, a fail-open path — CodeRabbit on mmnto-ai/totem#2855).
+    if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
+      const m = HEREDOC_AT.exec(command.slice(i));
+      if (m !== null) {
+        pending.push({
+          stripTabs: (m[1] || '') === '-',
+          quoted: m[2] !== undefined || m[3] !== undefined || m[4] !== undefined,
+          delimiter:
+            m[2] !== undefined
+              ? m[2]
+              : m[3] !== undefined
+                ? m[3]
+                : m[4] !== undefined
+                  ? m[4]
+                  : m[5] !== undefined
+                    ? m[5]
+                    : '',
+        });
+        i += m[0].length;
+        boundary = false;
+        continue;
+      }
+    }
+    boundary = WORD_BOUNDARY.indexOf(ch) !== -1;
+    i += 1;
+  }
+  if (pending.length > 0) consumeBodies(command.length);
+  return { heredocs: spans, comments: comments };
+}
+
+/** Every heredoc in the command — core's span shape minus the unused \`body\`. */
+function findHeredocSpans(command, powershell) {
+  return scanShell(command, powershell === true).heredocs;
+}
+
+/**
+ * The command with every heredoc body, and every comment, replaced by SPACES:
+ * core's blanking shape, so LENGTH and every offset are preserved (the hand
+ * copy dropped body lines instead, which moved every offset after them). The
+ * tokenizer below treats any run of spaces as one boundary, so the change of
+ * shape is invisible to it — the heredoc rows in the suite are that proof.
+ */
+function blankHeredocBodies(command, powershell) {
+  const scan = scanShell(command, powershell === true);
+  const regions = [];
+  for (let s = 0; s < scan.heredocs.length; s++) {
+    regions.push({ start: scan.heredocs[s].bodyStart, end: scan.heredocs[s].bodyEnd });
+  }
+  for (let c = 0; c < scan.comments.length; c++) {
+    regions.push(scan.comments[c]);
+  }
+  let out = command;
+  for (let r = 0; r < regions.length; r++) {
+    const region = regions[r];
+    if (region.end <= region.start) continue;
+    out =
+      out.slice(0, region.start) +
+      ' '.repeat(region.end - region.start) +
+      out.slice(region.end);
   }
   return out;
 }
@@ -2234,6 +2306,7 @@ if (require.main !== module) {
   module.exports = {
     blankHeredocBodies: blankHeredocBodies,
     clampBudgetMs: clampBudgetMs,
+    findHeredocSpans: findHeredocSpans,
     ghPrMergeArgvs: ghPrMergeArgvs,
     isGhExecutable: isGhExecutable,
     projectMergeReady: projectMergeReady,
