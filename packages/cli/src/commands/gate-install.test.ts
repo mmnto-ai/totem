@@ -1742,11 +1742,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       const head = initGitRepo();
       for (const command of PS_LINE_CONTINUATION_ROWS) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
-        runWrapper(
-          { tool_name: 'PowerShell', tool_input: { command } },
-          [],
-          'merge-ready',
-        );
+        runWrapper({ tool_name: 'PowerShell', tool_input: { command } }, [], 'merge-ready');
         expect(spawnedPayload(), JSON.stringify(command)).toEqual({
           repo: 'mmnto-ai/totem',
           pr: 5,
@@ -2769,7 +2765,7 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     }
   });
 
-  it("a trailing backtick continues the word in ps mode and separates in bash (round-6 leg, G3)", () => {
+  it('a trailing backtick continues the word in ps mode and separates in bash (round-6 leg, G3)', () => {
     // The argv exactly, because the payload cannot tell the whole story: the
     // fold-1 hook read `gh pr merge 5 <backtick><LF>--admin` as
     // `['5', '<backtick>']` — the same PR 5, with the flag lost to the next
