@@ -1516,7 +1516,11 @@ function resolveCliFromPath() {
 // \`env\`, \`timeout\`, \`nice\`, \`nohup\`, \`command\`, \`exec\`, \`time\`) is stripped
 // with its option grammar; \`eval\` re-tokenizes its operand once; a leading
 // redirection is skipped with its file; and a backtick substitution is a
-// segment of its own.
+// segment of its own. In POWERSHELL mode a trailing backtick is that shell's
+// LINE CONTINUATION instead — the backtick and the newline are consumed and
+// the word continues, exactly as bash's trailing backslash does (round-6 leg,
+// G3); it was a separator in both modes before, which made the backtick
+// itself the merge's target and left the real one in the next segment.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny. Every one of them
@@ -1553,9 +1557,6 @@ function resolveCliFromPath() {
 //     the operator is read as one word, and the last three of those ARE merges
 //     the shell runs. A \`&>\` splits the same way but leaves a readable \`>\` at
 //     the front of the next segment, so THAT one projects;
-//   - a PowerShell line continuation (a trailing backtick): the backtick is a
-//     segment separator here, so the halves become two segments — new with
-//     mmnto-ai/totem#2856 § C, and the safe direction;
 //   - PowerShell's own quoting (backtick escapes outside double quotes,
 //     here-strings) is not modelled — the walk reads POSIX quoting for both
 //     tools. PowerShell's call operator is NOT a miss: \`& gh pr merge 5\`
@@ -2131,6 +2132,24 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // pair and a \`$( … )\` inside double quotes, so \`echo "\`gh pr merge 5\`"\`
     // merges PR 5 unjudged. A disclosed fail-open, filed as
     // mmnto-ai/totem#2893 (round-5 leg, F4).
+    // POWERSHELL'S LINE CONTINUATION is a trailing BACKTICK — the exact twin
+    // of the backslash-newline arm below, and the reason this one has to be
+    // read first: in ps mode the backtick and the newline after it are
+    // consumed and the word continues, so
+    // \`gh pr merge <backtick><LF>5\` is \`gh pr merge 5\`. Read as the segment
+    // separator it is in BASH, that command projected the backtick itself as
+    // the merge's target (\`unresolvedTarget\`, a deny on a target nobody wrote
+    // under strict) while the real target sat in the next segment and merged
+    // unjudged (round-6 leg, G3). Bash keeps the separator: there a backtick
+    // opens a command substitution, whatever follows it.
+    if (
+      powershell === true &&
+      ch === '\`' &&
+      (command[i + 1] === '\\n' || (command[i + 1] === '\\r' && command[i + 2] === '\\n'))
+    ) {
+      i += command[i + 1] === '\\r' ? 3 : 2;
+      continue;
+    }
     if (ch === '\`') {
       endToken();
       current.push('\`');

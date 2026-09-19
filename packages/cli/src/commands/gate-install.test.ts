@@ -404,6 +404,21 @@ const HERESTRING_ROWS = [
 /** A backslash-newline joins two halves of one word. */
 const LINE_CONTINUATION_ROWS = ['gh \\\npr merge 5', 'gh pr merge \\\n5', 'gh \\\r\npr merge 5'];
 
+/**
+ * PowerShell's line continuation is a trailing BACKTICK — the exact twin of
+ * bash's trailing backslash (round-6 leg, G3). In ps mode the backtick and the
+ * newline after it are consumed and the word continues; in bash a backtick
+ * opens a substitution and stays a segment separator, so this arm is ps-only.
+ * Before it, `gh pr merge <backtick><LF>5` projected `unresolvedTarget: '`'`
+ * and PR 5 was merged on the next segment unjudged — strict denied a target
+ * nobody wrote, pilot warned and let the merge through.
+ */
+const PS_LINE_CONTINUATION_ROWS = [
+  'gh pr merge `\n5',
+  'gh pr merge 5 `\n--admin',
+  'gh pr merge `\r\n5',
+];
+
 // Shapes each asserted by a row of their own below, named here so the parity
 // corpus reads them too.
 const ROW_TWO_HEREDOC_BODIES = 'cat <<A <<B\nfirst\nA\ngh pr merge 5\nB\n';
@@ -490,6 +505,7 @@ const PARITY_COMMAND_CORPUS = [
   ...ARITHMETIC_COMMENT_ROWS,
   ...HERESTRING_ROWS,
   ...LINE_CONTINUATION_ROWS,
+  ...PS_LINE_CONTINUATION_ROWS,
   ...DELIMITER_PARITY_ROWS,
   ROW_TWO_HEREDOC_BODIES,
   ROW_HEREDOC_AS_OPERAND,
@@ -1689,6 +1705,36 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 5 });
     });
 
+    it("PowerShell's line continuation joins the word, in ps mode only (round-6 leg, G3)", () => {
+      // A trailing backtick is PowerShell's continuation, the twin of bash's
+      // trailing backslash. Read as the segment separator it is in bash, the
+      // merge's target became the backtick itself: the payload carried
+      // `unresolvedTarget: '`'` (strict denies a target nobody wrote) and the
+      // real target sat in the next segment, merged unjudged.
+      const head = initGitRepo();
+      for (const command of PS_LINE_CONTINUATION_ROWS) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(
+          { tool_name: 'PowerShell', tool_input: { command } },
+          [],
+          'merge-ready',
+        );
+        expect(spawnedPayload(), JSON.stringify(command)).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: 5,
+          headSha: head,
+        });
+      }
+
+      // BASH is untouched: there a backtick opens a command substitution, so
+      // it stays a segment separator and the target is unresolvable.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(bash(PS_LINE_CONTINUATION_ROWS[0]), [], 'merge-ready');
+      const payload = spawnedPayload();
+      expect(payload.pr).toBeNull();
+      expect(payload.unresolvedTarget).toBe('`');
+    });
+
     it('a PowerShell block comment is data, not commands (round 3 F8; round 4 F1, F8)', () => {
       initGitRepo();
       const pwsh = (command: string): Record<string, unknown> => ({
@@ -2652,6 +2698,27 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       const found = ghPrMergeArgvs(command, false);
       expect(found, JSON.stringify(command)).toEqual(expected === null ? [] : [expected]);
     }
+  });
+
+  it("a trailing backtick continues the word in ps mode and separates in bash (round-6 leg, G3)", () => {
+    // The argv exactly, because the payload cannot tell the whole story: the
+    // fold-1 hook read `gh pr merge 5 <backtick><LF>--admin` as
+    // `['5', '<backtick>']` — the same PR 5, with the flag lost to the next
+    // segment — so only this assertion bites on that row. The other two rows
+    // were `['<backtick>']` there, an `unresolvedTarget` payload.
+    const { ghPrMergeArgvs } = wrapperExports();
+    const rows: Array<[string, string[]]> = [
+      [PS_LINE_CONTINUATION_ROWS[0], ['5']],
+      [PS_LINE_CONTINUATION_ROWS[1], ['5', '--admin']],
+      [PS_LINE_CONTINUATION_ROWS[2], ['5']],
+    ];
+    for (const [command, expected] of rows) {
+      expect(ghPrMergeArgvs(command, true), JSON.stringify(command)).toEqual([expected]);
+    }
+    // Bash: a backtick opens a command substitution whatever follows it, so
+    // the separator stands and the target is the backtick.
+    expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[0], false)).toEqual([['`']]);
+    expect(ghPrMergeArgvs(PS_LINE_CONTINUATION_ROWS[1], false)).toEqual([['5', '`']]);
   });
 
   it('the span blanker replaces a body with spaces and keeps every offset (2857 § 1)', () => {
