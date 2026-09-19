@@ -1505,6 +1505,72 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload()).toMatchObject({ pr: 11 });
     });
 
+    /**
+     * A `--require` preload that sleeps 8 s and exits 0 in any node process
+     * whose executable IS the `git` shim, and is a no-op in every other node
+     * process — the wrapper and the stub CLI run under the same NODE_OPTIONS,
+     * so the argv0/execPath guard is what keeps the shim from slowing them.
+     */
+    const SLOW_GIT_PRELOAD = [
+      '"use strict";',
+      'const path = require("path");',
+      'const base = (p) => path.basename(String(p || "")).toLowerCase();',
+      'const me = base(process.argv0) + "|" + base(process.execPath);',
+      'if (me.includes("git")) {',
+      '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 8000);',
+      '  process.exit(0);',
+      '}',
+      '',
+    ].join('\n');
+
+    it('a hung git is bounded by the budget: exit 2, the named line, no CLI spawn (mmnto-ai/totem#2856 § G)', () => {
+      // THE FALSIFIER for § D. `spawnSync('git', …)` without a shell resolves
+      // `git.exe` through PATH on win32 (a `.cmd` shim is NOT resolvable that
+      // way), so the shim is a copy — a hard link where the volume allows — of
+      // this node binary named `git`/`git.exe` on a PATH dir of its own.
+      //
+      // Pre-fix the projection's git reads ran on their own 10 s timeouts
+      // BEFORE any deadline existed: the wrapper spent ~20 s in the projection
+      // and then spawned the CLI (and on a multi-merge envelope it reached the
+      // host's own hook timeout, where its exit code is never applied). With
+      // the budget set at the entry, the reads are bounded by what is left of
+      // it and the spent-budget arm fires before the first `gate check`.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const binDir = path.join(cwd, 'slow-git-bin');
+      fs.mkdirSync(binDir, { recursive: true });
+      const shim = path.join(binDir, process.platform === 'win32' ? 'git.exe' : 'git');
+      try {
+        fs.linkSync(process.execPath, shim);
+      } catch {
+        fs.copyFileSync(process.execPath, shim);
+      }
+      if (process.platform !== 'win32') fs.chmodSync(shim, 0o755);
+      const preload = path.join(cwd, 'slow.cjs');
+      fs.writeFileSync(preload, SLOW_GIT_PRELOAD);
+      const env = envWithPath(binDir + path.delimiter + (process.env.PATH ?? ''));
+      env.NODE_OPTIONS = '--require=' + preload.split(path.sep).join('/');
+
+      const started = Date.now();
+      const { status, stderr } = runWrapper(
+        bash('gh pr merge 5'),
+        ['--budget-ms', '1500'],
+        'merge-ready',
+        env,
+      );
+      const elapsed = Date.now() - started;
+
+      expect(status).toBe(2);
+      expect(stderr).toContain(
+        'the 1500 ms budget was spent before gate "merge-ready" could be evaluated',
+      );
+      expect(stderr).toContain('fail-closed');
+      // The CLI was never spawned: the budget was gone before the first check.
+      expect(stubArgv()).toBeNull();
+      // Bounded by the budget plus one floor, not by the 8 s sleep and not by
+      // `runWrapper`'s own 30 s timeout.
+      expect(elapsed).toBeLessThan(6000);
+    });
+
     it('an evaluation failure on an APPLICABLE merge blocks (fail-closed), pilot exits 0', () => {
       initGitRepo();
       writeStubCli({ exit: 1 });
