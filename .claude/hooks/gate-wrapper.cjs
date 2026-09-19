@@ -159,10 +159,11 @@ function resolveCliFromPath() {
 //     tokenizer's quote arm swallows the whole string as ONE token, so the
 //     merge inside runs unjudged. Filed as mmnto-ai/totem#2893 (round-5 leg,
 //     F4); the single-quoted spelling really is data and stays a control row;
-//   - a redirection operator carrying a tokenizer separator (`>|`, `2>&1`):
-//     `|` and `&` end the segment before the operator is read as one word. A
-//     `&>` splits the same way but leaves a readable `>` at the front of the
-//     next segment, so THAT one projects;
+//   - a redirection operator carrying a tokenizer separator (`>|`, `2>&1`,
+//     `>& file`, `<& 3`, `exec 3>&1 …`): `|` and `&` end the segment before
+//     the operator is read as one word, and the last three of those ARE merges
+//     the shell runs. A `&>` splits the same way but leaves a readable `>` at
+//     the front of the next segment, so THAT one projects;
 //   - a PowerShell line continuation (a trailing backtick): the backtick is a
 //     segment separator here, so the halves become two segments — new with
 //     mmnto-ai/totem#2856 § C, and the safe direction;

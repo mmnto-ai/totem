@@ -357,9 +357,14 @@ const MUTANT_ROWS = [
   // ends a segment before `>|` is ever read as one word, and the segment it
   // leaves starts at the FILE, not at a redirection — so this one is named in
   // the template as unreachable rather than claimed. A `2>&1` splits the same
-  // way and leaves `1` at the front.
+  // way and leaves `1` at the front. The `&`-carrying duplication operators go
+  // the same way, and the last three ARE merges the shell runs — disclosed
+  // misses, not mutants (round-5 leg, F5 residue).
   '>| out.txt gh pr merge 5',
   '2>&1 gh pr merge 5',
+  '>& file gh pr merge 5',
+  '<& 3 gh pr merge 5',
+  'exec 3>&1 gh pr merge 5',
   // § A: a near-miss executable. `gh.cmd` is a DIFFERENT program (and not
   // resolvable as `gh` by spawn without a shell); `$GH` is a variable this
   // wrapper cannot expand.
