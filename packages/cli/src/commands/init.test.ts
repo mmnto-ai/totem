@@ -4243,10 +4243,30 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(section).toMatch(/Greptile Review/);
     expect(section).toMatch(/GCA posted neither a status nor a check run/);
     // Executable (a fenced command), not merely mentioned in prose — and read
-    // in full (the reviews endpoint paginates).
+    // in full (the reviews endpoint paginates). Both halves of the comparison
+    // are PRINTED, never improvised: the head sha first, then every review's sha.
     expect(section).toContain(
-      '```bash\ngh api --paginate "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq',
+      '```bash\ngh pr view $ARGUMENTS --json headRefOid --jq .headRefOid\ngh api --paginate "repos/{owner}/{repo}/pulls/$ARGUMENTS/reviews" --jq',
     );
+    // The summary-comment half is executable too — one read per bot, each
+    // printing the sha the comment's own body names (Greptile's `Last reviewed
+    // commit` link; CodeRabbit's `final_review_risk_coverage` marker), after the
+    // reviews read and inside the same fence.
+    const commentsRead =
+      'gh api --paginate "repos/{owner}/{repo}/issues/$ARGUMENTS/comments" --jq ';
+    const greptileRead =
+      'select(.user.login == "greptile-apps[bot]") | .body | capture("Last reviewed commit:.*?/commit/(?<sha>[0-9a-f]{40})") | .sha';
+    const coderabbitRead =
+      'select(.user.login == "coderabbitai[bot]") | .body | capture("coveredCommitId.:.(?<sha>[0-9a-f]{40})") | .sha';
+    expect(section).toContain(commentsRead + "'.[] | " + greptileRead + "'");
+    expect(section).toContain(commentsRead + "'.[] | " + coderabbitRead + "'");
+    const fenceClose = section.indexOf('\n```\n', section.indexOf('```bash'));
+    expect(fenceClose).toBeGreaterThan(-1);
+    expect(section.indexOf(greptileRead)).toBeGreaterThan(
+      section.indexOf('/pulls/$ARGUMENTS/reviews'),
+    );
+    expect(section.indexOf(coderabbitRead)).toBeGreaterThan(section.indexOf(greptileRead));
+    expect(section.indexOf(coderabbitRead)).toBeLessThan(fenceClose);
     // Clause 2: silence is not a pass; the pass is a standalone re-trigger, not a re-invoke.
     expect(section).toMatch(/not a pass/);
     expect(section).toMatch(/standalone re-trigger/);
