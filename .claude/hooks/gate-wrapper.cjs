@@ -754,9 +754,10 @@ const TRANSPARENT_WRAPPERS = {
 // whole word an argument: `gh pr merge --squash ">"out.txt` passes the string
 // `>out.txt` to gh and redirects nothing. So the walk records, per token, the
 // INDEX of its first character that came from inside quotes or from a
-// backslash escape (`-1` when none), and a token is stripped only when the
-// operator prefix this file's two patterns match lies ENTIRELY BEFORE that
-// index. Under the round-6 rule every one of `>"out.txt"`, `2>"err.log"`,
+// backslash escape (`-1` when none), and a token is stripped only when an
+// operator prefix lies ENTIRELY BEFORE that index — the LONGEST prefix that
+// does, which is not always the longest the patterns match (the bounded rule
+// below). Under the round-6 rule every one of `>"out.txt"`, `2>"err.log"`,
 // `<<<'bar'` and `>"$FILE"` rode into argv as data — a merge judged on a
 // target nobody wrote, or (trailing) a branch named `>merge.log`. The rows
 // that made the round-6 rule necessary are unchanged by this one, because
@@ -772,17 +773,51 @@ const TRANSPARENT_WRAPPERS = {
 // The operator prefix is what decides, so the class is `[\s\S]+` and the
 // first-literal index above is what still keeps a quoted OPERATOR out.
 //
-// Residue of that rule, disclosed and locked as rows (round-8 leg, J5): the
-// contrived shapes where an empty quote pair or a QUOTED operator abuts a
-// real one — `"">out.txt`, `">">out.txt`, `"2">file`, `>"">out.txt` — are
-// read here as ONE word (`>out.txt`, `>>out.txt`, `2>file`), while bash
-// passes the empty string, `>` or `2` as an ARGUMENT and applies the
-// redirection that follows it (and answers "ambiguous redirect" for the
-// fourth, running NOTHING). TRAILING a merge, where the rows put them, that
-// divergence is confined to the argv's TEXT and each of those words names a
-// target the engine denies: the deny direction, no bypass.
+// The operator prefix is BOUNDED by that first literal index, and the bound
+// is what picks the operator (fold 6, the round-8 corpus partitioned by
+// provenance): bash extends an operator token over UNQUOTED characters only,
+// so `>">"out.txt gh pr merge 5` is the operator `>` with the filename
+// `>out.txt` — a real redirection with a real merge behind it. The greedy
+// `[<>]{1,2}` reads `>>` there, a prefix that ends PAST the index, and under
+// the index rule alone the word stayed, stood in front of `gh`, broke the
+// anchor and nothing was judged: a bypass under STRICT, and the same shape in
+// `<<"<"bar` and `2<">"out.txt`. So the prefix taken is the LONGEST one that
+// is itself an operator and ends at or before the index (`>>` → `>`,
+// `<<<` → `<<` → `<`, `2<>` → `2<`), which is the shell's own rule; a word
+// whose first literal character is at index 0 has no such prefix and stays
+// data (`">"out.txt` is the ARGUMENT `>out.txt`).
+//
+// Residue of both rules, disclosed and locked as rows (round-8 leg, J5,
+// re-measured at fold 6 over the 3 768-case quoting corpus, where the two
+// fail-open families read 0 and every divergence left is one of three kinds).
+// FIRST, a quote pair that opens at index 0 of the word — `"">out.txt`,
+// `">">out.txt`, `"2">file` — leaves no operator prefix before it, so the
+// word is data here (`>out.txt`, `>>out.txt`, `2>file`) while bash passes
+// the empty string, `>` or `2` as an ARGUMENT and applies the redirection
+// that follows it. SECOND, a `$VAR` in a kept filename is not expanded here,
+// so the word this walk names is `>$FILE` where bash wrote `>varfile.txt`.
+// Both of those are confined to the argv's TEXT, and each word they keep
+// names a target the engine denies. THIRD, where the quote sits INSIDE the
+// operator prefix the bounded rule strips the word, and bash sometimes runs
+// nothing at all behind it: an empty filename (`>"">out.txt`) or a file that
+// does not exist (`<"<"<out.txt`, `2<">"out.txt`) fails the redirection, so
+// the walk judges a merge the shell never ran — a bogus deny, not a bypass.
+// All three are the deny direction, and the rows assert the projection.
 const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
 const REDIRECTION_FUSED = /^([0-9]*(?:<<<|[<>]{1,2}))[\s\S]+$/;
+
+// The length of the operator prefix BOUNDED by `at`, the token's first
+// literal index: the longest prefix of the greedy match that is itself a
+// redirection operator and ends at or before `at`, or `-1` when none is
+// (`">"out.txt`, first literal at 0). A token with no literal character at
+// all (`at === -1`) keeps the greedy match, as it always has.
+function boundedOperatorLength(prefix, at) {
+  if (at === -1) return prefix.length;
+  for (let n = prefix.length < at ? prefix.length : at; n > 0; n--) {
+    if (REDIRECTION_ALONE.test(prefix.slice(0, n))) return n;
+  }
+  return -1;
+}
 
 /**
  * The argv after EVERY `gh pr merge` at command position in the command —
@@ -977,8 +1012,9 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
     // redirection in front of the command does not hide it, one in the middle
     // does not break the anchor, and a trailing one never rides into argv.
     // The OPERATOR's own quoting decides, as it does in the shell: strip only
-    // when the matched operator prefix lies entirely before the token's first
-    // literal character (round-7 leg, H1/H2).
+    // when an operator prefix lies entirely before the token's first literal
+    // character (round-7 leg, H1/H2), and the prefix taken is the longest one
+    // that does — `boundedOperatorLength` above, fold 6.
     let tokens = [];
     for (let r = 0; r < segment.length; r++) {
       const word = segment[r];
@@ -990,7 +1026,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
         continue;
       }
       const fused = REDIRECTION_FUSED.exec(word);
-      if (fused !== null && (at === -1 || fused[1].length <= at)) continue;
+      if (fused !== null && boundedOperatorLength(fused[1], at) !== -1) continue;
       tokens.push(word);
     }
     // Then strip everything at the segment's front that is NOT the command, in

@@ -345,6 +345,31 @@ const REDIRECTION_ROWS = [
   // on bash 5.3.
   '>"out file.txt" gh pr merge 5',
   '<<<"bar baz" gh pr merge 5',
+  // …and the operator prefix is BOUNDED by the first literal index (fold 6).
+  // Bash extends an operator over UNQUOTED characters only, so each of these
+  // is the BARE leading operator with the quoted rest as its filename — a real
+  // redirection with a real merge behind it. On the fold-5 hook the greedy
+  // `[<>]{1,2}` read `>>` / `<<<`, a prefix ending PAST that index, so the
+  // guard kept the word: it stood in front of `gh`, broke the anchor and each
+  // of these projected NOTHING — a bypass under STRICT. Measured on bash 5.3
+  // with a recording stub, each case in its OWN empty directory: gh's argv is
+  // `[pr] [merge] [5]` in all five, the file `>out.txt` (row 4: `>a b`) is
+  // created, and row 5 merges behind a "here-document delimited by
+  // end-of-file" warning.
+  '>">"out.txt gh pr merge 5',
+  ">'>'out.txt gh pr merge 5",
+  '>\\>out.txt gh pr merge 5',
+  '>">a "b gh pr merge 5',
+  '<<"<"bar gh pr merge 5',
+  // The `2<` arm of the same rule, whose bash truth depends on the FILE. With
+  // `>out.txt` present bash reads the operator `2<` and the filename
+  // `>out.txt`, and the merge runs (measured: `[pr] [merge] [5]`, exit 0) —
+  // the fold-5 hook projected nothing for it. With the file absent the
+  // redirection fails ("No such file or directory", exit 1, gh never runs)
+  // and this projection is a disclosed false fire in the DENY direction.
+  // Stripping is right either way: not stripping is a bypass whenever the
+  // file exists.
+  '2<">"out.txt gh pr merge 5',
 ];
 
 /**
@@ -661,6 +686,35 @@ const ROW_WS_HERESTRING_BRANCH = 'gh pr merge --squash <<<"bar baz"';
 const ROW_EMPTY_QUOTE_ABUT = 'gh pr merge --squash "">out.txt';
 const ROW_QUOTED_OPERATOR_ABUT = 'gh pr merge --squash ">">out.txt';
 /**
+ * The TRAILING twin of the bounded-prefix rule (fold 6): the operator is the
+ * BARE `>` and `">"merge.log` is its filename, so bash merges the current
+ * branch's PR and writes the file `>merge.log` — measured with a recording
+ * stub, gh's argv is `[--squash]`. On the fold-5 hook the greedy `>>` ended
+ * past the first literal index, the whole word rode into argv, and the engine
+ * was handed a pull request on a branch named `>>merge.log`.
+ */
+const ROW_ABUT_REDIRECT_BRANCH = 'gh pr merge --squash >">"merge.log';
+/**
+ * The keep-row of the same rule, LOCKED: a quoted argument whose text merely
+ * CONTAINS an operator, spaces and all. Its first literal character is at
+ * index 0, so no operator prefix lies before it and nothing is stripped —
+ * measured, gh's argv is `[-b] [a > b] [5]`.
+ */
+const ROW_LITERAL_BODY_SPACED = 'gh pr merge -b "a > b" 5';
+/**
+ * The residue the bounded prefix leaves, disclosed as a FALSE FIRE and locked
+ * both ways round (fold 6): an EMPTY quote pair INSIDE the operator prefix.
+ * The word here is `>>out.txt` with its first literal character at index 1, so
+ * the bounded prefix is `>` and the word strips — while bash reads `>` with an
+ * EMPTY filename and fails the redirection ("No such file or directory", exit
+ * 1, gh never runs, measured in an empty directory). So the wrapper judges a
+ * merge the shell never ran: noise in the deny direction, never a bypass. The
+ * fold-5 hook kept the word instead and projected `['--squash', '>>out.txt']`
+ * trailing / nothing at all leading.
+ */
+const ROW_EMPTY_PAIR_IN_OPERATOR_LEAD = '>"">out.txt gh pr merge 5';
+const ROW_EMPTY_PAIR_IN_OPERATOR = 'gh pr merge --squash >"">out.txt';
+/**
  * A disclosed FALSE FIRE, PowerShell's third (round-8 leg, J3): a backtick
  * followed by WHITESPACE and then a newline is not a continuation — the
  * backtick escapes the SPACE. Measured on pwsh 7 with a recording stub: pwsh
@@ -747,6 +801,10 @@ const PARITY_COMMAND_CORPUS = [
   ROW_WS_HERESTRING_BRANCH,
   ROW_EMPTY_QUOTE_ABUT,
   ROW_QUOTED_OPERATOR_ABUT,
+  ROW_ABUT_REDIRECT_BRANCH,
+  ROW_LITERAL_BODY_SPACED,
+  ROW_EMPTY_PAIR_IN_OPERATOR_LEAD,
+  ROW_EMPTY_PAIR_IN_OPERATOR,
   ROW_PS_BACKTICK_SPACE_NEWLINE,
 ];
 
@@ -2027,6 +2085,12 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         // branch named `>merge log.txt` and `<<<bar baz`.
         ROW_WS_REDIRECT_BRANCH,
         ROW_WS_HERESTRING_BRANCH,
+        // And the one whose QUOTE sits inside the operator prefix (fold 6):
+        // bash reads the bare `>` with `>merge.log` as its filename and merges
+        // the current branch's PR, while the fold-5 hook's greedy `>>` ended
+        // past the first literal index and the engine read a branch named
+        // `>>merge.log`.
+        ROW_ABUT_REDIRECT_BRANCH,
       ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
@@ -3145,6 +3209,32 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       // walk keeps is a target the engine denies.
       [ROW_EMPTY_QUOTE_ABUT, ['--squash', '>out.txt']],
       [ROW_QUOTED_OPERATOR_ABUT, ['--squash', '>>out.txt']],
+      // …and the operator prefix is BOUNDED by that same index (fold 6): the
+      // quote or escape sits INSIDE the prefix here, so the operator is the
+      // bare `>` / `<<` / `2<` and the rest is the filename. Each of these
+      // read `[]` on the fold-5 hook — the greedy `>>` / `<<<` / `2<>` ended
+      // past the index, the word was kept, and it stood in front of `gh` —
+      // and the trailing twin read `['--squash', '>>merge.log']`. Bash merges
+      // PR 5 in all six (the `2<` row when the file `>out.txt` exists).
+      ['>">"out.txt gh pr merge 5', ['5']],
+      [">'>'out.txt gh pr merge 5", ['5']],
+      ['>\\>out.txt gh pr merge 5', ['5']],
+      ['>">a "b gh pr merge 5', ['5']],
+      ['<<"<"bar gh pr merge 5', ['5']],
+      ['2<">"out.txt gh pr merge 5', ['5']],
+      [ROW_ABUT_REDIRECT_BRANCH, ['--squash']],
+      // The keep-rows of the bounded prefix: a first literal character at
+      // index 0 leaves no operator prefix before it, so the word is data
+      // whatever its text (`>out.txt` as an argument, `a > b` as a body).
+      [ROW_LITERAL_BODY_SPACED, ['-b', 'a > b', '5']],
+      // The disclosed FALSE FIRE of the bounded prefix, locked both ways
+      // round: an empty quote pair inside the prefix. Bash fails the
+      // redirection on the empty filename and runs NOTHING (exit 1, measured
+      // in an empty directory) while these project a merge — deny direction.
+      // On the fold-5 hook the leading row read `[]` and the trailing one
+      // `['--squash', '>>out.txt']`.
+      [ROW_EMPTY_PAIR_IN_OPERATOR_LEAD, ['5']],
+      [ROW_EMPTY_PAIR_IN_OPERATOR, ['--squash']],
       // RESIDUE, unreachable rather than claimed: `|` and `&` are the
       // tokenizer's own separators and end the token before the operator is
       // whole, so these two never present a redirection to strip.
