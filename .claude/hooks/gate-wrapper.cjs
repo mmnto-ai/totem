@@ -182,6 +182,16 @@ function resolveCliFromPath() {
 //     and `env -S'gh pr merge 5'` both arrive as the token
 //     `-Sgh pr merge 5`, and the rest of that token is now read as the
 //     operand, so both are judged;
+//   - CLUSTERED short options on a table word (`env -vu X gh pr merge 5`,
+//     `env -iS '<cmd>'`): the option test reads the WHOLE `-` token, so a
+//     cluster matches no entry of that word's operand list, is dropped as one
+//     flag, and the operand belonging to the cluster's LAST letter (`X` for
+//     `-vu`, the command string for `-iS`) is left standing at the front of
+//     the strip, where it blocks the anchor. coreutils RUNS the merge in both
+//     (measured, 8.32 — the `-i` spelling with absolute paths inside the
+//     operand, since `-i` clears the environment). ATTACHMENT is not the gap:
+//     `env -uX`, `nice -n10`, `timeout -k5 30` and `timeout -sTERM 30` all
+//     project and all run. CLUSTERING is (round-8 leg, J4);
 //   - `eval` nested deeper than ONE level
 //     (`eval "eval \"gh pr merge 5\""`);
 //   - a substitution inside DOUBLE quotes (`echo "`gh pr merge 5`"`,
@@ -230,16 +240,29 @@ function resolveCliFromPath() {
 // `timeout --foreground`) into a MISS, which is a bypass under STRICT. A
 // false fire on a command that runs nothing costs one bogus deny; rows assert
 // each of them, so this paragraph is read from the suite.
-// A sixth, PowerShell's again (round-7 leg, H4): a TRAILING BACKTICK AT THE
-// END OF THE INPUT (`gh pr merge 5 <backtick>`) is a continuation with
-// nothing to continue — pwsh answers with a parse error and runs NOTHING —
-// while here the backtick is not followed by a newline, so it falls through
-// to the separator arm and the merge in front of it is judged.
+// A sixth, PowerShell's again (round-7 leg, H4): a backtick that is the LAST
+// CHARACTER OF THE INPUT (`gh pr merge 5 <backtick>`, with nothing after it,
+// not even a newline) is a continuation with nothing to continue — pwsh
+// answers with a parse error and runs NOTHING — while here the backtick is
+// not followed by a newline, so it falls through to the separator arm and the
+// merge in front of it is judged. Narrowed to that one spelling on a
+// measurement (round-8 leg, J3): give the SAME input a trailing newline
+// (`gh pr merge 5 <backtick><LF>`) and pwsh runs the merge, while the
+// continuation arm here consumes the pair and projects it — no divergence.
 // A seventh, env's (round-7 leg, H5): a `$VAR` inside a `-S` operand
 // (`env -S 'gh pr merge $PR'`) makes env REFUSE the whole command — it
 // supports only `${VARNAME}` and answers "only ${VARNAME} expansion is
 // supported" — so NOTHING runs, while the split reaches the anchor and
 // `$PR` rides as an `unresolvedTarget` the strict tier denies.
+// An eighth, PowerShell's third (round-8 leg, J3): a backtick followed by
+// WHITESPACE and then a newline (`gh pr merge <backtick><space><LF>5`) is not
+// a continuation either, because the backtick escapes that SPACE. pwsh runs
+// `gh pr merge` with NO TARGET — the current branch's PR merges — and reads
+// the next line as its own statement, while here the backtick is not
+// IMMEDIATELY followed by a newline, so the separator arm takes it and the
+// walk projects `unresolvedTarget` naming the backtick: a target nobody
+// wrote, which the strict tier denies (measured on pwsh 7 with a stub `gh`;
+// a row asserts the projection).
 // `TOTEM_MERGE_GATE_OVERRIDE=1` is the audited way past any of them.
 // ─── The heredoc scanner (mmnto-ai/totem#2857) ─────────────────────────
 // sync-anchor: findHeredocs-scanner-downstream (packages/core/src/transport-shield.ts findHeredocs; the parity test in gate-install.test.ts is the lock)
@@ -739,8 +762,27 @@ const TRANSPARENT_WRAPPERS = {
 // that made the round-6 rule necessary are unchanged by this one, because
 // their operator character is itself quoted or escaped: `-b "<br>" 5` and
 // `-b \<br\> 5` both have their first literal character at index 0.
+//
+// The FILENAME may hold ANYTHING, whitespace included (round-8 leg, J1):
+// `>"out file.txt" gh pr merge 5` is one token here, and while the fused
+// pattern's filename class excluded whitespace that token matched neither
+// pattern — so it stood in front of `gh`, broke the anchor, and a real
+// redirection with a real merge behind it went unjudged; trailing, the same
+// word rode into argv and the engine read a branch named `>merge log.txt`.
+// The operator prefix is what decides, so the class is `[\s\S]+` and the
+// first-literal index above is what still keeps a quoted OPERATOR out.
+//
+// Residue of that rule, disclosed and locked as rows (round-8 leg, J5): the
+// contrived shapes where an empty quote pair or a QUOTED operator abuts a
+// real one — `"">out.txt`, `">">out.txt`, `"2">file`, `>"">out.txt` — are
+// read here as ONE word (`>out.txt`, `>>out.txt`, `2>file`), while bash
+// passes the empty string, `>` or `2` as an ARGUMENT and applies the
+// redirection that follows it (and answers "ambiguous redirect" for the
+// fourth, running NOTHING). TRAILING a merge, where the rows put them, that
+// divergence is confined to the argv's TEXT and each of those words names a
+// target the engine denies: the deny direction, no bypass.
 const REDIRECTION_ALONE = /^[0-9]*(?:<<<|[<>]{1,2})$/;
-const REDIRECTION_FUSED = /^([0-9]*(?:<<<|[<>]{1,2}))[^\s]+$/;
+const REDIRECTION_FUSED = /^([0-9]*(?:<<<|[<>]{1,2}))[\s\S]+$/;
 
 /**
  * The argv after EVERY `gh pr merge` at command position in the command —
@@ -1014,6 +1056,19 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           // token), and otherwise it is the NEXT token. An `=` is not a
           // separator for a short option — `env -S=x` hands env the operand
           // `=x` — so the split is long-only (round-7 leg, H5).
+          //
+          // …and when an `=` FOLLOWS the short option's letter this arm does
+          // not apply at all: the token falls through to be dropped as a flag
+          // of the word, which is the route that reads both spellings right
+          // (round-8 leg, J2). `env -S=X gh pr merge 5` is env splitting the
+          // operand `=X` into one word, an assignment with an EMPTY NAME, so
+          // the command is `gh pr merge 5` and the merge RUNS (measured,
+          // coreutils 8.32); reading `=X` as the operand here put it at the
+          // front of the strip, where it is neither an assignment this walk
+          // accepts nor a command, and the merge behind it went unjudged.
+          // `env -S='gh pr merge 5'` is the same rule the other way: env's
+          // words are `=gh`, `pr`, `merge`, `5`, the command is coreutils
+          // `pr` and no merge runs — and none is projected.
           let name = opt;
           let attached = null;
           if (opt.charAt(1) === '-') {
@@ -1022,7 +1077,7 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
               name = opt.slice(0, eq);
               attached = opt.slice(eq + 1);
             }
-          } else {
+          } else if (opt.charAt(2) !== '=') {
             name = opt.slice(0, 2);
             if (opt.length > 2) attached = opt.slice(2);
           }

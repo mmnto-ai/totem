@@ -266,6 +266,16 @@ const WRAPPER_STRIP_ROWS = [
   // fold 3 left them a miss — one more bypass under the strict tier.
   'env -Sgh pr merge 5',
   "env -S'gh pr merge 5'",
+  // An `=` after a SHORT option's letter is not a separator and not part of an
+  // operand this walk reads: the whole token is dropped as a flag of env, and
+  // that is the route that reads this spelling right (round-8 leg, J2). env
+  // splits `=X` into one word, an assignment with an EMPTY NAME, so the
+  // command is `gh pr merge 5` and the merge RUNS (measured, coreutils 8.32,
+  // with a recording stub: `GH-RAN [pr] [merge] [5]`). On the fold-4 hook the
+  // attached-operand arm read `=X` as the operand, put it at the front of the
+  // strip — neither an assignment this walk accepts nor a command — and
+  // projected NOTHING: a fail-open, which is a bypass under the strict tier.
+  'env -S=X gh pr merge 5',
   'timeout 30 gh pr merge 5',
   'timeout 30s gh pr merge 5',
   'timeout -k 5 30 gh pr merge 5',
@@ -326,6 +336,15 @@ const REDIRECTION_ROWS = [
   '2>"/dev/null" gh pr merge 5',
   '<"in.txt" gh pr merge 5',
   "<<<'bar' gh pr merge 5",
+  // …and the FILENAME may carry whitespace (round-8 leg, J1). A quoted name
+  // with a space in it is ONE token here, so while the fused pattern's
+  // filename class excluded whitespace the token matched neither pattern: it
+  // stood in front of `gh`, broke the anchor, and each of these projected
+  // NOTHING on the fold-4 hook — while bash truncates `out file.txt` (feeds
+  // the here-string `bar baz`) and merges PR 5, measured with a recording stub
+  // on bash 5.3.
+  '>"out file.txt" gh pr merge 5',
+  '<<<"bar baz" gh pr merge 5',
 ];
 
 /**
@@ -375,11 +394,26 @@ const MUTANT_ROWS = [
   // NOT a miss: an `=` is not a separator for a SHORT option, so env reads the
   // operand `=gh pr merge 5`, takes `=gh` as an assignment with an empty name
   // and runs `pr merge 5` — coreutils `pr`, which answers
-  // `pr: merge: No such file or directory`. No merge runs and none is
-  // projected; the walk reaches the same place by its own route, reading `=gh`
-  // as the command (round-7 leg, H5). On the fold-3 hook the `=` split applied
-  // to short options too, so this projected PR 5: a false fire, now gone.
+  // `pr: merge: No such file or directory` (measured, coreutils 8.32: the case
+  // exits 1 and the stub `gh` is never reached). No merge runs and none is
+  // projected. The ROUTE is the one J2 rules (round-8 leg): the token is
+  // dropped as a flag of env, where the fold-4 hook reached the same silence
+  // by splitting `=gh pr merge 5` into words and stalling on `=gh` — the same
+  // split that made `env -S=X gh pr merge 5` above a MISS.
   "env -S='gh pr merge 5'",
+  // LOCKED DISCLOSED MISSES, not mutants (round-8 leg, J4): CLUSTERED short
+  // options. The option test reads the WHOLE `-` token, so `-vu` and `-iS`
+  // match no entry of env's operand list, are dropped as one flag each, and
+  // the operand belonging to the cluster's LAST letter (`X` for `-vu`, the
+  // command string for `-iS`) is left at the front of the strip, where it
+  // blocks the anchor. coreutils RUNS the merge in both (measured, 8.32, with
+  // a recording stub: `env -vu X gh pr merge 5` records `GH-RAN [pr] [merge]
+  // [5]`, and the `-iS` spelling does too when the operand names the stub and
+  // its record file by absolute path, since `-i` clears the environment).
+  // ATTACHMENT is not the gap — `env -uX`, `nice -n10`, `timeout -k5 30` and
+  // `timeout -sTERM 30` all project and all run — CLUSTERING is.
+  'env -vu X gh pr merge 5',
+  "env -iS 'gh pr merge 5'",
   // `timeout` with no duration: the grammar consumes exactly one positional
   // before the command, so `gh` reads as the duration. A disclosed
   // false-negative of the grammar, locked here (the form is invalid to
@@ -504,11 +538,16 @@ const PS_LINE_CONTINUATION_ROWS = [
 const PS_CONTINUATION_INSIDE_WORD_ROWS = ['gh pr merg`\ne 5', 'g`\nh pr merge 5'];
 
 /**
- * A disclosed FALSE FIRE (round-7 leg, H4): a trailing backtick at the END of
- * the input is a continuation with nothing to continue, and pwsh answers with
- * a parse error without running anything. Here the backtick is not followed by
- * a newline, so it falls through to the segment-separator arm and the merge in
- * front of it is judged — the deny direction, on text the shell rejects.
+ * A disclosed FALSE FIRE (round-7 leg, H4): a backtick that is the LAST
+ * CHARACTER of the input — nothing after it, not even a newline — is a
+ * continuation with nothing to continue, and pwsh answers with a parse error
+ * without running anything. Here the backtick is not followed by a newline, so
+ * it falls through to the segment-separator arm and the merge in front of it
+ * is judged — the deny direction, on text the shell rejects. Narrowed to that
+ * one spelling on a measurement (round-8 leg, J3): give the same input a
+ * trailing newline (`gh pr merge 5 <backtick><LF>`) and pwsh runs the merge
+ * (recorded argv `[pr] [merge] [5]`), while the continuation arm consumes the
+ * pair and projects PR 5 — the two agree, and only this spelling diverges.
  */
 const ROW_PS_TRAILING_BACKTICK = 'gh pr merge 5 `';
 
@@ -600,6 +639,40 @@ const ROW_QUOTED_REDIRECT_PR = 'gh pr merge 5 >"out.txt"';
  */
 const ROW_QUOTED_OPERATOR_DATA = 'gh pr merge --squash ">"out.txt';
 /**
+ * The TRAILING twins of the whitespace rule (round-8 leg, J1): the operator is
+ * bare, the filename is quoted and carries a space, so bash redirects and
+ * merges the current branch's PR — while the fold-4 hook, whose fused pattern
+ * excluded whitespace from the filename, kept the whole word and reached the
+ * engine with a branch named `>merge log.txt` / `<<<bar baz`. Measured on
+ * bash 5.3 with a recording stub: gh's argv is `[--squash]` in both.
+ */
+const ROW_WS_REDIRECT_BRANCH = 'gh pr merge --squash >"merge log.txt"';
+const ROW_WS_HERESTRING_BRANCH = 'gh pr merge --squash <<<"bar baz"';
+/**
+ * The RESIDUE of that rule, locked rather than cured (round-8 leg, J5): an
+ * empty quote pair or a QUOTED operator abutting a real one. Bash reads the
+ * quoted part as an ARGUMENT and applies the redirection that follows it —
+ * measured with a recording stub, gh's argv is `[--squash] []` for the first
+ * and `[--squash] [>]` for the second — while this walk keeps each as ONE word
+ * and names it as the target. The divergence is in the argv's TEXT only: both
+ * of those words are targets the engine denies, so nothing gets through, and
+ * the rows assert the current projection rather than a claim in the comment.
+ */
+const ROW_EMPTY_QUOTE_ABUT = 'gh pr merge --squash "">out.txt';
+const ROW_QUOTED_OPERATOR_ABUT = 'gh pr merge --squash ">">out.txt';
+/**
+ * A disclosed FALSE FIRE, PowerShell's third (round-8 leg, J3): a backtick
+ * followed by WHITESPACE and then a newline is not a continuation — the
+ * backtick escapes the SPACE. Measured on pwsh 7 with a recording stub: pwsh
+ * runs `gh pr merge` with NO target (argv `[pr] [merge]`, so the current
+ * branch's PR merges) and evaluates the next line as its own statement. Here
+ * the backtick is not IMMEDIATELY followed by a newline, so the continuation
+ * arm does not take it, the separator arm does, and the walk projects an
+ * `unresolvedTarget` naming the backtick — a target nobody wrote, which the
+ * strict tier denies.
+ */
+const ROW_PS_BACKTICK_SPACE_NEWLINE = 'gh pr merge ` \n5';
+/**
  * A disclosed FALSE FIRE (round-5 leg, F13). PowerShell's escape inside a
  * double-quoted string is the BACKTICK, so `"a `"; gh pr merge 5`"b"` is ONE
  * string to PowerShell — it prints text and merges nothing. This walk reads
@@ -670,6 +743,11 @@ const PARITY_COMMAND_CORPUS = [
   ROW_QUOTED_VAR_BRANCH,
   ROW_QUOTED_REDIRECT_PR,
   ROW_QUOTED_OPERATOR_DATA,
+  ROW_WS_REDIRECT_BRANCH,
+  ROW_WS_HERESTRING_BRANCH,
+  ROW_EMPTY_QUOTE_ABUT,
+  ROW_QUOTED_OPERATOR_ABUT,
+  ROW_PS_BACKTICK_SPACE_NEWLINE,
 ];
 
 function readSettings(cwd: string): Record<string, unknown> {
@@ -1943,6 +2021,12 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         ROW_QUOTED_REDIRECT_ERR,
         ROW_QUOTED_APPEND_BRANCH,
         ROW_QUOTED_VAR_BRANCH,
+        // And the two whose quoted filename carries WHITESPACE (round-8 leg,
+        // J1): on the fold-4 hook the fused pattern's filename class excluded
+        // whitespace, so neither word was stripped and the engine was handed a
+        // branch named `>merge log.txt` and `<<<bar baz`.
+        ROW_WS_REDIRECT_BRANCH,
+        ROW_WS_HERESTRING_BRANCH,
       ]) {
         writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
         runWrapper(bash(command), [], 'merge-ready');
@@ -1984,6 +2068,27 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
         branch: '>out.txt',
         headSha: head,
       });
+
+      // The RESIDUE of the same rule, asserted rather than claimed (round-8
+      // leg, J5): an empty quote pair or a quoted operator ABUTTING a real
+      // one. Bash passes the quoted part as an argument and redirects the
+      // rest — `[--squash] []` and `[--squash] [>]` with a recording stub —
+      // while this walk keeps each as one word. The divergence is in the
+      // argv's TEXT: the branch it names is one the engine denies either way,
+      // so it costs a bogus deny and lets no merge through.
+      for (const [command, branch] of [
+        [ROW_EMPTY_QUOTE_ABUT, '>out.txt'],
+        [ROW_QUOTED_OPERATOR_ABUT, '>>out.txt'],
+      ] as const) {
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        runWrapper(bash(command), [], 'merge-ready');
+        expect(spawnedPayload(), command).toEqual({
+          repo: 'mmnto-ai/totem',
+          pr: null,
+          branch,
+          headSha: head,
+        });
+      }
     });
 
     it('an INVALID option to a table word is a DISCLOSED false fire (round-6 leg, G4)', () => {
@@ -2060,6 +2165,27 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(spawnedPayload(), ROW_PS_TRAILING_BACKTICK).toEqual({
         repo: 'mmnto-ai/totem',
         pr: 5,
+        headSha: head,
+      });
+
+      // The third of PowerShell's own (round-8 leg, J3), and the measurement
+      // that narrows the one above: a backtick followed by WHITESPACE and then
+      // a newline is not a continuation either — the backtick escapes the
+      // space, pwsh runs `gh pr merge` with NO target (the current branch's PR
+      // merges) and reads the next line as its own statement. Here the
+      // backtick is not IMMEDIATELY followed by a newline, so the separator
+      // arm takes it and the walk names the backtick as an unresolvable
+      // target: a strict deny on a target nobody wrote.
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: ROW_PS_BACKTICK_SPACE_NEWLINE } },
+        [],
+        'merge-ready',
+      );
+      expect(spawnedPayload(), ROW_PS_BACKTICK_SPACE_NEWLINE).toEqual({
+        repo: 'mmnto-ai/totem',
+        pr: null,
+        unresolvedTarget: '`',
         headSha: head,
       });
     });
@@ -3000,6 +3126,25 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
       // however it is spelled.
       ['> "out.txt" gh pr merge 5', ['5']],
       ['2> "err.log" gh pr merge 5', ['5']],
+      // …and the quoted filename may carry WHITESPACE (round-8 leg, J1): the
+      // operator prefix is what decides, so the fused pattern's filename class
+      // is `[\s\S]+` now. On the fold-4 hook, whose class excluded whitespace,
+      // the leading pair matched neither pattern and projected NOTHING (bash
+      // merges PR 5 in both), and the trailing pair rode the whole word into
+      // argv as `['--squash', '>merge log.txt']` and
+      // `['--squash', '<<<bar baz']`.
+      ['>"out file.txt" gh pr merge 5', ['5']],
+      ['<<<"bar baz" gh pr merge 5', ['5']],
+      [ROW_WS_REDIRECT_BRANCH, ['--squash']],
+      [ROW_WS_HERESTRING_BRANCH, ['--squash']],
+      ['gh pr merge 5 >"out file.txt"', ['5']],
+      // RESIDUE of that rule, locked (round-8 leg, J5): an empty quote pair or
+      // a quoted operator abutting a real one is ONE word here, where bash
+      // passes the quoted part as an argument (`[--squash] []`,
+      // `[--squash] [>]`) and redirects the rest. Text only, and the word this
+      // walk keeps is a target the engine denies.
+      [ROW_EMPTY_QUOTE_ABUT, ['--squash', '>out.txt']],
+      [ROW_QUOTED_OPERATOR_ABUT, ['--squash', '>>out.txt']],
       // RESIDUE, unreachable rather than claimed: `|` and `&` are the
       // tokenizer's own separators and end the token before the operator is
       // whole, so these two never present a redirection to strip.
@@ -3040,6 +3185,11 @@ describe('gate-wrapper export seam (mmnto-ai/totem#2856 § E)', () => {
     // A trailing backtick with no newline after it is untouched by the arm —
     // the disclosed false fire, with the backtick riding on as its own token.
     expect(ghPrMergeArgvs(ROW_PS_TRAILING_BACKTICK, true)).toEqual([['5', '`']]);
+    // …and the arm wants the newline IMMEDIATELY (round-8 leg, J3): put a
+    // space between the backtick and the newline and pwsh escapes that space
+    // instead, running `gh pr merge` with no target, while the separator arm
+    // here hands the backtick on as the target. The false fire, exactly.
+    expect(ghPrMergeArgvs(ROW_PS_BACKTICK_SPACE_NEWLINE, true)).toEqual([['`']]);
 
     // Bash: a backtick opens a command substitution whatever follows it, so
     // the separator stands and the target is the backtick.
