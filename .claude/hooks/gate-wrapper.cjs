@@ -131,13 +131,15 @@ function resolveCliFromPath() {
 // STRICT a bypass): the executable may be spelled `gh`, `gh.exe` or either
 // behind a path; a CLOSED table of transparent wrapper programs (`sudo`,
 // `env`, `timeout`, `nice`, `nohup`, `command`, `exec`, `time`) is stripped
-// with its option grammar; `eval` re-tokenizes its operand once; a leading
-// redirection is skipped with its file; and a backtick substitution is a
-// segment of its own. In POWERSHELL mode a trailing backtick is that shell's
-// LINE CONTINUATION instead — the backtick and the newline are consumed and
-// the word continues, exactly as bash's trailing backslash does (round-6 leg,
-// G3); it was a separator in both modes before, which made the backtick
-// itself the merge's target and left the real one in the next segment.
+// with its option grammar; `eval` re-tokenizes its operand once and
+// `env -S` / `--split-string` splits its own operand into the words that
+// take the option's place; a leading redirection is skipped with its file;
+// and a backtick substitution is a segment of its own. In POWERSHELL mode a
+// trailing backtick is that shell's LINE CONTINUATION instead — the backtick
+// and the newline are consumed and the word continues, exactly as bash's
+// trailing backslash does (round-6 leg, G3); it was a separator in both modes
+// before, which made the backtick itself the merge's target and left the real
+// one in the next segment.
 //
 // Disclosed misses, same posture as transport-shield's scanner — the gate does
 // NOT fire, which is the safe direction, never a false deny. Every one of them
@@ -159,16 +161,22 @@ function resolveCliFromPath() {
 //     table is keyed on the bare word the shell reads at command position, and
 //     `/usr/bin/time` is a PROGRAM with its own option grammar, not the
 //     reserved word this table models;
-//   - `env -S '<cmd>'`, `env --split-string '<cmd>'`, `--split-string=<cmd>`:
-//     the option's operand IS the command, split again under env's own rules.
-//     What makes it a miss is not which token the strip drops — it is that the
-//     operand is ONE QUOTED WORD and the anchor is never re-entered on one,
-//     the way `eval`'s operand is re-tokenized (round-6 leg, G6). The
-//     separate spellings consume the operand with the option (`--split-string`
-//     joins that list with this fold, for consistency with `-S` and with no
-//     change in outcome for a quoted operand); the attached spelling arrives
-//     as a single `-` token and is dropped whole; and where a strip left the
-//     operand standing, the anchor read one word where it needs three;
+//   - env's OWN splitting rules inside a `-S` / `--split-string` operand.
+//     The operand itself is no longer a miss: it is SPLIT and read, because
+//     every spelling of it RUNS the merge (fold 3, measured on coreutils
+//     8.32 with a stub `gh`) and consuming it with the option made all of
+//     them a bypass under STRICT. But it is split on WHITESPACE and nothing
+//     more: env's own escapes (`\_` is a SPACE, `\n`, `\t`, `\#`,
+//     `\$`), its `$VAR` expansion inside the string and its `#` comment
+//     are not modelled, and quotes INSIDE the string are not stripped.
+//     Measured: `env -S 'gh\_pr\_merge\_5'` runs `gh pr merge 5`, while
+//     the split reads ONE word here and nothing projects (locked row);
+//   - an ATTACHED SHORT `-S` operand (`env -S'gh pr merge 5'`): the quote
+//     arm joins it into one token `-Sgh pr merge 5`, which is not one of the
+//     three spellings fold 3 names (`-S <op>`, `--split-string <op>`,
+//     `--split-string=<op>`), so it is dropped as a flag of env and nothing
+//     projects. env RUNS that merge (measured), so this one is a fail-open
+//     (locked row);
 //   - `eval` nested deeper than ONE level
 //     (`eval "eval \"gh pr merge 5\""`);
 //   - a substitution inside DOUBLE quotes (`echo "`gh pr merge 5`"`,
@@ -582,7 +590,12 @@ function isGhExecutable(token) {
 //                 `-` token is not an option of it, so the shell runs no
 //                 command and there is nothing to project (bash's `time`
 //                 reserved word answers `-f: command not found`);
-//   evaluates   — the builtin whose operand is a STRING to re-tokenize.
+//   evaluates   — the builtin whose operand is a STRING to re-tokenize;
+//   evaluatesOperand
+//               — the OPTIONS whose own operand is a command STRING: the
+//                 operand is split into words and those words TAKE THE
+//                 OPTION'S PLACE, so the strip reads on from them
+//                 (`env -S 'gh pr merge 5'`).
 // Every other `-` token is skipped as a flag of the wrapper, so a long option
 // with an ATTACHED value (`--user=x`, `--kill-after=5`, `--adjustment=10`)
 // needs no entry and a bare `-10` reads as `nice`'s adjustment. A long option
@@ -631,9 +644,22 @@ const TRANSPARENT_WRAPPERS = {
     describe: ['-l', '--list', '-v', '--validate', '-V', '--version', '-K', '--remove-timestamp'],
   },
   env: {
-    operand: ['-u', '-C', '-S', '--unset', '--chdir', '--split-string'],
+    operand: ['-u', '-C', '--unset', '--chdir'],
     positional: 0,
     terminator: false,
+    // `-S` / `--split-string` does NOT consume its operand: env splits that
+    // string into words and PREPENDS them to the arguments that follow, then
+    // runs the first word as the command. Measured on coreutils 8.32 with a
+    // stub `gh`, every one of `env -S 'gh pr merge 5'`,
+    // `env -S "gh pr merge" 5`, `env -S gh pr merge 5`,
+    // `env --split-string gh pr merge 5`, `env --split-string='gh pr merge 5'`,
+    // `env -u X -S 'gh pr merge 5'` and `env -S 'A=1 gh pr merge 5'` RUNS
+    // `gh pr merge 5`. Consuming the operand with the option made all seven a
+    // MISS — consistency in the miss direction, which is a bypass under STRICT
+    // (fold 3, on the round-6 fold's own measurement). So the words take the
+    // option's place and the strip reads on from them, the way `eval`'s
+    // operand is re-read.
+    evaluatesOperand: ['-S', '--split-string'],
   },
   timeout: { operand: ['-k', '-s', '--kill-after', '--signal'], positional: 1, terminator: true },
   nice: { operand: ['-n', '--adjustment'], positional: 0, terminator: false },
@@ -922,6 +948,27 @@ function ghPrMergeArgvs(rawCommand, powershell, depth) {
           tokens = [];
           stripping = false;
           break;
+        }
+        if (wrapper.evaluatesOperand !== undefined) {
+          const eq = opt.indexOf('=');
+          const name = eq === -1 ? opt : opt.slice(0, eq);
+          if (wrapper.evaluatesOperand.indexOf(name) !== -1) {
+            // The operand is a COMMAND STRING, not a value to skip past: env
+            // splits it into words and prepends them to what follows. Split
+            // on whitespace — env's own rule — put the words where the option
+            // stood, and let the strip read on, so the assignment strip runs
+            // for `env -S 'A=1 gh pr merge 5'` and the anchor sees `gh`.
+            const operandText =
+              eq === -1 ? (tokens.length > 1 ? tokens[1] : '') : opt.slice(eq + 1);
+            const rest = tokens.slice(eq === -1 ? 2 : 1);
+            const words = operandText.split(/\s+/);
+            tokens = [];
+            for (let w = 0; w < words.length; w++) {
+              if (words[w] !== '') tokens.push(words[w]);
+            }
+            tokens = tokens.concat(rest);
+            continue;
+          }
         }
         if (wrapper.operand.indexOf(opt) !== -1) {
           tokens = tokens.slice(2);
