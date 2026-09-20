@@ -306,35 +306,41 @@ function DAYS_UNDER_FREEZE() {
 // hand-written page can state a figure the maturity page already derives
 // without hand-typing it. Each is a pure function of the same committed data
 // the block transforms above read, fails loud on a malformed source, and
-// carries no wall-clock. (Two hand-typed copies of the non-archived count
-// had already rotted before these existed: `docs/manual/why-totem.md` and
-// `docs/wiki/cloud-compilation.md` said 394 where the artifact held 392.)
+// carries no wall-clock. (Three hand-typed copies of the rule count had
+// already rotted before these existed: `docs/manual/why-totem.md`,
+// `docs/wiki/cloud-compilation.md` and `docs/reference/architecture.md` said
+// 394 non-archived where the artifact held 392 — and "non-archived" itself
+// overstated what the linter runs, since the canonical predicate also skips
+// untested-against-codebase and pending-verification rules.)
 
 function loadRules(rulesPath, label) {
   const data = readJson(rulesPath, label);
   if (!Array.isArray(data.rules) || data.rules.length === 0) {
     throw new Error(`[Totem Error] ${label} transform failed: ${rulesPath} has no rules array.`);
   }
+  // Every compiled rule carries the content hash of the lesson it came from —
+  // the provenance-chain claim the maturity page and every figure below rest
+  // on — so a rule without one is a malformed artifact, and every figure
+  // derived from the file fails loud here, before any count is taken (the
+  // block transform renderRuleProvenance carries the same guard).
+  data.rules.forEach((r, i) => {
+    if (typeof r.lessonHash !== 'string' || r.lessonHash.length === 0) {
+      throw new Error(
+        `[Totem Error] ${label} transform failed: rule[${i}] has no lessonHash — the provenance-chain claim cannot render.`,
+      );
+    }
+  });
   return data;
 }
 
 /**
  * `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules.
- * The sentence this sits in claims EVERY rule carries its lesson's hash, so a
- * rule without one is a malformed artifact and fails the build, exactly as the
- * block transform renderRuleProvenance does for the same claim on the
- * maturity page — the figure never publishes a ratio that contradicts its own
- * sentence (a "0 of 485" would have rendered before this guard).
+ * The loader has already refused any rule without one, so the figure can
+ * never publish a ratio that contradicts the sentence it sits in (a "0 of
+ * 485" would have rendered before that guard); what it states is the count.
  */
 function renderRuleProvenanceRatio(rulesPath) {
   const data = loadRules(rulesPath, 'RULE_PROVENANCE_RATIO');
-  data.rules.forEach((r, i) => {
-    if (typeof r.lessonHash !== 'string' || r.lessonHash.length === 0) {
-      throw new Error(
-        `[Totem Error] RULE_PROVENANCE_RATIO transform failed: rule[${i}] has no lessonHash — the provenance-chain claim cannot render.`,
-      );
-    }
-  });
   return `${data.rules.length} of ${data.rules.length}`;
 }
 
@@ -343,15 +349,39 @@ function RULE_PROVENANCE_RATIO() {
   return renderRuleProvenanceRatio(COMPILED_RULES);
 }
 
-/** Rules whose status is not `archived` — the count the linter still runs. */
-function renderNonArchivedRuleCount(rulesPath) {
-  const data = loadRules(rulesPath, 'NON_ARCHIVED_RULE_COUNT');
-  return String(data.rules.filter((r) => r.status !== 'archived').length);
+/**
+ * The canonical "does the linter run this rule" predicate, taken from core's
+ * built dist — the one loadCompiledRules applies — so this figure can never
+ * mirror a second predicate of its own (`status !== 'archived'` overstated
+ * the count by the untested-against-codebase rules). The docs CI job builds
+ * before it runs these transforms; a missing dist fails loud rather than
+ * guessing.
+ */
+function activeRulePredicate() {
+  const distPath = path.join(ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `[Totem Error] ACTIVE_RULE_COUNT transform failed: ${distPath} not found — run pnpm build first (the count derives from core's isActiveCompiledRule).`,
+    );
+  }
+  const core = require(distPath);
+  if (typeof core.isActiveCompiledRule !== 'function') {
+    throw new Error(
+      '[Totem Error] ACTIVE_RULE_COUNT transform failed: @mmnto/totem exports no isActiveCompiledRule.',
+    );
+  }
+  return core.isActiveCompiledRule;
 }
 
-/** NON_ARCHIVED_RULE_COUNT — e.g. `392`, from .totem/compiled-rules.json. */
-function NON_ARCHIVED_RULE_COUNT() {
-  return renderNonArchivedRuleCount(COMPILED_RULES);
+/** Rules the linter runs — the canonical active predicate over the artifact. */
+function renderActiveRuleCount(rulesPath, predicate = activeRulePredicate()) {
+  const data = loadRules(rulesPath, 'ACTIVE_RULE_COUNT');
+  return String(data.rules.filter(predicate).length);
+}
+
+/** ACTIVE_RULE_COUNT — e.g. `385`, from .totem/compiled-rules.json through core's predicate. */
+function ACTIVE_RULE_COUNT() {
+  return renderActiveRuleCount(COMPILED_RULES);
 }
 
 /**
@@ -497,7 +527,7 @@ module.exports = {
   DAYS_UNDER_FREEZE,
   LINT_RECEIPT,
   RULE_PROVENANCE_RATIO,
-  NON_ARCHIVED_RULE_COUNT,
+  ACTIVE_RULE_COUNT,
   LESSON_RECORD_COUNT,
   FREEZE_SINCE_MONTH,
   // internals exported for tests (render with an explicit source path)
@@ -507,7 +537,7 @@ module.exports = {
   _renderLintReceipt: renderLintReceipt,
   _loadMaturityData: loadMaturityData,
   _renderRuleProvenanceRatio: renderRuleProvenanceRatio,
-  _renderNonArchivedRuleCount: renderNonArchivedRuleCount,
+  _renderActiveRuleCount: renderActiveRuleCount,
   _renderLessonRecordCount: renderLessonRecordCount,
   _renderFreezeSinceMonth: renderFreezeSinceMonth,
 };

@@ -258,18 +258,34 @@ test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fa
   assert.throws(() => transforms._renderRuleProvenanceRatio(emptyHash), /no lessonHash/);
 });
 
-test('NON_ARCHIVED_RULE_COUNT counts every rule whose status is not archived', () => {
+test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical predicate, never a mirrored status test", () => {
+  const core = require('../packages/core/dist/index.js');
+  const active = compiledRules.rules.filter(core.isActiveCompiledRule).length;
+  assert.equal(transforms.ACTIVE_RULE_COUNT(), String(active));
+  // The artifact carries archived and untested-against-codebase rules today,
+  // so the canonical count sits at or below the non-archived count — the
+  // figure the pages used to publish as if it were what the linter runs.
   const nonArchived = compiledRules.rules.filter((r) => r.status !== 'archived').length;
-  assert.equal(transforms.NON_ARCHIVED_RULE_COUNT(), String(nonArchived));
-  // Discriminating: a mixed fixture must count exactly the non-archived rows.
+  assert.ok(active <= nonArchived, `active ${active} must not exceed non-archived ${nonArchived}`);
+  // Discriminating: every status the predicate excludes, plus one it keeps.
   const mixed = writeTmpJson('mixed-status.json', {
     rules: [
       { lessonHash: 'a', status: 'archived' },
       { lessonHash: 'b' },
       { lessonHash: 'c', status: 'untested-against-codebase' },
+      { lessonHash: 'd', status: 'pending-verification' },
     ],
   });
-  assert.equal(transforms._renderNonArchivedRuleCount(mixed), '2');
+  assert.equal(transforms._renderActiveRuleCount(mixed), '1');
+  // A hash-less rule fails loud here too: the validation lives in the loader,
+  // so every figure derived from the file shares it.
+  const hashless = writeTmpJson('active-hashless.json', { rules: [{ status: 'archived' }] });
+  assert.throws(() => transforms._renderActiveRuleCount(hashless), /no lessonHash/);
+  const lessonHashless = writeTmpJson('lesson-hashless.json', {
+    rules: [{ lessonHash: 'a' }, {}],
+    nonCompilable: Array.from({ length: 200 }, () => ({})),
+  });
+  assert.throws(() => transforms._renderLessonRecordCount(lessonHashless), /no lessonHash/);
 });
 
 test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {

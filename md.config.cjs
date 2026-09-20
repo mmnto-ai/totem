@@ -24,7 +24,7 @@ module.exports = {
     LINT_RECEIPT: transforms.LINT_RECEIPT,
     // Inline figures for prose (a fragment between markers inside a sentence).
     RULE_PROVENANCE_RATIO: transforms.RULE_PROVENANCE_RATIO,
-    NON_ARCHIVED_RULE_COUNT: transforms.NON_ARCHIVED_RULE_COUNT,
+    ACTIVE_RULE_COUNT: transforms.ACTIVE_RULE_COUNT,
     LESSON_RECORD_COUNT: transforms.LESSON_RECORD_COUNT,
     FREEZE_SINCE_MONTH: transforms.FREEZE_SINCE_MONTH,
   },
