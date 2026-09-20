@@ -1,5 +1,15 @@
 # @mmnto/cli
 
+## 2.9.0
+
+### Minor Changes
+
+- fa75e64: `totem init` now writes each distributed skill to its `.agents/skills/<name>/SKILL.md` twin as well as `.claude/skills/<name>/SKILL.md`, wherever the directory init runs in carries an `.agents/` directory and whichever AI tools were detected — the surface is the vendor-neutral one that Gemini CLI, Antigravity, Kimi and Codex read, so a repository with no Claude surface gets its twins too (mmnto-ai/totem#2788, the mmnto-ai/totem#2532 slice-2 charter; the consumer report is mmnto-ai/totem#2899). The install summary lists each twin written; a repository without that directory gets one summary line saying the twins were not written, and an `.agents` that is not a directory gets one line too instead of four write errors. The two copies are equal inside the markers and each keeps its own extension tail below the end marker, which is the contract the parity manifest states; `totem eject` now removes the twins it wrote alongside the `.claude` copies, so init no longer leaves a surface eject cannot see. Before this, init refreshed only the `.claude` copy and left a consumer's twin on the previous text: two liquid-city syncs found the drift by `cmp` and hand-copied the twin forward. The skill loop is now `distributeClaudeSkills(cwd, roots, opts)`, a module-level export with the one root list `SKILL_TWIN_ROOTS` beside it (init and eject both read that list, so a root can no longer drift between them), and the behaviour is testable against a temp directory: a stale marker-bearing twin is refreshed to the same managed block as the `.claude` copy, an extension tail on either surface survives, a marker-less twin is preserved unless the refresh is forced (reported as a preserve line, as the `.claude` copy's is), a repository without `.agents/` gets no twin, a `--bare` init writes neither copy, and a second run reports every twin as unchanged; one test runs `totem init` itself on a repository with an `.agents/` directory and no Claude surface and reads the twins after. Two safety folds from the bot round ride along: each skill copy on either root is written through the atomic user-file helper, so an interrupted write leaves the old bytes or the new, never a truncated skill; and `totem eject` applies the same marker-order ownership test init does on the write side, so a file whose end marker precedes its start marker is preserved and named on either root, and a skills root that could not be pruned is reported as a skipped row. A minor bump: a file surface init has never written before, on the AGENTS.md-floor precedent (`@mmnto/cli` exposes no module surface, so the two new exports are read by the tests and by eject, not by a public API).
+
+### Patch Changes
+
+- @mmnto/totem@2.9.0
+
 ## 2.8.0
 
 ### Minor Changes
