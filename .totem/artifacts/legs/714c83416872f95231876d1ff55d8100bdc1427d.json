@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "714c83416872f95231876d1ff55d8100bdc1427d",
+  "readAt": "2026-09-20T02:23:28Z",
+  "findings": [
+    {
+      "id": "L1",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 157,
+      "claim": "The purge-list check named as the register oracle for this line does not cover README.md. It joins four transform outputs only, and README.md renders none of them, so the new entry's compliance with the ruled copy bounds is established by inspection, not by any executable gate.",
+      "counterexample": "tools/docs-transforms.test.cjs:158-163 builds its subject as [MATURITY_TABLE(), RULE_PROVENANCE(), DAYS_UNDER_FREEZE(), LINT_RECEIPT()].join('\\n'); `grep -c \"<!-- docs\" README.md` returns 0, so none of the four ever renders into README.md. Checked the line against the verbatim ruled clause instead, .totem/specs/a2-proof-kit-a3-maturity.md:23-26 ('no public layer taxonomy; purge list, no Spine vocabulary, no Governance OS / fleet / shared-cognition / auto-healing language, no competitor roster, no implementation counts without a user outcome'): the entry trips none of them. `pnpm test:docs` = 25 passed, 0 failed."
+    },
+    {
+      "id": "L2",
+      "severity": "MINOR",
+      "file": "totem.config.ts",
+      "line": 137,
+      "claim": "The repo's own push-gate lint provides zero coverage of this diff, so a green totem lint is not evidence about this commit.",
+      "counterexample": "`node packages/cli/dist/index.js lint --branch --base main` printed 'Filtered 1 file(s) from the diff per ignorePatterns/shieldIgnorePatterns: README.md' then 'No changes detected. Nothing to review.' and exited 0. Source: totem.config.ts:137 lists 'README.md' in ignorePatterns; the config's own comment at lines 93-94 states that index exclusion is not a waiver of the review-leg floor."
+    },
+    {
+      "id": "L3",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 0,
+      "claim": "README.md is a markdown-magic target FILE but carries no docs markers at all, so docs:inject's only effect on it is prettier --write and the CI drift gate cannot detect a stale figure in README. The converging no-op result holds; the 'inject target' framing overstates the coverage.",
+      "counterexample": "md.config.cjs:15 sets files: ['README.md', 'docs/**/*.md'], but `grep -c \"<!-- docs\" README.md` returns 0 and `grep -n \"<!--\" README.md` returns nothing (README has no HTML comments). package.json:18 defines docs:inject as 'node tools/docs-inject.cjs && prettier --write README.md \"docs/**/*.md\"'. One executed run: README.md md5 258fcd355167a83ac91cdaf82d75232e before and after; aggregate md5 of all docs/**/*.md b8c2719e9adc336d418fe7c3668d4b51 before and after; `git diff --exit-code -- README.md docs/` exit 0; `git status --porcelain` empty."
+    },
+    {
+      "id": "L4",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 169,
+      "claim": "The new gloss is the only entry in the list whose subject is a pronoun ('building it with agents') rather than a named noun phrase; the five siblings all name their subject. Structural shape otherwise matches the siblings byte for byte.",
+      "counterexample": "README.md:166-171 read at byte level with cat -A: siblings name their subjects ('a PR mistake', 'hooks and MCP tools', 'override telemetry', 'machine-derived rows', 'a committed, re-runnable exhibit'). Mitigation, why no change is recommended: `git show caba03c6:docs/wiki/Home.md` line 15 already carries the identical wording on main, landed by mmnto-ai/totem#2898, so it is ruled operator copy reused with the em-dash swapped for the list's colon convention. The link-text/colon/bold/period shape matches all five siblings exactly."
+    },
+    {
+      "id": "L5",
+      "severity": "MINOR",
+      "file": "totem.config.ts",
+      "line": 102,
+      "claim": "The legs gate is currently red at this head: README.md is inside hooks.legsOwed.globs, the gate reports owed-and-unanswered, and .github/workflows/lint.yml:127 makes it a HARD required check, so the branch cannot merge until this deposit is committed as an ancestor of 714c8341. Procedural and self-clearing, not a defect in the line.",
+      "counterexample": "totem.config.ts:97-112 lists 'README.md' among hooks.legsOwed.globs. `node packages/cli/dist/index.js legs gate` exited 3 and printed 'legs: run the leg, then: totem legs deposit --sha HEAD --from <findings.json>'. .github/workflows/lint.yml:101-104 states a pull request whose diff touches a legsOwed path must carry a deposit under .totem/artifacts/legs/ that is ancestor-or-equal of the head."
+    }
+  ],
+  "folded": [],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 5 MINOR at 714c8341; all six claims survive falsification. Executed: git cat-file on the link target at both 714c8341 and caba03c6 plus gh pr view 2898 (MERGED, mergeCommit caba03c6, which is origin/main and the commit's sole parent); read docs/wiki/how-totem-gets-built.md in full and matched each of the gloss's three promises to lines 23, 31 and 3/5; checked the line against the verbatim ruled copy bounds at .totem/specs/a2-proof-kit-a3-maturity.md:23-26 and against tools/docs-transforms.test.cjs:158-163; byte-level cat -A compare of README.md:166-171 against all five siblings; prettier --check README.md clean; one pnpm docs:inject run converging to identical md5 for README.md and for the whole docs/ tree with git diff --exit-code and git status both clean; pnpm test:docs 25/25; doctor --claim-discipline PASS with no findings; totem lint --branch --base main showing README.md filtered out; totem legs gate exit 3; repo-wide greps for consumers of the Documentation & Workflows list, for a markdown link checker, and for README.md in the totem.config docs array, all empty. Worktree left clean on readme-how-totem-gets-built at 714c8341; no git state verbs were used. Seat's disposition: all five are disclosures of gate coverage, none a defect in the line; none folded, all recorded in the PR body; the deposit itself clears L5."
+}

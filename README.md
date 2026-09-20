@@ -166,6 +166,7 @@ No Node.js? The **Totem Lite** standalone binary runs `init`, `lint`, and `hooks
 - [**It Never Happens Again:**](docs/wiki/it-never-happens-again.md) How a PR mistake becomes a permanent project law: one lesson file, one command.
 - [**Governing AI Agents:**](docs/wiki/governing-ai-agents.md) How to use hooks and MCP tools to enforce project rules on Claude and Gemini from Turn 1.
 - [**It Stops Crying Wolf:**](docs/wiki/it-stops-crying-wolf.md) How override telemetry flags noisy rules for downgrade: proposed as a PR, merged by a human.
+- [**How Totem Gets Built:**](docs/wiki/how-totem-gets-built.md) The maintainer's account of building it with agents: what is a rule, what is a check, and what is not claimed.
 - [**Maturity:**](docs/wiki/maturity.md) What's shipped, partial, and still a goal: machine-derived rows with receipts, drift-gated in CI.
 - [**Proof Kit:**](examples/proof-kit/) A committed, re-runnable exhibit: one real mistake, the rule compiled from its lesson, and CI re-proving on every pull request that the mistake stays blocked, with zero LLM calls.
 
