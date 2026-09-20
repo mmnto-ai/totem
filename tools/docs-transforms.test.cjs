@@ -229,6 +229,81 @@ test('RULE_PROVENANCE derives the count from committed data, never a literal', (
   assert.ok(result.includes('lessonHash'), 'must name the provenance mechanism');
 });
 
+// ── Inline figures (fragments for prose) ─────────────────────────────────
+// Each derives from the committed file with the same predicate the page's
+// prose states, never from a literal, so a rotted hand-typed copy cannot
+// pass here while the artifact says otherwise.
+
+test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data', () => {
+  const hashed = compiledRules.rules.filter(
+    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
+  ).length;
+  assert.equal(transforms.RULE_PROVENANCE_RATIO(), `${hashed} of ${compiledRules.rules.length}`);
+  assert.match(transforms.RULE_PROVENANCE_RATIO(), /^\d+ of \d+$/);
+});
+
+test('NON_ARCHIVED_RULE_COUNT counts every rule whose status is not archived', () => {
+  const nonArchived = compiledRules.rules.filter((r) => r.status !== 'archived').length;
+  assert.equal(transforms.NON_ARCHIVED_RULE_COUNT(), String(nonArchived));
+  // Discriminating: a mixed fixture must count exactly the non-archived rows.
+  const mixed = writeTmpJson('mixed-status.json', {
+    rules: [
+      { lessonHash: 'a', status: 'archived' },
+      { lessonHash: 'b' },
+      { lessonHash: 'c', status: 'untested-against-codebase' },
+    ],
+  });
+  assert.equal(transforms._renderNonArchivedRuleCount(mixed), '2');
+});
+
+test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {
+  const distinct = new Set(compiledRules.rules.map((r) => r.lessonHash)).size;
+  const rest = Array.isArray(compiledRules.nonCompilable) ? compiledRules.nonCompilable.length : 0;
+  const rounded = Math.round((distinct + rest) / 100) * 100;
+  assert.equal(transforms.LESSON_RECORD_COUNT(), `about ${rounded.toLocaleString('en-US')}`);
+  const tiny = writeTmpJson('tiny-rules.json', {
+    rules: [{ lessonHash: 'a' }, { lessonHash: 'b' }],
+    nonCompilable: [{}, {}, {}],
+  });
+  assert.equal(transforms._renderLessonRecordCount(tiny), 'about 0');
+  const round = writeTmpJson('round-rules.json', {
+    rules: Array.from({ length: 150 }, (_, i) => ({ lessonHash: `h${i}` })),
+    nonCompilable: Array.from({ length: 1455 }, () => ({})),
+  });
+  assert.equal(transforms._renderLessonRecordCount(round), 'about 1,600');
+  const empty = writeTmpJson('empty-rules.json', { rules: [] });
+  assert.throws(() => transforms._renderLessonRecordCount(empty), /no rules array/);
+});
+
+test('FREEZE_SINCE_MONTH renders the month and year of freeze.since in UTC, and fails loud without the entry', () => {
+  const freeze = JSON.parse(fs.readFileSync(path.join(ROOT, '.totem', 'freeze.json'), 'utf-8'));
+  const since = freeze.frozen.find((f) => f.id === 'rule-compilation').since;
+  const d = new Date(since);
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  assert.equal(transforms.FREEZE_SINCE_MONTH(), `${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`);
+  // A since on the last day of a month in UTC must not slip into the next
+  // month on a machine east of UTC.
+  const edge = writeTmpJson('edge-freeze.json', {
+    frozen: [{ id: 'rule-compilation', since: '2026-05-31' }],
+  });
+  assert.equal(transforms._renderFreezeSinceMonth(edge), 'May 2026');
+  const lifted = writeTmpJson('lifted-freeze.json', { frozen: [] });
+  assert.throws(() => transforms._renderFreezeSinceMonth(lifted), /no rule-compilation entry/);
+});
+
 test('DAYS_UNDER_FREEZE derives days from freeze.since and the committed asOf', () => {
   const freeze = JSON.parse(fs.readFileSync(path.join(ROOT, '.totem', 'freeze.json'), 'utf-8'));
   const since = freeze.frozen.find((f) => f.id === 'rule-compilation').since;

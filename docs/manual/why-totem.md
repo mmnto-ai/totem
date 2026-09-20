@@ -85,7 +85,7 @@ Benchmark, measured when the compiled set held 147 rules: `totem lint` ran all o
 | Execution time | **1.75s**                    |
 | LLM calls      | **0**                        |
 
-The rule set grows as lessons are compiled; as of 1.89.0 this repo carries 485 compiled rules, 394 of them non-archived.
+The rule set grows as lessons are compiled; this repo carries <!-- docs RULE_COUNT -->485<!-- /docs --> compiled rules, <!-- docs NON_ARCHIVED_RULE_COUNT -->392<!-- /docs --> of them non-archived.
 
 This runs inside a `pre-push` git hook. The push is blocked until every violation is resolved; each finding reports the file, line, and fix guidance.
 

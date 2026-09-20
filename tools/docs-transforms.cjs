@@ -300,6 +300,108 @@ function DAYS_UNDER_FREEZE() {
   return renderDaysUnderFreeze(FREEZE_FILE, MATURITY_DATA);
 }
 
+// ── Inline figures ───────────────────────────────────────────────────────
+// Short fragments meant to sit INSIDE a sentence between inline markers
+// (`… (<!-- docs RULE_PROVENANCE_RATIO -->485 of 485<!-- /docs -->) …`), so a
+// hand-written page can state a figure the maturity page already derives
+// without hand-typing it. Each is a pure function of the same committed data
+// the block transforms above read, fails loud on a malformed source, and
+// carries no wall-clock. (Two hand-typed copies of the non-archived count
+// had already rotted before these existed: `docs/manual/why-totem.md` and
+// `docs/wiki/cloud-compilation.md` said 394 where the artifact held 392.)
+
+function loadRules(rulesPath, label) {
+  const data = readJson(rulesPath, label);
+  if (!Array.isArray(data.rules) || data.rules.length === 0) {
+    throw new Error(`[Totem Error] ${label} transform failed: ${rulesPath} has no rules array.`);
+  }
+  return data;
+}
+
+/** `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules. */
+function renderRuleProvenanceRatio(rulesPath) {
+  const data = loadRules(rulesPath, 'RULE_PROVENANCE_RATIO');
+  const hashed = data.rules.filter(
+    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
+  ).length;
+  return `${hashed} of ${data.rules.length}`;
+}
+
+/** RULE_PROVENANCE_RATIO — e.g. `485 of 485`, from .totem/compiled-rules.json. */
+function RULE_PROVENANCE_RATIO() {
+  return renderRuleProvenanceRatio(COMPILED_RULES);
+}
+
+/** Rules whose status is not `archived` — the count the linter still runs. */
+function renderNonArchivedRuleCount(rulesPath) {
+  const data = loadRules(rulesPath, 'NON_ARCHIVED_RULE_COUNT');
+  return String(data.rules.filter((r) => r.status !== 'archived').length);
+}
+
+/** NON_ARCHIVED_RULE_COUNT — e.g. `392`, from .totem/compiled-rules.json. */
+function NON_ARCHIVED_RULE_COUNT() {
+  return renderNonArchivedRuleCount(COMPILED_RULES);
+}
+
+/**
+ * `about N,NNN` — the lesson records the maturity page's provenance receipt
+ * counts (distinct compiled lessons + the non-compilable rest), rounded to the
+ * nearest hundred so prose does not churn on every banked lesson.
+ */
+function renderLessonRecordCount(rulesPath) {
+  const data = loadRules(rulesPath, 'LESSON_RECORD_COUNT');
+  const distinct = new Set(data.rules.map((r) => r.lessonHash)).size;
+  const nonCompilable = Array.isArray(data.nonCompilable) ? data.nonCompilable.length : 0;
+  const total = distinct + nonCompilable;
+  if (total <= 0) {
+    throw new Error(
+      `[Totem Error] LESSON_RECORD_COUNT transform failed: ${rulesPath} counts no lesson records.`,
+    );
+  }
+  const rounded = Math.round(total / 100) * 100;
+  return `about ${rounded.toLocaleString('en-US')}`;
+}
+
+/** LESSON_RECORD_COUNT — e.g. `about 1,600`, from .totem/compiled-rules.json. */
+function LESSON_RECORD_COUNT() {
+  return renderLessonRecordCount(COMPILED_RULES);
+}
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** `<Month> <YYYY>` of the rule-compilation freeze's `since`, read in UTC. */
+function renderFreezeSinceMonth(freezePath) {
+  const freeze = readJson(freezePath, 'FREEZE_SINCE_MONTH');
+  const entry = (freeze.frozen ?? []).find((f) => f.id === 'rule-compilation');
+  if (!entry) {
+    throw new Error(
+      '[Totem Error] FREEZE_SINCE_MONTH transform failed: no rule-compilation entry in .totem/freeze.json. ' +
+        'If the freeze lifted, retire this figure deliberately in the same PR.',
+    );
+  }
+  assertUtcDate(entry.since, 'FREEZE_SINCE_MONTH failed: freeze.json since');
+  const d = new Date(entry.since);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** FREEZE_SINCE_MONTH — e.g. `May 2026`, from .totem/freeze.json. */
+function FREEZE_SINCE_MONTH() {
+  return renderFreezeSinceMonth(FREEZE_FILE);
+}
+
 function renderLintReceipt(receiptPath) {
   const r = readJson(receiptPath, 'LINT_RECEIPT');
   // Every rendered field is required — including the environment labels; a
@@ -380,10 +482,18 @@ module.exports = {
   RULE_PROVENANCE,
   DAYS_UNDER_FREEZE,
   LINT_RECEIPT,
+  RULE_PROVENANCE_RATIO,
+  NON_ARCHIVED_RULE_COUNT,
+  LESSON_RECORD_COUNT,
+  FREEZE_SINCE_MONTH,
   // internals exported for tests (render with an explicit source path)
   _renderMaturityTable: renderMaturityTable,
   _renderRuleProvenance: renderRuleProvenance,
   _renderDaysUnderFreeze: renderDaysUnderFreeze,
   _renderLintReceipt: renderLintReceipt,
   _loadMaturityData: loadMaturityData,
+  _renderRuleProvenanceRatio: renderRuleProvenanceRatio,
+  _renderNonArchivedRuleCount: renderNonArchivedRuleCount,
+  _renderLessonRecordCount: renderLessonRecordCount,
+  _renderFreezeSinceMonth: renderFreezeSinceMonth,
 };
