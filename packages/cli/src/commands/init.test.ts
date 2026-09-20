@@ -4508,6 +4508,30 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     expect(section).toMatch(/record the late acknowledgement/);
   });
 
+  // mmnto-ai/totem#2903: the Phase 1 invocation names the bin explicitly. A bare
+  // `pnpm totem …` is neither a declared script nor `pnpm exec` of a bin — it
+  // rides pnpm's shim fallback, which opened a `cmd` banner instead of the
+  // triage on a Windows consumer.
+  it('REVIEW_REPLY_SKILL_CONTENT invokes the triage through `pnpm exec totem`, never a bare `pnpm totem` (mmnto-ai/totem#2903)', () => {
+    const phase1 = REVIEW_REPLY_SKILL_CONTENT.indexOf('## Phase 1: Fetch & Categorize');
+    const phase2 = REVIEW_REPLY_SKILL_CONTENT.indexOf('## Phase 2: Execute Actions');
+    expect(phase1).toBeGreaterThan(-1);
+    expect(phase2).toBeGreaterThan(phase1);
+    const section = REVIEW_REPLY_SKILL_CONTENT.slice(phase1, phase2);
+    // Executable: the fenced command names the bin through `pnpm exec`.
+    expect(section).toContain('```bash\npnpm exec totem triage-pr $ARGUMENTS\n```');
+    // The node-path form travels with it, for a checkout whose workspace build
+    // is the intended binary.
+    expect(section).toContain('node packages/cli/dist/index.js triage-pr $ARGUMENTS');
+    // And no command line anywhere in the skill invokes the bare form. The prose
+    // may NAME it (it explains why the explicit form is the one to run); a line
+    // that STARTS with it is an invocation.
+    const bareInvocations = REVIEW_REPLY_SKILL_CONTENT.split('\n').filter((line) =>
+      line.startsWith('pnpm totem'),
+    );
+    expect(bareInvocations).toEqual([]);
+  });
+
   // mmnto-ai/totem#2841 R3: the round's LAST operator-gated action is resolving
   // the threads the disposition just answered — the disposition comment IS the
   // evidence `totem resolve-threads` reads, so the step sits inside the

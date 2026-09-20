@@ -25,8 +25,10 @@ A summary-comment verdict is read from the PR's issue comments and matched to th
 Run the triage command to fetch, normalize, deduplicate, and categorize all bot comments:
 
 ```bash
-pnpm totem triage-pr $ARGUMENTS
+pnpm exec totem triage-pr $ARGUMENTS
 ```
+
+`pnpm exec` runs the `totem` bin of the pinned `@mmnto/cli`. A bare `pnpm totem …` is neither a declared script nor an explicit bin: it falls through to pnpm's shim lookup, which once opened a `cmd` banner instead of the triage on a Windows consumer (mmnto-ai/totem#2903). In a checkout whose workspace build is the intended binary, run `node packages/cli/dist/index.js triage-pr $ARGUMENTS` instead.
 
 This outputs a categorized inbox grouped by blast radius (Security → Architecture → Convention → Nits) with cross-bot deduplication already applied. The heavy lifting is done in TypeScript — no LLM math needed.
 
