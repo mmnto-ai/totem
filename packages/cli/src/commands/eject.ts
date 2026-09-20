@@ -653,7 +653,14 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     }
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    if (!content.includes(SKILL_MARKER_START) || !content.includes(SKILL_MARKER_END)) {
+    // The same ownership test scaffoldClaudeSkill applies on the write side
+    // (init.ts): both markers present AND in order. A file whose end marker
+    // precedes its start marker is one init preserves as user-owned, so eject
+    // preserves it too — presence alone would delete what init refused to
+    // touch (the mmnto-ai/totem#2902 bot round).
+    const markerStart = content.indexOf(SKILL_MARKER_START);
+    const markerEnd = content.indexOf(SKILL_MARKER_END);
+    if (markerStart === -1 || markerEnd === -1 || markerStart > markerEnd) {
       summary.skipped.push(`${rel} (no Totem markers — user-authored)`);
       continue;
     }
@@ -687,9 +694,10 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
       if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
         fs.rmdirSync(skillsRoot);
       }
-      // totem-context: intentional cleanup — best-effort skills-root pruning
-    } catch {
-      /* eject best-effort */
+      // totem-context: intentional cleanup — best-effort skills-root pruning, accounted as a skipped row rather than swallowed
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      summary.skipped.push(`${root}/skills/ (could not prune the empty directory: ${message})`);
     }
   }
 }

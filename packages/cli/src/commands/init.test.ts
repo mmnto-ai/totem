@@ -51,7 +51,7 @@ import {
   scaffoldMcpConfig,
   upgradeReflexes,
 } from './init.js';
-import { detectProject } from './init-detect.js';
+import { detectProject, type HookInstallerResult } from './init-detect.js';
 import {
   AGENTS_FLOOR_BLOCK,
   AGENTS_FLOOR_END,
@@ -3626,6 +3626,43 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     expect(output).toContain('Scaffolded vendor-neutral skill twin (.agents/skills)');
     expect(output).not.toContain('Skill twin scaffolding failed');
   }, 60000);
+
+  it('a failed twin write leaves the existing bytes intact and no temp file, and reports the error — the atomic writer is the seam (mmnto-ai/totem#2902 bot round)', async () => {
+    // Every skill copy on either root goes through writeFileAtomicSync, so an
+    // interrupted write is the old bytes or the new, never a truncated skill.
+    // Before this fold the scaffold wrote in place with fs.writeFileSync and
+    // the armed seam below had nothing to intercept.
+    const staleTwin = path.join(tmpDir, '.agents', 'skills', 'review-reply', 'SKILL.md');
+    fs.mkdirSync(path.dirname(staleTwin), { recursive: true });
+    const stale = REVIEW_REPLY_SKILL_CONTENT.replace('Before Phase 1', 'STALE PHASE');
+    fs.writeFileSync(staleTwin, stale);
+    atomicControl.failAll = new Error('EACCES: simulated');
+    let results: HookInstallerResult[];
+    try {
+      results = await distributeClaudeSkills(tmpDir, ['.agents']);
+    } finally {
+      atomicControl.failAll = undefined;
+    }
+    expect(results).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
+    for (const row of results) {
+      expect(row.action, row.file).toBe('skipped');
+      expect(row.err, row.file).toContain('EACCES: simulated');
+    }
+    // The stale twin is byte-unchanged (not truncated), no temp file sits
+    // beside it, and the three absent twins were not created.
+    expect(fs.readFileSync(staleTwin, 'utf-8')).toBe(stale);
+    expect(fs.readdirSync(path.dirname(staleTwin))).toEqual(['SKILL.md']);
+    for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+      if (skill.name === 'review-reply') continue;
+      expect(fs.existsSync(path.join(tmpDir, '.agents', 'skills', skill.name, 'SKILL.md'))).toBe(
+        false,
+      );
+    }
+    // With the seam disarmed the same run goes through: the stale twin is
+    // refreshed and the other three created.
+    const after = await distributeClaudeSkills(tmpDir, ['.agents']);
+    expect(after.map((r) => r.action).sort()).toEqual(['created', 'created', 'created', 'merged']);
+  });
 
   it('re-stamps a stale .agents twin to the same managed block as the .claude copy and reports both rows (the zero-tail case is byte-equal)', async () => {
     expect(SKILL_TWIN_ROOTS).toEqual(['.claude', '.agents']);

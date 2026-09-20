@@ -742,7 +742,7 @@ export function scaffoldClaudeSkill(
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+      writeFileAtomicSync(filePath, canonicalContent);
       return { action: 'created' };
     }
 
@@ -757,7 +757,7 @@ export function scaffoldClaudeSkill(
     // `forceSuppressed` so the caller can surface the destructive event.
     if (existingStart === -1 || existingEnd === -1 || existingStart > existingEnd) {
       if (options?.force === true) {
-        fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+        writeFileAtomicSync(filePath, canonicalContent);
         return { action: 'refreshed', forceSuppressed: true };
       }
       return {
@@ -784,7 +784,7 @@ export function scaffoldClaudeSkill(
       return { action: 'unchanged' };
     }
 
-    fs.writeFileSync(filePath, merged, 'utf-8');
+    writeFileAtomicSync(filePath, merged);
     return { action: 'refreshed' };
     // totem-context: intentional cleanup — preserve user's skill file on any IO failure rather than aborting init mid-flight; mirrors scaffoldFile's failure posture
   } catch (err) {

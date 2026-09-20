@@ -290,6 +290,38 @@ describe('ejectCommand', () => {
     );
   });
 
+  it('preserves a skill file whose end marker precedes its start marker on either root — the ownership test init applies on the write side (mmnto-ai/totem#2902 bot round)', async () => {
+    // scaffoldClaudeSkill treats a file with both markers present but out of
+    // order as one without canonical markers and preserves it; an eject that
+    // tested presence alone would delete what init refused to touch.
+    const outOfOrder = '<!-- totem:skill-end -->\n# mine\n<!-- totem:skill-start -->\n';
+    const files: string[] = [];
+    for (const root of ['.claude', '.agents']) {
+      const dir = path.join(cwd, root, 'skills', 'signoff');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'SKILL.md');
+      fs.writeFileSync(file, outOfOrder);
+      files.push(file);
+    }
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(' '));
+    });
+
+    try {
+      await ejectCommand({ force: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    for (const file of files) {
+      expect(fs.readFileSync(file, 'utf-8'), file).toBe(outOfOrder);
+    }
+    const output = lines.join('\n');
+    expect(output).toContain('.claude/skills/signoff/SKILL.md (no Totem markers — user-authored)');
+    expect(output).toContain('.agents/skills/signoff/SKILL.md (no Totem markers — user-authored)');
+  });
+
   it('scrubs AI reflex block from CLAUDE.md', async () => {
     const claudePath = path.join(cwd, 'CLAUDE.md');
     fs.writeFileSync(
