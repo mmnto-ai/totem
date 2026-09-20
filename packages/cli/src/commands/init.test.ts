@@ -32,6 +32,7 @@ import {
   deriveProjectName,
   detectEmbeddingTier,
   detectReflexStatus,
+  distributeClaudeSkills,
   findUnownedHookSibling,
   generateConfig,
   initCommand,
@@ -48,6 +49,7 @@ import {
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
+  SKILL_TWIN_ROOTS,
   upgradeReflexes,
 } from './init.js';
 import { detectProject } from './init-detect.js';
@@ -3285,7 +3287,6 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     tool: string,
     input: Record<string, unknown>,
   ): { threw: boolean; message: string } {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
     try {
       beforeTool(tool, input);
@@ -3544,6 +3545,77 @@ describe('GEMINI_SESSION_START ships as CJS for "type": "module" consumers (mmnt
     expect(res.status).not.toBe(0);
     expect(res.stderr).toMatch(/require is not defined/);
     expect(res.stdout).not.toContain('[Totem] Briefing unavailable');
+  });
+});
+
+describe('distributeClaudeSkills writes the .agents twin beside the .claude copy (mmnto-ai/totem#2899)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-twin-test-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('re-stamps a stale .agents twin to the same bytes as the .claude copy and reports both rows', async () => {
+    expect(SKILL_TWIN_ROOTS).toEqual(['.claude', '.agents']);
+    // A consumer that carries the twin convention, with one twin left on an
+    // older text (the liquid-city shape): markers intact, inside text stale.
+    const staleTwin = path.join(tmpDir, '.agents', 'skills', 'review-reply', 'SKILL.md');
+    fs.mkdirSync(path.dirname(staleTwin), { recursive: true });
+    const stale = REVIEW_REPLY_SKILL_CONTENT.replace('Before Phase 1', 'STALE PHASE');
+    expect(stale).not.toBe(REVIEW_REPLY_SKILL_CONTENT);
+    fs.writeFileSync(staleTwin, stale);
+
+    const results = await distributeClaudeSkills(tmpDir);
+
+    for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+      const claude = fs.readFileSync(
+        path.join(tmpDir, '.claude', 'skills', skill.name, 'SKILL.md'),
+        'utf-8',
+      );
+      const agents = fs.readFileSync(
+        path.join(tmpDir, '.agents', 'skills', skill.name, 'SKILL.md'),
+        'utf-8',
+      );
+      expect(agents, `${skill.name}: the .agents twin must equal the .claude copy`).toBe(claude);
+      expect(results.map((r) => r.file)).toContain(`.claude/skills/${skill.name}/SKILL.md`);
+      expect(results.map((r) => r.file)).toContain(`.agents/skills/${skill.name}/SKILL.md`);
+    }
+    // The stale twin was a marker-bearing refresh, reported as 'merged'; the
+    // fresh .claude copy was 'created'.
+    expect(results.find((r) => r.file === '.agents/skills/review-reply/SKILL.md')?.action).toBe(
+      'merged',
+    );
+    expect(results.find((r) => r.file === '.claude/skills/review-reply/SKILL.md')?.action).toBe(
+      'created',
+    );
+    expect(fs.readFileSync(staleTwin, 'utf-8')).not.toContain('STALE PHASE');
+  });
+
+  it('writes no twin where the repository has no .agents directory, and says so in one row', async () => {
+    const results = await distributeClaudeSkills(tmpDir);
+    expect(fs.existsSync(path.join(tmpDir, '.agents'))).toBe(false);
+    for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+      expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', skill.name, 'SKILL.md'))).toBe(
+        true,
+      );
+    }
+    const skipped = results.filter((r) => r.file.startsWith('.agents/'));
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0]?.action).toBe('skipped');
+    expect(skipped[0]?.summaryActionOverride).toMatch(/no \.agents\/ directory/);
+  });
+
+  it('is idempotent: a second run reports every twin as unchanged', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.agents'), { recursive: true });
+    await distributeClaudeSkills(tmpDir);
+    const second = await distributeClaudeSkills(tmpDir);
+    const twins = second.filter((r) => r.file.startsWith('.agents/skills/'));
+    expect(twins).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
+    for (const row of twins) expect(row.action, row.file).toBe('exists');
   });
 });
 

@@ -579,55 +579,96 @@ async function installClaudeHooks(
   });
 
   // 5. Distribute session-utility skills (mmnto-ai/totem#1890 Phase C
-  //    slice 3). Marker-based replace: fresh repos get the canonical
-  //    content; refreshes replace the inside-marker section while
-  //    preserving user customizations below the end marker.
-  //
-  //    scaffoldClaudeSkill's native action union ('created' | 'refreshed' |
-  //    'unchanged' | 'preserved') is mapped onto the existing
-  //    HookInstallerResult union for installer summary compatibility:
-  //    refreshed → 'merged' (file mutated), unchanged → 'exists' (no-op),
-  //    preserved → 'skipped' (user content protected).
-  for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
-    const skillPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
-    const skillRelative = `.claude/skills/${skill.name}/SKILL.md`;
-    const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
-      force: opts?.forceSkillRefresh === true,
-    });
+  //    slice 3) to `.claude/skills/` and, where the repository carries an
+  //    `.agents/` directory, to the `.agents/skills/` twin as well
+  //    (mmnto-ai/totem#2899).
+  results.push(...(await distributeClaudeSkills(cwd, opts)));
 
-    // Per W3.5 (mmnto-ai/totem#2008): the per-file warn fires ONLY on the
-    // no-marker suppression path. Marker-bearing refreshes (which ride the
-    // normal `refreshed`/`unchanged` path) emit no warning — keeps the
-    // signal-to-noise discipline tight (locked by invariant 8 in the spec).
-    if (skillResult.forceSuppressed === true) {
-      const { log } = await import('../ui.js');
-      log.warn(
-        'Totem',
-        `Force-overwriting ${skillRelative}: no canonical markers found, user content overwritten`,
-      );
-    }
+  return results;
+}
 
-    const mappedAction: HookInstallerResult['action'] =
-      skillResult.action === 'created'
-        ? 'created'
-        : skillResult.action === 'refreshed'
-          ? 'merged'
-          : skillResult.action === 'unchanged'
-            ? 'exists'
-            : 'skipped';
+/**
+ * The roots a distributed skill is written to. `.claude/skills/` always; the
+ * `.agents/skills/` twin whenever the repository carries an `.agents/`
+ * directory — the cohort's twin convention is opt-in by that directory's
+ * presence, and a repository that has it expects both copies byte-equal
+ * (this repository locks the equality in its own tests). Before
+ * mmnto-ai/totem#2899 init wrote only the `.claude` copy and left a
+ * consumer's twin on the previous text; two liquid-city syncs found the
+ * drift by `cmp` and hand-copied the twin forward.
+ */
+export const SKILL_TWIN_ROOTS = ['.claude', '.agents'] as const;
+
+/**
+ * Distribute every session-utility skill (mmnto-ai/totem#1890 Phase C slice
+ * 3). Marker-based replace: fresh repos get the canonical content; refreshes
+ * replace the inside-marker section while preserving user customizations
+ * below the end marker.
+ *
+ * scaffoldClaudeSkill's native action union ('created' | 'refreshed' |
+ * 'unchanged' | 'preserved') is mapped onto the existing HookInstallerResult
+ * union for installer summary compatibility: refreshed → 'merged' (file
+ * mutated), unchanged → 'exists' (no-op), preserved → 'skipped' (user content
+ * protected). One row per file written, so the summary names the `.agents`
+ * twin beside its `.claude` sibling; when the repository has no `.agents/`
+ * directory a single 'skipped' row says the twins were not written.
+ */
+export async function distributeClaudeSkills(
+  cwd: string,
+  opts?: { forceSkillRefresh?: boolean },
+): Promise<HookInstallerResult[]> {
+  const results: HookInstallerResult[] = [];
+  const twinPresent = fs.existsSync(path.join(cwd, '.agents'));
+  if (!twinPresent) {
     results.push({
-      file: skillRelative,
-      action: mappedAction,
-      ...(skillResult.forceSuppressed === true
-        ? {
-            summaryActionOverride:
-              'Force-overwritten: no canonical markers found, user content overwritten',
-          }
-        : {}),
-      ...(skillResult.err ? { err: skillResult.err } : {}),
+      file: '.agents/skills/ (twins)',
+      action: 'skipped',
+      summaryActionOverride:
+        'Skipped: no .agents/ directory in this repository — the skill twins are written only where that directory exists',
     });
   }
+  for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+    for (const root of SKILL_TWIN_ROOTS) {
+      if (root === '.agents' && !twinPresent) continue;
+      const skillPath = path.join(cwd, root, 'skills', skill.name, 'SKILL.md');
+      const skillRelative = `${root}/skills/${skill.name}/SKILL.md`;
+      const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
+        force: opts?.forceSkillRefresh === true,
+      });
 
+      // Per W3.5 (mmnto-ai/totem#2008): the per-file warn fires ONLY on the
+      // no-marker suppression path. Marker-bearing refreshes (which ride the
+      // normal `refreshed`/`unchanged` path) emit no warning — keeps the
+      // signal-to-noise discipline tight (locked by invariant 8 in the spec).
+      if (skillResult.forceSuppressed === true) {
+        const { log } = await import('../ui.js');
+        log.warn(
+          'Totem',
+          `Force-overwriting ${skillRelative}: no canonical markers found, user content overwritten`,
+        );
+      }
+
+      const mappedAction: HookInstallerResult['action'] =
+        skillResult.action === 'created'
+          ? 'created'
+          : skillResult.action === 'refreshed'
+            ? 'merged'
+            : skillResult.action === 'unchanged'
+              ? 'exists'
+              : 'skipped';
+      results.push({
+        file: skillRelative,
+        action: mappedAction,
+        ...(skillResult.forceSuppressed === true
+          ? {
+              summaryActionOverride:
+                'Force-overwritten: no canonical markers found, user content overwritten',
+            }
+          : {}),
+        ...(skillResult.err ? { err: skillResult.err } : {}),
+      });
+    }
+  }
   return results;
 }
 

@@ -20,7 +20,7 @@ Totem injects the `search_knowledge` instruction (the "Pull Before Coding" refle
 
 ## 4. Managed Skill Files
 
-`totem init` installs Claude Code skills at `.claude/skills/<name>/SKILL.md`, and every later `totem init` refreshes them in place. Each managed file is fenced by two marker comments, `<!-- totem:skill-start -->` and `<!-- totem:skill-end -->`. The refresh contract:
+`totem init` installs Claude Code skills at `.claude/skills/<name>/SKILL.md`, and every later `totem init` refreshes them in place. Where the repository carries an `.agents/` directory, the same content is written to `.agents/skills/<name>/SKILL.md` as a byte-equal twin on every run, and the install summary lists both files; a repository without that directory gets one summary line saying the twins were not written. Each managed file is fenced by two marker comments, `<!-- totem:skill-start -->` and `<!-- totem:skill-end -->`. The refresh contract:
 
 - **Everything up to and including the end marker is canonical.** A refresh replaces that entire leading span — the YAML frontmatter, anything you inserted before the start marker, and the body between the markers — with the current canonical content. Edits anywhere inside it are overwritten.
 - **Everything after the end marker is yours.** It is carried through verbatim on every refresh, so customizations belong below the end marker.
