@@ -22,5 +22,10 @@ module.exports = {
     RULE_PROVENANCE: transforms.RULE_PROVENANCE,
     DAYS_UNDER_FREEZE: transforms.DAYS_UNDER_FREEZE,
     LINT_RECEIPT: transforms.LINT_RECEIPT,
+    // Inline figures for prose (a fragment between markers inside a sentence).
+    RULE_PROVENANCE_RATIO: transforms.RULE_PROVENANCE_RATIO,
+    ACTIVE_RULE_COUNT: transforms.ACTIVE_RULE_COUNT,
+    LESSON_RECORD_COUNT: transforms.LESSON_RECORD_COUNT,
+    FREEZE_SINCE_MONTH: transforms.FREEZE_SINCE_MONTH,
   },
 };

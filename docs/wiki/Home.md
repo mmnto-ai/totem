@@ -12,6 +12,7 @@ Welcome to the Totem documentation.
 
 ## Reference
 
+- [How Totem Gets Built](how-totem-gets-built.md) — the maintainer's account of building it with agents: what is a rule, what is a check, and what is not claimed
 - [Maturity](maturity.md) — what's shipped, partial, and still a goal, with receipts
 - [Installation Guide](installation.md)
 - [CLI Reference](cli-reference.md)

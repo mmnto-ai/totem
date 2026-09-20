@@ -300,6 +300,152 @@ function DAYS_UNDER_FREEZE() {
   return renderDaysUnderFreeze(FREEZE_FILE, MATURITY_DATA);
 }
 
+// ── Inline figures ───────────────────────────────────────────────────────
+// Short fragments meant to sit INSIDE a sentence between inline markers
+// (`… (<!-- docs RULE_PROVENANCE_RATIO -->485 of 485<!-- /docs -->) …`), so a
+// hand-written page can state a figure the maturity page already derives
+// without hand-typing it. Each is a pure function of the same committed data
+// the block transforms above read, fails loud on a malformed source, and
+// carries no wall-clock. (Three hand-typed copies of the rule count had
+// already rotted before these existed: `docs/manual/why-totem.md`,
+// `docs/wiki/cloud-compilation.md` and `docs/reference/architecture.md` said
+// 394 non-archived where the artifact held 392 — and "non-archived" itself
+// overstated what the linter runs, since the canonical predicate also skips
+// untested-against-codebase and pending-verification rules.)
+
+function loadRules(rulesPath, label) {
+  const data = readJson(rulesPath, label);
+  if (!Array.isArray(data.rules) || data.rules.length === 0) {
+    throw new Error(`[Totem Error] ${label} transform failed: ${rulesPath} has no rules array.`);
+  }
+  // Every compiled rule carries the content hash of the lesson it came from —
+  // the provenance-chain claim the maturity page and every figure below rest
+  // on — so a rule without one is a malformed artifact, and every figure
+  // derived from the file fails loud here, before any count is taken (the
+  // block transform renderRuleProvenance carries the same guard).
+  data.rules.forEach((r, i) => {
+    if (typeof r.lessonHash !== 'string' || r.lessonHash.length === 0) {
+      throw new Error(
+        `[Totem Error] ${label} transform failed: rule[${i}] has no lessonHash — the provenance-chain claim cannot render.`,
+      );
+    }
+  });
+  return data;
+}
+
+/**
+ * `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules.
+ * The loader has already refused any rule without one, so the figure can
+ * never publish a ratio that contradicts the sentence it sits in (a "0 of
+ * 485" would have rendered before that guard); what it states is the count.
+ */
+function renderRuleProvenanceRatio(rulesPath) {
+  const data = loadRules(rulesPath, 'RULE_PROVENANCE_RATIO');
+  return `${data.rules.length} of ${data.rules.length}`;
+}
+
+/** RULE_PROVENANCE_RATIO — e.g. `485 of 485`, from .totem/compiled-rules.json. */
+function RULE_PROVENANCE_RATIO() {
+  return renderRuleProvenanceRatio(COMPILED_RULES);
+}
+
+/**
+ * The canonical "does the linter run this rule" predicate, taken from core's
+ * built dist — the one loadCompiledRules applies — so this figure can never
+ * mirror a second predicate of its own (`status !== 'archived'` overstated
+ * the count by the untested-against-codebase rules). The docs CI job builds
+ * before it runs these transforms; a missing dist fails loud rather than
+ * guessing.
+ */
+function activeRulePredicate() {
+  const distPath = path.join(ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `[Totem Error] ACTIVE_RULE_COUNT transform failed: ${distPath} not found — run pnpm build first (the count derives from core's isActiveCompiledRule).`,
+    );
+  }
+  const core = require(distPath);
+  if (typeof core.isActiveCompiledRule !== 'function') {
+    throw new Error(
+      '[Totem Error] ACTIVE_RULE_COUNT transform failed: @mmnto/totem exports no isActiveCompiledRule.',
+    );
+  }
+  return core.isActiveCompiledRule;
+}
+
+/** Rules the linter runs — the canonical active predicate over the artifact. */
+function renderActiveRuleCount(rulesPath, predicate = activeRulePredicate()) {
+  const data = loadRules(rulesPath, 'ACTIVE_RULE_COUNT');
+  return String(data.rules.filter(predicate).length);
+}
+
+/** ACTIVE_RULE_COUNT — e.g. `385`, from .totem/compiled-rules.json through core's predicate. */
+function ACTIVE_RULE_COUNT() {
+  return renderActiveRuleCount(COMPILED_RULES);
+}
+
+/**
+ * `about N,NNN` — the lesson records the maturity page's provenance receipt
+ * counts (distinct compiled lessons + the non-compilable rest), rounded to the
+ * nearest hundred so prose does not churn on every banked lesson.
+ */
+function renderLessonRecordCount(rulesPath) {
+  const data = loadRules(rulesPath, 'LESSON_RECORD_COUNT');
+  const distinct = new Set(data.rules.map((r) => r.lessonHash)).size;
+  const nonCompilable = Array.isArray(data.nonCompilable) ? data.nonCompilable.length : 0;
+  const total = distinct + nonCompilable;
+  // "about N hundred" is only honest for a corpus of hundreds: below one
+  // hundred the rounding would publish "about 0" or "about 100" for five
+  // records, so the figure refuses and the page must state the exact number.
+  if (total < 100) {
+    throw new Error(
+      `[Totem Error] LESSON_RECORD_COUNT transform failed: ${total} lesson record(s) in ${rulesPath} is too few to state as "about N hundred" — write the exact number instead.`,
+    );
+  }
+  const rounded = Math.round(total / 100) * 100;
+  return `about ${rounded.toLocaleString('en-US')}`;
+}
+
+/** LESSON_RECORD_COUNT — e.g. `about 1,600`, from .totem/compiled-rules.json. */
+function LESSON_RECORD_COUNT() {
+  return renderLessonRecordCount(COMPILED_RULES);
+}
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/** `<Month> <YYYY>` of the rule-compilation freeze's `since`, read in UTC. */
+function renderFreezeSinceMonth(freezePath) {
+  const freeze = readJson(freezePath, 'FREEZE_SINCE_MONTH');
+  const entry = (freeze.frozen ?? []).find((f) => f.id === 'rule-compilation');
+  if (!entry) {
+    throw new Error(
+      '[Totem Error] FREEZE_SINCE_MONTH transform failed: no rule-compilation entry in .totem/freeze.json. ' +
+        'If the freeze lifted, retire this figure deliberately in the same PR.',
+    );
+  }
+  assertUtcDate(entry.since, 'FREEZE_SINCE_MONTH failed: freeze.json since');
+  const d = new Date(entry.since);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** FREEZE_SINCE_MONTH — e.g. `May 2026`, from .totem/freeze.json. */
+function FREEZE_SINCE_MONTH() {
+  return renderFreezeSinceMonth(FREEZE_FILE);
+}
+
 function renderLintReceipt(receiptPath) {
   const r = readJson(receiptPath, 'LINT_RECEIPT');
   // Every rendered field is required — including the environment labels; a
@@ -380,10 +526,18 @@ module.exports = {
   RULE_PROVENANCE,
   DAYS_UNDER_FREEZE,
   LINT_RECEIPT,
+  RULE_PROVENANCE_RATIO,
+  ACTIVE_RULE_COUNT,
+  LESSON_RECORD_COUNT,
+  FREEZE_SINCE_MONTH,
   // internals exported for tests (render with an explicit source path)
   _renderMaturityTable: renderMaturityTable,
   _renderRuleProvenance: renderRuleProvenance,
   _renderDaysUnderFreeze: renderDaysUnderFreeze,
   _renderLintReceipt: renderLintReceipt,
   _loadMaturityData: loadMaturityData,
+  _renderRuleProvenanceRatio: renderRuleProvenanceRatio,
+  _renderActiveRuleCount: renderActiveRuleCount,
+  _renderLessonRecordCount: renderLessonRecordCount,
+  _renderFreezeSinceMonth: renderFreezeSinceMonth,
 };
