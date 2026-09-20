@@ -4,7 +4,7 @@ I haven't written a line of Totem's code.
 
 Using AI to write the code isn't something I'm trying to hide. In fact, that's the whole point of my approach. I'm purposefully delegating code generation to agents. Totem is the harness I built to keep agents in sync, inform before they design, enforce encoded rules, catch drift early, and record decisions.
 
-Nearly every commit in this repo carries my name, because the agents are running locally under my git identity, not because I actually wrote the code. As of today (Sept 19, 2026), the main branch has 1,381 commits. 1,176 of them are co-authored (875 naming a model directly). My guess is the truth is closer to 100% co-authored. I haven't investigated why some commits are unattributed. Local journals aren't published, so the git trailers and pull-requests are the audit trail.
+Nearly every commit in this repo carries my name, because the agents are running locally under my git identity, not because I actually wrote the code. As of September 19, 2026, the main branch has 1,381 commits. 1,176 of them are co-authored (875 naming a model directly). My guess is the truth is closer to 100% co-authored. I haven't investigated why some commits are unattributed. Local journals aren't published, so the git trailers and pull-requests are the audit trail.
 
 ## Where It Came From
 
