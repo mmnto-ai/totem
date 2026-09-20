@@ -12,5 +12,9 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     testTimeout: TEST_TIMEOUT_MS,
+    // Hooks ride the same floor (mmnto-ai/totem#2896): a fixture-building hook
+    // is the same spawn class, and vitest's `hookTimeout` is a separate 10s
+    // default that `testTimeout` never touched.
+    hookTimeout: TEST_TIMEOUT_MS,
   },
 });
