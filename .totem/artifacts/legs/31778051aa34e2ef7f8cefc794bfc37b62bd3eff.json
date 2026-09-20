@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "31778051aa34e2ef7f8cefc794bfc37b62bd3eff",
+  "readAt": "2026-09-20T01:07:53Z",
+  "findings": [
+    {
+      "id": "K1",
+      "severity": "MATERIAL",
+      "file": "docs/reference/architecture.md",
+      "line": 300,
+      "claim": "A THIRD hand-typed non-archived count is still rotted and still hand-typed. The commit subject asserts completeness — 'the two hand-typed non-archived counts that had rotted now inject too' — but architecture.md:300 reads 'As of 1.89.0, this repo's `.totem/compiled-rules.json` holds 485 compiled rules, of which 394 are non-archived', the same 394-vs-392 rot the landing notice cited for the other two. It sits inside the injector's own glob (md.config.cjs:15 `docs/**/*.md`) and inside the drift gate's path (.github/workflows/ci.yml:75 `git diff --exit-code -- README.md docs/`), and it is linked from README.md:176 'Deep Dives', so it is reader-facing and could have taken the identical `RULE_COUNT` / `NON_ARCHIVED_RULE_COUNT` pair. The landing contract (2026-09-20T0009Z-totem-claude-s3-landing.md, requirement 1) named only two sites, so the CONTRACT is satisfied; the commit's repo-level claim is not.",
+      "counterexample": "node over .totem/compiled-rules.json: rules.filter(r => r.status !== 'archived').length = 392 (histogram: 385 undefined, 93 archived, 7 untested-against-codebase). `grep -n 394 docs/reference/architecture.md` -> line 300 '... holds 485 compiled rules, of which 394 are non-archived'; `grep -c 'docs ' docs/reference/architecture.md` -> 0 markers. Two further sites print the stale figure as sample console output: docs/wiki/governing-ai-agents.md:52 and docs/wiki/it-never-happens-again.md:46, both '[Lint] Running 394 rules (zero LLM)...'."
+    },
+    {
+      "id": "K2",
+      "severity": "MATERIAL",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 296,
+      "claim": "The one assertion advertised as the UTC guard guards nothing, and its comment states the hazard in the wrong direction. The test says 'A since on the last day of a month in UTC must not slip into the next month on a machine east of UTC' and pins `_renderFreezeSinceMonth({since:'2026-05-31'})` to 'May 2026'. UTC midnight plus an eastward offset never leaves the day, so that fixture cannot detect a UTC-to-local regression in any timezone; the real hazard is WEST of UTC on a first-of-month `since`, which also corrupts the YEAR. Assertion strength is below the clause the test names (model-tiering Invariant 2); the shipped code at tools/docs-transforms.cjs:389-391 is correct.",
+      "counterexample": "Mutants applied to a temp copy, suite run under TZ=UTC, America/Chicago and Asia/Tokyo: 'M5 freeze getUTCMonth -> getMonth' SURVIVED in all three; 'M6 freeze getUTCFullYear -> getFullYear' SURVIVED in all three. Direct render under the mutant: 'TZ=America/Chicago since=2026-05-31 -> May 2026' (the test's fixture, passes), 'TZ=America/Chicago since=2026-06-01 -> May 2026' (wrong month), 'TZ=America/Chicago since=2026-01-01 -> December 2025' (wrong month AND year), while TZ=Asia/Tokyo renders all of them correctly."
+    },
+    {
+      "id": "K3",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 236,
+      "claim": "RULE_PROVENANCE_RATIO is the only one of the four new figures with no discriminating fixture, and its exported internal is dead. The test's own header comment claims each derives 'with the same predicate the page's prose states, never from a literal', and the sibling NON_ARCHIVED test carries a 'Discriminating:' mixed fixture — but `_renderRuleProvenanceRatio` is exported at tools/docs-transforms.cjs:493 and called by no test. Because numerator and denominator are both 485 today, the committed data cannot distinguish 'rules carrying a lessonHash' from 'all rules'.",
+      "counterexample": "Mutant 'M1 ratio predicate -> count ALL rules ((r) => true)' SURVIVED the full suite under TZ=UTC, America/Chicago and Asia/Tokyo (24/24 green in the repo). Contrast M2 (NON_ARCHIVED predicate -> status === undefined) which was killed by the mixed fixture expecting '2'."
+    },
+    {
+      "id": "K4",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 269,
+      "claim": "The LESSON_RECORD_COUNT fixtures do not exercise the two behaviours the test NAME asserts. The fixture literally named `round` is 150 rules + 1455 nonCompilable = 1605, which floors and rounds to the same 1600, so 'rounds ... to the nearest hundred' is untested; and no fixture carries a duplicate lessonHash, so `new Set(...).size` ('distinct compiled lessons', the maturity page's own wording at docs/wiki/maturity.md:35) is untested. A fixture summing to 1650 and one with repeated hashes would pin both.",
+      "counterexample": "Mutants SURVIVED the full suite in all three timezones: 'M3 lessonCount Math.round -> Math.floor' and 'M4 lessonCount distinct-set -> rules.length'. Direct probe of the real transform confirms the untested region: total=1650 -> 'about 1,700' with round, and the same input floors to 'about 1,600'."
+    },
+    {
+      "id": "K5",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 320,
+      "claim": "RULE_PROVENANCE_RATIO does not fail loud on the exact corruption its own prose claims to prove. The block comment at tools/docs-transforms.cjs:307-308 says each inline figure 'fails loud on a malformed source', and the sibling block transform renderRuleProvenance (line 235) THROWS on a rule with no lessonHash ('the provenance-chain claim cannot render'). The inline figure instead renders a number, so the sentence 'Every compiled rule carries the hash of the lesson it came from (0 of 485)' would publish itself. Blast radius is bounded in THIS repo only because RULE_PROVENANCE also runs on docs/wiki/maturity.md and a throwing transform aborts the whole run.",
+      "counterexample": "Fixture probes against the landed module: `_renderRuleProvenanceRatio({rules:[{},{},{}]})` -> RETURNED '0 of 3'; `{rules:[{lessonHash:''},{lessonHash:'a'}]}` -> '1 of 2'; `{rules:[{lessonHash:12345}]}` -> '0 of 1'. Abort behaviour measured separately on a markdown-magic 4.8 probe: a throwing transform rejects the promise, tools/docs-inject.cjs prints 'docs:inject failed: ...' and exits 1, and the file is not written."
+    },
+    {
+      "id": "K6",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 267,
+      "claim": "The guard `if (total <= 0) throw` (tools/docs-transforms.cjs:355) does not cover the degenerate rounding region, and the new test LOCKS the weaker behaviour in: `assert.equal(transforms._renderLessonRecordCount(tiny), 'about 0')` asserts that a 5-record corpus publishes the sentence 'those lessons are in the repo: about 0 lesson records' rather than failing the build. Separately, the figure stays plausible while provenance is destroyed, so it cannot act as a sensor for the corruption K5 describes.",
+      "counterexample": "Fixture probes: totals 1, 40, 49 -> 'about 0'; 50 -> 'about 100'. And `{rules:[{},{},{}], nonCompilable: 1599 entries}` -> 'about 1,600' — identical to today's output with zero rules carrying a lessonHash."
+    },
+    {
+      "id": "K7",
+      "severity": "MINOR",
+      "file": "tools/docs-inject.cjs",
+      "line": 14,
+      "claim": "A misspelled or de-registered marker name is fail-QUIET, and no test asserts that the page's three markers resolve. markdown-magic 4.8 reports the miss to stdout but resolves its promise, so docs-inject.cjs exits 0, the stale hand-typed literal survives verbatim, and `git diff --exit-code -- README.md docs/` stays clean — the drift gate goes green on exactly the hand-typed figure the landing contract's requirement 1 exists to abolish. Latent, not active at this head; it is a property of the injector, not of this diff, but this diff is the first to stake three prose figures on marker-name spelling.",
+      "counterexample": "Temp probe with only FIG registered and a marker named RULE_PROVENANCE_RATI: stdout prints 'Invalid transforms: 1 / 2' and 'Markdown Magic error: 1 / Missing 1 transforms', then 'RESOLVED filesChanged: [probe.md]'; `node run.js; echo $?` -> exit=0; the typo'd marker's body is unchanged in the written file. The repo's own run is healthy by contrast: 'Valid transforms: 13 / 13, Invalid transforms: 0 / 13', with RULE_PROVENANCE_RATIO / LESSON_RECORD_COUNT / FREEZE_SINCE_MONTH all listed at docs/wiki/how-totem-gets-built.md:38."
+    },
+    {
+      "id": "K8",
+      "severity": "MINOR",
+      "file": "docs/wiki/how-totem-gets-built.md",
+      "line": 38,
+      "claim": "QUESTION, not a defect: 'those lessons are in the repo: about 1,600 lesson records' is honest at its stated precision but cannot be tied to the files by any committed artifact, and the sentence's two halves count two different populations (the 'those lessons' referent is the 485 distinct compiled lessons; the 1,600 adds the 1,120 non-compilable). The wording is the operator's own and the landing notice forbids editing the register, so this is for the seat to rule on, not the lander.",
+      "counterexample": "Cross-reference executed: 0 of 485 rule lessonHashes and 0 of 1120 nonCompilable hashes match any `lesson-*.md` filename id, and 0 of the 1605 distinct 8-char prefixes match either — the ids are 16-hex in the artifact and 8-hex in the filenames, disjoint. Magnitudes do agree: derived 1605 vs `.totem/lessons/` holding 1596 `lesson-*.md` plus 17 other .md files = 1613 total; 1596, 1605 and 1613 all round to 'about 1,600'."
+    },
+    {
+      "id": "K9",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 166,
+      "claim": "Omitting README is a legitimate operator call, not a defect — I looked for a mechanism that would make it one and found none. docs/wiki/Home.md is the only index in the tree: there is no `_Sidebar.md`, no docs index, no wiki-sync workflow, and no test or gate that enumerates docs/wiki pages. The page is therefore reachable from Home.md only, which is a curation choice the operator may want to make consciously given README's 'Documentation & Workflows' list is where the other four narrative pages sit.",
+      "counterexample": "`find docs -iname '_sidebar*' -o -iname 'index.md' -o -iname 'README.md'` -> empty; `grep -rln 'docs/wiki' .github/workflows/` -> only lint.yml:211, inside a comment; `grep -rln 'Home.md|docs/wiki' --include=*.test.*` over packages/ and tools/ -> no test enumerating wiki pages. Home.md's new entry resolves (`docs/wiki/how-totem-gets-built.md` exists), as do both `../../README.md` and `maturity.md` from depth 2."
+    },
+    {
+      "id": "K10",
+      "severity": "MINOR",
+      "file": "docs/wiki/cloud-compilation.md",
+      "line": 15,
+      "claim": "The line this diff rewrites still opens with 'Reference benchmarks from Strategy #73 (438-lesson sample)' — a bare cross-repo issue reference in public copy, on the exact line the commit edits. Pre-existing and out of the landing contract's scope; flagged because the diff had the line open and because claim 8's own standard (no bare #NNN, no private-repo reference) is the repo's, not just the page's.",
+      "counterexample": "`git diff 12234cbb 31778051 -- docs/wiki/cloud-compilation.md` shows both the removed and the added line carrying 'Strategy #73', so the diff neither introduces nor removes it. The landed page itself is clean: bare hash-number refs -> [] (executed scan)."
+    }
+  ],
+  "folded": [
+    "K1",
+    "K2",
+    "K3",
+    "K4",
+    "K5",
+    "K6",
+    "K7",
+    "K10"
+  ],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 8 MINOR at 31778051 — verified the landed page against blob 114e5964 byte for byte (+157 bytes, fully accounted), reproduced all four figures from .totem/compiled-rules.json, .totem/freeze.json and docs/wiki/maturity.md, ran pnpm docs:inject twice to md5-identical output with a clean `git diff --exit-code -- README.md docs/`, ran pnpm test:docs (24/24) plus the same suite against 12234cbb's module in a temp root (all four new tests red) and a 10-mutant x 3-timezone mutation sweep, probed all four transforms with malformed fixtures, probed markdown-magic 4.8 inline-marker and fail-quiet behaviour on my own temp pages, and replicated the doctor claim-discipline WWND scan over the four touched files; the worktree is left clean on s3-how-totem-gets-built at 31778051. Seat's disposition: K1–K7 and K10 folded in the next commit (the third rotted line injects; the ratio and the lesson count fail loud; discriminating fixtures for rounding, distinctness and the hash-less case; the timezone check runs in a child process pinned west of UTC; a lock that every docs marker names a registered transform; the benchmark reference repo-qualified); K8 answered by the landing contract (the figure is the maturity page's own derivation, distinct compiled lessons plus the non-compilable rest, and the files under .totem/lessons/ round to the same hundred) and disclosed in the PR body rather than edited into the operator's register; K9 no action (the README link stays the operator's call)."
+}
