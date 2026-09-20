@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "206e38a4398de3690324251d40563a6273204d8b",
+  "readAt": "2026-09-20T02:40:01Z",
+  "findings": [
+    {
+      "id": "M1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 638,
+      "claim": "init now writes a surface eject cannot remove and does not even name. scrubClaudeSkills is anchored at `.claude/skills` (eject.ts:638) and the dirty-tree roster is the `.claude/skills/<name>/SKILL.md` literal only (eject.ts:1133, locked by eject.test.ts:1997) — neither file mentions `.agents`. The docblock this diff invalidates is eject.ts:631-633 ('a new distributed skill can never orphan on eject because a hand-mirrored list drifted'): the diff creates that orphan class on the ROOT dimension, and no gate catches it.",
+      "counterexample": "Executed in a temp repo (git init, CLAUDE.md, empty .agents/): initCommand({yes:true}) then ejectCommand({force:true}). POST-INIT .claude/skills and .agents/skills both hold review-loop, review-reply, signoff, signon; POST-EJECT .claude/skills = ABSENT, .agents/skills still holds all four. Eject printed 'Totem has been ejected from this project.' and its Removed/Skipped lists named only .claude/skills/*."
+    },
+    {
+      "id": "M2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/agent-claude-code.md",
+      "line": 23,
+      "claim": "The stated predicate is wrong in the direction that matters. The docs say the twin is written 'where the repository carries an .agents/ directory'; the real predicate is that AND Claude Code detected, because the writer is reached only through installClaudeHooks (init.ts:918; detection init-detect.ts:178). The .agents/skills surface is the VENDOR-NEUTRAL one (doctor-parity.ts:218-221; parity-manifest vendor-adapter: gemini, agy, kimi, codex), so the population that most needs it is the population the fix skips.",
+      "counterexample": "Executed initCommand({yes:true}) on three temp repos. (A) CLAUDE.md + .agents/: all eight skill rows, twins written. (B) CLAUDE.md, no .agents/: the one skipped row. (C) .gemini/ + .agents/, no Claude surface: 'Detected AI tools: Gemini CLI', writes .gemini/skills/totem.md and NOTHING else — .claude/skills = ABSENT, .agents/skills = ABSENT, and no skipped row explains why."
+    },
+    {
+      "id": "M3",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/agent-claude-code.md",
+      "line": 23,
+      "claim": "'as a byte-equal twin on every run' overclaims against the contract the twin carries: managed-block equality with a per-surface extension tail (parity-manifest.yaml:285-287 'byte-equality there is the zero-extension case, not the contract'; mmnto-ai/totem#2788's Ask 'preserves each surface's own extension tail outside the markers'). The changeset repeats it, and the new test locks byte equality on a zero-tail fixture only. The code is right; the prose and the release note are wrong.",
+      "counterexample": "Executed: seed .agents/, run distributeClaudeSkills, append a tail to .claude/skills/signon/SKILL.md and a different tail to .agents/skills/review-loop/SKILL.md, re-run: all eight rows 'exists'; 'signon: claude bytes === agents bytes? false | claude tail kept: true'; 'review-loop: claude bytes === agents bytes? false | twin tail kept: true'."
+    },
+    {
+      "id": "M4",
+      "severity": "MATERIAL",
+      "file": "AGENTS.md",
+      "line": 66,
+      "claim": "The canonical tracking issue for this exact change, mmnto-ai/totem#2788 ('init: write the four distributed skills to .agents/skills/ as well as .claude/skills/ from the same constants and markers', mmnto-ai/totem#2532 slice 2), is never referenced, and three in-repo prose sites the diff falsifies are left standing: AGENTS.md:66 ('a hand-kept copy … until totem init writes both'), doctor-parity.ts:231-240 ('totem init does not write this surface until #2532 slice 2', the installHint locked by doctor-parity.test.ts:793/815/835), init.test.ts:4049-4051 ('Until totem init learns the surface (slice 2) … THIS lock is the only CI sensor').",
+      "counterexample": "`gh issue view 2788` → OPEN, Done when: 'A totem init --yes on a cohort checkout leaves .claude/skills/* and .agents/skills/* byte-equal inside the markers … a test per shape.' `git diff caba03c6 206e38a4 | grep -c '2788\\|2532'` → 0. parity-manifest.yaml:292-297 'MECHANISM GAP, disclosed (Tenet 20): totem init writes .claude/skills ONLY … until mmnto-ai/totem#2788'."
+    },
+    {
+      "id": "M5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3551,
+      "claim": "One of the three shapes the charter names verbatim is untested — re-init over a surface carrying an extension tail — and it is the shape whose behaviour the docs got wrong. Also untested on the new root: the W3.5 no-marker/force path (the diff moved log.warn and summaryActionOverride inside the per-root loop with nothing asserting the twin's force behaviour), and no test asserts that the new rows reach the rendered summary.",
+      "counterexample": "With a tail on each surface the diff's own byte-equality assertion pattern would FAIL on correct code (measured 'claude bytes === agents bytes? false' for both, tails preserved). The untested force path behaves symmetrically when probed: a marker-less .agents/skills/signon/SKILL.md returns skipped + err by default and, under {forceSkillRefresh:true}, '[Totem] Force-overwriting .agents/skills/signon/SKILL.md: no canonical markers found, user content overwritten', action merged, twin == canonical after."
+    },
+    {
+      "id": "M6",
+      "severity": "MATERIAL",
+      "file": ".changeset/init-agents-skill-twin-2899.md",
+      "line": 2,
+      "claim": "'@mmnto/cli': patch understates the change against this repo's precedent and semver: two new public exports (distributeClaudeSkills, SKILL_TWIN_ROOTS) and a file surface totem init has never written.",
+      "counterexample": "packages/cli/CHANGELOG.md:39 under '### Minor Changes': 'ce510fe: totem init now scaffolds a public AGENTS.md floor …' — the same class (init begins writing a new file surface), bumped minor, and the entry notes the fixed changeset group takes every @mmnto/* package with it. Current version 2.8.0."
+    },
+    {
+      "id": "M7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1982,
+      "claim": "Every .agents row renders in the install summary as 'Scaffolded Claude Code hook' — the vendor-neutral surface labelled with the vendor it exists to be neutral about, and a skill labelled a hook (init.ts:1982 `summaryActionOverride ?? Scaffolded ${tool.name} hook`). The skipped row prints with a green OK glyph BEFORE the four .claude skill rows because it is pushed ahead of the loop.",
+      "counterexample": "Executed initCommand({yes:true}) summary, fixture A: 'OK .agents/skills/signoff/SKILL.md — Scaffolded Claude Code hook' (and the same for the other three). Fixture B: 'OK .agents/skills/ (twins) — Skipped: no .agents/ directory in this repository …' printed first."
+    },
+    {
+      "id": "M8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 621,
+      "claim": "fs.existsSync(path.join(cwd, '.agents')) is a presence test, not a directory test; an .agents that is a FILE passes it and then fails four times inside scaffoldClaudeSkill's catch, and initCommand routes err rows to log.error, never the summary, so init prints 'Init complete' over four 'Totem Error' lines. fs.statSync(...).isDirectory() would make the file case one honest skipped row.",
+      "counterexample": "Executed: .agents as a file → four rows 'skipped .agents/skills/<name>/SKILL.md ERR=[Totem Error] ENOTDIR: not a directory, mkdir …', the four .claude copies created, the .agents file untouched. Read-only stale twin (chmod 0444): 'skipped … ERR=[Totem Error] EPERM', the stale twin survives the run."
+    },
+    {
+      "id": "M9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 627,
+      "claim": "The skipped row's wording asserts a repository-level fact from a cwd-level probe ('no .agents/ directory in this repository'); cwd is process.cwd(), not the git root (doctor-parity anchors its equivalent read at the git root, doctor-parity.ts:848-850). Run from a package subdirectory of a repo that carries .agents/, the line is false as written and the twins silently go unrefreshed.",
+      "counterexample": "Executed: temp root with .agents/skills/ present, distributeClaudeSkills(<root>/packages/app) → row 'skipped .agents/skills/ (twins) … no .agents/ directory in this repository', while 'repo root .agents exists: true' and 'twins written under subdir: false'."
+    },
+    {
+      "id": "M10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3288,
+      "claim": "An out-of-scope edit the diff's narration does not mention: the removal of '// eslint-disable-next-line @typescript-eslint/no-require-imports' above the require(hookPath) call in the unrelated GEMINI_BEFORE_TOOL describe. Harmless (the rule is globally off) but neither required nor a complete sweep.",
+      "counterexample": "eslint.config.mjs:69-70 sets '@typescript-eslint/no-require-imports': 'off' with no files scope; `git show caba03c6:packages/cli/src/commands/init.test.ts | sed -n '3288p'` confirms the removed line; 7 sibling unused directives remain elsewhere."
+    }
+  ],
+  "folded": [
+    "M1",
+    "M2",
+    "M3",
+    "M4",
+    "M5",
+    "M6",
+    "M7",
+    "M8",
+    "M9",
+    "M10"
+  ],
+  "verdict": "1 BLOCKING, 5 MATERIAL, 4 MINOR at 206e38a4 — executed the init test file (333/3 skipped) plus eject and doctor-parity (212), ESLint and prettier on the touched files, nine temp-cwd fixtures of distributeClaudeSkills (stale twin, idempotent re-run, marker-less twin with and without force, .agents as a FILE, twin dir deleted, .agents with other tooling only, extension tails on each surface, read-only stale twin, junction .agents, subdirectory cwd), the real initCommand({yes:true}) headless on three temp git repos with the rendered summaries read verbatim, init then ejectCommand({force:true}) on a fourth, a re-implementation of the caba03c6 loop proving the first new test fails behaviourally, and every prose claim verified against gh issues 2899/2788/2532, the installed parity manifest, AGENTS.md, docs/wiki, eject.ts/eject.test.ts, doctor-parity.ts/doctor-parity.test.ts and the CLI changelog; the worktree untouched at 206e38a4. Seat's disposition, fold 1 in the next commit: all ten folded — eject walks both roots and its roster and lock carry both paths with a new eject test (M1); the twin write moves into initCommand's own always-run step for ['.agents'] independent of detection, the Claude installer writes ['.claude'] only (M2); the docs, changeset, docblocks and test wording say managed-block equality with per-surface tails (M3); mmnto-ai/totem#2788 referenced and the three prose sites corrected, the parity hint's asserted prefix kept (M4); tail, force and .claude-only-root tests added (M5); minor bump (M6); the twin rows carry their own summary label and the skipped row follows the installers (M7); a directory test with one disclosed row for a non-directory .agents (M8); the row says 'at the init cwd', where every surface init writes is anchored, rather than adding a git-root anchor the rest of init does not have (M9, folded by wording); the directive restored (M10). The fold rewires the writer's placement, so a re-armed leg scoped to the fold is owed before the PR is presented for merge."
+}
