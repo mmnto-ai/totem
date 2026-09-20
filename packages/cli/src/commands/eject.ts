@@ -631,14 +631,21 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
   // canonical DISTRIBUTED_CLAUDE_SKILLS so eject stays in lockstep with
   // `totem init` — a new distributed skill can never orphan on eject because a
   // hand-mirrored list drifted.
-  const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START, SKILL_MARKER_END } =
+  const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START, SKILL_MARKER_END, SKILL_TWIN_ROOTS } =
     await import('./init-templates.js');
   const distributedSkillNames = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
 
-  const skillsRoot = path.join(cwd, '.claude', 'skills');
-
-  for (const name of distributedSkillNames) {
-    const rel = `.claude/skills/${name}/SKILL.md`;
+  // Both roots init writes (mmnto-ai/totem#2899): the `.claude` copy and the
+  // vendor-neutral `.agents` twin — same names, same markers, so the same
+  // marker test decides what is Totem's to remove on either root. The root
+  // list is the same constant init reads, for the same reason the name list
+  // is: a hand-mirrored literal here would re-open on the root dimension the
+  // orphan class the derived list closes on the name dimension.
+  for (const [root, name] of SKILL_TWIN_ROOTS.flatMap((r) =>
+    distributedSkillNames.map((n) => [r, n] as const),
+  )) {
+    const skillsRoot = path.join(cwd, root, 'skills');
+    const rel = `${root}/skills/${name}/SKILL.md`;
     const filePath = path.join(skillsRoot, name, 'SKILL.md');
     if (!fs.existsSync(filePath)) {
       summary.skipped.push(`${rel} (not found)`);
@@ -646,7 +653,14 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     }
 
     const content = fs.readFileSync(filePath, 'utf-8');
-    if (!content.includes(SKILL_MARKER_START) || !content.includes(SKILL_MARKER_END)) {
+    // The same ownership test scaffoldClaudeSkill applies on the write side
+    // (init.ts): both markers present AND in order. A file whose end marker
+    // precedes its start marker is one init preserves as user-owned, so eject
+    // preserves it too — presence alone would delete what init refused to
+    // touch (the mmnto-ai/totem#2902 bot round).
+    const markerStart = content.indexOf(SKILL_MARKER_START);
+    const markerEnd = content.indexOf(SKILL_MARKER_END);
+    if (markerStart === -1 || markerEnd === -1 || markerStart > markerEnd) {
       summary.skipped.push(`${rel} (no Totem markers — user-authored)`);
       continue;
     }
@@ -673,14 +687,18 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     }
   }
 
-  // Prune the skills root if empty after per-skill pruning.
-  try {
-    if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
-      fs.rmdirSync(skillsRoot);
+  // Prune each skills root if empty after per-skill pruning.
+  for (const root of SKILL_TWIN_ROOTS) {
+    const skillsRoot = path.join(cwd, root, 'skills');
+    try {
+      if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
+        fs.rmdirSync(skillsRoot);
+      }
+      // totem-context: intentional cleanup — best-effort skills-root pruning, accounted as a skipped row rather than swallowed
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      summary.skipped.push(`${root}/skills/ (could not prune the empty directory: ${message})`);
     }
-    // totem-context: intentional cleanup — best-effort skills-root pruning
-  } catch {
-    /* eject best-effort */
   }
 }
 
@@ -1124,13 +1142,15 @@ export async function deriveDirtyTreeSense(
     // its own catch is a sensor that can abort the eject it senses for
     // (round 1, finding 11).
     const { AI_TOOLS } = await import('./init-detect.js');
-    const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
+    const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_TWIN_ROOTS } = await import('./init-templates.js');
     const roster = [
       ...new Set([
         ...totemScaffoldedFiles(totemDir),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) =>
+          SKILL_TWIN_ROOTS.map((root) => `${root}/skills/${s.name}/SKILL.md`),
+        ),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs(totemDir),

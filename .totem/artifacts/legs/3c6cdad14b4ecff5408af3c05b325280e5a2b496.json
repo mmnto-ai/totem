@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "3c6cdad14b4ecff5408af3c05b325280e5a2b496",
+  "readAt": "2026-09-20T22:26:52Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3552,
+      "claim": "The fold's headline semantic (the twin writer moved to an always-run step in initCommand) has no command-level sensor: every `.agents` assertion calls distributeClaudeSkills directly with explicit roots; no test runs initCommand and reads a path under `.agents/`. Reverting fold 1 (the writer back inside installClaudeHooks, the always-run step deleted) leaves all 549 tests green. Issue mmnto-ai/totem#2899 § Verification names a test that RUNS init verbatim, and charter mmnto-ai/totem#2788 § Done when is command-level too.",
+      "counterexample": "Enumeration: every `.agents` hit in init.test.ts sits at 3573-3684 inside describe('distributeClaudeSkills …') calling the helper directly; the only other hit (4114+) reads this repo's committed byte-copies. Headless fixtures C (.gemini + GEMINI.md + empty .agents/, no Claude surface) and H (no AI tool at all + .agents/) each wrote four .agents/skills/*/SKILL.md — the only evidence the placement works. Orchestrator RED: with the always-run block deleted (18 lines) the new command-level test failed on `.agents/skills/signoff/SKILL.md: expected false to be true`; restored, it passes."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor-parity.ts",
+      "line": 238,
+      "claim": "The new parity installHint names `run totem init from the repository root` as the remedy, and core threads one hint into three branches including the markers-absent WARN (`Restore the managed block via ${install}`), but a plain init PRESERVES a marker-stripped twin, so the remedy is inert in that branch — the class doctor-parity.ts:170-173 says the field exists to prevent ('an inert remedy is worse than none').",
+      "counterexample": "Fixture K: temp git repo, CLAUDE.md, .agents/skills/signon/SKILL.md = '# my own signon' (no markers), initCommand({yes:true}) → `[Totem Error] Skill twin scaffolding failed for .agents/skills/signon/SKILL.md: Skill file exists without canonical markers — preserving … Or pass --force-skill-refresh to overwrite`, file byte-unchanged; that state is the markers-absent WARN branch locked by doctor-parity.test.ts:823-840. Orchestrator RED: the tightened third-branch assertion failed with `expected 'Restore the managed block via a byte-…' to contain 'a marker-stripped twin is preserved'` before the hint edit."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 641,
+      "claim": "Eject's root list is a hand-mirrored literal in two places (`const roots = ['.claude', '.agents']` at 641 and both literal paths in the dirty-tree roster at 1141-1144) while init reads SKILL_TWIN_ROOTS — the fold rebuilds on the root dimension the drift class M1 closed on the name dimension, directly under the docblock (630-633) that says the scrub list is derived so a hand-mirrored list can never orphan. Side effect: SKILL_TWIN_ROOTS has no production consumer (both call sites pass explicit roots), and the changeset advertises it.",
+      "counterexample": "grep -rn SKILL_TWIN_ROOTS packages/ --include=*.ts → 4 hits, all init.ts (604, 605, 623) and init.test.ts (52, 3574); zero in eject.ts; `grep -n \"from './init\" eject.ts` → empty."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor-parity.test.ts",
+      "line": 786,
+      "claim": "A fourth stale prose site, inside the guard itself: the comment says never 'via totem init' '(which does not write .agents/skills until slice 2)', and the three `not.toContain('via totem init')` assertions now lock phrasing, not the invariant — the shipped hint DOES recommend init and passes only because its literal is 'run totem init'.",
+      "counterexample": "doctor-parity.test.ts green (96/96) with the new hint; the comment's premise is falsified by the diff that touched its subject. Also doctor-parity.ts:170 ('surfaces `totem init` does not write yet') now describes a surface init writes."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3290,
+      "claim": "Fold 1's M10 restore of `// eslint-disable-next-line @typescript-eslint/no-require-imports` adds one ESLint warning (net 7 → 8): eslint.config.mjs:70 sets the rule 'off' with no files scope, so the directive can never be used, and the next `eslint --fix` deletes it again — which is how it vanished in the first build.",
+      "counterexample": "`pnpm --filter @mmnto/cli exec eslint <five touched files>` → `3290:5 warning Unused eslint-disable directive`, ✖ 1 problem (0 errors, 1 warning); package-wide `eslint src/` → 8 problems (0 errors, 8 warnings), 7 before the fold; `lint` script has no --max-warnings."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/init-agents-skill-twin-2899.md",
+      "line": 5,
+      "claim": "The changeset's bump justification overclaims 'two new public exports': packages/cli/package.json exports only '.' → ./dist/index.js and src/index.ts has zero `export` statements, so neither distributeClaudeSkills nor SKILL_TWIN_ROOTS is importable from @mmnto/cli. The minor bump itself stands on the new-file-surface precedent (packages/cli/CHANGELOG.md:39, ce510fe).",
+      "counterexample": "`grep -c '^export' packages/cli/src/index.ts` → 0; package.json:13-18 exports map has the one entry."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "AGENTS.md",
+      "line": 66,
+      "claim": "AGENTS.md's predicate names the wrong directory: 'wherever this directory exists' has `.agents/skills/` as its nearest antecedent, while the code tests `.agents` (init.ts:632-634); the docs page already says it correctly.",
+      "counterexample": "Fixture A: `.agents/` created EMPTY (no skills/ child) → all four twins written ('Scaffolded vendor-neutral skill twin (.agents/skills)' ×4)."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "PR body",
+      "line": 0,
+      "claim": "The PR body's '## What' still carries the pre-fold predicate ('wherever the repository carries an `.agents/` directory') that the fold corrected everywhere else; the body is the merge artifact.",
+      "counterexample": "gh pr view 2902 --json body: the '## What' paragraph vs the '## How' paragraph, which is correct."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 633,
+      "claim": "Shape-grounded, failure not reproduced: the twin probe is an unguarded `fs.existsSync(p) && fs.statSync(p).isDirectory()` inside a command whose body is try/finally with no catch (init.ts:2352-2354), so an EPERM/EACCES/TOCTOU throw there escapes past the summary and the remaining always-run steps, departing from the posture at init.ts:783 (preserve on any IO failure rather than abort init mid-flight).",
+      "counterexample": "Fault injection by patching fs.statSync did not take (dist imports `node:fs` as a namespace snapshot); the run completed normally. Reachability low; treated as a shape finding."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "PR body",
+      "line": 0,
+      "claim": "Coupled surface out of repo: mmnto-ai/totem-strategy:doctrine/parity-manifest.yaml:292-298 (and its packages/strategy-doctrine copy) discloses a MECHANISM GAP — 'totem init writes .claude/skills ONLY … until mmnto-ai/totem#2788 has init write both surfaces' — that becomes false on merge; neither the PR body's 'Not in this PR' nor 'Related' names it as owed. The same read CONFIRMS the fold's contract citation (lines 286-287: byte-equality is the zero-extension case, the detector checks managed-block equality only).",
+      "counterexample": "D:/Dev/totem-strategy/doctrine/parity-manifest.yaml:286-298, read in full."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 2035,
+      "claim": "Disclosed noise for the seat to rule: every non-bare init in a repo without `.agents/` now prints the skipped row (before the fold only when Claude was detected; never at caba03c6); every eject in such a repo prints four `.agents/skills/<name>/SKILL.md (not found)` skipped rows and four `??` dirty-sense rows. Also: `initCommand({yes:true, bare:true})` writes no twins and prints no row, and the docs sentence ('whichever AI tools were detected') does not carve out --bare.",
+      "counterexample": "Fixtures B (no .agents/: one skipped row), G2 (eject without .agents/: four not-found + four dirty-sense rows), J (bare: nothing)."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 2044,
+      "claim": "An intentional preserve is announced as an error: a marker-less twin yields `[Totem Error] Skill twin scaffolding failed for …: … preserving.` above 'Init complete' — symmetric with the pre-existing .claude path ('Hook scaffolding failed'), so not a regression, but the changeset's 'a marker-less twin is preserved' reads as a quiet no-op while the user sees a red line. Latent coupling: the always-run step prints a row only when summaryActionOverride is set, whereas the installer loop prints created/merged rows with a default label; today twinLabel covers both so nothing is dropped.",
+      "counterexample": "Fixture K, same run as F2: the red preserve line, then 'Init complete'."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10"
+  ],
+  "verdict": "0 BLOCKING, 3 MATERIAL, 9 MINOR at 3c6cdad1, scoped to fold 1 (206e38a4..99399b59); all ten prior folds re-verified discharged on ten headless fixtures (M4 mostly — its residue is F4/F7/F10); 549 tests in the three touched files, 58 tool uses, first clock read 22:11:19Z, last 22:25:07Z. Convergence named on semantics: nothing changes where the writer runs, what population it targets, or what eject removes. Rulings: F1 FOLD — one initCommand-level test on a git repo with .agents/ and no Claude surface, RED with the placement removed, GREEN intact; F2 FOLD — the hint states the markers-absent preserve and names --force-skill-refresh, the third-branch assertion requires it (RED before the edit), the installHint docblock restated; F3 FOLD — SKILL_TWIN_ROOTS moved to init-templates.ts and read by eject's scrub, prune and roster, the roster test derives from it, the M1 eject test now asserts the Removed and Skipped naming; F4 FOLD — the guard comment restated as the live invariant; F5 FOLD — the directive dropped (fold 1's M10 restore was the non-defect; net ESLint warnings back to 7); F6 FOLD — the bump rests on the file-surface precedent and the exports are named as the tests' and eject's; F7 FOLD — 'wherever an .agents/ directory exists at the init cwd'; F8 FOLD — the PR body's What paragraph corrected; F9 FOLD — the probe guarded, annotated as an intentional cleanup, the non-directory row the disclosure; F10 FOLD by naming — the strategy-side MECHANISM GAP lines are owed to strategy-claude on merge, stated in the PR body. F11 RULED, not folded: the init skipped row and the eject not-found rows stay (one disclosed row per negative branch, symmetric with the .claude rows the same lists already print); the --bare carve-out added to the docs sentence and the changeset. F12 DECLINED with disclosure: the preserve line is the pre-existing .claude behaviour, not a regression; the changeset now says the preserve is reported as a line; the summaryActionOverride coupling is noted here, not changed."
+}

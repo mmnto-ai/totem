@@ -167,9 +167,10 @@ interface MechanicalArtifact {
   canonicalBlock: string | undefined;
   lineName: string;
   /**
-   * Remediation command override for surfaces `totem init` does not write yet
-   * (core defaults to `totem init` when omitted) — an inert remedy is worse
-   * than none (#2532 slice-1 falsification round).
+   * Remediation override for surfaces whose remedy is not a bare `totem init`
+   * (core defaults to `totem init` when omitted): a surface init does not write,
+   * or one it writes only under a condition the hint must state — an inert
+   * remedy is worse than none (#2532 slice-1 falsification round).
    */
   installHint?: string;
 }
@@ -228,16 +229,26 @@ function mechanicalArtifactsFor(
         markers,
         canonicalBlock: extract(s.content, markers),
         lineName: `Parity: agents-skills (${s.name})`,
-        // totem init does not write this surface until #2532 slice 2 — the
-        // honest remedy today is the byte-copy from the Claude twin. Descriptive
-        // prose, not a literal command (#2559 cross-bot round): `cp` is not
-        // cmd.exe-portable, the skip state means the destination dir does not
-        // exist yet, the twin itself can be absent, and doctor may run from a
-        // subdirectory of gitRoot.
+        // totem init writes this surface since mmnto-ai/totem#2899 (the
+        // mmnto-ai/totem#2532 slice-2 charter, mmnto-ai/totem#2788) wherever
+        // the init cwd carries an `.agents/` directory, so re-running init from
+        // the repository root is a remedy in the missing and the drifted states.
+        // In the markers-absent state it is NOT: a plain init preserves a
+        // marker-stripped twin (the same preserve the `.claude` copy gets), so
+        // the hint says so and names the flag that overwrites — one hint is
+        // threaded into all three branches, and a remedy that is inert in the
+        // branch it is read in is the class this field exists to prevent. The
+        // byte-copy stays named as the hand remedy for a checkout that cannot
+        // run init. Descriptive prose, not a literal command (#2559 cross-bot
+        // round): `cp` is not cmd.exe-portable, the skip state means the
+        // destination dir does not exist yet, the twin itself can be absent,
+        // and doctor may run from a subdirectory of gitRoot.
         installHint:
           `a byte-copy of .claude/skills/${s.name}/SKILL.md into .agents/skills/${s.name}/ ` +
-          `(create the directory first; totem init materializes the twin if absent, ` +
-          `and learns this surface in mmnto-ai/totem#2532 slice 2)`,
+          `(create the directory first), or run totem init from the repository root, ` +
+          `which writes the twin wherever an .agents/ directory exists — a marker-stripped ` +
+          `twin is preserved by init; pass --force-skill-refresh to overwrite it ` +
+          `(mmnto-ai/totem#2899)`,
       }));
     case 'review-reply-skill-content':
       return [

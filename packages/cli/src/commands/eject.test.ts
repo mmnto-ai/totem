@@ -34,6 +34,7 @@ import {
   REFLEX_START,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  SKILL_TWIN_ROOTS,
 } from './init-templates.js';
 import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
 
@@ -247,6 +248,78 @@ describe('ejectCommand', () => {
     await ejectCommand({ force: true });
 
     expect(fs.existsSync(path.join(skillDir, 'totem.md'))).toBe(false);
+  });
+
+  it('removes the .agents/skills twin init wrote beside the .claude copy, and names it (mmnto-ai/totem#2899)', async () => {
+    // Before the twin write landed, eject scrubbed `.claude/skills/` only and a
+    // twin written by init survived unnamed in the Removed and Skipped lists —
+    // the orphan class the derived scrub list exists to prevent.
+    const managed = '<!-- totem:skill-start -->\nmanaged\n<!-- totem:skill-end -->\n';
+    for (const root of ['.claude', '.agents']) {
+      const dir = path.join(cwd, root, 'skills', 'signon');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), managed);
+    }
+    const userTwin = path.join(cwd, '.agents', 'skills', 'review-loop', 'SKILL.md');
+    fs.mkdirSync(path.dirname(userTwin), { recursive: true });
+    fs.writeFileSync(userTwin, '# mine, no markers\n');
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(' '));
+    });
+
+    try {
+      await ejectCommand({ force: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signon', 'SKILL.md'))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, '.agents', 'skills', 'signon', 'SKILL.md'))).toBe(false);
+    // A marker-less twin is the user's and stays, exactly like a marker-less
+    // .claude copy.
+    expect(fs.readFileSync(userTwin, 'utf-8')).toBe('# mine, no markers\n');
+    // "and names it": the summary is the accounting surface, so the removed
+    // twin is listed under Removed and the preserved one under Skipped with its
+    // reason (the re-armed leg on mmnto-ai/totem#2899 fold 1: the row above
+    // asserted absence only, while the title promised the naming).
+    const output = lines.join('\n');
+    expect(output).toContain('.agents/skills/signon/SKILL.md');
+    expect(output).toContain(
+      '.agents/skills/review-loop/SKILL.md (no Totem markers — user-authored)',
+    );
+  });
+
+  it('preserves a skill file whose end marker precedes its start marker on either root — the ownership test init applies on the write side (mmnto-ai/totem#2902 bot round)', async () => {
+    // scaffoldClaudeSkill treats a file with both markers present but out of
+    // order as one without canonical markers and preserves it; an eject that
+    // tested presence alone would delete what init refused to touch.
+    const outOfOrder = '<!-- totem:skill-end -->\n# mine\n<!-- totem:skill-start -->\n';
+    const files: string[] = [];
+    for (const root of ['.claude', '.agents']) {
+      const dir = path.join(cwd, root, 'skills', 'signoff');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, 'SKILL.md');
+      fs.writeFileSync(file, outOfOrder);
+      files.push(file);
+    }
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(' '));
+    });
+
+    try {
+      await ejectCommand({ force: true });
+    } finally {
+      spy.mockRestore();
+    }
+
+    for (const file of files) {
+      expect(fs.readFileSync(file, 'utf-8'), file).toBe(outOfOrder);
+    }
+    const output = lines.join('\n');
+    expect(output).toContain('.claude/skills/signoff/SKILL.md (no Totem markers — user-authored)');
+    expect(output).toContain('.agents/skills/signoff/SKILL.md (no Totem markers — user-authored)');
   });
 
   it('scrubs AI reflex block from CLAUDE.md', async () => {
@@ -1994,7 +2067,9 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
         ...totemScaffoldedFiles('.totem'),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) =>
+          SKILL_TWIN_ROOTS.map((root) => `${root}/skills/${s.name}/SKILL.md`),
+        ),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs('.totem'),

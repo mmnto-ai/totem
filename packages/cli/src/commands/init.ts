@@ -60,6 +60,8 @@ import {
   renderAgentsFloorScaffold,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  SKILL_TWIN_ROOTS,
+  type SkillTwinRoot,
   TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
@@ -579,55 +581,129 @@ async function installClaudeHooks(
   });
 
   // 5. Distribute session-utility skills (mmnto-ai/totem#1890 Phase C
-  //    slice 3). Marker-based replace: fresh repos get the canonical
-  //    content; refreshes replace the inside-marker section while
-  //    preserving user customizations below the end marker.
-  //
-  //    scaffoldClaudeSkill's native action union ('created' | 'refreshed' |
-  //    'unchanged' | 'preserved') is mapped onto the existing
-  //    HookInstallerResult union for installer summary compatibility:
-  //    refreshed → 'merged' (file mutated), unchanged → 'exists' (no-op),
-  //    preserved → 'skipped' (user content protected).
-  for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
-    const skillPath = path.join(cwd, '.claude', 'skills', skill.name, 'SKILL.md');
-    const skillRelative = `.claude/skills/${skill.name}/SKILL.md`;
-    const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
-      force: opts?.forceSkillRefresh === true,
-    });
+  //    slice 3) to `.claude/skills/`. The vendor-neutral `.agents/skills/`
+  //    twin is written by initCommand's own step, independent of which
+  //    tools were detected (mmnto-ai/totem#2788, mmnto-ai/totem#2899).
+  results.push(...(await distributeClaudeSkills(cwd, ['.claude'], opts)));
 
-    // Per W3.5 (mmnto-ai/totem#2008): the per-file warn fires ONLY on the
-    // no-marker suppression path. Marker-bearing refreshes (which ride the
-    // normal `refreshed`/`unchanged` path) emit no warning — keeps the
-    // signal-to-noise discipline tight (locked by invariant 8 in the spec).
-    if (skillResult.forceSuppressed === true) {
-      const { log } = await import('../ui.js');
-      log.warn(
-        'Totem',
-        `Force-overwriting ${skillRelative}: no canonical markers found, user content overwritten`,
-      );
-    }
+  return results;
+}
 
-    const mappedAction: HookInstallerResult['action'] =
-      skillResult.action === 'created'
-        ? 'created'
-        : skillResult.action === 'refreshed'
-          ? 'merged'
-          : skillResult.action === 'unchanged'
-            ? 'exists'
-            : 'skipped';
+// The root list `SKILL_TWIN_ROOTS` lives in init-templates.ts beside the skill
+// constants, because eject reads the same list (mmnto-ai/totem#2899): the
+// `.claude/skills/` copy is written by the Claude installer, the
+// vendor-neutral `.agents/skills/` twin by a step of its own whenever the init
+// cwd carries an `.agents/` directory, whichever tools were detected. Before
+// this, init wrote only the `.claude` copy and left a consumer's twin on the
+// previous text; two liquid-city syncs found the drift by `cmp` and
+// hand-copied the twin forward.
+
+/**
+ * Distribute every session-utility skill (mmnto-ai/totem#1890 Phase C slice
+ * 3). Marker-based replace: fresh repos get the canonical content; refreshes
+ * replace the inside-marker section while preserving user customizations
+ * below the end marker.
+ *
+ * scaffoldClaudeSkill's native action union ('created' | 'refreshed' |
+ * 'unchanged' | 'preserved') is mapped onto the existing HookInstallerResult
+ * union for installer summary compatibility: refreshed → 'merged' (file
+ * mutated), unchanged → 'exists' (no-op), preserved → 'skipped' (user content
+ * protected). One row per file written, so the summary names the `.agents`
+ * twin beside its `.claude` sibling; when the repository has no `.agents/`
+ * directory a single 'skipped' row says the twins were not written.
+ */
+export async function distributeClaudeSkills(
+  cwd: string,
+  roots: readonly SkillTwinRoot[] = SKILL_TWIN_ROOTS,
+  opts?: { forceSkillRefresh?: boolean },
+): Promise<HookInstallerResult[]> {
+  const results: HookInstallerResult[] = [];
+  // The twin root is opt-in by the presence of an `.agents/` DIRECTORY at the
+  // init cwd — every surface init writes is anchored at the cwd, not at the
+  // git root, so init is run from the repository root. A missing directory is
+  // one disclosed row, and an `.agents` that is not a directory is one
+  // disclosed row too, rather than four write errors behind an "Init
+  // complete".
+  const agentsPath = path.join(cwd, '.agents');
+  // Guarded: initCommand has no catch, and every other skill IO in this file
+  // preserves rather than aborts init mid-flight; an unreadable `.agents`
+  // (EPERM, a TOCTOU remove) reads as "not a usable directory" and takes the
+  // disclosed non-directory row below.
+  let agentsIsDir = false;
+  // totem-context: intentional cleanup — a probe, not a write; the failure is
+  // disclosed as the non-directory row below rather than aborting init
+  try {
+    agentsIsDir = fs.statSync(agentsPath).isDirectory();
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  } catch {
+    agentsIsDir = false;
+  }
+  const writeTwin = roots.includes('.agents') && agentsIsDir;
+  if (roots.includes('.agents') && !writeTwin) {
     results.push({
-      file: skillRelative,
-      action: mappedAction,
-      ...(skillResult.forceSuppressed === true
-        ? {
-            summaryActionOverride:
-              'Force-overwritten: no canonical markers found, user content overwritten',
-          }
-        : {}),
-      ...(skillResult.err ? { err: skillResult.err } : {}),
+      file: '.agents/skills/ (twins)',
+      action: 'skipped',
+      summaryActionOverride: fs.existsSync(agentsPath)
+        ? 'Skipped: .agents at the init cwd is not a directory — the skill twins were not written'
+        : 'Skipped: no .agents/ directory at the init cwd — the skill twins are written only where that directory exists',
     });
   }
+  for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+    for (const root of roots) {
+      if (root === '.agents' && !writeTwin) continue;
+      const skillPath = path.join(cwd, root, 'skills', skill.name, 'SKILL.md');
+      const skillRelative = `${root}/skills/${skill.name}/SKILL.md`;
+      const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
+        force: opts?.forceSkillRefresh === true,
+      });
 
+      // Per W3.5 (mmnto-ai/totem#2008): the per-file warn fires ONLY on the
+      // no-marker suppression path. Marker-bearing refreshes (which ride the
+      // normal `refreshed`/`unchanged` path) emit no warning — keeps the
+      // signal-to-noise discipline tight (locked by invariant 8 in the spec).
+      if (skillResult.forceSuppressed === true) {
+        const { log } = await import('../ui.js');
+        log.warn(
+          'Totem',
+          `Force-overwriting ${skillRelative}: no canonical markers found, user content overwritten`,
+        );
+      }
+
+      const mappedAction: HookInstallerResult['action'] =
+        skillResult.action === 'created'
+          ? 'created'
+          : skillResult.action === 'refreshed'
+            ? 'merged'
+            : skillResult.action === 'unchanged'
+              ? 'exists'
+              : 'skipped';
+      // The summary renderer labels a Claude installer row "Scaffolded Claude
+      // Code hook"; the twin is neither Claude's nor a hook, so its rows carry
+      // their own label (the disclosed-override path the renderer already
+      // prints for created, merged, skipped and exists rows).
+      const twinLabel: string | undefined =
+        root === '.agents'
+          ? mappedAction === 'created'
+            ? 'Scaffolded vendor-neutral skill twin (.agents/skills)'
+            : mappedAction === 'merged'
+              ? 'Refreshed vendor-neutral skill twin (.agents/skills)'
+              : undefined
+          : undefined;
+      results.push({
+        file: skillRelative,
+        action: mappedAction,
+        ...(skillResult.forceSuppressed === true
+          ? {
+              summaryActionOverride:
+                'Force-overwritten: no canonical markers found, user content overwritten',
+            }
+          : twinLabel !== undefined
+            ? { summaryActionOverride: twinLabel }
+            : {}),
+        ...(skillResult.err ? { err: skillResult.err } : {}),
+      });
+    }
+  }
   return results;
 }
 
@@ -666,7 +742,7 @@ export function scaffoldClaudeSkill(
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+      writeFileAtomicSync(filePath, canonicalContent);
       return { action: 'created' };
     }
 
@@ -681,7 +757,7 @@ export function scaffoldClaudeSkill(
     // `forceSuppressed` so the caller can surface the destructive event.
     if (existingStart === -1 || existingEnd === -1 || existingStart > existingEnd) {
       if (options?.force === true) {
-        fs.writeFileSync(filePath, canonicalContent, 'utf-8');
+        writeFileAtomicSync(filePath, canonicalContent);
         return { action: 'refreshed', forceSuppressed: true };
       }
       return {
@@ -708,7 +784,7 @@ export function scaffoldClaudeSkill(
       return { action: 'unchanged' };
     }
 
-    fs.writeFileSync(filePath, merged, 'utf-8');
+    writeFileAtomicSync(filePath, merged);
     return { action: 'refreshed' };
     // totem-context: intentional cleanup — preserve user's skill file on any IO failure rather than aborting init mid-flight; mirrors scaffoldFile's failure posture
   } catch (err) {
@@ -1959,6 +2035,25 @@ export default {
               summary.push({ file: result.file, action: result.summaryActionOverride });
             }
           }
+        }
+      }
+
+      // --- Always run: the vendor-neutral `.agents/skills/` twins
+      //     (mmnto-ai/totem#2788, mmnto-ai/totem#2899). Independent of which
+      //     tools were detected: the surface is read by Gemini CLI, Antigravity,
+      //     Kimi and Codex, so a repository with no Claude surface and an
+      //     `.agents/` directory gets its twins too. Rows without a disclosed
+      //     label (an unchanged twin) stay silent, like the installers' own. ---
+      for (const result of await distributeClaudeSkills(cwd, ['.agents'], {
+        forceSkillRefresh: options?.forceSkillRefresh === true,
+      })) {
+        if (result.err) {
+          log.error(
+            'Totem Error',
+            `Skill twin scaffolding failed for ${result.file}: ${result.err}`,
+          ); // totem-ignore — internal installer error
+        } else if (result.summaryActionOverride) {
+          summary.push({ file: result.file, action: result.summaryActionOverride });
         }
       }
 
