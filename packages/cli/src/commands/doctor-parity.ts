@@ -228,16 +228,19 @@ function mechanicalArtifactsFor(
         markers,
         canonicalBlock: extract(s.content, markers),
         lineName: `Parity: agents-skills (${s.name})`,
-        // totem init does not write this surface until #2532 slice 2 — the
-        // honest remedy today is the byte-copy from the Claude twin. Descriptive
-        // prose, not a literal command (#2559 cross-bot round): `cp` is not
+        // totem init writes this surface since mmnto-ai/totem#2899 (the
+        // mmnto-ai/totem#2532 slice-2 charter, mmnto-ai/totem#2788) wherever
+        // the init cwd carries an `.agents/` directory, so re-running init from
+        // the repository root is the remedy; the byte-copy stays named as the
+        // hand remedy for a checkout that cannot run init. Descriptive prose,
+        // not a literal command (#2559 cross-bot round): `cp` is not
         // cmd.exe-portable, the skip state means the destination dir does not
         // exist yet, the twin itself can be absent, and doctor may run from a
         // subdirectory of gitRoot.
         installHint:
           `a byte-copy of .claude/skills/${s.name}/SKILL.md into .agents/skills/${s.name}/ ` +
-          `(create the directory first; totem init materializes the twin if absent, ` +
-          `and learns this surface in mmnto-ai/totem#2532 slice 2)`,
+          `(create the directory first), or run totem init from the repository root, ` +
+          `which writes the twin wherever an .agents/ directory exists (mmnto-ai/totem#2899)`,
       }));
     case 'review-reply-skill-content':
       return [

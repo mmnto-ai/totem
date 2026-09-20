@@ -579,25 +579,30 @@ async function installClaudeHooks(
   });
 
   // 5. Distribute session-utility skills (mmnto-ai/totem#1890 Phase C
-  //    slice 3) to `.claude/skills/` and, where the repository carries an
-  //    `.agents/` directory, to the `.agents/skills/` twin as well
-  //    (mmnto-ai/totem#2899).
-  results.push(...(await distributeClaudeSkills(cwd, opts)));
+  //    slice 3) to `.claude/skills/`. The vendor-neutral `.agents/skills/`
+  //    twin is written by initCommand's own step, independent of which
+  //    tools were detected (mmnto-ai/totem#2788, mmnto-ai/totem#2899).
+  results.push(...(await distributeClaudeSkills(cwd, ['.claude'], opts)));
 
   return results;
 }
 
 /**
- * The roots a distributed skill is written to. `.claude/skills/` always; the
- * `.agents/skills/` twin whenever the repository carries an `.agents/`
- * directory — the cohort's twin convention is opt-in by that directory's
- * presence, and a repository that has it expects both copies byte-equal
- * (this repository locks the equality in its own tests). Before
- * mmnto-ai/totem#2899 init wrote only the `.claude` copy and left a
- * consumer's twin on the previous text; two liquid-city syncs found the
- * drift by `cmp` and hand-copied the twin forward.
+ * The roots a distributed skill is written to. `.claude/skills/` is the
+ * Claude Code surface, written by the Claude installer; `.agents/skills/` is
+ * the vendor-neutral surface that Gemini CLI, Antigravity, Kimi and Codex
+ * read (mmnto-ai/totem#2532), written by a step of its own whenever the
+ * init cwd carries an `.agents/` directory, whichever tools were detected
+ * (mmnto-ai/totem#2788, the slice-2 charter; mmnto-ai/totem#2899, the consumer
+ * report). The two copies share the managed block — same constants, same
+ * markers — and each keeps its own extension tail below the end marker, which
+ * is the contract the parity manifest states; byte equality is the
+ * zero-tail case. Before this, init wrote only the `.claude` copy and left a
+ * consumer's twin on the previous text; two liquid-city syncs found the drift
+ * by `cmp` and hand-copied the twin forward.
  */
 export const SKILL_TWIN_ROOTS = ['.claude', '.agents'] as const;
+export type SkillTwinRoot = (typeof SKILL_TWIN_ROOTS)[number];
 
 /**
  * Distribute every session-utility skill (mmnto-ai/totem#1890 Phase C slice
@@ -615,21 +620,31 @@ export const SKILL_TWIN_ROOTS = ['.claude', '.agents'] as const;
  */
 export async function distributeClaudeSkills(
   cwd: string,
+  roots: readonly SkillTwinRoot[] = SKILL_TWIN_ROOTS,
   opts?: { forceSkillRefresh?: boolean },
 ): Promise<HookInstallerResult[]> {
   const results: HookInstallerResult[] = [];
-  const twinPresent = fs.existsSync(path.join(cwd, '.agents'));
-  if (!twinPresent) {
+  // The twin root is opt-in by the presence of an `.agents/` DIRECTORY at the
+  // init cwd — every surface init writes is anchored at the cwd, not at the
+  // git root, so init is run from the repository root. A missing directory is
+  // one disclosed row, and an `.agents` that is not a directory is one
+  // disclosed row too, rather than four write errors behind an "Init
+  // complete".
+  const agentsPath = path.join(cwd, '.agents');
+  const agentsIsDir = fs.existsSync(agentsPath) && fs.statSync(agentsPath).isDirectory();
+  const writeTwin = roots.includes('.agents') && agentsIsDir;
+  if (roots.includes('.agents') && !writeTwin) {
     results.push({
       file: '.agents/skills/ (twins)',
       action: 'skipped',
-      summaryActionOverride:
-        'Skipped: no .agents/ directory in this repository — the skill twins are written only where that directory exists',
+      summaryActionOverride: fs.existsSync(agentsPath)
+        ? 'Skipped: .agents at the init cwd is not a directory — the skill twins were not written'
+        : 'Skipped: no .agents/ directory at the init cwd — the skill twins are written only where that directory exists',
     });
   }
   for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
-    for (const root of SKILL_TWIN_ROOTS) {
-      if (root === '.agents' && !twinPresent) continue;
+    for (const root of roots) {
+      if (root === '.agents' && !writeTwin) continue;
       const skillPath = path.join(cwd, root, 'skills', skill.name, 'SKILL.md');
       const skillRelative = `${root}/skills/${skill.name}/SKILL.md`;
       const skillResult = scaffoldClaudeSkill(skillPath, skill.content, {
@@ -656,6 +671,18 @@ export async function distributeClaudeSkills(
             : skillResult.action === 'unchanged'
               ? 'exists'
               : 'skipped';
+      // The summary renderer labels a Claude installer row "Scaffolded Claude
+      // Code hook"; the twin is neither Claude's nor a hook, so its rows carry
+      // their own label (the disclosed-override path the renderer already
+      // prints for created, merged, skipped and exists rows).
+      const twinLabel: string | undefined =
+        root === '.agents'
+          ? mappedAction === 'created'
+            ? 'Scaffolded vendor-neutral skill twin (.agents/skills)'
+            : mappedAction === 'merged'
+              ? 'Refreshed vendor-neutral skill twin (.agents/skills)'
+              : undefined
+          : undefined;
       results.push({
         file: skillRelative,
         action: mappedAction,
@@ -664,7 +691,9 @@ export async function distributeClaudeSkills(
               summaryActionOverride:
                 'Force-overwritten: no canonical markers found, user content overwritten',
             }
-          : {}),
+          : twinLabel !== undefined
+            ? { summaryActionOverride: twinLabel }
+            : {}),
         ...(skillResult.err ? { err: skillResult.err } : {}),
       });
     }
@@ -2000,6 +2029,25 @@ export default {
               summary.push({ file: result.file, action: result.summaryActionOverride });
             }
           }
+        }
+      }
+
+      // --- Always run: the vendor-neutral `.agents/skills/` twins
+      //     (mmnto-ai/totem#2788, mmnto-ai/totem#2899). Independent of which
+      //     tools were detected: the surface is read by Gemini CLI, Antigravity,
+      //     Kimi and Codex, so a repository with no Claude surface and an
+      //     `.agents/` directory gets its twins too. Rows without a disclosed
+      //     label (an unchanged twin) stay silent, like the installers' own. ---
+      for (const result of await distributeClaudeSkills(cwd, ['.agents'], {
+        forceSkillRefresh: options?.forceSkillRefresh === true,
+      })) {
+        if (result.err) {
+          log.error(
+            'Totem Error',
+            `Skill twin scaffolding failed for ${result.file}: ${result.err}`,
+          ); // totem-ignore — internal installer error
+        } else if (result.summaryActionOverride) {
+          summary.push({ file: result.file, action: result.summaryActionOverride });
         }
       }
 

@@ -249,6 +249,29 @@ describe('ejectCommand', () => {
     expect(fs.existsSync(path.join(skillDir, 'totem.md'))).toBe(false);
   });
 
+  it('removes the .agents/skills twin init wrote beside the .claude copy, and names it (mmnto-ai/totem#2899)', async () => {
+    // Before the twin write landed, eject scrubbed `.claude/skills/` only and a
+    // twin written by init survived unnamed in the Removed and Skipped lists —
+    // the orphan class the derived scrub list exists to prevent.
+    const managed = '<!-- totem:skill-start -->\nmanaged\n<!-- totem:skill-end -->\n';
+    for (const root of ['.claude', '.agents']) {
+      const dir = path.join(cwd, root, 'skills', 'signon');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), managed);
+    }
+    const userTwin = path.join(cwd, '.agents', 'skills', 'review-loop', 'SKILL.md');
+    fs.mkdirSync(path.dirname(userTwin), { recursive: true });
+    fs.writeFileSync(userTwin, '# mine, no markers\n');
+
+    await ejectCommand({ force: true });
+
+    expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signon', 'SKILL.md'))).toBe(false);
+    expect(fs.existsSync(path.join(cwd, '.agents', 'skills', 'signon', 'SKILL.md'))).toBe(false);
+    // A marker-less twin is the user's and stays, exactly like a marker-less
+    // .claude copy.
+    expect(fs.readFileSync(userTwin, 'utf-8')).toBe('# mine, no markers\n');
+  });
+
   it('scrubs AI reflex block from CLAUDE.md', async () => {
     const claudePath = path.join(cwd, 'CLAUDE.md');
     fs.writeFileSync(
@@ -1994,7 +2017,10 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
         ...totemScaffoldedFiles('.totem'),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) => [
+          `.claude/skills/${s.name}/SKILL.md`,
+          `.agents/skills/${s.name}/SKILL.md`,
+        ]),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs('.totem'),

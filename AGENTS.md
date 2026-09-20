@@ -63,7 +63,7 @@ Not mechanically enforced. Follow because it reduces review noise.
 
 ## Repository skills
 
-Beside the installed ones: `/preflight <issue>` (spec + search before coding), `/prepush` (format + lint + review before push), `/postmerge <prs>` (extract lessons after merge). Skills also live under `.agents/skills/` for agents that read that path, a hand-kept copy of the `.claude/skills/` files until `totem init` writes both (mmnto-ai/totem#2788).
+Beside the installed ones: `/preflight <issue>` (spec + search before coding), `/prepush` (format + lint + review before push), `/postmerge <prs>` (extract lessons after merge). Skills also live under `.agents/skills/` for agents that read that path; `totem init` writes them beside the `.claude/skills/` copies wherever this directory exists, equal inside the markers with each file's own extension tail below the end marker (mmnto-ai/totem#2788, landed by mmnto-ai/totem#2899).
 
 ## Agent bus
 

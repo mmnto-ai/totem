@@ -635,10 +635,15 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     await import('./init-templates.js');
   const distributedSkillNames = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
 
-  const skillsRoot = path.join(cwd, '.claude', 'skills');
-
-  for (const name of distributedSkillNames) {
-    const rel = `.claude/skills/${name}/SKILL.md`;
+  // Both roots init writes (mmnto-ai/totem#2899): the `.claude` copy and the
+  // vendor-neutral `.agents` twin — same names, same markers, so the same
+  // marker test decides what is Totem's to remove on either root.
+  const roots = ['.claude', '.agents'] as const;
+  for (const [root, name] of roots.flatMap((r) =>
+    distributedSkillNames.map((n) => [r, n] as const),
+  )) {
+    const skillsRoot = path.join(cwd, root, 'skills');
+    const rel = `${root}/skills/${name}/SKILL.md`;
     const filePath = path.join(skillsRoot, name, 'SKILL.md');
     if (!fs.existsSync(filePath)) {
       summary.skipped.push(`${rel} (not found)`);
@@ -673,14 +678,17 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
     }
   }
 
-  // Prune the skills root if empty after per-skill pruning.
-  try {
-    if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
-      fs.rmdirSync(skillsRoot);
+  // Prune each skills root if empty after per-skill pruning.
+  for (const root of roots) {
+    const skillsRoot = path.join(cwd, root, 'skills');
+    try {
+      if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
+        fs.rmdirSync(skillsRoot);
+      }
+      // totem-context: intentional cleanup — best-effort skills-root pruning
+    } catch {
+      /* eject best-effort */
     }
-    // totem-context: intentional cleanup — best-effort skills-root pruning
-  } catch {
-    /* eject best-effort */
   }
 }
 
@@ -1130,7 +1138,10 @@ export async function deriveDirtyTreeSense(
         ...totemScaffoldedFiles(totemDir),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.map((s) => `.claude/skills/${s.name}/SKILL.md`),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) => [
+          `.claude/skills/${s.name}/SKILL.md`,
+          `.agents/skills/${s.name}/SKILL.md`,
+        ]),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs(totemDir),

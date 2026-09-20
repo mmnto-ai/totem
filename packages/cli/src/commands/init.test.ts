@@ -3287,6 +3287,7 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     tool: string,
     input: Record<string, unknown>,
   ): { threw: boolean; message: string } {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
     try {
       beforeTool(tool, input);
@@ -3559,7 +3560,17 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     cleanTmpDir(tmpDir);
   });
 
-  it('re-stamps a stale .agents twin to the same bytes as the .claude copy and reports both rows', async () => {
+  const managedBlock = (text: string): string => {
+    const start = text.indexOf(SKILL_MARKER_START);
+    const end = text.indexOf(SKILL_MARKER_END);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    return text.slice(start, end + SKILL_MARKER_END.length);
+  };
+  const readSkill = (root: string, name: string): string =>
+    fs.readFileSync(path.join(tmpDir, root, 'skills', name, 'SKILL.md'), 'utf-8');
+
+  it('re-stamps a stale .agents twin to the same managed block as the .claude copy and reports both rows (the zero-tail case is byte-equal)', async () => {
     expect(SKILL_TWIN_ROOTS).toEqual(['.claude', '.agents']);
     // A consumer that carries the twin convention, with one twin left on an
     // older text (the liquid-city shape): markers intact, inside text stale.
@@ -3569,34 +3580,73 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     expect(stale).not.toBe(REVIEW_REPLY_SKILL_CONTENT);
     fs.writeFileSync(staleTwin, stale);
 
-    const results = await distributeClaudeSkills(tmpDir);
+    const results = await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
 
     for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
-      const claude = fs.readFileSync(
-        path.join(tmpDir, '.claude', 'skills', skill.name, 'SKILL.md'),
-        'utf-8',
-      );
-      const agents = fs.readFileSync(
-        path.join(tmpDir, '.agents', 'skills', skill.name, 'SKILL.md'),
-        'utf-8',
-      );
-      expect(agents, `${skill.name}: the .agents twin must equal the .claude copy`).toBe(claude);
+      const claude = readSkill('.claude', skill.name);
+      const agents = readSkill('.agents', skill.name);
+      expect(agents, `${skill.name}: with no extension tail the twin is byte-equal`).toBe(claude);
       expect(results.map((r) => r.file)).toContain(`.claude/skills/${skill.name}/SKILL.md`);
       expect(results.map((r) => r.file)).toContain(`.agents/skills/${skill.name}/SKILL.md`);
     }
-    // The stale twin was a marker-bearing refresh, reported as 'merged'; the
-    // fresh .claude copy was 'created'.
-    expect(results.find((r) => r.file === '.agents/skills/review-reply/SKILL.md')?.action).toBe(
-      'merged',
-    );
+    // The stale twin was a marker-bearing refresh, reported as 'merged' with
+    // the twin's own summary label; the fresh .claude copy was 'created'.
+    const twinRow = results.find((r) => r.file === '.agents/skills/review-reply/SKILL.md');
+    expect(twinRow?.action).toBe('merged');
+    expect(twinRow?.summaryActionOverride).toMatch(/Refreshed vendor-neutral skill twin/);
     expect(results.find((r) => r.file === '.claude/skills/review-reply/SKILL.md')?.action).toBe(
       'created',
     );
     expect(fs.readFileSync(staleTwin, 'utf-8')).not.toContain('STALE PHASE');
   });
 
-  it('writes no twin where the repository has no .agents directory, and says so in one row', async () => {
-    const results = await distributeClaudeSkills(tmpDir);
+  it('keeps each surface its own extension tail below the end marker while the managed blocks stay equal (mmnto-ai/totem#2788)', async () => {
+    fs.mkdirSync(path.join(tmpDir, '.agents'), { recursive: true });
+    await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
+    const claudeTail = '\n\n## My Claude-only notes\n\nkept on the .claude copy\n';
+    const agentsTail = '\n\n## My vendor notes\n\nkept on the .agents twin\n';
+    fs.appendFileSync(path.join(tmpDir, '.claude', 'skills', 'signon', 'SKILL.md'), claudeTail);
+    fs.appendFileSync(
+      path.join(tmpDir, '.agents', 'skills', 'review-loop', 'SKILL.md'),
+      agentsTail,
+    );
+
+    const second = await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
+
+    for (const row of second) expect(row.action, row.file).toBe('exists');
+    const signonClaude = readSkill('.claude', 'signon');
+    const signonAgents = readSkill('.agents', 'signon');
+    expect(signonClaude.endsWith(claudeTail)).toBe(true);
+    expect(signonAgents.endsWith(claudeTail)).toBe(false);
+    expect(signonClaude).not.toBe(signonAgents);
+    expect(managedBlock(signonClaude)).toBe(managedBlock(signonAgents));
+    const loopClaude = readSkill('.claude', 'review-loop');
+    const loopAgents = readSkill('.agents', 'review-loop');
+    expect(loopAgents.endsWith(agentsTail)).toBe(true);
+    expect(loopClaude.endsWith(agentsTail)).toBe(false);
+    expect(managedBlock(loopClaude)).toBe(managedBlock(loopAgents));
+  });
+
+  it('preserves a marker-less twin unless the refresh is forced, with the same warning row as the .claude copy', async () => {
+    const twin = path.join(tmpDir, '.agents', 'skills', 'signon', 'SKILL.md');
+    fs.mkdirSync(path.dirname(twin), { recursive: true });
+    fs.writeFileSync(twin, '# my own signon\n');
+
+    const preserved = await distributeClaudeSkills(tmpDir, ['.agents']);
+    const preservedRow = preserved.find((r) => r.file === '.agents/skills/signon/SKILL.md');
+    expect(preservedRow?.action).toBe('skipped');
+    expect(preservedRow?.err).toBeTruthy();
+    expect(fs.readFileSync(twin, 'utf-8')).toBe('# my own signon\n');
+
+    const forced = await distributeClaudeSkills(tmpDir, ['.agents'], { forceSkillRefresh: true });
+    const forcedRow = forced.find((r) => r.file === '.agents/skills/signon/SKILL.md');
+    expect(forcedRow?.action).toBe('merged');
+    expect(forcedRow?.summaryActionOverride).toMatch(/Force-overwritten/);
+    expect(managedBlock(fs.readFileSync(twin, 'utf-8'))).toBe(managedBlock(SIGNON_SKILL_CONTENT));
+  });
+
+  it('writes no twin where the init cwd has no .agents directory, and says so in one row', async () => {
+    const results = await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
     expect(fs.existsSync(path.join(tmpDir, '.agents'))).toBe(false);
     for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
       expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills', skill.name, 'SKILL.md'))).toBe(
@@ -3606,16 +3656,31 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     const skipped = results.filter((r) => r.file.startsWith('.agents/'));
     expect(skipped).toHaveLength(1);
     expect(skipped[0]?.action).toBe('skipped');
-    expect(skipped[0]?.summaryActionOverride).toMatch(/no \.agents\/ directory/);
+    expect(skipped[0]?.summaryActionOverride).toMatch(/no \.agents\/ directory at the init cwd/);
   });
 
-  it('is idempotent: a second run reports every twin as unchanged', async () => {
+  it('treats an .agents that is not a directory as one disclosed skipped row, not four write errors', async () => {
+    fs.writeFileSync(path.join(tmpDir, '.agents'), 'not a directory\n');
+    const results = await distributeClaudeSkills(tmpDir, ['.agents']);
+    expect(results).toHaveLength(1);
+    expect(results[0]?.action).toBe('skipped');
+    expect(results[0]?.err).toBeUndefined();
+    expect(results[0]?.summaryActionOverride).toMatch(/not a directory/);
+    expect(fs.readFileSync(path.join(tmpDir, '.agents'), 'utf-8')).toBe('not a directory\n');
+  });
+
+  it('is idempotent: a second run reports every twin as unchanged, and the .claude-only root never touches .agents', async () => {
     fs.mkdirSync(path.join(tmpDir, '.agents'), { recursive: true });
-    await distributeClaudeSkills(tmpDir);
-    const second = await distributeClaudeSkills(tmpDir);
+    await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
+    const second = await distributeClaudeSkills(tmpDir, ['.claude', '.agents']);
     const twins = second.filter((r) => r.file.startsWith('.agents/skills/'));
     expect(twins).toHaveLength(DISTRIBUTED_CLAUDE_SKILLS.length);
     for (const row of twins) expect(row.action, row.file).toBe('exists');
+    // The Claude installer's own call writes the .claude root only: no
+    // .agents row of any kind, so a repository without the directory hears
+    // about it once, from initCommand's twin step, never from the installer.
+    const claudeOnly = await distributeClaudeSkills(tmpDir, ['.claude']);
+    expect(claudeOnly.some((r) => r.file.startsWith('.agents/'))).toBe(false);
   });
 });
 
@@ -4049,8 +4114,9 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
   });
 
   // ── vendor-neutral .agents/skills mirror (mmnto-ai/totem#2532 slice 1) ──
-  // Until `totem init` learns the surface (slice 2) and the agents-skills
-  // parity-manifest row arms, THIS lock is the only CI sensor keeping the
+  // `totem init` writes this surface since mmnto-ai/totem#2899 (the
+  // mmnto-ai/totem#2788 slice-2 charter) and the agents-skills parity row is
+  // armed; THIS lock is the in-repo CI sensor keeping the
   // .agents byte-copies from rotting when a skill's canonical content changes
   // (slice-1 falsification round, F3).
   it('every DISTRIBUTED_CLAUDE_SKILLS constant matches its .agents/skills byte-copy', () => {
