@@ -60,6 +60,8 @@ import {
   renderAgentsFloorScaffold,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  SKILL_TWIN_ROOTS,
+  type SkillTwinRoot,
   TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
@@ -587,22 +589,14 @@ async function installClaudeHooks(
   return results;
 }
 
-/**
- * The roots a distributed skill is written to. `.claude/skills/` is the
- * Claude Code surface, written by the Claude installer; `.agents/skills/` is
- * the vendor-neutral surface that Gemini CLI, Antigravity, Kimi and Codex
- * read (mmnto-ai/totem#2532), written by a step of its own whenever the
- * init cwd carries an `.agents/` directory, whichever tools were detected
- * (mmnto-ai/totem#2788, the slice-2 charter; mmnto-ai/totem#2899, the consumer
- * report). The two copies share the managed block — same constants, same
- * markers — and each keeps its own extension tail below the end marker, which
- * is the contract the parity manifest states; byte equality is the
- * zero-tail case. Before this, init wrote only the `.claude` copy and left a
- * consumer's twin on the previous text; two liquid-city syncs found the drift
- * by `cmp` and hand-copied the twin forward.
- */
-export const SKILL_TWIN_ROOTS = ['.claude', '.agents'] as const;
-export type SkillTwinRoot = (typeof SKILL_TWIN_ROOTS)[number];
+// The root list `SKILL_TWIN_ROOTS` lives in init-templates.ts beside the skill
+// constants, because eject reads the same list (mmnto-ai/totem#2899): the
+// `.claude/skills/` copy is written by the Claude installer, the
+// vendor-neutral `.agents/skills/` twin by a step of its own whenever the init
+// cwd carries an `.agents/` directory, whichever tools were detected. Before
+// this, init wrote only the `.claude` copy and left a consumer's twin on the
+// previous text; two liquid-city syncs found the drift by `cmp` and
+// hand-copied the twin forward.
 
 /**
  * Distribute every session-utility skill (mmnto-ai/totem#1890 Phase C slice
@@ -631,7 +625,19 @@ export async function distributeClaudeSkills(
   // disclosed row too, rather than four write errors behind an "Init
   // complete".
   const agentsPath = path.join(cwd, '.agents');
-  const agentsIsDir = fs.existsSync(agentsPath) && fs.statSync(agentsPath).isDirectory();
+  // Guarded: initCommand has no catch, and every other skill IO in this file
+  // preserves rather than aborts init mid-flight; an unreadable `.agents`
+  // (EPERM, a TOCTOU remove) reads as "not a usable directory" and takes the
+  // disclosed non-directory row below.
+  let agentsIsDir = false;
+  // totem-context: intentional cleanup — a probe, not a write; the failure is
+  // disclosed as the non-directory row below rather than aborting init
+  try {
+    agentsIsDir = fs.statSync(agentsPath).isDirectory();
+    // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+  } catch {
+    agentsIsDir = false;
+  }
   const writeTwin = roots.includes('.agents') && agentsIsDir;
   if (roots.includes('.agents') && !writeTwin) {
     results.push({

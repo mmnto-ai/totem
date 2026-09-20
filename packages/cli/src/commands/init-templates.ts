@@ -3472,6 +3472,22 @@ export const LEGACY_MANAGED_SESSION_HOOKS: ReadonlyArray<LegacyManagedHook> = [
 export const SKILL_MARKER_START = '<!-- totem:skill-start -->';
 export const SKILL_MARKER_END = '<!-- totem:skill-end -->';
 
+/**
+ * The two roots a distributed skill is written to (mmnto-ai/totem#2788, the
+ * mmnto-ai/totem#2532 slice-2 charter; landed by mmnto-ai/totem#2899): the
+ * `.claude/skills/` copy Claude Code reads and the vendor-neutral
+ * `.agents/skills/` twin that Gemini CLI, Antigravity, Kimi and Codex read.
+ * ONE list, read by both `totem init` (which writes each root under its own
+ * condition) and `totem eject` (which scrubs and rosters both), so a root can
+ * never drift between the writer and the remover the way a hand-mirrored
+ * literal would (the re-armed leg on mmnto-ai/totem#2899 fold 1, F3). The two
+ * copies are equal inside the markers and each keeps its own extension tail
+ * below the end marker — the contract the parity manifest states; byte
+ * equality is the zero-tail case.
+ */
+export const SKILL_TWIN_ROOTS = ['.claude', '.agents'] as const;
+export type SkillTwinRoot = (typeof SKILL_TWIN_ROOTS)[number];
+
 export const SIGNOFF_SKILL_CONTENT =
   `---
 name: signoff

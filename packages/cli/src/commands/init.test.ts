@@ -49,7 +49,6 @@ import {
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
-  SKILL_TWIN_ROOTS,
   upgradeReflexes,
 } from './init.js';
 import { detectProject } from './init-detect.js';
@@ -74,6 +73,7 @@ import {
   SIGNON_SKILL_CONTENT,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  SKILL_TWIN_ROOTS,
   TOTEM_FILE_END,
   TOTEM_FILE_MARKER,
 } from './init-templates.js';
@@ -3287,7 +3287,6 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     tool: string,
     input: Record<string, unknown>,
   ): { threw: boolean; message: string } {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const beforeTool = require(hookPath) as (t: string, i: unknown) => void;
     try {
       beforeTool(tool, input);
@@ -3569,6 +3568,64 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
   };
   const readSkill = (root: string, name: string): string =>
     fs.readFileSync(path.join(tmpDir, root, 'skills', name, 'SKILL.md'), 'utf-8');
+
+  it('totem init itself writes the twins on a repository with an .agents/ directory and no Claude surface, and the summary names them (the command-level sensor mmnto-ai/totem#2899 names)', async () => {
+    // The helper-level rows below lock distributeClaudeSkills' contract; none
+    // of them locks WHERE init calls it, and the fold under review is exactly
+    // that placement (the writer moved out of the Claude installer into an
+    // always-run step). Reverting the fold left every helper row green (the
+    // re-armed leg's finding F1), so this row runs the command against the
+    // population the fold exists for — an `.agents/` directory, no CLAUDE.md,
+    // no .claude/, no other AI-tool surface — and reads the disk after.
+    const originalCwd = process.cwd();
+    const savedIsTTY = process.stdin.isTTY;
+    const savedGlobal = process.env['GIT_CONFIG_GLOBAL'];
+    const savedSystem = process.env['GIT_CONFIG_SYSTEM'];
+    onTestFinished(() => {
+      vi.restoreAllMocks();
+      process.chdir(originalCwd);
+      Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
+      if (savedGlobal === undefined) delete process.env['GIT_CONFIG_GLOBAL'];
+      else process.env['GIT_CONFIG_GLOBAL'] = savedGlobal;
+      if (savedSystem === undefined) delete process.env['GIT_CONFIG_SYSTEM'];
+      else process.env['GIT_CONFIG_SYSTEM'] = savedSystem;
+    });
+    // Hermetic git, as in the non-interactive describe: the installers' own git
+    // calls read ambient config, so the isolation is env-level for the run.
+    const emptyGitConfig = path.join(tmpDir, 'empty-gitconfig');
+    fs.writeFileSync(emptyGitConfig, '', 'utf-8');
+    process.env['GIT_CONFIG_GLOBAL'] = emptyGitConfig;
+    process.env['GIT_CONFIG_SYSTEM'] = emptyGitConfig;
+    const gitInit = spawnSync('git', ['init'], { cwd: tmpDir, encoding: 'utf-8' });
+    expect(gitInit.status).toBe(0);
+    fs.mkdirSync(path.join(tmpDir, '.agents'));
+    process.chdir(tmpDir);
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+
+    try {
+      await initCommand({ yes: true });
+    } finally {
+      // Back out of the temp dir here, not only in onTestFinished: that hook
+      // runs after afterEach, whose cleanTmpDir cannot remove the cwd on win32.
+      process.chdir(originalCwd);
+    }
+
+    for (const skill of DISTRIBUTED_CLAUDE_SKILLS) {
+      const twin = path.join(tmpDir, '.agents', 'skills', skill.name, 'SKILL.md');
+      expect(fs.existsSync(twin), twin).toBe(true);
+      expect(managedBlock(readSkill('.agents', skill.name))).toBe(managedBlock(skill.content));
+    }
+    // No Claude surface was detected, so no .claude copy: the twins came from
+    // the always-run step, not from the Claude installer.
+    expect(fs.existsSync(path.join(tmpDir, '.claude', 'skills'))).toBe(false);
+    const output = stderr.join('\n');
+    expect(output).toContain('Scaffolded vendor-neutral skill twin (.agents/skills)');
+    expect(output).not.toContain('Skill twin scaffolding failed');
+  }, 60000);
 
   it('re-stamps a stale .agents twin to the same managed block as the .claude copy and reports both rows (the zero-tail case is byte-equal)', async () => {
     expect(SKILL_TWIN_ROOTS).toEqual(['.claude', '.agents']);

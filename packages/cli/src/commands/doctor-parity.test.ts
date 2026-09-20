@@ -787,8 +787,11 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
     // The remedy must be one that actually touches this surface AND holds in
     // the states it is prescribed for (slice-1 falsification F2 + the #2559
     // cross-bot round): descriptive byte-copy prose naming directory creation
-    // and the twin fallback — never a bare platform-bound command, and never
-    // "via totem init" (which does not write .agents/skills until slice 2).
+    // and the twin fallback — never a bare platform-bound command. Since
+    // mmnto-ai/totem#2899 init writes .agents/skills too, so the hint may name
+    // init; what it must never be is the bare "via totem init" default, which
+    // says nothing about the .agents/ precondition or the marker-stripped
+    // preserve (the third-branch row below locks that qualification).
     expect(line.remediation).toContain(
       `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
     );
@@ -835,6 +838,14 @@ describe('checkParity — mechanical agents-skills wiring (#2532 slice 1)', () =
       `a byte-copy of .claude/skills/${first.name}/SKILL.md into .agents/skills/${first.name}/`,
     );
     expect(line.remediation).not.toContain('via totem init');
+    // The init clause must hold in THIS state (re-armed leg on mmnto-ai/totem#2899
+    // fold 1, F2): a plain `totem init` preserves a marker-stripped twin, so the
+    // hint that names init as a remedy has to say what init does here and name
+    // the flag that overwrites — a remedy that is inert in the branch it is
+    // prescribed for is the class doctor-parity.ts's installHint docblock was
+    // written against.
+    expect(line.remediation).toContain('a marker-stripped twin is preserved');
+    expect(line.remediation).toContain('--force-skill-refresh');
   });
 });
 

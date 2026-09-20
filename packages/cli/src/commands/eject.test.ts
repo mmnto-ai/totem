@@ -34,6 +34,7 @@ import {
   REFLEX_START,
   SKILL_MARKER_END,
   SKILL_MARKER_START,
+  SKILL_TWIN_ROOTS,
 } from './init-templates.js';
 import { resolveGitRootForHookPath, resolveHooksDir } from './install-hooks.js';
 
@@ -262,14 +263,31 @@ describe('ejectCommand', () => {
     const userTwin = path.join(cwd, '.agents', 'skills', 'review-loop', 'SKILL.md');
     fs.mkdirSync(path.dirname(userTwin), { recursive: true });
     fs.writeFileSync(userTwin, '# mine, no markers\n');
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map(String).join(' '));
+    });
 
-    await ejectCommand({ force: true });
+    try {
+      await ejectCommand({ force: true });
+    } finally {
+      spy.mockRestore();
+    }
 
     expect(fs.existsSync(path.join(cwd, '.claude', 'skills', 'signon', 'SKILL.md'))).toBe(false);
     expect(fs.existsSync(path.join(cwd, '.agents', 'skills', 'signon', 'SKILL.md'))).toBe(false);
     // A marker-less twin is the user's and stays, exactly like a marker-less
     // .claude copy.
     expect(fs.readFileSync(userTwin, 'utf-8')).toBe('# mine, no markers\n');
+    // "and names it": the summary is the accounting surface, so the removed
+    // twin is listed under Removed and the preserved one under Skipped with its
+    // reason (the re-armed leg on mmnto-ai/totem#2899 fold 1: the row above
+    // asserted absence only, while the title promised the naming).
+    const output = lines.join('\n');
+    expect(output).toContain('.agents/skills/signon/SKILL.md');
+    expect(output).toContain(
+      '.agents/skills/review-loop/SKILL.md (no Totem markers — user-authored)',
+    );
   });
 
   it('scrubs AI reflex block from CLAUDE.md', async () => {
@@ -2017,10 +2035,9 @@ describe('deriveDirtyTreeSense (User-File Mutation Contract rule 2)', () => {
         ...totemScaffoldedFiles('.totem'),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) => [
-          `.claude/skills/${s.name}/SKILL.md`,
-          `.agents/skills/${s.name}/SKILL.md`,
-        ]),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) =>
+          SKILL_TWIN_ROOTS.map((root) => `${root}/skills/${s.name}/SKILL.md`),
+        ),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs('.totem'),

@@ -631,15 +631,17 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
   // canonical DISTRIBUTED_CLAUDE_SKILLS so eject stays in lockstep with
   // `totem init` — a new distributed skill can never orphan on eject because a
   // hand-mirrored list drifted.
-  const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START, SKILL_MARKER_END } =
+  const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_MARKER_START, SKILL_MARKER_END, SKILL_TWIN_ROOTS } =
     await import('./init-templates.js');
   const distributedSkillNames = DISTRIBUTED_CLAUDE_SKILLS.map((s) => s.name);
 
   // Both roots init writes (mmnto-ai/totem#2899): the `.claude` copy and the
   // vendor-neutral `.agents` twin — same names, same markers, so the same
-  // marker test decides what is Totem's to remove on either root.
-  const roots = ['.claude', '.agents'] as const;
-  for (const [root, name] of roots.flatMap((r) =>
+  // marker test decides what is Totem's to remove on either root. The root
+  // list is the same constant init reads, for the same reason the name list
+  // is: a hand-mirrored literal here would re-open on the root dimension the
+  // orphan class the derived list closes on the name dimension.
+  for (const [root, name] of SKILL_TWIN_ROOTS.flatMap((r) =>
     distributedSkillNames.map((n) => [r, n] as const),
   )) {
     const skillsRoot = path.join(cwd, root, 'skills');
@@ -679,7 +681,7 @@ async function scrubClaudeSkills(cwd: string, summary: EjectSummary): Promise<vo
   }
 
   // Prune each skills root if empty after per-skill pruning.
-  for (const root of roots) {
+  for (const root of SKILL_TWIN_ROOTS) {
     const skillsRoot = path.join(cwd, root, 'skills');
     try {
       if (fs.existsSync(skillsRoot) && fs.readdirSync(skillsRoot).length === 0) {
@@ -1132,16 +1134,15 @@ export async function deriveDirtyTreeSense(
     // its own catch is a sensor that can abort the eject it senses for
     // (round 1, finding 11).
     const { AI_TOOLS } = await import('./init-detect.js');
-    const { DISTRIBUTED_CLAUDE_SKILLS } = await import('./init-templates.js');
+    const { DISTRIBUTED_CLAUDE_SKILLS, SKILL_TWIN_ROOTS } = await import('./init-templates.js');
     const roster = [
       ...new Set([
         ...totemScaffoldedFiles(totemDir),
         CLAUDE_SETTINGS_LOCAL_FILE,
         CLAUDE_SETTINGS_FILE,
-        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) => [
-          `.claude/skills/${s.name}/SKILL.md`,
-          `.agents/skills/${s.name}/SKILL.md`,
-        ]),
+        ...DISTRIBUTED_CLAUDE_SKILLS.flatMap((s) =>
+          SKILL_TWIN_ROOTS.map((root) => `${root}/skills/${s.name}/SKILL.md`),
+        ),
         ...AI_TOOLS.flatMap((t) => (t.reflexFile === null ? [] : [t.reflexFile])),
         ...LEGACY_REFLEX_FILES,
         ...ejectArtifactDirs(totemDir),
