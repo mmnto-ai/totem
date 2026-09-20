@@ -234,12 +234,28 @@ test('RULE_PROVENANCE derives the count from committed data, never a literal', (
 // prose states, never from a literal, so a rotted hand-typed copy cannot
 // pass here while the artifact says otherwise.
 
-test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data', () => {
+test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fails loud on a hash-less rule', () => {
   const hashed = compiledRules.rules.filter(
     (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
   ).length;
   assert.equal(transforms.RULE_PROVENANCE_RATIO(), `${hashed} of ${compiledRules.rules.length}`);
   assert.match(transforms.RULE_PROVENANCE_RATIO(), /^\d+ of \d+$/);
+  // Discriminating: three hashed rules render "3 of 3"; a rule with no hash
+  // (or an empty one) is the corruption the sentence denies, so the figure
+  // refuses to render rather than publishing a ratio that contradicts it —
+  // the same guard the block transform carries for the maturity page.
+  const hashedOnly = writeTmpJson('ratio-hashed.json', {
+    rules: [{ lessonHash: 'a' }, { lessonHash: 'b' }, { lessonHash: 'c' }],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(hashedOnly), '3 of 3');
+  const hashless = writeTmpJson('ratio-hashless.json', {
+    rules: [{ lessonHash: 'a' }, {}],
+  });
+  assert.throws(() => transforms._renderRuleProvenanceRatio(hashless), /no lessonHash/);
+  const emptyHash = writeTmpJson('ratio-empty-hash.json', {
+    rules: [{ lessonHash: '' }],
+  });
+  assert.throws(() => transforms._renderRuleProvenanceRatio(emptyHash), /no lessonHash/);
 });
 
 test('NON_ARCHIVED_RULE_COUNT counts every rule whose status is not archived', () => {
@@ -261,16 +277,37 @@ test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hun
   const rest = Array.isArray(compiledRules.nonCompilable) ? compiledRules.nonCompilable.length : 0;
   const rounded = Math.round((distinct + rest) / 100) * 100;
   assert.equal(transforms.LESSON_RECORD_COUNT(), `about ${rounded.toLocaleString('en-US')}`);
+  // Discriminating fixtures, one per behaviour the name asserts. Rounding:
+  // 150 distinct + 1500 = 1650 rounds UP to 1,700 (a floor would say 1,600).
+  const round = writeTmpJson('round-rules.json', {
+    rules: Array.from({ length: 150 }, (_, i) => ({ lessonHash: `h${i}` })),
+    nonCompilable: Array.from({ length: 1500 }, () => ({})),
+  });
+  assert.equal(transforms._renderLessonRecordCount(round), 'about 1,700');
+  // Distinct: 150 rules over 50 hashes + 1600 = 1650 → 1,700 (counting rules
+  // instead of distinct lessons would say 1,750 → 1,800).
+  const duplicates = writeTmpJson('duplicate-hash-rules.json', {
+    rules: Array.from({ length: 150 }, (_, i) => ({ lessonHash: `h${i % 50}` })),
+    nonCompilable: Array.from({ length: 1600 }, () => ({})),
+  });
+  assert.equal(transforms._renderLessonRecordCount(duplicates), 'about 1,700');
+  // A corpus under one hundred cannot be stated as "about N hundred": the
+  // figure refuses (it used to publish "about 0" for five records).
   const tiny = writeTmpJson('tiny-rules.json', {
     rules: [{ lessonHash: 'a' }, { lessonHash: 'b' }],
     nonCompilable: [{}, {}, {}],
   });
-  assert.equal(transforms._renderLessonRecordCount(tiny), 'about 0');
-  const round = writeTmpJson('round-rules.json', {
-    rules: Array.from({ length: 150 }, (_, i) => ({ lessonHash: `h${i}` })),
-    nonCompilable: Array.from({ length: 1455 }, () => ({})),
+  assert.throws(() => transforms._renderLessonRecordCount(tiny), /too few/);
+  const ninetyNine = writeTmpJson('ninety-nine-rules.json', {
+    rules: [{ lessonHash: 'a' }],
+    nonCompilable: Array.from({ length: 98 }, () => ({})),
   });
-  assert.equal(transforms._renderLessonRecordCount(round), 'about 1,600');
+  assert.throws(() => transforms._renderLessonRecordCount(ninetyNine), /too few/);
+  const hundred = writeTmpJson('hundred-rules.json', {
+    rules: [{ lessonHash: 'a' }],
+    nonCompilable: Array.from({ length: 99 }, () => ({})),
+  });
+  assert.equal(transforms._renderLessonRecordCount(hundred), 'about 100');
   const empty = writeTmpJson('empty-rules.json', { rules: [] });
   assert.throws(() => transforms._renderLessonRecordCount(empty), /no rules array/);
 });
@@ -294,14 +331,61 @@ test('FREEZE_SINCE_MONTH renders the month and year of freeze.since in UTC, and 
     'December',
   ];
   assert.equal(transforms.FREEZE_SINCE_MONTH(), `${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`);
-  // A since on the last day of a month in UTC must not slip into the next
-  // month on a machine east of UTC.
-  const edge = writeTmpJson('edge-freeze.json', {
-    frozen: [{ id: 'rule-compilation', since: '2026-05-31' }],
-  });
-  assert.equal(transforms._renderFreezeSinceMonth(edge), 'May 2026');
+  // The render reads UTC fields, so a date-only since (midnight UTC) never
+  // shifts in-process whatever the zone. The hazard a local-time getter would
+  // introduce lies WEST of UTC on a first-of-month since, where midnight UTC
+  // is still the previous evening — and the previous month, and on January 1
+  // the previous year. In-process this test runs in whatever zone the machine
+  // has, so the discriminating check runs the render in a child process pinned
+  // to the westmost zone (Etc/GMT+12 is UTC-12 in POSIX's inverted sign).
   const lifted = writeTmpJson('lifted-freeze.json', { frozen: [] });
   assert.throws(() => transforms._renderFreezeSinceMonth(lifted), /no rule-compilation entry/);
+  const { execFileSync } = require('node:child_process');
+  const modulePath = path.join(__dirname, 'docs-transforms.cjs');
+  const renderWest = (since) => {
+    const fixture = writeTmpJson(`west-${since}.json`, {
+      frozen: [{ id: 'rule-compilation', since }],
+    });
+    const script = `process.stdout.write(require(${JSON.stringify(modulePath)})._renderFreezeSinceMonth(${JSON.stringify(fixture)}))`;
+    return execFileSync(process.execPath, ['-e', script], {
+      env: { ...process.env, TZ: 'Etc/GMT+12' },
+      encoding: 'utf-8',
+    });
+  };
+  assert.equal(renderWest('2026-06-01'), 'June 2026');
+  assert.equal(renderWest('2026-01-01'), 'January 2026');
+  assert.equal(renderWest('2026-05-31'), 'May 2026');
+});
+
+test('every docs marker in README.md and docs/**/*.md names a registered transform (a misspelled name is fail-quiet in the injector)', () => {
+  // markdown-magic reports a missing transform to stdout and still resolves,
+  // so docs-inject exits 0 and the hand-typed literal survives — the drift
+  // gate stays green on exactly the figure the markers exist to abolish. This
+  // lock fails the docs test instead.
+  const config = require('../md.config.cjs');
+  const registered = new Set(Object.keys(config.transforms));
+  const files = [path.join(ROOT, 'README.md')];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.name.endsWith('.md')) files.push(p);
+    }
+  };
+  walk(path.join(ROOT, 'docs'));
+  const unknown = [];
+  for (const file of files) {
+    const text = fs.readFileSync(file, 'utf-8');
+    for (const match of text.matchAll(/<!-- docs ([A-Za-z0-9_]+)/g)) {
+      if (!registered.has(match[1])) unknown.push(`${path.relative(ROOT, file)}: ${match[1]}`);
+    }
+  }
+  assert.deepEqual(unknown, [], 'every marker must name a registered transform');
+  // The landed page's three figures ride markers, not literals.
+  const page = fs.readFileSync(path.join(ROOT, 'docs', 'wiki', 'how-totem-gets-built.md'), 'utf-8');
+  for (const name of ['RULE_PROVENANCE_RATIO', 'LESSON_RECORD_COUNT', 'FREEZE_SINCE_MONTH']) {
+    assert.ok(page.includes(`<!-- docs ${name} -->`), `page must carry the ${name} marker`);
+  }
 });
 
 test('DAYS_UNDER_FREEZE derives days from freeze.since and the committed asOf', () => {

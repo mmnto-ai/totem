@@ -318,13 +318,24 @@ function loadRules(rulesPath, label) {
   return data;
 }
 
-/** `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules. */
+/**
+ * `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules.
+ * The sentence this sits in claims EVERY rule carries its lesson's hash, so a
+ * rule without one is a malformed artifact and fails the build, exactly as the
+ * block transform renderRuleProvenance does for the same claim on the
+ * maturity page — the figure never publishes a ratio that contradicts its own
+ * sentence (a "0 of 485" would have rendered before this guard).
+ */
 function renderRuleProvenanceRatio(rulesPath) {
   const data = loadRules(rulesPath, 'RULE_PROVENANCE_RATIO');
-  const hashed = data.rules.filter(
-    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
-  ).length;
-  return `${hashed} of ${data.rules.length}`;
+  data.rules.forEach((r, i) => {
+    if (typeof r.lessonHash !== 'string' || r.lessonHash.length === 0) {
+      throw new Error(
+        `[Totem Error] RULE_PROVENANCE_RATIO transform failed: rule[${i}] has no lessonHash — the provenance-chain claim cannot render.`,
+      );
+    }
+  });
+  return `${data.rules.length} of ${data.rules.length}`;
 }
 
 /** RULE_PROVENANCE_RATIO — e.g. `485 of 485`, from .totem/compiled-rules.json. */
@@ -353,9 +364,12 @@ function renderLessonRecordCount(rulesPath) {
   const distinct = new Set(data.rules.map((r) => r.lessonHash)).size;
   const nonCompilable = Array.isArray(data.nonCompilable) ? data.nonCompilable.length : 0;
   const total = distinct + nonCompilable;
-  if (total <= 0) {
+  // "about N hundred" is only honest for a corpus of hundreds: below one
+  // hundred the rounding would publish "about 0" or "about 100" for five
+  // records, so the figure refuses and the page must state the exact number.
+  if (total < 100) {
     throw new Error(
-      `[Totem Error] LESSON_RECORD_COUNT transform failed: ${rulesPath} counts no lesson records.`,
+      `[Totem Error] LESSON_RECORD_COUNT transform failed: ${total} lesson record(s) in ${rulesPath} is too few to state as "about N hundred" — write the exact number instead.`,
     );
   }
   const rounded = Math.round(total / 100) * 100;
