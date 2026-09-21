@@ -1,0 +1,135 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "27942ded294055b1636d6b04b9eec6ce380d9286",
+  "readAt": "2026-09-21T00:06:27Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/vitest.config.ts",
+      "line": 10,
+      "claim": "vitest's hookTimeout is a separate 10 s default that testTimeout never touched, and a config-level hookTimeout reaches hooks in nested describe blocks.",
+      "counterexample": "CONFIRMED at source: vitest 4.0.18 chunks/coverage.*.js resolved.hookTimeout ??= 1e4; @vitest/runner index.js getDefaultHookTimeout() reads runner.config.hookTimeout at registration, so nesting is irrelevant; --hookTimeout=1 fails the outer beforeEach of review-fan.test.ts with 'Hook timed out in 1ms'. The block at :2275 is one mkdtempSync plus eight git spawns, as stated."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/mcp/vitest.config.ts",
+      "line": 13,
+      "claim": "The six vitest configs are the complete set and each already carried the same platform floor.",
+      "counterexample": "CONFIRMED: git ls-files lists exactly six; all define TEST_TIMEOUT_MS = win32 ? 30_000 : 15_000 verbatim; no setupFiles or vi.setConfig touches timeouts."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/tools/search-knowledge.test.ts",
+      "line": 399,
+      "claim": "Every hook in the workspace ran under the 10 s default before this diff.",
+      "counterexample": "REFUTED as a universal: this beforeEach carries an explicit 30_000 citing mmnto-ai/totem#2608 for the same class. The diff's config comments claim only the default, so nothing shipped is false; the explicit 30 s still wins via timeout ?? getDefaultHookTimeout(). Folded by naming the #2608 precedent in the cli config comment."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 388,
+      "claim": "describe(name, options, fn) is a typed overload that survives the skipIf chain, its timeout is inherited by every it, and it overrides the config or CLI testTimeout.",
+      "counterexample": "CONFIRMED at source: runner parseArguments and createSuiteCollector merge suiteOptions into each test; timeout = options?.timeout ?? runner.config.testTimeout; skipIf returns the same chainable; TestOptions.timeout is typed and packages/cli/tsconfig.json includes src. Rerun: nine dry-run rows pass under --testTimeout=1 (343 ms to 8214 ms)."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 128,
+      "claim": "Commit message: under --testTimeout=1 every row of the previous file times out.",
+      "counterexample": "REFUTED in precision: 7 of the 8 issue-forms rows time out; 'disables blank issues' runs in 0 ms and passes because the verdict is an after-the-fact elapsed comparison. The load-bearing half (nine dry-run rows pass) is exact. Carried as a correction in the fold commit message and the PR body."
+    },
+    {
+      "id": "F6",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 381,
+      "claim": "The three macOS timeouts hit a different row each time.",
+      "counterexample": "REFUTED by the issue's own table: runs 35383436335 and 35473496298 both name the 'failed delete of a label that remains' row; 35444528753 names the '-WhatIf shadow never leaks' row. Three timeouts across two distinct rows. Folded in the test comment, the changeset and the fold commit message."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/vitest.config.ts",
+      "line": 13,
+      "claim": "spawnSync blocks the timer, yet the raise cures the exhibit; and the config comment attributes 12.6 s to the hook.",
+      "counterexample": "CONFIRMED that withTimeout compares elapsed >= budget after a synchronous body returns, so a raised budget cures a late verdict. REFUTED in precision: a row's reported duration includes its hooks, so the hook's cost is bounded by (10 s, 12.6 s], not measured at 12.6 s. Folded in the config comment."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 1829,
+      "claim": "60 s is the budget the other spawn-heavy suites here carry.",
+      "counterexample": "CONFIRMED: eight }, 60000) rows across two describe blocks of init.test.ts; nowhere else in the workspace. Worst local dry-run row 8.2 s; 60 s is about 4x the failing threshold."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/tsconfig.json",
+      "line": 0,
+      "claim": "Test configuration only; no runtime change.",
+      "counterexample": "CONFIRMED for runtime: no non-test src file changed, no published artifact carries a vitest config. Addition: tsconfig includes src, so compiled *.test.js files ship in the @mmnto/cli tarball (npm pack --dry-run: 372 test.js files of 1424, 20 MB unpacked), which makes the patch changeset correct and is a pre-existing datum for its own issue."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 0,
+      "claim": "The fix covers the class it names.",
+      "counterexample": "DISCLOSED: hooks are now covered everywhere, but row bodies with per-row spawns (install-hooks 58 sites, doctor 46, shield 17, others) stay at the 15 s non-win32 budget; no CI exhibit names any of them. A hung hook now burns 15 s or 30 s instead of 10 s; no job timeout-minutes is at risk."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/sync-labels-forms.test.ts",
+      "line": 382,
+      "claim": "Nothing is masked and no in-test override now conflicts.",
+      "counterexample": "CONFIRMED: no test asserts on a timeout verdict; the only in-test hook timeout (30 s) wins over the new value; passing an options object to describe adds only the timeout key, no concurrency or ordering delta."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": ".changeset/ci-2896-hook-timeout-floor.md",
+      "line": 2,
+      "claim": "Naming all six fixed-group packages is required.",
+      "counterexample": "CONFIRMED harmless, not required: the fixed group bumps together from one named member; repo precedent names @mmnto/cli alone. Style only."
+    },
+    {
+      "id": "F13",
+      "severity": "MINOR",
+      "file": ".changeset/ci-2896-hook-timeout-floor.md",
+      "line": 0,
+      "claim": "The commit message carries no closing keyword adjacent to an issue reference.",
+      "counterexample": "CONFIRMED: the only keyword-shaped word is 'resolved cli config'; the sole ref is in the subject after 'describe options'."
+    },
+    {
+      "id": "F14",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2896.md",
+      "line": 39,
+      "claim": "The committed spec describes the shipped change.",
+      "counterexample": "REFUTED: the spec predates the fourth exhibit and names only the suite budget; its invariant forbids altering testTimeout (which is untouched) beside a diff that adds hookTimeout to six configs. Folded by an amendment section naming the fourth exhibit, Task 2, the restated invariant, the two-rows correction and the options-form shape."
+    },
+    {
+      "id": "F15",
+      "severity": "MINOR",
+      "file": "packages/cli/vitest.config.ts",
+      "line": 22,
+      "claim": "The resolved cli config prints hookTimeout 30000 on win32.",
+      "counterexample": "DISCLOSED: the leg found no resolved-config printer in vitest and did not reproduce the seat's node import of the config; the value is grounded end to end from source (config 30_000 on win32, ??= 1e4 fills only undefined, passed to the worker, read by the runner)."
+    }
+  ],
+  "folded": [
+    "F3",
+    "F5",
+    "F6",
+    "F7",
+    "F14"
+  ],
+  "verdict": "0 BLOCKING, 3 MATERIAL, 12 MINOR at 27942ded — the leg read vitest 4.0.18's config resolution and runner at source (hookTimeout ??= 1e4; suite options merged into each test; timeout ?? config.testTimeout; withTimeout's after-the-fact elapsed check), reran both falsifiers (nine dry-run rows pass under --testTimeout=1; the review-fan hook fails under --hookTimeout=1), swept the workspace for masked timeout assertions and in-test overrides, prettier-checked all nine files, and checked every number against the issue. Seat's disposition, fold 1 in the next commit: F6 folded (three timeouts across two distinct rows, in the test comment, the changeset and the fold message); F7 folded (the config comment bounds the hook's cost by the row's 12.6 s timer instead of attributing it); F3 folded by naming the mmnto-ai/totem#2608 precedent in the cli config comment; F14 folded by an amendment on the spec naming the fourth exhibit, Task 2 and the restated invariant; F5 carried as a correction in the fold message and the PR body (7 of 8 form rows time out under 1 ms; the 8th runs in 0 ms). Confirmed without change: F1, F2, F4, F8, F9 (the tarball's compiled tests are a pre-existing datum for its own issue), F11, F12, F13. Disclosed, no change: F10, F15. No fold rewires semantics; no re-arm owed."
+}
