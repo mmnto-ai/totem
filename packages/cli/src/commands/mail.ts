@@ -1257,9 +1257,22 @@ export function formatTextResult(result: MailPollResult): string {
   // a convenience gap. `--json` always carried `filePath`; the human listing
   // now says it too, verbatim (the absolute path this poll opened, the same
   // string `--json` emits), so reading a dispatch never means browsing an
-  // outbox. Rendered in BOTH item arms (directed and gated-broadcast) — a
-  // broadcast dispatch is addressed to every seat, so its path is no more
-  // private than its basename. The empty-inbox arms are untouched.
+  // outbox. Rendered for every LISTED item in both arms (directed and
+  // gated-broadcast), ruled on the 2919 leg's F1: the listing's MEMBERSHIP is
+  // the exposure boundary, not the path. A poll that serves another seat's
+  // directed mail (`--as <other-seat>`, `--all-seats`, a foreign-anchored env)
+  // is the exposure ecl-discipline § 4.7 already names and bounds by conduct
+  // ("read only the line naming your own dispatch"); the path adds nothing to
+  // it — in the default non-recursive layout it is a function of the
+  // `Workspace:` line and the item line's `@ <repo>` and `from` fields, and
+  // `--json` carries it in every shape — so a text-only suppression would be
+  // a false boundary, and the CLI cannot tell `--as <own-seat>` from `--as
+  // <other-seat>` anyway (a declaration IS the identity). One thing the line
+  // shows that the item line does not: the OUTBOX OWNER (filesystem truth,
+  // `slot.outbox`) rather than the forgeable `from:` header, so a forged
+  // sender is visible as a disagreement between the two lines. The
+  // empty-inbox arms and the withheld directed items (never in `result.mail`)
+  // are untouched.
   const renderItem = (m: MailPollResult['mail'][number]): void => {
     lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
     lines.push(`      subject: ${m.subject}`);
