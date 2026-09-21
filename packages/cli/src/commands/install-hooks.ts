@@ -832,10 +832,24 @@ export async function installPostMergeHook(
 
 // ─── Agent detection snippet (POSIX-compliant) ─────────
 
+/**
+ * The env names that mark an AI-agent shell, so the strict arm fires without a
+ * `--strict` install (mmnto-ai/totem#2706). Claude Code exports `CLAUDECODE=1`
+ * and `CLAUDE_CODE_ENTRYPOINT` (`cli`, or an SDK entrypoint name) into every
+ * tool shell; measured on three seats across two machines between 2026-08-30
+ * and 2026-09-13, none of them ever carried `CLAUDE_CODE_AGENT` or
+ * `CLAUDE_VERSION`, the names the block tested before, so the strict arm was
+ * structurally inert on every Claude Code seat in the cohort. The two old
+ * names stay so an explicit export keeps working; `CURSOR_TRACE_ID` is Cursor's.
+ * `GEMINI_API_KEY` is deliberately NOT a marker: human developers export it
+ * for the embedding provider.
+ */
 function buildAgentDetectionBlock(): string {
-  return `# Agent detection — strict enforcement for AI agents
+  return `# Agent detection — strict enforcement for AI agents (mmnto-ai/totem#2706)
+# Claude Code exports CLAUDECODE=1 and CLAUDE_CODE_ENTRYPOINT into every tool
+# shell; CLAUDE_CODE_AGENT / CLAUDE_VERSION are kept for explicit exports.
 is_agent=0
-if [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
+if [ -n "$CLAUDECODE" ] || [ -n "$CLAUDE_CODE_ENTRYPOINT" ] || [ -n "$CLAUDE_CODE_AGENT" ] || [ -n "$CLAUDE_VERSION" ] || [ -n "$CURSOR_TRACE_ID" ]; then
   is_agent=1
 fi`;
 }
