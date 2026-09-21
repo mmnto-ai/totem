@@ -12,7 +12,8 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "totem-mcp": "./dist/index.js"

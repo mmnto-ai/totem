@@ -32,7 +32,8 @@
     "./fs-atomic": {
       "types": "./dist/fs-atomic.d.ts",
       "import": "./dist/fs-atomic.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "tsc",
