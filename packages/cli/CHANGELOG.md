@@ -1,5 +1,14 @@
 # @mmnto/cli
 
+## 2.9.1
+
+### Patch Changes
+
+- e4f35b4: ci(tests): `hookTimeout` rides the same platform floor as `testTimeout` in every workspace vitest config (30 s on win32, 15 s elsewhere; it sat at vitest's separate 10 s default), and the `scripts/sync-labels.ps1` dry-run suite carries a 60 s per-row budget for its cold `pwsh` spawn on a loaded runner (mmnto-ai/totem#2896: four CI timeouts in files the failing PRs did not touch — three timeouts across two distinct rows at the 15 s test limit on macOS, one `beforeEach` at the 10 s hook limit on Windows). Test configuration only; no runtime behavior changes.
+- c988efd: fix(skills): the distributed `review-reply` skill's Phase 1 line invokes the triage as `pnpm exec totem triage-pr $ARGUMENTS`, with the node-path form beside it for a checkout whose workspace build is the intended binary, instead of the bare `pnpm totem triage-pr`, which is neither a declared script nor an explicit bin and once rode pnpm's shim fallback into a `cmd` banner on a Windows consumer (mmnto-ai/totem#2903; a single occurrence, not reproduced since). Both copies re-stamp on the consumer's next `totem init` wherever init writes them — the `.claude/skills` copy with the Claude surface, the `.agents/skills` twin wherever the init cwd carries an `.agents/` directory — as long as the file still carries its canonical markers; a marker-less copy is preserved until `--force-skill-refresh`.
+- Updated dependencies [e4f35b4]
+  - @mmnto/totem@2.9.1
+
 ## 2.9.0
 
 ### Minor Changes
