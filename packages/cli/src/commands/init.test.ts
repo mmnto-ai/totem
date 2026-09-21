@@ -4520,8 +4520,10 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     const section = REVIEW_REPLY_SKILL_CONTENT.slice(phase1, phase2);
     // Executable: the fenced command names the bin through `pnpm exec`.
     expect(section).toContain('```bash\npnpm exec totem triage-pr $ARGUMENTS\n```');
-    // The node-path form travels with it, for a checkout whose workspace build
-    // is the intended binary.
+    // Both node-path forms travel with it: the installed package (the form the
+    // consumer exhibit proved) and a checkout whose workspace build is the
+    // intended binary.
+    expect(section).toContain('node node_modules/@mmnto/cli/dist/index.js triage-pr $ARGUMENTS');
     expect(section).toContain('node packages/cli/dist/index.js triage-pr $ARGUMENTS');
     // And no command line anywhere in the skill invokes the bare form. The prose
     // may NAME it (it explains why the explicit form is the one to run); an
