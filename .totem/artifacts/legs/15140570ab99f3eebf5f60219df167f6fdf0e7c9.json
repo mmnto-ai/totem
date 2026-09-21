@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "15140570ab99f3eebf5f60219df167f6fdf0e7c9",
+  "readAt": "2026-09-21T21:34:26Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "The changeset's escape-hatch sentence was false: is_agent=1 arms strict regardless of a hooks.tier standard pin, and no opt-out knob exists; the config schema already says agents are enforced at strict regardless of the setting, and totem-status pins standard on a ruled comment that this diff overrides on every Claude Code seat.",
+      "counterexample": "The guard is a disjunction in tools/pre-commit:35 and tools/pre-push:107 and :135; the leg ran the head hook with TOTEM_HOOK_TIER standard under CLAUDECODE=1 alone: BLOCKED, exit 1; all five markers scrubbed: exit 0. config-schema.ts:741-742 states the rule verbatim."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "The BEHAVIOUR CHANGE paragraph misnamed the pre-push arms: claim-discipline runs at every tier, and the arm actually added, doctor --strict, was not named.",
+      "counterexample": "tools/pre-push:70-91 runs doctor --claim-discipline --strict --scope-to-diff behind a file-existence guard only; the is_agent arms are :107-114 (legs gate blocking), :135-137 (doctor --strict) and :138-150 (review --gate)."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2706.md",
+      "line": 118,
+      "claim": "The correction block called packages/core/src/parity-detect.ts a hallucinated file; it exists (174,759 bytes, with its test) and its detectGeneratedArtifactContract is exactly the drift detector the generated spec described.",
+      "counterexample": "ls -la packages/core/src/parity-detect.ts; parity-detect.ts:1325-1340 documents the stale-version drift detection over the regenerated canonical hooks. The conclusion (no second copy of the detection block) survives; the stated reason was false."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/config-drift.test.ts",
+      "line": 138,
+      "claim": "The managed CLAUDE.md sentence's new half shipped with no lock, against the file's own precedent for the same clause, and the reflex-version guard the file's comment relies on cannot fail because the block interpolates the same constant.",
+      "counterexample": "config-drift.test.ts:143-174 locks the ANCHORED, topic-run, --fresh and legs-gate halves for mmnto-ai/totem#2700, #2698 and #2771; nothing locked CLAUDECODE, CLAUDE_CODE_ENTRYPOINT, CURSOR_TRACE_ID or the opt-in; the version assertion at :141 and :173 compares a constant to itself."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/cli/vitest.config.ts",
+      "line": 23,
+      "claim": "hooks.integration.test.ts, one of the eight files the author reported GREEN, is excluded from the default vitest project and contributed zero tests to the 954 count.",
+      "counterexample": "vitest.config.ts:22-23 excludes src/**/*.integration.test.ts; the seven files that do run sum to 954 passed / 9 skipped exactly; under vitest.integration.config.ts the file runs 7 passed."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": ".",
+      "line": 0,
+      "claim": "The stated base c94f8b6f was wrong by one commit: head 15140570's parent is fe0feca0, so the c94f8b6f..HEAD range carried 13 files of reverse Version-Packages noise.",
+      "counterexample": "git log -1 --format=%P 15140570 gives fe0feca0; git merge-base --is-ancestor c94f8b6f 15140570 exits 1; git diff --stat c94f8b6f..15140570 lists 20 files, fe0feca0..15140570 exactly 7."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2706.md",
+      "line": 125,
+      "claim": "The correction block's set -u reasoning was inverted: under set -u an unset variable in [ -n \"$VAR\" ] is a fatal unbound-variable error, not the empty string.",
+      "counterexample": "A two-line sh script with set -u and the test on an unset name: 'unbound variable', exit 1, the following echo never printed. The operative conclusion (the hooks do not set -u) stands."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 839,
+      "claim": "The provenance sentence 'three seats across two machines between 2026-08-30 and 2026-09-13' pinned a stale count to a later window; the thread records five seat-measurements by the end of it.",
+      "counterexample": "Issue body 2026-08-30 (strategy-claude), comment 2026-09-05 (status-claude and totem-claude, 'now three seats on two machines'), comment 2026-09-07 (a fresh consumer install, 'the fourth'), comment 2026-09-13 (lc-claude)."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 3985,
+      "claim": "No executed lock proved CLAUDECODE or CLAUDE_CODE_ENTRYPOINT arms the pre-push strict arms; the pre-push side had string containment only and both executed pre-push suites armed via the legacy name.",
+      "counterexample": "The two new expectations were toContain on a rendered string; the executed arm suite set CLAUDE_CODE_AGENT and pre-push-gate-matrix.test.ts:122 hardcodes it."
+    },
+    {
+      "id": "f10",
+      "severity": "MINOR",
+      "file": ".totem/specs/2706.md",
+      "line": 120,
+      "claim": "The correction block asserted the doctor-sensor follow-up was 'recorded on the issue' while the issue carried no 2026-09-21 comment.",
+      "counterexample": "gh issue view 2706 --json comments returned exactly three comments dated 2026-09-05, 2026-09-07 and 2026-09-13."
+    },
+    {
+      "id": "q1",
+      "severity": "MINOR",
+      "file": "mmnto-ai/totem#2706",
+      "line": 0,
+      "claim": "Where is the operator's word for cure option 1, and should it be recorded on the issue so the ruling is derivable from the primary surface?",
+      "counterexample": "Answered: the operator's 2026-09-21 greenlight of this lane's recorded recommendation, quoted verbatim in the ruling comment posted on the issue before the merge, with the doctor-sensor follow-up in the same comment."
+    },
+    {
+      "id": "q2",
+      "severity": "MINOR",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "Was the pre-push consequence for the three cohort repos with no hooks.legsOwed.enforce intended to land now, and does it want a dispatch to those seats?",
+      "counterexample": "Answered: yes, intended; the changeset discloses the class, and a heads-up dispatch naming the three arms and the timing goes to the three consumer seats with the PR, ahead of the cut that ships it."
+    },
+    {
+      "id": "q3",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/verdicts",
+      "line": 0,
+      "claim": "Is the review verdict id stdout-only and unverifiable by a later reader?",
+      "counterexample": "Answered: no; the verdict is persisted as .totem/artifacts/verdicts/<full hash>.json in the worktree (the file for 7e459a66 is present); the leg's content grep missed it because the file is named by the hash and does not contain it."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "f10",
+    "q1",
+    "q2",
+    "q3"
+  ],
+  "verdict": "0 BLOCKING, 4 MATERIAL, 6 MINOR, 3 questions, 71 tool uses. Reproduced: the seven-file GREEN count decomposed exactly (954 / 9, with hooks.integration contributing zero because the default project excludes it), RED at the rendered-hook level for the base and head pre-commit hooks under each marker alone, tsc and ESLint clean; added parity-detect 147 and doctor-parity 96 green, the cohort's installed hooks all on the old block, and five of eight local worktrees with no spec artifact. Falsified and held: the premise (the leg's own shell carries CLAUDECODE=1 and CLAUDE_CODE_ENTRYPOINT=cli and none of the old names), environment isolation in both directions for the executed suites, no stale rendered reflex block or pinned literal 15 in the repo, changeset level per five precedents, the D1 scan clean with controls, the timing claim (prepare copies into the shared hooks dir), and no suppression knob overlooked. Every finding folded in 5aeea81b: the changeset states there is no repo-level opt-out (a standard pin never suppressed detection, with the config schema's own sentence) and names the three pre-push strict arms with claim-discipline excluded (F1, F2); the spec correction credits parity-detect.ts as the drift detector it is, fixes the set -u remark, and the doctor follow-up now exists on the issue (F3, F7, F10); config-drift locks the new CLAUDE.md half by variable name with REFLEX_VERSION pinned at 16 (F4); the pre-push arm suite gains an executed case per marker (F9); the count reads five seat-measurements across four repositories (F8); the PR body names seven files plus the integration file under its own config (F5); the branch was brought forward by merging main in, never a rebase, so 15140570 and c94f8b6f are both ancestors (F6). Q1 answered on the issue, Q2 by a dispatch to the three consumer seats, Q3 by the persisted verdict file. The leg named termination conditional on the four folds and a scoped re-arm on the changeset, the spec text and the new locks; the re-arm was dispatched against a62bdb6b."
+}
