@@ -189,7 +189,7 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(AI_PROMPT_BLOCK).toContain('`CURSOR_TRACE_ID`');
     expect(AI_PROMPT_BLOCK).toContain('totem hook install --strict');
     expect(AI_PROMPT_BLOCK).not.toContain('which AI agents get automatically');
-    expect(REFLEX_VERSION).toBe(16); // totem-ignore — the literal pin IS the loudness; bump with the clause
+    expect(REFLEX_VERSION).toBe(16);
   });
 });
 

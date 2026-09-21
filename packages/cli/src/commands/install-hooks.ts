@@ -835,9 +835,10 @@ export async function installPostMergeHook(
 /**
  * The env names that mark an AI-agent shell, so the strict arm fires without a
  * `--strict` install (mmnto-ai/totem#2706). Claude Code exports `CLAUDECODE=1`
- * and `CLAUDE_CODE_ENTRYPOINT` (`cli`, or an SDK entrypoint name) into every
- * tool shell; five seat-measurements across four repositories between
- * 2026-08-30 and 2026-09-13 (the issue thread) found no live Claude Code
+ * and `CLAUDE_CODE_ENTRYPOINT` (`cli` on every measured seat; any non-empty
+ * value arms) into every tool shell; five seat-measurements in five checkouts,
+ * four of them named cohort repositories, between 2026-08-30 and 2026-09-13
+ * (the issue thread) found no live Claude Code
  * session carrying `CLAUDE_CODE_AGENT` or `CLAUDE_VERSION`, the names the
  * block tested before, so the strict arm was structurally inert on every
  * Claude Code seat in the cohort. The two old

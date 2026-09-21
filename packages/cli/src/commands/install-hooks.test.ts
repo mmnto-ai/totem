@@ -3012,9 +3012,9 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
       // Every marker scrubbed first, so the control proves this checkout passes
       // with no marker at all and each armed case proves ONE variable by itself.
       // RED on the previous block, which tested only CLAUDE_CODE_AGENT,
-      // CLAUDE_VERSION and CURSOR_TRACE_ID: three seats on two machines measured
-      // that no live Claude Code session carries any of those, so the strict arm
-      // never fired for the seats it was written for.
+      // CLAUDE_VERSION and CURSOR_TRACE_ID: five seat-measurements in the issue
+      // thread found no live Claude Code session carrying any of those, so the
+      // strict arm never fired for the seats it was written for.
       const scrubbed: NodeJS.ProcessEnv = { ...process.env };
       for (const name of [
         'CLAUDECODE',
