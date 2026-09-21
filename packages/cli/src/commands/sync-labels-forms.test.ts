@@ -379,8 +379,8 @@ function runScript(args: string[], stubDir: string, extraEnv: NodeJS.ProcessEnv 
  * Per-row budget for the dry run, carried to every row as the suite's options
  * (mmnto-ai/totem#2896). Every row starts a cold `pwsh` and walks the whole
  * label canon through the stub, and on a loaded macOS runner one row crossed the
- * cli config's 15 s `testTimeout` three times in three runs — a different row
- * each time, no diff touching this file. 60 s is the budget the other
+ * cli config's 15 s `testTimeout` three times in three runs, across two
+ * different rows, no diff touching this file. 60 s is the budget the other
  * spawn-heavy suites here carry (init.test.ts's CLI rows).
  */
 const DRY_RUN_ROW_BUDGET = { timeout: 60_000 };

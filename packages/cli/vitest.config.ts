@@ -10,8 +10,11 @@ import { defineConfig } from 'vitest/config';
 // Hooks ride the same floor (mmnto-ai/totem#2896). A `beforeEach` that builds
 // a git fixture is the same spawn class, but vitest's `hookTimeout` is a
 // SEPARATE 10s default that `testTimeout` never touched: review-fan.test.ts's
-// eight-spawn `beforeEach` crossed it at 12.6s on windows-latest while the row
-// beside it passed at 13s under the 30s test budget.
+// eight-spawn `beforeEach` blew it on windows-latest on a row whose own timer
+// read 12.6s with the hook inside that figure (the hook's cost sits between the
+// 10s it blew and 12.6s); the row beside it finished at 13s, hooks included.
+// mmnto-ai/totem#2608 raised one mcp hook to 30s by hand for the same class;
+// this floor makes that the default everywhere.
 const TEST_TIMEOUT_MS = process.platform === 'win32' ? 30_000 : 15_000;
 
 export default defineConfig({
