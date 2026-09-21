@@ -58,9 +58,17 @@ function publicPackages(): PublicPackage[] {
 describe('published packages expose ./package.json through their exports map (mmnto-ai/totem#2917)', () => {
   const packages = publicPackages();
 
-  it('finds the published workspace packages', () => {
+  it('finds exactly the published workspace packages', () => {
+    // The exact set, not a containment: a published package marked private by
+    // mistake would otherwise drop out of the two loops below unnoticed, and
+    // this guard is what makes their passes non-vacuous.
     const names = packages.map((pkg) => pkg.manifest.name).sort();
-    expect(names).toEqual(expect.arrayContaining(['@mmnto/cli', '@mmnto/mcp', '@mmnto/totem']));
+    expect(names).toEqual([
+      '@mmnto/cli',
+      '@mmnto/mcp',
+      '@mmnto/pack-rust-architecture',
+      '@mmnto/totem',
+    ]);
   });
 
   it('carries a self-referential "./package.json" key in every published exports map', () => {
@@ -84,7 +92,10 @@ describe('published packages expose ./package.json through their exports map (mm
         const code = (err as NodeJS.ErrnoException).code ?? 'unknown';
         throw new Error(`${specifier} did not resolve through the exports map (${code})`);
       }
-      expect(path.resolve(resolved)).toBe(path.resolve(pkg.manifestPath));
+      // realpathSync.native on both sides: path.resolve does not case-fold, so a
+      // drive-letter case difference on win32, or a junction in the checkout
+      // path, would otherwise fail a correct resolution.
+      expect(fs.realpathSync.native(resolved)).toBe(fs.realpathSync.native(pkg.manifestPath));
       const loaded = require(specifier) as { name?: string };
       expect(loaded.name, `${specifier} loads the manifest`).toBe(pkg.manifest.name);
     }

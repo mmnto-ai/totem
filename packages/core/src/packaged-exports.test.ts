@@ -199,7 +199,12 @@ describe('@mmnto/totem packaged subpath exports (#2336)', () => {
       const { stdout } = run(process.execPath, [consumer], { cwd: sandbox });
       const report = JSON.parse(stdout) as { viaRequire: string; viaResolve: string };
       expect(report.viaRequire).toBe(packed.version);
-      expect(report.viaResolve.endsWith('/package.json')).toBe(true);
+      // Identity, not a substring: the URL must name the sandbox's own
+      // manifest. realpathSync.native canonicalises drive-letter case and
+      // symlinks on both sides, so the comparison holds on win32 runners too.
+      expect(fs.realpathSync.native(fileURLToPath(report.viaResolve))).toBe(
+        fs.realpathSync.native(path.join(installedPkgDir, 'package.json')),
+      );
     },
     INTEGRATION_TIMEOUT_MS,
   );
