@@ -3582,3 +3582,87 @@ describe('mailCommand — --as selector (mmnto-ai/totem#2204)', () => {
     });
   });
 });
+
+// ─── Read path per item (mmnto-ai/totem#2919) ────────────
+// The human listing names WHERE to read each unread dispatch: a third line per
+// item, `read: <filePath>`, the same absolute path the --json item carries. A
+// consumer that saw only the basename listed the sender's outbox to find the
+// file and saw other seats' dispatches from the same round during a BLIND
+// window (lc-kimi, 2026-09-21). Both item arms render it; the clean-inbox arms
+// do not change. Adjacency is asserted separator-free (index arithmetic over
+// the rendered string) so the lock carries no escape sequence.
+
+describe('formatTextResult — each unread item names its read path (mmnto-ai/totem#2919)', () => {
+  const READ_PREFIX = '      read: ';
+
+  it('each directed item renders a read: line under its own subject line, equal to its own --json filePath', () => {
+    const nameA = '2026-09-21T0446Z-totem-claude-where-to-read.md';
+    const nameB = '2026-09-21T0445Z-totem-claude-earlier.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: nameA, to: 'totem-claude', subject: 'where to read' },
+      { name: nameB, to: 'totem-claude', subject: 'earlier' },
+    ]);
+    const result = poll({ env: SELF_CLAUDE });
+    // Two items, newest first (the sort suite locks the order), so the lock
+    // covers per-item INTERLEAVING — a renderer that pushed every basename and
+    // then every read path would fail here — not only one item's three lines.
+    expect(result.mail.map((m) => m.file)).toEqual([nameA, nameB]);
+
+    const rendered = formatTextResult(result);
+    let cursor = -1;
+    for (const m of result.mail) {
+      // The --json item is the source of the string; the text line must be the
+      // SAME string, not a re-derivation.
+      expect(m.filePath).toBe(path.join(outbox, m.file));
+      const itemLine = `  - ${m.file} (from strategy-claude @ totem-strategy, to: totem-claude)`;
+      const subjectLine = `      subject: ${m.subject}`;
+      const readLine = `${READ_PREFIX}${m.filePath}`;
+      const itemAt = rendered.indexOf(itemLine, cursor + 1);
+      expect(itemAt).toBeGreaterThan(cursor);
+      // Each line starts exactly one character (the line break) after the
+      // previous one ends: basename, subject, read path — in that order, and
+      // the next item's basename only after this item's read path.
+      expect(rendered.indexOf(subjectLine, itemAt)).toBe(itemAt + itemLine.length + 1);
+      const readAt = rendered.indexOf(readLine, itemAt);
+      expect(readAt).toBe(itemAt + itemLine.length + 1 + subjectLine.length + 1);
+      cursor = readAt + readLine.length;
+    }
+    // Exactly one read line per item, and no footer pointing at --json.
+    expect(rendered.split(READ_PREFIX)).toHaveLength(result.mail.length + 1);
+    expect(rendered).not.toContain('--json');
+  });
+
+  it('the identity-gated broadcast listing names the read path too, and the withheld item leaks on no line', () => {
+    const name = '2026-09-21T0447Z-broadcast-cut.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [
+      { name, to: 'broadcast', subject: 'cut' },
+      { name: '2026-09-21T0448Z-totem-claude-secret.md', to: 'totem-claude', subject: 'secret' },
+    ]);
+    // Env-less: the fixture repo resolves three seats via the map, so the poll
+    // gates — broadcasts served, the directed item withheld as a count.
+    const result = poll();
+    expect(result.seatGate).toEqual({ withheldDirected: 1 });
+    expect(result.mail.map((m) => m.file)).toEqual([name]);
+
+    const rendered = formatTextResult(result);
+    const itemLine = `  - ${name} (from strategy-claude @ totem-strategy, to: broadcast)`;
+    const subjectLine = '      subject: cut';
+    const readLine = `${READ_PREFIX}${path.join(outbox, name)}`;
+    const itemAt = rendered.indexOf(itemLine);
+    expect(itemAt).toBeGreaterThan(-1);
+    // Same three-line shape and order as the directed arm.
+    expect(rendered.indexOf(subjectLine)).toBe(itemAt + itemLine.length + 1);
+    expect(rendered.indexOf(readLine)).toBe(itemAt + itemLine.length + 1 + subjectLine.length + 1);
+    expect(rendered.split(READ_PREFIX)).toHaveLength(2);
+    // A broadcast is addressed to every seat, so its path is no more private
+    // than its basename; the WITHHELD directed dispatch must surface nowhere.
+    expect(rendered).not.toContain('secret');
+  });
+
+  it('the clean-inbox arm is unchanged: no read line, no footer', () => {
+    const rendered = formatTextResult(poll({ env: SELF_CLAUDE }));
+    expect(rendered).toContain('No unread mail addressed to totem-claude or broadcast.');
+    expect(rendered).not.toContain(READ_PREFIX);
+    expect(rendered).not.toContain('--json');
+  });
+});

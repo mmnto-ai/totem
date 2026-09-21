@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "706a9a14473d34ef0c19c29bcc8dd7f3bcc9dcab",
+  "readAt": "2026-09-21T19:37:48Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1258,
+      "claim": "The in-code justification for rendering the path in both arms is broadcast-only and is silently carried to the directed arm, where the served item can be another seat's directed mail (--as <other-seat>, --all-seats, a foreign-anchored env); ecl-discipline § 4.7 already types that listing as an exposure bounded by conduct, and the read line deepens it from subjects to a copy-pasteable path per foreign directed dispatch.",
+      "counterexample": "The leg ran the built dist of both revisions against a 3-recipient fixture: --all-seats (new) renders a read line under an item whose to: is totem-gemini; the same for a single foreign-anchored poll (TOTEM_SELF_AGENT=totem-gemini). Mitigators the leg named: the path is derivable from the Workspace line plus the item line's repo and from fields in the default layout; --json carries it in every shape; the bus is gitignored local files under one OS user — a doctrine-consistency question, not a security boundary. Ruled as-is by the author; see q1."
+    },
+    {
+      "id": "f2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 975,
+      "claim": "The help line's quantifier is unconditional (every unread item carries a read line) while two arms render unread items with no read line: withheld directed dispatches on a gated poll, and unread broadcasts on the source-none arm, which lists no item at all.",
+      "counterexample": "The leg's gated control rendered 1 read line for 1 broadcast while seatGate reported 1 withheld directed dispatch — one unread item with no read line."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.test.ts",
+      "line": 3630,
+      "claim": "Adjacency was locked in one arm with one item; the gated case asserted only containment plus an exactly-once count, and both fixtures were single-item, so a renderer that emitted every basename and then every read line would have stayed green.",
+      "counterexample": "Read of both cases: only the directed case carried the index arithmetic. Behaviour itself was correct in the leg's 3-item --all-seats run; this was assertion strength."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 976,
+      "claim": "Two wording problems: 'it holds every seat's dispatches' reads as each seat's own contents where the true proposition is one sender's dispatches to every seat; and a bare 'never list a sender's outbox' collides with the doctrine-sanctioned listing in ecl-discipline § 4.3 (ls the outbox, grep a topic keyword).",
+      "counterexample": "Both doctrine lines read at source in totem-strategy's doctrine/ecl-discipline.md (§ 1.2 line 41, § 4.7 line 77, § 4.3 line 237)."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1266,
+      "claim": "The read line is the first place the human listing exposes the outbox-owner seat (filesystem truth, slot.outbox) rather than the forgeable from: header the item line prints; net-positive as an anti-forgery sensor but undocumented in the diff.",
+      "counterexample": "A fixture with from: somebody-else inside strategy-claude's outbox renders the item line naming somebody-else above a read line naming strategy-claude's outbox."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": ".changeset/mail-2919-listing-read-path.md",
+      "line": 9,
+      "claim": "'the same filePath the --json output has always emitted' is false for a shipped window: the field existed from the first commit but totem mail --json emitted no JSON until d27675ce (the program-level --json swallowed the subcommand's).",
+      "counterexample": "git log -1 --format=%B d27675ce."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2919.md",
+      "line": 100,
+      "claim": "The correction block omits two deviations: the Task-2 directive's test names were not used, and the 'meaningless' claim about repo-relative paths is over-broad for a same-repo dispatch, whose outbox sits under the reader's own root.",
+      "counterexample": "Spec text read at source; same-repo fixtures in mail.test.ts; enumerateOutboxes yields the self repo's outboxes too."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 975,
+      "claim": "No test locks the mail help text, so the help's per-item render contract can silently desync from the renderer; a pre-existing pattern (six addHelpText registrations, zero assertions), named because this diff is the first to put a render contract into the help paragraph.",
+      "counterexample": "grep of addHelpText and 'Reading never consumes' across packages/cli/src hits only index.ts."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": "mmnto-ai/totem#2527",
+      "line": 0,
+      "claim": "mmnto-ai/totem#2527 (mail mark should accept the bare filename the listing displays) is still open and its premise is weakened by this diff, which displays a path markSource accepts; lesson-296c72de becomes partially stale. Nothing in the diff references either.",
+      "counterexample": "gh issue view 2527 reports OPEN; markSource reads the argument with fs.readFileSync and the CLI passes it through, so an absolute path resolves."
+    },
+    {
+      "id": "q1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1258,
+      "claim": "Was the --as <other-seat> / --all-seats / foreign-anchored directed arm considered and ruled acceptable, or was the broadcast justification written for the gated arm and applied to both without a separate ruling?",
+      "counterexample": "The latter, as written at 706a9a14. Ruled at the fold: acceptable as-is, for the reasons now in the renderer comment — the listing's membership is the exposure boundary, the path adds nothing derivable, --json carries it in every shape, and the CLI cannot tell --as <own-seat> from --as <other-seat>."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "q1"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 8 MINOR, 1 question, 80 tool uses. Every author measurement the leg could re-run without a mutation reproduced: the new cases GREEN 3/3 and RED 2/3 on the previous renderer (executed against the b3373d9a dist rather than a stash), the four mail files 246/246, format clean, ESLint 0 errors / 1 warning with the warning's provenance confirmed on HEAD at line 2773, plus a new tsc --noEmit exit 0; lint --branch and review --branch were not re-run under the leg's no-mutation reading. Falsified and held: text path equals the --json field by identity, absolute by construction, no path for any withheld or unlisted item, no text-format consumer anywhere in the four cohort checkouts, the verdict-line helpers unaffected, mark accepts the path, the commit message clean under the D1 evaluator with positive controls, changeset level and group per precedent, the spec-correction device per precedent. F1 ruled as-is by the author and written into the renderer comment: the listing's membership is the exposure boundary ecl-discipline § 4.7 already names and bounds by conduct; the path is a function of the Workspace line and the item line in the default layout and --json carries it in every shape, so a text-only suppression would be a false boundary, and the CLI cannot distinguish --as <own-seat> from --as <other-seat>. Folded in the next commit: F2 (the help says listed), F3 (two-item interleaving and gated-arm adjacency locked), F4 (help wording, the § 4.3 collision removed), F5 (the outbox-owner disclosure documented in the comment), F6 (changeset tense), F7 (the two spec-correction omissions), Q1 (answered by the ruling). Disclosed, no change: F8 (no help-text lock, a pre-existing pattern), F9 (mmnto-ai/totem#2527's premise weakened; recorded on that issue after the merge). The leg named convergence conditional on the F1 ruling; ruled, so converged at this scope. No fold rewired semantics, so no re-armed leg."
+}
