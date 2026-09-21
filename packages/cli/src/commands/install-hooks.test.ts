@@ -4246,7 +4246,12 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
   const HELP_WITHOUT_GATE =
     'Totem: local-first toolkit\n\nUsage: totem [command]\n\nCommands:\n  init         Initialize Totem\n  lint         Run compiled rules\n  merge-gate   Gate a merge';
 
-  function runHook(options: { tier: 'strict' | 'standard'; agent: boolean }): {
+  function runHook(options: {
+    tier: 'strict' | 'standard';
+    agent: boolean;
+    /** Which marker arms the agent (default the legacy explicit export). */
+    marker?: 'CLAUDECODE' | 'CLAUDE_CODE_ENTRYPOINT';
+  }): {
     status: number | null;
     stdout: string;
     stderr: string;
@@ -4268,7 +4273,11 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
     delete env['CLAUDE_CODE_AGENT'];
     delete env['CLAUDE_VERSION'];
     delete env['CURSOR_TRACE_ID'];
-    if (options.agent) env['CLAUDE_CODE_AGENT'] = '1';
+    if (options.agent) {
+      if (options.marker === 'CLAUDE_CODE_ENTRYPOINT') env['CLAUDE_CODE_ENTRYPOINT'] = 'cli';
+      else if (options.marker === 'CLAUDECODE') env['CLAUDECODE'] = '1';
+      else env['CLAUDE_CODE_AGENT'] = '1';
+    }
     const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
     return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
   }
@@ -4335,6 +4344,24 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
     expect(invocations()).not.toContain('legs gate --advisory');
     expect(r.status).toBe(1);
   });
+
+  // Executed, not string-matched: the pre-push arm fires on the two variables a
+  // live Claude Code shell exports (mmnto-ai/totem#2706), on the standard tier,
+  // with every other marker scrubbed. RED on the previous block, where each of
+  // these ran the advisory arm and passed.
+  for (const marker of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'] as const) {
+    it.skipIf(!shellOk)(
+      `a Claude Code shell (${marker} alone) on the standard tier takes the strict arm`,
+      () => {
+        writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+        const r = runHook({ tier: 'standard', agent: true, marker });
+        expect(invocations()).toContain('legs gate');
+        expect(invocations()).not.toContain('legs gate --advisory');
+        expect(r.status).toBe(1);
+        expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      },
+    );
+  }
 
   it.skipIf(!shellOk)(
     'standard tier, no agent: --advisory is passed and exit 0 proceeds past the arm',

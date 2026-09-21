@@ -836,10 +836,11 @@ export async function installPostMergeHook(
  * The env names that mark an AI-agent shell, so the strict arm fires without a
  * `--strict` install (mmnto-ai/totem#2706). Claude Code exports `CLAUDECODE=1`
  * and `CLAUDE_CODE_ENTRYPOINT` (`cli`, or an SDK entrypoint name) into every
- * tool shell; measured on three seats across two machines between 2026-08-30
- * and 2026-09-13, none of them ever carried `CLAUDE_CODE_AGENT` or
- * `CLAUDE_VERSION`, the names the block tested before, so the strict arm was
- * structurally inert on every Claude Code seat in the cohort. The two old
+ * tool shell; five seat-measurements across four repositories between
+ * 2026-08-30 and 2026-09-13 (the issue thread) found no live Claude Code
+ * session carrying `CLAUDE_CODE_AGENT` or `CLAUDE_VERSION`, the names the
+ * block tested before, so the strict arm was structurally inert on every
+ * Claude Code seat in the cohort. The two old
  * names stay so an explicit export keeps working; `CURSOR_TRACE_ID` is Cursor's.
  * `GEMINI_API_KEY` is deliberately NOT a marker: human developers export it
  * for the embedding provider.
