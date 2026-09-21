@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "0c67ed2c3d10e850c5eb5cc57bce12e7bbeba9c8",
+  "readAt": "2026-09-21T00:36:51Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "The badge renders and its count is scoped to mmnto-ai/totem.",
+      "counterexample": "CONFIRMED with a control: the exact URL returns 200 image/svg+xml with title 'CodeRabbit Reviews: 789'; the same endpoint for mmnto-ai/totem-strategy and a nonexistent repo renders 'provider or repo not found', facebook/react renders 0. GitHub's reviewed-by:coderabbitai search counts 490 PRs — same order of magnitude, a different population; disclosed."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "Placement and form match the badge row; the link target equals the badge's own link parameter.",
+      "counterexample": "CONFIRMED: lines 3-8 are each [![alt](img)](link); line 9 is the same shape, appended last; the link= parameter percent-decodes to the identical https://coderabbit.ai. The alt text is shields.io's catalog name for the endpoint."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/badge-verifier.ts",
+      "line": 43,
+      "claim": "The badge verifier is out of scope by construction for this dynamic URL.",
+      "counterexample": "CONFIRMED by running the built extractor on the real diff (0 extracted) with a positive control rewriting the path to /badge/ (1 extracted): BADGE_IMAGE_RE requires img.shields.io/badge/. The pre-push hook wiring at install-hooks.ts:1398 is live."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/badge-verifier.ts",
+      "line": 23,
+      "claim": "The commit message states the verifier's full relationship to this badge.",
+      "counterexample": "DISCLOSED: true but understated — coderabbit is in neither DEFAULT_TOOL_INTEGRATIONS nor STANDARD_CLAIM_LABELS, and decodeBadgeUrl returns empty label and message for a non-/badge/ URL, so the verifier would be silent even if it extracted the badge; .coderabbit.yaml (4714 bytes) at the repo root would substantiate a future matrix entry. The commit is not amended; carried here and in the PR body."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "The badge URL's link parameter makes the badge clickable.",
+      "counterexample": "DISCLOSED: shields.io documents link= as working only inside an <object> tag, not an <img> or markup; GitHub renders README badges as camo-proxied <img>. The markdown wrapper link is what makes it clickable; the commit message claims only consistency, which holds."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 0,
+      "claim": "Nothing else changed; the branch is one commit ahead of live main.",
+      "counterexample": "CONFIRMED: git show --stat lists README.md +1 only; git ls-remote main = e4f35b4b = origin/main = merge-base."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 0,
+      "claim": "The commit message carries no closing keyword and no issue reference.",
+      "counterexample": "CONFIRMED by regex over the full message: no #N, no close/fix/resolve keyword, no totem-close marker."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "Prettier is clean and the line's bytes are clean.",
+      "counterexample": "CONFIRMED: prettier --check passes; line 9 is 273 bytes of pure ASCII, no trailing whitespace, LF. Premise correction: the worktree does have a node_modules directory (the dispatch said it had none); immaterial."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "The query string's parameters are cosmetic.",
+      "counterexample": "DISCLOSED: label, labelColor and color are honored (differential fetch shows the styled title and fills); the utm_* parameters change nothing rendered and never reach the click-through URL, and camo proxies the image, so they carry no attribution; link= is inert in markdown (F5)."
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 9,
+      "claim": "The image markdown is the operator's verbatim.",
+      "counterexample": "DISCLOSED as a question the leg could not ground: no in-repo artifact and no CodeRabbit docs page publishes the snippet; the seat holds the provenance (the operator's pasted text in the session), and the alt text matches shields' catalog title."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 3,
+      "claim": "A dynamic badge adds a new failure surface to the README.",
+      "counterexample": "DISCLOSED as not new: three of the six neighbours (npm/v, the Actions badge.svg, github/license) are already live-fetched; an upstream outage renders an error state in place of the count, the same class."
+    }
+  ],
+  "folded": [],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 11 MINOR at 0c67ed2c — the leg fetched the badge and three control repositories from shields.io, ran the built badge extractor on the real diff with a positive control, read the verifier's matrix and claim list, checked the commit message with the repo's own keyword regexes, read live main from ls-remote, and checked prettier and bytes. Seat's disposition: nothing folded — the one message-level enrichment (F4) and the link-parameter note (F5) are carried in the PR body rather than an amended commit; F10's provenance is the operator's pasted snippet in this session. No re-arm owed."
+}

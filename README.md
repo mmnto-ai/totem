@@ -6,6 +6,7 @@
 [![License: Apache-2.0](https://img.shields.io/github/license/mmnto-ai/totem)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-managed-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
+[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mmnto-ai/totem?utm_source=oss&utm_medium=github&utm_campaign=mmnto-ai%2Ftotem&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
 **Editor integrations:** [Claude Code](.claude/) · [Gemini CLI](.gemini/) · [GitHub Copilot](.github/copilot-instructions.md) · [JetBrains Junie](.junie/) · others in progress. See [`AGENTS.md`](AGENTS.md) for how integration works.
 
