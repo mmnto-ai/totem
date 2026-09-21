@@ -1248,6 +1248,23 @@ export function formatTextResult(result: MailPollResult): string {
   const lines: string[] = [];
   const selfList =
     result.selfAgents.agents.length > 0 ? result.selfAgents.agents.join(', ') : '(none)';
+  // One unread item = three lines: the basename line, its subject, and its
+  // READ path (mmnto-ai/totem#2919). The listing used to stop at the subject,
+  // so a reader had to know where the file lived; under sender-owns-outbox a
+  // consumer improvised with `ls` on the sender's outbox, which showed it the
+  // OTHER seats' copies of the same round's dispatches (an ECL basename is
+  // recipient + compressed subject) during a BLIND window — a disclosure, not
+  // a convenience gap. `--json` always carried `filePath`; the human listing
+  // now says it too, verbatim (the absolute path this poll opened, the same
+  // string `--json` emits), so reading a dispatch never means browsing an
+  // outbox. Rendered in BOTH item arms (directed and gated-broadcast) — a
+  // broadcast dispatch is addressed to every seat, so its path is no more
+  // private than its basename. The empty-inbox arms are untouched.
+  const renderItem = (m: MailPollResult['mail'][number]): void => {
+    lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
+    lines.push(`      subject: ${m.subject}`);
+    lines.push(`      read: ${m.filePath}`);
+  };
   lines.push(`Workspace: ${result.workspace}`);
   lines.push(`Self agents: ${selfList} (source: ${result.selfAgents.source})`);
   if (result.warnings.length > 0) {
@@ -1321,10 +1338,7 @@ export function formatTextResult(result: MailPollResult): string {
           ? `${result.mail.length} unread broadcast dispatch(es) — scan INCOMPLETE (${nonGateWarnings} scan warning(s) above); more may exist in unscanned locations:`
           : `${result.mail.length} unread broadcast dispatch(es):`,
       );
-      for (const m of result.mail) {
-        lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
-        lines.push(`      subject: ${m.subject}`);
-      }
+      for (const m of result.mail) renderItem(m);
     }
   } else if (result.mail.length === 0) {
     // A degraded scan must not close with the verdict a clean scan produces
@@ -1347,10 +1361,7 @@ export function formatTextResult(result: MailPollResult): string {
         ? `${result.mail.length} unread — scan INCOMPLETE (${result.warnings.length} warning(s) above); more may exist in unscanned locations.`
         : `${result.mail.length} unread:`,
     );
-    for (const m of result.mail) {
-      lines.push(`  - ${m.file} (from ${m.from} @ ${m.repo}, to: ${m.to})`);
-      lines.push(`      subject: ${m.subject}`);
-    }
+    for (const m of result.mail) renderItem(m);
   }
   if (result.truncated) {
     lines.push(`[scan truncated at ${result.scanned} files; raise concern if this persists]`);
