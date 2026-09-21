@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "9cb2a0aaa0ca32699a324a1945953d3d8bd247d9",
+  "readAt": "2026-09-21T00:07:48Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3607,
+      "claim": "A bare pnpm totem falls through to pnpm's shim lookup, which once opened a cmd banner; pnpm exec does not.",
+      "counterexample": "REFUTED at pnpm 11.2.2 source (corepack dist/pnpm.mjs): fallbackCommand 'run' (255794) routes an unknown name through the run handler, which on no matching script calls the exec handler (215843, handler39 = 'pnpm exec', 216125-216160) with the same prependPaths (216204) and spawn; on Windows both forms run totem.CMD under cmd.exe /q /d /s /c via cross-spawn, which cannot print the interactive banner. Folded on all three surfaces: the sentence now states the fallback order (builtin, declared script, then exec), keeps 'once' and 'not reproduced since', and adds the installed-package node path."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/skills-2903-review-reply-exec.md",
+      "line": 5,
+      "claim": "Both copies re-stamp on every consumer's next totem init.",
+      "counterexample": "REFUTED for 'every': init.ts writes the .claude copy inside the Claude hook installer (:587, reached only for a detected Claude surface), writes the .agents twin only where the init cwd carries an .agents directory (:641-650), and preserves a marker-less copy until --force-skill-refresh (:758-767). CONFIRMED that a marker-bearing copy refreshes from a changed constant with no force flag. Folded in the changeset with the three conditions."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 4529,
+      "claim": "A line that starts with 'pnpm totem' is the right predicate for an invocation.",
+      "counterexample": "DISCLOSED: the postmerge skill indents its fenced command lines by three spaces, and a '$ ' prompt or doubled space would slip past startsWith. Folded: the predicate is a regex over leading whitespace, an optional $ or > prompt, and any spacing between the two words; grep of the same regex reads 1 on the cbcc28d5 text and 0 on the new one."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".claude/skills/review-reply/SKILL.md",
+      "line": 31,
+      "claim": "The node-path form ships a path a consumer can use.",
+      "counterexample": "DISCLOSED: packages/cli/dist/index.js exists only in the totem monorepo; the issue's exhibit proved node node_modules/@mmnto/cli/dist/index.js on the consumer, and adr-072 ranks the pinned entry above the ambient global. Folded inside F1's sentence, which now names both forms."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".totem/lessons/lesson-268017f5.md",
+      "line": 1,
+      "claim": "The cited lesson supports the fix and could sense this class.",
+      "counterexample": "CONFIRMED consistent with the lesson's prose; DISCLOSED that its pattern matches the literal 'pnpm bin' with a scope of sh, yml and package.json, so it neither did nor could fire on the skill line. Not a mechanical sensor for this class."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/verify-manifest.ts",
+      "line": 227,
+      "claim": "No other in-repo surface carries the bare form.",
+      "counterexample": "DISCLOSED: one internal source comment read 'pnpm totem verify-manifest'; every distributed or consumer-facing surface was clean. Folded to 'pnpm exec totem verify-manifest'."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".totem/specs/2903.md",
+      "line": 41,
+      "claim": "totem lint on this tree prints seven advisory warnings, all on the new test.",
+      "counterexample": "REFUTED in count: ten warnings; the seven on init.test.ts are frozen-lesson false positives (a corrupt timestamp-titled rule on toBeGreaterThan, the sanitization toContain rule on an exact fenced block, glob-entry rules on String.split output, an orchestrator-timeout rule on a 1 ms string assertion); three more hit marketing terms in the generated spec. Advisory under the freeze; no change."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F6"
+  ],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 5 MINOR at 9cb2a0aa — the leg read pnpm 11.2.2's dist at source (fallbackCommand run into the exec handler with the same prependPaths and spawn), rendered the constant from the built dist and proved the three surfaces byte-identical inside the markers with unchanged tails, proved the new lock RED on the cbcc28d5 text by re-rendering it and GREEN now (2 files, 397 passed, 3 skipped), ran sterilization and the repo's own autoclose regex over the commit message and every added file, and confirmed the changeset bump against the fixed group and precedent. Seat's disposition, fold 1 in the next commit: F1 folded on all three surfaces (the sentence states the fallback order and drops the shim-lookup distinction; the unverified no-package.json clause the leg proposed was left out); F2 folded in the changeset; F3 folded (regex predicate); F4 folded inside F1's sentence; F6 folded. Disclosed, no change: F5, F7. No fold rewires semantics; no re-arm owed."
+}
