@@ -1,0 +1,79 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "b32cdf1b9a158e71d3dff8a52e190da46f64a55b",
+  "readAt": "2026-09-21T18:06:22Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".totem/specs/2917.md",
+      "line": 26,
+      "claim": "The committed spec states false premises (string-valued exports, ./lib/index.js, a string-to-object conversion trap) with no correction note, against the convention the 2896 spec applied one commit before the base.",
+      "counterexample": "git show 4ca8307a:packages/cli/package.json is an object map with import and types conditions on ./dist/index.js; ./lib appears nowhere in the repository."
+    },
+    {
+      "id": "f2",
+      "severity": "MINOR",
+      "file": "packages/core/src/packaged-exports.test.ts",
+      "line": 202,
+      "claim": "viaResolve.endsWith('/package.json') passes for any package.json on disk; the contract is identity with the sandbox's installed manifest.",
+      "counterexample": "A resolution that escaped the sandbox to the workspace copy satisfies both the substring and the version equality, since both copies are 2.9.1."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": "packages/core/src/published-exports-lock.test.ts",
+      "line": 63,
+      "claim": "arrayContaining of three names lets coverage narrow silently if a published package is ever marked private.",
+      "counterexample": "@mmnto/pack-rust-architecture marked private drops out of publicPackages() and the guard still passes."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": ".changeset/exports-2917-package-json-subpath.md",
+      "line": 10,
+      "claim": "The prose says consumers can use the specifier 'again' though it never worked, and the lock's scope (workspace manifests; packed arm for @mmnto/totem only) is under-disclosed.",
+      "counterexample": "The charter's own datum: the specifier has always thrown on these packages; npm pack --dry-run shows package.json in all three tarballs."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": ".totem/lessons/lesson-379fc29e.md",
+      "line": 1,
+      "claim": "The in-repo lesson names the wrong mechanism (an import-only condition) and gives advice this cut retires for cohort packages; the diff neither updates nor names it.",
+      "counterexample": "@mmnto/pack-rust-architecture has no import condition and resolved before the diff; the cause is the subpath's absence from the map."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/package.json",
+      "line": 15,
+      "claim": "Pre-existing: cli and mcp order import before types in the '.' condition object while core orders types first (sibling axis of mmnto-ai/totem#2851).",
+      "counterexample": "Out of scope; named so it is not mistaken for this diff's work."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/core/tsconfig.json",
+      "line": 1,
+      "claim": "Pre-existing: core's tsconfig includes src with no exclude, so 166 compiled test files ship in the @mmnto/totem tarball; this diff makes it 167.",
+      "counterexample": "Same class as mmnto-ai/totem#2907 (the cli tarball's compiled tests)."
+    },
+    {
+      "id": "q1",
+      "severity": "MINOR",
+      "file": "packages/core/src/published-exports-lock.test.ts",
+      "line": 87,
+      "claim": "path.resolve does not case-fold on Windows; a drive-letter case difference between import.meta.url and require.resolve's realpath would fail a correct resolution. Not reproduced; hardening only.",
+      "counterexample": "None constructed."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "q1"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 6 MINOR, 1 question. Every author measurement re-run and reproduced, one count corrected (two of the three lock cases go red on the previous maps; the first is a coverage guard). The leg ran the full build and the full workspace test, both exit 0, and the D1 evaluator on the commit message (empty, with a positive control). At convergence for a merge presentation once F1 is folded; F5 is named in the PR body for the postmerge lesson pass; F7 and F8 are pre-existing and disclosed; a further leg would be the infinite-polish gradient."
+}
