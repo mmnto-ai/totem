@@ -224,7 +224,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
   // but the fail-loud gate only fires inside the monorepo. Detected via
   // existence of the template source at its monorepo-relative path. Walk up
   // from cwd so the check survives running from a sub-directory of the
-  // monorepo (e.g., `cd packages/cli && pnpm totem verify-manifest`).
+  // monorepo (e.g., `cd packages/cli && pnpm exec totem verify-manifest`).
   const inMonorepo = findMonorepoTemplate(cwd, path, fs) !== undefined;
   if (manifest.compile_worker_fingerprint !== undefined && inMonorepo) {
     // Resolve the base branch dynamically — repos can use main, master, or
