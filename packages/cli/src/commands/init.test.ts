@@ -4524,10 +4524,12 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
     // is the intended binary.
     expect(section).toContain('node packages/cli/dist/index.js triage-pr $ARGUMENTS');
     // And no command line anywhere in the skill invokes the bare form. The prose
-    // may NAME it (it explains why the explicit form is the one to run); a line
-    // that STARTS with it is an invocation.
+    // may NAME it (it explains why the explicit form is the one to run); an
+    // invocation is a line whose command is the bare form — indented (the
+    // postmerge skill indents its fences), behind a `$ ` or `> ` prompt, or
+    // with any run of spaces between the two words.
     const bareInvocations = REVIEW_REPLY_SKILL_CONTENT.split('\n').filter((line) =>
-      line.startsWith('pnpm totem'),
+      /^\s*(?:[$>]\s*)?pnpm\s+totem\b/.test(line),
     );
     expect(bareInvocations).toEqual([]);
   });

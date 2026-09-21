@@ -28,7 +28,7 @@ Run the triage command to fetch, normalize, deduplicate, and categorize all bot 
 pnpm exec totem triage-pr $ARGUMENTS
 ```
 
-`pnpm exec` runs the `totem` bin of the pinned `@mmnto/cli`. A bare `pnpm totem …` is neither a declared script nor an explicit bin: it falls through to pnpm's shim lookup, which once opened a `cmd` banner instead of the triage on a Windows consumer (mmnto-ai/totem#2903). In a checkout whose workspace build is the intended binary, run `node packages/cli/dist/index.js triage-pr $ARGUMENTS` instead.
+`pnpm exec` is the documented explicit form: it puts `node_modules/.bin` first on the path and runs the `totem` bin from there. A bare `pnpm totem …` reaches the same bin only as a fallback — pnpm tries a builtin command first, then a declared `totem` script, and hands the name to `pnpm exec` only when it finds neither — so the explicit form is the one to run; a Windows consumer once saw a `cmd` banner instead of the triage on the bare form (mmnto-ai/totem#2903, one occurrence, not reproduced since). From an installed `@mmnto/cli`, `node node_modules/@mmnto/cli/dist/index.js triage-pr $ARGUMENTS` is the same triage with no resolver in between; in a checkout whose workspace build is the intended binary, `node packages/cli/dist/index.js triage-pr $ARGUMENTS`.
 
 This outputs a categorized inbox grouped by blast radius (Security → Architecture → Convention → Nits) with cross-bot deduplication already applied. The heavy lifting is done in TypeScript — no LLM math needed.
 
