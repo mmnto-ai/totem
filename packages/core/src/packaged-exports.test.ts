@@ -172,6 +172,39 @@ describe('@mmnto/totem packaged subpath exports (#2336)', () => {
   );
 
   it(
+    'exposes ./package.json in the packed exports map and resolves it by specifier (mmnto-ai/totem#2917)',
+    () => {
+      // The packed manifest carries the self-referential key, and a consumer
+      // beside the sandbox's node_modules reaches the manifest through it both
+      // ways Node offers — CommonJS require and ESM import.meta.resolve. Before
+      // #2917 both threw ERR_PACKAGE_PATH_NOT_EXPORTED, and every cohort
+      // pin-sync read the installed version by walking node_modules by path.
+      const packed = JSON.parse(
+        fs.readFileSync(path.join(installedPkgDir, 'package.json'), 'utf-8'),
+      ) as { version: string; exports?: Record<string, unknown> };
+      expect(packed.exports?.['./package.json']).toBe('./package.json');
+
+      const consumer = path.join(sandbox, 'manifest-consumer.mjs');
+      fs.writeFileSync(
+        consumer,
+        [
+          "import { createRequire } from 'node:module';",
+          'const require = createRequire(import.meta.url);',
+          "const viaRequire = require('@mmnto/totem/package.json').version;",
+          "const viaResolve = import.meta.resolve('@mmnto/totem/package.json');",
+          'process.stdout.write(JSON.stringify({ viaRequire, viaResolve }));',
+          '',
+        ].join('\n'),
+      );
+      const { stdout } = run(process.execPath, [consumer], { cwd: sandbox });
+      const report = JSON.parse(stdout) as { viaRequire: string; viaResolve: string };
+      expect(report.viaRequire).toBe(packed.version);
+      expect(report.viaResolve.endsWith('/package.json')).toBe(true);
+    },
+    INTEGRATION_TIMEOUT_MS,
+  );
+
+  it(
     'imports every supported subpath from the packed artifact as Node ESM (via the package specifier)',
     () => {
       const consumer = path.join(sandbox, 'esm-consumer.mjs');
