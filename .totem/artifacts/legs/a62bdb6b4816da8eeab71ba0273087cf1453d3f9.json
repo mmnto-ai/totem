@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "a62bdb6b4816da8eeab71ba0273087cf1453d3f9",
+  "readAt": "2026-09-21T21:59:03Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "MATERIAL",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "The BEHAVIOUR CHANGE paragraph listed three pre-push arms and then said a disciplined seat sees no new step, which silently dropped doctor --strict and the shield gate, both of which run on every push from a Claude Code shell and can block, the shield gate being an LLM run per push.",
+      "counterexample": "tools/pre-push strict block: doctor --strict || exit 1, then review --gate || exit 1; doctor.ts:35 documents that bare --strict exits non-zero on fail-class diagnostics; neither is answered by a spec artifact or a leg deposit."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "'running that one command with the variable unset' (singular) is not a working escape hatch on a Claude Code seat, which exports both markers.",
+      "counterexample": "Measured in the leg's shell: env -u CLAUDECODE still gives is_agent=1, env -u CLAUDE_CODE_ENTRYPOINT still gives is_agent=1, only unsetting both gives is_agent=0."
+    },
+    {
+      "id": "f3",
+      "severity": "MINOR",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 12,
+      "claim": "The pre-push hook header names no --no-verify override; only the pre-commit header does, so attributing both to 'the hook header' was half-false.",
+      "counterexample": "grep no-verify tools/pre-push: no match; tools/pre-commit:3 carries it; git push -h documents --no-verify itself."
+    },
+    {
+      "id": "f4",
+      "severity": "MINOR",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 10,
+      "claim": "'across four repositories' undercounts: the five seat-measurements sit in five checkouts, four named cohort repositories and one unnamed consumer.",
+      "counterexample": "Issue body plus three comments name strategy, status, totem, a fresh consumer install (the fourth) and liquid-city; gh repo list mmnto-ai shows no repo for the consumer measurement."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 3014,
+      "claim": "The pre-commit case's comment still said 'three seats on two machines' after the fold corrected the other two surfaces to five.",
+      "counterexample": "The phrase is verbatim from the 2026-09-05 comment, superseded by the 2026-09-07 and 2026-09-13 comments."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/config-drift.test.ts",
+      "line": 192,
+      "claim": "The totem-ignore marker on the REFLEX_VERSION pin suppressed nothing under the live rule set and would mute any future rule on that line.",
+      "counterexample": "Stripping the marker in a scratch clone left lint at 23 warnings with none at that line; a positive control on line 187 moved the count, so the probe was valid."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.test.ts",
+      "line": 2871,
+      "claim": "The fold's RED receipt of 4 failures under-counts the same swap: the parity locks and both detection-snippet tests must also fail with the parent renderer in place, so the RED is stronger than stated.",
+      "counterexample": "Derived from the assertion sites at 2871-2872 and 3988-3989 and the whole-file byte-locks at tools-hook-parity.test.ts:138 and :142; not executed, since the swap needs a worktree write."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 48,
+      "claim": "The opt-in clause named hooks.tier without the re-render the config schema says a tier change needs.",
+      "counterexample": "config-schema.ts:742-743: the tier is rendered into the hook at install, so re-run totem hook install --force after changing it."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": ".changeset/hooks-2706-claudecode-detection.md",
+      "line": 10,
+      "claim": "The 23 branch lint warnings were all advisory and twelve sat on the fold's own added lines; the disposition was owed in prose rather than left unread.",
+      "counterexample": "Scratch-clone lint: PASS, 23 warnings, 0 errors: absolute-claims on 'never fired' and 'there never was one', the correction heading over 60 characters, partial-matcher and timeout lessons on the test files."
+    },
+    {
+      "id": "q1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/install-hooks.ts",
+      "line": 836,
+      "claim": "What primary source backs 'or an SDK entrypoint name' for CLAUDE_CODE_ENTRYPOINT?",
+      "counterexample": "Answered: none in the thread; the JSDoc now says the value is cli on every measured seat and that any non-empty value arms."
+    },
+    {
+      "id": "q2",
+      "severity": "MINOR",
+      "file": ".totem/specs/2706.md",
+      "line": 121,
+      "claim": "Is 'about 175 KB, with its test' the file alone or the pair?",
+      "counterexample": "Answered: the file alone; the block now states the two sizes separately."
+    },
+    {
+      "id": "q3",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/legs",
+      "line": 0,
+      "claim": "Is this re-arm's deposit the one the push gate reads for the current head?",
+      "counterexample": "Answered: this deposit is recorded against a62bdb6b, the head the re-arm read; the gate reads the nearest ancestor deposit, and both deposits stay ancestors of the tip after the merge-forward."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f8",
+    "q1",
+    "q2"
+  ],
+  "verdict": "Scoped re-arm on the fold: 0 BLOCKING, 2 MATERIAL, 7 MINOR, 3 questions, 71 tool uses, all prose. Reproduced: the three-file GREEN count 364 / 6 exactly, both parity suite counts, format clean, branch lint 23 warnings 0 errors in a scratch clone with full attribution. Executed the shipped hook bodies pre- and post-fix in scratch under each marker with every other marker scrubbed: RED and GREEN for the stated reasons. Falsified and held: the new pre-push cases are not vacuous (the invocation log is an exact-element match, so the advisory probe line cannot satisfy it; the status and BLOCKED assertions alone do not discriminate, which the PR body now says); every config-drift string occurs exactly once in the template; the three-arm list and the claim-discipline exclusion are exact; the no-opt-out sentence and the schema quote are faithful; the spec's first bullet is true; the set -u inversion is correct; the doctor follow-up is on the issue; the merge-forward is a merge with both deposits ancestors; the package list is the fixed group. Folded in the next commit: F1 (the doctor and shield gates run on every push and can block, the shield gate an LLM call per push), F2 (both marker variables must be unset), F3 (--no-verify attributed to git), F4 (five checkouts, four named), F5 (the case comment), F6 (the decorative marker dropped), F8 (the opt-in names the re-render), Q1 and Q2 (wording). Disclosed in the PR body: F7 (the fold's RED count was the filtered run; the unfiltered swap also fails the parity and snippet locks, as measured at 15140570) and F9 (the warnings dispositioned by class). Q3 answered by this deposit's sha. Convergence named by the author: the re-arm returned prose folds inside the paragraph the first fold rewrote, with no new falsification surface; a third leg would be the infinite-polish gradient, and the surviving shape is the one presented for merge."
+}

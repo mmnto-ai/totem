@@ -172,6 +172,25 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(AI_PROMPT_BLOCK).toContain('totem legs deposit --sha HEAD --from <findings.json>');
     expect(AI_PROMPT_BLOCK).toContain(`totem:reflexes:version:${REFLEX_VERSION}`);
   });
+
+  // The agent-detection half of the same sentence (mmnto-ai/totem#2706): which
+  // seats get strict automatically, on which variables, and the opt-in for the
+  // rest. Before 2706 the sentence said "which AI agents get automatically"
+  // while the hook tested names no Claude Code session exports, so an agent
+  // following its CLAUDE.md was told about an arm that never fired. A CLAUDE.md
+  // naming the wrong variable would reopen exactly that gap, so the variables
+  // are locked by name. The version guard in the two tests above cannot fail on
+  // its own (the block interpolates the same constant), so the literal pin here
+  // is what makes a clause edit without a bump loud: bump both together.
+  it('the gate clause names the seats that get strict automatically, the variables, and the opt-in', () => {
+    expect(AI_PROMPT_BLOCK).toContain('a Claude Code or Cursor seat gets automatically');
+    expect(AI_PROMPT_BLOCK).toContain('`CLAUDECODE`');
+    expect(AI_PROMPT_BLOCK).toContain('`CLAUDE_CODE_ENTRYPOINT`');
+    expect(AI_PROMPT_BLOCK).toContain('`CURSOR_TRACE_ID`');
+    expect(AI_PROMPT_BLOCK).toContain('totem hook install --strict');
+    expect(AI_PROMPT_BLOCK).not.toContain('which AI agents get automatically');
+    expect(REFLEX_VERSION).toBe(16);
+  });
 });
 
 // ─── `totem review` billing honesty (mmnto-ai/totem#2536) ─

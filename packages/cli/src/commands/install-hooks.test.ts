@@ -2866,10 +2866,15 @@ describe('buildPreCommitHook agent detection', () => {
     const hook = buildPreCommitHook(RENDER);
     expect(hook).toContain('is_agent=0');
     expect(hook).toContain('is_agent=1');
+    // The names a live Claude Code shell actually exports (mmnto-ai/totem#2706):
+    // without these two the strict arm never fires on a Claude Code seat.
+    expect(hook).toContain('"$CLAUDECODE"');
+    expect(hook).toContain('"$CLAUDE_CODE_ENTRYPOINT"');
     expect(hook).toContain('CLAUDE_CODE_AGENT');
     expect(hook).toContain('CLAUDE_VERSION');
     expect(hook).toContain('CURSOR_TRACE_ID');
     // GEMINI_API_KEY intentionally excluded — human devs export it for Totem's embedding provider
+    expect(hook).not.toContain('GEMINI_API_KEY');
   });
 
   it('includes TOTEM_HOOK_TIER variable', () => {
@@ -3000,6 +3005,41 @@ describe('buildPreCommitHook strict evidence — executed under sh (mmnto-ai/tot
     const r = spawnSync('sh', ['./pre-commit'], { cwd: tmpDir, encoding: 'utf-8', env });
     return { status: r.status, stdout: r.stdout };
   }
+
+  it.skipIf(!shellOk)(
+    'arms strict under CLAUDECODE=1 or CLAUDE_CODE_ENTRYPOINT alone, the variables a live Claude Code shell exports (mmnto-ai/totem#2706)',
+    () => {
+      // Every marker scrubbed first, so the control proves this checkout passes
+      // with no marker at all and each armed case proves ONE variable by itself.
+      // RED on the previous block, which tested only CLAUDE_CODE_AGENT,
+      // CLAUDE_VERSION and CURSOR_TRACE_ID: five seat-measurements in the issue
+      // thread found no live Claude Code session carrying any of those, so the
+      // strict arm never fired for the seats it was written for.
+      const scrubbed: NodeJS.ProcessEnv = { ...process.env };
+      for (const name of [
+        'CLAUDECODE',
+        'CLAUDE_CODE_ENTRYPOINT',
+        'CLAUDE_CODE_AGENT',
+        'CLAUDE_VERSION',
+        'CURSOR_TRACE_ID',
+      ]) {
+        delete scrubbed[name];
+      }
+      const control = runHookWith(scrubbed);
+      expect(control.stdout).not.toContain('no totem spec run artifact');
+      expect(control.status).toBe(0);
+
+      const byClaudecode = runHookWith({ ...scrubbed, CLAUDECODE: '1' });
+      expect(byClaudecode.status).toBe(1);
+      expect(byClaudecode.stdout).toContain(
+        'no totem spec run artifact under .totem/artifacts/runs/',
+      );
+
+      const byEntrypoint = runHookWith({ ...scrubbed, CLAUDE_CODE_ENTRYPOINT: 'cli' });
+      expect(byEntrypoint.status).toBe(1);
+      expect(byEntrypoint.stdout).toContain('no totem spec run artifact');
+    },
+  );
 
   it.skipIf(!shellOk)(
     'reports a reader that cannot run DISTINCTLY from missing evidence, and still fails closed',
@@ -3945,6 +3985,8 @@ describe('buildPrePushHook with strict tier', () => {
   it('includes agent detection snippet', () => {
     const hook = buildPrePushHook({ ...RENDER, tier: 'strict' });
     expect(hook).toContain('is_agent=0');
+    expect(hook).toContain('"$CLAUDECODE"');
+    expect(hook).toContain('"$CLAUDE_CODE_ENTRYPOINT"');
     expect(hook).toContain('CLAUDE_CODE_AGENT');
   });
 
@@ -4204,7 +4246,12 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
   const HELP_WITHOUT_GATE =
     'Totem: local-first toolkit\n\nUsage: totem [command]\n\nCommands:\n  init         Initialize Totem\n  lint         Run compiled rules\n  merge-gate   Gate a merge';
 
-  function runHook(options: { tier: 'strict' | 'standard'; agent: boolean }): {
+  function runHook(options: {
+    tier: 'strict' | 'standard';
+    agent: boolean;
+    /** Which marker arms the agent (default the legacy explicit export). */
+    marker?: 'CLAUDECODE' | 'CLAUDE_CODE_ENTRYPOINT';
+  }): {
     status: number | null;
     stdout: string;
     stderr: string;
@@ -4214,16 +4261,23 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
       buildPrePushHook({ ...RENDER, tier: options.tier }),
     );
     // Every agent-detection variable is cleared explicitly: this suite runs
-    // inside an agent session, and an inherited CLAUDE_CODE_AGENT would make
-    // the standard-tier cases silently exercise the strict arm.
+    // inside an agent session, and an inherited CLAUDECODE=1 (what Claude Code
+    // really exports, mmnto-ai/totem#2706) or CLAUDE_CODE_AGENT would make the
+    // standard-tier cases silently exercise the strict arm.
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
     };
+    delete env['CLAUDECODE'];
+    delete env['CLAUDE_CODE_ENTRYPOINT'];
     delete env['CLAUDE_CODE_AGENT'];
     delete env['CLAUDE_VERSION'];
     delete env['CURSOR_TRACE_ID'];
-    if (options.agent) env['CLAUDE_CODE_AGENT'] = '1';
+    if (options.agent) {
+      if (options.marker === 'CLAUDE_CODE_ENTRYPOINT') env['CLAUDE_CODE_ENTRYPOINT'] = 'cli';
+      else if (options.marker === 'CLAUDECODE') env['CLAUDECODE'] = '1';
+      else env['CLAUDE_CODE_AGENT'] = '1';
+    }
     const result = spawnSync('sh', ['./pre-push'], { cwd: repoDir, env, encoding: 'utf-8' });
     return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
   }
@@ -4290,6 +4344,24 @@ describe('the review-leg floor arm executed under sh (mmnto-ai/totem#2698)', () 
     expect(invocations()).not.toContain('legs gate --advisory');
     expect(r.status).toBe(1);
   });
+
+  // Executed, not string-matched: the pre-push arm fires on the two variables a
+  // live Claude Code shell exports (mmnto-ai/totem#2706), on the standard tier,
+  // with every other marker scrubbed. RED on the previous block, where each of
+  // these ran the advisory arm and passed.
+  for (const marker of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT'] as const) {
+    it.skipIf(!shellOk)(
+      `a Claude Code shell (${marker} alone) on the standard tier takes the strict arm`,
+      () => {
+        writeStub({ helpText: HELP_WITH_GATE, gateExit: 3 });
+        const r = runHook({ tier: 'standard', agent: true, marker });
+        expect(invocations()).toContain('legs gate');
+        expect(invocations()).not.toContain('legs gate --advisory');
+        expect(r.status).toBe(1);
+        expect(r.stdout).toContain('[Totem] BLOCKED: this push is legs-owed');
+      },
+    );
+  }
 
   it.skipIf(!shellOk)(
     'standard tier, no agent: --advisory is passed and exit 0 proceeds past the arm',
@@ -4503,6 +4575,10 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       ...process.env,
       PATH: [binDir, process.env['PATH'] ?? ''].join(path.delimiter),
     };
+    // Scrubbed for the same reason as the arm suite above: this suite runs
+    // inside a Claude Code shell, which exports CLAUDECODE=1 (mmnto-ai/totem#2706).
+    delete env['CLAUDECODE'];
+    delete env['CLAUDE_CODE_ENTRYPOINT'];
     delete env['CLAUDE_CODE_AGENT'];
     delete env['CLAUDE_VERSION'];
     delete env['CURSOR_TRACE_ID'];
