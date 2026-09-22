@@ -1,0 +1,9 @@
+## Lesson — Since the mmnto-ai/totem#2926 merge (6954f2a5, the cut
+
+**Tags:** hooks, strict-tier, claude-code, trap, worktree
+
+**Applies-to:** infrastructure, boundary-test
+
+Since the mmnto-ai/totem#2926 merge (6954f2a5, the cut after @mmnto/cli 2.9.3; the mmnto-ai/totem#2706 ruling) the managed pre-commit and pre-push hooks arm the strict tier on CLAUDECODE and CLAUDE_CODE_ENTRYPOINT, the two variables a live Claude Code shell exports. Before it the block tested only CLAUDE_CODE_AGENT, CLAUDE_VERSION and CURSOR_TRACE_ID, which no Claude Code session carries (five seat-measurements, 2026-08-30 to 2026-09-13), so the strict arm was inert on every Claude Code seat and the managed CLAUDE.md sentence "AI agents get strict automatically" described a mechanism that never fired. What strict does on a Claude Code seat at the next hook re-render: pre-commit blocks until the checkout carries an anchored `totem spec` run artifact (a fresh worktree has none); pre-push runs the legs gate in blocking mode, `totem doctor --strict`, and the shield gate (`totem review --gate`, an LLM call per push). There is no repo-level opt-out: the arm is is_agent OR tier = strict, so a `hooks.tier: 'standard'` pin does not suppress it; a per-command bypass is git's --no-verify or running that one command with BOTH markers unset (unsetting one alone still arms). TRAP for tests: any test that spawns a rendered hook with process.env inherited must scrub CLAUDECODE and CLAUDE_CODE_ENTRYPOINT as well as the three old names, or it silently runs the strict arm inside a Claude Code shell and the standard arm in CI (the two pre-push suites in install-hooks.test.ts do). TRAP for this repository: `pnpm install` runs prepare, which copies tools/pre-* into the SHARED .git/hooks (the commondir), so one install in any worktree arms every worktree and the resident checkout at once.
+
+**Source:** mcp (added at 2026-09-22T00:06:23.100Z)
