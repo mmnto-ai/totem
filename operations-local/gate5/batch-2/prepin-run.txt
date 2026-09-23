@@ -1,0 +1,18 @@
+Gate (5) batch 2 — pre-pin pass (pre-registration § 3.3), the seat's attestation of what the two captured logs beside this file do not print themselves.
+
+clone:        git clone --quiet --branch gate5/batch-2-2263305c --single-branch <the resident repository> <scratchpad>/prepin-clone-b2
+clone HEAD:   4732a1c4e15e2cf8ced25bf099ed70ef393b2fff  (the envelope commit; checked equal to the pushed commit before the pass)
+staging:      <scratchpad>/staging-2.10.0 — @mmnto/cli 2.10.0, @mmnto/totem 2.10.0, @ast-grep/napi 0.42.3, node v24.16.0 (a fresh npm install of the exact published versions)
+
+validate leg (cwd = the clone root; no --tree — the firing-set leg is the batch run's):
+  node operations-local/gate5/mig-harness.mjs --set operations-local/gate5/manifest-2263305c.json --only 5afaf8d0,329479bf,638d6fcc,06282905,24f112fe,fb05f895,81f72c85,3c777370,487a0a23,7cdfa106,f202f65f,2d3ac4b9,240f19ca --inventory operations-local/gate5/batch-2/mig-inventory.json --core <staging>/node_modules/@mmnto/totem --cli <staging>/node_modules/@mmnto/cli
+  exit code:  0
+  captured:   prepin-validate.log (stdout + stderr, verbatim)
+
+intake (cwd = the clone root; the published binary runs itself, never a checkout's dist; no --judged-by, so the CLI default static-whitelist@cert-1 applied at this PRE-release pass):
+  TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author
+  exit code:  1  (expected at this pass: 2 minted on the exemplar row, 27 rejected per rule on the pre-release whitelist, no file-aborting throw)
+  captured:   prepin-intake.log (stdout + stderr, verbatim)
+  ledger:     .totem/spine/authoring-ledger.ndjson written in the clone only (2 rows); not on the branch (git ls-files .totem/spine/ lists no ledger)
+
+attested by totem-claude, 2026-09-23.

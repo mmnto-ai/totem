@@ -20,8 +20,30 @@ translated to `requires:` at the `line` window, the widening measured (below).
 off `origin/main`), because the generalized harness, the frozen manifest copy, the K3 expectations
 file and the `.prettierignore` line live only on that branch until mmnto-ai/totem#2945 merges; the
 batch-1 records and envelope are therefore present here unchanged (`git diff 49754e9c..HEAD --
-.totem/rules/mig-<batch-1 hash8>-*` is empty for every batch-1 record). The batch-2 draft PR targets
-the batch-1 branch and re-targets to `main` when that branch merges.
+.totem/rules/mig-<batch-1 hash8>-*` is empty for every batch-1 record). The batch-2 draft PR
+(mmnto-ai/totem#2947) targets the batch-1 branch and re-targets to `main` when that branch merges.
+The manifest-only refresh (D2) ran at this pin too (`0689f778`: `records_hash` re-attested over the
+29 tracked records, `compiled_at` restamped, nothing else), because the pre-push compile-manifest arm
+requires it for a push carrying new tracked records. **Four foreseeable merges, named (the leg's
+b2-F1):** when the batch-1 branch gains its ledger rows and its own manifest-only refresh at its
+intake pin and then squash-merges, (a) `.totem/compile-manifest.json` conflicts by construction —
+both branches restamp the same two lines; (b) the shared envelope is not append-only past batch 1's
+intake pin — § 3.3 keeps a review-rejected entry out of the envelope at intake time, so batch 1's file
+will lose some of its 14 entries while this branch's copy still carries all 14; (c) `judgedBy` sits
+inside `structuralEligibility`, which is part of the ledger row's `authoringContentHash`
+(`packages/cli/src/authored-rule-intake.ts`), so a batch-2 intake over carried batch-1 entries under a
+different `--judged-by` set id would read every carried entry `revised` (an apparatus fault under
+§ 3.3), and without batch 1's ledger rows carried forward they would mint again and
+`authoring-ledger.ndjson` would conflict add/add; (d) after the squash `49754e9c` is not an ancestor
+of `main`. **The sequencing rule this imposes:** batch 2's intake step runs only after
+mmnto-ai/totem#2945 merges and `main` is brought into this branch by MERGE, never a rebase (the legs
+gate matches deposits by ancestry), and the base branch is never removed by a raw ref-delete (which
+would end the dependent PR instead of re-targeting it); the envelope is then reconciled to batch 1's
+post-intake entries (the generator's `--exclude` regenerates this batch's entries beside them),
+batch 1's ledger rows ride the merge, this batch's intake runs over its own entries, and the
+manifest-only refresh runs again as the last action. The `pr` values differ per batch (2945 on
+batch 1's entries, 2947 on this batch's) and are inert under the free-text lane (`pr` is read only
+under a content-addressed binding).
 
 ## Method
 
@@ -31,7 +53,14 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   value was COPIED out of the frozen manifest copy (sha256-checked by the generator before any read)
   by a generator (the translator's scratch tool, not part of the pin) and round-trip-checked against
   it FROM THE WRITTEN FILE; nothing was retyped. The generalized harness's fidelity leg re-verifies
-  the copy with the real parser (12/15 identical + 3 declared (ii) divergences + 0 unexpected, below).
+  the copy with the real parser on the twelve identical records (12/15 identical + 3 declared (ii)
+  divergences + 0 unexpected, below); **on the three (ii) rows it checks only that a `requires:`
+  block is present and excuses the payload delta** (the pin's harness, unchanged), so the record
+  pattern and `requires.pattern` of `638d6fcc`, `24f112fe` and `487a0a23` are checked by the
+  generator's assertion (not on the branch) and, independently, by the falsification leg over this
+  pin (each record pattern is the legacy pattern with exactly one contiguous substring removed and
+  nothing else changed; each `requires.pattern` is the lookahead body, less `[^)]*` on
+  `638d6fcc`); the per-rule notes quote both sides for the scorer's C3 read.
 - **Record contract applied (§ 4 item 5):** `curation.sourceLesson: lesson-<lessonHash16>` ·
   `curatedBy` = the row's curator · `curatedAt` = the row's `curatedAt` (quoted, a string) ·
   `baseline5Phase: 3`; `severity` and `message` byte-for-byte; `examples[0]` = the curated pair after
@@ -53,8 +82,15 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   rule decides the declaration by the firing-set delta: no added firing = a right declaration;
   removed-only = PASS with the `window-widened` covariate; any added firing = `matcher-drift`. Each
   of the three is a suppress-when-present condition on the same line as the target — mechanically
-  what `requires:` expresses — so (ii) is the honest first-class translation and the widening is a
-  measurement, not a choice. Measured: **added 0 on all three; removed 1 on `24f112fe` and 1 on
+  what `requires:` expresses. **Declaring (ii) is the translator's choice** (§ 7 (b) offers keeping
+  the lookaround verbatim as the other route, and no gate in `rule-record.ts` or `record-lower.ts`
+  refuses a lookahead); its ground is C3's conjunct — "no opaque escape or regex hack standing in for
+  a first-class construct" — read with § 2 item 8's "the only V1 window for a target-adjacent
+  requirement is `line`": a lookahead kept in the pattern would stand in for the grammar's own
+  construct, so the first-class translation is the honest one, and its cost, the widening, is
+  measured rather than assumed. `487a0a23`'s two lookaheads are exemptions (a type-only import; an
+  `Error`-class import), not must-contains in the charter's wording; they qualify under C3's
+  mechanical rule, which reads any `requires:` translation of a lookaround by its delta. Measured: **added 0 on all three; removed 1 on `24f112fe` and 1 on
   `487a0a23` (each quoted in its per-rule note), removed 0 on `638d6fcc`.** By construction the
   record fires only where the legacy fires (the record's target is the legacy pattern less its
   lookahead, and the record is silent whenever the requirement is present anywhere on the line,
@@ -98,6 +134,14 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   NAME is (the whitelist keys on the pair, and engine typing is half of the review, so a batch-1
   class under the other engine is named as new for the review's purpose). Where a class's token can
   appear in prose or a doc-comment, the engine-typing question is stated for the scorer's review.
+  **Disclosed for the class review and the delivery PR (the leg's b2-F5):** the whitelist file's
+  header says "a class present under two engines is AMBIGUOUS ⇒ non-decidable", while the shipped
+  predicate `evaluateStructuralEligibility` (`packages/core/src/spine/authored-rule.ts`) filters on
+  BOTH engine and class — exactly one `(engine, class)` match — so two rows of one class under two
+  engines are each decidable, not ambiguous; and the eligibility `basis` string is
+  `whitelist:<class>` with no engine, so an admitted `(regex, forbidden-callee-call)` row and an
+  admitted `(ast-grep, forbidden-callee-call)` row would carry the same basis string in the ledger.
+  The reviewer reads the header; the delivery PR should say which text governs.
 
 ## Whole-batch transformation inventory
 
@@ -168,8 +212,9 @@ firing set (legacy → record, union for a set) · notes.
 
 - Legacy: `pattern` = a single character class of emoji ranges and code points (54 UTF-16 code
   units: `[☀-➿` … `㊙]`, carrying the surrogate ranges `\uD83C-\uDBFF` and `\uDC00-\uDFFF` as lone
-  code units — under the runtime's `new RegExp(pattern)` with no `u` flag these match any surrogate
-  code unit, i.e. any astral character); globs `**/*.md`, `**/*.mdx`; warning. Record: pattern
+  code units — under the runtime's `new RegExp(pattern)` with no `u` flag these are code-unit classes —
+  high surrogates from D83C up and every low surrogate — so every astral character matches through
+  its low surrogate, while a lone high surrogate below D83C would not); globs `**/*.md`, `**/*.mdx`; warning. Record: pattern
   verbatim — on disk a double-quoted YAML scalar with the two lone surrogates as `\ud83c` / `\udfff`
   escapes and the paired `􏰀` written as one literal astral character, which the `yaml`
   parser returns as the legacy string byte-for-byte (the generator's round trip from the written
@@ -206,11 +251,14 @@ firing set (legacy → record, union for a set) · notes.
   `pattern: execFileSync\s*\(\s*['"]git['"]` (the legacy pattern less its one lookahead) +
   `requires: { pattern: 'shell:\s*(?:true|IS_WIN)', scope: line }` (the lookahead's body less its
   window prefix `[^)]*`); globs verbatim (`.tsx`/`.jsx` match 0 files; kept — regex).
-- Inventory: **(ii)** — a must-contain bounded by the call's closing parenthesis (`[^)]*`), which
-  the `line` window widens to the whole line (§ 2 item 1 names this row). Measured: removed 0,
-  added 0 over the pinned tree — no line in scope carries `shell:\s*(?:true|IS_WIN)` outside the
-  call and after the target, so the widening produced no delta here (no `window-widened` covariate
-  arises on this tree; the seam remains and is disclosed).
+- Inventory: **(ii)** — a must-contain whose legacy window is `[^)]*`: the text after the target up
+  to the FIRST `)`, which may sit inside an argument; the `line` window covers the whole line, the
+  text before the target included (§ 2 item 1 names this row). Two line shapes where the legacy
+  fires and the record is silent, checked under both matchers: `execFileSync('git', a.map(f()), {
+shell: true })` (the first `)` closes `f()`) and `const o={ shell: true }; execFileSync('git',
+['x'])` (the requirement precedes the target). Measured over the pinned tree: removed 0, added 0 —
+  no in-scope line has either shape, so no `window-widened` covariate arises on this tree; the seam
+  is disclosed.
 - Honest class: `callee-literal-arg-missing-option` (regex) — a call to a named callee whose first
   argument is a fixed string literal, lacking a required option in its argument list (batch 1's
   `forbidden-callee-literal-arg` target shape, `a190836d`, plus a must-contain). New for the review.
@@ -430,7 +478,10 @@ the pushed commit), never the branch checkout; the ledger rows the pass wrote
 (`.totem/spine/authoring-ledger.ndjson`, two rows for the two minted entries) stayed in the clone
 and are not on the branch. Both legs used the staging install of the PUBLISHED 2.10.0
 (`<staging>/node_modules/@mmnto/{cli,totem}`; napi 0.42.3; node v24.16.0). The logs are on the branch
-as `prepin-validate.log` and `prepin-intake.log` beside these notes.
+as `prepin-validate.log` and `prepin-intake.log` beside these notes; they carry no header of their
+own (the intake prints none; the validate log's K4 header names the clone path, not its commit), so
+the clone commit, both invocations and both exit codes are attested by the seat in `prepin-run.txt`
+beside them, the captured logs untouched.
 
 **Coverage limit of the pass, disclosed (as batch 1 disclosed it):** in `authored-rule-intake.ts` a
 whitelist miss returns before `deriveRecordFixtures` and the record-schema parse of the entry, so on
