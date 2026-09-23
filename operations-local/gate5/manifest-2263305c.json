@@ -1,0 +1,2380 @@
+{
+  "registration": "operations/310-migration-preregistration.md v1",
+  "ledgerRegistration": "mmnto-ai/totem-strategy#288 § 10 curation charter 2026-08-22",
+  "strategyHeadSha": "b9ed654ddf81779b51d63a513d6377f7bb626334",
+  "apparatusBlobs": {
+    "operations/310-migration/freeze.mjs": "71a70b503f303fb0a7eb39394bf7d629456525d7",
+    "operations/310-migration/lib/pair-norm.mjs": "9cfa718f3f6823c89471c46292dfa0d92f3e99de"
+  },
+  "inputs": {
+    "ledger": {
+      "path": "operations/310-curation/ledger.ndjson",
+      "blob": "f8306f7d244e9b0f04a3e79090a322b60fcf19a9"
+    },
+    "ranking": {
+      "path": "operations/310-r14-audit/ranking.json",
+      "blob": "db953c6a86dce12bf7e20a9a4d1d01244a052cc4",
+      "snapshotAt": "2026-08-20T06:17:21.003Z",
+      "totemHeadSha": "5293614badd3cc5a67993abd8a6db46afb1c400f"
+    },
+    "seed20": {
+      "path": "operations/310-r14-audit/seed-20.json",
+      "blob": "2388936031f5a56e84ab4d6eb87e9c09ce6398da"
+    },
+    "compiledRules": {
+      "path": "operations/310-r14-audit/inputs/compiled-rules.json",
+      "blob": "589f3f166623883f870a75969095e33b9fdca617",
+      "sha256": "bb4c800ac02a78d001174acbe4c89f04ffffa0b41d215b75c3dfdc95299d1e3a"
+    },
+    "prepass": {
+      "path": "operations/310-curation/prepass.json",
+      "blob": "6ca21568d7a7548cf7267ce56fc14cdf8e21c33c"
+    }
+  },
+  "r14RecordPin": {
+    "branch": "r14/seed-20-translation",
+    "sha": "78e7f196b93caf0df68a3baba561cce66279563c"
+  },
+  "pairNormalization": "lib/pair-norm.mjs: lf = CRLF -> LF only (the product's own rule); pairSha256 = sha256(JSON.stringify([lf(bad), lf(good)])) — a freeze-integrity digest; C0 (a) is decided by the product's ruleExamplePairHash (§ 3.1)",
+  "sourceRefCitesRule": "sourceRef matching /[.]totem\\/rules\\/r14-/ -> 'r14-record'; matching /record-exemplars[.]fixture[.]ts/ -> 'exemplar'; else 'other' — a classification of the citation text, not of authorship or equality",
+  "targetDefectTextRule": "lessonHeading, unless it is an ISO-8601 timestamp, then the first 120 characters of message (§ 4 item 6)",
+  "order": "rank ascending (the frozen ranking's order); lessonHash ascending on a tie",
+  "counts": {
+    "promote": 53,
+    "byEngine": {
+      "ast-grep": 21,
+      "regex": 32
+    },
+    "byCurator": {
+      "status-claude": 7,
+      "strategy-codex": 11,
+      "strategy-kimi": 22,
+      "totem-claude": 13
+    },
+    "byRowShape": {
+      "nested": 29,
+      "top-level": 24
+    },
+    "bySourceRefCites": {
+      "exemplar": 1,
+      "other": 49,
+      "r14-record": 3
+    },
+    "byStrata": {
+      "S1-flat-regex": 17,
+      "S1-flat-regex+S4-absent-must-contain": 5,
+      "S1-flat-regex+S4-absent-must-contain+S5-explicit-exclusions": 4,
+      "S1-flat-regex+S5-explicit-exclusions": 6,
+      "S2-flat-ast-grep": 10,
+      "S2-flat-ast-grep+S5-explicit-exclusions": 10,
+      "S3-compound-ast-grep+S4-absent-must-contain+S5-explicit-exclusions": 1
+    },
+    "r14SeedMembers": 4,
+    "duplicateGroupSurvivors": 4,
+    "legacyCompiledExamples": 2,
+    "headingIsTimestamp": 4
+  },
+  "rules": [
+    {
+      "lessonHash": "427c97fb0063f0cb",
+      "rank": 2,
+      "triggerCount": 14579,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Avoid using partial matchers like toContain when testing secret masking or data sanitization' (lesson-a9809941)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "expect(masked).toContain('sk-');",
+        "good": "expect(masked).toBe('sk-…redacted');"
+      },
+      "pairSha256": "b50e9c580025ae13847b2741d9267640d1492862a2a4ef896abb3757d22d2d83",
+      "targetDefectText": "Avoid using partial matchers like toContain when testing",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "427c97fb0063f0cb",
+        "lessonHeading": "Avoid using partial matchers like toContain when testing",
+        "pattern": "",
+        "message": "Avoid toContain for testing secret masking or data sanitization — use exact string assertions (e.g., toBe or toEqual) to ensure surrounding context is preserved and nothing is over-redacted.",
+        "engine": "ast-grep",
+        "astGrepPattern": "expect($VAL).toContain($EXPECTED)",
+        "compiledAt": "2026-04-06T03:27:07.216Z",
+        "createdAt": "2026-04-06T03:27:07.216Z",
+        "fileGlobs": [
+          "**/*.test.ts",
+          "**/*.spec.ts",
+          "**/*.test.tsx",
+          "**/*.spec.tsx",
+          "**/*.test.js",
+          "**/*.spec.js"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "71935fe9a742137b",
+      "rank": 10,
+      "triggerCount": 3163,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "R14 record .totem/rules/r14-71935fe9-string-cast-on-input.rule.yaml @ mmnto-ai/totem 62fa5b42 — differential VERIFIED at the pin (bad fires, good silent)",
+      "sourceRefCites": "r14-record",
+      "curatedPair": {
+        "bad": "const pattern = String(input.pattern);",
+        "good": "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+      },
+      "pairSha256": "cb72f1806459bad4b7fbb72680ee0373932949af28477bd29cad0ab25d27b623",
+      "targetDefectText": "Using String() casting on input patterns can lead to silent",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "71935fe9a742137b",
+        "lessonHeading": "Using String() casting on input patterns can lead to silent",
+        "pattern": "",
+        "message": "Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'. Explicitly validate the type and throw a descriptive error instead.",
+        "engine": "ast-grep",
+        "astGrepPattern": "String($INPUT)",
+        "compiledAt": "2026-04-06T03:21:39.640Z",
+        "createdAt": "2026-04-06T03:21:39.640Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.tsx",
+          "**/*.js",
+          "**/*.jsx"
+        ],
+        "severity": "warning"
+      },
+      "r14": {
+        "seedEntry": 18,
+        "recordPin": "78e7f196b93caf0df68a3baba561cce66279563c",
+        "branch": "r14/seed-20-translation"
+      }
+    },
+    {
+      "lessonHash": "54140f59be3e6e44",
+      "rank": 25,
+      "triggerCount": 1985,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'when aggregating multiple sources, use qualified syntax like owner/repo#number' (lesson-8ce9f3a5 — full body intact)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const ref = 'fixed in #1234';",
+        "good": "const ref = 'fixed in mmnto-ai/totem#1234';"
+      },
+      "pairSha256": "66ccba51f54c282ceb40b3520ca0ccc01cfec55828d668523eb673b6c74a38ac",
+      "targetDefectText": "Issue numbers are only unique within a single repository;",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "54140f59be3e6e44",
+        "lessonHeading": "Issue numbers are only unique within a single repository;",
+        "pattern": "(^|[^a-zA-Z0-9-_./])#\\d+",
+        "message": "Issue numbers are only unique within a single repository;",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:28.328Z",
+        "createdAt": "2026-05-16T20:48:28.328Z",
+        "fileGlobs": [
+          "packages/cli/**/*.ts",
+          "apps/cli/**/*.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "error",
+        "manual": true,
+        "unverified": true
+      },
+      "r14": {
+        "seedEntry": 5,
+        "recordPin": "78e7f196b93caf0df68a3baba561cce66279563c",
+        "branch": "r14/seed-20-translation"
+      }
+    },
+    {
+      "lessonHash": "4f283f5495489a19",
+      "rank": 35,
+      "triggerCount": 1381,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Replacing inline fs.rmSync calls with a shared helper ensures retry logic and error-handling policies remain consistent' (lesson-0ec8999c)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "fs.rmSync(tmpDir, { recursive: true, force: true });",
+        "good": "await removeWithRetry(tmpDir);"
+      },
+      "pairSha256": "7dded4e48ab8f018c1a8150ef45fe8e063972d60948742f6da1a652ea0c60a00",
+      "targetDefectText": "Replacing inline fs.rmSync calls with a shared helper",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "4f283f5495489a19",
+        "lessonHeading": "Replacing inline fs.rmSync calls with a shared helper",
+        "pattern": "",
+        "message": "Use the shared helper instead of inline fs.rmSync calls to ensure consistent retry logic and error-handling across the test suite.",
+        "engine": "ast-grep",
+        "astGrepPattern": "fs.rmSync($$$ARGS)",
+        "compiledAt": "2026-04-06T03:20:00.691Z",
+        "createdAt": "2026-04-06T03:20:00.691Z",
+        "fileGlobs": [
+          "**/*.test.ts",
+          "**/*.test.js",
+          "**/*.spec.ts",
+          "**/*.spec.js"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "bc8b99e815c3943f",
+      "rank": 41,
+      "triggerCount": 1181,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Standard console.log or console.error calls in MCP tools can corrupt the stdio transport protocol used for communication. Use dedicated file-based loggers or return formatted system warnings to the agent instead of swallowing errors in catch blocks.' (lesson-1faaf06c)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "console.log('mcp server listening on stdio');",
+        "good": "logger.info('mcp server listening on stdio');"
+      },
+      "pairSha256": "69eef063cf8df51573bfaf83fc9419768d8772baad8b12191faa4007b06b3ad0",
+      "targetDefectText": "Standard console.log or console.error calls in MCP tools",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "bc8b99e815c3943f",
+        "lessonHeading": "Standard console.log or console.error calls in MCP tools",
+        "pattern": "",
+        "message": "Do not use console.log in MCP tools — it corrupts the stdio transport protocol. Use a file-based logger or return a formatted system warning instead.",
+        "engine": "ast-grep",
+        "astGrepPattern": "console.log($$$ARGS)",
+        "compiledAt": "2026-04-06T03:20:50.999Z",
+        "createdAt": "2026-04-06T03:20:50.999Z",
+        "fileGlobs": [
+          "packages/mcp/**/*.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "2266fc0dfe824f24",
+      "rank": 44,
+      "triggerCount": 1123,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": true,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-7a5bc642.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "import { deriveSettled } from '@mmnto/totem';",
+        "good": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan() {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
+      },
+      "pairSha256": "6395e1e56e6ae0d4281fd1904e15938da085fc98f64498f32a625a475b0624cb",
+      "targetDefectText": "Static top-level imports from heavy internal packages delay",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "2266fc0dfe824f24",
+        "lessonHeading": "Static top-level imports from heavy internal packages delay",
+        "pattern": "",
+        "message": "Avoid static top-level value imports from '@mmnto/totem' in CLI commands — the core barrel pulls LanceDB and other heavy deps into every startup, including --help. Use dynamic `await import('@mmnto/totem')` inside the command function; `import type { ... }` stays static (erased at build). Named-import shape; default-import shape is covered by sibling rules 3bb96274/c5192192 (mmnto-ai/totem#2339).",
+        "engine": "ast-grep",
+        "astGrepPattern": "import { $$$NAMES } from '@mmnto/totem'",
+        "compiledAt": "2026-04-06T03:25:03.655Z",
+        "createdAt": "2026-04-06T03:25:03.655Z",
+        "fileGlobs": [
+          "packages/cli/src/commands/**/*.ts",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "error",
+        "badExample": "import {\n  deriveCacheEligible,\n  deriveSettled,\n  renderCovariateLine,\n  TotemConfigError,\n  VERDICT_ARTIFACT_SCHEMA_VERSION,\n} from '@mmnto/totem';",
+        "goodExample": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan(): Promise<void> {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
+      }
+    },
+    {
+      "lessonHash": "a190836df4daa24d",
+      "rank": 46,
+      "triggerCount": 1065,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-forbid-raw-git-exec.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const out = execFileSync('git', ['status', '--porcelain']);",
+        "good": "const branch = getGitBranch(cwd);"
+      },
+      "pairSha256": "ed7f809bc769cd0b10cff216d6598e7ed515472599eae99d5096e7df0eb5dd37",
+      "targetDefectText": "Use git adapter instead of raw git execution",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "a190836df4daa24d",
+        "lessonHeading": "Use git adapter instead of raw git execution",
+        "pattern": "(?:execFileSync|safeExec)\\(\\s*['\"`]git['\"`]",
+        "message": "Use git adapter instead of raw git execution",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:30:42.814Z",
+        "createdAt": "2026-04-06T03:30:42.814Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "!packages/core/src/sys/git.ts",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "87aff037d7de47a7",
+      "rank": 47,
+      "triggerCount": 1029,
+      "engine": "ast-grep",
+      "strata": [
+        "S3-compound-ast-grep",
+        "S4-absent-must-contain",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": true,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/rules/r14-87aff037-fail-open-catch-ban.rule.yaml@2a713576",
+      "sourceRefCites": "r14-record",
+      "curatedPair": {
+        "bad": "try { fs.unlinkSync(p); } catch (err) { console.warn(err); }",
+        "good": "try { fs.unlinkSync(p); } catch (err) { throw new Error('unlink failed', { cause: err }); }"
+      },
+      "pairSha256": "c24e35d6d97f152cb65937bdefeb56f843bba60a05dcf427777299cc6c3aa8e5",
+      "targetDefectText": "Ban fail-open catch blocks that skip re-throwing",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "87aff037d7de47a7",
+        "lessonHeading": "Ban fail-open catch blocks that skip re-throwing",
+        "pattern": "",
+        "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
+        "engine": "ast-grep",
+        "astGrepYamlRule": {
+          "rule": {
+            "kind": "catch_clause",
+            "not": {
+              "has": {
+                "kind": "throw_statement",
+                "stopBy": "end"
+              }
+            }
+          }
+        },
+        "compiledAt": "2026-04-15T07:06:45.072Z",
+        "createdAt": "2026-04-15T07:06:45.072Z",
+        "fileGlobs": [
+          "packages/**/*.ts",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "error",
+        "manual": true
+      },
+      "r14": {
+        "seedEntry": 3,
+        "recordPin": "78e7f196b93caf0df68a3baba561cce66279563c",
+        "branch": "r14/seed-20-translation"
+      }
+    },
+    {
+      "lessonHash": "a1fd35ee696110b0",
+      "rank": 49,
+      "triggerCount": 887,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-2aa447d9.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const { parse } = await import('yaml');",
+        "good": "import { parse } from 'yaml';"
+      },
+      "pairSha256": "079b17f670395a03fd075159e43cce9b2eecf6694de25d0251c1ae068dac301d",
+      "targetDefectText": "Dynamic imports intended for performance optimization",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "a1fd35ee696110b0",
+        "lessonHeading": "Dynamic imports intended for performance optimization",
+        "pattern": "",
+        "message": "Dynamic imports should only be used at CLI command entry points, not in utility or adapter layers. Move lazy-loading to the command entry point to maintain a clean dependency graph and avoid security scanner flags.",
+        "engine": "ast-grep",
+        "astGrepPattern": "import($MODULE)",
+        "compiledAt": "2026-04-06T03:21:17.839Z",
+        "createdAt": "2026-04-06T03:21:17.839Z",
+        "fileGlobs": [
+          "packages/cli/src/utils/**/*.ts",
+          "packages/cli/src/adapters/**/*.ts",
+          "packages/cli/src/lib/**/*.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "61bb8b8b88d2ecab",
+      "rank": 55,
+      "triggerCount": 650,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Direct type assertions (as LockData) can mask TypeError risks if a lock file is concurrently truncated, malformed, or empty' (lesson-6c74f5ff; the as-unknown+Zod exception is scope-excluded via !**/registry.ts)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const data = JSON.parse(raw) as LockData;",
+        "good": "const data = LockDataSchema.parse(JSON.parse(raw));"
+      },
+      "pairSha256": "389647c05e950738558305733278059df4c09c989ac8f1ae9941cc4421bb50cb",
+      "targetDefectText": "Perform explicit null and type checks on the results",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "61bb8b8b88d2ecab",
+        "lessonHeading": "Perform explicit null and type checks on the results",
+        "pattern": "",
+        "message": "Perform explicit null and type checks on the results",
+        "engine": "ast-grep",
+        "astGrepPattern": "JSON.parse($A) as $B",
+        "compiledAt": "2026-05-16T20:48:11.638Z",
+        "createdAt": "2026-05-16T20:48:11.638Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.tsx",
+          "!**/registry.ts"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "6ad0d4d5c760a5d6",
+      "rank": 59,
+      "triggerCount": 509,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": true,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Absolute claims should be replaced with specific descriptions of tested environments and observed results' (lesson-3b28d35f)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "Totem guarantees seamless, world-class performance.",
+        "good": "Totem enforced the rule set on the tested 485-rule corpus."
+      },
+      "pairSha256": "6ad5650fffa84f3b5e9f3a92127bc8f3e29c02f148c072d0093ac6ee2fb383a7",
+      "targetDefectText": "Technical documentation must avoid marketing-centric terms",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "6ad0d4d5c760a5d6",
+        "lessonHeading": "Technical documentation must avoid marketing-centric terms",
+        "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+        "message": "Technical documentation must avoid marketing-centric terms. Replace absolute claims with specific descriptions of tested environments and observed results.",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:22:04.487Z",
+        "createdAt": "2026-04-06T03:22:04.487Z",
+        "fileGlobs": [
+          "**/*.md",
+          "**/*.mdx",
+          "**/*.rst",
+          "**/*.txt"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "1210f02da9f16e5b",
+      "rank": 68,
+      "triggerCount": 449,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": true,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-38229426.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "throw new Error('bad config');",
+        "good": "throw new TotemConfigError('bad config');"
+      },
+      "pairSha256": "02708f48c112f31fa0b348f6ed06efbfced16c800b08af6a2b0061d9c1ac0194",
+      "targetDefectText": "Using domain-specific error subclasses instead of raw Error",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "1210f02da9f16e5b",
+        "lessonHeading": "Using domain-specific error subclasses instead of raw Error",
+        "pattern": "",
+        "message": "Throw a domain-specific error subclass instead of raw Error so CLI handlers can provide actionable recovery hints and suppress noisy stack traces for known failure modes.",
+        "engine": "ast-grep",
+        "astGrepPattern": "throw new Error($MSG)",
+        "compiledAt": "2026-04-06T03:21:57.473Z",
+        "createdAt": "2026-04-06T03:21:57.473Z",
+        "fileGlobs": [
+          "packages/cli/**/*.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "7056157a6bf72fa8",
+      "rank": 75,
+      "triggerCount": 373,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'use git rev-parse --git-path hooks to support custom hook paths and worktrees correctly' (lesson-90fe3242)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const hooksDir = '.git/hooks';",
+        "good": "const hooksDir = execSync('git rev-parse --git-path hooks').toString().trim();"
+      },
+      "pairSha256": "2dce4cb1df1d3ba5a94facee8177f14614e7bad19d2ef3db35d33feb579f61b4",
+      "targetDefectText": "Instead of hardcoding .git/hooks, use 'git rev-parse",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "7056157a6bf72fa8",
+        "lessonHeading": "Instead of hardcoding .git/hooks, use 'git rev-parse",
+        "pattern": "[\\/'\"`]?\\.git[\\/]hooks",
+        "message": "Do not hardcode '.git/hooks' — use 'git rev-parse --git-path hooks' to support custom hook paths and worktrees correctly.",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:26:02.574Z",
+        "createdAt": "2026-04-06T03:26:02.574Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.mjs",
+          "**/*.cjs"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "5afaf8d03f059a41",
+      "rank": 77,
+      "triggerCount": 365,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Emojis are excluded from all documentation files to adhere to the project's professional formatting standards' (lesson-3d96d9c7)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "## Results ✅",
+        "good": "## Results"
+      },
+      "pairSha256": "a32d56323473c51e4a76920984ff34ed51718fe996d64409e1fcf7e62f0e1813",
+      "targetDefectText": "Emojis are excluded from all documentation files to adhere",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "5afaf8d03f059a41",
+        "lessonHeading": "Emojis are excluded from all documentation files to adhere",
+        "pattern": "[☀-➿\ud83c-􏰀-\udfff⌀-⏿⭐-⭕⌚-⌛▪-◾☔-☕♈-♓⚪-⚫✅✔✖❌❎❓-❕❗➡⤴-⤵©®‼⁉⃣〰〽㊗㊙]",
+        "message": "Emojis are not allowed in documentation files — project standards require professional formatting without emoji characters",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:33:24.501Z",
+        "createdAt": "2026-04-06T03:33:24.501Z",
+        "fileGlobs": [
+          "**/*.md",
+          "**/*.mdx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "329479bf34f8816f",
+      "rank": 78,
+      "triggerCount": 363,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-18586d8b.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const schema = z.array(z.string());",
+        "good": "const schema = z.array(z.string().min(1));"
+      },
+      "pairSha256": "52ab1cc86f70afa6fa95ac13c4bb569c396d31ce8e9d5797b18cbcb40f3aee11",
+      "targetDefectText": "Use .min(1) on string schemas in config arrays",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "329479bf34f8816f",
+        "lessonHeading": "Use .min(1) on string schemas in config arrays",
+        "pattern": "",
+        "message": "Use z.array(z.string().min(1)) to reject empty strings at parse time instead of filtering them at runtime",
+        "engine": "ast-grep",
+        "astGrepPattern": "z.array(z.string())",
+        "compiledAt": "2026-04-06T03:20:28.908Z",
+        "createdAt": "2026-04-06T03:20:28.908Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.tsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "638d6fcc8a601da0",
+      "rank": 87,
+      "triggerCount": 289,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Windows requires shell:true for git binary resolution' (lesson-86f1b0f3)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "execFileSync('git', ['rev-parse', 'HEAD']);",
+        "good": "execFileSync('git', ['rev-parse', 'HEAD'], { shell: IS_WIN });"
+      },
+      "pairSha256": "2cb26704e102b74aa469af67e4d6bb08e821736c88b914d07dae9af7ffb0dabe",
+      "targetDefectText": "Windows requires shell:true for git binary resolution",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "638d6fcc8a601da0",
+        "lessonHeading": "Windows requires shell:true for git binary resolution",
+        "pattern": "execFileSync\\s*\\(\\s*['\"]git['\"](?![^)]*shell:\\s*(?:true|IS_WIN))",
+        "message": "Windows requires shell:true for git binary resolution",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:14.280Z",
+        "createdAt": "2026-05-16T20:48:14.280Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.tsx",
+          "**/*.jsx"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "06282905d061ca34",
+      "rank": 100,
+      "triggerCount": 151,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": true,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-804f3379.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const out = execSync('git status');",
+        "good": "const out = execFileSync('git', ['status']);"
+      },
+      "pairSha256": "39d500a96bca7b4361a1a5873e873018d69a1073db3f00a504721d0418e57d21",
+      "targetDefectText": "Diagnostic hints must precisely identify the underlying",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "06282905d061ca34",
+        "lessonHeading": "Diagnostic hints must precisely identify the underlying",
+        "pattern": "",
+        "message": "Use execFileSync instead of execSync to avoid shell-parsing overhead and security risks",
+        "engine": "ast-grep",
+        "astGrepPattern": "execSync($$$ARGS)",
+        "compiledAt": "2026-04-06T03:25:24.078Z",
+        "createdAt": "2026-04-06T03:25:24.078Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.tsx",
+          "**/*.jsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "24f112fe3a6679bd",
+      "rank": 103,
+      "triggerCount": 141,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-a9ce5de1.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "throw new Error('bad config');",
+        "good": "throw new Error('[Totem Error] bad config');"
+      },
+      "pairSha256": "9cd868b2be95ca4c95b7bbc67293e48eb81fd13f14ff4c505c7dd260d1c860f9",
+      "targetDefectText": "Standardize exception messages with a consistent prefix",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "24f112fe3a6679bd",
+        "lessonHeading": "Standardize exception messages with a consistent prefix",
+        "pattern": "\\bnew\\s+\\w*Error\\(\\s*['\"`](?!\\[Totem Error\\])",
+        "message": "Standardize exception messages with a consistent prefix",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:14.282Z",
+        "createdAt": "2026-05-16T20:48:14.282Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "!**/*.test.ts"
+        ],
+        "severity": "error",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "fb05f895862808e6",
+      "rank": 113,
+      "triggerCount": 106,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": true,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Direct use of node:child_process is forbidden outside of the sys utilities. Use safeExec from @mmnto/totem instead. It handles cross-platform shell requirements (Windows shell: true), UTF-8 encoding, 10MB maxBuffer default' (lesson-forbid-child-process)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "import { execSync } from 'node:child_process';",
+        "good": "import { safeExec } from '@mmnto/totem';"
+      },
+      "pairSha256": "fff0569cc828777822011665776dc26b5bc5f25401dde0a28e552981e5138e88",
+      "targetDefectText": "Forbid direct child_process — use safeExec",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "fb05f895862808e6",
+        "lessonHeading": "Forbid direct child_process — use safeExec",
+        "pattern": "(?:from|require\\()\\s*['\"](?:node:)?child_process['\"]",
+        "message": "Forbid direct child_process — use safeExec",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:30:42.814Z",
+        "createdAt": "2026-04-06T03:30:42.814Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "!packages/core/src/sys/**",
+          "!**/*.test.ts",
+          "!**/*.spec.ts",
+          "!**/*.test.js",
+          "!**/*.spec.js"
+        ],
+        "severity": "error"
+      }
+    },
+    {
+      "lessonHash": "81f72c855eba4229",
+      "rank": 117,
+      "triggerCount": 90,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-0905a7ff.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const results = await Promise.allSettled(tasks);",
+        "good": "const results = await Promise.all(tasks);"
+      },
+      "pairSha256": "5dfe5c8e27f5fb0c31bc595086bb0f4484828ebf129bad670ca865b643be5dad",
+      "targetDefectText": "2026-03-06T05:32:34.074Z",
+      "headingIsTimestamp": true,
+      "legacy": {
+        "lessonHash": "81f72c855eba4229",
+        "lessonHeading": "2026-03-06T05:32:34.074Z",
+        "pattern": "Promise\\.allSettled",
+        "message": "2026-03-06T05:32:34.074Z",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:47:23.604Z",
+        "createdAt": "2026-05-16T20:47:23.604Z",
+        "fileGlobs": [
+          "**/cli/**/*.ts",
+          "**/totem/**/*.ts",
+          "**/orchestrator/**/*.ts"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "3c7773706e5b3b2d",
+      "rank": 119,
+      "triggerCount": 88,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-710c212c.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const glob = '**/*.{ts,js}';",
+        "good": "const globs = ['**/*.ts', '**/*.js'];"
+      },
+      "pairSha256": "3299ad3a555ebdbba40ddc974119ded4ac4934e4dc75e2b2a9fb908eff6c5f28",
+      "targetDefectText": "Brace expansion (e.g., \\*.{ts,js}) is not universally",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "3c7773706e5b3b2d",
+        "lessonHeading": "Brace expansion (e.g., \\*.{ts,js}) is not universally",
+        "pattern": "\\*\\.\\{[^}]+\\}",
+        "message": "Brace expansion (e.g., *.{ts,js}) is not universally supported and may silently match zero files. Expand into separate glob strings instead (e.g., [\"**/*.ts\", \"**/*.js\"]).",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:24:45.511Z",
+        "createdAt": "2026-04-06T03:24:45.511Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.json",
+          "**/*.yml",
+          "**/*.yaml"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "487a0a23bd24569d",
+      "rank": 129,
+      "triggerCount": 62,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Static top-level imports from heavy internal packages delay' (lesson-5361f089) + ADR-072 lazy command-load convention",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "import { runIndex } from '../core/index.js';",
+        "good": "const { runIndex } = await import('../core/index.js');"
+      },
+      "pairSha256": "c15ea9db392a3d4323d9a5a5b3bb6c65b3a80184575bcc3fea354d7e737e24ea",
+      "targetDefectText": "Static top-level imports from heavy internal packages delay",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "487a0a23bd24569d",
+        "lessonHeading": "Static top-level imports from heavy internal packages delay",
+        "pattern": "^import\\s+(?!type\\s)(?!\\s*\\{[^}]*Error).*from\\s+['\"](?:\\.\\.\\/|@[\\w-]+\\/)",
+        "message": "Static top-level imports from heavy internal packages delay",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:08.661Z",
+        "createdAt": "2026-05-16T20:48:08.661Z",
+        "fileGlobs": [
+          "packages/cli/src/commands/**/*.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "7cdfa1069477b69a",
+      "rank": 137,
+      "triggerCount": 43,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-6208fffc.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const { parse } = await import('yaml');",
+        "good": "import { parse } from 'yaml';"
+      },
+      "pairSha256": "079b17f670395a03fd075159e43cce9b2eecf6694de25d0251c1ae068dac301d",
+      "targetDefectText": "Dynamic imports should be limited to CLI command entry",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "7cdfa1069477b69a",
+        "lessonHeading": "Dynamic imports should be limited to CLI command entry",
+        "pattern": "\\bimport\\s*\\(",
+        "message": "Dynamic imports should be limited to CLI command entry",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:08.662Z",
+        "createdAt": "2026-05-16T20:48:08.662Z",
+        "fileGlobs": [
+          "packages/core/src/**/*.ts",
+          "packages/cli/src/adapters/**/*.ts",
+          "packages/cli/src/utils.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "f202f65f8a198f18",
+      "rank": 138,
+      "triggerCount": 43,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'When testing expected failures, assert the specific error message or violation count instead of just checking if an error was thrown. This prevents false positives where a different, unrelated error satisfies the test.' (lesson-f638b03c)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "await expect(loadConfig('/missing')).rejects.toThrow();",
+        "good": "await expect(loadConfig('/missing')).rejects.toThrow('[Totem Error] config not found');"
+      },
+      "pairSha256": "141fa291a02c06391892f95355e9a985d5625e5b8cf6e0bc82bb16795056d85a",
+      "targetDefectText": "When testing expected failures, assert the specific error",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "f202f65f8a198f18",
+        "lessonHeading": "When testing expected failures, assert the specific error",
+        "pattern": "",
+        "message": "Assert the specific error message or type in rejects.toThrow() — bare toThrow() allows unrelated errors to pass the test",
+        "engine": "ast-grep",
+        "astGrepPattern": "await expect($PROMISE).rejects.toThrow()",
+        "compiledAt": "2026-04-06T03:30:23.144Z",
+        "createdAt": "2026-04-06T03:30:23.144Z",
+        "fileGlobs": [
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "**/*.spec.ts",
+          "**/*.spec.tsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "2d3ac4b9516ed9b6",
+      "rank": 140,
+      "triggerCount": 40,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-07135f9a.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const instructions = '.gemini/gemini.md';",
+        "good": "const instructions = 'GEMINI.md';"
+      },
+      "pairSha256": "3211c7f5f2925c23e3d0d316d1bf07ba3ddffcdc4783de2157ea791b1952330c",
+      "targetDefectText": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "2d3ac4b9516ed9b6",
+        "lessonHeading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+        "pattern": "\\.gemini/gemini\\.md",
+        "message": "Gemini CLI and GCA do not recognize .gemini/gemini.md. Use GEMINI.md (uppercase) at the project root instead.",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:19:41.886Z",
+        "createdAt": "2026-04-06T03:19:41.886Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.json",
+          "**/*.yaml",
+          "**/*.yml",
+          "**/*.sh",
+          "**/*.md"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "240f19cae3e56b10",
+      "rank": 141,
+      "triggerCount": 39,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-fc5f8f10.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "process.exit(2);",
+        "good": "throw new TotemParseError('bad input');"
+      },
+      "pairSha256": "b0a4a6889e59893f903274a303a9304da4df71388be8a7354cb212d447a36aa2",
+      "targetDefectText": "Throwing specific error classes like TotemParseError",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "240f19cae3e56b10",
+        "lessonHeading": "Throwing specific error classes like TotemParseError",
+        "pattern": "",
+        "message": "Avoid calling process.exit() directly. Throw a specific error class (e.g., TotemParseError) instead to ensure consistent error handling and exit behavior across the CLI.",
+        "engine": "ast-grep",
+        "astGrepPattern": "process.exit($CODE)",
+        "compiledAt": "2026-04-06T03:30:35.271Z",
+        "createdAt": "2026-04-06T03:30:35.271Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "!**/*.test.ts",
+          "!**/*.test.js"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "391de7088c633579",
+      "rank": 146,
+      "triggerCount": 34,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-fe9485c6.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const range = 'main...HEAD';",
+        "good": "const range = dynamicRange;"
+      },
+      "pairSha256": "bd34080a4ce3875bb50145d4dba6be24709f47032017c3e10e9a2a2f85c8104c",
+      "targetDefectText": "2026-03-03T01:52:20.000Z",
+      "headingIsTimestamp": true,
+      "legacy": {
+        "lessonHash": "391de7088c633579",
+        "lessonHeading": "2026-03-03T01:52:20.000Z",
+        "pattern": "\\b(main|master)\\.\\.\\.HEAD\\b",
+        "message": "2026-03-03T01:52:20.000Z",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:33.200Z",
+        "createdAt": "2026-05-16T20:48:33.200Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.sh"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "83b86cd73d637a6c",
+      "rank": 154,
+      "triggerCount": 28,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-ac2bd4f2.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "interface ToolMeta { mcpServers: string[]; }",
+        "good": "interface ToolMeta { mcpServers?: string[]; }"
+      },
+      "pairSha256": "ff0977afd1e5ece463be1fb0934b29f6981ee5db05a5d0a52cb45e2d88f9f65d",
+      "targetDefectText": "AI tool metadata must treat MCP-related fields as optional",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "83b86cd73d637a6c",
+        "lessonHeading": "AI tool metadata must treat MCP-related fields as optional",
+        "pattern": "\\bmcp[a-zA-Z0-9_]*(?!\\?)\\s*:",
+        "message": "AI tool metadata must treat MCP-related fields as optional",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:14.284Z",
+        "createdAt": "2026-05-16T20:48:14.284Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.tsx",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "cf65e2b445329be2",
+      "rank": 155,
+      "triggerCount": 28,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Use readJsonSafe from the sys utilities instead of inline JSON.parse(fs.readFileSync(...)). The helper differentiates ENOENT (missing file) from SyntaxError (corrupt JSON) from ZodError (schema mismatch)' (lesson-forbid-inline-json-parse)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));",
+        "good": "const cfg = readJsonSafe(configPath, ConfigSchema);"
+      },
+      "pairSha256": "577623c291d68b6c5bb36d18991b3465dbf42dcb4d7119be81d38286f99cf059",
+      "targetDefectText": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "cf65e2b445329be2",
+        "lessonHeading": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
+        "pattern": "JSON\\.parse\\(\\s*\\S*readFileSync",
+        "message": "Forbid inline JSON.parse(readFileSync) — use readJsonSafe",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:30:42.814Z",
+        "createdAt": "2026-04-06T03:30:42.814Z",
+        "fileGlobs": [
+          "packages/core/src/**/*.ts",
+          "!packages/core/src/sys/**",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "64bb807f4e10ea4f",
+      "rank": 157,
+      "triggerCount": 24,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Always combine typeof val === \"object\" with a truthiness check because typeof null is \"object\"' (lesson-3e7e22fb)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "if (typeof val === 'object') { val.nested; }",
+        "good": "if (typeof val === 'object' && val !== null) { val.nested; }"
+      },
+      "pairSha256": "59a49a2e8413fc5533b36c9873db3d2ad7bb05ff1b2c05e457de932a76688580",
+      "targetDefectText": "2026-03-07T06:05:56.069Z",
+      "headingIsTimestamp": true,
+      "legacy": {
+        "lessonHash": "64bb807f4e10ea4f",
+        "lessonHeading": "2026-03-07T06:05:56.069Z",
+        "pattern": "typeof\\s+[^\\s!&|=]+\\s*===\\s*['\"]object['\"](?!\\s*&&)",
+        "message": "2026-03-07T06:05:56.069Z",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:08.659Z",
+        "createdAt": "2026-05-16T20:48:08.659Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.tsx",
+          "**/*.js",
+          "**/*.jsx",
+          "!**/*.test.ts"
+        ],
+        "severity": "error",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "87e2437431c17ec5",
+      "rank": 159,
+      "triggerCount": 22,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-e2326081.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "if (line.startsWith('+++ b/')) path = line.slice(6);",
+        "good": "const m = /^\\+\\+\\+ \"?b\\/(.+?)\"?$/.exec(line);"
+      },
+      "pairSha256": "301a0b7a7b30272164e0e90e917d6c6046274cddd53858915afbcef9217688e4",
+      "targetDefectText": "Git diff headers wrap file paths containing spaces",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "87e2437431c17ec5",
+        "lessonHeading": "Git diff headers wrap file paths containing spaces",
+        "pattern": "(['\"\\/])\\^?\\+\\+\\+\\s+b\\\\?\\/",
+        "message": "Git diff headers wrap file paths containing spaces",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:31.007Z",
+        "createdAt": "2026-05-16T20:48:31.007Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.py",
+          "**/*.sh",
+          "**/*.go",
+          "**/*.rs"
+        ],
+        "severity": "error",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "434c51ff64ec74b6",
+      "rank": 160,
+      "triggerCount": 18,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Using split() on markdown headings often misclassifies… utilize matchAll to capture heading indices' (lesson-51a626d2)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const parts = md.split(/^## /m);",
+        "good": "const heads = [...md.matchAll(/^## /gm)];"
+      },
+      "pairSha256": "1fe87fe7ee5ebbef2fb9511e7c4e0bbd454f5a689c97df7fe7418ced1cbab7b4",
+      "targetDefectText": "Using split() on markdown headings often misclassifies",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "434c51ff64ec74b6",
+        "lessonHeading": "Using split() on markdown headings often misclassifies",
+        "pattern": "\\.split\\(\\s*(?:\\/\\^?#+|['\"]\\^?#+)",
+        "message": "Using split() on markdown headings often misclassifies",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:31.005Z",
+        "createdAt": "2026-05-16T20:48:31.005Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.tsx",
+          "**/*.jsx"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "55797450514d4c3b",
+      "rank": 161,
+      "triggerCount": 17,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Never use git add -A or git add . … Always stage specific files by name' (lesson-8067935e)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "git add -A",
+        "good": "git add packages/cli/package.json .changeset/"
+      },
+      "pairSha256": "48d60c864a48ca3e186d1063a558759b660941f90312f6d7a4a610dc3fd9c034",
+      "targetDefectText": "Never use git add -A or git add .",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "55797450514d4c3b",
+        "lessonHeading": "Never use git add -A or git add .",
+        "pattern": "git add\\s+(-A|\\.)\\b",
+        "message": "Never use 'git add -A' or 'git add .' — always stage specific files by name to avoid committing artifacts, lock files, or agent worktree copies",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:25:24.828Z",
+        "createdAt": "2026-04-06T03:25:24.828Z",
+        "fileGlobs": [
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.yml",
+          "**/*.yaml",
+          "**/*.ts",
+          "**/*.js"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "0615c43eb5a9d0e8",
+      "rank": 164,
+      "triggerCount": 15,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-3cf9dfda.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "if (existsSync('.git')) return;",
+        "good": "const root = execFileSync('git', ['rev-parse', '--show-toplevel']);"
+      },
+      "pairSha256": "860e96267444fea759aa3e36dfe68c347fdb997575b9b0382add3fda6d21879f",
+      "targetDefectText": "Resolve git root via rev-parse for monorepo compatibility",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "0615c43eb5a9d0e8",
+        "lessonHeading": "Resolve git root via rev-parse for monorepo compatibility",
+        "pattern": "(-d\\s+['\"]?\\.git['\"]?|existsSync\\([^)]*['\"]\\.git['\"]\\))",
+        "message": "Resolve git root via rev-parse for monorepo compatibility",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:08.659Z",
+        "createdAt": "2026-05-16T20:48:08.659Z",
+        "fileGlobs": [
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.js",
+          "**/*.ts",
+          "**/*.yml",
+          "**/*.yaml"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "56c801dfda484c75",
+      "rank": 167,
+      "triggerCount": 12,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'use gemini-embedding-2-preview as the correct identifier' (lesson-f344af8e, full body)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const MODEL = 'text-embedding-004';",
+        "good": "const MODEL = 'gemini-embedding-2-preview';"
+      },
+      "pairSha256": "79aa63aade05ffa7722b5cfceafe8ae92fdfc126976878b08573a2f7cc7db469",
+      "targetDefectText": "The text-embedding-004 identifier is frequently unavailable",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "56c801dfda484c75",
+        "lessonHeading": "The text-embedding-004 identifier is frequently unavailable",
+        "pattern": "text-embedding-004",
+        "message": "Use 'gemini-embedding-2-preview' instead of 'text-embedding-004' — the latter is frequently unavailable and causes API initialization failures",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:30:19.338Z",
+        "createdAt": "2026-04-06T03:30:19.338Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.tsx",
+          "**/*.jsx",
+          "**/*.json",
+          "**/*.env",
+          "**/*.yaml",
+          "**/*.yml"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "fe1b4123aa1f679c",
+      "rank": 168,
+      "triggerCount": 12,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Regex escaping must include the hyphen to prevent unintended range behavior when the escaped string is interpolated into a character class [...].' (lesson-fef03c13)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const escaped = raw.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');",
+        "good": "const escaped = raw.replace(/[.*+?^${}()|[\\]\\\\-]/g, '\\\\$&');"
+      },
+      "pairSha256": "1a15afe7cf2418bc24540d27e2529c929679e6e9fb3b7f64f382da1beaf12b85",
+      "targetDefectText": "Always escape hyphens in regex utilities",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "fe1b4123aa1f679c",
+        "lessonHeading": "Always escape hyphens in regex utilities",
+        "pattern": "",
+        "message": "Regex escape utility is missing the hyphen (-). Add it to prevent unintended range behavior when the escaped string is used inside a character class [...].",
+        "engine": "ast-grep",
+        "astGrepPattern": "$STR.replace(/[.*+?^${}()|[\\]\\\\]/g, $REPLACEMENT)",
+        "badExample": "str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')",
+        "compiledAt": "2026-04-17T02:13:55.951Z",
+        "createdAt": "2026-04-17T02:13:55.951Z",
+        "fileGlobs": [
+          "packages/core/src/**/*.ts",
+          "!**/*.test.*",
+          "!**/*.spec.*"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "6f362fa28abcf94a",
+      "rank": 170,
+      "triggerCount": 10,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Avoid using type assertions when reading JSON from disk; perform element-level validation instead' (lesson-36bf3592)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const rows = JSON.parse(raw) as RetiredLesson[];",
+        "good": "const rows = RetiredLessonsSchema.parse(JSON.parse(raw));"
+      },
+      "pairSha256": "891cbccfd0fb507906bb9e364656882cab55e09f9266fc5efcee1b532376c9cf",
+      "targetDefectText": "Validate JSON at system boundaries",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "6f362fa28abcf94a",
+        "lessonHeading": "Validate JSON at system boundaries",
+        "pattern": "",
+        "message": "Avoid type assertions on JSON.parse results — perform element-level validation instead to prevent crashes from corrupted or manually edited files.",
+        "engine": "ast-grep",
+        "astGrepPattern": "JSON.parse($INPUT) as $TYPE",
+        "compiledAt": "2026-04-06T03:21:54.412Z",
+        "createdAt": "2026-04-06T03:21:54.412Z",
+        "fileGlobs": [
+          "packages/core/**/*.ts",
+          "!**/*.test.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "4ac94d6f9c387e1e",
+      "rank": 173,
+      "triggerCount": 7,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Parsers using start-of-string anchors (^) should allow for leading whitespace or use trimStart()' (lesson-30aad866)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "const re = /^ERROR/;",
+        "good": "const re = /^\\s*ERROR/;"
+      },
+      "pairSha256": "260815dbab9f4b3a7eda22eca9d51882e021eee4302a800dd67bbfb503066a22",
+      "targetDefectText": "Account for leading whitespace in line-start parsers",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "4ac94d6f9c387e1e",
+        "lessonHeading": "Account for leading whitespace in line-start parsers",
+        "pattern": "/\\^[^\\s\\\\]",
+        "message": "Start-of-string anchor (^) used without accounting for leading whitespace. Use trimStart() on input or include optional whitespace (^\\s*) to prevent failures from leading blank lines.",
+        "engine": "regex",
+        "compiledAt": "2026-04-11T05:06:18.175Z",
+        "createdAt": "2026-04-11T05:06:18.175Z",
+        "fileGlobs": [
+          "packages/mcp/src/tools/**/*.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "5da43ea60b66e96e",
+      "rank": 174,
+      "triggerCount": 7,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "R14 record .totem/rules/r14-5da43ea6-git-double-dash-separator.rule.yaml @ mmnto-ai/totem 62fa5b42 — absence→requires: translation, differential VERIFIED at the pin (bad fires, good silent under requires{scope:line})",
+      "sourceRefCites": "r14-record",
+      "curatedPair": {
+        "bad": "git log $UNTRUSTED_REF",
+        "good": "git log \"$UNTRUSTED_REF\" -- ."
+      },
+      "pairSha256": "93efa4351e3758a73bd1155cbd1116d8ff948fbbb9d55c6be388c947fd066af6",
+      "targetDefectText": "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to prevent argument",
+      "headingIsTimestamp": true,
+      "legacy": {
+        "lessonHash": "5da43ea60b66e96e",
+        "lessonHeading": "2026-03-08T02:39:04.901Z",
+        "pattern": "git\\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\\s+(?!.*\\s--\\s)(?:['\"`]?\\$[{(]?\\w|['\"`]?\\$\\w)",
+        "message": "Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to prevent argument injection of untrusted strings like branch or tag names.",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:34:33.681Z",
+        "createdAt": "2026-04-06T03:34:33.681Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.mjs",
+          "**/*.cjs"
+        ],
+        "severity": "warning"
+      },
+      "r14": {
+        "seedEntry": 13,
+        "recordPin": "78e7f196b93caf0df68a3baba561cce66279563c",
+        "branch": "r14/seed-20-translation"
+      }
+    },
+    {
+      "lessonHash": "884becd45e6380bd",
+      "rank": 176,
+      "triggerCount": 7,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-7301928e.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "pnpm version",
+        "good": "pnpm run version"
+      },
+      "pairSha256": "d79a59cd1030a5e90e14cd171fb0ab48ce3b9e4e1df5dd6b8b715ca77ebb6337",
+      "targetDefectText": "Using 'pnpm run version' instead of the bare 'pnpm version'",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "884becd45e6380bd",
+        "lessonHeading": "Using 'pnpm run version' instead of the bare 'pnpm version'",
+        "pattern": "\\bpnpm\\s+version\\b",
+        "message": "Use 'pnpm run version' (not bare 'pnpm version') to correctly trigger the Changesets workflow and update changelogs.",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:24:50.601Z",
+        "createdAt": "2026-04-06T03:24:50.601Z",
+        "fileGlobs": [
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.yml",
+          "**/*.yaml",
+          "**/Makefile",
+          "**/*.md"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "089b0c628b330c16",
+      "rank": 179,
+      "triggerCount": 6,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": true,
+      "curator": "strategy-codex",
+      "curatedAt": "2026-08-22",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-f2bb0f72.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "console.warn('problem');",
+        "good": "logger.warn('problem');"
+      },
+      "pairSha256": "856e2593f0f5f687f4d7b74bde21719da0f1cd2199ba20bac89bcf7e000965b0",
+      "targetDefectText": "Core packages should use an injectable logger interface",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "089b0c628b330c16",
+        "lessonHeading": "Core packages should use an injectable logger interface",
+        "pattern": "",
+        "message": "Core packages should use an injectable logger interface instead of direct console calls, to allow consumers to control output routing.",
+        "engine": "ast-grep",
+        "astGrepPattern": "console.$METHOD($$$ARGS)",
+        "compiledAt": "2026-04-06T03:30:19.200Z",
+        "createdAt": "2026-04-06T03:30:19.200Z",
+        "fileGlobs": [
+          "packages/core/**/*.ts",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "427481b534fe3392",
+      "rank": 180,
+      "triggerCount": 6,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": true,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Refrain from using console.warn within core library packages to maintain architectural boundaries' (lesson-1b177bcc)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "console.warn('cache miss; rebuilding index');",
+        "good": "log.warn('cache miss; rebuilding index');"
+      },
+      "pairSha256": "2076a412d2adf2a16dafb0f2a3eb7d95b05406ea0c0bc0fd9dc9dfb57fb6131e",
+      "targetDefectText": "Refrain from using console.warn within core library",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "427481b534fe3392",
+        "lessonHeading": "Refrain from using console.warn within core library",
+        "pattern": "",
+        "message": "Do not use console.warn in core library packages — use the project-specific logger instead",
+        "engine": "ast-grep",
+        "astGrepPattern": "console.warn($$$ARGS)",
+        "compiledAt": "2026-04-06T03:20:33.086Z",
+        "createdAt": "2026-04-06T03:20:33.086Z",
+        "fileGlobs": [
+          "packages/core/**/*.ts",
+          "packages/core/**/*.tsx",
+          "!**/*.test.ts",
+          "!**/*.spec.ts"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "5c5fe9d9060bcb6d",
+      "rank": 181,
+      "triggerCount": 6,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Core library modules should use optional callbacks like onWarn instead of hardcoded console methods' (lesson-929b31e4)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "console.warn('index rebuild complete');",
+        "good": "opts.onWarn?.('index rebuild complete');"
+      },
+      "pairSha256": "a378e734c3e0a3cb894e57c6fa25bb95d32dc57f0cb41bcf056cb329669b12ab",
+      "targetDefectText": "Core library modules should use optional callbacks",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "5c5fe9d9060bcb6d",
+        "lessonHeading": "Core library modules should use optional callbacks",
+        "pattern": "",
+        "message": "Core library modules should not use hardcoded console.warn — use an optional onWarn callback instead to remain environment-agnostic",
+        "engine": "ast-grep",
+        "astGrepPattern": "console.warn($$$ARGS)",
+        "compiledAt": "2026-04-06T03:26:15.489Z",
+        "createdAt": "2026-04-06T03:26:15.489Z",
+        "fileGlobs": [
+          "packages/core/**/*.ts",
+          "packages/core/**/*.js",
+          "src/**/*.ts",
+          "src/**/*.js",
+          "lib/**/*.ts",
+          "lib/**/*.js"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "61dcb058bd1df15d",
+      "rank": 182,
+      "triggerCount": 6,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": true,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "the lesson's own Example Hit / Example Miss pair (lesson-protect-lessons-md)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "git rm .totem/lessons.md",
+        "good": "rm .totem/lessons/lesson-cd27a5b0.md"
+      },
+      "pairSha256": "55589694d9cee6501379a427aa3348773cae0434fc4636910130ebbfae870638",
+      "targetDefectText": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "61dcb058bd1df15d",
+        "lessonHeading": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+        "pattern": "\\b(?:git\\s+rm|rm)\\s+[^\\n]{0,40}\\.totem/lessons\\.md\\b",
+        "message": "Do not delete .totem/lessons.md (load-bearing for 41+ rules)",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T18:40:01.768Z",
+        "createdAt": "2026-04-06T18:40:01.768Z",
+        "fileGlobs": [
+          "**/*.sh",
+          "**/*.bash",
+          "**/*.zsh",
+          "**/*.md",
+          "**/*.ts",
+          "**/*.js",
+          "**/*.cjs",
+          "**/*.mjs",
+          ".claude/**/*",
+          "!**/*.test.*",
+          "!**/*.spec.*",
+          "!.totem/lessons/**",
+          "!.totem/lessons.md",
+          "!.totem/tests/**"
+        ],
+        "severity": "error"
+      }
+    },
+    {
+      "lessonHash": "fb008f77a1f5a49a",
+      "rank": 187,
+      "triggerCount": 6,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Constructing shell commands with string interpolation is vulnerable to paths containing spaces or metacharacters; use argument arrays with spawnSync for robustness.' (lesson-3a326621); compiled message (compiled-rules.json): 'spawnSync called without an argument array — use spawnSync(cmd, [arg1, arg2], opts) instead of string interpolation to avoid shell injection and path-with-spaces bugs'",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "spawnSync(`git commit -m \"${message}\"`, { shell: true, stdio: 'inherit' });",
+        "good": "spawnSync('git', ['commit', '-m', message], { stdio: 'inherit' });"
+      },
+      "pairSha256": "6b664a0a57ec983ef0abbae64286371fe68fdb8aa020dc2a22a9fce9b0f1dcde",
+      "targetDefectText": "Constructing shell commands with string interpolation",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "fb008f77a1f5a49a",
+        "lessonHeading": "Constructing shell commands with string interpolation",
+        "pattern": "",
+        "message": "spawnSync called without an argument array — use spawnSync(cmd, [arg1, arg2], opts) instead of string interpolation to avoid shell injection and path-with-spaces bugs",
+        "engine": "ast-grep",
+        "astGrepPattern": "spawnSync($CMD, { $$$OPTS })",
+        "compiledAt": "2026-04-06T03:22:01.184Z",
+        "createdAt": "2026-04-06T03:22:01.184Z",
+        "fileGlobs": [
+          "**/*.ts",
+          "**/*.js",
+          "**/*.tsx",
+          "**/*.jsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "8435c024569ffa51",
+      "rank": 188,
+      "triggerCount": 4,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-b605c621.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "See gemini.md for the instructions file.",
+        "good": "See GEMINI.md for the instructions file."
+      },
+      "pairSha256": "3d80115aa54d833a2244ea52ff8204141ee91079f1b94d122aae680da86913fb",
+      "targetDefectText": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "8435c024569ffa51",
+        "lessonHeading": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+        "pattern": "\\bgemini\\.md\\b",
+        "message": "The Gemini CLI and Gemini Code Assist (GCA) do not",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:28.326Z",
+        "createdAt": "2026-05-16T20:48:28.326Z",
+        "fileGlobs": [
+          "**/*.md",
+          "**/*.sh",
+          "**/*.yml",
+          "**/*.yaml",
+          "**/package.json",
+          "**/*.txt"
+        ],
+        "severity": "error",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "8213cd4e21b375ba",
+      "rank": 189,
+      "triggerCount": 3,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-cd27a5b0.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "Closes #1006, #1005, #1007",
+        "good": "Closes #1006. Closes #1005. Closes #1007."
+      },
+      "pairSha256": "b110a48415e910ecebe247a319ffe42b13102b3aa5182029ae1f0dfb05b308a6",
+      "targetDefectText": "GitHub Closes keyword only applies to the first issue",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "8213cd4e21b375ba",
+        "lessonHeading": "GitHub Closes keyword only applies to the first issue",
+        "pattern": "\\b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\\s+#\\d+\\s*,\\s*#\\d+",
+        "message": "GitHub Closes keyword only applies to the first issue",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T18:30:29.901Z",
+        "createdAt": "2026-04-06T18:30:29.901Z",
+        "fileGlobs": [
+          "**/CHANGELOG.md",
+          ".github/**/*.md",
+          ".changeset/*.md"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "b34d95158d37f5a9",
+      "rank": 191,
+      "triggerCount": 3,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-f390b202.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "cp config.json .junie/config.json",
+        "good": "cp config.json .junie/mcp/mcp.json"
+      },
+      "pairSha256": "665a1a0db385ca758696ae6d41a44a07c84b5353edd424ebb9e1842367c79424",
+      "targetDefectText": "Junie requires specific file locations for auto-detection,",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "b34d95158d37f5a9",
+        "lessonHeading": "Junie requires specific file locations for auto-detection,",
+        "pattern": "\\.junie\\/(?!mcp\\/mcp\\.json|guidelines\\.md)[^'\"\\s>]+\\.(json|md)",
+        "message": "Junie requires specific file locations for auto-detection,",
+        "engine": "regex",
+        "compiledAt": "2026-05-16T20:48:33.199Z",
+        "createdAt": "2026-05-16T20:48:33.199Z",
+        "fileGlobs": [
+          "**/*.js",
+          "**/*.ts",
+          "**/*.json",
+          "**/*.md",
+          "**/*.sh",
+          "**/*.yml",
+          "**/*.yaml",
+          "**/.gitignore"
+        ],
+        "severity": "warning",
+        "manual": true,
+        "unverified": true
+      }
+    },
+    {
+      "lessonHash": "7e3eefeaa85403d0",
+      "rank": 192,
+      "triggerCount": 2,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:.totem/lessons/lesson-4822027f.md",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "## Lesson: Missing separator heading",
+        "good": "## Lesson — Proper separator heading"
+      },
+      "pairSha256": "90f382de2db01bbf8248666afd16661b4fcea9a4c0ec532b6c70e495bac807c3",
+      "targetDefectText": "Manual lessons must use the '## Lesson <separator> <Heading>' structure",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "7e3eefeaa85403d0",
+        "lessonHeading": "Manual lessons must use the '## Lesson <separator> <Heading>' structure",
+        "pattern": "^## Lesson(?! [—–-] .+)",
+        "message": "Manual lessons must use '## Lesson <separator> <Heading>' structure where separator is an em-dash (—), en-dash (–), or hyphen (-)",
+        "engine": "regex",
+        "compiledAt": "2026-04-12T15:37:03.920Z",
+        "createdAt": "2026-04-12T15:37:03.920Z",
+        "fileGlobs": [
+          "**/*.md"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "d487264e210913a4",
+      "rank": 193,
+      "triggerCount": 2,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "status-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Prefer Vitest's expect().rejects.toHaveProperty() assertions over manual try/catch blocks with expect.fail(). This pattern is more concise and prevents tests from accidentally passing if the code fails to throw as expected.' (lesson-2f24e90f; D:/Dev/totem/.totem/lessons.md:829)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "try { await doThing(); expect.fail('no throw'); } catch (e) { expect(e).toHaveProperty('code'); }",
+        "good": "await expect(doThing()).rejects.toHaveProperty('code', 'E_BAD');"
+      },
+      "pairSha256": "c5cc8a3c042eb3d562f95ded88c56c8a70d445a7a67d50102f44dc64086ad69a",
+      "targetDefectText": "Prefer Vitest's expect().rejects.toHaveProperty()",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "d487264e210913a4",
+        "lessonHeading": "Prefer Vitest's expect().rejects.toHaveProperty()",
+        "pattern": "",
+        "message": "Prefer expect().rejects.toHaveProperty() over try/catch with expect.fail() — the latter can cause tests to accidentally pass if no error is thrown",
+        "engine": "ast-grep",
+        "astGrepPattern": "try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }",
+        "compiledAt": "2026-04-06T03:18:08.299Z",
+        "createdAt": "2026-04-06T03:18:08.299Z",
+        "fileGlobs": [
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "**/*.spec.ts",
+          "**/*.spec.tsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "4ae0a01d912f8742",
+      "rank": 196,
+      "triggerCount": 1,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Prefer canonical noun-verb command forms (e.g., totem lesson extract) in documentation over deprecated bare aliases' (lesson-d8150eca)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "Run `totem extract <pr>` to pull lessons.",
+        "good": "Run `totem lesson extract <pr>` to pull lessons."
+      },
+      "pairSha256": "84af17cf5f014be107dcd5c96bf3adb4e5d54fd9d475b0e8ac7ff7019ec52650",
+      "targetDefectText": "Use canonical CLI command forms",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "4ae0a01d912f8742",
+        "lessonHeading": "Use canonical CLI command forms",
+        "pattern": "`totem\\s+extract\\b",
+        "message": "Use canonical CLI command forms (e.g., `totem lesson extract`) instead of bare aliases like `totem extract`",
+        "engine": "regex",
+        "compiledAt": "2026-04-13T02:52:25.816Z",
+        "createdAt": "2026-04-13T02:52:25.816Z",
+        "fileGlobs": [
+          "docs/wiki/**/*.md"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "63680bf329d59167",
+      "rank": 197,
+      "triggerCount": 1,
+      "engine": "ast-grep",
+      "strata": [
+        "S2-flat-ast-grep",
+        "S5-explicit-exclusions"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "strategy-kimi",
+      "curatedAt": "2026-08-23",
+      "ledgerRowShape": "nested",
+      "sourceRef": "lesson clause: 'Prefer setting process.exitCode over calling process.exit(1) to allow the Node.js process to terminate gracefully' (lesson-ae21165d)",
+      "sourceRefCites": "other",
+      "curatedPair": {
+        "bad": "process.exit(1);",
+        "good": "process.exitCode = 1;"
+      },
+      "pairSha256": "c6241119a7991b66595d9080e9ca985f113bc0b405637faf081bfe95ba36d49e",
+      "targetDefectText": "Use process.exitCode for CLI exits",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "63680bf329d59167",
+        "lessonHeading": "Use process.exitCode for CLI exits",
+        "pattern": "",
+        "message": "Prefer setting process.exitCode instead of calling process.exit() to allow graceful shutdown (cleanup, log flushing, child process termination).",
+        "engine": "ast-grep",
+        "astGrepPattern": "process.exit($CODE)",
+        "compiledAt": "2026-04-06T03:27:18.352Z",
+        "createdAt": "2026-04-06T03:27:18.352Z",
+        "fileGlobs": [
+          "packages/cli/src/**/*.ts",
+          "!packages/cli/src/index.ts",
+          "!packages/cli/src/commands/**/*.ts",
+          "!**/*.test.ts",
+          "!**/*.test.tsx",
+          "!**/*.spec.ts",
+          "!**/*.spec.tsx"
+        ],
+        "severity": "warning"
+      }
+    },
+    {
+      "lessonHash": "b3e3e2b380a0b1be",
+      "rank": 198,
+      "triggerCount": 1,
+      "engine": "regex",
+      "strata": [
+        "S1-flat-regex",
+        "S4-absent-must-contain"
+      ],
+      "status": "active",
+      "serving": true,
+      "dryRun": false,
+      "duplicateGroupSurvivor": false,
+      "curator": "totem-claude",
+      "curatedAt": "2026-08-24",
+      "ledgerRowShape": "top-level",
+      "sourceRef": "mmnto-ai/totem:packages/core/src/spine/record-exemplars.fixture.ts (design8ExemplarRecord) + .totem/lessons (this lesson)",
+      "sourceRefCites": "exemplar",
+      "curatedPair": {
+        "bad": "git log --oneline",
+        "good": "LC_ALL=C git log --oneline"
+      },
+      "pairSha256": "781f06c461e2e342c1715b09189e228f7a249ce4c3a3dd8bc048886f686521d7",
+      "targetDefectText": "Git output can vary by system locale, causing parsing logic",
+      "headingIsTimestamp": false,
+      "legacy": {
+        "lessonHash": "b3e3e2b380a0b1be",
+        "lessonHeading": "Git output can vary by system locale, causing parsing logic",
+        "pattern": "\\bgit\\s+(?!.*LC_ALL=C)",
+        "message": "Git commands should be run with LC_ALL=C to ensure consistent output format across different system locales",
+        "engine": "regex",
+        "compiledAt": "2026-04-06T03:27:30.079Z",
+        "createdAt": "2026-04-06T03:27:30.079Z",
+        "fileGlobs": [
+          "**/*.sh",
+          "**/*.bash"
+        ],
+        "severity": "warning"
+      }
+    }
+  ]
+}

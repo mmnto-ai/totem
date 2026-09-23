@@ -1,0 +1,33 @@
+{
+  "_schema": "gate5-declared-inventory/1",
+  "_purpose": "K3 regression expectations for the 22 R14 records at 78e7f196 (P0 figures; the E26 cure declared)",
+  "5da43ea60b66e96e": {
+    "inventory": ["ii"],
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "0e01112d5f18ffde": {
+    "inventory": [],
+    "expectedPayloadDivergence": "E26 cure at 78e7f196: the inert lookahead (?!Totem) removed from the seed's own pattern (R14 ruling; the frozen row keeps it)",
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "1a7080ebf6162de3": {
+    "inventory": [],
+    "expect": { "validate": "rejected", "differential": "not-evaluable" }
+  },
+  "6b2b62eb1e8693fc": {
+    "inventory": [],
+    "expect": { "validate": "compiled", "differential": "good-also-fires" }
+  },
+  "be74c55caa9fd60c": {
+    "inventory": [],
+    "expect": { "validate": "compiled", "differential": "good-also-fires" }
+  },
+  "b237bcf3b52381b1": {
+    "inventory": [],
+    "expect": { "validate": "compiled", "differential": "good-also-fires" }
+  },
+  "d940b2c9ffe92e99": {
+    "inventory": [],
+    "expect": { "validate": "compiled", "differential": "bad-does-not-fire" }
+  }
+}

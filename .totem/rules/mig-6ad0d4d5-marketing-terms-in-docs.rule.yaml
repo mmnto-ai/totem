@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Technical documentation must avoid marketing-centric terms. Replace absolute claims with specific descriptions of tested environments and observed results.
+
+target:
+  type: regex
+  pattern: \b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\b
+  scope:
+    fileGlobs:
+      - '**/*.md'
+      - '**/*.mdx'
+      - '**/*.rst'
+      - '**/*.txt'
+
+examples:
+  - bad: Totem guarantees seamless, world-class performance.
+    good: Totem enforced the rule set on the tested 485-rule corpus.
+
+curation:
+  sourceLesson: lesson-6ad0d4d5c760a5d6
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

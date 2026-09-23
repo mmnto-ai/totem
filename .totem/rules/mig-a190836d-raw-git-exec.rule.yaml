@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Use git adapter instead of raw git execution
+
+target:
+  type: regex
+  pattern: (?:execFileSync|safeExec)\(\s*['"`]git['"`]
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+    excludeGlobs:
+      - packages/core/src/sys/git.ts
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: const out = execFileSync('git', ['status', '--porcelain']);
+    good: const branch = getGitBranch(cwd);
+
+curation:
+  sourceLesson: lesson-a190836df4daa24d
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

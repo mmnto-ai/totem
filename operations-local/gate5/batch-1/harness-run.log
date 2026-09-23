@@ -1,0 +1,56 @@
+K4 header
+  @mmnto/totem   2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\staging-2.10.0\node_modules\@mmnto\totem\dist\index.js)
+  @mmnto/cli     2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\staging-2.10.0\node_modules\@mmnto\cli)
+  checkout       2.11.0 declared by D:\Dev\worktrees\totem-totem-claude-gate5-b1\packages\core\package.json
+  node           v24.16.0
+  @ast-grep/napi 0.42.3
+  languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
+  packs          none
+  records        D:\Dev\worktrees\totem-totem-claude-gate5-b1\.totem\rules
+  tree           D:\Dev\worktrees\totem-totem-claude-gate5-tree
+
+set: C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-ac68-5b2dc9182f87/scratchpad/manifest.json — 53 rule(s), manifest order
+--only: 13 entries selected
+tree: D:\Dev\worktrees\totem-totem-claude-gate5-tree — 2702 git-tracked path(s)
+
+ 1. 427c97fb0063f0cb (rank 2)  differential-satisfied  firing-set union: legacy=2638 record=2638 added=0 removed=0
+    mig-427c97fb-partial-matcher-secret-masking.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=2638 record=2638
+ 2. 71935fe9a742137b (rank 10)  differential-satisfied  (2 records)  firing-set union: legacy=511 record=511 added=0 removed=0
+    mig-71935fe9-string-cast-on-input-js.rule.yaml [ast-grep@.js] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=511 record=0 (this language; delta at the entry union)
+    mig-71935fe9-string-cast-on-input.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=511 record=511 (this language; delta at the entry union)
+ 3. 54140f59be3e6e44 (rank 25)  differential-satisfied  firing-set union: legacy=335 record=335 added=0 removed=0
+    mig-54140f59-bare-issue-number-refs.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=335 record=335
+ 4. 4f283f5495489a19 (rank 35)  differential-satisfied  firing-set union: legacy=124 record=124 added=0 removed=0
+    mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=124 record=124
+ 5. bc8b99e815c3943f (rank 41)  differential-satisfied  firing-set union: legacy=49 record=49 added=0 removed=0
+    mig-bc8b99e8-console-log-in-mcp.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=49 record=49
+ 6. 2266fc0dfe824f24 (rank 44)  differential-satisfied  firing-set union: legacy=15 record=15 added=0 removed=0
+    mig-2266fc0d-static-named-import-totem-barrel.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent | pair1: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=15 record=15
+ 7. a190836df4daa24d (rank 46)  differential-satisfied  firing-set union: legacy=75 record=75 added=0 removed=0
+    mig-a190836d-raw-git-exec.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=75 record=75
+ 8. 87aff037d7de47a7 (rank 47)  differential-satisfied  firing-set union: legacy=604 record=604 added=0 removed=0
+    mig-87aff037-fail-open-catch-ban.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=604 record=604
+ 9. a1fd35ee696110b0 (rank 49)  differential-satisfied  firing-set union: legacy=55 record=55 added=0 removed=0
+    mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=55 record=55
+10. 61bb8b8b88d2ecab (rank 55)  differential-satisfied  firing-set union: legacy=91 record=91 added=0 removed=0
+    mig-61bb8b8b-json-parse-as-cast.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=91 record=91
+11. 6ad0d4d5c760a5d6 (rank 59)  differential-satisfied  firing-set union: legacy=169 record=169 added=0 removed=0
+    mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=169 record=169
+12. 1210f02da9f16e5b (rank 68)  differential-satisfied  firing-set union: legacy=20 record=20 added=0 removed=0
+    mig-1210f02d-raw-error-throw-in-cli.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=20 record=20
+13. 7056157a6bf72fa8 (rank 75)  differential-satisfied  firing-set union: legacy=71 record=71 added=0 removed=0
+    mig-7056157a-hardcoded-git-hooks-path.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent · firings legacy=71 record=71
+
+Validate: 14 record(s) — parsed 14, compiled 14, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Fidelity (records): 14/14 identical, 0 expected divergence(s), 0 UNEXPECTED
+Fidelity (entries): 13/13 identical, 0 expected divergence(s), 0 UNEXPECTED
+Differential split (measured, per entry):
+  differential-satisfied   13  (entries 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+  good-also-fires          0
+  bad-does-not-fire        0
+  not-evaluable            0
+Differential expectation mismatches: 0
+
+per-record output: 14 line(s) → operations-local/gate5/batch-1/harness-per-record.jsonl (schema gate5-harness-record/1)
+
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0
