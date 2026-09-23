@@ -205,106 +205,31 @@
     }
   ],
   "folded": [
-    {
-      "id": "f1",
-      "disposition": "resolveSendRepoRoot: nearest .git-bearing ancestor, must carry .totem/, must host the seat; three named refusals; verify placement requires .git at the .totem's parent; five locks. Reader-side capture filed as mmnto-ai/totem#2938."
-    },
-    {
-      "id": "f2",
-      "disposition": "Ruled on a measurement: 408 live dispatches, one empty (the mmnto-ai/totem#2887 exhibit). Refusal stands; the listing line states the fact and never claims a drop; the subject-only class is pinned; doctrine note routed to strategy."
-    },
-    {
-      "id": "f3",
-      "disposition": "Compare the slugified forms; two locks."
-    },
-    {
-      "id": "f4",
-      "disposition": "Placement resolves the file's repository first; the roster's default workspace is that repository's parent; one lock."
-    },
-    {
-      "id": "f5",
-      "disposition": "Wrapped; a re-read failure becomes a failing verify finding that says the file IS written."
-    },
-    {
-      "id": "f6",
-      "disposition": "Disclosed, unchanged."
-    },
-    {
-      "id": "f7",
-      "disposition": "A blank slug is no slug (one lock); the doctrine drift routed to strategy."
-    },
-    {
-      "id": "f8",
-      "disposition": "Two Commander cases added, which found the parent-claims-the-flags defect in verify; the refusal now resolves on .git and runs on this host."
-    },
-    {
-      "id": "f9",
-      "disposition": "Rewritten: three confabulations and one omission; the realpath trap answered; the refuted walker recorded."
-    },
-    {
-      "id": "r1",
-      "disposition": "A .git file stops the walk with its own refusal naming the resident checkout parsed from the gitdir pointer; verify's placement requires a .git DIRECTORY at the root; two locks."
-    },
-    {
-      "id": "r2",
-      "disposition": "mailReply always asks for the derived form; mailSend judges explicitness after the strip; one lock with two seats."
-    },
-    {
-      "id": "r3",
-      "disposition": "Out of scope; filed as mmnto-ai/totem#2939 with the reproduction."
-    },
-    {
-      "id": "r4",
-      "disposition": "The four checks are computed, then findings are listed in the documented order; one lock."
-    },
-    {
-      "id": "r5",
-      "disposition": "Separator restored for root repositories; the roster derives from the file's repository only when placement holds; the always-true test replaced by the .git-directory check; one lock."
-    },
-    {
-      "id": "r6",
-      "disposition": "The submodule shape is refused by the .git-file rule; nothing else changed."
-    },
-    {
-      "id": "r7",
-      "disposition": "Disclosed: the throw is reachable only by a transient lock between the rename and the re-read, and the module-internal verify is not injectable without adding a seam."
-    },
-    {
-      "id": "r8",
-      "disposition": "The count corrected in the PR body (now 36 after the re-arm's locks)."
-    },
-    {
-      "id": "r9",
-      "disposition": "Both now say a worktree is refused outright, with the resident named."
-    },
-    {
-      "id": "t1",
-      "disposition": "Send and verify pin the repository to the workspace TOTEM_WORKSPACE (or --workspace) names; the no-pin case is undecidable locally and is disclosed and locked as the residual rather than certified. Convergence named by the author on the leg's own termination condition."
-    },
-    {
-      "id": "t2",
-      "disposition": "The fixture registers a seat only under the cwd-resolved workspace, absent from the map and the phantom's parent."
-    },
-    {
-      "id": "t3",
-      "disposition": "The send and verify use the reader's isRealDirectory for .totem and the seat directory; locks with a junction on both verbs."
-    },
-    {
-      "id": "t4",
-      "disposition": "Rewritten to what the code does."
-    },
-    {
-      "id": "t5",
-      "disposition": "Rewritten."
-    },
-    {
-      "id": "t6",
-      "disposition": "The refusal names a worktree's or a submodule's pointer, and says when the pointer leads into no worktree layout."
-    },
-    {
-      "id": "t7",
-      "disposition": "Accepted as is, matching the reader."
-    }
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "r1",
+    "r2",
+    "r3",
+    "r4",
+    "r5",
+    "r6",
+    "r7",
+    "r8",
+    "r9",
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+    "t7"
   ],
-  "verdict": "Three falsification legs (30 + 34 + 13 tool uses; END 02:41:30Z, 03:00:37Z, 03:11Z): round 1 on b9f82f89 1 BLOCKING (the nearest-marker walker captured by a stray .totem/), 3 MATERIAL, 5 MINOR; re-arm on de5e7263..a06837f4 0 BLOCKING, 3 MATERIAL (a worktree accepted as a host; a stripped reply slug losing the sender token; the pre-existing swallowed --workspace, filed as mmnto-ai/totem#2939), 6 MINOR; third round on 2aa48fa5..f39a1b24 1 BLOCKING under the convergence bar (a resident-shaped clone outside the workspace), 2 MATERIAL, 4 MINOR. Every finding folded or ruled; the third leg named its termination condition (F1 folded or disclosed as the default-resolution residual; F3 aligned with the reader's no-follow rules) and both are met at 6bd69a6a, so convergence is named by the author with the residual disclosed and locked. Reproduced first-hand at this head: mail suites 286/286, guards 38 cases, RED checks after each fold. Out of scope: the reader-side walker (mmnto-ai/totem#2938), send/reply --workspace (mmnto-ai/totem#2939)."
+  "verdict": "Three falsification legs (30 + 34 + 13 tool uses; END 02:41:30Z, 03:00:37Z, 03:11Z): round 1 on b9f82f89 1 BLOCKING (the nearest-marker walker captured by a stray .totem/), 3 MATERIAL, 5 MINOR; re-arm on de5e7263..a06837f4 0 BLOCKING, 3 MATERIAL (a worktree accepted as a host; a stripped reply slug losing the sender token; the pre-existing swallowed --workspace, filed as mmnto-ai/totem#2939), 6 MINOR; third round on 2aa48fa5..f39a1b24 1 BLOCKING under the convergence bar (a resident-shaped clone outside the workspace), 2 MATERIAL, 4 MINOR. Every finding folded or ruled (dispositions in the fold commits); the third leg named its termination condition and both halves are met at 6bd69a6a, so convergence is named by the author with the default-resolution residual disclosed and locked. Reproduced first-hand at this head: mail suites 286/286, guards 38 cases, RED checks after each fold. Out of scope: the reader-side walker (mmnto-ai/totem#2938), send/reply --workspace (mmnto-ai/totem#2939)."
 }
