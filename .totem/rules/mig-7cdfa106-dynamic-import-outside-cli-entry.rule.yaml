@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Dynamic imports should be limited to CLI command entry
+
+target:
+  type: regex
+  pattern: \bimport\s*\(
+  scope:
+    fileGlobs:
+      - packages/core/src/**/*.ts
+      - packages/cli/src/adapters/**/*.ts
+      - packages/cli/src/utils.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: const { parse } = await import('yaml');
+    good: import { parse } from 'yaml';
+
+curation:
+  sourceLesson: lesson-7cdfa1069477b69a
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

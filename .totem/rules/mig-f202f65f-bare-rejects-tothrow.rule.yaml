@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: Assert the specific error message or type in rejects.toThrow() — bare toThrow() allows unrelated errors to pass the test
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: await expect($PROMISE).rejects.toThrow()
+  scope:
+    fileGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: await expect(loadConfig('/missing')).rejects.toThrow();
+    good: await expect(loadConfig('/missing')).rejects.toThrow('[Totem Error] config not found');
+
+curation:
+  sourceLesson: lesson-f202f65f8a198f18
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
