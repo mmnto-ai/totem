@@ -829,6 +829,8 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
       date: DATE,
       subject,
       filePath: path.join(workspace, repo, '.totem', 'orchestration', sender, 'outbox', file),
+      // Additive field (mmnto-ai/totem#2887): every fixture here carries a body.
+      bodyEmpty: false,
     });
 
     expect(poll({ env: TWO_SEATS })).toEqual({
@@ -2307,8 +2309,13 @@ describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', ()
 
 describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
   const fixedClock = (): Date => new Date('2026-06-09T17:34:37.127Z');
+  // A send lands only inside a totem repository (mmnto-ai/totem#2930): the
+  // fixture carries the `.totem/` marker the resolver walks up to, exactly
+  // as `markedRepoRoot` does for the reader-side fixtures.
   function sendRepo(basename = 'totem'): string {
-    return mkDir(path.join(workspace, basename));
+    const root = mkDir(path.join(workspace, basename));
+    mkDir(path.join(root, '.totem'));
+    return root;
   }
 
   it('writes a v0.4-compliant dispatch the poller reads back (sensor↔actuator round-trip)', () => {
@@ -2351,6 +2358,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'totem-typoo',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: sendRepo(),
       env: {},
       now: fixedClock,
@@ -2365,6 +2373,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'broadcast',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: sendRepo(),
       env: {},
       now: fixedClock,
@@ -2415,6 +2424,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 'same slug here',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2433,6 +2443,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2530,6 +2541,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 'shadow probe',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2590,6 +2602,7 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
       // walk-up resolver (CR @1480), so a marker-less fixture would climb to a
       // host ancestor `.totem`.
       repoRoot: selfRepoRoot(),
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2623,6 +2636,7 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot: selfRepoRoot(), // marker-bearing (CR @1480 resolver parity)
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2967,6 +2981,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2997,6 +3012,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     mailReply(src, {
       from: 'totem-claude',
       repoRoot: selfRepoRoot(),
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3020,6 +3036,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
       mailReply(src, {
         from: 'totem-claude',
         repoRoot,
+        body: 'body',
         env: {},
         now: fixedClock,
         knownAgents: ['strategy-claude'],
@@ -3042,11 +3059,14 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
 
   it('--no-mark (noMark) leaves the source unmarked (stage-only reply)', () => {
     const src = writeSource();
-    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    // Marker-bearing (mmnto-ai/totem#2930): a marker-less fixture would now
+    // walk up past the temp dir to whatever host-level marker sits above it.
+    const repoRoot = selfRepoRoot();
     const res = mailReply(src, {
       from: 'totem-claude',
       noMark: true,
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3071,6 +3091,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3184,7 +3205,10 @@ describe('mailSend — the filename emitter is colon-free / ADS-safe (mmnto-ai/t
       to: 'strategy-claude',
       subject: 'lane handoff',
       from: 'totem-claude',
-      repoRoot: mkDir(path.join(workspace, 'totem')),
+      body: 'body',
+      // Marker-bearing (mmnto-ai/totem#2930): the send now walks up to the
+      // nearest marker, so a bare fixture would land above the temp dir.
+      repoRoot: selfRepoRoot(),
       env: {},
       now: () => new Date('2026-07-18T05:10:23.456Z'),
       knownAgents: ['strategy-claude'],
