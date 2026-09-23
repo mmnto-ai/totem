@@ -21,12 +21,19 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { findTotemRepoRootSync } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
-import { formatTextResult, mailReply, mailSend, pollMail, verifyDispatch } from './mail.js';
+import {
+  formatTextResult,
+  mailReply,
+  mailSend,
+  mailVerifyCommand,
+  pollMail,
+  verifyDispatch,
+} from './mail.js';
 
 let tmpRoot: string;
 let workspace: string;
@@ -388,5 +395,32 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     expect(() => verifyDispatch(path.join(tmpRoot, 'no-such-dispatch.md'))).toThrow(
       /cannot read the dispatch to verify/,
     );
+  });
+
+  it('mail verify --json emits the structured result on stdout and the exit still follows the verdict', async () => {
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    try {
+      const good = mailSend({ ...SEND, repoRoot: repoRoot() });
+      const okResult = verifyDispatch(good.filePath, { knownAgents: ['strategy-claude'] });
+      await expect(mailVerifyCommand(okResult, { json: true })).resolves.toBe(okResult);
+      expect(JSON.parse(written[0] ?? '')).toMatchObject({ ok: true, findings: [] });
+
+      const empty = writeDispatch('totem', 'totem-claude', `${STAMP}-strategy-claude-e.md`, {
+        to: 'strategy-claude',
+        subject: 'e',
+      });
+      const badResult = verifyDispatch(empty, { knownAgents: ['strategy-claude'] });
+      await expect(mailVerifyCommand(badResult, { json: true })).rejects.toThrow(
+        /not routable as written/,
+      );
+      expect(JSON.parse(written[1] ?? '')).toMatchObject({ ok: false });
+      expect((JSON.parse(written[1] ?? '') as { findings: string[] }).findings).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

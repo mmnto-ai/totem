@@ -2544,7 +2544,20 @@ export function verifyDispatch(
  */
 export async function mailVerifyCommand(
   result: DispatchVerifyResult,
+  opts: { json?: boolean } = {},
 ): Promise<DispatchVerifyResult> {
+  // `--json`: the structured result on stdout (the durable contract for a
+  // hook or script that verifies a dispatch it just wrote); the exit still
+  // follows `ok`, so a machine reader never has to parse the text lines.
+  if (opts.json === true) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result.ok) return result;
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `dispatch is not routable as written (${result.filePath}): ${result.findings.length} failing check(s)`,
+      'fix the failing check(s) in the JSON findings and re-verify.',
+    );
+  }
   const { log } = await import('../ui.js');
   const { parse, recipient, body, placement } = result.checks;
   // A line is a failure iff it is in `findings` — never by substring, since

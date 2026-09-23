@@ -1163,10 +1163,12 @@ mailCmd
     '--workspace <path>',
     'Workspace for roster resolution (default: $TOTEM_WORKSPACE, else parent of the repo root)',
   )
-  .action(async (target: string, opts: { workspace?: string }) => {
+  .option('--json', 'Emit the structured verify result on stdout (exit still follows the verdict)')
+  .action(async (target: string, opts: { workspace?: string; json?: boolean }) => {
     try {
       const { verifyDispatch, mailVerifyCommand } = await import('./commands/mail.js');
-      await mailVerifyCommand(verifyDispatch(target, opts));
+      const { json, ...verifyOpts } = opts;
+      await mailVerifyCommand(verifyDispatch(target, verifyOpts), { json });
       // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
     } catch (err) {
       handleError(err);
