@@ -1,0 +1,158 @@
+splitRef: gate5-migration-2263305c
+authoredAfterSplit: true
+heldOutNonInspectionAttestation: true
+rules:
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '427c97fb0063f0cb: Avoid using partial matchers like toContain when testing'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-427c97fb-partial-matcher-secret-masking.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-427c97fb-partial-matcher-secret-masking.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: bcf3cf0de100eb5a55b9f64d43ba07e9666cd42347e169583c4fd39e530089ee
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '71935fe9a742137b@javascript: Using String() casting on input patterns can lead to silent'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-71935fe9-string-cast-on-input-js.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-71935fe9-string-cast-on-input-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 920a1acacc79bf894717dd6e568754fab6e717d7dc287d48b2ed75263d70b5f6
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '71935fe9a742137b@typescript: Using String() casting on input patterns can lead to silent'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-71935fe9-string-cast-on-input.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-71935fe9-string-cast-on-input.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 920a1acacc79bf894717dd6e568754fab6e717d7dc287d48b2ed75263d70b5f6
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '54140f59be3e6e44: Issue numbers are only unique within a single repository;'
+    structuralClass: bare-issue-reference
+    record: .totem/rules/mig-54140f59-bare-issue-number-refs.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-54140f59-bare-issue-number-refs.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: a00534bfadee96809319421aa7f696635871f813b3d5a720e50a98520f2c7e9d
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '4f283f5495489a19: Replacing inline fs.rmSync calls with a shared helper'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 8d15b2f4f2c8708dbf4f55a0865b5f155beb25aad9c7c4394e6b5bc7bdc55c9d
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'bc8b99e815c3943f: Standard console.log or console.error calls in MCP tools'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-bc8b99e8-console-log-in-mcp.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-bc8b99e8-console-log-in-mcp.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 72248a705ac7a428879077352e47f1fb76aa5a6257d60dbe8adad4fad13fd993
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '2266fc0dfe824f24: Static top-level imports from heavy internal packages delay'
+    structuralClass: static-import-from-module
+    record: .totem/rules/mig-2266fc0d-static-named-import-totem-barrel.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-2266fc0d-static-named-import-totem-barrel.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 4acd1a619d7988d4be359611e67152a23291161b6f38a702d5ad33c11f94b629
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'a190836df4daa24d: Use git adapter instead of raw git execution'
+    structuralClass: forbidden-callee-literal-arg
+    record: .totem/rules/mig-a190836d-raw-git-exec.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-a190836d-raw-git-exec.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: abd584ae45c1b3b715549927fb87fcad44052ef11729b394cea503fe312479bc
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '87aff037d7de47a7: Ban fail-open catch blocks that skip re-throwing'
+    structuralClass: catch-without-rethrow
+    record: .totem/rules/mig-87aff037-fail-open-catch-ban.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-87aff037-fail-open-catch-ban.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: e86a4035dcf21787e0fd062fb1c5c93b6abc99c75c8aaa76bcff3f246aaa7166
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'a1fd35ee696110b0: Dynamic imports intended for performance optimization'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 2c717193b02a76b4d92e0fc5034b0d70eba84de67dff598e08261fd0f32e2b83
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '61bb8b8b88d2ecab: Perform explicit null and type checks on the results'
+    structuralClass: type-assertion-on-call
+    record: .totem/rules/mig-61bb8b8b-json-parse-as-cast.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-61bb8b8b-json-parse-as-cast.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 9142fc32365180c3447c06e315a26ea692b97a8d1494c5eddef2931627a4a8b6
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '6ad0d4d5c760a5d6: Technical documentation must avoid marketing-centric terms'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 3af662427b0d1896f218ee6e459f4063d59f28c040087c40431d8d3b0b14edc8
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '1210f02da9f16e5b: Using domain-specific error subclasses instead of raw Error'
+    structuralClass: forbidden-constructor-throw
+    record: .totem/rules/mig-1210f02d-raw-error-throw-in-cli.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-1210f02d-raw-error-throw-in-cli.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 2320dd1dd8726d2621cfa7643cde5806df612fb7707476a0460c66a310f1ee1d
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: "7056157a6bf72fa8: Instead of hardcoding .git/hooks, use 'git rev-parse"
+    structuralClass: forbidden-path-literal
+    record: .totem/rules/mig-7056157a-hardcoded-git-hooks-path.rule.yaml
+    positiveFixtures:
+      - pr: 2945
+        filePath: .totem/rules/mig-7056157a-hardcoded-git-hooks-path.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 540834ddfc9e0c8de710d2c6e8a35eba7bd6a587e8a5f3c052ed20fa9d9e609d
+        example: 0
