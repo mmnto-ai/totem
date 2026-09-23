@@ -30,7 +30,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
-  findTotemRepoRootSync,
   isPathSafeAgentId,
   knownCohortAgents,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
@@ -2119,17 +2118,20 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // exited 0: a dispatch no poll would ever list (the doubled-outbox
   // silent-drop class). A start with NO marker at or above it is refused
   // outright rather than used as-is — there is no repo there to host a seat,
-  // and a `.totem/` minted under it is exactly the phantom.
+  // and a `.totem/` minted under it is exactly the phantom. The resolver
+  // returns the walk-start itself when no marker exists, so "no marker at the
+  // resolved root" is exactly "nothing was found" (a found root carries one).
   const start = path.resolve(opts.repoRoot ?? process.cwd());
-  const found = findTotemRepoRootSync(start);
-  if (found === null) {
+  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+  const hasMarker =
+    fs.existsSync(path.join(repoRoot, '.totem')) || fs.existsSync(path.join(repoRoot, '.git'));
+  if (!hasMarker) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
       `not inside a totem repository: no .totem/ or .git/ marker at or above ${start} — refusing to mint a phantom .totem/orchestration/ there (a dispatch written outside a repo is read by no poll; mmnto-ai/totem#2930)`,
       'run mail send/reply from inside the repository that hosts your seat — its root or any subdirectory.',
     );
   }
-  const repoRoot = found;
   const now = (opts.now ?? (() => new Date()))();
 
   const to = opts.to.trim();
@@ -2545,8 +2547,11 @@ export async function mailVerifyCommand(
 ): Promise<DispatchVerifyResult> {
   const { log } = await import('../ui.js');
   const { parse, recipient, body, placement } = result.checks;
+  // A line is a failure iff it is in `findings` — never by substring, since
+  // the recipient line quotes a sender-controlled `to:` value.
+  const failing = new Set(result.findings);
   for (const line of [parse, recipient, body, placement]) {
-    if (line.includes('FAIL')) log.warn(TAG, line);
+    if (failing.has(line)) log.warn(TAG, line);
     else log.info(TAG, line);
   }
   if (result.ok) {
