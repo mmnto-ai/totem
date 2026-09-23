@@ -2,8 +2,10 @@
  * Send-side guards for `totem mail send` / `mail reply` and the `mail verify`
  * verb — four cohort datums on one seam:
  *
- * - mmnto-ai/totem#2930: the outbox root resolves to the hosting repository
- *   (walk-up), never the shell's cwd; a marker-less start is refused.
+ * - mmnto-ai/totem#2930: the outbox root is the repository TOPLEVEL (the
+ *   nearest `.git`-bearing ancestor) that carries `.totem/` and hosts the
+ *   sending seat, never the shell's cwd and never a stray `.totem/` under a
+ *   subdirectory; anything else is refused.
  * - mmnto-ai/totem#2887: an empty or whitespace-only body is refused at send;
  *   the listing flags a served frontmatter-only dispatch; `mail verify`.
  * - mmnto-ai/totem#2889: a `--slug` that begins with the recipient token is
@@ -11,10 +13,10 @@
  * - mmnto-ai/totem#2929: a derived reply basename leads its topic with the
  *   sender token, so N seats replying to one kit never share a basename.
  *
- * Every fixture is a marker-bearing `<tmp>/workspace/<repo>/.totem/` tree:
- * the send now walks UP to the nearest marker (the same resolver the poll and
- * `mail mark` use), so a bare directory under the OS temp dir would resolve to
- * whatever host-level marker sits above it.
+ * Every sender fixture is a `<tmp>/workspace/<repo>/` tree with `.git`,
+ * `.totem/` and the registered seat directories: the send resolves on `.git`,
+ * so a bare directory under the OS temp dir resolves to nothing (refused) and
+ * a `.totem` above the temp dir (this build host has an empty one) is inert.
  */
 
 import * as fs from 'node:fs';
@@ -23,7 +25,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { findTotemRepoRootSync } from '@mmnto/totem';
+import { TotemError } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -46,11 +48,32 @@ function mkDir(p: string): string {
   return p;
 }
 
-/** A marker-bearing repo root at `<workspace>/<basename>` (what `totem init` leaves). */
-function repoRoot(basename = 'totem'): string {
+/**
+ * A repository root at `<workspace>/<basename>`: `.git` (the toplevel the send
+ * resolves to), `.totem/` (what `totem init` leaves) and the seat directories
+ * `totem seat add` registers — the send refuses to mint a seat
+ * (mmnto-ai/totem#2930).
+ */
+function repoRoot(
+  basename = 'totem',
+  seats: readonly string[] = ['totem-claude', 'totem-gemini'],
+): string {
   const root = mkDir(path.join(workspace, basename));
+  mkDir(path.join(root, '.git'));
   mkDir(path.join(root, '.totem'));
+  for (const seat of seats) mkDir(path.join(root, '.totem', 'orchestration', seat));
   return root;
+}
+
+/** The nearest `.git`-bearing ancestor of `dir`, or null — the send's own rule. */
+function gitAbove(dir: string): string | null {
+  let cur = path.resolve(dir);
+  for (;;) {
+    if (fs.existsSync(path.join(cur, '.git'))) return cur;
+    const parent = path.dirname(cur);
+    if (parent === cur) return null;
+    cur = parent;
+  }
 }
 
 interface Dispatch {
@@ -144,17 +167,73 @@ describe('mailSend — outbox root resolves to the hosting repository (mmnto-ai/
     expect(fs.existsSync(path.join(deep, '.totem'))).toBe(false);
   });
 
-  // The refusal needs a start with NO marker at or above it. On a host whose
-  // temp dir sits under a `.totem`/`.git` (this walker has no ceiling), the
-  // fixture cannot be built, so the case is skipped LOUDLY rather than passed
-  // vacuously; CI runners carry no such marker.
-  const hostMarkerAboveTmp = findTotemRepoRootSync(os.tmpdir());
-  it.skipIf(hostMarkerAboveTmp !== null)(
-    'a start with no marker at or above it is refused, naming the directory, and mints nothing',
+  it("a stray .totem/ in a subdirectory (a tool's temp state) is never the root: the send lands at the git toplevel (leg F1)", () => {
+    const root = repoRoot();
+    mkDir(path.join(root, 'packages', 'cli', '.totem', 'temp'));
+    const start = mkDir(path.join(root, 'packages', 'cli', 'src'));
+    const res = mailSend({ ...SEND, repoRoot: start });
+    expect(path.dirname(res.filePath)).toBe(
+      path.join(root, '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    expect(fs.existsSync(path.join(root, 'packages', 'cli', '.totem', 'orchestration'))).toBe(
+      false,
+    );
+    expect(res.verify?.ok).toBe(true);
+  });
+
+  it("a phantom outbox under a subdirectory (the old bug's residue, hosting the seat) is skipped for the git toplevel and gains no file", () => {
+    const root = repoRoot();
+    const phantom = mkDir(
+      path.join(root, 'apps', 'game', '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    const start = mkDir(path.join(root, 'apps', 'game', 'src'));
+    const res = mailSend({ ...SEND, repoRoot: start });
+    expect(path.dirname(res.filePath)).toBe(
+      path.join(root, '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    expect(fs.readdirSync(phantom)).toEqual([]);
+  });
+
+  it('a git repository with no .totem/ is refused: nothing is minted there', () => {
+    const plain = mkDir(path.join(workspace, 'plain-git'));
+    mkDir(path.join(plain, '.git'));
+    expect(() => mailSend({ ...SEND, repoRoot: plain })).toThrow(
+      /not a totem repository: .*plain-git .*carries no \.totem\//,
+    );
+    expect(fs.existsSync(path.join(plain, '.totem'))).toBe(false);
+  });
+
+  it('a totem repository that does not host the sending seat is refused, naming the seat and the cure (a worktree is the live case)', () => {
+    const wt = repoRoot('totem-wt', []);
+    let caught: unknown;
+    try {
+      mailSend({ ...SEND, repoRoot: wt });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(TotemError);
+    expect((caught as Error).message).toMatch(
+      /does not host seat "totem-claude": no \.totem\/orchestration\/totem-claude\/ there/,
+    );
+    // The cure rides the recovery hint, the line the CLI boundary prints as `Fix:`.
+    expect((caught as { recoveryHint?: string }).recoveryHint).toContain(
+      'totem seat add totem-claude',
+    );
+    expect(fs.existsSync(path.join(wt, '.totem', 'orchestration', 'totem-claude'))).toBe(false);
+  });
+
+  // The refusal needs a start with NO `.git` at or above it. On a host whose
+  // temp dir sits inside a git repository the fixture cannot be built, so the
+  // case is skipped LOUDLY rather than passed vacuously; CI runners' temp dirs
+  // carry none. A `.totem` above the temp dir (this build host has an empty
+  // one directly under %TEMP%) no longer matters: the send resolves on `.git`.
+  const gitAboveTmp = gitAbove(os.tmpdir());
+  it.skipIf(gitAboveTmp !== null)(
+    'a start with no .git at or above it is refused, naming the directory, and mints nothing',
     () => {
       const nowhere = mkDir(path.join(tmpRoot, 'nowhere', 'deeper'));
       expect(() => mailSend({ ...SEND, repoRoot: nowhere })).toThrow(
-        /not inside a totem repository: no \.totem\/ or \.git\/ marker at or above .*deeper/,
+        /not inside a repository: no \.git at or above .*deeper/,
       );
       expect(fs.existsSync(path.join(nowhere, '.totem'))).toBe(false);
       expect(fs.existsSync(path.join(tmpRoot, 'nowhere', '.totem'))).toBe(false);
@@ -170,7 +249,26 @@ describe('mailSend — an empty body is refused at send (mmnto-ai/totem#2887)', 
     expect(() => mailSend({ ...SEND, body: ' \n\t', repoRoot: root })).toThrow(
       /dispatch body is empty \(the body argument: 3 bytes\) — nothing was written/,
     );
-    expect(fs.existsSync(path.join(root, '.totem', 'orchestration'))).toBe(false);
+    expect(
+      fs.existsSync(path.join(root, '.totem', 'orchestration', 'totem-claude', 'outbox')),
+    ).toBe(false);
+  });
+
+  it('the subject-only class ADR-106 tolerates (the mmnto-ai/totem#2118 shape) reads bodyEmpty: true, and the line does not claim a transport drop', () => {
+    writeDispatch('totem-strategy', 'strategy-claude', `${STAMP}-totem-claude-subject-only.md`, {
+      to: 'totem-claude',
+      subject: `[${'W'.repeat(2500)}]`,
+    });
+    const result = pollMail({
+      repoRoot: repoRoot(),
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'totem-claude' },
+    });
+    const entry = result.mail.find((m) => m.file === `${STAMP}-totem-claude-subject-only.md`);
+    expect(entry?.bodyEmpty).toBe(true);
+    const text = formatTextResult(result);
+    expect(text).toContain('unless the subject carries the whole message');
+    expect(text).not.toContain('did not land');
   });
 
   it('refuses a whitespace-only --body-file the same way, naming the file', () => {
@@ -236,6 +334,15 @@ describe('mailSend — a --slug that begins with the recipient token is stripped
     const res = mailSend({ ...SEND, slug: 'strategy-claude', repoRoot: repoRoot() });
     expect(res.fileName).toBe(`${STAMP}-strategy-claude-lane-handoff.md`);
     expect(res.warnings.some((w) => w.includes('(subject-derived)'))).toBe(true);
+  });
+
+  it('compares the SLUGIFIED forms: a spaced or underscored recipient prefix is stripped too (leg F3)', () => {
+    const a = mailSend({ ...SEND, slug: 'Strategy Claude review', repoRoot: repoRoot() });
+    expect(a.fileName).toBe(`${STAMP}-strategy-claude-review.md`);
+    expect(a.warnings.some((w) => w.includes('began with the recipient token'))).toBe(true);
+    const b = mailSend({ ...SEND, slug: 'strategy_claude-review', repoRoot: repoRoot('totem-b') });
+    expect(b.fileName).toBe(`${STAMP}-strategy-claude-review.md`);
+    expect(b.warnings.some((w) => w.includes('began with the recipient token'))).toBe(true);
   });
 
   it('a slug that merely contains the recipient token later is untouched', () => {
@@ -304,6 +411,24 @@ describe('mailReply — the sender token leads the derived basename (mmnto-ai/to
       knownAgents: ['strategy-claude'],
     });
     expect(res.fileName).toBe(`${STAMP}-strategy-claude-tc-s3-r2-deposit.md`);
+  });
+
+  it("a blank --slug on reply is no slug: the sender token still leads (leg F7's nit)", () => {
+    const kit = writeDispatch('totem-strategy', 'strategy-claude', KIT, {
+      to: 'broadcast',
+      subject: 'BLIND round: S3 smell-read r2',
+      body: 'the kit',
+    });
+    const res = mailReply(kit, {
+      from: 'totem-claude',
+      body: 'deposit',
+      slug: '   ',
+      repoRoot: repoRoot(),
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.fileName).toMatch(/^2026-09-23T0152Z-strategy-claude-totem-claude-re-blind-round-/);
   });
 
   it('a plain send does not gain the sender token (send basenames are unchanged)', () => {
@@ -376,6 +501,34 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     expect(v.findings[0]).toMatch(
       /^placement: FAIL — not at \.totem\/orchestration\/<seat>\/outbox\/<file>/,
     );
+  });
+
+  it("the roster derives from the FILE's repository, never the cwd: a seat registered only in the fixture workspace resolves (leg F4)", () => {
+    const file = writeDispatch('totem', 'totem-claude', `${STAMP}-fixture-seat-hello.md`, {
+      to: 'fixture-seat',
+      subject: 'hello',
+      body: 'b',
+    });
+    mkDir(path.join(workspace, 'fixture-repo', '.totem', 'orchestration', 'fixture-seat'));
+    const v = verifyDispatch(file, { env: {} });
+    expect(v.checks.recipient).toBe('recipient: ok (to: fixture-seat)');
+  });
+
+  it('a dispatch under a .totem/ whose parent carries no .git fails placement: the phantom the send refuses (leg F1)', () => {
+    const root = repoRoot();
+    const phantomOutbox = mkDir(
+      path.join(root, 'packages', 'cli', '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    const file = path.join(phantomOutbox, `${STAMP}-strategy-claude-lost.md`);
+    fs.writeFileSync(
+      file,
+      '---\nfrom: totem-claude\nto: strategy-claude\nsubject: lost\n---\n\nbody\n',
+      'utf-8',
+    );
+    const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
+    expect(v.ok).toBe(false);
+    expect(v.findings).toHaveLength(1);
+    expect(v.findings[0]).toMatch(/^placement: FAIL — .*packages[\\/]cli carries no \.git/);
   });
 
   it('a file that does not parse fails parse and leaves recipient and body unchecked', () => {

@@ -1164,11 +1164,16 @@ mailCmd
     'Workspace for roster resolution (default: $TOTEM_WORKSPACE, else parent of the repo root)',
   )
   .option('--json', 'Emit the structured verify result on stdout (exit still follows the verdict)')
-  .action(async (target: string, opts: { workspace?: string; json?: boolean }) => {
+  .action(async (target: string, _opts: { workspace?: string; json?: boolean }, cmd: Command) => {
     try {
       const { verifyDispatch, mailVerifyCommand } = await import('./commands/mail.js');
-      const { json, ...verifyOpts } = opts;
-      await mailVerifyCommand(verifyDispatch(target, verifyOpts), { json });
+      // The parent `mail` command declares `--json` and `--workspace` too, and
+      // Commander lets a parent claim its options even after a subcommand, so
+      // the flags typed after `verify` land on the PARENT's scope; the poll
+      // action reads them back with optsWithGlobals (the mmnto-ai/totem#2097
+      // seam) and so does this one — the wiring test pins both flags.
+      const { json, workspace } = cmd.optsWithGlobals<{ json?: boolean; workspace?: string }>();
+      await mailVerifyCommand(verifyDispatch(target, { workspace }), { json });
       // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
     } catch (err) {
       handleError(err);
