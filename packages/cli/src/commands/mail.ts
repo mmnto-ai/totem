@@ -2076,13 +2076,23 @@ function compactStamp(d: Date): string {
   return `${iso.slice(0, 10)}T${hhmm}Z`;
 }
 
+/**
+ * The kebab normalisation every filename token goes through: lowercase, each
+ * non-alphanumeric run folded to `-`, no leading or trailing dash. Shared by
+ * `slugify` and the recipient-prefix strip so the two can never disagree on
+ * what a token looks like on disk (leg F3).
+ */
+function normalizeSlugToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 /** Short, kebab filename slug (concise-dispatch-filename discipline: ~3-6 words). */
 function slugify(subject: string, explicit?: string): string {
   const source = explicit !== undefined && explicit.trim().length > 0 ? explicit : subject;
-  const slug = source
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+  const slug = normalizeSlugToken(source)
     .split('-')
     .filter((s) => s.length > 0)
     .slice(0, 6)
@@ -2246,14 +2256,8 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
     // review` and `strategy_claude-review` both double the recipient on disk
     // while a raw comparison sees no prefix (leg F3, reproduced).
     const given = explicitSlug;
-    const normalized = given
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    const prefix = toToken
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    const normalized = normalizeSlugToken(given);
+    const prefix = normalizeSlugToken(toToken);
     if (normalized === prefix || normalized.startsWith(`${prefix}-`)) {
       const rest = normalized.slice(prefix.length).replace(/^-+/, '');
       warnings.push(
@@ -2268,7 +2272,10 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // their basenames would converge in the recipient's `processed/` store —
   // the cross-sender collision ecl-discipline § 3.1 names. The sender token
   // sits AFTER the recipient's, so the reader's positional recipient match
-  // (mmnto-ai/totem#2144) is untouched. An explicit slug is the caller's.
+  // (mmnto-ai/totem#2144) is untouched. An explicit slug is the caller's;
+  // "explicit" is judged HERE, after the strip — a slug that was blank or
+  // that stripped down to nothing is no slug, and the derived form with the
+  // token applies (re-arm F2: `--slug <recipient>` from two seats converged).
   const withSender = opts.senderInSlug === true && explicitSlug === undefined;
   const base = withSender
     ? `${compactStamp(now)}-${toToken}-${fileToken(from)}-${topic}`
@@ -2350,7 +2357,24 @@ function resolveSendRepoRoot(start: string): string {
   const origin = path.resolve(start);
   let dir = origin;
   for (;;) {
-    if (fs.existsSync(path.join(dir, '.git'))) break;
+    const gitPath = path.join(dir, '.git');
+    if (fs.existsSync(gitPath)) {
+      if (!fs.statSync(gitPath).isDirectory()) {
+        // A `.git` FILE is a worktree's (or a submodule's) pointer at another
+        // repository's store. A worktree is never a seat's host: its
+        // orchestration tree is gitignored, no poll enumerates it (it is not
+        // a workspace child), and a seat registered there by `totem seat add`
+        // would give the send a home no reader visits — the phantom class
+        // again, reached through the hosting hint (re-arm F1, reproduced).
+        const main = mainCheckoutFromGitFile(gitPath);
+        throw new TotemError(
+          'MAIL_SEND_FAILED',
+          `${dir} is a worktree (its .git is a file pointing at ${main ?? 'another repository'}), never a seat's host — refusing to mint an outbox no poll reads (mmnto-ai/totem#2930)`,
+          `run mail send/reply from the resident checkout${main !== null ? ` at ${main}` : ''}, which hosts the seat.`,
+        );
+      }
+      break;
+    }
     const parent = path.dirname(dir);
     if (parent === dir) {
       throw new TotemError(
@@ -2369,6 +2393,27 @@ function resolveSendRepoRoot(start: string): string {
     );
   }
   return dir;
+}
+
+/**
+ * The main checkout a worktree's `.git` file points at
+ * (`gitdir: <main>/.git/worktrees/<name>`), or null when the pointer has
+ * another shape (a submodule's `.git/modules/…`, an unreadable file). Used
+ * only to NAME the resident in a refusal — never to redirect a write there.
+ */
+function mainCheckoutFromGitFile(gitFile: string): string | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(gitFile, 'utf-8');
+    // totem-context: intentional cleanup — the pointer is read only to name the resident checkout in the refusal's hint; an unreadable pointer degrades the hint to "another repository" and the refusal itself still fires.
+  } catch {
+    return null;
+  }
+  const m = /^gitdir:\s*(.+)$/m.exec(text);
+  if (m === null) return null;
+  const gitdir = path.resolve(path.dirname(gitFile), m[1]!.trim()).replace(/\\/g, '/');
+  const idx = gitdir.lastIndexOf('/.git/worktrees/');
+  return idx > 0 ? path.resolve(gitdir.slice(0, idx)) : null;
 }
 
 /**
@@ -2437,10 +2482,11 @@ export function mailReply(
     to: replyTo,
     subject,
     inReplyTo: portableSourceRef(source),
-    // The derived reply basename leads its topic with the sender token
-    // (mmnto-ai/totem#2929); an explicit `--slug` is the caller's verbatim. A
-    // blank slug is no slug (leg F7's nit): it must not silence the token.
-    senderInSlug: (sendOpts.slug?.trim() ?? '') === '',
+    // A reply's DERIVED basename leads its topic with the sender token
+    // (mmnto-ai/totem#2929). Whether the slug is explicit is judged inside
+    // `mailSend`, after the recipient-prefix strip: a blank slug, or one that
+    // strips down to nothing, is no slug and the token applies (re-arm F2).
+    senderInSlug: true,
   });
   // Consume-marking (ADR-106 § A1.4; mmnto-ai/totem#2396): in the SAME command,
   // AFTER the reply lands, mark the source processed — bound to the replying seat
@@ -2552,14 +2598,14 @@ export function verifyDispatch(
       err,
     );
   }
-  const findings: string[] = [];
-  // Placement first, because the roster below derives from the FILE's own
-  // repository (leg F4): `<root>/.totem/orchestration/<seat>/outbox/<file>` at
-  // depth 1 — the shape every poll scans (ADR-106 § 3) — with the seat's
-  // directory present and `<root>` a repository toplevel (`.git`). A `.totem/`
-  // whose parent carries no `.git` is the phantom the send now refuses to
-  // mint (leg F1), and a verify that called it routable would be the false
-  // confirmation the leg caught.
+  // Placement is computed first because the roster below derives from the
+  // FILE's own repository (leg F4): `<root>/.totem/orchestration/<seat>/outbox/
+  // <file>` at depth 1 — the shape every poll scans (ADR-106 § 3) — with
+  // `<root>` a RESIDENT checkout: a `.git` DIRECTORY there. A `.totem/` whose
+  // parent carries no `.git` (a tool's temp state under `packages/<x>/`) or
+  // only a `.git` file (a worktree, a submodule) is the phantom the send
+  // refuses to mint (leg F1, re-arm F1), and a verify that called it routable
+  // would be the false confirmation the leg caught.
   const segments = abs.split(/[/\\]/);
   const n = segments.length;
   const atDepthOne =
@@ -2568,32 +2614,47 @@ export function verifyDispatch(
     segments[n - 4] === 'orchestration' &&
     segments[n - 5] === '.totem';
   const seat = atDepthOne ? (segments[n - 3] ?? '') : '';
-  const repoOfFile = atDepthOne ? segments.slice(0, n - 5).join(path.sep) : null;
+  let repoOfFile: string | null = null;
+  if (atDepthOne) {
+    const joined = segments.slice(0, n - 5).join(path.sep);
+    // A repository at a drive root (`D:`) or the POSIX root (`''`) needs its
+    // separator back, or `path.resolve` reads the per-drive cwd (re-arm F5).
+    repoOfFile =
+      joined.length === 0 || /^[A-Za-z]:$/.test(joined) ? `${joined}${path.sep}` : joined;
+  }
+  const gitAtRepo = repoOfFile !== null ? path.join(repoOfFile, '.git') : null;
+  const residentHost =
+    gitAtRepo !== null && fs.existsSync(gitAtRepo) && fs.statSync(gitAtRepo).isDirectory();
   let placement: string;
-  if (!atDepthOne || seat.length === 0 || !fs.existsSync(path.dirname(path.dirname(abs)))) {
+  let placementOk = false;
+  if (!atDepthOne || seat.length === 0) {
     placement = `placement: FAIL — not at .totem/orchestration/<seat>/outbox/<file> (outbox depth 1 of a hosted seat); no poll scans ${abs}`;
-    findings.push(placement);
-  } else if (repoOfFile === null || !fs.existsSync(path.join(repoOfFile, '.git'))) {
-    placement = `placement: FAIL — ${repoOfFile ?? abs} carries no .git: a .totem/ under a subdirectory is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
-    findings.push(placement);
+  } else if (!residentHost) {
+    placement = `placement: FAIL — ${repoOfFile} is not a resident checkout (no .git directory there): a .totem/ under a subdirectory or a worktree is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
   } else {
     placement = `placement: ok (.totem/orchestration/${seat}/outbox/${path.basename(abs)})`;
+    placementOk = true;
   }
   const parsed = parseHeader(content);
   let parse: string;
   let recipient: string;
   let body: string;
+  let parseOk = false;
+  let recipientOk = false;
+  let bodyOk = false;
   if (!parsed.ok) {
     parse = `parse: FAIL — ${parsed.reason}`;
     recipient = 'recipient: not checked (the header did not parse)';
     body = 'body: not checked (the header did not parse)';
-    findings.unshift(parse);
   } else {
     parse = 'parse: ok (ADR-098 frontmatter)';
+    parseOk = true;
     const to = parsed.header.to.trim();
     const toLower = to.toLowerCase();
     // The roster's workspace is the parent of the FILE's repository when the
-    // file sits in one (never the cwd's, which may be anywhere); `--workspace`
+    // file is placed in one (never the cwd's, which may be anywhere); on a
+    // phantom the file's tree says nothing about the roster, so the cwd's
+    // resolution is used and only placement fails (re-arm F5). `--workspace`
     // and `TOTEM_WORKSPACE` still override.
     const known =
       opts.knownAgents ??
@@ -2601,7 +2662,7 @@ export function verifyDispatch(
         path.resolve(
           opts.workspace ??
             env['TOTEM_WORKSPACE'] ??
-            (repoOfFile !== null
+            (placementOk && repoOfFile !== null
               ? path.dirname(repoOfFile)
               : path.dirname(resolveTotemRepoRootSync(opts.repoRoot, process.cwd()))),
         ),
@@ -2609,17 +2670,25 @@ export function verifyDispatch(
     const roster = new Set(known.map((a) => a.toLowerCase()));
     if (toLower === 'broadcast' || roster.has(toLower)) {
       recipient = `recipient: ok (to: ${to})`;
+      recipientOk = true;
     } else {
       recipient = `recipient: FAIL — to: "${to}" is neither broadcast nor a roster seat (one recipient per dispatch)`;
-      findings.push(recipient);
     }
     if (parsed.bodyEmpty) {
       body = 'body: FAIL — empty (frontmatter only); nothing for the recipient to act on';
-      findings.push(body);
     } else {
       body = 'body: ok (non-empty)';
+      bodyOk = true;
     }
   }
+  // Findings in the documented order — parse, recipient, body, placement —
+  // whatever order the checks were computed in (re-arm F4).
+  const findings = [
+    ...(parseOk ? [] : [parse]),
+    ...(parseOk && !recipientOk ? [recipient] : []),
+    ...(parseOk && !bodyOk ? [body] : []),
+    ...(placementOk ? [] : [placement]),
+  ];
   return {
     filePath: abs,
     ok: findings.length === 0,

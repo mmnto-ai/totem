@@ -203,7 +203,34 @@ describe('mailSend — outbox root resolves to the hosting repository (mmnto-ai/
     expect(fs.existsSync(path.join(plain, '.totem'))).toBe(false);
   });
 
-  it('a totem repository that does not host the sending seat is refused, naming the seat and the cure (a worktree is the live case)', () => {
+  it("a worktree (a .git FILE) is never a seat's host, even with a seat directory registered there: refused, naming the resident checkout (re-arm F1)", () => {
+    const main = repoRoot();
+    const wt = mkDir(path.join(workspace, 'worktrees', 'wt1'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(main, '.git', 'worktrees', 'wt1')}\n`,
+      'utf-8',
+    );
+    mkDir(path.join(wt, '.totem', 'orchestration', 'totem-claude'));
+    let caught: unknown;
+    try {
+      mailSend({ ...SEND, repoRoot: path.join(wt, 'packages') });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(TotemError);
+    expect((caught as Error).message).toMatch(
+      /wt1 is a worktree \(its \.git is a file pointing at .*totem\), never a seat's host/,
+    );
+    expect((caught as { recoveryHint?: string }).recoveryHint).toContain(
+      `resident checkout at ${main}`,
+    );
+    expect(fs.existsSync(path.join(wt, '.totem', 'orchestration', 'totem-claude', 'outbox'))).toBe(
+      false,
+    );
+  });
+
+  it('a resident checkout that has not registered the sending seat is refused, naming the seat and the cure', () => {
     const wt = repoRoot('totem-wt', []);
     let caught: unknown;
     try {
@@ -431,6 +458,30 @@ describe('mailReply — the sender token leads the derived basename (mmnto-ai/to
     expect(res.fileName).toMatch(/^2026-09-23T0152Z-strategy-claude-totem-claude-re-blind-round-/);
   });
 
+  it('two seats replying with --slug <recipient> (stripped to nothing) still get distinct basenames: the token applies to a slug that is no slug (re-arm F2)', () => {
+    const kit = writeDispatch('totem-strategy', 'strategy-claude', KIT, {
+      to: 'broadcast',
+      subject: 'kit round',
+      body: 'the kit',
+    });
+    const root = repoRoot();
+    const reply = (from: string) =>
+      mailReply(kit, {
+        from,
+        body: `deposit ${from}`,
+        slug: 'strategy-claude',
+        repoRoot: root,
+        env: {},
+        now: fixedClock,
+        knownAgents: ['strategy-claude'],
+      });
+    const a = reply('totem-claude');
+    const b = reply('totem-gemini');
+    expect(a.fileName).toBe(`${STAMP}-strategy-claude-totem-claude-re-kit-round.md`);
+    expect(b.fileName).toBe(`${STAMP}-strategy-claude-totem-gemini-re-kit-round.md`);
+    expect(a.warnings.some((w) => w.includes('began with the recipient token'))).toBe(true);
+  });
+
   it('a plain send does not gain the sender token (send basenames are unchanged)', () => {
     const res = mailSend({ ...SEND, repoRoot: repoRoot() });
     expect(res.fileName).toBe(`${STAMP}-strategy-claude-lane-handoff.md`);
@@ -528,7 +579,61 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
     expect(v.ok).toBe(false);
     expect(v.findings).toHaveLength(1);
-    expect(v.findings[0]).toMatch(/^placement: FAIL — .*packages[\\/]cli carries no \.git/);
+    expect(v.findings[0]).toMatch(
+      /^placement: FAIL — .*packages[\\/]cli is not a resident checkout \(no \.git directory there\)/,
+    );
+  });
+
+  it('a dispatch inside a worktree (a .git FILE at the root) fails placement: no poll enumerates a worktree (re-arm F1)', () => {
+    const main = repoRoot();
+    const wt = mkDir(path.join(workspace, 'worktrees', 'wt2'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(main, '.git', 'worktrees', 'wt2')}\n`,
+      'utf-8',
+    );
+    const outbox = mkDir(path.join(wt, '.totem', 'orchestration', 'totem-claude', 'outbox'));
+    const file = path.join(outbox, `${STAMP}-strategy-claude-wt.md`);
+    fs.writeFileSync(
+      file,
+      '---\nfrom: totem-claude\nto: strategy-claude\nsubject: wt\n---\n\nbody\n',
+      'utf-8',
+    );
+    const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
+    expect(v.findings).toEqual([
+      expect.stringMatching(/^placement: FAIL — .*wt2 is not a resident checkout/),
+    ]);
+  });
+
+  it('findings keep the documented order (parse, recipient, body, placement) whatever order the checks ran in (re-arm F4)', () => {
+    const root = repoRoot();
+    const phantomOutbox = mkDir(
+      path.join(root, 'packages', 'core', '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    const file = path.join(phantomOutbox, `${STAMP}-nobody-z.md`);
+    fs.writeFileSync(
+      file,
+      '---\nfrom: totem-claude\nto: nobody-at-all\nsubject: z\n---\n',
+      'utf-8',
+    );
+    const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
+    expect(v.findings.map((f) => f.split(':')[0])).toEqual(['recipient', 'body', 'placement']);
+  });
+
+  it('on a phantom the roster comes from the cwd resolution, not the phantom tree: only placement fails (re-arm F5)', () => {
+    const root = repoRoot();
+    const phantomOutbox = mkDir(
+      path.join(root, 'packages', 'core', '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    const file = path.join(phantomOutbox, `${STAMP}-strategy-claude-p.md`);
+    fs.writeFileSync(
+      file,
+      '---\nfrom: totem-claude\nto: strategy-claude\nsubject: p\n---\n\nbody\n',
+      'utf-8',
+    );
+    const v = verifyDispatch(file, { env: {} });
+    expect(v.checks.recipient).toBe('recipient: ok (to: strategy-claude)');
+    expect(v.findings.map((f) => f.split(':')[0])).toEqual(['placement']);
   });
 
   it('a file that does not parse fails parse and leaves recipient and body unchecked', () => {
