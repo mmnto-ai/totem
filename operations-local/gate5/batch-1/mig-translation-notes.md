@@ -299,5 +299,61 @@ The pre-pin pass log is appended below when it runs.
 
 ## Pre-pin pass (§ 3.3) — scratch clone, published 2.10.0
 
-_Appended at the pin: the verbatim validate leg and the intake invocation + output from a scratch
-clone of the branch under the 2.10.0 staging install._
+Run 2026-09-23 in a scratch clone of the branch at `d0ccb50b4619c339d78fc359971b0747519aafd8` (the
+envelope commit; `git clone --branch gate5/batch-1-2263305c --single-branch`), never the branch
+checkout; the ledger row the pass wrote (`.totem/spine/authoring-ledger.ndjson`, one row for the
+one minted entry) stayed in the clone and is not on the branch. Both legs used the staging install
+of the PUBLISHED 2.10.0 (`<staging>/node_modules/@mmnto/{cli,totem}`; napi 0.42.3; node v24.16.0).
+The logs are on the branch as `prepin-validate.log` and `prepin-intake.log` beside these notes.
+
+**Validate leg** — the generalized harness in the clone, no `--tree` (the firing-set leg is the
+batch run's, above): exit 0.
+
+```text
+node operations-local/gate5/mig-harness.mjs --set operations-local/gate5/manifest-2263305c.json --only 427c97fb,71935fe9,54140f59,4f283f54,bc8b99e8,2266fc0d,a190836d,87aff037,a1fd35ee,61bb8b8b,6ad0d4d5,1210f02d,7056157a --inventory operations-local/gate5/batch-1/mig-inventory.json --core <staging>/node_modules/@mmnto/totem --cli <staging>/node_modules/@mmnto/cli
+```
+
+Summary lines (the full log in `prepin-validate.log`):
+
+```text
+Validate: 14 record(s) — parsed 14, compiled 14, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0
+```
+
+**Intake** — the verbatim invocation (cwd = the clone root; `TOTEM_NO_REEXEC=1` so the published
+binary runs itself and never delegates to a checkout's dist; no `--judged-by`, so the CLI default
+`static-whitelist@cert-1` applied — this is the PRE-release pass, the intake pin's run will carry
+`--judged-by static-whitelist@gate5-<setSha8>` explicit):
+
+```text
+TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author
+```
+
+Exit 1 — the expected outcome at this pass (§ 5 step 2 of the charter): no file-aborting throw
+(the record parse, `judgedBy == author`, the repeated `(author, targetDefect)` identity, the
+dangling fixture ordinal and the `failed validation` path all passed); one entry minted
+(`6ad0d4d5`, class `forbidden-literal-token`, a row of the pre-release table) and thirteen rejected
+per rule on the whitelist, each naming its `(engine, class)` pair. Output verbatim:
+
+```text
+[RuleAuthor] 1 authored rule(s): 1 minted, 0 revised, 0 unchanged.
+  + 923841006dd9c024  totem-claude :: 6ad0d4d5c760a5d6: Technical documentation must avoid marketing-centric terms
+
+[RuleAuthor] WARNING: 13 rule(s) REJECTED — not structurally decidable, excluded from the producer output:
+  x totem-claude :: 427c97fb0063f0cb: Avoid using partial matchers like toContain when testing: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 71935fe9a742137b@javascript: Using String() casting on input patterns can lead to silent: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 71935fe9a742137b@typescript: Using String() casting on input patterns can lead to silent: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 54140f59be3e6e44: Issue numbers are only unique within a single repository;: no unambiguous whitelist match for (regex, bare-issue-reference) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 4f283f5495489a19: Replacing inline fs.rmSync calls with a shared helper: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: bc8b99e815c3943f: Standard console.log or console.error calls in MCP tools: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 2266fc0dfe824f24: Static top-level imports from heavy internal packages delay: no unambiguous whitelist match for (ast-grep, static-import-from-module) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: a190836df4daa24d: Use git adapter instead of raw git execution: no unambiguous whitelist match for (regex, forbidden-callee-literal-arg) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 87aff037d7de47a7: Ban fail-open catch blocks that skip re-throwing: no unambiguous whitelist match for (ast-grep, catch-without-rethrow) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: a1fd35ee696110b0: Dynamic imports intended for performance optimization: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 61bb8b8b88d2ecab: Perform explicit null and type checks on the results: no unambiguous whitelist match for (ast-grep, type-assertion-on-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 1210f02da9f16e5b: Using domain-specific error subclasses instead of raw Error: no unambiguous whitelist match for (ast-grep, forbidden-constructor-throw) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 7056157a6bf72fa8: Instead of hardcoding .git/hooks, use 'git rev-parse: no unambiguous whitelist match for (regex, forbidden-path-literal) — not structurally decidable (ADR-112 §3)
+```
+
+The thirteen `intake-ineligible (whitelist)` outcomes are the D1 (C) demand figure for this batch;
+the class list is in the pin mail and in the per-rule notes above.
