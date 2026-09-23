@@ -397,3 +397,114 @@ forbidden-callee-call)` PAIR is new (see 20); the token can appear in a doc-comm
 - Firing set (union): 23 → 23, added 0, removed 0 (the javascript record fires 2 times on the `.js`
   files; the typescript record carries 21).
 - Differential satisfied on both records; legacy over pair 0 satisfied. Curator strategy-codex, 2026-08-22.
+
+## The envelope (`.totem/spine/authored-rules.yaml`)
+
+The batch-1 envelope with **15 entries appended** (29 in all); the header unchanged
+(`splitRef: gate5-migration-2263305c`, free-text lane, § 2 item 5; `authoredAfterSplit: true`;
+`heldOutNonInspectionAttestation: true`); batch 1's 14 entries byte-identical (the generator asserted
+the old file a byte prefix of the new one before writing). One entry per batch-2 record:
+`author: totem-claude` · `authoredAt: '2026-09-23'` · `targetDefect: "<lessonHash16>[@<language>]:
+<targetDefectText>"` (the manifest's text; `@<language>` on both records of `06282905` and of
+`240f19ca`) · `structuralClass` = the honest class above · `record: .totem/rules/<file>` ·
+`positiveFixtures: [{pr: 2947, filePath: <the record>, matchedSpan: examples[0].bad, contentHash:
+sha256(examples[0].bad), example: 0}]` — this batch's draft PR is mmnto-ai/totem#2947. The
+`(author, targetDefect)` identity was checked unique over the whole file (both batches) before the
+write. The generator now carries an `--exclude <hash8,…>` option for a record that must stay out of
+the envelope (a record that did not parse or lower, § 3.3) — unused in this batch: all 15 parse and
+lower.
+
+**Records kept out of the envelope:** none. **Records the pre-pin intake pass rejects:** every
+entry whose honest class is outside the five pre-release whitelist rows — expected at this pass
+(§ 5 step 2 of the charter) and not a fault; the class loop (D1 (C)) decides admission. **Entries the
+pass ADMITS:** `5afaf8d0` — its honest class is the exemplar row of the pre-release table, on a
+prose-only scope (see its per-rule note; the batch-1 ruling's ground) — and, in the shared file,
+batch 1's `6ad0d4d5` again (its own pass minted it; the clone here has no ledger row from that pass,
+so it mints again).
+
+## Pre-pin pass (§ 3.3) — scratch clone, published 2.10.0
+
+Run 2026-09-23 in a scratch clone of the branch at `4732a1c4e15e2cf8ced25bf099ed70ef393b2fff` (the
+envelope commit; `git clone --branch gate5/batch-2-2263305c --single-branch`, HEAD checked equal to
+the pushed commit), never the branch checkout; the ledger rows the pass wrote
+(`.totem/spine/authoring-ledger.ndjson`, two rows for the two minted entries) stayed in the clone
+and are not on the branch. Both legs used the staging install of the PUBLISHED 2.10.0
+(`<staging>/node_modules/@mmnto/{cli,totem}`; napi 0.42.3; node v24.16.0). The logs are on the branch
+as `prepin-validate.log` and `prepin-intake.log` beside these notes.
+
+**Coverage limit of the pass, disclosed (as batch 1 disclosed it):** in `authored-rule-intake.ts` a
+whitelist miss returns before `deriveRecordFixtures` and the record-schema parse of the entry, so on
+the 27 rejected entries the dangling-ordinal and `failed validation` throws were not reached by the
+intake itself; they are reached for every entry only at the post-release intake pin. The record
+parse, the `judgedBy == author` check and the `(author, targetDefect)` identity check run over the
+whole file before any entry is judged and all passed (no throw; the run reached its per-rule
+verdicts).
+
+**Validate leg** — the generalized harness in the clone, no `--tree` (the firing-set leg is the
+batch run's, above): exit 0.
+
+```text
+node operations-local/gate5/mig-harness.mjs --set operations-local/gate5/manifest-2263305c.json --only 5afaf8d0,329479bf,638d6fcc,06282905,24f112fe,fb05f895,81f72c85,3c777370,487a0a23,7cdfa106,f202f65f,2d3ac4b9,240f19ca --inventory operations-local/gate5/batch-2/mig-inventory.json --core <staging>/node_modules/@mmnto/totem --cli <staging>/node_modules/@mmnto/cli
+```
+
+Summary lines (the full log in `prepin-validate.log`):
+
+```text
+Validate: 15 record(s) — parsed 15, compiled 15, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Fidelity (records): 12/15 identical, 3 expected divergence(s), 0 UNEXPECTED
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0
+```
+
+**Intake** — the verbatim invocation (cwd = the clone root; `TOTEM_NO_REEXEC=1` so the published
+binary runs itself and never delegates to a checkout's dist; no `--judged-by`, so the CLI default
+`static-whitelist@cert-1` applied — this is the PRE-release pass, the intake pin's run will carry
+`--judged-by static-whitelist@gate5-<setSha8>` explicit):
+
+```text
+TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author
+```
+
+Exit 1 — the expected outcome at this pass (§ 5 step 2 of the charter): no file-aborting throw;
+two entries minted (`6ad0d4d5` and `5afaf8d0`, both class `forbidden-literal-token`, the
+pre-release table's exemplar row) and 27 rejected per rule on the whitelist (batch 1's 13 and this
+batch's 14), each naming its `(engine, class)` pair. Output verbatim (the full log in
+`prepin-intake.log`):
+
+```text
+[RuleAuthor] 2 authored rule(s): 2 minted, 0 revised, 0 unchanged.
+  + 923841006dd9c024  totem-claude :: 6ad0d4d5c760a5d6: Technical documentation must avoid marketing-centric terms
+  + 6e5b15c0ae7e2285  totem-claude :: 5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere
+
+[RuleAuthor] WARNING: 27 rule(s) REJECTED — not structurally decidable, excluded from the producer output:
+  x totem-claude :: 427c97fb0063f0cb: Avoid using partial matchers like toContain when testing: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 71935fe9a742137b@javascript: Using String() casting on input patterns can lead to silent: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 71935fe9a742137b@typescript: Using String() casting on input patterns can lead to silent: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 54140f59be3e6e44: Issue numbers are only unique within a single repository;: no unambiguous whitelist match for (regex, bare-issue-reference) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 4f283f5495489a19: Replacing inline fs.rmSync calls with a shared helper: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: bc8b99e815c3943f: Standard console.log or console.error calls in MCP tools: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 2266fc0dfe824f24: Static top-level imports from heavy internal packages delay: no unambiguous whitelist match for (ast-grep, static-import-from-module) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: a190836df4daa24d: Use git adapter instead of raw git execution: no unambiguous whitelist match for (regex, forbidden-callee-literal-arg) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 87aff037d7de47a7: Ban fail-open catch blocks that skip re-throwing: no unambiguous whitelist match for (ast-grep, catch-without-rethrow) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: a1fd35ee696110b0: Dynamic imports intended for performance optimization: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 61bb8b8b88d2ecab: Perform explicit null and type checks on the results: no unambiguous whitelist match for (ast-grep, type-assertion-on-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 1210f02da9f16e5b: Using domain-specific error subclasses instead of raw Error: no unambiguous whitelist match for (ast-grep, forbidden-constructor-throw) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 7056157a6bf72fa8: Instead of hardcoding .git/hooks, use 'git rev-parse: no unambiguous whitelist match for (regex, forbidden-path-literal) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 329479bf34f8816f: Use .min(1) on string schemas in config arrays: no unambiguous whitelist match for (ast-grep, forbidden-fixed-call-expression) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 638d6fcc8a601da0: Windows requires shell:true for git binary resolution: no unambiguous whitelist match for (regex, callee-literal-arg-missing-option) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 06282905d061ca34@javascript: Diagnostic hints must precisely identify the underlying: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 06282905d061ca34@typescript: Diagnostic hints must precisely identify the underlying: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 24f112fe3a6679bd: Standardize exception messages with a consistent prefix: no unambiguous whitelist match for (regex, constructor-literal-arg-missing-prefix) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: fb05f895862808e6: Forbid direct child_process — use safeExec: no unambiguous whitelist match for (regex, forbidden-module-import) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 81f72c855eba4229: 2026-03-06T05:32:34.074Z: no unambiguous whitelist match for (regex, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 3c7773706e5b3b2d: Brace expansion (e.g., \*.{ts,js}) is not universally: no unambiguous whitelist match for (regex, brace-expansion-glob-literal) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 487a0a23bd24569d: Static top-level imports from heavy internal packages delay: no unambiguous whitelist match for (regex, static-import-from-module) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 7cdfa1069477b69a: Dynamic imports should be limited to CLI command entry: no unambiguous whitelist match for (regex, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: f202f65f8a198f18: When testing expected failures, assert the specific error: no unambiguous whitelist match for (ast-grep, callee-call-without-argument) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 2d3ac4b9516ed9b6: The Gemini CLI and Gemini Code Assist (GCA) do not: no unambiguous whitelist match for (regex, forbidden-path-literal) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 240f19cae3e56b10@javascript: Throwing specific error classes like TotemParseError: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+  x totem-claude :: 240f19cae3e56b10@typescript: Throwing specific error classes like TotemParseError: no unambiguous whitelist match for (ast-grep, forbidden-callee-call) — not structurally decidable (ADR-112 §3)
+```
+
+The fourteen batch-2 `intake-ineligible (whitelist)` outcomes are the D1 (C) demand figure for this
+batch (eight `(engine, class)` pairs new for the review; two pairs batch 1's, awaiting that batch's
+delivery; one the exemplar row); the class list is in the pin mail and in the per-rule notes above.
