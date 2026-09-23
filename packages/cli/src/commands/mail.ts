@@ -1869,7 +1869,10 @@ export interface MailSendOptions {
    * no explicit slug is given (mmnto-ai/totem#2929): N seats replying to one
    * kit share a subject, so the sender token is what keeps their basenames
    * distinct in the recipient's `processed/` store (ecl-discipline § 3.1).
-   * Ignored when `slug` is set — an explicit slug is the caller's.
+   * `mailReply` always asks for it; whether a slug is explicit is judged
+   * inside `mailSend` AFTER the recipient-prefix strip — a non-empty slug is
+   * the caller's and gets no token, a blank one or one stripped to nothing is
+   * no slug and takes the derived form.
    */
   senderInSlug?: boolean;
   /**
@@ -2138,7 +2141,7 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // one verb that MINTS, so it picks the repository TOPLEVEL (`.git`), never a
   // `.totem/` a tool left under a subdirectory — see `resolveSendRepoRoot`.
   const start = path.resolve(opts.repoRoot ?? process.cwd());
-  const repoRoot = resolveSendRepoRoot(start);
+  const repoRoot = resolveSendRepoRoot(start, env);
   const now = (opts.now ?? (() => new Date()))();
 
   const to = opts.to.trim();
@@ -2166,7 +2169,8 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // send. A worktree or a sibling checkout carries no seat directory, and the
   // old send minted one there — an outbox no poll enumerates.
   const seatDir = path.join(repoRoot, '.totem', 'orchestration', from);
-  if (!fs.existsSync(seatDir)) {
+  // A real directory, as the reader's Dirent filter demands (no link).
+  if (!isRealDirectory(seatDir)) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
       `${repoRoot} does not host seat "${from}": no .totem/orchestration/${from}/ there — refusing to mint it (a worktree or a sibling checkout is not the seat's host; mmnto-ai/totem#2930)`,
@@ -2342,9 +2346,14 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
 
 /**
  * The repository root a SEND lands in (mmnto-ai/totem#2930): the nearest
- * ancestor carrying `.git` (the repository toplevel; a worktree's `.git` is a
- * file and counts), which must also carry `.totem/`. A `.totem/` WITHOUT `.git`
- * is never authoritative here: it is derived state a tool minted under a
+ * ancestor carrying a `.git` DIRECTORY (a resident checkout; a `.git` FILE is a
+ * worktree's or a submodule's pointer and is refused, see below), which must
+ * also carry a real `.totem/` directory (no link — the reader follows none,
+ * mmnto-ai/totem#2355) and, when `TOTEM_WORKSPACE` names a workspace, must be a
+ * direct child of it (the only shape a poll of that workspace enumerates; with
+ * no pin the parent of the resident IS its workspace, and a resident-shaped
+ * clone elsewhere cannot be told apart locally — the disclosed residual). A
+ * `.totem/` WITHOUT `.git` is never authoritative here: it is derived state a tool minted under a
  * subdirectory (`packages/cli/.totem/temp`, or an `apps/<x>/.totem/orchestration/`
  * phantom the old cwd-based send left behind), and the nearest-marker walker
  * the READER shares would stop at it — the falsification leg reproduced a send
@@ -2353,7 +2362,7 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
  * its fixtures are the nearest marker; a reader-side capture is its own datum);
  * the send is the one verb that MINTS, so it is the one that picks the toplevel.
  */
-function resolveSendRepoRoot(start: string): string {
+function resolveSendRepoRoot(start: string, env: Record<string, string | undefined>): string {
   const origin = path.resolve(start);
   let dir = origin;
   for (;;) {
@@ -2369,7 +2378,7 @@ function resolveSendRepoRoot(start: string): string {
         const main = mainCheckoutFromGitFile(gitPath);
         throw new TotemError(
           'MAIL_SEND_FAILED',
-          `${dir} is a worktree (its .git is a file pointing at ${main ?? 'another repository'}), never a seat's host — refusing to mint an outbox no poll reads (mmnto-ai/totem#2930)`,
+          `${dir}: its .git is a file (a worktree's or a submodule's pointer${main !== null ? ` at ${main}` : ', not into any worktree layout'}), never a seat's host — refusing to mint an outbox no poll reads (mmnto-ai/totem#2930)`,
           `run mail send/reply from the resident checkout${main !== null ? ` at ${main}` : ''}, which hosts the seat.`,
         );
       }
@@ -2385,12 +2394,32 @@ function resolveSendRepoRoot(start: string): string {
     }
     dir = parent;
   }
-  if (!fs.existsSync(path.join(dir, '.totem'))) {
+  // A real directory, never a link: the reader's scan follows no link at the
+  // repo, `.totem` or seat level (mmnto-ai/totem#2355), so a junctioned
+  // `.totem/` would take a certified send no poll reads (third leg F3).
+  if (!isRealDirectory(path.join(dir, '.totem'))) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
-      `not a totem repository: ${dir} (the repository toplevel above ${origin}) carries no .totem/ — refusing to mint one (mmnto-ai/totem#2930)`,
+      `not a totem repository: ${dir} (the repository toplevel above ${origin}) carries no real .totem/ directory (absent, or a link the reader never follows) — refusing to mint one (mmnto-ai/totem#2930)`,
       'run mail send/reply from the checkout that hosts your seat, or `totem init` this repository first.',
     );
+  }
+  // The workspace pin (third leg F1): a poll enumerates the DIRECT children of
+  // its workspace, so a resident-shaped clone elsewhere, or one nested inside
+  // a resident, is written and never read. When the environment names the
+  // workspace the send can tell; with no pin the resident's parent is its
+  // workspace by definition and the case is undecidable here — disclosed, not
+  // certified.
+  const pinned = env['TOTEM_WORKSPACE']?.trim();
+  if (pinned !== undefined && pinned.length > 0) {
+    const workspace = path.resolve(pinned);
+    if (path.resolve(path.dirname(dir)) !== workspace) {
+      throw new TotemError(
+        'MAIL_SEND_FAILED',
+        `${dir} is not a direct child of the workspace TOTEM_WORKSPACE names (${workspace}) — no poll of that workspace enumerates it; refusing to mint an outbox there (mmnto-ai/totem#2930)`,
+        `run mail send/reply from the resident checkout under ${workspace} that hosts your seat, or unset TOTEM_WORKSPACE if this checkout's parent is the workspace.`,
+      );
+    }
   }
   return dir;
 }
@@ -2625,12 +2654,28 @@ export function verifyDispatch(
   const gitAtRepo = repoOfFile !== null ? path.join(repoOfFile, '.git') : null;
   const residentHost =
     gitAtRepo !== null && fs.existsSync(gitAtRepo) && fs.statSync(gitAtRepo).isDirectory();
+  // The reader follows no link at the repo, `.totem` or seat level
+  // (mmnto-ai/totem#2355), so placement demands real directories there too
+  // (third leg F3); and when a workspace is named (`--workspace`, else
+  // `TOTEM_WORKSPACE`) the repository must be its direct child, the only
+  // shape a poll of it enumerates (third leg F1). With no workspace named the
+  // resident's parent is its workspace by definition: a resident-shaped clone
+  // elsewhere cannot be told apart here — the disclosed residual.
+  const realTotem = repoOfFile !== null && isRealDirectory(path.join(repoOfFile, '.totem'));
+  const realSeat = atDepthOne && isRealDirectory(path.dirname(path.dirname(abs)));
+  const namedWorkspace = (opts.workspace ?? env['TOTEM_WORKSPACE'])?.trim();
+  const workspaceChild =
+    namedWorkspace === undefined || namedWorkspace.length === 0 || repoOfFile === null
+      ? true
+      : path.resolve(path.dirname(repoOfFile)) === path.resolve(namedWorkspace);
   let placement: string;
   let placementOk = false;
   if (!atDepthOne || seat.length === 0) {
     placement = `placement: FAIL — not at .totem/orchestration/<seat>/outbox/<file> (outbox depth 1 of a hosted seat); no poll scans ${abs}`;
-  } else if (!residentHost) {
-    placement = `placement: FAIL — ${repoOfFile} is not a resident checkout (no .git directory there): a .totem/ under a subdirectory or a worktree is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
+  } else if (!residentHost || !realTotem || !realSeat) {
+    placement = `placement: FAIL — ${repoOfFile} is not a resident checkout (no .git directory there, or .totem/ or the seat directory is a link the reader never follows): a .totem/ under a subdirectory, a worktree or a linked tree is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
+  } else if (!workspaceChild) {
+    placement = `placement: FAIL — ${repoOfFile} is not a direct child of the workspace ${path.resolve(namedWorkspace ?? '')} — no poll of that workspace enumerates it (mmnto-ai/totem#2930)`;
   } else {
     placement = `placement: ok (.totem/orchestration/${seat}/outbox/${path.basename(abs)})`;
     placementOk = true;

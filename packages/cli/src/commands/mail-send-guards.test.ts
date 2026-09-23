@@ -194,11 +194,60 @@ describe('mailSend — outbox root resolves to the hosting repository (mmnto-ai/
     expect(fs.readdirSync(phantom)).toEqual([]);
   });
 
+  it('with TOTEM_WORKSPACE set, a resident-shaped clone outside the workspace, or nested inside a resident, is refused: no poll of that workspace enumerates it (third leg F1)', () => {
+    const env = { TOTEM_WORKSPACE: workspace };
+    const elsewhere = mkDir(path.join(tmpRoot, 'elsewhere', 'clone'));
+    mkDir(path.join(elsewhere, '.git'));
+    mkDir(path.join(elsewhere, '.totem', 'orchestration', 'totem-claude'));
+    expect(() => mailSend({ ...SEND, env, repoRoot: elsewhere })).toThrow(
+      /clone is not a direct child of the workspace TOTEM_WORKSPACE names/,
+    );
+    const nested = mkDir(path.join(repoRoot(), 'vendor', 'inner'));
+    mkDir(path.join(nested, '.git'));
+    mkDir(path.join(nested, '.totem', 'orchestration', 'totem-claude'));
+    expect(() => mailSend({ ...SEND, env, repoRoot: path.join(nested, 'src') })).toThrow(
+      /inner is not a direct child of the workspace/,
+    );
+    expect(
+      fs.existsSync(path.join(nested, '.totem', 'orchestration', 'totem-claude', 'outbox')),
+    ).toBe(false);
+    // A resident that IS a workspace child passes the same pin.
+    expect(mailSend({ ...SEND, env, repoRoot: repoRoot('totem-b') }).verify?.ok).toBe(true);
+  });
+
+  it('without a workspace pin, a resident-shaped clone elsewhere is ACCEPTED: the residual the send cannot decide locally (disclosed, not certified as clean)', () => {
+    const elsewhere = mkDir(path.join(tmpRoot, 'elsewhere', 'clone'));
+    mkDir(path.join(elsewhere, '.git'));
+    mkDir(path.join(elsewhere, '.totem', 'orchestration', 'totem-claude'));
+    const res = mailSend({ ...SEND, repoRoot: elsewhere });
+    expect(path.dirname(res.filePath)).toBe(
+      path.join(elsewhere, '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    // Its parent is its workspace by definition; a poll of THIS fixture's
+    // workspace never lists it. That gap closes only with the pin above.
+    const inbox = pollMail({
+      repoRoot: repoRoot('totem-strategy'),
+      workspace,
+      env: { TOTEM_SELF_AGENT: 'strategy-claude' },
+    });
+    expect(inbox.mail.map((m) => m.file)).not.toContain(res.fileName);
+  });
+
+  it('a resident whose .totem/ is a junction or symlink is refused: the reader follows no link (third leg F3)', () => {
+    const real = mkDir(path.join(tmpRoot, 'realtotem', 'orchestration', 'totem-claude'));
+    const repo = mkDir(path.join(workspace, 'symrepo'));
+    mkDir(path.join(repo, '.git'));
+    fs.symlinkSync(path.dirname(path.dirname(real)), path.join(repo, '.totem'), 'junction');
+    expect(() => mailSend({ ...SEND, repoRoot: repo })).toThrow(
+      /carries no real \.totem\/ directory \(absent, or a link the reader never follows\)/,
+    );
+  });
+
   it('a git repository with no .totem/ is refused: nothing is minted there', () => {
     const plain = mkDir(path.join(workspace, 'plain-git'));
     mkDir(path.join(plain, '.git'));
     expect(() => mailSend({ ...SEND, repoRoot: plain })).toThrow(
-      /not a totem repository: .*plain-git .*carries no \.totem\//,
+      /not a totem repository: .*plain-git .*carries no real \.totem\/ directory/,
     );
     expect(fs.existsSync(path.join(plain, '.totem'))).toBe(false);
   });
@@ -220,7 +269,7 @@ describe('mailSend — outbox root resolves to the hosting repository (mmnto-ai/
     }
     expect(caught).toBeInstanceOf(TotemError);
     expect((caught as Error).message).toMatch(
-      /wt1 is a worktree \(its \.git is a file pointing at .*totem\), never a seat's host/,
+      /wt1: its \.git is a file \(a worktree's or a submodule's pointer at .*totem\), never a seat's host/,
     );
     expect((caught as { recoveryHint?: string }).recoveryHint).toContain(
       `resident checkout at ${main}`,
@@ -580,7 +629,7 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     expect(v.ok).toBe(false);
     expect(v.findings).toHaveLength(1);
     expect(v.findings[0]).toMatch(
-      /^placement: FAIL — .*packages[\\/]cli is not a resident checkout \(no \.git directory there\)/,
+      /^placement: FAIL — .*packages[\\/]cli is not a resident checkout \(no \.git directory there/,
     );
   });
 
@@ -620,20 +669,60 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     expect(v.findings.map((f) => f.split(':')[0])).toEqual(['recipient', 'body', 'placement']);
   });
 
-  it('on a phantom the roster comes from the cwd resolution, not the phantom tree: only placement fails (re-arm F5)', () => {
+  it('on a phantom the roster comes from the cwd resolution, not the phantom tree: a seat registered only in the cwd workspace resolves and only placement fails (re-arm F5, third leg F2)', () => {
     const root = repoRoot();
+    // Registered ONLY under the cwd-resolved workspace, never under the
+    // phantom's parent (`root/packages`), and absent from the static cohort
+    // map — so a roster read from the phantom's tree cannot know it.
+    mkDir(path.join(workspace, 'fixture-repo', '.totem', 'orchestration', 'fixture-seat'));
     const phantomOutbox = mkDir(
       path.join(root, 'packages', 'core', '.totem', 'orchestration', 'totem-claude', 'outbox'),
     );
-    const file = path.join(phantomOutbox, `${STAMP}-strategy-claude-p.md`);
+    const file = path.join(phantomOutbox, `${STAMP}-fixture-seat-p.md`);
     fs.writeFileSync(
       file,
-      '---\nfrom: totem-claude\nto: strategy-claude\nsubject: p\n---\n\nbody\n',
+      '---\nfrom: totem-claude\nto: fixture-seat\nsubject: p\n---\n\nbody\n',
       'utf-8',
     );
-    const v = verifyDispatch(file, { env: {} });
-    expect(v.checks.recipient).toBe('recipient: ok (to: strategy-claude)');
+    const v = verifyDispatch(file, { env: {}, repoRoot: root });
+    expect(v.checks.recipient).toBe('recipient: ok (to: fixture-seat)');
     expect(v.findings.map((f) => f.split(':')[0])).toEqual(['placement']);
+  });
+
+  it('with a workspace named, placement fails for a dispatch in a resident-shaped clone that is not its direct child, and for a junctioned .totem/ (third leg F1, F3)', () => {
+    const elsewhere = mkDir(path.join(tmpRoot, 'elsewhere', 'clone'));
+    mkDir(path.join(elsewhere, '.git'));
+    const outbox = mkDir(path.join(elsewhere, '.totem', 'orchestration', 'totem-claude', 'outbox'));
+    const file = path.join(outbox, `${STAMP}-strategy-claude-far.md`);
+    const text = '---\nfrom: totem-claude\nto: strategy-claude\nsubject: far\n---\n\nbody\n';
+    fs.writeFileSync(file, text, 'utf-8');
+    const far = verifyDispatch(file, { knownAgents: ['strategy-claude'], workspace });
+    expect(far.findings).toEqual([
+      expect.stringMatching(/^placement: FAIL — .*clone is not a direct child of the workspace/),
+    ]);
+    expect(verifyDispatch(file, { knownAgents: ['strategy-claude'], env: {} }).ok).toBe(true);
+
+    const real = mkDir(path.join(tmpRoot, 'realtotem2', 'orchestration', 'totem-claude', 'outbox'));
+    const repo = mkDir(path.join(workspace, 'symrepo2'));
+    mkDir(path.join(repo, '.git'));
+    fs.symlinkSync(
+      path.dirname(path.dirname(path.dirname(real))),
+      path.join(repo, '.totem'),
+      'junction',
+    );
+    const linked = path.join(
+      repo,
+      '.totem',
+      'orchestration',
+      'totem-claude',
+      'outbox',
+      `${STAMP}-strategy-claude-link.md`,
+    );
+    fs.writeFileSync(linked, text, 'utf-8');
+    const viaLink = verifyDispatch(linked, { knownAgents: ['strategy-claude'], env: {} });
+    expect(viaLink.findings).toEqual([
+      expect.stringMatching(/^placement: FAIL — .*is not a resident checkout/),
+    ]);
   });
 
   it('a file that does not parse fails parse and leaves recipient and body unchecked', () => {
