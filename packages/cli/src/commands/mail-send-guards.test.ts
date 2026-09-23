@@ -167,6 +167,74 @@ describe('mailSend — outbox root resolves to the hosting repository (mmnto-ai/
     expect(fs.existsSync(path.join(deep, '.totem'))).toBe(false);
   });
 
+  it('a reply from a subdirectory with a stray .totem/ lands its consume-mark in the SAME root as the reply, never in the stray (CodeRabbit on the PR)', () => {
+    const src = writeDispatch(
+      'totem-strategy',
+      'strategy-claude',
+      `${STAMP}-totem-claude-ask2.md`,
+      {
+        to: 'totem-claude',
+        subject: 'an ask',
+        body: 'please',
+      },
+    );
+    const root = repoRoot();
+    mkDir(path.join(root, 'packages', 'cli', '.totem', 'temp'));
+    const start = mkDir(path.join(root, 'packages', 'cli', 'src'));
+    const res = mailReply(src, {
+      from: 'totem-claude',
+      body: 'done',
+      repoRoot: start,
+      env: {},
+      now: fixedClock,
+      knownAgents: ['strategy-claude'],
+    });
+    expect(res.mark?.markPath).toBe(
+      path.join(root, '.totem', 'orchestration', 'totem-claude', 'processed', path.basename(src)),
+    );
+    expect(fs.existsSync(path.join(root, 'packages', 'cli', '.totem', 'orchestration'))).toBe(
+      false,
+    );
+  });
+
+  it('a linked orchestration/ or outbox/ level is refused: the reader lstat-checks every level (CodeRabbit on the PR)', () => {
+    const root = repoRoot('totem-linked-outbox');
+    const realOutbox = mkDir(path.join(tmpRoot, 'elsewhere-outbox'));
+    fs.symlinkSync(
+      realOutbox,
+      path.join(root, '.totem', 'orchestration', 'totem-claude', 'outbox'),
+      'junction',
+    );
+    expect(() => mailSend({ ...SEND, repoRoot: root })).toThrow(
+      /outbox is not a real directory \(a link the reader never follows\)/,
+    );
+    expect(fs.readdirSync(realOutbox)).toEqual([]);
+
+    const root2 = mkDir(path.join(workspace, 'totem-linked-orch'));
+    mkDir(path.join(root2, '.git'));
+    mkDir(path.join(root2, '.totem'));
+    const realOrch = mkDir(path.join(tmpRoot, 'elsewhere-orch', 'totem-claude'));
+    fs.symlinkSync(path.dirname(realOrch), path.join(root2, '.totem', 'orchestration'), 'junction');
+    expect(() => mailSend({ ...SEND, repoRoot: root2 })).toThrow(
+      /does not host seat "totem-claude"/,
+    );
+  });
+
+  it.skipIf(process.platform !== 'win32')(
+    'on win32 the workspace pin compares paths case-insensitively (CodeRabbit on the PR)',
+    () => {
+      const flipped =
+        workspace.charAt(0).toUpperCase() === workspace.charAt(0)
+          ? workspace.charAt(0).toLowerCase() + workspace.slice(1)
+          : workspace.charAt(0).toUpperCase() + workspace.slice(1);
+      const res = mailSend({ ...SEND, env: { TOTEM_WORKSPACE: flipped }, repoRoot: repoRoot() });
+      expect(res.verify?.ok).toBe(true);
+      expect(
+        verifyDispatch(res.filePath, { knownAgents: ['strategy-claude'], workspace: flipped }).ok,
+      ).toBe(true);
+    },
+  );
+
   it("a stray .totem/ in a subdirectory (a tool's temp state) is never the root: the send lands at the git toplevel (leg F1)", () => {
     const root = repoRoot();
     mkDir(path.join(root, 'packages', 'cli', '.totem', 'temp'));
@@ -721,6 +789,36 @@ describe('verifyDispatch — one dispatch, written and routable (mmnto-ai/totem#
     fs.writeFileSync(linked, text, 'utf-8');
     const viaLink = verifyDispatch(linked, { knownAgents: ['strategy-claude'], env: {} });
     expect(viaLink.findings).toEqual([
+      expect.stringMatching(/^placement: FAIL — .*is not a resident checkout/),
+    ]);
+  });
+
+  it('a whitespace-only body larger than the header search window still fails the body check (Greptile P1 on the PR)', () => {
+    const outbox = mkDir(
+      path.join(repoRoot(), '.totem', 'orchestration', 'totem-claude', 'outbox'),
+    );
+    const file = path.join(outbox, `${STAMP}-strategy-claude-big.md`);
+    const header = '---\nfrom: totem-claude\nto: strategy-claude\nsubject: big\n---\n';
+    fs.writeFileSync(file, header + ' \n'.repeat(12_000), 'utf-8');
+    expect(fs.statSync(file).size).toBeGreaterThan(16_387);
+    const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
+    expect(v.checks.body).toMatch(/^body: FAIL/);
+    expect(v.ok).toBe(false);
+  });
+
+  it('a dispatch under a linked outbox/ fails placement even though the file reads (CodeRabbit on the PR)', () => {
+    const root = repoRoot('totem-verify-linked');
+    const realOutbox = mkDir(path.join(tmpRoot, 'elsewhere-outbox-v'));
+    const link = path.join(root, '.totem', 'orchestration', 'totem-claude', 'outbox');
+    fs.symlinkSync(realOutbox, link, 'junction');
+    const file = path.join(link, `${STAMP}-strategy-claude-viaoutbox.md`);
+    fs.writeFileSync(
+      file,
+      '---\nfrom: totem-claude\nto: strategy-claude\nsubject: v\n---\n\nbody\n',
+      'utf-8',
+    );
+    const v = verifyDispatch(file, { knownAgents: ['strategy-claude'] });
+    expect(v.findings).toEqual([
       expect.stringMatching(/^placement: FAIL — .*is not a resident checkout/),
     ]);
   });

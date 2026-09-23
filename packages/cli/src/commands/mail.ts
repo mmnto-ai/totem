@@ -332,15 +332,15 @@ function parseHeader(content: string, sourceTruncated = false): HeaderParse {
   // unquoted, hand-authored) can carry terminal-injection bytes into
   // `MailEntry` (CR R5 on mmnto-ai/totem#2134; the unquoted exposure predates
   // this PR — closing the whole class here, not just the unquote fallback).
-  // Body emptiness (mmnto-ai/totem#2887) is judged ONLY on bytes the read
-  // fully covered: a truncated read, or a file that extends past the search
-  // window, has a body by construction (the window ends before the file does),
-  // so neither can ever read as empty.
-  const bodyStart = close.index + close[0].length;
-  const bodyEmpty =
-    !sourceTruncated &&
-    content.length <= 3 + MAX_HEADER_SEARCH_BYTES &&
-    window.slice(bodyStart).trim().length === 0;
+  // Body emptiness (mmnto-ai/totem#2887) is judged on the bytes the read
+  // fully covered: a truncated read has a body by construction (the file
+  // extends past what was read), so it never reads as empty; a complete read
+  // judges the WHOLE content after the closing delimiter — the search window
+  // bounds where the delimiter is looked for, never how much body is judged,
+  // so a large whitespace-only body cannot pass as non-empty (Greptile P1 on
+  // mmnto-ai/totem#2940).
+  const bodyStart = 3 + close.index + close[0].length;
+  const bodyEmpty = !sourceTruncated && content.slice(bodyStart).trim().length === 0;
   return {
     ok: true,
     bodyEmpty,
@@ -2169,8 +2169,10 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // send. A worktree or a sibling checkout carries no seat directory, and the
   // old send minted one there — an outbox no poll enumerates.
   const seatDir = path.join(repoRoot, '.totem', 'orchestration', from);
-  // A real directory, as the reader's Dirent filter demands (no link).
-  if (!isRealDirectory(seatDir)) {
+  // Real directories at every level the reader's scan lstat-checks
+  // (`orchestration/` and the seat here, `outbox/` after the mkdir below):
+  // a link at any of them takes a write no poll lists.
+  if (!isRealDirectory(path.dirname(seatDir)) || !isRealDirectory(seatDir)) {
     throw new TotemError(
       'MAIL_SEND_FAILED',
       `${repoRoot} does not host seat "${from}": no .totem/orchestration/${from}/ there — refusing to mint it (a worktree or a sibling checkout is not the seat's host; mmnto-ai/totem#2930)`,
@@ -2246,6 +2248,16 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
     );
   }
 
+  // `mkdirSync` accepts an existing link named `outbox` as the directory; the
+  // reader does not follow it, so the write would land where no poll looks.
+  if (!isRealDirectory(outboxDir)) {
+    throw new TotemError(
+      'MAIL_SEND_FAILED',
+      `${outboxDir} is not a real directory (a link the reader never follows) — refusing to write a dispatch no poll lists (mmnto-ai/totem#2930)`,
+      'replace the linked outbox with a real directory, then re-send.',
+    );
+  }
+
   // `<stamp>-<recipient>-<topic>` (ecl-discipline § 3.1). An explicit slug
   // names the TOPIC; one that begins with the recipient token would double it
   // (`<stamp>-<to>-<to>-…`, mmnto-ai/totem#2889 — measured twice on the same
@@ -2264,8 +2276,10 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
     const prefix = normalizeSlugToken(toToken);
     if (normalized === prefix || normalized.startsWith(`${prefix}-`)) {
       const rest = normalized.slice(prefix.length).replace(/^-+/, '');
+      // The raw slug is CLI input bound for the terminal: control bytes are
+      // escaped at this boundary as every other displayed mail field is.
       warnings.push(
-        `--slug "${given}" began with the recipient token "${toToken}" — stripped to "${rest.length > 0 ? rest : '(subject-derived)'}"; the verb already prefixes <stamp>-<recipient>- (mmnto-ai/totem#2889)`,
+        `--slug "${escapeControlBytes(given)}" began with the recipient token "${toToken}" — stripped to "${rest.length > 0 ? rest : '(subject-derived)'}"; the verb already prefixes <stamp>-<recipient>- (mmnto-ai/totem#2889)`,
       );
       explicitSlug = rest.length > 0 ? rest : undefined;
     }
@@ -2413,7 +2427,7 @@ function resolveSendRepoRoot(start: string, env: Record<string, string | undefin
   const pinned = env['TOTEM_WORKSPACE']?.trim();
   if (pinned !== undefined && pinned.length > 0) {
     const workspace = path.resolve(pinned);
-    if (path.resolve(path.dirname(dir)) !== workspace) {
+    if (!samePath(path.dirname(dir), workspace)) {
       throw new TotemError(
         'MAIL_SEND_FAILED',
         `${dir} is not a direct child of the workspace TOTEM_WORKSPACE names (${workspace}) — no poll of that workspace enumerates it; refusing to mint an outbox there (mmnto-ai/totem#2930)`,
@@ -2422,6 +2436,19 @@ function resolveSendRepoRoot(start: string, env: Record<string, string | undefin
     }
   }
   return dir;
+}
+
+/**
+ * Path equality for the workspace pin: exact on POSIX, case-insensitive on
+ * win32, where `path.resolve` keeps the drive letter and every segment as
+ * typed — `TOTEM_WORKSPACE=c:\work` against a cwd under `C:\work` is the same
+ * workspace and must not read as "not a direct child" (CodeRabbit on
+ * mmnto-ai/totem#2940).
+ */
+function samePath(a: string, b: string): boolean {
+  const ra = path.resolve(a);
+  const rb = path.resolve(b);
+  return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
 }
 
 /**
@@ -2527,9 +2554,18 @@ export function mailReply(
   if (noMark === true) return result;
   let mark: MailMarkResult;
   try {
+    // The mark lands in the SAME root the reply landed in: `markSource`
+    // resolves its root with the reader's nearest-marker walker, so from a
+    // subdirectory with a stray `.totem/` the reply would reach the toplevel
+    // while the mark minted `<subdir>/.totem/orchestration/<seat>/processed/`,
+    // a store no poll drains, and the source stayed unread behind a "source
+    // marked processed" line (CodeRabbit on mmnto-ai/totem#2940). The written
+    // path is `<root>/.totem/orchestration/<seat>/outbox/<file>`, five
+    // segments below the root.
+    const sendRoot = path.resolve(result.filePath, '..', '..', '..', '..', '..');
     mark = markSource(source, {
       agentId: result.header.from,
-      repoRoot: opts.repoRoot,
+      repoRoot: sendRoot,
       env: opts.env,
     });
     // totem-context: the reply WAS written above (mailSend succeeded); only the consume-mark failed. Re-throw a DISTINGUISHABLE error naming the landed reply so the operator never re-runs `mail reply` (which would send a duplicate) — the recovery is the standalone `mail mark`, not a retry (greptile P1, the headline of the #2431 bot round).
@@ -2662,20 +2698,29 @@ export function verifyDispatch(
   // resident's parent is its workspace by definition: a resident-shaped clone
   // elsewhere cannot be told apart here — the disclosed residual.
   const realTotem = repoOfFile !== null && isRealDirectory(path.join(repoOfFile, '.totem'));
-  const realSeat = atDepthOne && isRealDirectory(path.dirname(path.dirname(abs)));
+  // Every level the reader's scan lstat-checks: `orchestration/`, the seat,
+  // `outbox/` (CodeRabbit on mmnto-ai/totem#2940: a link at either outer level
+  // hid the file from the poll while placement read ok).
+  const outboxOfFile = path.dirname(abs);
+  const seatOfFile = path.dirname(outboxOfFile);
+  const realSeat =
+    atDepthOne &&
+    isRealDirectory(path.dirname(seatOfFile)) &&
+    isRealDirectory(seatOfFile) &&
+    isRealDirectory(outboxOfFile);
   const namedWorkspace = (opts.workspace ?? env['TOTEM_WORKSPACE'])?.trim();
   const workspaceChild =
     namedWorkspace === undefined || namedWorkspace.length === 0 || repoOfFile === null
       ? true
-      : path.resolve(path.dirname(repoOfFile)) === path.resolve(namedWorkspace);
+      : samePath(path.dirname(repoOfFile), namedWorkspace);
   let placement: string;
   let placementOk = false;
   if (!atDepthOne || seat.length === 0) {
-    placement = `placement: FAIL — not at .totem/orchestration/<seat>/outbox/<file> (outbox depth 1 of a hosted seat); no poll scans ${abs}`;
+    placement = `placement: FAIL — not at .totem/orchestration/<seat>/outbox/<file> (outbox depth 1 of a hosted seat); no poll scans ${escapeControlBytes(abs)}`;
   } else if (!residentHost || !realTotem || !realSeat) {
-    placement = `placement: FAIL — ${repoOfFile} is not a resident checkout (no .git directory there, or .totem/ or the seat directory is a link the reader never follows): a .totem/ under a subdirectory, a worktree or a linked tree is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
+    placement = `placement: FAIL — ${escapeControlBytes(repoOfFile ?? abs)} is not a resident checkout (no .git directory there, or .totem/, orchestration/, the seat directory or outbox/ is a link the reader never follows): a .totem/ under a subdirectory, a worktree or a linked tree is a phantom no poll enumerates (mmnto-ai/totem#2930)`;
   } else if (!workspaceChild) {
-    placement = `placement: FAIL — ${repoOfFile} is not a direct child of the workspace ${path.resolve(namedWorkspace ?? '')} — no poll of that workspace enumerates it (mmnto-ai/totem#2930)`;
+    placement = `placement: FAIL — ${escapeControlBytes(repoOfFile ?? abs)} is not a direct child of the workspace ${escapeControlBytes(path.resolve(namedWorkspace ?? ''))} — no poll of that workspace enumerates it (mmnto-ai/totem#2930)`;
   } else {
     placement = `placement: ok (.totem/orchestration/${seat}/outbox/${path.basename(abs)})`;
     placementOk = true;
