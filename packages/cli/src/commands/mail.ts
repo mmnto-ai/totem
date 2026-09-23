@@ -2313,9 +2313,9 @@ export function mailSend(opts: MailSendOptions): MailSendResult {
   // same four checks `mail verify <path>` runs, on this one file, from the
   // roster already in hand. Written-and-routable, never consumed.
   let verify: DispatchVerifyResult;
-  // totem-context: intentional cleanup — the dispatch is WRITTEN at this point (the rename landed); a verify that cannot re-read it (a transient lock) must not throw past the write, or the caller reads exit 1 as "nothing shipped" and re-sends, and a reply skips its consume-mark (leg F5). It is reported as a failing verify finding instead.
   try {
     verify = verifyDispatch(filePath, { knownAgents: roster, env });
+    // totem-context: intentional cleanup — the dispatch is WRITTEN at this point (the rename landed); a verify that cannot re-read it (a transient lock) must not throw past the write, or the caller reads exit 1 as "nothing shipped" and re-sends, and a reply skips its consume-mark (leg F5). It is reported as a failing verify finding instead.
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     verify = {
