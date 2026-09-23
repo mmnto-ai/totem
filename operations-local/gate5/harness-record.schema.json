@@ -61,6 +61,11 @@
             "excludesMatch": { "type": "boolean" },
             "positivesSubset": { "type": "boolean" },
             "droppedPositives": { "type": "array", "items": { "type": "string" } },
+            "droppedSameLanguage": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "additive: dropped positives whose extension resolves to the record's own language or to none (never a language split)"
+            },
             "declaredI": { "type": "boolean" },
             "declaredIII": { "type": "boolean" }
           }

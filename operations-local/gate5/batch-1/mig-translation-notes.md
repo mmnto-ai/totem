@@ -56,12 +56,18 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   `36312ed9` are untouched); method and additions in its header. Beyond the four pre-registered
   additions it carries, after the pin's falsification leg: C7's `runSmokeGate` reason check (the
   shipped smoke gate over every pair beside the R14-method `fires`; a reason or a disagreement is
-  recorded on the pair), the engine and scope-declaration checks inside the fidelity leg (inventory
-  (i) and (iii) verified by mechanism, not only declared), legacy-over-pair-0 for every parsed
-  record, and a per-row field-set check against `operations-local/gate5/harness-record.schema.json`
-  (schema `gate5-harness-record/1`; the additive keys named there). A declared payload divergence
-  outside inventory (ii) is refused in `--set` mode (exit 2) and admitted only under `--r14`, where
-  the K3 expectations file names the ruled E26 cure. Per-record output at
+  recorded on the pair), the engine and scope-declaration checks inside the fidelity leg — (i) as
+  set-equality of the record's `excludeGlobs` with the legacy `!`-entries, (iii) as: every dropped
+  legacy positive must resolve to a registered language other than the record's declared one (a
+  dropped glob of the record's own language, or of no registered language, is unexpected whatever
+  the declaration; the file-set comparison itself stays C5's scope half, the scorer's) —
+  legacy-over-pair-0 for every parsed record (a record whose declared language has no registered
+  grammar gets `null` with a reason, never a substituted grammar), and a per-row field-set check
+  against `operations-local/gate5/harness-record.schema.json` (schema `gate5-harness-record/1`;
+  the additive keys named there; a real JSON Schema validator over both committed outputs read
+  14/14 and 22/22 valid at the second leg). A declared payload divergence outside inventory (ii) is
+  refused in `--set` mode (exit 2) and admitted only under `--r14`, where the K3 expectations file
+  names the ruled E26 cure; `--set` combined with `--r14` is refused (exit 2). Per-record output at
   `operations-local/gate5/batch-1/harness-per-record.jsonl`; the run log verbatim at
   `operations-local/gate5/batch-1/harness-run.log` (it prints the manifest's sha256); the K3
   self-check at `operations-local/gate5/k3/` (log, per-record output, the expectations file, which
@@ -125,12 +131,16 @@ Fidelity (entries): 18/20 identical, 2 expected divergence(s), 0 UNEXPECTED
   REPRODUCED — differential split and dead-matcher probe match the notes.
 ```
 
-**K3 fidelity figure, a disclosure for the scorer (ask-back sent by mail before this pin):** the
-pre-registered expectation reads "19/20 identical with one expected divergence (`5da43ea6`)". That
-figure is `scoring.md` item 3's, measured at the REGISTERED pin `2a713576`. At `78e7f196` — the E26
-cure pin the manifest names — entry 4 (`0e01112d`) carries the pattern `\bnew\s+Error\(` where the
-frozen row carries `\bnew\s+(?!Totem)Error\(`: the cure removed the inert lookahead (the commit
-subject at `78e7f196` says so; every other byte identical). So the honest K3 figure at `78e7f196` is
+**K3 fidelity figure, a disclosure for the scorer (ask-back sent by mail before this pin; ruled
+19:43Z as v1.1; the scorer's erratum of 19:51Z on the pin's location taken):** the pre-registered
+expectation reads "19/20 identical with one expected divergence (`5da43ea6`)". That figure is
+`scoring.md` item 3's, measured at the SCORING pin `62fa5b42` (2026-08-21; verified: that commit
+carries `\bnew\s+(?!Totem)Error\(` on `r14-0e01112d`), whose twenty registered records are
+byte-identical at its linear child `2a713576` (the twins added there). At `78e7f196` — the E26 cure
+pin the manifest names, one hunk on top — entry 4 (`0e01112d`) carries the pattern
+`\bnew\s+Error\(` where the frozen row carries `\bnew\s+(?!Totem)Error\(`: the cure removed the
+inert lookahead (the commit subject at `78e7f196` says so; every other byte identical). So the
+honest K3 figure at `78e7f196` is
 **18/20 identical + 2 declared divergences (`5da43ea6` by inventory (ii); `0e01112d` by the ruled
 E26 cure) + 0 unexpected.** The harness accepts the cure only through an explicit
 `expectedPayloadDivergence` declaration in the K3 expectations file (`k3/k3-r14-inventory.json`); in

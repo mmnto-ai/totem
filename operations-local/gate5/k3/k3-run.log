@@ -34,7 +34,7 @@ seed: C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-a
 11. 6b2b62eb1e8693fc  good-also-fires
     r14-6b2b62eb-totem-error-log-tag.rule.yaml [ast-grep@.ts] validate=compiled · good-also-fires: pair0: bad=FIRES good=FIRES · fidelity: identical · legacy/pair0: bad=FIRES good=FIRES
 12. 1a7080ebf6162de3  not-evaluable
-    r14-1a7080eb-inline-secrets-agent-config.rule.yaml [rejected] validate=rejected · not-evaluable: pair0: bad=n/a good=n/a (no compiled rule to evaluate) · fidelity: identical · legacy/pair0: bad=silent good=silent
+    r14-1a7080eb-inline-secrets-agent-config.rule.yaml [rejected] validate=rejected · not-evaluable: pair0: bad=n/a good=n/a (no compiled rule to evaluate) · fidelity: identical · legacy/pair0: n/a (no registered grammar for language 'json' — the legacy row cannot be dispatched over pair 0)
       reason (verbatim): Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record.
 13. 5da43ea60b66e96e  differential-satisfied
     r14-5da43ea6-git-double-dash-separator.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent

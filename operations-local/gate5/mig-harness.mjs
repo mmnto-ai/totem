@@ -101,6 +101,11 @@ if (SET === undefined && !(SEED !== undefined && CORPUS !== undefined)) {
     'pass --set <manifest.json>, or --seed <seed-20.json> --corpus <compiled-rules.json> (add --r14 for the K3 regression).',
   );
 }
+// The two modes are exclusive: --r14 is the K3 regression's admission of the ruled
+// E26 declaration, so a --set run may never carry it (leg 2, F4).
+if (SET !== undefined && R14_MODE) {
+  die('--r14 is the K3 regression mode and cannot be combined with --set (the migration run).');
+}
 
 // ── the shipped matchers (K4 header) ────────────────────────────────────────
 const coreDist = CORE.endsWith('.js') ? CORE : path.join(CORE, 'dist', 'index.js');
@@ -151,10 +156,12 @@ try {
 const extensions = registeredExtensions();
 const languages = [...new Set(extensions.map((e) => extensionToLanguage(e)))].sort();
 // Installed packs are a property of the CHECKOUT the records live in (a pack
-// contributes languages to the registry the harness just printed); `packsLoaded`
-// is the count of those the registry actually resolved, so the K4 attestation's
-// `packsLoaded === packs.length` is printed as measured.
-const packsPath = path.join(REPO_ROOT, '.totem', 'installed-packs.json');
+// contributes languages to the registry the harness just printed), so the file is
+// read from the RECORDS' checkout (`<records>/../..`), not from this script's own.
+// With no pack declared, `packsLoaded === packs.length` holds trivially (0 === 0)
+// and is printed so; with packs declared, this harness does not measure how many
+// the registry loaded and says so rather than inferring it (leg 2, F6).
+const packsPath = path.join(path.resolve(RULES_DIR, '..', '..'), '.totem', 'installed-packs.json');
 let packsDeclared = [];
 if (existsSync(packsPath)) {
   try {
@@ -577,11 +584,30 @@ for (const e of entries) {
       const legacyExcludes = legacyGlobs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
       const recPositives = rec.target.scope.fileGlobs;
       const recExcludes = rec.target.scope.excludeGlobs ?? [];
-      const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+      // True SET equality (a repeated entry cannot stand in for a missing one; leg 2, F3).
+      const sameSet = (a, b) => {
+        const A = new Set(a);
+        const B = new Set(b);
+        return A.size === B.size && [...A].every((x) => B.has(x));
+      };
+      // A dropped positive is a language split ONLY when its extension resolves to
+      // a registered language other than the record's declared one (leg 2, F2);
+      // a dropped glob of the record's own language, or of no registered language,
+      // is a scope change no inventory item covers.
+      const droppedPositives = legacyPositives.filter((g) => !recPositives.includes(g));
+      const globLanguage = (g) => {
+        const m = /\.([A-Za-z0-9]+)$/.exec(g);
+        return m === null ? null : extensionToLanguage(`.${m[1].toLowerCase()}`);
+      };
+      const droppedSameLanguage = droppedPositives.filter((g) => {
+        const lang = globLanguage(g);
+        return lang === null || lang === undefined || lang === rec.target.language;
+      });
       f.scope = {
         excludesMatch: sameSet(recExcludes, legacyExcludes),
         positivesSubset: recPositives.every((g) => legacyPositives.includes(g)),
-        droppedPositives: legacyPositives.filter((g) => !recPositives.includes(g)),
+        droppedPositives,
+        droppedSameLanguage,
         declaredI: decl.inventory.includes('i'),
         declaredIII: decl.inventory.includes('iii'),
       };
@@ -594,6 +620,10 @@ for (const e of entries) {
       if (!f.scope.positivesSubset) f.unexpected.push('scope.fileGlobs');
       if (f.scope.droppedPositives.length > 0 && !f.scope.declaredIII)
         f.unexpected.push('scope.droppedPositives (no inventory iii)');
+      if (f.scope.droppedSameLanguage.length > 0)
+        f.unexpected.push(
+          `scope.droppedPositives (not a language split: ${f.scope.droppedSameLanguage.join(', ')})`,
+        );
       if (legacyExcludes.length > 0 && !f.scope.declaredI)
         f.unexpected.push('scope.excludeGlobs (inventory i undeclared)');
       f.expectedDivergence = !f.payload && payloadExplained !== null ? payloadExplained : null;
@@ -612,18 +642,26 @@ for (const e of entries) {
 
     // (2) the frozen row over pair 0 under the record's dispatch — whenever the
     // record PARSED, lowered or not (leg finding F8): the `defective-source`
-    // discriminator needs the legacy row and pair 0 only, and R14 typed exactly a
-    // non-lowering record (`1a7080eb`) that way.
+    // discriminator needs the legacy row and pair 0 only. A record whose declared
+    // language has no registered grammar (K3's `1a7080eb`, `language: json`) gets
+    // no substituted grammar: the leg reads `null` with the reason (leg 2, F1).
     if (parsed !== undefined && parsed.record.examples.length > 0) {
       const pair0 = parsed.record.examples[0];
+      const recordLanguage = rule !== undefined ? rule.language : parsed.record.target.language;
       const legacyExt =
-        e.legacy.engine === 'ast-grep'
-          ? dispatchExt(rule !== undefined ? rule.language : parsed.record.target.language)
-          : '.ts';
+        e.legacy.engine === 'ast-grep' ? (EXT_BY_LANGUAGE[recordLanguage] ?? null) : '.ts';
       try {
-        const lb = legacyFires(e.legacy, pair0.bad, legacyExt);
-        const lg = legacyFires(e.legacy, pair0.good, legacyExt);
-        row.legacyOverPair0 = { badFires: lb, goodSilent: !lg, reason: null };
+        if (legacyExt === null) {
+          row.legacyOverPair0 = {
+            badFires: null,
+            goodSilent: null,
+            reason: `no registered grammar for language '${recordLanguage}' — the legacy row cannot be dispatched over pair 0`,
+          };
+        } else {
+          const lb = legacyFires(e.legacy, pair0.bad, legacyExt);
+          const lg = legacyFires(e.legacy, pair0.good, legacyExt);
+          row.legacyOverPair0 = { badFires: lb, goodSilent: !lg, reason: null };
+        }
       } catch (err) {
         row.legacyOverPair0 = {
           badFires: null,
@@ -752,7 +790,9 @@ for (const e of entries) {
     const lop =
       row.legacyOverPair0 === null
         ? ''
-        : ` · legacy/pair0: bad=${row.legacyOverPair0.badFires ? 'FIRES' : 'silent'} good=${row.legacyOverPair0.goodSilent ? 'silent' : 'FIRES'}`;
+        : row.legacyOverPair0.badFires === null
+          ? ` · legacy/pair0: n/a (${row.legacyOverPair0.reason})`
+          : ` · legacy/pair0: bad=${row.legacyOverPair0.badFires ? 'FIRES' : 'silent'} good=${row.legacyOverPair0.goodSilent ? 'silent' : 'FIRES'}`;
     const fs =
       row.firingSet === null
         ? ''
