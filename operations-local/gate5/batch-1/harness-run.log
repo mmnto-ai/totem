@@ -5,11 +5,12 @@ K4 header
   node           v24.16.0
   @ast-grep/napi 0.42.3
   languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
-  packs          none
+  packs          none declared (packs.length 0, packsLoaded 0 — packsLoaded === packs.length holds)
   records        D:\Dev\worktrees\totem-totem-claude-gate5-b1\.totem\rules
   tree           D:\Dev\worktrees\totem-totem-claude-gate5-tree
 
-set: C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-ac68-5b2dc9182f87/scratchpad/manifest.json — 53 rule(s), manifest order
+set sha256: 2263305cfbbe8b792d8884d8091a311676ba8ddedf75e852fa9ab434de950ca5 (the freeze's splitRef suffix is its first 8 hex)
+set: operations-local/gate5/manifest-2263305c.json — 53 rule(s), manifest order
 --only: 13 entries selected
 tree: D:\Dev\worktrees\totem-totem-claude-gate5-tree — 2702 git-tracked path(s)
 

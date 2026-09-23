@@ -1,6 +1,6 @@
 {
   "_schema": "gate5-declared-inventory/1",
-  "_purpose": "K3 regression expectations for the 22 R14 records at 78e7f196 (P0 figures; the E26 cure declared)",
+  "_purpose": "K3 regression expectations for the 22 R14 records at 78e7f196: the P0 figures, R14's own declared inventory (r14-translation-notes.md, 'Whole-seed transformation inventory': (i) on six rules, language narrowing (iii) on five, absence->requires (ii) on one), and the ruled E26 cure",
   "5da43ea60b66e96e": {
     "inventory": ["ii"],
     "expect": { "validate": "compiled", "differential": "differential-satisfied" }
@@ -15,7 +15,7 @@
     "expect": { "validate": "rejected", "differential": "not-evaluable" }
   },
   "6b2b62eb1e8693fc": {
-    "inventory": [],
+    "inventory": ["iii"],
     "expect": { "validate": "compiled", "differential": "good-also-fires" }
   },
   "be74c55caa9fd60c": {
@@ -27,7 +27,16 @@
     "expect": { "validate": "compiled", "differential": "good-also-fires" }
   },
   "d940b2c9ffe92e99": {
-    "inventory": [],
+    "inventory": ["iii"],
     "expect": { "validate": "compiled", "differential": "bad-does-not-fire" }
-  }
+  },
+  "87aff037d7de47a7": { "inventory": ["i"] },
+  "54140f59be3e6e44": { "inventory": ["i"] },
+  "5b85fe53468964e1": { "inventory": ["i"] },
+  "6467c35159c1504d": { "inventory": ["i"] },
+  "65ede9bfdf6995fe": { "inventory": ["i"] },
+  "0167a783f75b5ecd": { "inventory": ["i"] },
+  "aa7a588d48e74503": { "inventory": ["iii"] },
+  "6b1890e2dbda3331": { "inventory": ["iii"] },
+  "71935fe9a742137b": { "inventory": ["iii"] }
 }

@@ -5,7 +5,7 @@ K4 header
   node           v24.16.0
   @ast-grep/napi 0.42.3
   languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
-  packs          none
+  packs          none declared (packs.length 0, packsLoaded 0 — packsLoaded === packs.length holds)
   records        D:\Dev\worktrees\totem-totem-claude-r14-78e7f196\.totem\rules
 
 seed: C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-ac68-5b2dc9182f87/scratchpad/seed-20.json joined to C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-ac68-5b2dc9182f87/scratchpad/compiled-rules.json — 20 entries, draw order
@@ -34,7 +34,7 @@ seed: C:/Users/jmatt/AppData/Local/Temp/claude/D--Dev-totem/de67d78e-7e8f-4353-a
 11. 6b2b62eb1e8693fc  good-also-fires
     r14-6b2b62eb-totem-error-log-tag.rule.yaml [ast-grep@.ts] validate=compiled · good-also-fires: pair0: bad=FIRES good=FIRES · fidelity: identical · legacy/pair0: bad=FIRES good=FIRES
 12. 1a7080ebf6162de3  not-evaluable
-    r14-1a7080eb-inline-secrets-agent-config.rule.yaml [rejected] validate=rejected · not-evaluable: pair0: bad=n/a good=n/a (no compiled rule to evaluate) · fidelity: identical
+    r14-1a7080eb-inline-secrets-agent-config.rule.yaml [rejected] validate=rejected · not-evaluable: pair0: bad=n/a good=n/a (no compiled rule to evaluate) · fidelity: identical · legacy/pair0: bad=silent good=silent
       reason (verbatim): Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record.
 13. 5da43ea60b66e96e  differential-satisfied
     r14-5da43ea6-git-double-dash-separator.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent

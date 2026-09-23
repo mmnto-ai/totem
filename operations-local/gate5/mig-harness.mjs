@@ -22,12 +22,22 @@
 //       and `requires` are compared against the frozen legacy row; the DECLARED
 //       inventory (--inventory, the notes' machine-readable half) replaces R14's
 //       hand-typed divergence set; every other delta is UNEXPECTED and fails the exit.
+//       Checked by mechanism as well: the engine (`target.type` vs the legacy
+//       engine) and the scope declarations — `excludeGlobs` equal to the legacy
+//       `!`-entries under a declared (i), record positives a subset of the legacy
+//       positives, a dropped positive only under a declared (iii).
 //   (2) legacy-row-over-pair-0: the frozen compiled row run over `examples[0]` under
-//       the record's engine dispatch (the `defective-source` discriminator, § 3.2).
+//       the record's engine dispatch (the `defective-source` discriminator, § 3.2) —
+//       for every record that PARSED, lowered or not.
 //   (3) the tree firing-set leg (--tree): legacy row and record (union over an
 //       N-record set) over the pinned tree's in-scope files, `(file, line)` firings,
 //       `added` / `removed` (§ 3.1); a firing's line is the match's start line.
-//   (4) one JSON line per record on --out, schema `gate5-harness-record/1`.
+//   (4) one JSON line per record on --out, schema `gate5-harness-record/1`
+//       (`harness-record.schema.json` beside this file; each row is checked against
+//       the required field set before it is written).
+// C7's `runSmokeGate` reason check (§ 3.1 C7): the shipped smoke gate runs over every
+// pair beside the R14-method `fires`; a `reason`, or a verdict that disagrees with
+// `fires`, is recorded on the pair as `reason` and the record reads `not-evaluable`.
 //
 // Modes:
 //   --set <manifest.json>                     the migration run (rules[] carries the legacy row + curated pair)
@@ -48,6 +58,7 @@
 // Determinism: no clock in any computed value, no network, no writes except --out.
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -106,6 +117,7 @@ const {
   requiresSuppressesMatch,
   registeredExtensions,
   extensionToLanguage,
+  runSmokeGate,
 } = core;
 for (const [name, fn] of Object.entries({
   parseRuleRecord,
@@ -117,6 +129,7 @@ for (const [name, fn] of Object.entries({
   requiresSuppressesMatch,
   registeredExtensions,
   extensionToLanguage,
+  runSmokeGate,
 })) {
   if (typeof fn !== 'function') die(`the core module at ${coreDist} does not export ${name}`);
 }
@@ -137,20 +150,24 @@ try {
 }
 const extensions = registeredExtensions();
 const languages = [...new Set(extensions.map((e) => extensionToLanguage(e)))].sort();
+// Installed packs are a property of the CHECKOUT the records live in (a pack
+// contributes languages to the registry the harness just printed); `packsLoaded`
+// is the count of those the registry actually resolved, so the K4 attestation's
+// `packsLoaded === packs.length` is printed as measured.
 const packsPath = path.join(REPO_ROOT, '.totem', 'installed-packs.json');
-let packsLine = 'none (no .totem/installed-packs.json)';
+let packsDeclared = [];
 if (existsSync(packsPath)) {
   try {
     const packs = readJson(packsPath);
-    const list = Array.isArray(packs) ? packs : (packs.packs ?? []);
-    packsLine =
-      list.length === 0
-        ? 'none'
-        : list.map((p) => (typeof p === 'string' ? p : (p.name ?? JSON.stringify(p)))).join(', ');
+    packsDeclared = Array.isArray(packs) ? packs : (packs.packs ?? []);
   } catch {
-    packsLine = 'unreadable';
+    packsDeclared = null;
   }
 }
+const packsLine =
+  packsDeclared === null
+    ? 'unreadable .totem/installed-packs.json'
+    : `${packsDeclared.length === 0 ? 'none declared' : packsDeclared.map((p) => (typeof p === 'string' ? p : (p.name ?? JSON.stringify(p)))).join(', ')} (packs.length ${packsDeclared.length}, packsLoaded ${packsDeclared.length === 0 ? 0 : 'n/a'} — packsLoaded === packs.length ${packsDeclared.length === 0 ? 'holds' : 'not measured by this harness'})`;
 console.log('K4 header');
 console.log(`  @mmnto/totem   ${pkgVersion(corePkgDir)}  (${coreDist})`);
 if (CLI) console.log(`  @mmnto/cli     ${pkgVersion(path.resolve(CLI))}  (${path.resolve(CLI)})`);
@@ -182,6 +199,8 @@ const worse = (a, b) => (VERDICT_SEVERITY.indexOf(b) > VERDICT_SEVERITY.indexOf(
 let entries;
 if (SET !== undefined) {
   const manifest = readJson(SET);
+  const setSha256 = createHash('sha256').update(readFileSync(SET)).digest('hex');
+  console.log(`set sha256: ${setSha256} (the freeze's splitRef suffix is its first 8 hex)`);
   entries = manifest.rules.map((r, i) => ({
     entry: i + 1,
     lessonHash: r.lessonHash,
@@ -222,14 +241,23 @@ if (ONLY) {
 const inventory = INVENTORY_PATH ? readJson(INVENTORY_PATH) : {};
 const declared = (lessonHash) => {
   const row = inventory[lessonHash] ?? {};
+  // A payload divergence declared OUTSIDE the closed inventory (i)–(iii) is
+  // admissible ONLY in the K3 regression (--r14): the ruled E26 cure on
+  // `0e01112d` at 78e7f196 is the one case. In the migration run (--set) every
+  // payload delta is (ii) or UNEXPECTED, so the key is REFUSED there rather than
+  // honoured — the translator writes the inventory file, and a key the translator
+  // could use to excuse a delta would be a bypass of § 3.1 C5 (leg finding F2).
+  if (row.expectedPayloadDivergence !== undefined && !R14_MODE) {
+    die(
+      `inventory entry ${lessonHash} carries expectedPayloadDivergence, which is admissible only under --r14 (the K3 regression's ruled E26 cure); in the migration run every payload delta is inventory (ii) or unexpected (§ 3.1 C5).`,
+    );
+  }
   return {
     inventory: Array.isArray(row.inventory) ? row.inventory : [],
-    // A payload divergence declared OUTSIDE the closed inventory (i)–(iii): only a
-    // RULED prior cure may be named here (the K3 regression's E26 cure on
-    // `0e01112d` at 78e7f196 is the one case); in the migration run every payload
-    // delta is (ii) or unexpected, and a value here is a disclosure the scorer reads.
     expectedPayloadDivergence:
-      typeof row.expectedPayloadDivergence === 'string' && row.expectedPayloadDivergence.length > 0
+      R14_MODE &&
+      typeof row.expectedPayloadDivergence === 'string' &&
+      row.expectedPayloadDivergence.length > 0
         ? row.expectedPayloadDivergence
         : null,
     expect: {
@@ -266,7 +294,10 @@ if (orphans.length > 0)
 const allLines = (text) => text.split('\n').map((_, i) => i + 1);
 const EXT_BY_LANGUAGE = { typescript: '.ts', javascript: '.js', tsx: '.tsx' };
 const dispatchExt = (language) => EXT_BY_LANGUAGE[language] ?? '.ts';
-const lineOf = (s) => (s.endsWith('\r') ? s.slice(0, -1) : s);
+// A line is tested AS-IS: R14's `fires` (r14-differential.mjs) and the runtime's
+// regex loop (rule-engine.ts) never strip a trailing CR, and a file's extension is
+// dispatched as `path.extname` returns it, never lowercased (leg finding F9).
+const lineOf = (s) => s;
 
 /** Legacy compiled row's payload for the ast-grep matcher (config form or pattern). */
 const legacyAstPayload = (legacy) =>
@@ -312,7 +343,7 @@ function legacyFires(legacy, text, ext) {
 /** `(file, line)` firings of the compiled RECORD rule over one tree file. */
 function recordFirings(rule, file, text) {
   const out = [];
-  const ext = path.extname(file).toLowerCase();
+  const ext = path.extname(file);
   if (rule.engine === 'regex') {
     const re = new RegExp(rule.pattern);
     const lines = text.split('\n');
@@ -340,7 +371,7 @@ function recordFirings(rule, file, text) {
 /** `(file, line)` firings of the frozen LEGACY row over one tree file. */
 function legacyFirings(legacy, file, text) {
   const out = [];
-  const ext = path.extname(file).toLowerCase();
+  const ext = path.extname(file);
   if (legacy.engine === 'regex') {
     const re = new RegExp(legacy.pattern);
     const lines = text.split('\n');
@@ -376,6 +407,54 @@ const readTree = (file) => {
   treeText.set(file, text);
   return text;
 };
+
+/**
+ * The pre-registered field set (§ 5.1 (4)) every output row must carry — the
+ * required half of `harness-record.schema.json`; a row that fails it is a harness
+ * fault and part of the exit. Additive keys are allowed and named in the schema.
+ */
+function rowShapeErrors(row) {
+  const errs = [];
+  const has = (o, k) => o !== null && typeof o === 'object' && Object.hasOwn(o, k);
+  for (const k of [
+    'schema',
+    'lessonHash',
+    'recordPath',
+    'language',
+    'validate',
+    'fidelity',
+    'differential',
+    'legacyOverPair0',
+    'firingSet',
+  ])
+    if (!has(row, k)) errs.push(`missing ${k}`);
+  if (row.schema !== SCHEMA) errs.push('schema');
+  if (!/^[0-9a-f]{16}$/.test(String(row.lessonHash))) errs.push('lessonHash');
+  for (const k of ['parse', 'lower', 'reason'])
+    if (!has(row.validate, k)) errs.push(`validate.${k}`);
+  if (row.fidelity !== null)
+    for (const k of [
+      'message',
+      'severity',
+      'payload',
+      'requires',
+      'declaredInventory',
+      'unexpected',
+    ])
+      if (!has(row.fidelity, k)) errs.push(`fidelity.${k}`);
+  if (!Array.isArray(row.differential)) errs.push('differential');
+  else
+    for (const l of row.differential)
+      for (const k of ['pair', 'badFires', 'goodSilent', 'reason'])
+        if (!has(l, k)) errs.push(`differential[].${k}`);
+  if (row.legacyOverPair0 !== null)
+    for (const k of ['badFires', 'goodSilent'])
+      if (!has(row.legacyOverPair0, k)) errs.push(`legacyOverPair0.${k}`);
+  if (row.firingSet !== null)
+    for (const k of ['legacy', 'record', 'added', 'removed'])
+      if (!has(row.firingSet, k)) errs.push(`firingSet.${k}`);
+  return errs;
+}
 
 // ── per record ───────────────────────────────────────────────────────────────
 const outLines = [];
@@ -486,10 +565,37 @@ for (const e of entries) {
         : decl.expectedPayloadDivergence !== null
           ? `payload (declared: ${decl.expectedPayloadDivergence})`
           : null;
+      // The engine and the SCOPE DECLARATIONS are checked by mechanism too (leg
+      // finding F10): `target.type` must equal the legacy engine; `excludeGlobs`
+      // must equal the legacy `!`-entries (inventory (i), declared); every record
+      // positive glob must be a legacy positive; a legacy positive may be dropped
+      // only under a declared (iii). The file-set comparison itself is C5's scope
+      // half, the scorer's.
+      f.engine = rec.target.type === legacy.engine;
+      const legacyGlobs = Array.isArray(legacy.fileGlobs) ? legacy.fileGlobs : [];
+      const legacyPositives = legacyGlobs.filter((g) => !g.startsWith('!'));
+      const legacyExcludes = legacyGlobs.filter((g) => g.startsWith('!')).map((g) => g.slice(1));
+      const recPositives = rec.target.scope.fileGlobs;
+      const recExcludes = rec.target.scope.excludeGlobs ?? [];
+      const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+      f.scope = {
+        excludesMatch: sameSet(recExcludes, legacyExcludes),
+        positivesSubset: recPositives.every((g) => legacyPositives.includes(g)),
+        droppedPositives: legacyPositives.filter((g) => !recPositives.includes(g)),
+        declaredI: decl.inventory.includes('i'),
+        declaredIII: decl.inventory.includes('iii'),
+      };
       if (!f.message) f.unexpected.push('message');
       if (!f.severity) f.unexpected.push('severity');
       if (!f.payload && payloadExplained === null) f.unexpected.push('payload');
       if (!f.requires) f.unexpected.push('requires');
+      if (!f.engine) f.unexpected.push('engine');
+      if (!f.scope.excludesMatch) f.unexpected.push('scope.excludeGlobs');
+      if (!f.scope.positivesSubset) f.unexpected.push('scope.fileGlobs');
+      if (f.scope.droppedPositives.length > 0 && !f.scope.declaredIII)
+        f.unexpected.push('scope.droppedPositives (no inventory iii)');
+      if (legacyExcludes.length > 0 && !f.scope.declaredI)
+        f.unexpected.push('scope.excludeGlobs (inventory i undeclared)');
       f.expectedDivergence = !f.payload && payloadExplained !== null ? payloadExplained : null;
       row.fidelity = f;
       fidelity.records += 1;
@@ -504,7 +610,30 @@ for (const e of entries) {
       }
     }
 
-    // differential (C7) + (2) legacy-over-pair-0 + (3) firing set
+    // (2) the frozen row over pair 0 under the record's dispatch — whenever the
+    // record PARSED, lowered or not (leg finding F8): the `defective-source`
+    // discriminator needs the legacy row and pair 0 only, and R14 typed exactly a
+    // non-lowering record (`1a7080eb`) that way.
+    if (parsed !== undefined && parsed.record.examples.length > 0) {
+      const pair0 = parsed.record.examples[0];
+      const legacyExt =
+        e.legacy.engine === 'ast-grep'
+          ? dispatchExt(rule !== undefined ? rule.language : parsed.record.target.language)
+          : '.ts';
+      try {
+        const lb = legacyFires(e.legacy, pair0.bad, legacyExt);
+        const lg = legacyFires(e.legacy, pair0.good, legacyExt);
+        row.legacyOverPair0 = { badFires: lb, goodSilent: !lg, reason: null };
+      } catch (err) {
+        row.legacyOverPair0 = {
+          badFires: null,
+          goodSilent: null,
+          reason: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    // differential (C7) + (3) firing set
     let recordVerdict;
     let grammar;
     if (rule === undefined) {
@@ -524,7 +653,30 @@ for (const e of entries) {
         try {
           const bad = recordFires(rule, example.bad, ext);
           const good = recordFires(rule, example.good, ext);
-          legs.push({ pair: ordinal, badFires: bad, goodSilent: !good, reason: null });
+          // C7's `runSmokeGate` reason check (§ 3.1 C7; leg finding F1): the SHIPPED
+          // smoke gate over the same pair; a `reason` from either side is an
+          // `intake-defect` signal, never a pass, and a verdict that disagrees with
+          // the R14-method `fires` is reported as a reason too (a harness↔shipped
+          // divergence the scorer must see).
+          const sgBad = runSmokeGate(rule, example.bad);
+          const sgGood = runSmokeGate(rule, example.good);
+          const reasons = [];
+          if (typeof sgBad.reason === 'string') reasons.push(`smoke gate (bad): ${sgBad.reason}`);
+          if (typeof sgGood.reason === 'string')
+            reasons.push(`smoke gate (good): ${sgGood.reason}`);
+          if (sgBad.matched !== bad)
+            reasons.push(`smoke gate (bad) matched=${sgBad.matched} but fires=${bad}`);
+          if (sgGood.matched !== good)
+            reasons.push(`smoke gate (good) matched=${sgGood.matched} but fires=${good}`);
+          const reason = reasons.length === 0 ? null : reasons.join('; ');
+          legs.push({
+            pair: ordinal,
+            badFires: bad,
+            goodSilent: !good,
+            reason,
+            smokeGate: { badMatched: sgBad.matched, goodMatched: sgGood.matched },
+          });
+          if (reason !== null) reasoned = true;
           if (!bad) badSilent = true;
           if (good) goodFires = true;
         } catch (err) {
@@ -545,20 +697,6 @@ for (const e of entries) {
           : goodFires
             ? GOOD_FIRES
             : SATISFIED;
-
-      // (2) the frozen row over pair 0 under the record's dispatch
-      const pair0 = parsed.record.examples[0];
-      try {
-        const lb = legacyFires(e.legacy, pair0.bad, ext ?? '.ts');
-        const lg = legacyFires(e.legacy, pair0.good, ext ?? '.ts');
-        row.legacyOverPair0 = { badFires: lb, goodSilent: !lg };
-      } catch (err) {
-        row.legacyOverPair0 = {
-          badFires: null,
-          goodSilent: null,
-          reason: err instanceof Error ? err.message : String(err),
-        };
-      }
 
       // (3) the tree firing set
       if (treeFiles !== null) {
@@ -636,7 +774,16 @@ for (const e of entries) {
       row.firingSet.removed = removed;
     }
   }
-  for (const row of entryRows) outLines.push(JSON.stringify(row));
+  for (const row of entryRows) {
+    const shapeErrors = rowShapeErrors(row);
+    if (shapeErrors.length > 0) {
+      harnessThrows += 1;
+      console.log(
+        `    [SHAPE] ${row.recordPath}: per-record row fails the pre-registered field set — ${shapeErrors.join(', ')}`,
+      );
+    }
+    outLines.push(JSON.stringify(row));
+  }
   splitCounts[entryVerdict] += 1;
   if (entryVerdict !== decl.expect.differential) differentialMismatches += 1;
   if (entryFidelity === 'identical') fidelityEntries.identical += 1;

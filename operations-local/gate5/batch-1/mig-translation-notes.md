@@ -27,7 +27,10 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
 - **Closed transformation inventory (§ 3.1 C5), declared per rule below and machine-readably in
   `mig-inventory.json`** (the harness reads that file in place of R14's hand-typed divergence set):
   (i) `!`-negated legacy globs → `excludeGlobs`; (ii) a must-contain lookaround → `requires:` — **none
-  in batch 1** (no row of this batch carries a lookaround); (iii) the N-record language split.
+  in batch 1**: no regex row of this batch carries a lookaround, and the batch's one S4 row,
+  `87aff037` (strata `S3-compound-ast-grep + S4-absent-must-contain + S5-explicit-exclusions`),
+  carries its absence as the `not:` compound INSIDE the ast-grep rule tree, which the record keeps
+  verbatim, so no `requires:` translation arises; (iii) the N-record language split.
 - **Language split rule applied (§ 7 (b), "one record per language actually covered"):** a language
   is written when at least one git-tracked file of the pinned tree `5293614badd3cc5a67993abd8a6db46afb1c400f`
   matches the legacy globs of that language's registered extensions (R14's rule: globs with zero files
@@ -50,10 +53,20 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   `packages/core/src/spine/**`) is unchanged. The checkout declares 2.11.0 in `package.json`; every
   harness and intake run here used the 2.10.0 staging install, and the K4 header of each log says so.
 - **Harness:** `operations-local/gate5/mig-harness.mjs` — a NEW file set (the two R14 scripts at
-  `36312ed9` are untouched); method and additions in its header. Per-record output schema
-  `gate5-harness-record/1` at `operations-local/gate5/batch-1/harness-per-record.jsonl`; the run log
-  verbatim at `operations-local/gate5/batch-1/harness-run.log`; the K3 self-check at
-  `operations-local/gate5/k3/` (log, per-record output, the K3 expectations file).
+  `36312ed9` are untouched); method and additions in its header. Beyond the four pre-registered
+  additions it carries, after the pin's falsification leg: C7's `runSmokeGate` reason check (the
+  shipped smoke gate over every pair beside the R14-method `fires`; a reason or a disagreement is
+  recorded on the pair), the engine and scope-declaration checks inside the fidelity leg (inventory
+  (i) and (iii) verified by mechanism, not only declared), legacy-over-pair-0 for every parsed
+  record, and a per-row field-set check against `operations-local/gate5/harness-record.schema.json`
+  (schema `gate5-harness-record/1`; the additive keys named there). A declared payload divergence
+  outside inventory (ii) is refused in `--set` mode (exit 2) and admitted only under `--r14`, where
+  the K3 expectations file names the ruled E26 cure. Per-record output at
+  `operations-local/gate5/batch-1/harness-per-record.jsonl`; the run log verbatim at
+  `operations-local/gate5/batch-1/harness-run.log` (it prints the manifest's sha256); the K3
+  self-check at `operations-local/gate5/k3/` (log, per-record output, the expectations file, which
+  also carries R14's own declared inventory — six (i) rules, five language-narrowed rules — so the
+  scope checks read R14's notes as the pre-registration says).
 - **Honest structural classes (§ 3.4):** named per rule BELOW, before any intake ran and before any
   class set exists; not revised after a refusal. Disclosed: the translator built the intake and knows
   the five whitelist rows. The names are defect-SHAPE names at the granularity a decidability review
@@ -161,10 +174,11 @@ firing set (legacy → record, union for a set) · notes.
   the R14 record carried a different `examples[0]`); the curation block gained the trio.
 - Inventory: (i).
 - Honest class: `bare-issue-reference` (regex) — a `#<digits>` token not preceded by an owner/repo
-  qualifier. Engine-typing note for the scorer: the token appears in prose and comments BY DESIGN
-  (the rule's target is any bare reference in a source file, comments included), so a prose
-  occurrence is a true positive here, not the doc-comment false positive the whitelist header guards
-  against; the scorer's review decides.
+  qualifier. Engine-typing note for the scorer: the legacy regex matches the token wherever it
+  appears in a source file — code, string literals and comments alike (the frozen row's own
+  behaviour; the manifest's `sourceRef` says only "when aggregating multiple sources, use qualified
+  syntax like owner/repo#number"); whether a comment hit is a true positive for this rule is the
+  engine-typing review's question and is not settled here.
 - Firing set: 335 → 335, added 0, removed 0.
 - Differential satisfied; legacy over pair 0 satisfied. Curator strategy-kimi, 2026-08-23.
 
@@ -201,9 +215,10 @@ firing set (legacy → record, union for a set) · notes.
 
 ### 7. `a190836df4daa24d` — rank 46 — regex — `mig-a190836d-raw-git-exec.rule.yaml`
 
-- Legacy: `pattern: (?:execFileSync|safeExec)\(\s*['"\`]git['"\`]`; globs `**/\*.ts`,
-`!packages/core/src/sys/git.ts`, `!**/_.test.ts`, `!\*\*/_.spec.ts`; warning. Record: pattern
-verbatim; three `excludeGlobs`.
+- Legacy: pattern ``(?:execFileSync|safeExec)\(\s*['"`]git['"`]`` (a double-backtick span: the
+  pattern itself contains a backtick); globs `**/*.ts`, `!packages/core/src/sys/git.ts`,
+  `!**/*.test.ts`, `!**/*.spec.ts`; warning. Record: pattern verbatim; `fileGlobs: ['**/*.ts']`;
+  `excludeGlobs: ['packages/core/src/sys/git.ts', '**/*.test.ts', '**/*.spec.ts']`.
 - Inventory: (i).
 - Honest class: `forbidden-callee-literal-arg` (regex) — a call to a named callee whose first argument
   is a fixed string literal. Engine-typing note: the token can appear in a doc-comment (a comment
@@ -256,7 +271,15 @@ verbatim; three `excludeGlobs`.
 - Inventory: none.
 - Honest class: `forbidden-literal-token` (regex) — a banned word list in prose files. This IS the
   exemplar class's shape and is named honestly, not as a bucket: the rule's whole target is prose, so
-  the engine-typing rule's prose concern is the rule's intent.
+  the engine-typing rule's prose concern is the rule's intent. **Disclosed (a question for the
+  scorer):** this class is a row of the SHIPPED pre-release table (`regex/forbidden-literal-token`,
+  one of the two mechanism-validating exemplar rows in `authored-whitelist.ts`), so the intake ADMITS
+  this entry at the pre-release table with no class review in between — the pre-pin pass minted it
+  (`923841006dd9c024`). The whitelist header's engine-typing rule says a forbidden-token class whose
+  token can appear in prose must be `ast-grep`; this rule's tokens are prose words in prose files.
+  Whether the exemplar row is a legitimate delivery for this rule, or the entry should be typed
+  `intake-ineligible (engine-typing)` and the class re-reviewed, is the scorer's to rule; the pin
+  mail asks it.
 - Firing set: 169 → 169, added 0, removed 0.
 - Differential satisfied; legacy over pair 0 satisfied. Curator strategy-kimi, 2026-08-23.
 
@@ -272,9 +295,10 @@ verbatim; three `excludeGlobs`.
 
 ### 13. `7056157a6bf72fa8` — rank 75 — regex — `mig-7056157a-hardcoded-git-hooks-path.rule.yaml`
 
-- Legacy: `pattern: [\/'"\`]?\.git[\/]hooks`; globs `**/\*.ts`, `**/_.js`, `\*\*/_.sh`, `**/\*.bash`,
-`**/_.mjs`, `\*\*/_.cjs`; warning. Record: pattern and globs verbatim (`\*_/_.bash` matches 0
-  pinned-tree files and is kept: regex records have no language floor and the glob is dialect-clean).
+- Legacy: pattern ``[\/'"`]?\.git[\/]hooks`` (a double-backtick span: the pattern itself contains
+  a backtick); globs `**/*.ts`, `**/*.js`, `**/*.sh`, `**/*.bash`, `**/*.mjs`, `**/*.cjs`; warning.
+  Record: pattern and globs verbatim (`**/*.bash` matches 0 pinned-tree files and is kept: regex
+  records have no language floor and the glob is dialect-clean).
 - Inventory: none.
 - Honest class: `forbidden-path-literal` (regex) — a hardcoded path token. Engine-typing note: the
   token can appear in a comment; the legacy regex accepts that; the scorer's review decides.
@@ -295,7 +319,8 @@ The fixture `contentHash` recipe is the smoke envelope's own, reproduced on `r14
 **Records kept out of the envelope:** none — all 14 parse and lower. **Records the pre-pin intake
 pass rejects:** every entry whose honest class is outside the five pre-release whitelist rows — expected
 at this pass (§ 5 step 2 of the charter) and not a fault; the class loop (D1 (C)) decides admission.
-The pre-pin pass log is appended below when it runs.
+**One entry the pass ADMITS:** `6ad0d4d5` — its honest class is an exemplar row of the pre-release
+table (see its per-rule note); disclosed, and the scorer's to rule on.
 
 ## Pre-pin pass (§ 3.3) — scratch clone, published 2.10.0
 
@@ -305,6 +330,14 @@ checkout; the ledger row the pass wrote (`.totem/spine/authoring-ledger.ndjson`,
 one minted entry) stayed in the clone and is not on the branch. Both legs used the staging install
 of the PUBLISHED 2.10.0 (`<staging>/node_modules/@mmnto/{cli,totem}`; napi 0.42.3; node v24.16.0).
 The logs are on the branch as `prepin-validate.log` and `prepin-intake.log` beside these notes.
+
+**Coverage limit of the pass, disclosed:** in `authored-rule-intake.ts` a whitelist miss returns
+before `deriveRecordFixtures` and the record-schema parse of the entry, so on the thirteen rejected
+entries the dangling-ordinal and `failed validation` throws were not reached by the intake itself;
+they are reached for every entry only at the post-release intake pin. The falsification leg over
+this pin (2026-09-23) exercised both directly over all 14 entries (`deriveRecordFixtures` plus the
+fixture schema: all derive and validate) — the leg's measurement, recorded here as such, not the
+seat's.
 
 **Validate leg** — the generalized harness in the clone, no `--tree` (the firing-set leg is the
 batch run's, above): exit 0.
