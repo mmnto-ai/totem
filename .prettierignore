@@ -47,3 +47,8 @@ spikes/serena-pilot/artifacts/
 # formatter rewrite is churn on evidence, and without this line every seat would have to format an emitted
 # record before every push.
 .totem/artifacts/legs/
+
+# Gate (5) migration (operations-local/gate5/): the frozen manifest copy is the strategy freeze's
+# own bytes (sha256 2263305c, LF-pinned there); a formatter rewrite would break the identity the
+# harness and the scorer check (same class as .totem/spine/ above).
+operations-local/gate5/manifest-*.json
