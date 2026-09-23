@@ -1,0 +1,235 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "6bd69a6a96612f67e91906e25fbb48aa0f83bed4",
+  "readAt": "2026-09-23T03:11:00Z",
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2059,
+      "claim": "The nearest-marker walker lets a stray .totem/ under a subdirectory capture a send, and verify's lexical placement check then calls the phantom routable.",
+      "counterexample": "Reproduced: repo/.git + repo/.totem/orchestration/totem-claude + stray repo/packages/cli/.totem/temp; a send from repo/packages/cli/src wrote to packages/cli/.totem/orchestration/totem-claude/outbox/ with verify.ok === true. Live strays: D:/Dev/totem/packages/cli/.totem/temp, packages/core/.totem/temp; D:/Dev/liquid-city/apps/game-godot/.totem/orchestration/lc-claude/outbox (hosts the seat)."
+    },
+    {
+      "id": "f2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1284,
+      "claim": "ADR-106 line 150 tolerates a subject-only dispatch; the listing line called that class a transport drop and the refusal conflicts with the convention.",
+      "counterexample": "A subject-only dispatch reads bodyEmpty: true; the #2118 tests do not pin it."
+    },
+    {
+      "id": "f3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2232,
+      "claim": "The strip compared the raw slug while the filename is composed from the slugified one, so a spaced or underscored recipient prefix still doubled the recipient.",
+      "counterexample": "Reproduced: --slug 'Strategy Claude review' and 'strategy_claude-review' each wrote <stamp>-strategy-claude-strategy-claude-review with 0 warnings."
+    },
+    {
+      "id": "f4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2465,
+      "claim": "verify resolved its roster from the cwd's repository, not the file's.",
+      "counterexample": "From a marker-less cwd the resolver falls back to the cwd itself and the roster comes from the wrong tree (attested; on this host the walk climbed to the temp-dir .totem)."
+    },
+    {
+      "id": "f5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2257,
+      "claim": "verifyDispatch inside mailSend could throw after the rename landed, so exit 1 would say nothing about the dispatch being written and a reply would skip its consume-mark.",
+      "counterexample": "Attested: the only throw is the readFileSync catch; a transient Windows lock reaches it."
+    },
+    {
+      "id": "f6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 343,
+      "claim": "verifyDispatch reads the whole file, so a file whose delimiter is inside the window but whose content past 16 KiB is only whitespace reads as non-empty.",
+      "counterexample": "Holds with a negligible edge; the bounded-read path is conservative and correct."
+    },
+    {
+      "id": "f7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2246,
+      "claim": "The sender token in position three does not disturb the positional recipient match or the #2311 sensor; no consumer parses basenames positionally; doctrine says seat-short where the mechanism uses the full id; a blank --slug silenced both the token and the slug.",
+      "counterexample": "Holds (hasSelfToken anchors on the stamp prefix; the sensor keys on exact basenames). The nit reproduced."
+    },
+    {
+      "id": "f8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-send-guards.test.ts",
+      "line": 145,
+      "claim": "The three cases that pass on base are same-on-base locks; the skipIf is honest on CI but blind on this host; no Commander-level coverage for verify or reply --slug.",
+      "counterexample": "Holds."
+    },
+    {
+      "id": "f9",
+      "severity": "MINOR",
+      "file": ".totem/specs/2930.md",
+      "line": 155,
+      "claim": "The spec's correction block overcounted confabulations, left the realpath trap unanswered and drew only a test lesson from the ceiling-less walker.",
+      "counterexample": "Holds."
+    },
+    {
+      "id": "r1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2162,
+      "claim": "A worktree (a .git FILE) with a seat directory registered there gets the send, verify calls it routable, and no poll reads it; the hosting refusal's own hint (totem seat add) leads there.",
+      "counterexample": "Reproduced: a fixture with .git as a file and .totem/orchestration/totem-claude/ gave verify.ok true and the recipient poll saw nothing."
+    },
+    {
+      "id": "r2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2443,
+      "claim": "A reply with --slug <recipient> does not gain the sender token after the strip empties the slug, so two seats converge on one basename (the mmnto-ai/totem#2929 class).",
+      "counterexample": "Reproduced: totem-claude and totem-gemini both wrote 2026-09-23T0152Z-strategy-claude-re-kit-round.md."
+    },
+    {
+      "id": "r3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/index.ts",
+      "line": 1080,
+      "claim": "Pre-existing: mail send --workspace and mail reply --workspace are claimed by the parent mail command and silently dropped; verify's optsWithGlobals read holds.",
+      "counterexample": "Reproduced with a Commander probe: send local opts {to: x}, globals carry workspace W; reply local {}."
+    },
+    {
+      "id": "r4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2526,
+      "claim": "verify's findings no longer followed the documented order (parse, recipient, body, placement).",
+      "counterexample": "Reproduced: a phantom-placed file with a bad to: and an empty body gave [placement, recipient, body]."
+    },
+    {
+      "id": "r5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2560,
+      "claim": "Segment arithmetic holds for POSIX, drive and UNC paths; a repository at a drive root or the POSIX root loses its separator; on a phantom the roster derived from the phantom's parent; the seat-directory test was always true.",
+      "counterexample": "Simulated with path.win32; the drive-root case gives repoOfFile 'D:' and path.resolve reads the per-drive cwd."
+    },
+    {
+      "id": "r6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2340,
+      "claim": "Claim 1 edges hold: D:/Dev refused; the .totem/temp start walks up; a start that is .totem itself lands at the root; .git-only refused; seat add creates the directory the hosting check reads; a submodule with .totem and a seat dir is the F1 shape.",
+      "counterexample": "Measured on this host except the submodule case (read from code)."
+    },
+    {
+      "id": "r7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2315,
+      "claim": "The post-write verify try/catch has no lock.",
+      "counterexample": "grep for the finding text finds no test."
+    },
+    {
+      "id": "r8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-send-guards.test.ts",
+      "line": 1,
+      "claim": "The guards file had 29 cases, not the 30 claimed.",
+      "counterexample": "vitest reported 29 passed."
+    },
+    {
+      "id": "r9",
+      "severity": "MINOR",
+      "file": ".changeset/mail-send-guards-2930.md",
+      "line": 11,
+      "claim": "Changeset bullet 1 and spec item 3 matched the code, but 'a worktree is refused' held only while the worktree had no seat directory.",
+      "counterexample": "See r1."
+    },
+    {
+      "id": "t1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2361,
+      "claim": "A repository with a .git directory that is not a direct child of the workspace (a clone elsewhere, or one nested inside a resident) takes a certified send the recipient's poll never lists, because enumerateOutboxes reads only the workspace's direct children.",
+      "counterexample": "Reproduced end to end with TOTEM_WORKSPACE=<tmp>/ws: <tmp>/elsewhere/clone and <tmp>/ws/totem/vendor/inner both gave verify.ok true and the poll missed them."
+    },
+    {
+      "id": "t2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail-send-guards.test.ts",
+      "line": 623,
+      "claim": "The roster-on-phantom lock passed on the pre-fix code because the static cohort map already carried the recipient; it locked nothing.",
+      "counterexample": "knownCohortAgents always seeds COHORT_AGENT_MAP, which holds strategy-claude."
+    },
+    {
+      "id": "t3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2385,
+      "claim": "A resident whose .totem is a junction or symlink gets a certified send no poll reads: the send and verify followed links, the reader never does.",
+      "counterexample": "Reproduced: <tmp>/ws/symrepo with .totem junctioned to <tmp>/realtotem gave verify.ok true and the poll missed it."
+    },
+    {
+      "id": "t4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2345,
+      "claim": "The resolver's doc comment still said a worktree's .git file counts, which the code below refuses.",
+      "counterexample": "Stale doc."
+    },
+    {
+      "id": "t5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1867,
+      "claim": "The senderInSlug doc said mailReply sets it only when no explicit slug is given; mailReply now always passes true and mailSend judges after the strip. Behaviour correct; no other caller exists; a plain send gets no token.",
+      "counterexample": "Stale doc."
+    },
+    {
+      "id": "t6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2372,
+      "claim": "Submodules and stray .git files were refused under the word worktree; refusing is right, the label was wrong. Relative, CRLF and backslash pointers resolve to the resident; a POSIX pointer at the filesystem root weakens only the hint.",
+      "counterexample": "gitdir: ../../.git/modules/x and a non-pointer file both read 'is a worktree'."
+    },
+    {
+      "id": "t7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 2627,
+      "claim": "A .git symlink or junction to a directory is accepted as a resident checkout; the poll reads it, and the existsSync-then-statSync race errors loudly rather than certifying.",
+      "counterexample": "Reproduced: the poll lists a dispatch under a junctioned .git."
+    }
+  ],
+  "folded": [
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "r1",
+    "r2",
+    "r3",
+    "r4",
+    "r5",
+    "r6",
+    "r7",
+    "r8",
+    "r9",
+    "t1",
+    "t2",
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+    "t7"
+  ],
+  "verdict": "Three falsification legs (30 + 34 + 13 tool uses; END 02:41:30Z, 03:00:37Z, 03:11Z): round 1 on b9f82f89 1 BLOCKING (the nearest-marker walker captured by a stray .totem/), 3 MATERIAL, 5 MINOR; re-arm on de5e7263..a06837f4 0 BLOCKING, 3 MATERIAL (a worktree accepted as a host; a stripped reply slug losing the sender token; the pre-existing swallowed --workspace, filed as mmnto-ai/totem#2939), 6 MINOR; third round on 2aa48fa5..f39a1b24 1 BLOCKING under the convergence bar (a resident-shaped clone outside the workspace), 2 MATERIAL, 4 MINOR. Every finding folded or ruled (dispositions in the fold commits); the third leg named its termination condition and both halves are met at 6bd69a6a, so convergence is named by the author with the default-resolution residual disclosed and locked. Reproduced first-hand at this head: mail suites 286/286, guards 38 cases, RED checks after each fold. Out of scope: the reader-side walker (mmnto-ai/totem#2938), send/reply --workspace (mmnto-ai/totem#2939)."
+}

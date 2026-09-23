@@ -23,6 +23,7 @@ interface WiringHandlers {
   deriveSeatCommand: (opts: Record<string, unknown>) => void;
   mailReply: (source: string, opts: Record<string, unknown>) => void;
   markSource: (source: string, opts: Record<string, unknown>) => void;
+  mailVerify: (target: string, opts: Record<string, unknown>) => void;
 }
 
 /** Mirror of the `mail` poll + `mail reply` / `mail mark` registration in index.ts. */
@@ -90,6 +91,7 @@ function buildMailProgram(handlers: WiringHandlers): Command {
     .option('--from <agent>', 'Sender agent-id')
     .option('--to <agent>', 'Override the inferred recipient')
     .option('--subject <text>', 'Override the inferred subject')
+    .option('--slug <slug>', 'Filename slug override (mmnto-ai/totem#2929)')
     .option('--no-mark', 'Do NOT mark the source dispatch processed')
     .action((source: string, opts: { mark?: boolean } & Record<string, unknown>) => {
       // EXACT translation from index.ts: strip the CLI-only negation flag and
@@ -105,6 +107,19 @@ function buildMailProgram(handlers: WiringHandlers): Command {
       handlers.markSource(source, opts);
     });
 
+  mailCmd
+    .command('verify <path>')
+    .option('--workspace <path>', 'Workspace for roster resolution')
+    .option('--json', 'Emit the structured verify result on stdout')
+    .action((target: string, _opts: { workspace?: string; json?: boolean }, cmd: Command) => {
+      // EXACT translation from index.ts (mmnto-ai/totem#2887 ask 3): the
+      // parent `mail` claims `--json` / `--workspace` even after the
+      // subcommand (the #2097 seam), so the action reads them back with
+      // optsWithGlobals and passes exactly the two the lib and the wrapper take.
+      const { json, workspace } = cmd.optsWithGlobals<{ json?: boolean; workspace?: string }>();
+      handlers.mailVerify(target, { workspace, json });
+    });
+
   return program;
 }
 
@@ -114,10 +129,39 @@ function handlers() {
     deriveSeatCommand: vi.fn(),
     mailReply: vi.fn(),
     markSource: vi.fn(),
+    mailVerify: vi.fn(),
   };
 }
 
 describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #2204)', () => {
+  it('`mail reply <source> --slug <slug>` reaches the lib as `slug` beside the mark translation (mmnto-ai/totem#2929)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', 'reply', 'kit.md', '--slug', 'tc-r2']);
+    expect(h.mailReply).toHaveBeenCalledTimes(1);
+    const [source, opts] = h.mailReply.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(source).toBe('kit.md');
+    expect(opts['slug']).toBe('tc-r2');
+    expect(opts['noMark']).toBe(false);
+  });
+
+  it('`mail verify <path> --json --workspace <w>` splits the wrapper flag from the lib options (mmnto-ai/totem#2887 ask 3)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse([
+      'node',
+      'totem',
+      'mail',
+      'verify',
+      'd.md',
+      '--json',
+      '--workspace',
+      'ws',
+    ]);
+    expect(h.mailVerify).toHaveBeenCalledTimes(1);
+    const [target, opts] = h.mailVerify.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(target).toBe('d.md');
+    expect(opts).toEqual({ workspace: 'ws', json: true });
+  });
+
   it('bare `mail` dispatches the poll with no seat selector', () => {
     const h = handlers();
     buildMailProgram(h).parse(['node', 'totem', 'mail']);

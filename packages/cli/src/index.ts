@@ -1069,7 +1069,10 @@ mailCmd
   .option('--priority <level>', 'priority: frontmatter value')
   .option('--related <refs...>', 'related-issues: frontmatter refs')
   .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
-  .option('--slug <slug>', 'Filename slug override (default: derived from subject)')
+  .option(
+    '--slug <slug>',
+    'Filename slug override (default: derived from subject); appended after <stamp>-<recipient>-, so never name the recipient in it (a leading recipient token is stripped)',
+  )
   .option(
     '--workspace <path>',
     'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
@@ -1110,6 +1113,10 @@ mailCmd
   .option('--related <refs...>', 'related-issues: frontmatter refs')
   .option('--expected-action <text>', 'expected-action: frontmatter (default: none)')
   .option(
+    '--slug <slug>',
+    'Filename slug override (default: <sender>-<re-subject>, so N seats replying to one kit never share a basename); appended after <stamp>-<recipient>-, so never name the recipient in it',
+  )
+  .option(
     '--workspace <path>',
     'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
   )
@@ -1128,6 +1135,7 @@ mailCmd
         priority?: string;
         related?: string[];
         expectedAction?: string;
+        slug?: string;
         workspace?: string;
         // Commander `--no-mark` sets `mark: false`; absent ⇒ `true` (default).
         mark?: boolean;
@@ -1145,6 +1153,32 @@ mailCmd
       }
     },
   );
+
+mailCmd
+  .command('verify <path>')
+  .description(
+    "Verify ONE dispatch is written and routable — frontmatter parses, to: resolves, body non-empty, outbox depth 1 — without reading any other seat's outbox (mmnto-ai/totem#2887)",
+  )
+  .option(
+    '--workspace <path>',
+    'Workspace for roster resolution (default: $TOTEM_WORKSPACE, else parent of the repo root)',
+  )
+  .option('--json', 'Emit the structured verify result on stdout (exit still follows the verdict)')
+  .action(async (target: string, _opts: { workspace?: string; json?: boolean }, cmd: Command) => {
+    try {
+      const { verifyDispatch, mailVerifyCommand } = await import('./commands/mail.js');
+      // The parent `mail` command declares `--json` and `--workspace` too, and
+      // Commander lets a parent claim its options even after a subcommand, so
+      // the flags typed after `verify` land on the PARENT's scope; the poll
+      // action reads them back with optsWithGlobals (the mmnto-ai/totem#2097
+      // seam) and so does this one — the wiring test pins both flags.
+      const { json, workspace } = cmd.optsWithGlobals<{ json?: boolean; workspace?: string }>();
+      await mailVerifyCommand(verifyDispatch(target, { workspace }), { json });
+      // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
+    } catch (err) {
+      handleError(err);
+    }
+  });
 
 mailCmd
   .command('mark <source>')

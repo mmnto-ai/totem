@@ -157,6 +157,19 @@ function markedRepoRoot(basename: string): string {
 }
 
 /**
+ * The `totem` repo as a SENDER sees it (mmnto-ai/totem#2930): `selfRepoRoot`
+ * plus the `.git` toplevel marker the send resolves to and the registered
+ * `totem-claude` seat directory the send refuses to mint. Reader-side fixtures
+ * keep `selfRepoRoot` (the poll and `mail mark` walk to the nearest marker).
+ */
+function senderRepoRoot(): string {
+  const root = selfRepoRoot();
+  mkDir(path.join(root, '.git'));
+  mkDir(path.join(root, '.totem', 'orchestration', 'totem-claude'));
+  return root;
+}
+
+/**
  * Build a frontmatter-only dispatch (zero blank lines) carrying the whole
  * message in an oversized `subject:` — the cohort adr-098 shape whose
  * silent drop is the mmnto-ai/totem#2118 regression class (observed live
@@ -829,6 +842,8 @@ describe('pollMail — lifecycle-aware broadcast denominators (mmnto-ai/totem#25
       date: DATE,
       subject,
       filePath: path.join(workspace, repo, '.totem', 'orchestration', sender, 'outbox', file),
+      // Additive field (mmnto-ai/totem#2887): every fixture here carries a body.
+      bodyEmpty: false,
     });
 
     expect(poll({ env: TWO_SEATS })).toEqual({
@@ -1831,7 +1846,7 @@ describe('pollMail — bounded header reads (mmnto-ai/totem#2144)', () => {
 
 describe('mailSend — workspace-known recipients (mmnto-ai/totem#2141)', () => {
   it('a dir-registered seat in any workspace repo is a known recipient (no unknown-recipient warning)', () => {
-    const repoRoot = selfRepoRoot();
+    const repoRoot = senderRepoRoot();
     mkDir(path.join(workspace, 'other-repo', '.totem', 'orchestration', 'totem-codex'));
     const result = mailSend({
       to: 'totem-codex',
@@ -1847,7 +1862,7 @@ describe('mailSend — workspace-known recipients (mmnto-ai/totem#2141)', () => 
   });
 
   it('an unregistered recipient still warns (advisory, inv6 — the dispatch writes anyway)', () => {
-    const repoRoot = selfRepoRoot();
+    const repoRoot = senderRepoRoot();
     const result = mailSend({
       to: 'nobody-anywhere',
       subject: 'typo check',
@@ -2307,8 +2322,17 @@ describe('parseHeader — timestamp:/date: precedence (mmnto-ai/totem#2042)', ()
 
 describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
   const fixedClock = (): Date => new Date('2026-06-09T17:34:37.127Z');
-  function sendRepo(basename = 'totem'): string {
-    return mkDir(path.join(workspace, basename));
+  // A send lands only in the repository TOPLEVEL that hosts the seat
+  // (mmnto-ai/totem#2930): `.git` is what the send resolves to, `.totem/` is
+  // what `totem init` leaves, and the seat directory is what `totem seat add`
+  // registers — the send refuses to mint one. `seat: null` builds a repo that
+  // hosts nobody (the unresolvable-self case).
+  function sendRepo(basename = 'totem', seat: string | null = 'totem-claude'): string {
+    const root = mkDir(path.join(workspace, basename));
+    mkDir(path.join(root, '.git'));
+    mkDir(path.join(root, '.totem'));
+    if (seat !== null) mkDir(path.join(root, '.totem', 'orchestration', seat));
+    return root;
   }
 
   it('writes a v0.4-compliant dispatch the poller reads back (sensor↔actuator round-trip)', () => {
@@ -2351,6 +2375,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'totem-typoo',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: sendRepo(),
       env: {},
       now: fixedClock,
@@ -2365,6 +2390,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'broadcast',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: sendRepo(),
       env: {},
       now: fixedClock,
@@ -2381,7 +2407,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
 
   it('hard-errors on unresolvable self (never writes .../undefined/outbox)', () => {
     expect(() =>
-      mailSend({ to: 'x', subject: 's', repoRoot: sendRepo('not-a-cohort-repo'), env: {} }),
+      mailSend({ to: 'x', subject: 's', repoRoot: sendRepo('not-a-cohort-repo', null), env: {} }),
     ).toThrow(/cannot resolve a sender/);
   });
 
@@ -2415,6 +2441,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 'same slug here',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2433,6 +2460,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 's',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2530,6 +2558,7 @@ describe('mailSend — actuator (mmnto-ai/totem#2042)', () => {
       to: 'strategy-claude',
       subject: 'shadow probe',
       from: 'totem-claude',
+      body: 'body',
       repoRoot: repo,
       env: {},
       now: fixedClock,
@@ -2589,7 +2618,8 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
       // Marker-bearing root: markSource resolves the repo root via the shared
       // walk-up resolver (CR @1480), so a marker-less fixture would climb to a
       // host ancestor `.totem`.
-      repoRoot: selfRepoRoot(),
+      repoRoot: senderRepoRoot(),
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2622,7 +2652,8 @@ describe('mailReply — sugar (mmnto-ai/totem#2042)', () => {
     fs.writeFileSync(src, '---\nto: totem-claude\nsubject: legacy mail\n---\n\nBody.\n', 'utf-8');
     const res = mailReply(src, {
       from: 'totem-claude',
-      repoRoot: selfRepoRoot(), // marker-bearing (CR @1480 resolver parity)
+      repoRoot: senderRepoRoot(), // toplevel + hosted seat (mmnto-ai/totem#2930)
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2963,10 +2994,11 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
 
   it('marks the source processed in the same command as the reply (default; copy under the replying seat)', () => {
     const src = writeSource();
-    const repoRoot = selfRepoRoot(); // marker-bearing (CR @1480 resolver parity)
+    const repoRoot = senderRepoRoot(); // toplevel + hosted seat (mmnto-ai/totem#2930)
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -2996,7 +3028,8 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     );
     mailReply(src, {
       from: 'totem-claude',
-      repoRoot: selfRepoRoot(),
+      repoRoot: senderRepoRoot(),
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3008,7 +3041,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
 
   it('when the mark fails after the reply lands, the error is distinguishable + anti-retry (greptile P1)', () => {
     const src = writeSource();
-    const repoRoot = selfRepoRoot();
+    const repoRoot = senderRepoRoot();
     // Block ONLY the mark write: occupy the seat's `processed/` PATH with a file
     // so markSource's mkdir fails — the reply (a sibling `outbox/` write) still
     // lands. Distinct from a reply failure.
@@ -3020,6 +3053,7 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
       mailReply(src, {
         from: 'totem-claude',
         repoRoot,
+        body: 'body',
         env: {},
         now: fixedClock,
         knownAgents: ['strategy-claude'],
@@ -3042,11 +3076,14 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
 
   it('--no-mark (noMark) leaves the source unmarked (stage-only reply)', () => {
     const src = writeSource();
-    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    // Toplevel + hosted seat (mmnto-ai/totem#2930): a bare fixture would walk
+    // up past the temp dir, and an unhosted one is refused.
+    const repoRoot = senderRepoRoot();
     const res = mailReply(src, {
       from: 'totem-claude',
       noMark: true,
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3067,10 +3104,11 @@ describe('mailReply — atomic consume-mark (mmnto-ai/totem#2396)', () => {
     // Reply target derives from source.from (strategy-claude, directed), but the
     // MARK follows the SOURCE's class — a broadcast source lands in _broadcast/.
     const src = writeSource('broadcast');
-    const repoRoot = selfRepoRoot(); // marker-bearing (CR @1480 resolver parity)
+    const repoRoot = senderRepoRoot(); // toplevel + hosted seat (mmnto-ai/totem#2930)
     const res = mailReply(src, {
       from: 'totem-claude',
       repoRoot,
+      body: 'body',
       env: {},
       now: fixedClock,
       knownAgents: ['strategy-claude'],
@@ -3184,7 +3222,10 @@ describe('mailSend — the filename emitter is colon-free / ADS-safe (mmnto-ai/t
       to: 'strategy-claude',
       subject: 'lane handoff',
       from: 'totem-claude',
-      repoRoot: mkDir(path.join(workspace, 'totem')),
+      body: 'body',
+      // Toplevel + hosted seat (mmnto-ai/totem#2930): the send resolves to the
+      // `.git` toplevel and refuses a repo that does not host the seat.
+      repoRoot: senderRepoRoot(),
       env: {},
       now: () => new Date('2026-07-18T05:10:23.456Z'),
       knownAgents: ['strategy-claude'],
