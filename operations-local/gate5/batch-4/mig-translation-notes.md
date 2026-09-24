@@ -508,3 +508,79 @@ separator heading` carries `—` and is suppressed); legacy over pair 0 satisfie
 - Firing set: 26 → 26, added 0, removed 0.
 - Differential satisfied (the record); legacy over pair 0 NOT satisfied (`good=FIRES`, above).
   Curator totem-claude, 2026-08-24 (the translator seat; the pair's text is the scorer's).
+
+## The envelope (`.totem/spine/authored-rules.yaml`)
+
+The shared envelope with **15 entries appended** (57 in all); the header unchanged
+(`splitRef: gate5-migration-2263305c`, `authoredAfterSplit: true`, `heldOutNonInspectionAttestation:
+true`); the 42 entries of batches 1–3 byte-identical (the generator asserted the old file a byte
+prefix of the new one before writing). One entry per batch-4 record: `author: totem-claude` ·
+`authoredAt: '2026-09-23'` · `targetDefect: "<lessonHash16>[@<language>]: <targetDefectText>"` (the
+manifest's text; the N = 2 set carries `@typescript` and `@javascript`) · `structuralClass` = the
+honest class above · `record: .totem/rules/<file>` · `positiveFixtures: [{pr: 2950, filePath: <the
+record>, matchedSpan: examples[0].bad, contentHash: sha256(examples[0].bad), example: 0}]` — this
+batch's draft PR is mmnto-ai/totem#2950. The `(author, targetDefect)` identity was checked unique
+over the whole file (all four batches) before the write.
+
+**Records kept out of the envelope:** none — all 15 parse and lower. **Records the pre-pin intake
+pass rejects:** every entry whose honest class is outside the five pre-release rows — expected at
+this pass (§ 5 step 2) and not a fault. **Entries the pass ADMITS:** the three
+`forbidden-literal-token` rows of this batch (`884becd4`, `8435c024`, `4ae0a01d`) — the exemplar
+row, under the operator's (A): admission measured at the intake pin, flagged on R6 — and, in the
+shared file, batches 1–3's six again (the clone has no ledger row from their own passes). **At the
+intake pin, under the scorer's batch-1 table and delivery:** `61dcb058` and `b34d9515` read
+`intake-ineligible (engine-typing)` by carry-over and are kept out of the envelope there (the
+generator's `--exclude`), with batch 1's three withheld rules, batch 2's `2d3ac4b9` and batch 3's
+`434c51ff` and `0615c43e` below them in the stack; `427481b5`, `5c5fe9d9` and `63680bf3` become
+admissible under the delivered `(ast-grep, forbidden-callee-call)` row once the `@mmnto/cli` patch
+carrying mmnto-ai/totem#2949's rows is published and the intake runs at that version.
+
+## Pre-pin pass (§ 3.3) — scratch clone, published 2.10.0
+
+Run 2026-09-24 in a scratch clone of the branch at `23d2008883f6d3f684e624ba553c645323d90e86` (the
+envelope commit; `git clone --branch gate5/batch-4-2263305c --single-branch`, HEAD checked equal to
+the pushed commit), never the branch checkout; the nine ledger rows the pass wrote stayed in the
+clone and are not on the branch. Both legs used the staging install of the PUBLISHED 2.10.0. The
+logs are on the branch as `prepin-validate.log` and `prepin-intake.log` beside these notes; the
+clone commit, both invocations and both exit codes are attested in `prepin-run.txt` beside them
+(the captured logs carry no header of their own).
+
+**Coverage limit of the pass, disclosed (as batches 1–3 disclosed it):** a whitelist miss returns
+before `deriveRecordFixtures` and the record-schema parse of the entry, so on the 48 rejected entries
+the dangling-ordinal and `failed validation` throws were not reached by the intake itself; they are
+reached for every entry only at the post-release intake pin. The record parse, the `judgedBy ==
+author` check and the `(author, targetDefect)` identity check run over the whole file before any
+entry is judged and all passed.
+
+**Validate leg** — the generalized harness in the clone, no `--tree`: exit 0; the summary lines
+identical to the batch run's (15 parsed, 15 compiled, fidelity 12/15 + 3 declared, differential
+14/14, `Verdict: PASS (exit 0)`; `legacy/pair0: bad=FIRES good=FIRES` on `b3e3e2b3` as in the batch
+run). Invocation in `prepin-run.txt`; the full log in `prepin-validate.log`.
+
+**Intake** — `TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author`
+(cwd = the clone root; the CLI default `judgedBy` at this PRE-release pass). Exit 1 — the expected
+outcome (§ 5 step 2): no file-aborting throw; **9 minted** (the exemplar row: batches 1–3's six,
+this batch's three) and **48 rejected** per record on the whitelist (batch 1's 13, batch 2's 14,
+batch 3's 9, this batch's 12 — the N = 2 set counted twice), each naming its `(engine, class)` pair.
+The minted block verbatim (the 48 rejected lines in `prepin-intake.log`):
+
+```text
+[RuleAuthor] 9 authored rule(s): 9 minted, 0 revised, 0 unchanged.
+  + 923841006dd9c024  totem-claude :: 6ad0d4d5c760a5d6: Technical documentation must avoid marketing-centric terms
+  + 6e5b15c0ae7e2285  totem-claude :: 5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere
+  + f4538a6aa67863a3  totem-claude :: 391de7088c633579: 2026-03-03T01:52:20.000Z
+  + 53926c1a10b531b9  totem-claude :: 87e2437431c17ec5: Git diff headers wrap file paths containing spaces
+  + d6da524c3aec39c7  totem-claude :: 55797450514d4c3b: Never use git add -A or git add .
+  + 1c3a3c4e61a2d666  totem-claude :: 56c801dfda484c75: The text-embedding-004 identifier is frequently unavailable
+  + 106680a4d371f82f  totem-claude :: 884becd45e6380bd: Using 'pnpm run version' instead of the bare 'pnpm version'
+  + 50662ab6a745c6d5  totem-claude :: 8435c024569ffa51: The Gemini CLI and Gemini Code Assist (GCA) do not
+  + 312894688c167fb2  totem-claude :: 4ae0a01d912f8742: Use canonical CLI command forms
+
+[RuleAuthor] WARNING: 48 rule(s) REJECTED — not structurally decidable, excluded from the producer output:
+```
+
+The eleven batch-4 `intake-ineligible (whitelist)` outcomes at this pass (twelve rejected lines, the
+N = 2 set counted twice) are this batch's D1 (C) demand figure before carry-over is applied: two of
+them (`61dcb058`, `b34d9515`) are batch-1 pairs already withheld; three (`427481b5`, `5c5fe9d9`,
+`63680bf3`) are the batch-1 pair already delivered and need no review; six are new pairs for the
+review; the class list is in the pin mail and in the per-rule notes above.

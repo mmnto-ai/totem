@@ -1,0 +1,18 @@
+Gate (5) batch 4 — pre-pin pass (pre-registration § 3.3), the seat's attestation of what the two captured logs beside this file do not print themselves.
+
+clone:        git clone --quiet --branch gate5/batch-4-2263305c --single-branch <the resident repository> <scratchpad>/prepin-clone-b4
+clone HEAD:   23d2008883f6d3f684e624ba553c645323d90e86  (the envelope commit; checked equal to the pushed commit before the pass)
+staging:      <scratchpad>/staging-2.10.0 — @mmnto/cli 2.10.0, @mmnto/totem 2.10.0, @ast-grep/napi 0.42.3, node v24.16.0 (the fresh npm install of the exact published versions made for batch 2)
+
+validate leg (cwd = the clone root; no --tree — the firing-set leg is the batch run's):
+  node operations-local/gate5/mig-harness.mjs --set operations-local/gate5/manifest-2263305c.json --only 884becd4,089b0c62,427481b5,5c5fe9d9,61dcb058,fb008f77,8435c024,8213cd4e,b34d9515,7e3eefea,d487264e,4ae0a01d,63680bf3,b3e3e2b3 --inventory operations-local/gate5/batch-4/mig-inventory.json --core <staging>/node_modules/@mmnto/totem --cli <staging>/node_modules/@mmnto/cli
+  exit code:  0
+  captured:   prepin-validate.log (stdout + stderr, verbatim)
+
+intake (cwd = the clone root; the published binary runs itself, never a checkout's dist; no --judged-by, so the CLI default static-whitelist@cert-1 applied at this PRE-release pass):
+  TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author
+  exit code:  1  (expected at this pass: 9 minted on the exemplar row — batch 1's 6ad0d4d5, batch 2's 5afaf8d0, batch 3's 391de708, 87e24374, 55797450, 56c801df, batch 4's 884becd4, 8435c024, 4ae0a01d — and 48 rejected per record on the pre-release whitelist (13 + 14 + 9 + 12, the batch-4 N = 2 set counted twice), no file-aborting throw)
+  captured:   prepin-intake.log (stdout + stderr, verbatim)
+  ledger:     .totem/spine/authoring-ledger.ndjson written in the clone only (9 rows); not on the branch (git ls-files .totem/spine/ lists no ledger)
+
+attested by totem-claude, 2026-09-24.
