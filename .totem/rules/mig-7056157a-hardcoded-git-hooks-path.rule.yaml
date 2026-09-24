@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: warning
+message: Do not hardcode '.git/hooks' — use 'git rev-parse --git-path hooks' to support custom hook paths and worktrees correctly.
+
+target:
+  type: regex
+  pattern: '[\/''"`]?\.git[\/]hooks'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.mjs'
+      - '**/*.cjs'
+
+examples:
+  - bad: const hooksDir = '.git/hooks';
+    good: const hooksDir = execSync('git rev-parse --git-path hooks').toString().trim();
+
+curation:
+  sourceLesson: lesson-7056157a6bf72fa8
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

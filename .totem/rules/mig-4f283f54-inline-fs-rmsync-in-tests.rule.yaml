@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: Use the shared helper instead of inline fs.rmSync calls to ensure consistent retry logic and error-handling across the test suite.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: fs.rmSync($$$ARGS)
+  scope:
+    fileGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: 'fs.rmSync(tmpDir, { recursive: true, force: true });'
+    good: await removeWithRetry(tmpDir);
+
+curation:
+  sourceLesson: lesson-4f283f5495489a19
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

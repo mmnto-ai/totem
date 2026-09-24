@@ -1,0 +1,41 @@
+schemaVersion: 1
+severity: error
+message: Avoid static top-level value imports from '@mmnto/totem' in CLI commands — the core barrel pulls LanceDB and other heavy deps into every startup, including --help. Use dynamic `await import('@mmnto/totem')` inside the command function; `import type { ... }` stays static (erased at build). Named-import shape; default-import shape is covered by sibling rules 3bb96274/c5192192 (mmnto-ai/totem#2339).
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: import { $$$NAMES } from '@mmnto/totem'
+  scope:
+    fileGlobs:
+      - packages/cli/src/commands/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: import { deriveSettled } from '@mmnto/totem';
+    good: |-
+      import type { VerdictArtifact } from '@mmnto/totem';
+      export async function runFan() {
+        const { deriveSettled } = await import('@mmnto/totem');
+      }
+  - bad: |-
+      import {
+        deriveCacheEligible,
+        deriveSettled,
+        renderCovariateLine,
+        TotemConfigError,
+        VERDICT_ARTIFACT_SCHEMA_VERSION,
+      } from '@mmnto/totem';
+    good: |-
+      import type { VerdictArtifact } from '@mmnto/totem';
+      export async function runFan(): Promise<void> {
+        const { deriveSettled } = await import('@mmnto/totem');
+      }
+
+curation:
+  sourceLesson: lesson-2266fc0dfe824f24
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

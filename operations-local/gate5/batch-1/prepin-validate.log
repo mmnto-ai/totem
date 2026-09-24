@@ -1,0 +1,52 @@
+K4 header
+  @mmnto/totem   2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\staging-2.10.0\node_modules\@mmnto\totem\dist\index.js)
+  @mmnto/cli     2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\staging-2.10.0\node_modules\@mmnto\cli)
+  checkout       2.11.0 declared by C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\prepin-clone\packages\core\package.json
+  node           v24.16.0
+  @ast-grep/napi 0.42.3
+  languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
+  packs          none (no .totem/installed-packs.json)
+  records        C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\de67d78e-7e8f-4353-ac68-5b2dc9182f87\scratchpad\prepin-clone\.totem\rules
+
+set: operations-local/gate5/manifest-2263305c.json — 53 rule(s), manifest order
+--only: 13 entries selected
+
+ 1. 427c97fb0063f0cb (rank 2)  differential-satisfied
+    mig-427c97fb-partial-matcher-secret-masking.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 2. 71935fe9a742137b (rank 10)  differential-satisfied  (2 records)
+    mig-71935fe9-string-cast-on-input-js.rule.yaml [ast-grep@.js] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+    mig-71935fe9-string-cast-on-input.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 3. 54140f59be3e6e44 (rank 25)  differential-satisfied
+    mig-54140f59-bare-issue-number-refs.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 4. 4f283f5495489a19 (rank 35)  differential-satisfied
+    mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 5. bc8b99e815c3943f (rank 41)  differential-satisfied
+    mig-bc8b99e8-console-log-in-mcp.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 6. 2266fc0dfe824f24 (rank 44)  differential-satisfied
+    mig-2266fc0d-static-named-import-totem-barrel.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent | pair1: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 7. a190836df4daa24d (rank 46)  differential-satisfied
+    mig-a190836d-raw-git-exec.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 8. 87aff037d7de47a7 (rank 47)  differential-satisfied
+    mig-87aff037-fail-open-catch-ban.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+ 9. a1fd35ee696110b0 (rank 49)  differential-satisfied
+    mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+10. 61bb8b8b88d2ecab (rank 55)  differential-satisfied
+    mig-61bb8b8b-json-parse-as-cast.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+11. 6ad0d4d5c760a5d6 (rank 59)  differential-satisfied
+    mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+12. 1210f02da9f16e5b (rank 68)  differential-satisfied
+    mig-1210f02d-raw-error-throw-in-cli.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+13. 7056157a6bf72fa8 (rank 75)  differential-satisfied
+    mig-7056157a-hardcoded-git-hooks-path.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+
+Validate: 14 record(s) — parsed 14, compiled 14, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Fidelity (records): 14/14 identical, 0 expected divergence(s), 0 UNEXPECTED
+Fidelity (entries): 13/13 identical, 0 expected divergence(s), 0 UNEXPECTED
+Differential split (measured, per entry):
+  differential-satisfied   13  (entries 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+  good-also-fires          0
+  bad-does-not-fire        0
+  not-evaluable            0
+Differential expectation mismatches: 0
+
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0

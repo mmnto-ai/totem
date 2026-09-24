@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Do not use console.log in MCP tools — it corrupts the stdio transport protocol. Use a file-based logger or return a formatted system warning instead.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: console.log($$$ARGS)
+  scope:
+    fileGlobs:
+      - packages/mcp/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: console.log('mcp server listening on stdio');
+    good: logger.info('mcp server listening on stdio');
+
+curation:
+  sourceLesson: lesson-bc8b99e815c3943f
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

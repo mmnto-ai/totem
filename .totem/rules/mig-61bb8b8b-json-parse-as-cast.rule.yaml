@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Perform explicit null and type checks on the results
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: JSON.parse($A) as $B
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+    excludeGlobs:
+      - '**/registry.ts'
+
+examples:
+  - bad: const data = JSON.parse(raw) as LockData;
+    good: const data = LockDataSchema.parse(JSON.parse(raw));
+
+curation:
+  sourceLesson: lesson-61bb8b8b88d2ecab
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Throw a domain-specific error subclass instead of raw Error so CLI handlers can provide actionable recovery hints and suppress noisy stack traces for known failure modes.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: throw new Error($MSG)
+  scope:
+    fileGlobs:
+      - packages/cli/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: throw new Error('bad config');
+    good: throw new TotemConfigError('bad config');
+
+curation:
+  sourceLesson: lesson-1210f02da9f16e5b
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Dynamic imports should only be used at CLI command entry points, not in utility or adapter layers. Move lazy-loading to the command entry point to maintain a clean dependency graph and avoid security scanner flags.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: import($MODULE)
+  scope:
+    fileGlobs:
+      - packages/cli/src/utils/**/*.ts
+      - packages/cli/src/adapters/**/*.ts
+      - packages/cli/src/lib/**/*.ts
+
+examples:
+  - bad: const { parse } = await import('yaml');
+    good: import { parse } from 'yaml';
+
+curation:
+  sourceLesson: lesson-a1fd35ee696110b0
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

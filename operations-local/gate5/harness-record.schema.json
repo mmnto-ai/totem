@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "gate5-harness-record/1",
+  "title": "Gate (5) migration harness — one per-record output line (JSONL)",
+  "description": "The pre-registered field set of operations/310-migration-preregistration.md § 5.1 (4), plus the additive keys this harness carries (named below, each optional for a reader of the pre-registered set). firingSet.legacy and firingSet.record are COUNTS of (file, line) firings; added and removed are the whole sets, as strings `<file>:<line>`, at the entry union for an N-record set (deltaScope names which).",
+  "type": "object",
+  "required": [
+    "schema",
+    "lessonHash",
+    "recordPath",
+    "language",
+    "validate",
+    "fidelity",
+    "differential",
+    "legacyOverPair0",
+    "firingSet"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "gate5-harness-record/1" },
+    "lessonHash": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "recordPath": { "type": "string", "pattern": "^\\.totem/rules/.+\\.rule\\.yaml$" },
+    "language": { "type": ["string", "null"] },
+    "validate": {
+      "type": "object",
+      "required": ["parse", "lower", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "parse": { "type": "boolean" },
+        "lower": { "type": ["string", "null"], "enum": ["compiled", "rejected", "throw", null] },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "fidelity": {
+      "type": ["object", "null"],
+      "required": ["message", "severity", "payload", "requires", "declaredInventory", "unexpected"],
+      "additionalProperties": false,
+      "properties": {
+        "message": { "type": "boolean" },
+        "severity": { "type": "boolean" },
+        "payload": { "type": "boolean" },
+        "requires": { "type": "boolean" },
+        "declaredInventory": { "type": "array", "items": { "enum": ["i", "ii", "iii"] } },
+        "unexpected": { "type": "array", "items": { "type": "string" } },
+        "engine": {
+          "type": "boolean",
+          "description": "additive: target.type equals the legacy engine"
+        },
+        "scope": {
+          "type": "object",
+          "description": "additive: the scope declarations checked by mechanism (inventory (i) and (iii))",
+          "required": [
+            "excludesMatch",
+            "positivesSubset",
+            "droppedPositives",
+            "declaredI",
+            "declaredIII"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "excludesMatch": { "type": "boolean" },
+            "positivesSubset": { "type": "boolean" },
+            "droppedPositives": { "type": "array", "items": { "type": "string" } },
+            "droppedSameLanguage": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "additive: dropped positives whose extension resolves to the record's own language or to none (never a language split)"
+            },
+            "declaredI": { "type": "boolean" },
+            "declaredIII": { "type": "boolean" }
+          }
+        },
+        "expectedDivergence": {
+          "type": ["string", "null"],
+          "description": "additive: the declared explanation of a payload delta (inventory (ii); under --r14 only, a ruled prior cure)"
+        }
+      }
+    },
+    "differential": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pair", "badFires", "goodSilent", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "pair": { "type": "integer", "minimum": 0 },
+          "badFires": { "type": ["boolean", "null"] },
+          "goodSilent": { "type": ["boolean", "null"] },
+          "reason": { "type": ["string", "null"] },
+          "smokeGate": {
+            "type": "object",
+            "description": "additive: the shipped runSmokeGate's verdicts over the same pair (C7's reason check)",
+            "required": ["badMatched", "goodMatched"],
+            "additionalProperties": false,
+            "properties": {
+              "badMatched": { "type": "boolean" },
+              "goodMatched": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "legacyOverPair0": {
+      "type": ["object", "null"],
+      "required": ["badFires", "goodSilent"],
+      "additionalProperties": false,
+      "properties": {
+        "badFires": { "type": ["boolean", "null"] },
+        "goodSilent": { "type": ["boolean", "null"] },
+        "reason": {
+          "type": ["string", "null"],
+          "description": "additive: the matcher's throw, when one occurred"
+        }
+      }
+    },
+    "firingSet": {
+      "type": ["object", "null"],
+      "required": ["legacy", "record", "added", "removed"],
+      "additionalProperties": false,
+      "properties": {
+        "legacy": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "count of legacy (file, line) firings over the record's files"
+        },
+        "record": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "count of record (file, line) firings"
+        },
+        "added": { "type": "array", "items": { "type": "string" } },
+        "removed": { "type": "array", "items": { "type": "string" } },
+        "unreadable": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "additive: in-scope paths that could not be read as files"
+        },
+        "deltaScope": {
+          "enum": ["record", "entry-union"],
+          "description": "additive: whether added/removed are this record's own or the entry union's"
+        }
+      }
+    }
+  }
+}
