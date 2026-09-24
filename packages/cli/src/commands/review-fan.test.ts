@@ -47,11 +47,7 @@ import {
   runReviewFan,
   validateReviewLanes,
 } from './review-fan.js';
-import {
-  MAX_DIFF_CHARS,
-  type ShieldFinding,
-  truncateDiffForReview,
-} from './shield-templates.js';
+import { MAX_DIFF_CHARS, type ShieldFinding, truncateDiffForReview } from './shield-templates.js';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -1431,7 +1427,9 @@ describe('runReviewFan', () => {
     const SECRET = 'sk-' + 'z'.repeat(40); // matches a built-in DLP pattern
     const head = 'a'.repeat(MAX_DIFF_CHARS + 200);
     const fullDiff = `${head}\nLEAKED=${SECRET}\n`;
-    // Emulate assemblePrompt: truncate at MAX_DIFF_CHARS + marker, wrap in <git_diff>.
+    // An arbitrary over-window block in the OLD raw-slice shape, kept on purpose: the
+    // primary path extracts whatever block the prompt carries. The assembler's REAL
+    // output is driven through the fan in the mmnto-ai/totem#2954 test below.
     const truncated =
       fullDiff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`;
     const prompt = `SYSTEM PROMPT\n=== DIFF ===\n<git_diff>\n${truncated}\n</git_diff>\nEND`;
@@ -1490,9 +1488,7 @@ describe('runReviewFan', () => {
     const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
     const expected = truncateDiffForReview(fullDiff).delivered;
     expect(expected).toContain('cut at a file boundary; 1 file(s) not shown: b.ts]');
-    expect(createHash('sha256').update(expected, 'utf-8').digest('hex')).toBe(
-      v.diffScope.diffHash,
-    );
+    expect(createHash('sha256').update(expected, 'utf-8').digest('hex')).toBe(v.diffScope.diffHash);
     // The old raw-slice shape would have hashed differently.
     const oldShape =
       fullDiff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`;
@@ -1514,7 +1510,7 @@ describe('runReviewFan', () => {
       };
     };
     const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, { filteredDiff: fullDiff });
-    // A zero-completed fan writes the honest verdict FIRST, then hard-errors (#2452).
+    // A zero-completed fan writes the honest verdict FIRST, then hard-errors (mmnto-ai/totem#2452).
     await expect(runReviewFan(ctx)).rejects.toThrow(/no completed verdict lane/);
 
     const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
@@ -1522,8 +1518,44 @@ describe('runReviewFan', () => {
     expect(lane.status).toBe('abstained');
     if (lane.status === 'abstained') {
       expect(lane.reason).toContain('the delivered diff was truncated:');
-      expect(lane.reason).toContain(`of ${fullDiff.length} chars, cut at a line boundary`);
+      // One line wider than the window: the last line boundary sits in the header,
+      // below the half-window floor, so the cut is at the window itself.
+      expect(lane.reason).toContain(`of ${fullDiff.length} chars, cut at a char boundary`);
     }
+  });
+
+  // mmnto-ai/totem#2954: the REAL assembler's output through the fan — the persisted
+  // diffHash binds the assembled <git_diff> block, and that block is the helper's bytes.
+  it('the assembled prompt through the fan: diffHash = sha256 of the assembled block = the helper bytes', async () => {
+    const { assemblePrompt } = await import('./shield.js');
+    const fileA = `diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,1 @@\n-${'a'.repeat(MAX_DIFF_CHARS - 100)}\n+x\n`;
+    const fileB = `diff --git a/b.ts b/b.ts\n--- a/b.ts\n+++ b/b.ts\n@@ -1,1 +1,1 @@\n-${'b'.repeat(500)}\n+y\n`;
+    const fullDiff = fileA + fileB;
+    const prompt = assemblePrompt(
+      fullDiff,
+      ['a.ts', 'b.ts'],
+      { specs: [], sessions: [], code: [], lessons: [] },
+      'SYS',
+    );
+    expect(prompt).toContain('=== DIFF TRUNCATION NOTICE ===');
+    const invoker: LaneInvoker = async () => {
+      const content = wrapVerdict([]);
+      return {
+        content,
+        runArtifactHash: hex('g4a'),
+        runArtifact: makeRunArtifact({ content, provider: 'anthropic', model: 'claude-a' }),
+      };
+    };
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      prompt,
+      filteredDiff: fullDiff,
+    });
+    await runReviewFan(ctx);
+
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    const block = prompt.match(/<git_diff>\n([\s\S]*?)\n<\/git_diff>/)![1]!;
+    expect(block).toBe(truncateDiffForReview(fullDiff).delivered);
+    expect(createHash('sha256').update(block, 'utf-8').digest('hex')).toBe(v.diffScope.diffHash);
   });
 
   // ── Exit contract (finding 3 / Gate G5) ──

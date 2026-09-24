@@ -67,12 +67,7 @@ import {
   extractStructuredVerdict,
   writeReviewedContentHashValue,
 } from './shield.js';
-import {
-  DISPLAY_TAG,
-  type ShieldFinding,
-  TAG,
-  truncateDiffForReview,
-} from './shield-templates.js';
+import { DISPLAY_TAG, type ShieldFinding, TAG, truncateDiffForReview } from './shield-templates.js';
 
 /**
  * Round index at/above which the advisory max-rounds sensor line fires. A
