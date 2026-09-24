@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { TotemGitError } from '../errors.js';
@@ -430,12 +431,31 @@ export function findRepoRootSync(start: string): string | null {
  * `.totem/`. Whether the winning `.git` is a directory or a worktree's FILE is
  * a separate question — {@link classifyTotemRepoRootSync} answers it for the
  * callers that must refuse a worktree.
+ *
+ * The user-level store at `~/.totem` (`registry.json`, `worktrees.json`, the
+ * estate's records) is not a repository and never anchors the `.totem/` arm:
+ * without that exclusion a verb run outside any repository, on a host that
+ * keeps the store, resolved the home directory as its repo root and read a
+ * home-wide "workspace" as clean — the marker-less class of
+ * mmnto-ai/totem#2946 wearing a marker.
  */
 export function findTotemRepoRootSync(start: string): string | null {
+  const home = os.homedir();
   return (
     findRepoRootSync(start) ??
-    walkUpToMarker(start, (dir) => fs.existsSync(path.join(dir, '.totem')))
+    walkUpToMarker(start, (dir) => !sameDir(dir, home) && fs.existsSync(path.join(dir, '.totem')))
   );
+}
+
+/**
+ * Directory identity for the home-store exclusion: exact on POSIX,
+ * case-insensitive on win32, where `os.homedir()` and a cwd-derived path can
+ * spell the same directory with different casing.
+ */
+function sameDir(a: string, b: string): boolean {
+  const ra = path.resolve(a);
+  const rb = path.resolve(b);
+  return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
 }
 
 /**

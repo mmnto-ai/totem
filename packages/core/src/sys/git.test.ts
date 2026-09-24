@@ -9,6 +9,20 @@ vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
 }));
 
+// `findTotemRepoRootSync` skips the user-level `~/.totem` store
+// (mmnto-ai/totem#2946); `homedir` is redirected per test so the exclusion is
+// exercised without touching the real home directory (a frozen ESM namespace
+// cannot be spied — a module mock with a hoisted override instead).
+const osMock = vi.hoisted(() => ({ home: undefined as string | undefined }));
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    default: actual,
+    homedir: (): string => osMock.home ?? actual.homedir(),
+  };
+});
+
 import { TotemGitError } from '../errors.js';
 import { fail, ok } from '../test-utils.js';
 import {
@@ -624,6 +638,25 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
       expect(findTotemRepoRootSync(start)).toBe(path.resolve(inner));
     } else {
       expect(path.isAbsolute(findTotemRepoRootSync(start)!)).toBe(true);
+    }
+  });
+
+  it('the user-level ~/.totem store never anchors the walk (mmnto-ai/totem#2946)', () => {
+    // `homedir()` is redirected at a marked tmp dir: a start beneath it with no
+    // marker of its own must NOT resolve to "home". The walk continues above it
+    // and lands on whatever the host ancestry holds — nothing (null) on a clean
+    // host, an ancestor marker on a dev box — never the excluded directory.
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const start = path.join(tmpDir, 'projects', 'scratch');
+    fs.mkdirSync(start, { recursive: true });
+    osMock.home = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(start);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+    } finally {
+      osMock.home = undefined;
     }
   });
 });
