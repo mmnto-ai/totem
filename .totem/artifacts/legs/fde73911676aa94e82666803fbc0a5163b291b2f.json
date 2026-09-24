@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "fde73911676aa94e82666803fbc0a5163b291b2f",
+  "readAt": "2026-09-24T22:25:55Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/gate-wrapper-killsignal-2932.md",
+      "line": 10,
+      "claim": "The changeset never tells consumers to re-run totem gate install; the wrapper is refreshed only by that command, nothing senses a stale wrapper (no version, hash or doctor row), so an installed wrapper keeps the old behaviour with nothing said.",
+      "counterexample": "A POSIX consumer upgrades @mmnto/cli: its .claude/hooks/gate-wrapper.cjs still has no killSignal."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/gate-wrapper-killsignal.test.ts",
+      "line": 12,
+      "claim": "The template test is textual and weaker than the contract: the spawnBlocks scanner can pass vacuously (a spawn without a closing '});' merges with the next block; both options commented out still pass; an execFileSync is not scanned). It fails on the pre-fix template, so it is a regression pin, not a behavioural one.",
+      "counterexample": "A copy of the scanner against a template with a 'spawnSync(...).stdout;' call ahead of two correct spawns: n=2, pass=true; with both options commented out: pass=true."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": ".changeset/gate-wrapper-killsignal-2932.md",
+      "line": 10,
+      "claim": "'No skill text or hook behaviour changes' is false: the change is a hook behaviour change on POSIX (the deadline now bounds the hook; a wedged child lands in exit 2 inside the budget instead of hanging).",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".claude/hooks/SessionStart.cjs",
+      "line": 204,
+      "claim": "The other managed hooks (the Claude and Gemini SessionStart hooks) spawn the CLI with a 20 s timeout and no killSignal, the same class; out of this issue's scope.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 2610,
+      "claim": "'SIGTERM can be ignored by a wedged child, SIGKILL cannot' overstates the guarantee: a process in uninterruptible sleep is not reaped until its I/O returns, and orphaned grandchildren (the re-exec'd CLI, gh) outlive a SIGKILL of the direct child as they did under SIGTERM.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/gate-wrapper-killsignal-2932.md",
+      "line": 10,
+      "claim": "The changeset names 'the strategy seat' as a POSIX seat, copied from the issue; ungrounded (this machine is win32 and hosts the strategy checkout).",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F5",
+    "F6"
+  ],
+  "verdict": "Leg 1 over fde73911: 0 BLOCKING, 2 MATERIAL, 4 MINOR, nothing blocking; the spawn inventory is exactly two, the kill result shape on win32 is ETIMEDOUT/SIGKILL/null and the wrapper handles it (gitRead returns '', the checker path fails closed), the committed wrapper equals the template at both shas byte for byte, gitRead's three reads take no lock so SIGKILL leaves no state. F1, F2, F3, F5, F6 folded at the next commit (the re-scaffold instruction and the POSIX behaviour named in the changeset; a POSIX-only behavioural row on a SIGTERM-ignoring git shim beside the textual pin; the comment softened to 'cannot be caught'; the strategy seat dropped); F4 filed as mmnto-ai/totem#2962."
+}
