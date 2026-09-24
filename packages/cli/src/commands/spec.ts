@@ -933,6 +933,52 @@ export function resolveDefaultSpecPath(
   return deps.pathJoin(root, '.totem', 'specs', `${stem}.md`);
 }
 
+// ─── Issue inputs ───────────────────────────────────────
+
+/** How one positional input names an issue, and in which repository. */
+export interface IssueInput {
+  number: number;
+  /**
+   * The repository the input names, in the form `gh --repo` takes
+   * (`owner/repo`, or `host/owner/repo` off github.com), or null for a bare
+   * number, which resolves against the working directory's repository.
+   */
+  repo: string | null;
+}
+
+/**
+ * Parse one positional input as an issue: a bare number (this repository), an
+ * issue URL (GitHub, a GitHub Enterprise host, GitLab or any host with
+ * `/issues/<n>` or `/-/issues/<n>`) or `owner/repo#<n>`. A URL or a qualified
+ * ref NAMES its repository, and the fetch must run against that repository
+ * (mmnto-ai/totem#2943): resolving the number against the working directory's
+ * repository either fails with a misleading hint or, worse, anchors the run on
+ * a stranger's issue of the same number. The URL match is not end-anchored on
+ * purpose (the anchor's `ref` keeps the input as typed; see the anchor tests).
+ * Returns null for anything else — a topic — and for the number 0.
+ */
+export function parseIssueInput(input: string): IssueInput | null {
+  if (/^\d+$/.test(input)) {
+    const number = parseInt(input, 10);
+    return number > 0 ? { number, repo: null } : null;
+  }
+  const urlMatch = input.match(/^https?:\/\/([^/]+)\/(.+?)\/(?:-\/)?issues\/(\d+)/);
+  if (urlMatch) {
+    const host = urlMatch[1]!;
+    const path = urlMatch[2]!;
+    const number = parseInt(urlMatch[3]!, 10);
+    if (!(number > 0)) return null;
+    return { number, repo: host === 'github.com' ? path : `${host}/${path}` };
+  }
+  const hashIdx = input.indexOf('#');
+  const isQualified = hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
+  if (isQualified) {
+    const number = parseInt(input.slice(hashIdx + 1), 10);
+    return number > 0 ? { number, repo: input.slice(0, hashIdx) } : null;
+  }
+  return null;
+}
+
 // ─── Main command ───────────────────────────────────────
 
 export async function specCommand(inputs: string[], options: SpecOptions): Promise<void> {
@@ -1039,29 +1085,19 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
 
   for (const input of unique) {
-    // Match GitHub, GitLab, or any URL ending in /issues/<number> or /-/issues/<number>
-    const urlMatch = input.match(/^https?:\/\/[^/]+\/.*\/(?:-\/)?issues\/(\d+)/);
-    // Support owner/repo#123 format for multi-repo disambiguation
-    const hashIdx = input.indexOf('#');
-    const isQualified =
-      hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
-    const qualifiedRepo = isQualified ? input.slice(0, hashIdx) : null;
-    const qualifiedNum = isQualified ? parseInt(input.slice(hashIdx + 1), 10) : null;
+    const issueInput = parseIssueInput(input);
 
-    const issueNumber = /^\d+$/.test(input)
-      ? parseInt(input, 10)
-      : urlMatch
-        ? parseInt(urlMatch[1]!, 10)
-        : qualifiedNum;
-
-    if (issueNumber) {
-      // If qualified with owner/repo, create a repo-specific adapter
+    if (issueInput !== null) {
+      // A URL or an `owner/repo#N` names its repository: the fetch runs against
+      // THAT repository (mmnto-ai/totem#2943). A bare number keeps the working
+      // directory's adapter.
       let fetchAdapter = adapter;
-      if (qualifiedRepo) {
+      if (issueInput.repo !== null) {
         const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
-        fetchAdapter = new GitHubCliAdapter(cwd, qualifiedRepo);
+        fetchAdapter = new GitHubCliAdapter(cwd, issueInput.repo);
       }
-      log.info(TAG, `Fetching issue #${issueNumber}...`);
+      const issueNumber = issueInput.number;
+      log.info(TAG, `Fetching issue #${issueNumber} (${issueInput.repo ?? 'this repository'})...`);
       const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
       // `issueRef` keeps the input AS TYPED so the anchor's ref round-trips

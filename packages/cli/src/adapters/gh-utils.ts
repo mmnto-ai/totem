@@ -64,7 +64,10 @@ export function handleGhError(err: unknown, context: string): never {
   throw new TotemError(
     'SHIELD_FAILED',
     `Failed to fetch ${context}: ${wrapperMsg}`,
-    'Run `gh auth status` to verify authentication, then retry.',
+    // A wrong repository is the first suspect, not authentication (mmnto-ai/totem#2943):
+    // an issue URL or `owner/repo#N` names its repository, a bare number resolves
+    // against this one.
+    'Check that the target exists in the repository it was looked up in (a URL or `owner/repo#N` names its repository; a bare number resolves against this one), then run `gh auth status` to verify authentication and retry.',
     err,
   );
 }

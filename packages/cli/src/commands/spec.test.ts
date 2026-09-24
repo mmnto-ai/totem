@@ -36,6 +36,7 @@ import {
   MAX_LESSON_CHARS,
   MAX_LESSONS,
   MAX_SPECS,
+  parseIssueInput,
   resolveDefaultSpecPath,
   resolveGroundingAnchor,
   retrieveContext,
@@ -122,6 +123,30 @@ vi.mock('../adapters/create-issue-adapter.js', () => ({
       labels: [],
     }),
   }),
+}));
+
+// mmnto-ai/totem#2943: a qualified input builds a repository-specific adapter;
+// the mock records the repository each one was built for and answers with a
+// title that names it, so a test can tell WHICH repository the fetch ran against.
+const crossRepo = vi.hoisted(() => ({ built: [] as Array<string | undefined> }));
+vi.mock('../adapters/github-cli.js', () => ({
+  GitHubCliAdapter: class {
+    private readonly repo: string | undefined;
+    constructor(_cwd: string, repo?: string) {
+      this.repo = repo;
+      crossRepo.built.push(repo);
+    }
+    fetchIssue(num: number): StandardIssue {
+      return {
+        number: num,
+        title: `Cross-repo issue ${num} of ${this.repo ?? 'cwd'}`,
+        body: 'cross-repo body',
+        state: 'open',
+        labels: [],
+        repo: this.repo,
+      };
+    }
+  },
 }));
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -2272,5 +2297,75 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     expect(message).toContain('Retrieval returned 0 hits');
     expect(message).toContain(FLOOR_LINE_UNSET_TEXT);
     expect(harness.orchestratorArgs).toEqual([]);
+  });
+
+  // ─── mmnto-ai/totem#2943: a qualified input fetches from the repository it names ───
+
+  it('an issue URL fetches from the repository the URL names, never the cwd repository', async () => {
+    crossRepo.built.length = 0;
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+    await specCommand(['https://github.com/other-org/other-repo/issues/7'], { stdout: true });
+    expect(crossRepo.built).toEqual(['other-org/other-repo']);
+    const prompt = String(harness.orchestratorArgs[0]!['prompt']);
+    expect(prompt).toContain('Cross-repo issue 7 of other-org/other-repo');
+  });
+
+  it('owner/repo#N and a GitHub Enterprise URL name their repositories in the form gh --repo takes', async () => {
+    crossRepo.built.length = 0;
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+    await specCommand(['mmnto-ai/totem-strategy#288'], { stdout: true });
+    await specCommand(['https://ghe.example.com/team/proj/issues/3'], { stdout: true });
+    expect(crossRepo.built).toEqual(['mmnto-ai/totem-strategy', 'ghe.example.com/team/proj']);
+  });
+
+  it('a bare number keeps the working directory adapter and builds no repository-specific one', async () => {
+    crossRepo.built.length = 0;
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+    await specCommand(['2735'], { stdout: true });
+    expect(crossRepo.built).toEqual([]);
+    expect(String(harness.orchestratorArgs[0]!['prompt'])).toContain('Issue 2735');
+  });
+});
+
+// ─── parseIssueInput (mmnto-ai/totem#2943) ───────────────
+
+describe('parseIssueInput', () => {
+  it('reads the three forms and names the repository for the qualified ones', () => {
+    expect(parseIssueInput('2929')).toEqual({ number: 2929, repo: null });
+    expect(parseIssueInput('mmnto-ai/totem#2929')).toEqual({
+      number: 2929,
+      repo: 'mmnto-ai/totem',
+    });
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/2929')).toEqual({
+      number: 2929,
+      repo: 'mmnto-ai/totem',
+    });
+    // Off github.com the host rides along, the form `gh --repo` takes.
+    expect(parseIssueInput('https://ghe.example.com/team/proj/issues/12')).toEqual({
+      number: 12,
+      repo: 'ghe.example.com/team/proj',
+    });
+    expect(parseIssueInput('https://gitlab.com/group/sub/proj/-/issues/5')).toEqual({
+      number: 5,
+      repo: 'gitlab.com/group/sub/proj',
+    });
+  });
+
+  it('keeps the URL match not end-anchored: trailing text still resolves the number', () => {
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/1?x=y')).toEqual({
+      number: 1,
+      repo: 'mmnto-ai/totem',
+    });
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/5#issuecomment-9')).toEqual({
+      number: 5,
+      repo: 'mmnto-ai/totem',
+    });
+  });
+
+  it('returns null for a topic, for issue 0, for a non-numeric hash and for a pull URL', () => {
+    expect(parseIssueInput('a loose topic')).toBeNull();
+    expect(parseIssueInput('0')).toBeNull();
+    expect(parseIssueInput('mmnto-ai/totem#abc')).toBeNull();
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/pull/5')).toBeNull();
   });
 });

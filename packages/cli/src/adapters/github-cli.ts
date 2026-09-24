@@ -76,7 +76,8 @@ export class GitHubCliAdapter implements IssueAdapter {
         'number,title,body,labels,state',
       ],
       GhIssueSchema,
-      `issue #${issueNumber}`,
+      // The failure names where the issue was looked up (mmnto-ai/totem#2943).
+      `issue #${issueNumber}${this.repo ? ` in ${this.repo}` : ''}`,
       this.cwd,
     );
     return {
