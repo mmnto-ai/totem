@@ -1219,7 +1219,8 @@ function gitRead(args) {
     encoding: 'utf-8',
     timeout: Math.max(250, Math.min(10000, remaining)),
     // The deadline must bound the hook: SIGTERM can be ignored by a wedged
-    // child, SIGKILL cannot (mmnto-ai/totem#2932; TerminateProcess on win32).
+    // child, SIGKILL cannot be caught (mmnto-ai/totem#2932; TerminateProcess
+    // on win32 either way).
     killSignal: 'SIGKILL',
   });
   if (res.error || typeof res.status !== 'number' || res.status !== 0) return '';
