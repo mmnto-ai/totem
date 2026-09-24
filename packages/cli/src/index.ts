@@ -79,7 +79,12 @@ function handleError(err: unknown): never {
     console.error('  (Set TOTEM_DEBUG=1 for full stack trace)');
   }
 
-  process.exit(1);
+  // A refusal to read or write in the wrong place (`REPO_ROOT_REFUSED`: a mail
+  // reader verb started outside any repository or inside a linked worktree —
+  // mmnto-ai/totem#2946, mmnto-ai/totem#2968) exits 2, the NOT-DERIVED family
+  // the poll's own identity arms use: nothing was derived, and the cure is the
+  // directory, not the code. Every other error keeps the boundary's exit 1.
+  process.exit(err instanceof Error && 'code' in err && err.code === 'REPO_ROOT_REFUSED' ? 2 : 1);
 }
 
 const program = new Command();
@@ -1042,10 +1047,11 @@ const mailCmd = program
           if (exitCode !== 0) process.exitCode = exitCode;
           return;
         }
-        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
-        // so the wrapper returns the code and we set process.exitCode (never
-        // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
-        // no self agent resolves: the verdict is NOT DERIVED, not a clean inbox.
+        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail throws only
+        // the root refusal (handleError below maps it to exit 2), so the wrapper
+        // returns the code and we set process.exitCode (never process.exit
+        // mid-flow — same pattern as the ecl-gc action). Exit 2 when no self
+        // agent resolves: the verdict is NOT DERIVED, not a clean inbox.
         const { exitCode } = await mailCommand({ json, recursive, workspace, asSeat, allSeats });
         if (exitCode !== 0) process.exitCode = exitCode;
       } catch (err) {

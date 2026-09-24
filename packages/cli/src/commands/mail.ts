@@ -30,8 +30,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  classifyTotemRepoRootSync,
   isPathSafeAgentId,
   knownCohortAgents,
+  mainCheckoutFromGitFileSync,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
   // (session-context.mjs), so the #2339 dynamic-import shape is structurally
   // impossible for this name; mail.ts is itself action-lazy-loaded by index.ts
@@ -685,22 +687,79 @@ const COMMA_TO_HINT =
   'a comma list is not a recipient — ADR-098 `to:` is single-valued; send one directed dispatch per recipient';
 
 /**
+ * The reader verbs' repository root — the poll, `mail mark`, `ecl-gc` and its
+ * compaction: everything that reads a workspace as a verdict or writes a
+ * `processed/` cursor. `repoRoot ?? cwd` is the WALK START, never the root
+ * (mmnto-ai/totem#2312); the walk prefers the repository toplevel over a stray
+ * `.totem/` under a subdirectory (mmnto-ai/totem#2938), and two of the classes
+ * it can land on are REFUSED here, loudly and before any read or write:
+ *
+ * - `none` — no `.git` or `.totem/` at or above the start
+ *   (mmnto-ai/totem#2946). The old fallback used the start itself, so a poll
+ *   from such a directory derived a workspace of nothing and rendered "inbox
+ *   clean", and a standalone mark minted a `processed/` tree there that no
+ *   poll ever reads.
+ * - `worktree` — the nearest `.git` is a FILE, a linked worktree's pointer
+ *   (mmnto-ai/totem#2968). A worktree hosts no seat: its orchestration tree is
+ *   gitignored and no poll enumerates it as a workspace child, so a mark from
+ *   one lands in a phantom store the resident never drains and the source
+ *   stays unread forever. The send side refuses the same class
+ *   (mmnto-ai/totem#2930); the reader now matches it, naming the resident.
+ *
+ * A `.totem`-only tree with no `.git` at any height (a bare fixture) is a
+ * toplevel and is served. The refusal is `REPO_ROOT_REFUSED`, which the CLI
+ * maps to exit 2 — the NOT-DERIVED family — because nothing was derived and
+ * the cure is the directory, not identity.
+ */
+export function resolveReaderRepoRoot(
+  repoRootOpt: string | undefined,
+  cwd: string,
+  verb: string,
+): string {
+  const cls = classifyTotemRepoRootSync(repoRootOpt, cwd);
+  switch (cls.kind) {
+    case 'toplevel':
+      return cls.root;
+    case 'worktree': {
+      const at = cls.resident !== null ? ` at ${cls.resident}` : '';
+      throw new TotemError(
+        'REPO_ROOT_REFUSED',
+        `${cls.root}: its .git is a file (a worktree's or a submodule's pointer${cls.resident !== null ? at : ', not into any worktree layout'}) — a worktree hosts no seat and no poll enumerates it, so ${verb} there reads an empty workspace or mints a processed/ store the resident never drains; refusing (mmnto-ai/totem#2968)`,
+        `run ${verb} from the resident checkout${at} that hosts your seat — its root or any subdirectory.`,
+      );
+    }
+    case 'none':
+      throw new TotemError(
+        'REPO_ROOT_REFUSED',
+        `not inside a repository: no .git or .totem/ marker at or above ${cls.start} — ${verb} there would read an empty workspace as clean or mint a phantom processed/ tree; refusing (mmnto-ai/totem#2946)`,
+        `run ${verb} from inside the checkout that hosts your seat — its root or any subdirectory.`,
+      );
+  }
+}
+
+/**
  * Programmatic entry point. Returns a structured `MailPollResult` for
  * consumers that want to render their own output (hooks, MCP audits,
  * future surfaces). The CLI wrapper calls this then formats the result
  * for human consumption.
  *
- * Never throws — filesystem failures degrade to warnings on the result.
+ * Never throws on a filesystem failure — those degrade to warnings on the
+ * result. The one throw is the root refusal (`REPO_ROOT_REFUSED`) before any
+ * scan: a start outside any repository or inside a linked worktree
+ * (mmnto-ai/totem#2946, mmnto-ai/totem#2968; see `resolveReaderRepoRoot`).
  */
 export function pollMail(opts: MailCommandOptions = {}): MailPollResult {
   const env = opts.env ?? process.env;
-  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync`):
-  // from a SUBDIRECTORY (e.g. `.totem/orchestration/<seat>/processed/`), the
-  // old `path.resolve(cwd)` made `repoRoot` the subdir and `workspace =
+  // Walk-start, not definitive root (`resolveReaderRepoRoot`): from a
+  // SUBDIRECTORY (e.g. `.totem/orchestration/<seat>/processed/`), the old
+  // `path.resolve(cwd)` made `repoRoot` the subdir and `workspace =
   // dirname(subdir)` garbage — `enumerateOutboxes` scanned nothing real and the
-  // poll rendered a false-clean inbox (mmnto-ai/totem#2312). Explicit
-  // `--workspace` / `TOTEM_WORKSPACE` overrides are untouched below.
-  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+  // poll rendered a false-clean inbox (mmnto-ai/totem#2312). A stray `.totem/`
+  // under a subdirectory did the same until the toplevel won the walk
+  // (mmnto-ai/totem#2938); a start outside any repository or in a worktree is
+  // refused rather than read as clean. Explicit `--workspace` /
+  // `TOTEM_WORKSPACE` overrides are untouched below.
+  const repoRoot = resolveReaderRepoRoot(opts.repoRoot, process.cwd(), 'totem mail');
 
   const workspaceRaw = opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot);
   const workspace = path.resolve(workspaceRaw);
@@ -1726,8 +1785,10 @@ export async function mailCommand(
     // the gitignored config absent — falsification-leg F4), fall back to the
     // env-declared list itself: a multi-seat env declaration is the
     // gate-exempt operator-declared shape, and narrowing it is exactly what
-    // this flag is for.
-    const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+    // this flag is for. The reader's own root rule applies here too, so a
+    // `--as` poll from a worktree or outside any repository is refused with the
+    // root line, never with a misleading "not a seat resolved for this repo".
+    const repoRoot = resolveReaderRepoRoot(opts.repoRoot, process.cwd(), 'totem mail');
     const structuralEnv = { ...env };
     delete structuralEnv['TOTEM_SELF_AGENT'];
     let resolved = resolveSelfAgents(repoRoot, structuralEnv);
@@ -2389,7 +2450,7 @@ function resolveSendRepoRoot(start: string, env: Record<string, string | undefin
         // a workspace child), and a seat registered there by `totem seat add`
         // would give the send a home no reader visits — the phantom class
         // again, reached through the hosting hint (re-arm F1, reproduced).
-        const main = mainCheckoutFromGitFile(gitPath);
+        const main = mainCheckoutFromGitFileSync(gitPath);
         throw new TotemError(
           'MAIL_SEND_FAILED',
           `${dir}: its .git is a file (a worktree's or a submodule's pointer${main !== null ? ` at ${main}` : ', not into any worktree layout'}), never a seat's host — refusing to mint an outbox no poll reads (mmnto-ai/totem#2930)`,
@@ -2449,27 +2510,6 @@ function samePath(a: string, b: string): boolean {
   const ra = path.resolve(a);
   const rb = path.resolve(b);
   return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
-}
-
-/**
- * The main checkout a worktree's `.git` file points at
- * (`gitdir: <main>/.git/worktrees/<name>`), or null when the pointer has
- * another shape (a submodule's `.git/modules/…`, an unreadable file). Used
- * only to NAME the resident in a refusal — never to redirect a write there.
- */
-function mainCheckoutFromGitFile(gitFile: string): string | null {
-  let text: string;
-  try {
-    text = fs.readFileSync(gitFile, 'utf-8');
-    // totem-context: intentional cleanup — the pointer is read only to name the resident checkout in the refusal's hint; an unreadable pointer degrades the hint to "another repository" and the refusal itself still fires.
-  } catch {
-    return null;
-  }
-  const m = /^gitdir:\s*(.+)$/m.exec(text);
-  if (m === null) return null;
-  const gitdir = path.resolve(path.dirname(gitFile), m[1]!.trim()).replace(/\\/g, '/');
-  const idx = gitdir.lastIndexOf('/.git/worktrees/');
-  return idx > 0 ? path.resolve(gitdir.slice(0, idx)) : null;
 }
 
 /**
@@ -2885,13 +2925,15 @@ export interface MailMarkResult {
  */
 export function markSource(source: string, opts: MailMarkOptions = {}): MailMarkResult {
   const env = opts.env ?? process.env;
-  // Walk-start, not definitive root (CR @1480): use the SAME resolver as
-  // `pollMail` (mail.ts) and `eclCompact` (ecl-gc.ts) so a subdirectory
-  // invocation lands the mark in the REAL repo root's `processed/` store — where
-  // the poll reads it — instead of writing a phantom `<subdir>/.totem` mark that
-  // no poll would ever find. A marker-less start (bare test fixture) is used
-  // as-is by the resolver's own fallback.
-  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+  // Walk-start, not definitive root (CR @1480): the SAME resolver as `pollMail`
+  // and `eclCompact`, so a subdirectory invocation lands the mark in the REAL
+  // repo root's `processed/` store — where the poll reads it — instead of a
+  // phantom `<subdir>/.totem` mark no poll would ever find. The mark is the
+  // verb that MINTS a cursor, so the two refusals matter most here: a start
+  // outside any repository (the old fallback minted `processed/` under it,
+  // mmnto-ai/totem#2946) and a linked worktree (a store the resident never
+  // drains — the source re-surfaces as unread forever, mmnto-ai/totem#2968).
+  const repoRoot = resolveReaderRepoRoot(opts.repoRoot, process.cwd(), 'totem mail mark');
 
   // Read + parse the source (HARD error if missing/unparseable — parity with
   // `mailReply`): the `to:` field selects the broadcast-vs-directed store, and a

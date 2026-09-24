@@ -27,12 +27,14 @@ import {
   checkSecretsFileTracked,
   checkStaleRules,
   checkStrategyRoot,
+  checkStrayTotemMarkers,
   checkUpgradeCandidates,
   CLAUDE_MD_REDIRECT_MAX_BYTES,
   doctorCommand,
   doctorGateFailed,
   findLegacyGrandfatheredRules,
   findStaleRules,
+  findStrayTotemMarkers,
   MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
   NON_CODE_THRESHOLD,
@@ -1201,6 +1203,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Stale Rules',
   'Grandfathered Rules',
   'Freeze state',
+  'Stray Markers',
   'Estate',
   'Seat Identity',
 ] as const;
@@ -1702,6 +1705,70 @@ describe('checkSecretsFileTracked', () => {
     // tmpDir is not a git repo — execSync will throw, which we catch
     const result = checkSecretsFileTracked(tmpDir);
     expect(result.status).toBe('pass');
+  });
+});
+
+// ─── Stray `.totem/` markers (mmnto-ai/totem#2938) ───────
+
+describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('passes when the only .totem/ is the root marker', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'lessons'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'packages', 'cli', 'src'), { recursive: true });
+    const result = checkStrayTotemMarkers(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.name).toBe('Stray Markers');
+    expect(result.gateExempt).toBeUndefined();
+  });
+
+  it('warns (gate-exempt) naming every stray, one under the root marker temp tree included, never one under node_modules or .git', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'temp', 'spec-x', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'packages', 'cli', '.totem', 'temp'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'examples', 'fixture', '.totem', 'orchestration', 'seat'), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(tmpDir, 'node_modules', 'dep', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, '.git', 'x', '.totem'), { recursive: true });
+
+    const { strays, truncated } = findStrayTotemMarkers(tmpDir);
+    expect(truncated).toBe(false);
+    expect([...strays].sort()).toEqual([
+      '.totem/temp/spec-x/.totem',
+      'examples/fixture/.totem',
+      'packages/cli/.totem',
+    ]);
+
+    const result = checkStrayTotemMarkers(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.gateExempt).toBe(true);
+    expect(result.message).toContain('3 stray .totem/ directories');
+    expect(result.message).toContain('packages/cli/.totem');
+    expect(result.remediation).toContain('mmnto-ai/totem#2938');
+  });
+
+  it('a configured totemDir is the root marker; a bare .totem elsewhere is still a stray', () => {
+    fs.mkdirSync(path.join(tmpDir, '.tt'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'sub', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'sub2', '.tt'), { recursive: true });
+    expect([...findStrayTotemMarkers(tmpDir, '.tt').strays].sort()).toEqual([
+      'sub/.totem',
+      'sub2/.tt',
+    ]);
+  });
+
+  it('a stray is named, never descended: a marker nested inside a stray is not a second row', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'a', '.totem', 'temp', 'b', '.totem'), { recursive: true });
+    expect(findStrayTotemMarkers(tmpDir).strays).toEqual(['a/.totem']);
   });
 });
 

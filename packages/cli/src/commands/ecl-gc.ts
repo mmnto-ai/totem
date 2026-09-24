@@ -38,13 +38,18 @@ import * as path from 'node:path';
 import {
   getErrorMessage,
   isPathSafeAgentId,
-  resolveTotemRepoRootSync,
   type TotemConfig,
   TotemConfigError,
   TotemError,
 } from '@mmnto/totem';
 
-import { pollMail, resolveSelfSender, sanitizeEclBasename, type SenderFault } from './mail.js';
+import {
+  pollMail,
+  resolveReaderRepoRoot,
+  resolveSelfSender,
+  sanitizeEclBasename,
+  type SenderFault,
+} from './mail.js';
 
 // ─── Constants ──────────────────────────────────────────
 
@@ -226,11 +231,13 @@ export function planPrune(entries: DirEntryLike[], cutoff: string): PrunePlan {
  */
 export function eclGc(opts: EclGcOptions = {}): EclGcResult {
   const env = opts.env ?? process.env;
-  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync` —
-  // same seam as `pollMail`, mmnto-ai/totem#2312): from a subdir the bare
+  // Walk-start, not definitive root (`resolveReaderRepoRoot` — same seam as
+  // `pollMail`, mmnto-ai/totem#2312): from a subdir the bare
   // `path.resolve(cwd)` made `<repoRoot>/.totem/orchestration/<agent>/outbox`
-  // garbage and self-resolution would throw.
-  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+  // garbage and self-resolution would throw. A start outside any repository or
+  // in a linked worktree is refused before the scan (mmnto-ai/totem#2946,
+  // mmnto-ai/totem#2968) — this verb UNLINKS under the root it derives.
+  const repoRoot = resolveReaderRepoRoot(opts.repoRoot, process.cwd(), 'totem ecl-gc');
   const now = (opts.now ?? (() => new Date()))();
 
   // Retain-days validation (usage error) — evaluated before any scan.
@@ -571,12 +578,14 @@ export async function loadEclConfig(cwd: string): Promise<TotemConfig | undefine
  */
 export function eclCompact(opts: EclCompactOptions = {}): EclCompactResult {
   const env = opts.env ?? process.env;
-  // Walk-start, not definitive root (contract in `resolveTotemRepoRootSync` —
-  // same seam as `pollMail`, mmnto-ai/totem#2312) so the derived `workspace =
+  // Walk-start, not definitive root (`resolveReaderRepoRoot` — same seam as
+  // `pollMail`, mmnto-ai/totem#2312) so the derived `workspace =
   // parent-of-root` and the A2.2 completeness gate see the real cohort tree,
-  // not a subdir's `dirname`. Explicit `--workspace` / `TOTEM_WORKSPACE`
+  // not a subdir's `dirname`; a start outside any repository or in a linked
+  // worktree is refused before the gate (mmnto-ai/totem#2946,
+  // mmnto-ai/totem#2968). Explicit `--workspace` / `TOTEM_WORKSPACE`
   // overrides are untouched.
-  const repoRoot = resolveTotemRepoRootSync(opts.repoRoot, process.cwd());
+  const repoRoot = resolveReaderRepoRoot(opts.repoRoot, process.cwd(), 'totem ecl-gc --compact');
   const workspace = path.resolve(
     opts.workspace ?? env['TOTEM_WORKSPACE'] ?? path.dirname(repoRoot),
   );

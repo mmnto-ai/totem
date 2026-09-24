@@ -12,6 +12,7 @@ vi.mock('cross-spawn', () => ({
 import { TotemGitError } from '../errors.js';
 import { fail, ok } from '../test-utils.js';
 import {
+  classifyTotemRepoRootSync,
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
@@ -24,6 +25,7 @@ import {
   getTagDate,
   inferScopeFromFiles,
   isFileDirty,
+  mainCheckoutFromGitFileSync,
   resolveGitRoot,
   resolveTotemRepoRootSync,
 } from './git.js';
@@ -593,6 +595,122 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     } else {
       expect(path.isAbsolute(result)).toBe(true);
     }
+  });
+
+  it('prefers the repository toplevel over a nearer stray .totem/ (mmnto-ai/totem#2938)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const stray = path.join(tmpDir, 'packages', 'cli', '.totem', 'temp');
+    fs.mkdirSync(stray, { recursive: true });
+    const start = path.join(tmpDir, 'packages', 'cli', 'src');
+    fs.mkdirSync(start, { recursive: true });
+    // From beneath the stray, from inside it, and from the stray itself: the
+    // toplevel every time. Before the rule the walk stopped at packages/cli.
+    expect(findTotemRepoRootSync(start)).toBe(path.resolve(tmpDir));
+    expect(findTotemRepoRootSync(stray)).toBe(path.resolve(tmpDir));
+    expect(findTotemRepoRootSync(path.join(tmpDir, 'packages', 'cli', '.totem'))).toBe(
+      path.resolve(tmpDir),
+    );
+  });
+
+  it('a .totem-only tree with no .git at any height still resolves to its NEAREST .totem/', () => {
+    const inner = path.join(tmpDir, 'outer', 'inner');
+    fs.mkdirSync(path.join(tmpDir, 'outer', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(inner, '.totem'), { recursive: true });
+    const start = path.join(inner, 'deep');
+    fs.mkdirSync(start);
+    // Guarded like the null case: a host that nests tmp under a checkout has a
+    // .git above, and the toplevel rule then applies instead.
+    if (findRepoRootSync(tmpDir) === null) {
+      expect(findTotemRepoRootSync(start)).toBe(path.resolve(inner));
+    } else {
+      expect(path.isAbsolute(findTotemRepoRootSync(start)!)).toBe(true);
+    }
+  });
+});
+
+describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-classify-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a .git DIRECTORY at the root is the toplevel, from the root and from a subdirectory', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const sub = path.join(tmpDir, 'src', 'deep');
+    fs.mkdirSync(sub, { recursive: true });
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
+    expect(classifyTotemRepoRootSync(undefined, tmpDir)).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
+  });
+
+  it('a .git FILE is a worktree, naming the resident its gitdir pointer leads to', () => {
+    const resident = path.join(tmpDir, 'res');
+    fs.mkdirSync(path.join(resident, '.git', 'worktrees', 'wt'), { recursive: true });
+    const wt = path.join(tmpDir, 'wt');
+    fs.mkdirSync(path.join(wt, 'a', 'b'), { recursive: true });
+    fs.mkdirSync(path.join(wt, '.totem'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(resident, '.git', 'worktrees', 'wt')}\n`,
+    );
+    expect(classifyTotemRepoRootSync(path.join(wt, 'a', 'b'), '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(wt),
+      resident: path.resolve(resident),
+    });
+  });
+
+  it('a .git FILE with another pointer shape is a worktree with no resident named (a submodule)', () => {
+    const sub = path.join(tmpDir, 'sub');
+    fs.mkdirSync(sub);
+    fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../.git/modules/sub\n');
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(sub),
+      resident: null,
+    });
+  });
+
+  it('a .totem-only tree is a toplevel (the bare-fixture contract)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    if (findRepoRootSync(tmpDir) === null) {
+      expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere')).toEqual({
+        kind: 'toplevel',
+        root: path.resolve(tmpDir),
+      });
+    } else {
+      expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere').kind).not.toBe('none');
+    }
+  });
+
+  it('no marker at any height is `none`, carrying the resolved start', () => {
+    const bare = path.join(tmpDir, 'bare');
+    fs.mkdirSync(bare);
+    if (findTotemRepoRootSync(bare) === null) {
+      expect(classifyTotemRepoRootSync(bare, '/elsewhere')).toEqual({
+        kind: 'none',
+        start: path.resolve(bare),
+      });
+    } else {
+      expect(classifyTotemRepoRootSync(bare, '/elsewhere').kind).not.toBe('none');
+    }
+  });
+
+  it('mainCheckoutFromGitFileSync: a relative worktree pointer names the main checkout; a missing file is null', () => {
+    const gitFile = path.join(tmpDir, '.git');
+    fs.writeFileSync(gitFile, 'gitdir: ../main/.git/worktrees/x\n');
+    expect(mainCheckoutFromGitFileSync(gitFile)).toBe(path.resolve(tmpDir, '..', 'main'));
+    expect(mainCheckoutFromGitFileSync(path.join(tmpDir, 'absent'))).toBeNull();
   });
 });
 

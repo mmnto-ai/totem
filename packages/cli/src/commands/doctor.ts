@@ -1187,6 +1187,101 @@ export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): Diagn
   };
 }
 
+// ─── Stray `.totem/` markers (mmnto-ai/totem#2938) ───────
+
+/** Directories the stray-marker sweep never descends into. */
+const STRAY_MARKER_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'coverage', '.lancedb']);
+/** Depth and breadth bounds: a doctor row, not a crawl. */
+const STRAY_MARKER_MAX_DEPTH = 8;
+const STRAY_MARKER_MAX_DIRS = 20_000;
+/** How many strays the row names before it counts the rest. */
+const STRAY_MARKER_LIST_MAX = 8;
+
+/**
+ * Every `.totem/` (or `<totemDir>/`) directory under `root` that is not the
+ * repository's own root marker, as forward-slash paths relative to `root`,
+ * in directory order. The root marker itself is descended (its `temp/` trees
+ * are where `totem spec` scratch checkouts leave strays); a STRAY is never
+ * descended, since whatever it holds is the same residue. Unreadable
+ * directories are skipped, not reported. `truncated` is set when the breadth
+ * bound stopped the sweep, so a clean answer is never claimed for a tree the
+ * row did not finish.
+ */
+export function findStrayTotemMarkers(
+  root: string,
+  totemDir = '.totem',
+): { strays: string[]; truncated: boolean } {
+  const rootMarker = path.resolve(root, totemDir);
+  const strays: string[] = [];
+  let visited = 0;
+  let truncated = false;
+  const walk = (dir: string, depth: number): void => {
+    if (truncated || depth > STRAY_MARKER_MAX_DEPTH) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+      // totem-context: an unreadable directory is skipped by design — the sweep reports the strays it can see, and a permission hole is not a stray; the breadth bound below is the honesty guard.
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (++visited > STRAY_MARKER_MAX_DIRS) {
+        truncated = true;
+        return;
+      }
+      const full = path.join(dir, entry.name);
+      const isMarker = entry.name === totemDir || entry.name === '.totem';
+      if (isMarker && path.resolve(full) !== rootMarker) {
+        strays.push(path.relative(root, full).split(path.sep).join('/'));
+        continue;
+      }
+      if (!isMarker && STRAY_MARKER_SKIP_DIRS.has(entry.name)) continue;
+      walk(full, depth + 1);
+    }
+  };
+  walk(path.resolve(root), 0);
+  return { strays, truncated };
+}
+
+/**
+ * Sensor row (never gates): `.totem/` directories under this repository that
+ * are not its root marker. Until mmnto-ai/totem#2938 the nearest-marker walk
+ * every reader verb shares stopped at one of these — a poll from
+ * `<repo>/packages/cli` read an empty workspace as clean, a mark landed in a
+ * store no poll drains. The walk now prefers the repository toplevel, so a
+ * stray no longer captures a verb; the row closes the loop on the residue
+ * and on whatever is still minting it.
+ */
+export function checkStrayTotemMarkers(cwd: string, totemDir = '.totem'): DiagnosticResult {
+  const name = 'Stray Markers';
+  const { strays, truncated } = findStrayTotemMarkers(cwd, totemDir);
+  const suffix = truncated
+    ? ` (sweep stopped at ${STRAY_MARKER_MAX_DIRS} directories — the list may be incomplete)`
+    : '';
+  if (strays.length === 0) {
+    return {
+      name,
+      status: truncated ? 'warn' : 'pass',
+      message: `no ${totemDir}/ directory under this repository other than its root marker${suffix}`,
+      ...(truncated ? { gateExempt: true as const } : {}),
+    };
+  }
+  const shown = strays.slice(0, STRAY_MARKER_LIST_MAX).join(', ');
+  const more =
+    strays.length > STRAY_MARKER_LIST_MAX
+      ? ` (+${strays.length - STRAY_MARKER_LIST_MAX} more)`
+      : '';
+  return {
+    name,
+    status: 'warn',
+    gateExempt: true,
+    message: `${strays.length} stray ${totemDir}/ director${strays.length === 1 ? 'y' : 'ies'} under this repository, none of them its root marker: ${shown}${more}${suffix}`,
+    remediation:
+      'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each stray, or the tool that mints it; a committed fixture belongs under a path no verb runs from.',
+  };
+}
+
 // ─── AGENTS.md canonical-redirect check (Proposal 272 § 6.7 / mmnto-ai/totem#1905) ───
 
 /**
@@ -2580,6 +2675,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, totemDir, doctorThresholds),
     await checkGrandfatheredRules(cwd, totemDir),
     await checkFreezes(cwd, totemDir),
+    checkStrayTotemMarkers(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.

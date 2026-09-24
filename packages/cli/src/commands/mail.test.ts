@@ -1607,18 +1607,66 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     expect(result.workspace).toBe(path.resolve(tmpRoot)); // parent of anchor-repo
   });
 
-  it('a marker-less start dir falls back to the given dir when the ancestry is marker-free', () => {
-    // The literal pre-#2312 behavior: `findTotemRepoRootSync` returns null ⇒
-    // repoRoot stays the given dir ⇒ workspace = its parent. Guarded like
+  it('a marker-less start is REFUSED before any scan — never an empty workspace read as clean (mmnto-ai/totem#2946)', () => {
+    // The old fallback used the start itself: repoRoot = the bare dir, workspace
+    // = its parent, nothing enumerated, "inbox clean" rendered. Guarded like
     // findRepoRootSync's own null-case test — some dev hosts nest tmp under a
     // marker (e.g. `~/.totem`), where the walk anchors upward instead.
     const bare = mkDir(path.join(tmpRoot, 'bare-parent', 'bare-repo'));
-    const result = pollMail({ repoRoot: bare, env: {} });
-    if (findTotemRepoRootSync(bare) === null) {
-      expect(result.workspace).toBe(path.resolve(path.join(tmpRoot, 'bare-parent')));
-    } else {
-      expect(path.isAbsolute(result.workspace)).toBe(true);
+    if (findTotemRepoRootSync(bare) !== null) {
+      expect(path.isAbsolute(pollMail({ repoRoot: bare, env: {} }).workspace)).toBe(true);
+      return;
     }
+    let thrown: unknown;
+    try {
+      pollMail({ repoRoot: bare, env: {} });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    const refusal = thrown as TotemError;
+    expect(refusal.code).toBe('REPO_ROOT_REFUSED');
+    expect(refusal.message).toContain(path.resolve(bare));
+    expect(refusal.message).toContain('mmnto-ai/totem#2946');
+    expect(refusal.recoveryHint).toContain('totem mail');
+  });
+
+  it('a stray .totem/ under a subdirectory no longer captures the poll — the toplevel wins (mmnto-ai/totem#2938)', () => {
+    const repoRoot = mkDir(path.join(workspace, 'totem'));
+    fs.mkdirSync(path.join(repoRoot, '.git'));
+    mkDir(path.join(repoRoot, 'packages', 'cli', '.totem', 'temp'));
+    const start = mkDir(path.join(repoRoot, 'packages', 'cli', 'src'));
+    writeOutbox('totem-strategy', 'strategy-claude', [
+      { name: '2026-05-18T1810Z-totem-claude.md', to: 'totem-claude', subject: 'past the stray' },
+    ]);
+    // Before the toplevel rule the walk stopped at packages/cli/.totem: repoRoot
+    // = packages/cli, workspace = packages/, nothing enumerated, inbox "clean".
+    const result = pollMail({ repoRoot: start, env: {}, allSeats: true });
+    expect(result.workspace).toBe(path.resolve(workspace));
+    expect(result.mail.map((m) => m.subject)).toEqual(['past the stray']);
+  });
+
+  it('a linked worktree is REFUSED, naming the resident its .git file points at (mmnto-ai/totem#2968)', () => {
+    const resident = selfRepoRoot();
+    mkDir(path.join(resident, '.git', 'worktrees', 'wt'));
+    const wt = mkDir(path.join(tmpRoot, 'worktrees', 'totem-wt'));
+    mkDir(path.join(wt, '.totem'));
+    const start = mkDir(path.join(wt, 'src'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(resident, '.git', 'worktrees', 'wt')}\n`,
+    );
+    let thrown: unknown;
+    try {
+      pollMail({ repoRoot: start, env: SELF_CLAUDE });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    const refusal = thrown as TotemError;
+    expect(refusal.code).toBe('REPO_ROOT_REFUSED');
+    expect(refusal.message).toContain('mmnto-ai/totem#2968');
+    expect(refusal.recoveryHint).toContain(path.resolve(resident));
   });
 });
 
@@ -2825,6 +2873,69 @@ describe('markSource — standalone mail mark (mmnto-ai/totem#2396)', () => {
     const base = path.join(selfRepoRoot(), '.totem', 'orchestration', seat, 'processed');
     return broadcast ? path.join(base, '_broadcast', name) : path.join(base, name);
   }
+
+  it('from a subdirectory holding a stray .totem/, the mark lands in the repo root store (mmnto-ai/totem#2938)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-stray.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const root = selfRepoRoot();
+    fs.mkdirSync(path.join(root, '.git'));
+    mkDir(path.join(root, 'packages', 'cli', '.totem', 'temp'));
+    const start = mkDir(path.join(root, 'packages', 'cli', 'src'));
+
+    const res = markSource(path.join(outbox, name), { repoRoot: start, env: SOLO });
+    expect(res.markPath).toBe(processedPath('totem-claude', name));
+    // Nothing minted under the stray — the store the poll never drains.
+    expect(fs.existsSync(path.join(root, 'packages', 'cli', '.totem', 'orchestration'))).toBe(
+      false,
+    );
+    expect(poll({ env: SOLO }).mail).toEqual([]);
+  });
+
+  it('from a linked worktree the mark is REFUSED and nothing is minted under it (mmnto-ai/totem#2968)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-wt.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const resident = selfRepoRoot();
+    mkDir(path.join(resident, '.git', 'worktrees', 'wt'));
+    const wt = mkDir(path.join(tmpRoot, 'worktrees', 'totem-wt'));
+    mkDir(path.join(wt, '.totem'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(resident, '.git', 'worktrees', 'wt')}\n`,
+    );
+
+    let thrown: unknown;
+    try {
+      markSource(path.join(outbox, name), { repoRoot: wt, env: SOLO });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+    expect((thrown as TotemError).recoveryHint).toContain(path.resolve(resident));
+    // The phantom store the mmnto-ai/totem#2925 leg reproduced is never minted,
+    // and a refusal consumes nothing: the source stays unread for the seat.
+    expect(fs.existsSync(path.join(wt, '.totem', 'orchestration'))).toBe(false);
+    expect(poll({ env: SOLO }).mail.map((m) => m.file)).toContain(name);
+  });
+
+  it('outside any repository the mark is REFUSED — no phantom processed/ tree (mmnto-ai/totem#2946)', () => {
+    const name = '2026-07-16T2200Z-totem-claude-bare.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const bare = mkDir(path.join(tmpRoot, 'nowhere', 'start'));
+    if (findTotemRepoRootSync(bare) !== null) {
+      // Host ancestry carries a marker: the case cannot be built here.
+      expect(path.isAbsolute(bare)).toBe(true);
+      return;
+    }
+    let thrown: unknown;
+    try {
+      markSource(path.join(outbox, name), { repoRoot: bare, env: SOLO });
+    } catch (err) {
+      thrown = err;
+    }
+    expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+    expect(fs.existsSync(path.join(bare, '.totem'))).toBe(false);
+  });
 
   it('marks a directed dispatch so a subsequent poll subtracts it (consume-atomicity)', () => {
     const name = '2026-07-16T2200Z-totem-claude-handoff.md';
