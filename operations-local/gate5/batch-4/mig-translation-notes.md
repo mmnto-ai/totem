@@ -45,12 +45,18 @@ carried forward, the manifest-only refresh last.
 **What the scorer's batch-1 review and delivery changed for this batch (its receipt of
 2026-09-24T00:13Z and its delivery of 2026-09-24T00:28Z, verified at strategy `729fa215`):** engine
 typing (whitelist rule 2) is MEASURED — the frozen regex per line over the pinned tree's in-scope
-files, every firing classified by the shipped `classifyLines`; a `comment`-context firing is the
-token appearing in a doc-comment and fails the class as the header's sentence reads. So these notes
-carry that measurement per regex rule up front (`census-batch-4.txt`, the scorer's own instrument
-`class-review/census-comment-firings.mjs` at `729fa215`, run by the translator over this batch's
-eight regex rules with the same staging install and tree; counts below): **zero comment-context
-firings on all eight at this tree.** The batch-1 class set is DELIVERED as data: five ast-grep rows
+files, every firing classified by the shipped `classifyLines`; the scorer's reading counts TWO
+appearances of the token, either of which fails the class as the header's sentence reads: a
+`comment`-context firing over an in-scope file, or a firing in a PROSE file (a `.md` / `.txt` line
+the classifier has no grammar for) — the batch-1 table's row 6 failed `forbidden-literal-token` on
+prose-file firings alone. So these notes carry that measurement per regex rule up front, both limbs
+(`census-batch-4.txt`, the scorer's own instrument `class-review/census-comment-firings.mjs` at
+`729fa215`, run by the translator over this batch's eight regex rules with the same staging install
+and tree; counts below): **zero comment-context firings on all eight at this tree, and prose-file
+firings on six of the eight** (`884becd4` 9, `8435c024` 12, `61dcb058` 2, `8213cd4e` 2, `b34d9515`
+13 of its 15 no-grammar lines, `7e3eefea` 1; none on `4ae0a01d`, and none on `b3e3e2b3`, whose 26
+no-grammar lines sit in shell files — four of them `#` comment lines the instrument cannot classify,
+found by reading). The batch-1 class set is DELIVERED as data: five ast-grep rows
 (`forbidden-callee-call` among them) in mmnto-ai/totem#2949 under the set id
 `static-whitelist@gate5-6cba5706`, awaiting the operator's merge word and the `@mmnto/cli` patch
 cut; the three batch-1 regex classes withheld on measured engine typing stay withheld, and two of
@@ -156,15 +162,25 @@ astGrepPattern, fileGlobs}` for the matcher and its scope, `curatedPair` for pai
 
 ## Disclosures for the class review (§ 3.4; no class renamed)
 
-- **The exemplar row's (A) on this batch's three rules.** The batch-3 notes disclosed that (A) was
-  ruled on prose-only records and that batch 3 extended it to source-scoped rules carrying
-  doc-comment firings. This batch's three `regex/forbidden-literal-token` rules carry NO
-  comment-context firing at this tree: `4ae0a01d` is prose-only (`docs/wiki/**/*.md`, 0 firings);
-  `884becd4` and `8435c024` reach scripts and config files beside prose (`**/*.sh`, `**/*.yml`,
-  `**/package.json`, `**/Makefile`, …) and every firing at this tree sits in a `.md` or `.txt` file
-  the classifier has no grammar for (9 and 12 `no-grammar` lines, none in a source file). So the
-  batch-3 question (whether (A) reaches a source-scoped rule with doc-comment firings) is not raised
-  again by these three; they read under (A) as ruled, with the scope disclosed.
+- **Rule 2's prose limb on this batch, measured (the leg's b4-F1).** The scorer reads rule 2 as two
+  appearances of the token — in a doc-comment of an in-scope file, or in a prose file — and failed
+  the batch-1 exemplar row (`6ad0d4d5`, row 6) on prose-file firings alone. Six regex rules of this
+  batch carry prose-file firings at this tree. The three `regex/forbidden-literal-token` rules:
+  `884becd4` (9, all `.md`; its scope also reaches `.sh`, `.yml`, `.yaml`, `Makefile`), `8435c024`
+  (12, `.md`; its scope also reaches `.sh`, `.yml`, `.yaml`, `package.json`, `.txt`), `4ae0a01d`
+  (prose-only scope, 0 firings) — none carries a comment-context firing, so the batch-3 question
+  (whether (A) reaches a source-scoped rule with doc-comment firings) is not raised again; they
+  read under (A) as ruled (admission measured at the intake pin, flagged on R6), with the scope
+  disclosed. The two withheld carry-overs: `61dcb058` (2: the compiled-rules exports quoting its
+  pattern) and `b34d9515` (13 `.md` + 2 `.json`) — the pair is withheld already. **The two NEW
+  regex pairs whose scopes are prose-only sit in row 6's exact position under the scorer's reading
+  as written:** `8213cd4e` (2: an export quoting the pattern; a changelog line, a real instance of
+  the shape) and `7e3eefea` (1: a README heading) — a prose-only regex class fails rule 2 as the
+  header's sentence reads unless the HELD scope clause (C) applies; the notes measure, the review
+  types them. `b3e3e2b3`'s 26 firings are all in shell files (no prose file, no classifier
+  grammar); four of them are `#` comment lines the instrument cannot classify — found by reading,
+  disclosed for the comment limb. The first draft of these notes stated only the comment limb (the
+  leg's finding); the headline in the translation commit message carries that first wording.
 - **Two "missing X" names, and what the record decides.** `heading-missing-required-separator`
   (`7e3eefea`) and `command-missing-required-env-token` (`b3e3e2b3`) name an absence, as batch 3's
   `typeof-comparison-missing-null-guard` did — but here the absent thing is a literal token shape on
@@ -172,7 +188,15 @@ astGrepPattern, fileGlobs}` for the matcher and its scope, `curatedPair` for pai
   `requires:` decides syntactically and exactly, with no semantic property in the name. The
   rule-1 question the batch-3 name raised (a semantic "null guard") does not arise; disclosed so the
   review can say whether the naming convention (`<shape>-missing-<token>`) is acceptable for an
-  absence construct.
+  absence construct. Precedents, disclosed (the leg's b4-F5): four earlier names already use
+  `-missing-` (`callee-literal-arg-missing-option`, `constructor-literal-arg-missing-prefix`,
+  `property-key-missing-optional-marker`, `command-arg-missing-separator`), and batch 3's
+  `command-arg-missing-separator` (`5da43ea6`: a git subcommand invocation with no `--` separator on
+  the line — a (ii) line-window row by the same mechanics) has the same shape as
+  `command-missing-required-env-token` with a different required token. The notes' own rule
+  ("shared with batches 1–3 where the shape is theirs") would put the two under one name; § 3.4
+  forbids a rename after the refusal, so both names stand as named and the review decides whether
+  they are one row — as for `089b0c62` below.
 - **`forbidden-object-member-call` is a new name for a shape batch 1 folded into
   `forbidden-callee-call`.** `089b0c62`'s matcher is `console.$METHOD($$$ARGS)` — the callee's
   property is a metavariable, so the class is "a call whose callee is a member of a fixed object,
@@ -235,21 +259,24 @@ regex rules of this batch. It counts RAW per-line legacy firings by the shipped 
 classifier, before the runtime's suppression (its own header says so). Per rule, `code · comment ·
 string · other (no-grammar)`:
 
-| Rule       | code | comment | string | other         | total | where the firings sit                                                                                   |
-| ---------- | ---- | ------- | ------ | ------------- | ----- | ------------------------------------------------------------------------------------------------------- |
-| `884becd4` | 0    | 0       | 0      | 9 no-grammar  | 9     | `.md` files only (contributing docs, the compiled-rules exports, two lessons)                           |
-| `61dcb058` | 0    | 0       | 0      | 2 no-grammar  | 2     | the two compiled-rules exports quoting the legacy pattern                                               |
-| `8435c024` | 0    | 0       | 0      | 12 no-grammar | 12    | `.md` files (the exports, two lessons, two wiki pages, …)                                               |
-| `8213cd4e` | 0    | 0       | 0      | 2 no-grammar  | 2     | one export quoting the pattern; `packages/core/CHANGELOG.md:2574` (a closing keyword before three refs) |
-| `b34d9515` | 1    | 0       | 1      | 15 no-grammar | 17    | code: `totem.config.ts:57` (`.junie/skills/totem-rules/rules.md`); string: `wrap.ts:61`; the rest `.md` |
-| `7e3eefea` | 0    | 0       | 0      | 1 no-grammar  | 1     | `packages/pack-rust-architecture/README.md:22` (`## Lesson manifest`)                                   |
-| `4ae0a01d` | 0    | 0       | 0      | 0             | 0     | —                                                                                                       |
-| `b3e3e2b3` | 0    | 0       | 0      | 26 no-grammar | 26    | `.sh` files only (`.claude/hooks/*.sh`)                                                                 |
+| Rule       | code | comment | string | other         | total | where the firings sit                                                                                                                                                                                                                    |
+| ---------- | ---- | ------- | ------ | ------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `884becd4` | 0    | 0       | 0      | 9 no-grammar  | 9     | `.md` files only (contributing docs, the compiled-rules exports, two lessons)                                                                                                                                                            |
+| `61dcb058` | 0    | 0       | 0      | 2 no-grammar  | 2     | the two compiled-rules exports quoting the legacy pattern                                                                                                                                                                                |
+| `8435c024` | 0    | 0       | 0      | 12 no-grammar | 12    | `.md` files (the exports, two lessons, two wiki pages, …)                                                                                                                                                                                |
+| `8213cd4e` | 0    | 0       | 0      | 2 no-grammar  | 2     | one export quoting the pattern; `packages/core/CHANGELOG.md:2574` (a closing keyword before three refs)                                                                                                                                  |
+| `b34d9515` | 1    | 0       | 1      | 15 no-grammar | 17    | code: `totem.config.ts:57` (`.junie/skills/totem-rules/rules.md`); string: `wrap.ts:61`; 13 `.md` + 2 `.json` (`.totem/compiled-rules.json:5568`, `:5607`)                                                                               |
+| `7e3eefea` | 0    | 0       | 0      | 1 no-grammar  | 1     | `packages/pack-rust-architecture/README.md:22` (`## Lesson manifest`)                                                                                                                                                                    |
+| `4ae0a01d` | 0    | 0       | 0      | 0             | 0     | —                                                                                                                                                                                                                                        |
+| `b3e3e2b3` | 0    | 0       | 0      | 26 no-grammar | 26    | five shell files: `.claude/hooks/pre-compact.sh` 8, `.claude/hooks/content-hash.sh` 3, `tests/clean-room/stress-test.sh` 4, `tools/wind-tunnel-sha.test.sh` 8, `tools/update-wind-tunnel-sha.sh` 3; four of the 26 are `#` comment lines |
 
-So at this tree no regex rule of this batch carries a comment-context firing; the review applies the
+So at this tree no regex rule of this batch carries a comment-context firing, and six carry
+prose-file firings (the scorer's second limb; the first disclosure above); the review applies the
 rule, these notes only measure it. `no-grammar` counts firing LINES (not files) in in-scope files the
-classifier has no grammar for — counted, never skipped, the instrument's rule; the `.md` firings are
-mostly the compiled-rules exports (`.github/copilot-instructions.md`, `.junie/skills/totem-rules/rules.md`)
+classifier has no grammar for — counted, never skipped, the instrument's rule; it prints at most
+eight sample lines per context, so the per-file and per-extension figures in this table were
+replayed with the frozen regex over every in-scope line of the tree. The `.md` firings are mostly the
+compiled-rules exports (`.github/copilot-instructions.md`, `.junie/skills/totem-rules/rules.md`)
 quoting each lesson's own heading or pattern.
 
 ## Per-rule notes (manifest order)
@@ -401,13 +428,18 @@ not`** (a pre-registered `defective-source` candidate on the text, not the match
   false positives under the lesson's intent and the `window-widened` covariate removes only those;
   and the one code-context firing at this tree, `totem.config.ts:57`
   (`junie: '.junie/skills/totem-rules/rules.md'`), is totem's own skills export path, which the
-  lesson's allow-list also omits (the record keeps that firing: no allowed name on the line).
+  lesson's allow-list also omits (the record keeps that firing: no allowed name on the line). The
+  requirement is unanchored, stated: `requires:` matches `mcp/mcp.json` or `guidelines.md` anywhere
+  on the line, not only under `.junie/`, so a line carrying a disallowed `.junie/` path beside any
+  `guidelines.md` (`see .junie/foo.md and CONTRIBUTING-guidelines.md`) is a legacy firing the record
+  suppresses — removed-only by construction at line granularity (C3's rule); none such at this tree
+  beyond the four above.
 
 - Honest class: `forbidden-path-literal` (regex) — a path literal under a fixed directory outside a
   fixed allow-list; batch 1's PAIR, WITHHELD on measured engine typing — carries over as
   `intake-ineligible (engine-typing)`, kept out of the envelope at the intake pin. Census here: 0
   comment, 1 string (`packages/cli/src/commands/wrap.ts:61`), 1 code (`totem.config.ts:57`), 15
-  no-grammar.
+  no-grammar (13 `.md`, 2 `.json`).
 - Firing set: 17 → 13, added 0, removed 4 (above).
 - Differential satisfied (pair 0: `bad` `cp config.json .junie/config.json` fires; `good`
   `cp config.json .junie/mcp/mcp.json` — the target matches without the lookahead and the
@@ -417,9 +449,9 @@ not`** (a pre-registered `defective-source` candidate on the text, not the match
 ### 49. `7e3eefeaa85403d0` — rank 192 — regex — `mig-7e3eefea-lesson-heading-separator.rule.yaml`
 
 - Legacy: `pattern: ^## Lesson(?! [—–-] .+)`; globs `**/*.md`; warning. Record: `pattern: ^## Lesson`
-  - `requires: { pattern: ' [—–-] .+', scope: line }` (the lookahead's body verbatim: a space, one of
-    em dash / en dash / hyphen, a space, one or more characters; the two dashes are literal characters
-    in the YAML, single-quoted for the leading space); glob verbatim.
+  with `requires: { pattern: ' [—–-] .+', scope: line }` (the lookahead's body verbatim: a space, one
+  of em dash / en dash / hyphen, a space, one or more characters; the two dashes are literal
+  characters in the YAML, single-quoted for the leading space); glob verbatim.
 - Inventory: **(ii)**. Measured over the pinned tree: removed 0, added 0 (1 → 1): the one legacy
   firing, `packages/pack-rust-architecture/README.md:22` (`## Lesson manifest`), carries no
   separator anywhere on its line, so the line window changes nothing at this tree. The widening the
@@ -484,13 +516,19 @@ separator heading` carries `—` and is suppressed); legacy over pair 0 satisfie
 - Legacy: `pattern: \bgit\s+(?!.*LC_ALL=C)`; globs `**/*.sh`, `**/*.bash`; warning; the
   `lessonHeading` is the truncated `Git output can vary by system locale, causing parsing logic`;
   `sourceRefCites: exemplar` — the curated pair is the text strategy-claude (the scorer) wrote on
-  2026-08-19 as Prop 310 § Design 8's exemplar, and the manifest row's receipt says the pair
-  "verifies only under the § Design 8 requires form". Record: `pattern: \bgit\s+` (the legacy
+  2026-08-19 as Prop 310 § Design 8's exemplar, and the curation ledger's receipt for the row
+  (`operations/310-curation/ledger.ndjson`, row 179 — the pre-registration § 1 cites it) says the
+  pair "verifies only under the § Design 8 requires form". Record: `pattern: \bgit\s+` (the legacy
   pattern less its one lookahead) + `requires: { pattern: 'LC_ALL=C', scope: line }` (the
   lookahead's body less its `.*` window prefix — R14's `5da43ea6` mechanics); globs verbatim.
 - Inventory: **(ii)**. Measured over the pinned tree: removed 0, added 0 (26 → 26): every `git `
-  invocation in the nine in-scope shell files lacks `LC_ALL=C` on its line, so the lookahead and the
-  line window agree on all 26.
+  invocation in the in-scope shell files (26 lines across five of the nine files: `.claude/hooks/`
+  11, `tests/clean-room/stress-test.sh` 4, `tools/` 11) lacks `LC_ALL=C` on its line, so the
+  lookahead and the line window agree on all 26. The widening the window admits, stated: `requires:`
+  matches `LC_ALL=C` anywhere on the line, so an unprefixed `git` on a line that also carries
+  `LC_ALL=C` (`git status && LC_ALL=C git log`; `LC_ALL=C sort f; git diff`) is a legacy firing the
+  record suppresses — removed-only by construction at line granularity (C3's rule); none at this
+  tree.
 - **The K9 shape, disclosed:** the frozen legacy matcher fires on the curated `good`
   (`LC_ALL=C git log --oneline`: after `git ` the rest of the line carries no `LC_ALL=C`, so the
   lookahead passes) — the harness's legacy-over-pair-0 leg reports `bad=FIRES good=FIRES`, the
@@ -503,8 +541,9 @@ separator heading` carries `—` and is suppressed); legacy over pair 0 satisfie
   beside, verdict-inert; R7 names it. The translator's part is the record and this class name only.
 - Honest class: `command-missing-required-env-token` (regex) — a fixed command invocation whose line
   lacks a required literal token (`LC_ALL=C`), an absence the `line`-window `requires:` decides. New
-  pair; see the "missing X" disclosure. Census: 0 comment, 0 string, 0 code, 26 no-grammar (all
-  `.sh` under `.claude/hooks/`).
+  pair; see the "missing X" disclosure. Census: 0 comment, 0 string, 0 code, 26 no-grammar (five
+  shell files — `.claude/hooks/` 11, `tests/clean-room/stress-test.sh` 4, `tools/` 11; four of the 26
+  are `#` comment lines the instrument cannot classify, found by reading).
 - Firing set: 26 → 26, added 0, removed 0.
 - Differential satisfied (the record); legacy over pair 0 NOT satisfied (`good=FIRES`, above).
   Curator totem-claude, 2026-08-24 (the translator seat; the pair's text is the scorer's).
