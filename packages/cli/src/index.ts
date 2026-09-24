@@ -1078,21 +1078,31 @@ mailCmd
     'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
   )
   .action(
-    async (opts: {
-      to: string;
-      subject: string;
-      from?: string;
-      bodyFile?: string;
-      inReplyTo?: string;
-      priority?: string;
-      related?: string[];
-      expectedAction?: string;
-      slug?: string;
-      workspace?: string;
-    }) => {
+    async (
+      opts: {
+        to: string;
+        subject: string;
+        from?: string;
+        bodyFile?: string;
+        inReplyTo?: string;
+        priority?: string;
+        related?: string[];
+        expectedAction?: string;
+        slug?: string;
+        workspace?: string;
+      },
+      cmd: Command,
+    ) => {
       try {
         const { mailSend, mailSendCommand } = await import('./commands/mail.js');
-        await mailSendCommand(mailSend(opts));
+        // The parent `mail` command declares `--workspace` too, and Commander lets
+        // a parent claim its option even when it is typed after the subcommand
+        // (the mmnto-ai/totem#2097 seam), so the flag lands on the PARENT's scope
+        // and the local `opts` never carries it. Read it back with optsWithGlobals
+        // as the poll and `verify` actions do (mmnto-ai/totem#2939); every other
+        // option is the subcommand's own.
+        const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+        await mailSendCommand(mailSend({ ...opts, workspace }));
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);
@@ -1140,13 +1150,18 @@ mailCmd
         // Commander `--no-mark` sets `mark: false`; absent ⇒ `true` (default).
         mark?: boolean;
       },
+      cmd: Command,
     ) => {
       try {
         const { mailReply, mailSendCommand } = await import('./commands/mail.js');
         // Translate the Commander boolean-negation flag into the lib's opt-out
         // and keep `mark` out of the spread (mmnto-ai/totem#2396).
         const { mark, ...rest } = opts;
-        await mailSendCommand(mailReply(source, { ...rest, noMark: mark === false }));
+        // `--workspace` is claimed by the parent `mail` command even after the
+        // subcommand (the mmnto-ai/totem#2097 seam): read it back with
+        // optsWithGlobals (mmnto-ai/totem#2939).
+        const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+        await mailSendCommand(mailReply(source, { ...rest, workspace, noMark: mark === false }));
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);

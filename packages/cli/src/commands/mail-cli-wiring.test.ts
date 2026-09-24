@@ -21,6 +21,7 @@ import { describe, expect, it, vi } from 'vitest';
 interface WiringHandlers {
   mailCommand: (opts: Record<string, unknown>) => void;
   deriveSeatCommand: (opts: Record<string, unknown>) => void;
+  mailSend: (opts: Record<string, unknown>) => void;
   mailReply: (source: string, opts: Record<string, unknown>) => void;
   markSource: (source: string, opts: Record<string, unknown>) => void;
   mailVerify: (target: string, opts: Record<string, unknown>) => void;
@@ -87,17 +88,34 @@ function buildMailProgram(handlers: WiringHandlers): Command {
     );
 
   mailCmd
+    .command('send')
+    .requiredOption('--to <agent>', 'Recipient agent-id')
+    .requiredOption('--subject <text>', 'Subject line')
+    .option('--slug <slug>', 'Filename slug override')
+    .option('--workspace <path>', 'Workspace for dir-derived recipient validation')
+    .action((opts: Record<string, unknown>, cmd: Command) => {
+      // EXACT translation from index.ts (mmnto-ai/totem#2939): the parent `mail`
+      // claims `--workspace` even after the subcommand (the #2097 seam), so the
+      // action reads it back with optsWithGlobals and spreads its own opts first.
+      const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+      handlers.mailSend({ ...opts, workspace });
+    });
+
+  mailCmd
     .command('reply <source>')
     .option('--from <agent>', 'Sender agent-id')
     .option('--to <agent>', 'Override the inferred recipient')
     .option('--subject <text>', 'Override the inferred subject')
     .option('--slug <slug>', 'Filename slug override (mmnto-ai/totem#2929)')
+    .option('--workspace <path>', 'Workspace for dir-derived recipient validation')
     .option('--no-mark', 'Do NOT mark the source dispatch processed')
-    .action((source: string, opts: { mark?: boolean } & Record<string, unknown>) => {
+    .action((source: string, opts: { mark?: boolean } & Record<string, unknown>, cmd: Command) => {
       // EXACT translation from index.ts: strip the CLI-only negation flag and
-      // map it into the lib's opt-out.
+      // map it into the lib's opt-out; `--workspace` read back through the
+      // parent's scope (mmnto-ai/totem#2939).
       const { mark, ...rest } = opts;
-      handlers.mailReply(source, { ...rest, noMark: mark === false });
+      const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+      handlers.mailReply(source, { ...rest, workspace, noMark: mark === false });
     });
 
   mailCmd
@@ -127,6 +145,7 @@ function handlers() {
   return {
     mailCommand: vi.fn(),
     deriveSeatCommand: vi.fn(),
+    mailSend: vi.fn(),
     mailReply: vi.fn(),
     markSource: vi.fn(),
     mailVerify: vi.fn(),
@@ -160,6 +179,75 @@ describe('mail CLI command-surface (Commander wiring, mmnto-ai/totem#2396 + #220
     const [target, opts] = h.mailVerify.mock.calls[0]! as [string, Record<string, unknown>];
     expect(target).toBe('d.md');
     expect(opts).toEqual({ workspace: 'ws', json: true });
+  });
+
+  // ─── mmnto-ai/totem#2939: `--workspace` on send and reply reaches the lib in BOTH flag positions ───
+
+  it('`mail send --to x --subject s --workspace ws` (flag after the subcommand) reaches the lib as workspace', () => {
+    const h = handlers();
+    buildMailProgram(h).parse([
+      'node',
+      'totem',
+      'mail',
+      'send',
+      '--to',
+      'x',
+      '--subject',
+      's',
+      '--workspace',
+      'ws',
+    ]);
+    expect(h.mailSend).toHaveBeenCalledTimes(1);
+    const [opts] = h.mailSend.mock.calls[0]! as [Record<string, unknown>];
+    expect(opts).toEqual({ to: 'x', subject: 's', workspace: 'ws' });
+  });
+
+  it('`mail --workspace ws send --to x --subject s` (flag before the subcommand) reaches the lib the same way', () => {
+    const h = handlers();
+    buildMailProgram(h).parse([
+      'node',
+      'totem',
+      'mail',
+      '--workspace',
+      'ws',
+      'send',
+      '--to',
+      'x',
+      '--subject',
+      's',
+    ]);
+    expect(h.mailSend).toHaveBeenCalledTimes(1);
+    const [opts] = h.mailSend.mock.calls[0]! as [Record<string, unknown>];
+    expect(opts).toEqual({ to: 'x', subject: 's', workspace: 'ws' });
+    // The poll never fires when a subcommand is given.
+    expect(h.mailCommand).not.toHaveBeenCalled();
+  });
+
+  it('`mail reply <source> --workspace ws` reaches the lib as workspace beside the mark translation', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', 'reply', 'kit.md', '--workspace', 'ws']);
+    expect(h.mailReply).toHaveBeenCalledTimes(1);
+    const [source, opts] = h.mailReply.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(source).toBe('kit.md');
+    expect(opts).toEqual({ workspace: 'ws', noMark: false });
+  });
+
+  it('`mail --workspace ws reply <source>` (flag before the subcommand) reaches the lib the same way', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', '--workspace', 'ws', 'reply', 'kit.md']);
+    expect(h.mailReply).toHaveBeenCalledTimes(1);
+    const [, opts] = h.mailReply.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(opts).toEqual({ workspace: 'ws', noMark: false });
+  });
+
+  it('send and reply without --workspace hand the lib no workspace (the lib defaults it)', () => {
+    const h = handlers();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', 'send', '--to', 'x', '--subject', 's']);
+    const [sendOpts] = h.mailSend.mock.calls[0]! as [Record<string, unknown>];
+    expect(sendOpts['workspace']).toBeUndefined();
+    buildMailProgram(h).parse(['node', 'totem', 'mail', 'reply', 'kit.md']);
+    const [, replyOpts] = h.mailReply.mock.calls[0]! as [string, Record<string, unknown>];
+    expect(replyOpts['workspace']).toBeUndefined();
   });
 
   it('bare `mail` dispatches the poll with no seat selector', () => {
