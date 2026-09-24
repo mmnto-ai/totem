@@ -49,6 +49,170 @@ export const ESTIMATE_DISPLAY_TAG = 'Estimate';
 
 export const MAX_DIFF_CHARS = 50_000;
 export const QUERY_DIFF_TRUNCATE = 2_000;
+
+// ─── Diff truncation (mmnto-ai/totem#2954) ──────────────────────────────
+//
+// A review delivers at most `MAX_DIFF_CHARS` of the (already file-filtered)
+// diff. The cut used to land wherever the character count fell — mid-hunk,
+// mid-line — followed by a marker that named only the limit; a lane handed
+// that payload could answer in a shape the shared verdict cascade cannot
+// extract (measured: the Gemini lane abstained exactly when the code diff
+// was truncated and completed when it was whole). The cut now lands on a
+// file or hunk boundary and the marker says what was delivered and what was
+// not. ONE helper serves every assembly site and the fan's delivered-segment
+// fallback, so the persisted `<git_diff>` bytes always equal what a lane saw.
+
+/** The literal every truncation marker begins with — grep-stable across formats. */
+export const DIFF_TRUNCATION_MARKER_HEAD = '... [diff truncated';
+
+/** Where the delivered segment was cut when the diff exceeded the window. */
+export type DiffCutBoundary = 'none' | 'file' | 'hunk' | 'line' | 'char';
+
+export interface DiffTruncation {
+  /** The bytes to deliver inside the diff block: the diff whole, or the cut prefix plus the marker. */
+  delivered: string;
+  truncated: boolean;
+  /** Chars of diff content delivered (the marker excluded). */
+  deliveredChars: number;
+  totalChars: number;
+  cutAt: DiffCutBoundary;
+  /** Files whose `diff --git` header lies at or beyond the cut — nothing of them was delivered. */
+  omittedFiles: string[];
+  /** The file the cut fell inside (a hunk, line or char cut), or null at a file boundary. */
+  partialFile: string | null;
+}
+
+const FILE_HEADER_NEEDLE = '\ndiff --git ';
+const HUNK_NEEDLE = '\n@@ ';
+/** Omitted files named in the marker before the count collapses to `(+N more)`. */
+const MAX_NAMED_OMITTED = 12;
+
+interface DiffFileHeader {
+  /** Index of the `diff --git` line's first char. */
+  index: number;
+  /** The post-image (`b/`) path, or the raw remainder of the header when it does not parse. */
+  path: string;
+}
+
+function diffFileHeaders(diff: string): DiffFileHeader[] {
+  const headers: DiffFileHeader[] = [];
+  const pushHeader = (lineStart: number): void => {
+    const lineEnd = diff.indexOf('\n', lineStart);
+    const line = diff.slice(lineStart, lineEnd === -1 ? diff.length : lineEnd);
+    const m = /^diff --git a\/.+? b\/(.+)$/.exec(line);
+    headers.push({ index: lineStart, path: m ? m[1]! : line.slice('diff --git '.length) });
+  };
+  if (diff.startsWith('diff --git ')) pushHeader(0);
+  let pos = diff.indexOf(FILE_HEADER_NEEDLE);
+  while (pos !== -1) {
+    pushHeader(pos + 1);
+    pos = diff.indexOf(FILE_HEADER_NEEDLE, pos + 1);
+  }
+  return headers;
+}
+
+function omittedFilesClause(omittedFiles: readonly string[]): string {
+  if (omittedFiles.length === 0) return 'no whole file omitted';
+  const named = omittedFiles.slice(0, MAX_NAMED_OMITTED);
+  const more = omittedFiles.length - named.length;
+  return `${omittedFiles.length} file(s) not shown: ${named.join(', ')}${more > 0 ? ` (+${more} more)` : ''}`;
+}
+
+/**
+ * Cut a unified diff to at most `limit` chars of content on the latest file or
+ * hunk boundary at or before the limit (a line boundary when a single hunk is
+ * wider than the window; a hard character cut only when the diff has no
+ * newline within the window at all), and append a marker that names the
+ * delivered and total sizes, the boundary kind, the file shown in part and
+ * every whole file not shown. A diff within the limit is returned unchanged
+ * with `truncated: false`.
+ */
+export function truncateDiffForReview(diff: string, limit: number = MAX_DIFF_CHARS): DiffTruncation {
+  const totalChars = diff.length;
+  if (totalChars <= limit) {
+    return {
+      delivered: diff,
+      truncated: false,
+      deliveredChars: totalChars,
+      totalChars,
+      cutAt: 'none',
+      omittedFiles: [],
+      partialFile: null,
+    };
+  }
+
+  // `cut` is the index of the newline that ends the delivered prefix, so the
+  // prefix `diff.slice(0, cut)` is at most `limit` chars and ends on a whole
+  // line. The later of the last file boundary and the last hunk boundary wins:
+  // it delivers the most complete hunks; a file boundary at the same index is
+  // cleaner and is preferred on a tie.
+  const fileCut = diff.lastIndexOf(FILE_HEADER_NEEDLE, limit);
+  let hunkCut = diff.lastIndexOf(HUNK_NEEDLE, limit);
+  // A hunk boundary is useful only when at least one whole hunk of the SAME file
+  // is delivered before it; a cut at a file's first hunk would deliver a bare
+  // header, and the file boundary before that header (or a line boundary when
+  // the file is the first) serves better.
+  if (hunkCut > 0) {
+    const headerBefore = diff.lastIndexOf(FILE_HEADER_NEEDLE, hunkCut);
+    const fileStart = headerBefore === -1 ? 0 : headerBefore + 1;
+    const priorHunk = diff.lastIndexOf(HUNK_NEEDLE, hunkCut - 1);
+    if (priorHunk <= fileStart) hunkCut = -1;
+  }
+  let cut: number;
+  let cutAt: DiffCutBoundary;
+  if (fileCut > 0 && fileCut >= hunkCut) {
+    cut = fileCut;
+    cutAt = 'file';
+  } else if (hunkCut > 0) {
+    cut = hunkCut;
+    cutAt = 'hunk';
+  } else {
+    const lineCut = diff.lastIndexOf('\n', limit);
+    if (lineCut > 0) {
+      cut = lineCut;
+      cutAt = 'line';
+    } else {
+      cut = limit;
+      cutAt = 'char';
+    }
+  }
+
+  const prefix = diff.slice(0, cut);
+  const headers = diffFileHeaders(diff);
+  const omittedFiles = headers.filter((h) => h.index >= cut).map((h) => h.path);
+  let partialFile: string | null = null;
+  if (cutAt !== 'file') {
+    const inside = headers.filter((h) => h.index < cut).at(-1);
+    partialFile = inside === undefined ? null : inside.path;
+  }
+  const partialClause = partialFile === null ? '' : `${partialFile} shown in part; `;
+  const marker = `\n${DIFF_TRUNCATION_MARKER_HEAD}: ${prefix.length} of ${totalChars} chars delivered, cut at a ${cutAt} boundary; ${partialClause}${omittedFilesClause(omittedFiles)}] ...`;
+  return {
+    delivered: prefix + marker,
+    truncated: true,
+    deliveredChars: prefix.length,
+    totalChars,
+    cutAt,
+    omittedFiles,
+    partialFile,
+  };
+}
+
+/** The operator-facing warning for a truncated delivered diff (post file-filtering). */
+export function describeDiffTruncation(t: DiffTruncation, limit: number = MAX_DIFF_CHARS): string {
+  const partial = t.partialFile === null ? '' : `, ${t.partialFile} shown in part`;
+  return `Delivered code diff ${t.totalChars} chars exceeds the ${limit}-char review window: ${t.deliveredChars} chars delivered (cut at a ${t.cutAt} boundary), ${omittedFilesClause(t.omittedFiles)}${partial}. Re-run with a narrower --diff <range> for a whole-diff review.`;
+}
+
+/**
+ * The prompt section that follows a truncated diff block. It sits OUTSIDE the
+ * diff wrapper: a template line the assembler wrote, never content a diff
+ * author could have placed inside the untrusted block.
+ */
+export function diffTruncationNotice(t: DiffTruncation): string {
+  const partial = t.partialFile === null ? '' : `${t.partialFile} shown in part; `;
+  return `=== DIFF TRUNCATION NOTICE ===\nThe diff block above is truncated: ${t.deliveredChars} of ${t.totalChars} chars delivered, cut at a ${t.cutAt} boundary; ${partial}${omittedFilesClause(t.omittedFiles)}. Review the delivered hunks only and answer in the required format.`;
+}
 /**
  * Spec candidates REQUESTED before the delivery cap. Kept at its
  * pre-mmnto-ai/totem#2735 width: on the hybrid path the requested width IS the

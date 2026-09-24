@@ -67,7 +67,12 @@ import {
   extractStructuredVerdict,
   writeReviewedContentHashValue,
 } from './shield.js';
-import { DISPLAY_TAG, MAX_DIFF_CHARS, type ShieldFinding, TAG } from './shield-templates.js';
+import {
+  DISPLAY_TAG,
+  type ShieldFinding,
+  TAG,
+  truncateDiffForReview,
+} from './shield-templates.js';
 
 /**
  * Round index at/above which the advisory max-rounds sensor line fires. A
@@ -369,6 +374,10 @@ export async function runLane(
   invoker: LaneInvoker,
   shared: ExemptionShared,
   deliveredPrompt: string,
+  // mmnto-ai/totem#2954: a fact about the delivered payload (its truncation) that an
+  // unextractable-output abstention carries in its reason, so the operator sees the
+  // likely cause on the first run. Undefined when the payload was delivered whole.
+  abstainContext?: string,
 ): Promise<LaneRunResult> {
   // No try/catch: a throw here is classified by the fan's allSettled handler
   // (classifyRejectedLane) so the classification is not a bare swallow (finding 13).
@@ -419,7 +428,10 @@ export async function runLane(
         laneId: id,
         resolvedBackend,
         runArtifactHash: invocation.runArtifactHash,
-        reason: 'lane output not extractable by the shared Shield verdict cascade',
+        reason:
+          abstainContext === undefined
+            ? 'lane output not extractable by the shared Shield verdict cascade'
+            : `lane output not extractable by the shared Shield verdict cascade (${abstainContext})`,
       },
       runArtifact: invocation.runArtifact,
       filteredFindings: [],
@@ -963,14 +975,12 @@ export function assembleVerdict(
 /**
  * The diff segment EXACTLY as delivered inside the shared per-lane prompt's
  * `<git_diff>` block: post file-filtering, post `MAX_DIFF_CHARS` truncation
- * INCLUDING the truncation marker. Mirrors `assemblePrompt`'s truncation VERBATIM
- * (the single-lane path's assembly is untouched); used only as a fallback when the
- * `<git_diff>` block cannot be located in the assembled prompt.
+ * INCLUDING the truncation marker. The SAME helper `assemblePrompt` calls
+ * (mmnto-ai/totem#2954), so the two can never drift; used only as a fallback when
+ * the `<git_diff>` block cannot be located in the assembled prompt.
  */
 function deliveredDiffSegment(diff: string): string {
-  return diff.length > MAX_DIFF_CHARS
-    ? diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`
-    : diff;
+  return truncateDiffForReview(diff).delivered;
 }
 
 /** The `<git_diff>` block wrapper (see `wrapXml`) delimits the delivered segment. */
@@ -1288,9 +1298,15 @@ export async function runReviewFan(ctx: ReviewFanContext): Promise<void> {
   // configured-lane order — the artifact is deterministic regardless of completion
   // order. A rejected lane promise is mapped to a `failed` lane classification
   // (classifyRejectedLane) so a lane is never lost.
+  // mmnto-ai/totem#2954: when the delivered code diff was cut, every unextractable
+  // abstention names the cut in its reason.
+  const truncation = truncateDiffForReview(ctx.filteredDiff);
+  const abstainContext = truncation.truncated
+    ? `the delivered diff was truncated: ${truncation.deliveredChars} of ${truncation.totalChars} chars, cut at a ${truncation.cutAt} boundary`
+    : undefined;
   const settledLanes = await Promise.allSettled(
     ctx.laneModels.map((laneModel, index) =>
-      runLane(index, laneModel, invoker, ctx.shared, deliveredPrompt),
+      runLane(index, laneModel, invoker, ctx.shared, deliveredPrompt, abstainContext),
     ),
   );
   const laneResults: LaneRunResult[] = [];

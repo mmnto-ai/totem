@@ -47,7 +47,11 @@ import {
   runReviewFan,
   validateReviewLanes,
 } from './review-fan.js';
-import { MAX_DIFF_CHARS, type ShieldFinding } from './shield-templates.js';
+import {
+  MAX_DIFF_CHARS,
+  type ShieldFinding,
+  truncateDiffForReview,
+} from './shield-templates.js';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -417,6 +421,34 @@ describe('runLane', () => {
       'delivered-prompt',
     );
     expect(result.lane.status).toBe('abstained');
+    if (result.lane.status === 'abstained') {
+      // No context given: the bare reason, no parenthesis.
+      expect(result.lane.reason).toBe(
+        'lane output not extractable by the shared Shield verdict cascade',
+      );
+    }
+  });
+
+  // mmnto-ai/totem#2954: the abstention names the delivered payload's cut when the fan
+  // hands one in, so the operator sees the likely cause on the first run.
+  it('an unextractable abstention carries the abstain context in its reason', async () => {
+    const invoker = mapInvoker({
+      'anthropic:claude-x': completedInvocation({ content: 'not a verdict at all', seed: 'l1c' }),
+    });
+    const result = await runLane(
+      0,
+      'anthropic:claude-x',
+      invoker,
+      EMPTY_SHARED,
+      'delivered-prompt',
+      'the delivered diff was truncated: 49000 of 143519 chars, cut at a file boundary',
+    );
+    expect(result.lane.status).toBe('abstained');
+    if (result.lane.status === 'abstained') {
+      expect(result.lane.reason).toBe(
+        'lane output not extractable by the shared Shield verdict cascade (the delivered diff was truncated: 49000 of 143519 chars, cut at a file boundary)',
+      );
+    }
   });
 
   it('an extractable verdict completes with an honest severity tally + lane-blind laneId', async () => {
@@ -1431,6 +1463,67 @@ describe('runReviewFan', () => {
     // The truncated-away secret never entered the delivered payload nor the hash.
     expect(seg).not.toContain(SECRET);
     expect(capturedPrompt).not.toContain(SECRET);
+  });
+
+  // mmnto-ai/totem#2954: the fan's delivered-segment FALLBACK (no <git_diff> block in
+  // the prompt) is the same helper the assembler uses — a boundary cut with the new
+  // marker, never the old raw slice — so the persisted diffHash binds the bytes a
+  // lane would have seen.
+  it('diffHash fallback mirrors truncateDiffForReview when the prompt carries no <git_diff> block', async () => {
+    const fileA = `diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,1 @@\n-${'a'.repeat(MAX_DIFF_CHARS - 100)}\n+x\n`;
+    const fileB = `diff --git a/b.ts b/b.ts\n--- a/b.ts\n+++ b/b.ts\n@@ -1,1 +1,1 @@\n-${'b'.repeat(500)}\n+y\n`;
+    const fullDiff = fileA + fileB;
+    const invoker: LaneInvoker = async () => {
+      const content = wrapVerdict([]);
+      return {
+        content,
+        runArtifactHash: hex('g4f'),
+        runArtifact: makeRunArtifact({ content, provider: 'anthropic', model: 'claude-a' }),
+      };
+    };
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, {
+      prompt: 'a prompt with no diff block at all',
+      filteredDiff: fullDiff,
+    });
+    await runReviewFan(ctx);
+
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    const expected = truncateDiffForReview(fullDiff).delivered;
+    expect(expected).toContain('cut at a file boundary; 1 file(s) not shown: b.ts]');
+    expect(createHash('sha256').update(expected, 'utf-8').digest('hex')).toBe(
+      v.diffScope.diffHash,
+    );
+    // The old raw-slice shape would have hashed differently.
+    const oldShape =
+      fullDiff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`;
+    expect(createHash('sha256').update(oldShape, 'utf-8').digest('hex')).not.toBe(
+      v.diffScope.diffHash,
+    );
+  });
+
+  // mmnto-ai/totem#2954: an unextractable lane over a truncated payload says so in the
+  // persisted verdict's lane reason.
+  it('an abstained lane over a truncated delivered diff names the cut in the persisted reason', async () => {
+    const fullDiff = `diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,1 @@\n-${'a'.repeat(MAX_DIFF_CHARS + 500)}\n+x\n`;
+    const invoker: LaneInvoker = async () => {
+      const content = 'prose, not a verdict';
+      return {
+        content,
+        runArtifactHash: hex('g4t'),
+        runArtifact: makeRunArtifact({ content, provider: 'anthropic', model: 'claude-a' }),
+      };
+    };
+    const ctx = makeCtx(tmpDir, ['anthropic:claude-a'], invoker, { filteredDiff: fullDiff });
+    // A zero-completed fan writes the honest verdict FIRST, then hard-errors (#2452).
+    await expect(runReviewFan(ctx)).rejects.toThrow(/no completed verdict lane/);
+
+    const v = listVerdictArtifacts(tmpDir, noWarn)[0]!.artifact;
+    const lane = v.lanes[0]!;
+    expect(lane.status).toBe('abstained');
+    if (lane.status === 'abstained') {
+      expect(lane.reason).toContain('the delivered diff was truncated:');
+      expect(lane.reason).toContain(`of ${fullDiff.length} chars, cut at a line boundary`);
+    }
   });
 
   // ── Exit contract (finding 3 / Gate G5) ──
