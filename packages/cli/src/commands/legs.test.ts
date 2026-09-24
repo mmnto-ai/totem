@@ -240,11 +240,37 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(fs.existsSync(stored)).toBe(true);
     const printed = errors.join('\n');
     expect(printed).toContain(stored);
-    expect(printed).toContain('blocking=1 material=0 minor=1 folded=1');
+    expect(printed).toContain('blocking=1 material=0 minor=1 question=0 folded=1');
     // The deposit names the head the leg read, not the file's own guess.
     const written = JSON.parse(fs.readFileSync(stored, 'utf-8')) as LegDeposit;
     expect(written.diffSha).toBe(headSha);
-    expect(written.schemaVersion).toBe('1.0.0');
+    expect(written.schemaVersion).toBe('1.1.0');
+  });
+
+  // mmnto-ai/totem#2944: a QUESTION lands as itself and the summary counts it.
+  it('deposits a QUESTION finding as its own class and prints question=1', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: unknown[] };
+    const withQuestion = {
+      ...body,
+      findings: [
+        ...body.findings,
+        {
+          id: 'Q1',
+          severity: 'QUESTION',
+          file: 'packages/cli/src/commands/legs.ts',
+          line: 0,
+          claim: 'Does the gate read the merge-base or the PR base?',
+          counterexample: '',
+        },
+      ],
+    };
+    await legsDepositCommand({ from: writeFindings(withQuestion as never) });
+    const printed = errors.join('\n');
+    expect(printed).toContain('blocking=1 material=0 minor=1 question=1 folded=1');
+    const stored = legDepositPath(path.join(tmpDir, '.totem'), headSha);
+    const written = JSON.parse(fs.readFileSync(stored, 'utf-8')) as LegDeposit;
+    expect(written.findings.map((f) => f.severity)).toContain('QUESTION');
   });
 
   it('stamps readAt when neither the file nor --read-at carries one, and SAYS so', async () => {
@@ -468,7 +494,7 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     expect(line).toContain('(read 2026-09-01T00:00:00.000Z,');
     expect(line).toContain(`· head ${HEAD_SHA.slice(0, 8)} ·`);
     expect(line).toContain('· exact ·');
-    expect(line).toContain('blocking=1 material=0 folded=1');
+    expect(line).toContain('blocking=1 material=0 question=0 folded=1');
     // The path is repo-root relative and forward-slashed on every platform.
     expect(line).not.toContain(tmpDir);
   });

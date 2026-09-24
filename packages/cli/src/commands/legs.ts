@@ -159,9 +159,9 @@ export interface LegsDepositOptions {
   readAt?: string;
 }
 
-/** Render the four counts the way both verbs spell them. */
+/** Render the five counts the way both verbs spell them. */
 function renderCounts(counts: LegFindingCounts): string {
-  return `blocking=${counts.blocking} material=${counts.material} minor=${counts.minor} folded=${counts.folded}`;
+  return `blocking=${counts.blocking} material=${counts.material} minor=${counts.minor} question=${counts.question} folded=${counts.folded}`;
 }
 
 /**
@@ -581,7 +581,7 @@ export async function runLegsGate(
         ? ''
         : ` · covers ${winner.coverage.covered}/${winner.coverage.owed} owed paths`;
     const stdout = [
-      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach}${covers} · blocking=${counts.blocking} material=${counts.material} folded=${counts.folded}`,
+      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach}${covers} · blocking=${counts.blocking} material=${counts.material} question=${counts.question} folded=${counts.folded}`,
     ];
     const superseded = resolution?.superseded ?? [];
     if (superseded.length > 0) {
