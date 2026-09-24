@@ -37,17 +37,6 @@ rules:
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '54140f59be3e6e44: Issue numbers are only unique within a single repository;'
-    structuralClass: bare-issue-reference
-    record: .totem/rules/mig-54140f59-bare-issue-number-refs.rule.yaml
-    positiveFixtures:
-      - pr: 2945
-        filePath: .totem/rules/mig-54140f59-bare-issue-number-refs.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: a00534bfadee96809319421aa7f696635871f813b3d5a720e50a98520f2c7e9d
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: '4f283f5495489a19: Replacing inline fs.rmSync calls with a shared helper'
     structuralClass: forbidden-callee-call
     record: .totem/rules/mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml
@@ -78,17 +67,6 @@ rules:
         filePath: .totem/rules/mig-2266fc0d-static-named-import-totem-barrel.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: 4acd1a619d7988d4be359611e67152a23291161b6f38a702d5ad33c11f94b629
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'a190836df4daa24d: Use git adapter instead of raw git execution'
-    structuralClass: forbidden-callee-literal-arg
-    record: .totem/rules/mig-a190836d-raw-git-exec.rule.yaml
-    positiveFixtures:
-      - pr: 2945
-        filePath: .totem/rules/mig-a190836d-raw-git-exec.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: abd584ae45c1b3b715549927fb87fcad44052ef11729b394cea503fe312479bc
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
@@ -144,17 +122,6 @@ rules:
         filePath: .totem/rules/mig-1210f02d-raw-error-throw-in-cli.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: 2320dd1dd8726d2621cfa7643cde5806df612fb7707476a0460c66a310f1ee1d
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: "7056157a6bf72fa8: Instead of hardcoding .git/hooks, use 'git rev-parse"
-    structuralClass: forbidden-path-literal
-    record: .totem/rules/mig-7056157a-hardcoded-git-hooks-path.rule.yaml
-    positiveFixtures:
-      - pr: 2945
-        filePath: .totem/rules/mig-7056157a-hardcoded-git-hooks-path.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 540834ddfc9e0c8de710d2c6e8a35eba7bd6a587e8a5f3c052ed20fa9d9e609d
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
