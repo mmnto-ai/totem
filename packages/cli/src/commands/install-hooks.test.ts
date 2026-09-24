@@ -4675,7 +4675,7 @@ describe('the review-leg floor arm COMPOSED with the real gate (mmnto-ai/totem#2
       // 2/2 with an accented owed path among them: the measured result of
       // reading both sides raw.
       expect(r.stdout).toContain('· covers 2/2 owed paths ·');
-      expect(r.stdout).toContain('blocking=0 material=1 folded=1');
+      expect(r.stdout).toContain('blocking=0 material=1 question=0 folded=1');
       expect(r.stdout).not.toContain('BLOCKED');
       expect(r.status).toBe(0);
     },
