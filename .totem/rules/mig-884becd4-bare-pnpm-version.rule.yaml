@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: warning
+message: Use 'pnpm run version' (not bare 'pnpm version') to correctly trigger the Changesets workflow and update changelogs.
+
+target:
+  type: regex
+  pattern: \bpnpm\s+version\b
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/Makefile'
+      - '**/*.md'
+
+examples:
+  - bad: pnpm version
+    good: pnpm run version
+
+curation:
+  sourceLesson: lesson-884becd45e6380bd
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

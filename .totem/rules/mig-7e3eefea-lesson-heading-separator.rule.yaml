@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Manual lessons must use '## Lesson <separator> <Heading>' structure where separator is an em-dash (—), en-dash (–), or hyphen (-)
+
+target:
+  type: regex
+  pattern: ^## Lesson
+  scope:
+    fileGlobs:
+      - '**/*.md'
+
+requires:
+  pattern: ' [—–-] .+'
+  scope: line
+
+examples:
+  - bad: '## Lesson: Missing separator heading'
+    good: '## Lesson — Proper separator heading'
+
+curation:
+  sourceLesson: lesson-7e3eefeaa85403d0
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

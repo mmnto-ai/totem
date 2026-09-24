@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: GitHub Closes keyword only applies to the first issue
+
+target:
+  type: regex
+  pattern: \b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\s+#\d+\s*,\s*#\d+
+  scope:
+    fileGlobs:
+      - '**/CHANGELOG.md'
+      - .github/**/*.md
+      - .changeset/*.md
+
+examples:
+  - bad: 'Closes #1006, #1005, #1007'
+    good: 'Closes #1006. Closes #1005. Closes #1007.'
+
+curation:
+  sourceLesson: lesson-8213cd4e21b375ba
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

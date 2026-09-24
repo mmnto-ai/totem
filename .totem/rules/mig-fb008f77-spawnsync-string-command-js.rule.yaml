@@ -1,0 +1,21 @@
+schemaVersion: 1
+severity: warning
+message: spawnSync called without an argument array — use spawnSync(cmd, [arg1, arg2], opts) instead of string interpolation to avoid shell injection and path-with-spaces bugs
+
+target:
+  type: ast-grep
+  language: javascript
+  pattern: spawnSync($CMD, { $$$OPTS })
+  scope:
+    fileGlobs:
+      - '**/*.js'
+
+examples:
+  - bad: 'spawnSync(`git commit -m "${message}"`, { shell: true, stdio: ''inherit'' });'
+    good: "spawnSync('git', ['commit', '-m', message], { stdio: 'inherit' });"
+
+curation:
+  sourceLesson: lesson-fb008f77a1f5a49a
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
