@@ -100,6 +100,7 @@ vi.mock('../utils.js', () => ({
 import {
   deriveOrientReport,
   orientCommand,
+  type OrientParkedEntry,
   type OrientReport,
   renderOrientForSession,
   renderReport,
@@ -194,6 +195,91 @@ describe('orient per-section failure isolation', () => {
     expect(r.parked).toEqual([
       { subsystem: 'embedder', since: '2026-01-01', reason: 'blocked. extra', provenance: 'local' },
     ]);
+  });
+
+  // ─── mmnto-ai/totem#2937: a local mirror of a cohort freeze is ONE line ───
+  // The doctrine snapshot is staged as an installed package under the temp
+  // repo root; the REAL readEffectiveFreezes walks to it from repoRoot.
+  function installDoctrineSnapshot(frozen: unknown[], version = '0.2.0'): void {
+    const pkgDir = path.join(tmpRoot, 'node_modules', '@mmnto', 'strategy-doctrine');
+    fs.mkdirSync(pkgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ name: '@mmnto/strategy-doctrine', version }),
+    );
+    fs.writeFileSync(path.join(pkgDir, 'freeze.json'), JSON.stringify({ frozen }));
+  }
+  const COHORT_HOLD = {
+    subsystem: 'rule-compilation (legacy lesson-compile path)',
+    id: 'rule-compilation',
+    scope: 'cohort',
+    since: '2026-05-17',
+    reason: 'parked. cohort prose',
+    tracking: 'the board',
+    'do-not': ['run the compile'],
+  };
+
+  it('collapses a local mirror of a cohort freeze into one entry naming both provenances (mmnto-ai/totem#2937)', async () => {
+    installDoctrineSnapshot([COHORT_HOLD]);
+    fs.writeFileSync(
+      path.join(tmpRoot, '.totem', 'freeze.json'),
+      JSON.stringify({
+        frozen: [{ ...COHORT_HOLD, scope: 'local', reason: 'CI-visible mirror. see note' }],
+      }),
+    );
+    await runJson();
+    const r = parseJson();
+    // One entry, the cohort entry's fields, the mirror's presence recorded.
+    expect(r.parked).toEqual([
+      {
+        subsystem: COHORT_HOLD.subsystem,
+        id: 'rule-compilation',
+        since: '2026-05-17',
+        reason: 'parked. cohort prose',
+        tracking: 'the board',
+        provenance: 'cohort',
+        sourceVersion: '0.2.0',
+        mirroredLocally: true,
+      },
+    ]);
+  });
+
+  it('flags a mirror whose bound fields drift, and keeps a local id the snapshot lacks as its own line (mmnto-ai/totem#2937)', async () => {
+    installDoctrineSnapshot([COHORT_HOLD]);
+    fs.writeFileSync(
+      path.join(tmpRoot, '.totem', 'freeze.json'),
+      JSON.stringify({
+        frozen: [
+          { ...COHORT_HOLD, scope: 'local', since: '2026-05-18' },
+          { subsystem: 'embedder', id: 'embedder', since: '2026-01-01' },
+        ],
+      }),
+    );
+    await runJson();
+    const parked = parseJson().parked as OrientParkedEntry[];
+    expect(parked).toHaveLength(2);
+    expect(parked[0]).toMatchObject({ subsystem: 'embedder', id: 'embedder', provenance: 'local' });
+    expect(parked[1]).toMatchObject({
+      id: 'rule-compilation',
+      provenance: 'cohort',
+      mirroredLocally: true,
+      mirrorDrift: ['since'],
+    });
+    // Prose fields (reason, tracking) are not mirror-bound: no drift on them alone.
+    expect(parked[1]!.mirrorDrift).not.toContain('reason');
+  });
+
+  it('never collapses id-less entries, even with an identical subsystem (mmnto-ai/totem#2937)', async () => {
+    const idless = { ...COHORT_HOLD, id: undefined }; // JSON.stringify drops the key
+    installDoctrineSnapshot([idless]);
+    fs.writeFileSync(
+      path.join(tmpRoot, '.totem', 'freeze.json'),
+      JSON.stringify({ frozen: [{ ...idless, scope: 'local' }] }),
+    );
+    await runJson();
+    const parked = parseJson().parked as OrientParkedEntry[];
+    expect(parked).toHaveLength(2);
+    expect(parked.map((p) => p.provenance)).toEqual(['local', 'cohort']);
   });
 });
 
@@ -576,6 +662,44 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
       makeReport({ freezeChannel: { cohortStatus: 'absent-package', warnings: [] } }),
     );
     expect(quiet).not.toContain('cohort');
+  });
+
+  it('names both provenances on a collapsed local mirror and counts it once (mmnto-ai/totem#2937)', () => {
+    const block = renderOrientForSession(
+      makeReport({
+        parked: [
+          {
+            subsystem: 'rule-compilation (legacy lesson-compile path)',
+            provenance: 'cohort',
+            sourceVersion: '0.1.49',
+            id: 'rule-compilation',
+            mirroredLocally: true,
+          },
+        ],
+      }),
+    );
+    expect(block).toContain(
+      '⛔ parked/frozen (1): rule-compilation (legacy lesson-compile path) [local mirror + cohort@0.1.49]',
+    );
+    expect(block).not.toContain('mirror differs');
+
+    const drifted = renderOrientForSession(
+      makeReport({
+        parked: [
+          {
+            subsystem: 'x',
+            provenance: 'cohort',
+            sourceVersion: '0.1.49',
+            id: 'x',
+            mirroredLocally: true,
+            mirrorDrift: ['since', 'do-not'],
+          },
+        ],
+      }),
+    );
+    expect(drifted).toContain(
+      'x [local mirror + cohort@0.1.49] ⚠ local mirror differs (since, do-not)',
+    );
   });
 
   it('NEVER enumerates epics / children / other issues (the #467 Tier-A-lean guard)', () => {

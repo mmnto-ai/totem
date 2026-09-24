@@ -61,6 +61,104 @@ export interface OrientParkedEntry {
   provenance?: 'local' | 'cohort';
   /** Snapshot package version (cohort provenance only). */
   sourceVersion?: string;
+  /** The entry's machine match key (strategy#584), when it carries one. */
+  id?: string;
+  /**
+   * True on a cohort entry into which this repo's local mirror of the same `id`
+   * was collapsed (mmnto-ai/totem#2937): one freeze, two provenances, one line.
+   */
+  mirroredLocally?: boolean;
+  /**
+   * The mirror-bound fields (`subsystem`, `since`, `do-not`) on which the local
+   * mirror differs from the cohort entry it mirrors — present only when non-empty.
+   */
+  mirrorDrift?: string[];
+}
+
+/** The shape `readEffectiveFreezes` yields per entry (structural; core stays the owner). */
+interface EffectiveFreezeEntry {
+  entry: {
+    subsystem: string;
+    id?: string;
+    since?: string;
+    reason?: string;
+    tracking?: string;
+    'do-not'?: string[];
+  };
+  provenance: 'local' | 'cohort';
+  sourceVersion?: string;
+}
+
+/** The fields a local mirror must carry identically to the cohort entry it mirrors. */
+const MIRROR_BOUND_FIELDS = ['subsystem', 'since', 'do-not'] as const;
+
+/**
+ * Collapse a repo-local MIRROR of a cohort freeze into one parked entry
+ * (mmnto-ai/totem#2937). The effective read is a union by contract — no dedup,
+ * `verify-manifest` and `doctor` read it as such — so the collapse lives at the
+ * RENDER's derivation: a local entry whose `id` a cohort entry also carries folds
+ * into that cohort entry (the cohort hold is the authority; its fields render),
+ * the entry names both provenances, and a mirror whose machine-meaningful fields
+ * differ is flagged. A local entry whose id no cohort entry carries, or the
+ * reverse, stays its own line — that divergence is what the union exists to
+ * surface. Id-less entries never collapse. Order is the union's, with the
+ * collapsed local entry removed.
+ */
+export function collapseMirroredFreezes(
+  entries: readonly EffectiveFreezeEntry[],
+): OrientParkedEntry[] {
+  const cohortIndexById = new Map<string, number>();
+  entries.forEach((f, i) => {
+    if (f.provenance === 'cohort' && f.entry.id !== undefined && !cohortIndexById.has(f.entry.id)) {
+      cohortIndexById.set(f.entry.id, i);
+    }
+  });
+  const mirrorOf = new Map<number, EffectiveFreezeEntry>();
+  const collapsed = new Set<number>();
+  entries.forEach((f, i) => {
+    if (f.provenance !== 'local' || f.entry.id === undefined) return;
+    const j = cohortIndexById.get(f.entry.id);
+    if (j === undefined || mirrorOf.has(j)) return;
+    mirrorOf.set(j, f);
+    collapsed.add(i);
+  });
+  const out: OrientParkedEntry[] = [];
+  entries.forEach((f, i) => {
+    if (collapsed.has(i)) return;
+    const parked: OrientParkedEntry = {
+      subsystem: f.entry.subsystem,
+      since: f.entry.since,
+      reason: f.entry.reason,
+      tracking: f.entry.tracking,
+      provenance: f.provenance,
+      sourceVersion: f.sourceVersion,
+      id: f.entry.id,
+    };
+    const mirror = mirrorOf.get(i);
+    if (mirror !== undefined) {
+      parked.mirroredLocally = true;
+      const drift = MIRROR_BOUND_FIELDS.filter(
+        (k) => JSON.stringify(mirror.entry[k] ?? null) !== JSON.stringify(f.entry[k] ?? null),
+      );
+      if (drift.length > 0) parked.mirrorDrift = [...drift];
+    }
+    out.push(parked);
+  });
+  return out;
+}
+
+/** The provenance tag a parked entry renders with, on either surface. */
+function parkedProvenanceTag(f: OrientParkedEntry, cohortLabel: string): string {
+  if (f.provenance !== 'cohort') return '';
+  const both = f.mirroredLocally === true ? 'local mirror + ' : '';
+  return ` [${both}${cohortLabel}${f.sourceVersion ?? '?'}]`;
+}
+
+/** The drift flag on a collapsed mirror whose bound fields differ, else ''. */
+function parkedDriftTag(f: OrientParkedEntry): string {
+  return f.mirrorDrift !== undefined && f.mirrorDrift.length > 0
+    ? ` ⚠ local mirror differs (${f.mirrorDrift.join(', ')})`
+    : '';
 }
 
 /**
@@ -211,14 +309,9 @@ async function deriveParked(
     // of invocation directory (one derivation, two callers — cannot diverge).
     const result = readEffectiveFreezes(repoRoot, totemDir, DOCTRINE_PIN_PACKAGE);
     return {
-      parked: result.entries.map((f) => ({
-        subsystem: f.entry.subsystem,
-        since: f.entry.since,
-        reason: f.entry.reason,
-        tracking: f.entry.tracking,
-        provenance: f.provenance,
-        sourceVersion: f.sourceVersion,
-      })),
+      // One line per freeze: a local mirror folds into the cohort entry it
+      // mirrors (mmnto-ai/totem#2937); the union itself stays undeduplicated.
+      parked: collapseMirroredFreezes(result.entries),
       freezeChannel: {
         cohortStatus: result.cohortStatus,
         cohortPackageVersion: result.cohortPackageVersion,
@@ -533,9 +626,7 @@ export function renderReport(report: OrientReport): string {
     for (const f of report.parked) {
       const reason = (f.reason || '').split('. ')[0];
       const name =
-        f.provenance === 'cohort'
-          ? `${f.subsystem} [cohort @ strategy-doctrine ${f.sourceVersion ?? '?'}]`
-          : f.subsystem;
+        f.subsystem + parkedProvenanceTag(f, 'cohort @ strategy-doctrine ') + parkedDriftTag(f);
       out.push(`  • ${name} (since ${f.since || '?'})${reason ? ` — ${reason}` : ''}`);
       if (f.tracking) out.push(`      tracking: ${f.tracking}`);
     }
@@ -667,10 +758,9 @@ export function renderOrientForSession(report: OrientReport): string {
   if (isError(report.parked)) {
     out.push(`⛔ parked: ⚠ could not derive: ${report.parked.error}`);
   } else if (report.parked.length > 0) {
-    const shown = report.parked.slice(0, SESSION_PARKED_CAP).map((f) => {
-      const provTag = f.provenance === 'cohort' ? ` [cohort@${f.sourceVersion ?? '?'}]` : '';
-      return f.subsystem + provTag;
-    });
+    const shown = report.parked
+      .slice(0, SESSION_PARKED_CAP)
+      .map((f) => f.subsystem + parkedProvenanceTag(f, 'cohort@') + parkedDriftTag(f));
     const more = report.parked.length > SESSION_PARKED_CAP ? ' …' : '';
     out.push(`⛔ parked/frozen (${report.parked.length}): ${shown.join(', ')}` + more);
   }
