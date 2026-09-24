@@ -62,6 +62,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+      # A re-run after a red verify can meet E409 "Cannot publish over
+      # previously staged version": the registry holds the version from the
+      # first run and is promoting it (about 20 min on the 2.11.1 cut,
+      # mmnto-ai/totem#2953). The script counts such a package as published
+      # so the verify step below waits for its promotion.
       - name: Publish unpublished packages via OIDC
         if: steps.changesets.outputs.hasChangesets == 'false'
         id: publish
@@ -78,20 +83,22 @@ jobs:
       # package readable minutes after publish, per package: 2 min 20 s after
       # the old budget gave up on the 1.123.0 cut (5 attempts separated by
       # 4 × 5 s sleeps — about 20 s of waiting; the step ran 21 s), and
-      # 6 min 57 s after the merge on the 1.124.0 cut. The script polls every
-      # still-pending package once per round, so:
-      #   FLOOR   — 10 min (VISIBILITY_DEADLINE_MS): a package that stays
+      # 6 min 57 s after the merge on the 1.124.0 cut, and a STAGED version
+      # (accepted, then E404 for 20 min 19 s) on the 2.11.1 cut
+      # (mmnto-ai/totem#2953). The script polls every still-pending package
+      # once per round, so:
+      #   FLOOR   — 25 min (VISIBILITY_DEADLINE_MS): a package that stays
       #             invisible is polled for at least that long.
-      #   CEILING — worstCaseMs(4) = 10 min + 15 s + 4 × 20 s ≈ 11 min 35 s
+      #   CEILING — worstCaseMs(4) = 25 min + 15 s + 4 × 20 s ≈ 26 min 35 s
       #             for the four published packages: the deadline, plus the
       #             one poll interval the final round can start past it, plus
       #             one spawn timeout per package pending in that round.
-      # timeout-minutes: 13 is the OUTER cap and must stay ≥ that ceiling;
+      # timeout-minutes: 30 is the OUTER cap and must stay ≥ that ceiling;
       # tools/verify-oidc-provenance.test.mjs pins the relation, so lowering
       # this without lowering the script's budget fails CI.
       - name: Verify OIDC provenance on published packages
         if: steps.publish.outputs.published == 'true'
-        timeout-minutes: 13
+        timeout-minutes: 30
         run: node tools/verify-oidc-provenance.mjs
         env:
           PUBLISHED_PACKAGES: ${{ steps.publish.outputs.published_packages }}

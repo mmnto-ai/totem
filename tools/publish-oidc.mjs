@@ -37,6 +37,8 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, unlinkSync } fro
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { classifyPublishFailure } from './publish-oidc-lib.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
@@ -142,14 +144,19 @@ for (const dir of PKG_ORDER) {
   }
 
   console.log(`[publish-oidc] Publishing ${pkg.name}@${pkg.version} via OIDC`);
+  // stdout and stderr are captured so a failure can be classified, then
+  // echoed so the job log still shows npm's own lines.
   const publishResult = spawnSync(
     'npm',
     ['publish', tarballName, '--provenance', '--access', 'public'],
     {
       cwd: pkgDir,
-      stdio: 'inherit',
+      encoding: 'utf-8',
+      stdio: ['inherit', 'pipe', 'pipe'],
     },
   );
+  if (publishResult.stdout) process.stdout.write(publishResult.stdout);
+  if (publishResult.stderr) process.stderr.write(publishResult.stderr);
 
   try {
     unlinkSync(tarballPath);
@@ -158,6 +165,20 @@ for (const dir of PKG_ORDER) {
   }
 
   if (publishResult.status !== 0) {
+    const kind = classifyPublishFailure(
+      `${publishResult.stdout ?? ''}\n${publishResult.stderr ?? ''}`,
+    );
+    if (kind === 'staged') {
+      // The registry holds this version from an earlier publish call and is
+      // promoting it (about 20 minutes on the 2.11.1 cut, mmnto-ai/totem#2953);
+      // a re-run cannot publish it again. It IS published: the verify step
+      // waits for its promotion, and the tag and release are made as usual.
+      console.log(
+        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry (E409 on re-publish): counted as published, awaiting promotion — the verify step waits for it.`,
+      );
+      published.push({ name: pkg.name, version: pkg.version, dir: pkgDir });
+      continue;
+    }
     console.error(`[publish-oidc] npm publish failed for ${pkg.name}@${pkg.version}`);
     console.error(
       '[publish-oidc] If this is E404 on a previously-published package: verify trusted publishers configured on npm.com for this package match repo=mmnto-ai/totem workflow=release.yml.',
