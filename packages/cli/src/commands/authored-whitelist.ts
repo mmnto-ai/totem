@@ -27,11 +27,15 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * The decidable-class data-table: the strategy-delivered cert-#1 set (the 0013Z
  * lockstep dispatch — exact-match strings coupled to lc's drafted
  * `structuralClass@engine`) plus the two original mechanism-validating exemplars
- * (retained as predicate proofs; they are decidable classes in their own right).
+ * (retained as predicate proofs; they are decidable classes in their own right),
+ * plus the Gate 5 batch-1 class set (five ast-grep rows delivered as data on
+ * 2026-09-24; the row comment below names the set, the dispatch and the set id).
  * The engine typing follows the 2026-06-28 ruling above: `is_finite` and
  * `procgen-entropy-clock-source` tokens can appear in prose/doc-comments ⇒
  * ast-grep only; `debug-assert-len-mismatch` matches a code-only construct ⇒
- * regex is safe.
+ * regex is safe. The Gate 5 rows are ast-grep only because the scorer MEASURED
+ * rule 2 (the doc-comment census over the pinned tree) and withheld every regex
+ * class of that batch.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
@@ -44,6 +48,20 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // ── Mechanism-validating exemplars (the original predicate proofs) ──
   Object.freeze({ engine: 'regex', structuralClass: 'forbidden-literal-token' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'node-shape-presence' }),
+  // ── The Gate 5 batch-1 class set (strategy-owned data; set `gate5-2263305c` batch 1,
+  // strategy-claude's delivery dispatch of 2026-09-24T00:28:55Z under D1 (C): the scorer's
+  // class-review table at strategy 729fa215, the codex D3 (i) blind replay converged on
+  // every verdict, nothing withdrawn). Five ast-grep rows in the delivered order; the four
+  // regex classes of that batch were withheld on rule 2 (engine typing, measured) and are
+  // not rows. Set id `static-whitelist@gate5-6cba5706`: the first 8 hex of the sha256 over
+  // these five rows' compact JSON bytes (`JSON.stringify`, `engine` then `structuralClass`)
+  // in this order — pinned by authored-whitelist.test.ts; the batch-1 intake pin passes it
+  // as `--judged-by`. A row edit, a reorder or a re-typing is a new set id. ──
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-call' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'static-import-from-module' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'catch-without-rethrow' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'type-assertion-on-call' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-constructor-throw' }),
 ]);
 
 /**
