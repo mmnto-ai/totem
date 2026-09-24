@@ -64,13 +64,22 @@ export interface OrientParkedEntry {
   /** The entry's machine match key (strategy#584), when it carries one. */
   id?: string;
   /**
-   * True on a cohort entry into which this repo's local mirror of the same `id`
-   * was collapsed (mmnto-ai/totem#2937): one freeze, two provenances, one line.
+   * True on an entry into which the OTHER source's entry of the same `id` was
+   * collapsed (mmnto-ai/totem#2937): one freeze, two provenances, one line.
    */
   mirroredLocally?: boolean;
   /**
-   * The mirror-bound fields (`subsystem`, `since`, `do-not`) on which the local
-   * mirror differs from the cohort entry it mirrors — present only when non-empty.
+   * Which side the repo's local entry plays in a collapsed pair: `mirror` on a
+   * consumer (the local file mirrors the cohort hold; the cohort entry's fields
+   * render), `source` on the publisher (the local entry is scoped `cohort` and IS
+   * the hold the snapshot was cut from; the local entry's fields render).
+   */
+  localRole?: 'mirror' | 'source';
+  /**
+   * The bound fields (`subsystem`, `since`, `do-not`) on which the non-rendered
+   * side differs from the rendered one — present only when non-empty. On a
+   * consumer the mirror differs from the hold; on the publisher the snapshot
+   * lags the source.
    */
   mirrorDrift?: string[];
 }
@@ -80,6 +89,7 @@ interface EffectiveFreezeEntry {
   entry: {
     subsystem: string;
     id?: string;
+    scope?: 'local' | 'cohort';
     since?: string;
     reason?: string;
     tracking?: string;
@@ -89,20 +99,32 @@ interface EffectiveFreezeEntry {
   sourceVersion?: string;
 }
 
-/** The fields a local mirror must carry identically to the cohort entry it mirrors. */
+/** The fields the two sides of a collapsed pair must carry identically. */
 const MIRROR_BOUND_FIELDS = ['subsystem', 'since', 'do-not'] as const;
 
+/** A bound field's comparison form: `do-not` as a sorted set (absent = empty), the rest as-is. */
+function boundFieldKey(
+  entry: EffectiveFreezeEntry['entry'],
+  field: (typeof MIRROR_BOUND_FIELDS)[number],
+): string {
+  if (field === 'do-not') return JSON.stringify([...(entry['do-not'] ?? [])].sort());
+  return JSON.stringify(entry[field] ?? null);
+}
+
 /**
- * Collapse a repo-local MIRROR of a cohort freeze into one parked entry
+ * Collapse the two sources' entries for ONE freeze into one parked entry
  * (mmnto-ai/totem#2937). The effective read is a union by contract — no dedup,
  * `verify-manifest` and `doctor` read it as such — so the collapse lives at the
- * RENDER's derivation: a local entry whose `id` a cohort entry also carries folds
- * into that cohort entry (the cohort hold is the authority; its fields render),
- * the entry names both provenances, and a mirror whose machine-meaningful fields
- * differ is flagged. A local entry whose id no cohort entry carries, or the
+ * RENDER's derivation. A local entry whose `id` a cohort entry also carries folds
+ * with it into one line naming both provenances. Which side renders depends on
+ * the local entry's own `scope`: on a consumer (`local`) the local file is a
+ * MIRROR and the cohort hold's fields render; on the publisher (`cohort`) the
+ * local entry IS the source the snapshot was cut from and its fields render,
+ * with the snapshot's version beside it. A bound field on which the other side
+ * differs is flagged. A local entry whose id no cohort entry carries, or the
  * reverse, stays its own line — that divergence is what the union exists to
- * surface. Id-less entries never collapse. Order is the union's, with the
- * collapsed local entry removed.
+ * surface. Id-less entries never collapse. Order is the union's, the collapsed
+ * local entry removed and the line at the cohort entry's position.
  */
 export function collapseMirroredFreezes(
   entries: readonly EffectiveFreezeEntry[],
@@ -113,35 +135,44 @@ export function collapseMirroredFreezes(
       cohortIndexById.set(f.entry.id, i);
     }
   });
-  const mirrorOf = new Map<number, EffectiveFreezeEntry>();
+  const localOf = new Map<number, EffectiveFreezeEntry>();
   const collapsed = new Set<number>();
   entries.forEach((f, i) => {
     if (f.provenance !== 'local' || f.entry.id === undefined) return;
     const j = cohortIndexById.get(f.entry.id);
-    if (j === undefined || mirrorOf.has(j)) return;
-    mirrorOf.set(j, f);
+    if (j === undefined || localOf.has(j)) return;
+    localOf.set(j, f);
     collapsed.add(i);
   });
+  const toParked = (f: EffectiveFreezeEntry): OrientParkedEntry => ({
+    subsystem: f.entry.subsystem,
+    since: f.entry.since,
+    reason: f.entry.reason,
+    tracking: f.entry.tracking,
+    provenance: f.provenance,
+    sourceVersion: f.sourceVersion,
+    id: f.entry.id,
+  });
   const out: OrientParkedEntry[] = [];
-  entries.forEach((f, i) => {
+  entries.forEach((cohort, i) => {
     if (collapsed.has(i)) return;
-    const parked: OrientParkedEntry = {
-      subsystem: f.entry.subsystem,
-      since: f.entry.since,
-      reason: f.entry.reason,
-      tracking: f.entry.tracking,
-      provenance: f.provenance,
-      sourceVersion: f.sourceVersion,
-      id: f.entry.id,
-    };
-    const mirror = mirrorOf.get(i);
-    if (mirror !== undefined) {
-      parked.mirroredLocally = true;
-      const drift = MIRROR_BOUND_FIELDS.filter(
-        (k) => JSON.stringify(mirror.entry[k] ?? null) !== JSON.stringify(f.entry[k] ?? null),
-      );
-      if (drift.length > 0) parked.mirrorDrift = [...drift];
+    const local = localOf.get(i);
+    if (local === undefined) {
+      out.push(toParked(cohort));
+      return;
     }
+    const localRole = local.entry.scope === 'cohort' ? 'source' : 'mirror';
+    const rendered = localRole === 'source' ? local : cohort;
+    const other = localRole === 'source' ? cohort : local;
+    const parked = toParked(rendered);
+    // The snapshot's version travels with the line whichever side renders.
+    parked.sourceVersion = cohort.sourceVersion;
+    parked.mirroredLocally = true;
+    parked.localRole = localRole;
+    const drift = MIRROR_BOUND_FIELDS.filter(
+      (k) => boundFieldKey(other.entry, k) !== boundFieldKey(rendered.entry, k),
+    );
+    if (drift.length > 0) parked.mirrorDrift = [...drift];
     out.push(parked);
   });
   return out;
@@ -149,16 +180,19 @@ export function collapseMirroredFreezes(
 
 /** The provenance tag a parked entry renders with, on either surface. */
 function parkedProvenanceTag(f: OrientParkedEntry, cohortLabel: string): string {
+  if (f.mirroredLocally === true) {
+    const local = f.localRole === 'source' ? 'local source' : 'local mirror';
+    return ` [${local} + ${cohortLabel}${f.sourceVersion ?? '?'}]`;
+  }
   if (f.provenance !== 'cohort') return '';
-  const both = f.mirroredLocally === true ? 'local mirror + ' : '';
-  return ` [${both}${cohortLabel}${f.sourceVersion ?? '?'}]`;
+  return ` [${cohortLabel}${f.sourceVersion ?? '?'}]`;
 }
 
-/** The drift flag on a collapsed mirror whose bound fields differ, else ''. */
+/** The drift flag on a collapsed pair whose bound fields differ, else ''. */
 function parkedDriftTag(f: OrientParkedEntry): string {
-  return f.mirrorDrift !== undefined && f.mirrorDrift.length > 0
-    ? ` ⚠ local mirror differs (${f.mirrorDrift.join(', ')})`
-    : '';
+  if (f.mirrorDrift === undefined || f.mirrorDrift.length === 0) return '';
+  const who = f.localRole === 'source' ? 'snapshot differs' : 'local mirror differs';
+  return ` ⚠ ${who} (${f.mirrorDrift.join(', ')})`;
 }
 
 /**
