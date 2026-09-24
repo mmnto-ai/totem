@@ -115,6 +115,7 @@ export function ghFetchAndParse<T>(
     }
 
     return schema.parse(parsed);
+    // totem-context: handleGhError rethrows every error it is handed (its return type is never — a typed TotemError with the caller's hint); the catch swallows nothing.
   } catch (err) {
     handleGhError(err, context, hint);
   }
