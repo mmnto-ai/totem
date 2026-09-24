@@ -1,3 +1,4 @@
+tree   : D:/Dev/worktrees/totem-totem-claude-gate5-tree @ 5293614badd3cc5a67993abd8a6db46afb1c400f
 legacy : \bmcp[a-zA-Z0-9_]*(?!\?)\s*:
 without: \bmcp[a-zA-Z0-9_]*\s*:
 same  legacy=FIRES without=FIRES  interface ToolMeta { mcpServers: string[]; }
@@ -12,4 +13,4 @@ same  legacy=silent without=silent  mcpServers?:string
 same  legacy=FIRES without=FIRES  mcp_a1?: number; mcpB: number
 same  legacy=FIRES without=FIRES  { mcpServers:string[] }
 same  legacy=FIRES without=FIRES  mcpServers: string[] // optional?
-battery disagreements: 0; tree: 380 files, 117505 lines, legacy firings 11, disagreements 0
+battery disagreements: 0; tree: 380 files (0 unreadable), 117505 lines, legacy firings 11, disagreements 0

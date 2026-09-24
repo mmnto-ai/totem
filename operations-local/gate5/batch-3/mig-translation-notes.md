@@ -112,8 +112,7 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   after a refusal. Disclosed: the translator built the intake and knows the five whitelist rows. The
   names are defect-SHAPE names at the granularity a decidability review can act on, shared with
   batches 1 and 2 where the shape is theirs. **Carry-over, read against the scorer's receipt (pairs,
-  not names; the batch-1 table at `729fa215`):** `(ast-grep, type-assertion-on-call)` DELIVERS —
-  `6f362fa2` carries over as deliverable; `(regex, forbidden-callee-literal-arg)` and
+  not names; the batch-1 table at `729fa215`):** `(ast-grep, type-assertion-on-call)` is marked DELIVER — `6f362fa2` carries over as deliverable pending the codex D3 (i) re-derivation (a class it rejects is withdrawn first); `(regex, forbidden-callee-literal-arg)` and
   `(regex, forbidden-path-literal)` were WITHHELD on measured engine typing — `434c51ff` and `0615c43e`
   carry over as `intake-ineligible (engine-typing)`, kept out of the envelope at the intake pin,
   whatever their own census counts read (the pair is withheld, and the pair is the whitelist's key);
@@ -126,6 +125,32 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
   class review and the delivery PR): the header calls a class under two engines AMBIGUOUS while the
   predicate filters on both engine and class, and the eligibility `basis` string carries no engine.
 
+## Two disclosures for the class review (the leg's b3-F1 and b3-F2, folded; no class renamed — § 3.4)
+
+- **The operator's (A) was ruled on prose-only records, and this batch extends it to source scope.**
+  The ruling relayed on 2026-09-24T00:18Z named `6ad0d4d5` and `5afaf8d0`, both prose-scoped, and the
+  scorer's ground for recommending (A) was "the record's scope is prose-only" (the batch-1 table at
+  `729fa215`). The four `regex/forbidden-literal-token` rules of this batch are SOURCE-scoped
+  (`391de708`, `87e24374`, `55797450`, `56c801df`), and the census shows the token in a doc-comment
+  on two of them — `391de708` (1: `packages/core/src/sys/git.test.ts:151`) and `87e24374` (2:
+  `packages/core/src/compiler.test.ts:267`, `packages/core/src/diff-parser.ts:27`) — which is the very
+  false positive the whitelist header's engine-typing sentence guards against. So (A) is being read
+  past its ruled ground here: these four mint at the pre-pin pass by the shipped row as the two
+  prose-scoped rules did, but whether (A) reaches a source-scoped rule under the exemplar row is the
+  scorer's or the operator's call, not the translator's, and until ruled they read `pending-intake`
+  with the question open. The shape names stand (each is a fixed literal token); the review may weigh
+  other shape names for the same matchers (a command with a literal argument for `git add -A` /
+  `git add .`, for instance), which the notes do not choose.
+- **`typeof-comparison-missing-null-guard` is likely a rule-1 question.** The batch-1 table's rule-1
+  FAIL criterion names "missing null check on results" as a semantic property no engine decides
+  syntactically, and this name asserts one. What the record decides is syntactic and narrower: a
+  `typeof x === 'object'` comparison on a line carrying no `&&` — `requires: '\s*&&'` suppresses
+  on ANY `&&` on the line, guard or not (an unguarded `(typeof x === 'object' || …) && x.foo` is
+  suppressed), and a guard on the previous line is invisible to it (the tree's
+  `orchestrator.ts:222-223`, `pack-discovery.ts:282-284`). A syntactic reading of the same shape —
+  "a typeof-object comparison without a same-line conjunction" — is what the record implements; the
+  name is not revised after the refusal (§ 3.4), and the question is disclosed for the review.
+
 ## Whole-batch transformation inventory
 
 | Transformation                                                  | Count | Rules                                                                                                                                    |
@@ -137,7 +162,7 @@ astGrepYamlRule, fileGlobs}` for the matcher and its scope, `curatedPair` for pa
 | Legacy compiled pair appended as `examples[1]`                  | 0     | — (`fe1b4123` carries a lone compiled `bad`, recorded in its note)                                                                       |
 | Brace-glob expansion · shallow-glob promotion · `message` edits | 0     | —                                                                                                                                        |
 | `lessonHeading` dropped                                         | 13    | the V1 grammar has no heading construct; the heading rides the envelope's `targetDefect`                                                 |
-| Legacy `manual` / `unverified` flags dropped                    | 7     | `391de708`, `83b86cd7`, `64bb807f`, `87e24374`, `434c51ff`, `0615c43e`, and no other row carries them; the grammar has no such field     |
+| Legacy `manual` / `unverified` flags dropped                    | 6     | `391de708`, `83b86cd7`, `64bb807f`, `87e24374`, `434c51ff`, `0615c43e`, and no other row carries them; the grammar has no such field     |
 
 ## Harness results (verbatim summary lines; full logs on the branch)
 
@@ -180,7 +205,7 @@ suppression (its own header says so). Per rule, `code · comment · string · ot
 | Rule       | code | comment | string | other         | total | comment-context firings, sample                                                                             |
 | ---------- | ---- | ------- | ------ | ------------- | ----- | ----------------------------------------------------------------------------------------------------------- |
 | `391de708` | 3    | **1**   | 3      | 1 no-grammar  | 8     | `packages/core/src/sys/git.test.ts:151` (a comment quoting `origin/main...HEAD`)                            |
-| `83b86cd7` | 10   | **1**   | 0      | —             | 11    | `packages/core/src/config-schema.ts:562` (a JSDoc line carrying `mcpServers:` inside an example)            |
+| `83b86cd7` | 10   | **1**   | 0      | —             | 11    | `packages/core/src/config-schema.ts:562` (a JSDoc example object carrying `mcp: [...]`)                     |
 | `cf65e2b4` | 6    | 0       | 0      | —             | 6     | —                                                                                                           |
 | `64bb807f` | 6    | 0       | 1      | —             | 7     | —                                                                                                           |
 | `87e24374` | 1    | **2**   | 34     | —             | 37    | `packages/core/src/compiler.test.ts:267`, `packages/core/src/diff-parser.ts:27` (comments quoting `+++ b/`) |
@@ -193,8 +218,7 @@ suppression (its own header says so). Per rule, `code · comment · string · ot
 
 So at this tree three regex rules of this batch carry a comment-context firing (`391de708`,
 `83b86cd7`, `87e24374`) and eight carry none; the review applies the rule, these notes only measure
-it. `no-grammar` counts the in-scope `.sh` / `.yml` / `.json` / `.env` files the classifier has no
-grammar for (counted, never skipped — the instrument's rule); `5da43ea6`'s one firing is a string.
+it. `no-grammar` counts firing LINES (not files) in in-scope files the classifier has no grammar for — counted, never skipped, the instrument's rule: `391de708`'s one in a `.sh` file; `55797450`'s three all in `.sh` files; `56c801df`'s fifteen all in `.json` files (the token inside `lessonHeading` / `message` strings of two `compiled-rules.json` copies — prose the instrument cannot classify). `5da43ea6`'s one firing is a string.
 
 ## Per-rule notes (manifest order)
 
@@ -227,11 +251,10 @@ firing set (legacy → record) · notes.
   class contains neither whitespace nor `:`. Proved by `inert-83b86cd7.mjs` (its log beside these
   notes): the battery of 12 shapes (required / optional / spaced / ternary forms) and every in-scope
   line of the pinned tree (380 files, 117,505 lines, 11 legacy firings) — 0 disagreements between
-  the legacy pattern and the pattern without the lookahead. Fidelity: identical. C3 admits an inert
-  construct (§ 2 item 8); the scorer's read decides.
+  the legacy pattern and the pattern without the lookahead. Fidelity: identical. C3 admits an inert construct (§ 2 item 8); the scorer's read decides. Two sources bear on the choice, disclosed: the pre-registration § 2 item 1 lists this row's `(?!\?)` among the lookaheads "that a `line`-window `requires:` would widen" (a (ii) candidate), and R14's precedent for an inert lookahead was to REMOVE it (the E26 cure on `0e01112d`, the declared divergence K3 carries). Neither route is taken here: a (ii) declaration with `requires: '\?'` would suppress on any `?` on the line (a widening with nothing to gain, the construct being inert), and removal is outside the closed inventory — the harness's `--set` mode refuses a declared payload divergence — so the verbatim pattern, fidelity identical, is the honest translation.
 - Honest class: `property-key-missing-optional-marker` (regex) — a property signature whose key
   carries a fixed prefix (`mcp…`) and lacks the optional marker. New for the review. Census: 1
-  comment-context firing (a JSDoc example naming `mcpServers:`); 10 code-context firings, most of
+  comment-context firing (a JSDoc example object carrying `mcp: [...]`); 10 code-context firings, most of
   them `mcpPath:` / `mcpJsonPath:` keys in object literals (not type members) — curation feedback
   for R8: the matcher does not distinguish an object-literal key from an interface member.
 - Firing set: 11 → 11, added 0, removed 0.
@@ -270,20 +293,12 @@ firing set (legacy → record) · notes.
   `packages/cli/src/orchestrators/orchestrator.ts:223` `(typeof current === 'object' || typeof current === 'function') &&` ·
   `packages/core/src/pack-discovery.ts:284` `(typeof callbackResult === 'object' || typeof callbackResult === 'function') &&` ·
   `packages/core/src/spine/authoring-ledger.ts:123` `if (value !== null && typeof value === 'object') {`.
-  **Every one carries a null guard or a conjoined guard BEFORE the `typeof` (or a compound
-  disjunction followed by `&&`), which the legacy lookahead — looking only at what follows `'object'`
-  — cannot see: all seven are legacy false positives under the lesson's own intent** (the curated
-  pair's `good` is exactly the guarded form). So on this tree the `window-widened` covariate removes
+  **Five carry a null guard or a truthiness guard on the same line BEFORE the `typeof` (`value !== null &&`, `value &&`), which the legacy lookahead — looking only at what follows `'object'` — cannot see; on the two compound lines (`orchestrator.ts:223`, `pack-discovery.ts:284`) the null guard sits on the PREVIOUS line (`current !== null &&`, `callbackResult !== null &&`) and the record is silent because of the trailing `) &&` conjunction, not because it sees the guard. All seven are legacy false positives under the lesson's own intent** (the curated pair's `good` is the guarded form with the guard AFTER the typeof, `&& val !== null`). So on this tree the `window-widened` covariate removes
   false positives only and the record is, by C7, the lesson's rule; but it is also silent on every
   line of the tree, so the served rule's precision here is undefined (no true positive exists to
   keep). Curation feedback for R8: the legacy row never fired on a true positive at `5293614b`.
   **Evidence for the mmnto-ai/totem-strategy#1093 demand row (not the record):** a target-anchored
-  requirement — `requires: { pattern: "['\"]object['\"]\s*&&", scope: line }` — reproduces the
-  legacy exactly on this tree (7/7 firings, removed 0, added 0; `probe-64bb807f`, the translator's
-  scratch measurement, its figures quoted in the pin), so a target-relative window would carry this
-  rule without loss; the record carries the body form because that is the pre-registration's
-  operationalisation (K8b) and the closed inventory's (ii), and a re-pin with the lookahead verbatim
-  or with the anchored form is one mail away if the scorer rules that route for this rule.
+  requirement — `requires: { pattern: "['\"]object['\"]\s*&&", scope: line }` — reproduces the legacy on THIS tree (7/7 firings, removed 0, added 0; `probe-64bb807f`, the translator's scratch measurement, its figures quoted in the pin) — on this tree only: the anchored form is still a line window, and a line carrying two object comparisons (`typeof a === 'object' && typeof b === 'object')`) is one the legacy fires on and the anchored form suppresses. The record carries the body form because that is the pre-registration's operationalisation (K8b) and the closed inventory's (ii). Two routes remain for this rule, stated exactly: the lookahead kept VERBATIM is within § 7 (b) and would be a re-pin; the anchored requirement is NOT the lookahead body, so it lies outside the closed inventory's (ii) — an undeclared transformation the harness's (ii) excusal would not catch — and would need a revision of the pre-registration, not a re-pin.
 - Honest class: `typeof-comparison-missing-null-guard` (regex) — a `typeof x === 'object'`
   comparison lacking a conjoined null guard. New for the review. Census: 0 comment, 1 string, 6 code.
 - Firing set: 7 → 0, added 0, removed 7 (above).
@@ -321,12 +336,11 @@ firing set (legacy → record) · notes.
 ### 33. `55797450514d4c3b` — rank 161 — regex — `mig-55797450-git-add-all.rule.yaml`
 
 - Legacy: `pattern: git add\s+(-A|\.)\b`; globs `**/*.sh`, `**/*.bash`, `**/*.yml`, `**/*.yaml`,
-  `**/*.ts`, `**/*.js`; warning; the message is the full sentence, the heading its first 60
-  characters. Record: pattern and globs verbatim.
+  `**/*.ts`, `**/*.js`; warning; the heading is a separate, shorter text (`Never use git add -A or git add .`), not a prefix of the message. Record: pattern and globs verbatim.
 - Inventory: none.
 - Honest class: `forbidden-literal-token` (regex) — a fixed command token sequence (`git add -A` /
   `git add .`) in scripts, workflow files and source; the exemplar row's shape (see 27). Census: 0
-  comment, 1 string, 1 code, 3 no-grammar (`.sh`/`.yml` files).
+  comment, 1 string, 1 code, 3 no-grammar (all `.sh` files).
 - Firing set: 5 → 5, added 0, removed 0.
 - Differential satisfied; legacy over pair 0 satisfied. Curator strategy-kimi, 2026-08-23.
 
@@ -349,8 +363,7 @@ firing set (legacy → record) · notes.
   Record: pattern and globs verbatim.
 - Inventory: none.
 - Honest class: `forbidden-literal-token` (regex) — a fixed literal (a model identifier) anywhere
-  in source and config; the exemplar row's shape (see 27). Census: 0 comment, 0 string, 3 code, 15
-  no-grammar (`.json`/`.yaml` files).
+  in source and config; the exemplar row's shape (see 27). Census: 0 comment, 0 string, 3 code, 15 no-grammar (all `.json`: the token inside heading and message strings of two `compiled-rules.json` copies).
 - Firing set: 18 → 18, added 0, removed 0.
 - Differential satisfied; legacy over pair 0 satisfied. Curator strategy-kimi, 2026-08-23.
 
@@ -381,8 +394,7 @@ firing set (legacy → record) · notes.
   rules will fire together on `packages/core/**` files under `**/*.ts` minus their respective
   excludes — disclosed, not a translation matter.
 - Inventory: (i).
-- Honest class: `type-assertion-on-call` (ast-grep) — batch 1's PAIR (`61bb8b8b`), DELIVERED by the
-  batch-1 review; carries over as deliverable, no second review.
+- Honest class: `type-assertion-on-call` (ast-grep) — batch 1's PAIR (`61bb8b8b`), marked DELIVER by the batch-1 table; carries over as deliverable pending the codex D3 (i) re-derivation, no second review here.
 - Firing set: 7 → 7, added 0, removed 0.
 - Differential satisfied; legacy over pair 0 satisfied. Curator strategy-kimi, 2026-08-23.
 
@@ -399,11 +411,20 @@ firing set (legacy → record) · notes.
 
 ### 39. `5da43ea60b66e96e` — rank 174 — regex — `mig-5da43ea6-git-double-dash-separator.rule.yaml` (R14 seed entry 13, re-pinned)
 
-- Legacy: `pattern: git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?!.*\s--\s)(?:['"`]?\$[{(]?\w|['"`]?\$\w)`(a double-backtick span: the pattern itself contains a backtick); globs`**/\*.ts`, `**/_.js`,
-`\*\*/_.sh`, `**/\*.bash`, `**/_.mjs`, `\*\*/_.cjs`; warning; **the `lessonHeading`is the timestamp`2026-03-08T02:39:04.901Z`**, the `message`the description, so the envelope's`targetDefect`carries the message's first 120 characters (the manifest's`targetDefectText`, § 4 item 6 — the
-one row where the fallback recovers a description). Record:
-`pattern: git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?:['"`]?\$[{(]?\w|['"`]?\$\w)`(the legacy pattern less its one lookahead) +`requires: { pattern: '\s--\s', scope: line }`(the
-lookahead's body less its window prefix`.\*`); globs verbatim.
+- Legacy and record, quoted in fenced blocks (a formatter reflowed the code spans of an earlier
+  draft of this bullet — the leg's b3-F10 — so the four values the C3 read relies on are fenced):
+
+```text
+legacy pattern:   git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?!.*\s--\s)(?:['"`]?\$[{(]?\w|['"`]?\$\w)
+record pattern:   git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?:['"`]?\$[{(]?\w|['"`]?\$\w)
+record requires:  pattern '\s--\s', scope line   (the lookahead's body less its window prefix .*)
+globs (verbatim): **/*.ts  **/*.js  **/*.sh  **/*.bash  **/*.mjs  **/*.cjs
+```
+
+Severity warning; **the `lessonHeading` is the timestamp `2026-03-08T02:39:04.901Z`**, the `message`
+the description, so the envelope's `targetDefect` carries the message's first 120 characters (the
+manifest's `targetDefectText`, § 4 item 6 — the one row where the fallback recovers a description).
+
 - Inventory: **(ii)** — R14's own translation of this row, reproduced by the same mechanics.
   **The R14 re-pin (§ 4 item 4):** the R14 record at `78e7f196`
   (`.totem/rules/r14-5da43ea6-git-double-dash-separator.rule.yaml`) already carried the curated pair
