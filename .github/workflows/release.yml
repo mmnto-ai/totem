@@ -65,8 +65,12 @@ jobs:
       # A re-run after a red verify can meet E409 "Cannot publish over
       # previously staged version": the registry holds the version from the
       # first run and is promoting it (about 20 min on the 2.11.1 cut,
-      # mmnto-ai/totem#2953). The script counts such a package as published
-      # so the verify step below waits for its promotion.
+      # mmnto-ai/totem#2953). On a RE-RUN (GITHUB_RUN_ATTEMPT > 1, the same
+      # sha that built the tarball) the script counts such a package as
+      # published so the verify step below waits for its promotion; on a first
+      # attempt it fails loud instead, because the staged tarball was built by
+      # another run at another commit and tagging this one would misplace the
+      # release tag.
       - name: Publish unpublished packages via OIDC
         if: steps.changesets.outputs.hasChangesets == 'false'
         id: publish

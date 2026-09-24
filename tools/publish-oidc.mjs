@@ -37,7 +37,7 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, unlinkSync } fro
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { classifyPublishFailure } from './publish-oidc-lib.mjs';
+import { classifyPublishFailure, stagedCountsAsPublished } from './publish-oidc-lib.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
@@ -153,10 +153,18 @@ for (const dir of PKG_ORDER) {
       cwd: pkgDir,
       encoding: 'utf-8',
       stdio: ['inherit', 'pipe', 'pipe'],
+      // The file listing of the largest package is about 76 KB; the default
+      // 1 MiB buffer would kill npm with ENOBUFS on a much larger one.
+      maxBuffer: 64 * 1024 * 1024,
     },
   );
   if (publishResult.stdout) process.stdout.write(publishResult.stdout);
   if (publishResult.stderr) process.stderr.write(publishResult.stderr);
+  if (publishResult.error) {
+    console.error(
+      `[publish-oidc] npm publish did not run to completion for ${pkg.name}@${pkg.version}: ${publishResult.error.message}`,
+    );
+  }
 
   try {
     unlinkSync(tarballPath);
@@ -168,16 +176,26 @@ for (const dir of PKG_ORDER) {
     const kind = classifyPublishFailure(
       `${publishResult.stdout ?? ''}\n${publishResult.stderr ?? ''}`,
     );
-    if (kind === 'staged') {
-      // The registry holds this version from an earlier publish call and is
-      // promoting it (about 20 minutes on the 2.11.1 cut, mmnto-ai/totem#2953);
-      // a re-run cannot publish it again. It IS published: the verify step
-      // waits for its promotion, and the tag and release are made as usual.
+    if (kind === 'staged' && stagedCountsAsPublished(process.env)) {
+      // A re-run of the run that published it: the registry holds this version
+      // from that earlier publish call and is promoting it (about 20 minutes on
+      // the 2.11.1 cut, mmnto-ai/totem#2953); it cannot be published again. It
+      // IS published, at this very sha: the verify step waits for its
+      // promotion, and the tag and release are made as usual.
       console.log(
-        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry (E409 on re-publish): counted as published, awaiting promotion — the verify step waits for it.`,
+        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry (E409 on re-publish, attempt ${process.env.GITHUB_RUN_ATTEMPT}): counted as published, awaiting promotion — the verify step waits for it.`,
       );
       published.push({ name: pkg.name, version: pkg.version, dir: pkgDir });
       continue;
+    }
+    if (kind === 'staged') {
+      // A FIRST attempt meeting a staged version: another run's publish, at
+      // another commit, is still promoting it. Counting it here would tag and
+      // release this commit for a tarball it did not build.
+      console.error(
+        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry from another run's publish (E409 on a first attempt): this run does not count, tag or release it. Wait for the promotion (npm view ${pkg.name}@${pkg.version} version), then re-run the run that published it.`,
+      );
+      process.exit(1);
     }
     console.error(`[publish-oidc] npm publish failed for ${pkg.name}@${pkg.version}`);
     console.error(
