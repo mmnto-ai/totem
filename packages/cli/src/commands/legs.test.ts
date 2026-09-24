@@ -265,12 +265,14 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
         },
       ],
     };
-    await legsDepositCommand({ from: writeFindings(withQuestion as never) });
+    // A findings file copied from an older deposit carries that label; the writer's wins.
+    await legsDepositCommand({ from: writeFindings({ ...withQuestion, schemaVersion: '1.0.0' }) });
     const printed = errors.join('\n');
     expect(printed).toContain('blocking=1 material=0 minor=1 question=1 folded=1');
     const stored = legDepositPath(path.join(tmpDir, '.totem'), headSha);
     const written = JSON.parse(fs.readFileSync(stored, 'utf-8')) as LegDeposit;
     expect(written.findings.map((f) => f.severity)).toContain('QUESTION');
+    expect(written.schemaVersion).toBe('1.1.0');
   });
 
   it('stamps readAt when neither the file nor --read-at carries one, and SAYS so', async () => {
@@ -494,9 +496,37 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     expect(line).toContain('(read 2026-09-01T00:00:00.000Z,');
     expect(line).toContain(`· head ${HEAD_SHA.slice(0, 8)} ·`);
     expect(line).toContain('· exact ·');
-    expect(line).toContain('blocking=1 material=0 question=0 folded=1');
+    expect(line).toContain('blocking=1 material=0 minor=0 question=0 folded=1');
     // The path is repo-root relative and forward-slashed on every platform.
     expect(line).not.toContain(tmpDir);
+  });
+
+  // mmnto-ai/totem#2944: a deposit's question is counted on the evidence line as itself.
+  it('OWED, exact deposit carrying a QUESTION: the evidence line counts it beside the three', async () => {
+    storeDeposit({
+      findings: [
+        ...depositFixture().findings,
+        {
+          id: 'Q1',
+          severity: 'QUESTION',
+          file: 'a.ts',
+          line: 0,
+          claim: 'Is the base the merge-base?',
+          counterexample: '',
+        },
+        {
+          id: 'M1',
+          severity: 'MINOR',
+          file: 'a.ts',
+          line: 2,
+          claim: 'a wording nit',
+          counterexample: '',
+        },
+      ],
+    });
+    const outcome = await runLegsGate({}, makeDeps());
+    expect(outcome.derived).toBe(0);
+    expect(outcome.stdout[0]).toContain('blocking=1 material=0 minor=1 question=1 folded=1');
   });
 
   it('OWED, ancestor deposit: exit 0 and the line DISCLOSES the commits since the read', async () => {

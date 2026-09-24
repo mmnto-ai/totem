@@ -277,10 +277,10 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     );
   }
 
-  const schemaVersion =
-    typeof fields['schemaVersion'] === 'string'
-      ? (fields['schemaVersion'] as string)
-      : LEG_DEPOSIT_SCHEMA_VERSION;
+  // The WRITER's version, always: a findings file copied from an older deposit
+  // carries that deposit's label, and a label must say what vocabulary the
+  // file may use (a 1.0 reader refuses a QUESTION; mmnto-ai/totem#2944).
+  const schemaVersion = LEG_DEPOSIT_SCHEMA_VERSION;
 
   // Assembled as `unknown` and handed to the validate-on-write path: the
   // schema is the ONE validation boundary, so a malformed findings array
@@ -581,7 +581,7 @@ export async function runLegsGate(
         ? ''
         : ` · covers ${winner.coverage.covered}/${winner.coverage.owed} owed paths`;
     const stdout = [
-      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach}${covers} · blocking=${counts.blocking} material=${counts.material} question=${counts.question} folded=${counts.folded}`,
+      `[Totem] legs evidence: ${relative(winner.path)} (read ${safe(winner.deposit.readAt)}, ${age}) · head ${head8} · ${reach}${covers} · ${renderCounts(counts)}`,
     ];
     const superseded = resolution?.superseded ?? [];
     if (superseded.length > 0) {
