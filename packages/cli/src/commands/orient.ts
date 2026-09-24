@@ -16,6 +16,8 @@
 // - NO embedding/LanceDB path — this is what makes orient run green when
 //   `@google/genai` is absent (it structurally dodges #2018).
 
+import type { ActiveFreeze } from '@mmnto/totem';
+
 import type { BoardItem } from '../adapters/github-cli-project.js';
 import type { StandardIssueWithBody } from '../adapters/issue-adapter.js';
 import type { StandardPrListItem } from '../adapters/pr-adapter.js';
@@ -87,20 +89,9 @@ export interface OrientParkedEntry {
   mirrorDrift?: string[];
 }
 
-/** The shape `readEffectiveFreezes` yields per entry (structural; core stays the owner). */
-interface EffectiveFreezeEntry {
-  entry: {
-    subsystem: string;
-    id?: string;
-    scope?: 'local' | 'cohort';
-    since?: string;
-    reason?: string;
-    tracking?: string;
-    'do-not'?: string[];
-  };
-  provenance: 'local' | 'cohort';
-  sourceVersion?: string;
-}
+// The per-entry shape is core's own `ActiveFreeze` (a type-only import): a
+// local structural copy would keep type-checking against a stale mirror if
+// core's entry shape moved (the review fan's WARN on mmnto-ai/totem#2960).
 
 /** The fields the two sides of a collapsed pair must carry identically. */
 const MIRROR_BOUND_FIELDS = ['subsystem', 'since', 'do-not'] as const;
@@ -111,7 +102,7 @@ const MIRROR_BOUND_FIELDS = ['subsystem', 'since', 'do-not'] as const;
  * (both render as `?`).
  */
 function boundFieldKey(
-  entry: EffectiveFreezeEntry['entry'],
+  entry: ActiveFreeze['entry'],
   field: (typeof MIRROR_BOUND_FIELDS)[number],
 ): string {
   if (field === 'do-not') return JSON.stringify([...(entry['do-not'] ?? [])].sort());
@@ -134,16 +125,14 @@ function boundFieldKey(
  * surface. Id-less entries never collapse. Order is the union's, the collapsed
  * local entry removed and the line at the cohort entry's position.
  */
-export function collapseMirroredFreezes(
-  entries: readonly EffectiveFreezeEntry[],
-): OrientParkedEntry[] {
+export function collapseMirroredFreezes(entries: readonly ActiveFreeze[]): OrientParkedEntry[] {
   const cohortIndexById = new Map<string, number>();
   entries.forEach((f, i) => {
     if (f.provenance === 'cohort' && f.entry.id !== undefined && !cohortIndexById.has(f.entry.id)) {
       cohortIndexById.set(f.entry.id, i);
     }
   });
-  const localOf = new Map<number, EffectiveFreezeEntry>();
+  const localOf = new Map<number, ActiveFreeze>();
   const collapsed = new Set<number>();
   entries.forEach((f, i) => {
     if (f.provenance !== 'local' || f.entry.id === undefined) return;
@@ -152,7 +141,7 @@ export function collapseMirroredFreezes(
     localOf.set(j, f);
     collapsed.add(i);
   });
-  const toParked = (f: EffectiveFreezeEntry): OrientParkedEntry => ({
+  const toParked = (f: ActiveFreeze): OrientParkedEntry => ({
     subsystem: f.entry.subsystem,
     since: f.entry.since,
     reason: f.entry.reason,
