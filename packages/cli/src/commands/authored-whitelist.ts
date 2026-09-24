@@ -34,7 +34,7 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * `procgen-entropy-clock-source` tokens can appear in prose/doc-comments ⇒
  * ast-grep only; `debug-assert-len-mismatch` matches a code-only construct ⇒
  * regex is safe. The Gate 5 rows are ast-grep only because the scorer MEASURED
- * rule 2 (the doc-comment census over the pinned tree) and withheld every regex
+ * rule 2 (the doc-comment census over the pinned tree) and delivered no regex
  * class of that batch.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
@@ -51,12 +51,14 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // ── The Gate 5 batch-1 class set (strategy-owned data; set `gate5-2263305c` batch 1,
   // strategy-claude's delivery dispatch of 2026-09-24T00:28:55Z under D1 (C): the scorer's
   // class-review table at strategy 729fa215, the codex D3 (i) blind replay converged on
-  // every verdict, nothing withdrawn). Five ast-grep rows in the delivered order; the four
-  // regex classes of that batch were withheld on rule 2 (engine typing, measured) and are
-  // not rows. Set id `static-whitelist@gate5-6cba5706`: the first 8 hex of the sha256 over
-  // these five rows' compact JSON bytes (`JSON.stringify`, `engine` then `structuralClass`)
-  // in this order — pinned by authored-whitelist.test.ts; the batch-1 intake pin passes it
-  // as `--judged-by`. A row edit, a reorder or a re-typing is a new set id. ──
+  // every verdict, nothing withdrawn). Five ast-grep rows in the delivered order. The four
+  // regex classes of that batch failed rule 2 (engine typing, measured): three withheld and
+  // never rows; the fourth, `forbidden-literal-token`, is the exemplar row above, its rule's
+  // admission measured at the intake pin. Set id `static-whitelist@gate5-6cba5706`: the
+  // first 8 hex of the sha256 over these five rows' compact JSON bytes (`JSON.stringify`,
+  // `engine` then `structuralClass`) in this order — pinned by authored-whitelist.test.ts;
+  // the batch-1 intake pin passes it as `--judged-by`. A row edit, a reorder or a re-typing
+  // is a new set id. ──
   Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-call' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'static-import-from-module' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'catch-without-rethrow' }),
