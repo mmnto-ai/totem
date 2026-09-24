@@ -400,3 +400,38 @@ per rule on the whitelist, each naming its `(engine, class)` pair. Output verbat
 
 The thirteen `intake-ineligible (whitelist)` outcomes are the D1 (C) demand figure for this batch;
 the class list is in the pin mail and in the per-rule notes above.
+
+## Intake pin (§ 3.3) — `d7034cc4`, 2026-09-24, at the published `@mmnto/cli` 2.11.1
+
+The sections above are the TRANSLATION pin's record (`49754e9c`, 14 entries, none kept out at that
+pin). The intake pin changed the envelope and added the ledger; nothing above is edited, and this
+section is the reconciliation the reader needs (the leg's and Greptile's finding on the batch-1 bot
+round).
+
+- **The class set:** reviewed by the scorer (the batch-1 table at strategy `729fa215`),
+  blind-replayed (D3 (i), converged, nothing withdrawn), delivered as data (2026-09-24T00:28:55Z,
+  corrected 01:05Z), landed on `main` in mmnto-ai/totem#2949 (`0279deec`) under the set id
+  `static-whitelist@gate5-6cba5706`, cut as `@mmnto/cli` 2.11.1 (mmnto-ai/totem#2951 → `7e375235`;
+  the registry held the cli publish as a staged version for ~20 minutes, visible 09:13:11Z with
+  provenance). The apparatus re-froze at strategy `682cd362` (mmnto-ai/totem-strategy#1428).
+- **The envelope at the intake pin (`4943e0eb`): 14 → 11 entries.** The three rules whose regex
+  classes the scorer withheld on measured engine typing are OUT — `54140f59`
+  (`bare-issue-reference`), `a190836d` (`forbidden-callee-literal-arg`), `7056157a`
+  (`forbidden-path-literal`): `intake-ineligible (engine-typing)`, frozen-legacy, scored C0–C7 from
+  the translation pin, never READY; their records and every artifact above stay on the branch.
+  `6ad0d4d5` (`forbidden-literal-token`, the exemplar row) IN under the operator's ruling (A). The
+  header and every kept entry byte-identical (asserted by the reconciliation script before writing);
+  no record file changed.
+- **The intake (`acc98498`):** `TOTEM_NO_REEXEC=1 node <staging-2.11.1>/node_modules/@mmnto/cli/dist/index.js rule author --judged-by static-whitelist@gate5-6cba5706`
+  (a fresh `npm i` of the PUBLISHED 2.11.1, `npm audit signatures` 13 verified; cwd = this
+  checkout of record; no prior ledger, asserted): **exit 0, 11 minted, 0 rejected** — the ten
+  entries under the five delivered ast-grep rows and `6ad0d4d5` under the exemplar row. The 11
+  ledger rows are committed (`.totem/spine/authoring-ledger.ndjson`), every row `judgedBy =
+static-whitelist@gate5-6cba5706`, decidable 11/11; the verbatim output, the exit code and the
+  seat's attestation (the K4 header, the apparatus, the precondition) are in
+  `operations-local/gate5/batch-1/intake-pin/`.
+- **The D2 refresh (`d7034cc4`):** `lesson compile --refresh-manifest` printed "Manifest already
+  fresh — no changes" (the intake changed no record). Erratum: that commit's message claims a
+  restamp that did not happen; the captured output is the fact; the commit is not amended.
+- **Pin mail:** sent to the scorer 2026-09-24T09:20:26Z; the scorer's K4 + K7 at 2.11.1, its
+  intake-inputs merge and admission run from a fresh clone at `d7034cc4` follow.
