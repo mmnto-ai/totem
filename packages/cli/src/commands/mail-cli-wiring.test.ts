@@ -27,7 +27,7 @@ interface WiringHandlers {
   mailVerify: (target: string, opts: Record<string, unknown>) => void;
 }
 
-/** Mirror of the `mail` poll + `mail reply` / `mail mark` registration in index.ts. */
+/** Mirror of the `mail` poll + `mail send` / `mail reply` / `mail mark` / `mail verify` registration in index.ts. */
 function buildMailProgram(handlers: WiringHandlers): Command {
   const program = new Command();
   program.exitOverride(); // throw on parse error instead of process.exit
@@ -95,8 +95,9 @@ function buildMailProgram(handlers: WiringHandlers): Command {
     .option('--workspace <path>', 'Workspace for dir-derived recipient validation')
     .action((opts: Record<string, unknown>, cmd: Command) => {
       // EXACT translation from index.ts (mmnto-ai/totem#2939): the parent `mail`
-      // claims `--workspace` even after the subcommand (the #2097 seam), so the
-      // action reads it back with optsWithGlobals and spreads its own opts first.
+      // claims `--workspace` even after the subcommand (the mmnto-ai/totem#2097
+      // seam), so the action reads it back with optsWithGlobals and spreads its
+      // own opts first.
       const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
       handlers.mailSend({ ...opts, workspace });
     });

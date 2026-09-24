@@ -1075,7 +1075,7 @@ mailCmd
   )
   .option(
     '--workspace <path>',
-    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else the parent of the repo root)',
   )
   .action(
     async (
@@ -1128,7 +1128,7 @@ mailCmd
   )
   .option(
     '--workspace <path>',
-    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else the parent of the repo root)',
   )
   .option(
     '--no-mark',
