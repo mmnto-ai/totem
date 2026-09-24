@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "0ef18ecc15eb8f827a42f7a8c90c3b20316b9c25",
+  "readAt": "2026-09-24T01:24:44Z",
+  "findings": [
+    {
+      "id": "b1r-F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/gate5-b1-class-rows.md",
+      "line": 10,
+      "claim": "The set-id definition is written three different ways (dispatch, changeset, row comment). Only the test's JSDoc and body say fully how to compute it, and a plain reading of the scorer's own dispatch wording gives a different digest.",
+      "counterexample": "Dispatch: 'the first 8 hex of the sha256 of the delivered rows' JSON bytes as you commit them'. Its own json block (LF, no trailing newline) hashes to d591f1c9…, or 04757c85… with a trailing LF (both reproduced by the seat: 373 and 374 bytes). The changeset said only 'the sha256 over the five rows' compact JSON bytes, in committed order', with no JSON.stringify, key order or array wrapper; the row comment named JSON.stringify and the key order but not 'one array'. Other digests: rows concatenated d9540a7a…; JSONL f9154396… (64bbf4b0… with a trailing LF); pretty-printed at indent 2: 0c250c62…; keys swapped: 8468b4cf…; the committed rule (JSON.stringify of the 5-element array, compact, no LF): 6cba570671625739d69745949cb38ddde8aaa1ecb7e52f8c869fef57423714b1, which matches. Mitigation: the dispatch asks the scorer to record the id verbatim from the PR and the pin mail, so the recorded id does not depend on recomputation; only a replayer or control that recomputes is exposed. FOLDED: the changeset, the row comment and the PR body state the one rule — ONE compact JSON array of the five rows in committed order, JSON.stringify of { engine, structuralClass } objects, no whitespace, no trailing newline — and say the dispatch's pretty-printed block is not the input; the PR body names d591f1c9 as that block's digest so a recomputation cannot be mistaken for the id."
+    },
+    {
+      "id": "b1r-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 53,
+      "claim": "The row comment cites the codex D3 (i) replay as converged, but no merged strategy source records the replay. Its only record also shows a row-6 dissent that bears on the comment's own clause about forbidden-literal-token.",
+      "counterexample": "At 729fa215, batch-1.json has status 'committed before delivery; awaiting the blind re-derivation (D3 (i), strategy-codex)'. The synthesis audits/internal/2026-09-24-gate5-batch-1-class-review-replay.md exists only on the unmerged origin/gate5/score-batch-1 (ef2b6e80). Its line 22 reads 'verdicts converge; the OUTCOME differed — the replayer's (B) ... recorded as a dissent'. Line 29 says the dissent is 'carried to the round close on the tracker, the operator's to re-rule'. So 'converged on every verdict, nothing withdrawn' is true; the dispatch and synthesis line 27 confirm the five rows. But the comment's clause on forbidden-literal-token states ruling (A), which is still open to re-ruling. FOLDED: the comment now grounds the replay's convergence on the delivery dispatch ('per that dispatch'); the row-6 dissent is disclosed in the PR body for the operator, whose (A) stands until re-ruled."
+    },
+    {
+      "id": "b1r-F3",
+      "severity": "MINOR",
+      "file": ".changeset/gate5-b1-class-rows.md",
+      "line": 10,
+      "claim": "'no mechanism, option, output or default ... changes' is too broad for 'output'. For any envelope entry declaring one of the five classes, totem rule author now reports decidable/minted where it used to report rejected with exit 1.",
+      "counterexample": "authored-rule.ts:385-392: decidable iff exactly one whitelist entry matches. Before this diff there was no row for (ast-grep, forbidden-callee-call) etc., so matches.length was 0 and the entry was rejected. rule-author.ts sets exitCode=1 on any rejected entry (prereg 310 section 2 item 4, citing rule-author.ts:183-192). The claim holds for the output FORMAT and the default (rule-author.ts:41 is unchanged). FOLDED: the changeset says 'no mechanism, option, output format or default changes; an envelope entry declaring one of the five pairs is now decidable (minted) where it was rejected with exit 1'."
+    },
+    {
+      "id": "b1r-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.test.ts",
+      "line": 40,
+      "claim": "The branch lint warning comes from this diff and is a false positive.",
+      "counterexample": "node packages/cli/dist/index.js lint, run in the worktree: 'PASS - 1 warning(s), 0 errors across 385 rules'. The warning: 'packages/cli/src/commands/authored-whitelist.test.ts:40 - Orchestrator test suites should set an explicit 15s timeout ... Lesson: Set higher timeouts for orchestrator tests', on the describe line. It is caused by the new file. The suite is pure data with no I/O; vitest ran 5 tests in 3ms. NOT FOLDED (disclosed in the PR body): a timeout on a 3 ms data suite would pacify a lesson rule whose premise (an orchestrator suite) does not hold here; the warning is diff-scoped and does not gate."
+    },
+    {
+      "id": "b1r-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spine-authored-cert-corpus.ts",
+      "line": 131,
+      "claim": "Disclosure for the intake pin: each batch gets its own set id, so a ledger that holds rows from more than one set id (cert-1 rows, or batch-1 plus batch-2 rows) can never be read by the authored cert corpus.",
+      "counterexample": "spine-authored-cert-corpus.ts:128-139: const judgedBys = new Set(...judgedBy), then if (judgedBys.size !== 1) throw GATE_INVALID ... a single cert run binds ONE §3 eligibility check. Not a hazard for batch 1 today: .totem/spine/authoring-ledger.ndjson is absent at 0ef18ecc and at 49754e9c, and absent on disk in the resident and in every gate5 worktree. Prereg line 68 routes the pre-pin pass to a scratch clone so the post-release run does not read revised against a default-judgedBy row. Gate 5 does not use the cert-corpus path. It becomes live if batch 2 is delivered with its own gate5-<sha8> and its rows land in the same repo ledger as batch 1's (authored-rule-intake.ts:685: a changed judgedBy must append a revised row). NOT FOLDED (a question for the scorer): carried to the PR body and to the intake-pin mail as a disclosure."
+    }
+  ],
+  "folded": [
+    "b1r-F1",
+    "b1r-F2",
+    "b1r-F3"
+  ],
+  "verdict": "Leg 1 over origin/main (3713c2d8)..0ef18ecc (gate5 b1 class rows): 0 BLOCKING, 1 MATERIAL, 4 MINOR. The data itself (rows, order, id, uniqueness, frozenness, test strength) is not falsified; all five findings are wording or disclosure; folding F1 (changeset and PR-body prose) and F2/F3 (comment wording) does not rewire semantics, so no re-armed leg is owed unless a fold touches a row or the test (none did)."
+}

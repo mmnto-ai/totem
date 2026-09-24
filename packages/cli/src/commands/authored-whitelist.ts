@@ -50,15 +50,16 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   Object.freeze({ engine: 'ast-grep', structuralClass: 'node-shape-presence' }),
   // ── The Gate 5 batch-1 class set (strategy-owned data; set `gate5-2263305c` batch 1,
   // strategy-claude's delivery dispatch of 2026-09-24T00:28:55Z under D1 (C): the scorer's
-  // class-review table at strategy 729fa215, the codex D3 (i) blind replay converged on
-  // every verdict, nothing withdrawn). Five ast-grep rows in the delivered order. The four
-  // regex classes of that batch failed rule 2 (engine typing, measured): three withheld and
-  // never rows; the fourth, `forbidden-literal-token`, is the exemplar row above, its rule's
-  // admission measured at the intake pin. Set id `static-whitelist@gate5-6cba5706`: the
-  // first 8 hex of the sha256 over these five rows' compact JSON bytes (`JSON.stringify`,
-  // `engine` then `structuralClass`) in this order — pinned by authored-whitelist.test.ts;
-  // the batch-1 intake pin passes it as `--judged-by`. A row edit, a reorder or a re-typing
-  // is a new set id. ──
+  // class-review table at strategy 729fa215 and, per that dispatch, the codex D3 (i) blind
+  // replay converged on every verdict with nothing withdrawn). Five ast-grep rows in the
+  // delivered order. The four regex classes of that batch failed rule 2 (engine typing,
+  // measured): three withheld and never rows; the fourth, `forbidden-literal-token`, is the
+  // exemplar row above, its rule's admission measured at the intake pin. Set id
+  // `static-whitelist@gate5-6cba5706`: the first 8 hex of the sha256 over ONE compact JSON
+  // array of these five rows in this order (`JSON.stringify` of `{ engine, structuralClass }`
+  // objects: no whitespace, no trailing newline; the dispatch's pretty-printed block is not
+  // the input) — pinned by authored-whitelist.test.ts; the batch-1 intake pin passes it as
+  // `--judged-by`. A row edit, a reorder or a re-typing is a new set id. ──
   Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-call' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'static-import-from-module' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'catch-without-rethrow' }),
