@@ -1,0 +1,29 @@
+schemaVersion: 1
+severity: error
+message: 2026-03-07T06:05:56.069Z
+
+target:
+  type: regex
+  pattern: typeof\s+[^\s!&|=]+\s*===\s*['"]object['"]
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.jsx'
+    excludeGlobs:
+      - '**/*.test.ts'
+
+requires:
+  pattern: \s*&&
+  scope: line
+
+examples:
+  - bad: if (typeof val === 'object') { val.nested; }
+    good: if (typeof val === 'object' && val !== null) { val.nested; }
+
+curation:
+  sourceLesson: lesson-64bb807f4e10ea4f
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

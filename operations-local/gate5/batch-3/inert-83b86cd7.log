@@ -1,0 +1,15 @@
+legacy : \bmcp[a-zA-Z0-9_]*(?!\?)\s*:
+without: \bmcp[a-zA-Z0-9_]*\s*:
+same  legacy=FIRES without=FIRES  interface ToolMeta { mcpServers: string[]; }
+same  legacy=silent without=silent  interface ToolMeta { mcpServers?: string[]; }
+same  legacy=FIRES without=FIRES  mcpServers : string[]
+same  legacy=silent without=silent  mcpServers ?: string[]
+same  legacy=silent without=silent  mcpServers ? : string[]
+same  legacy=FIRES without=FIRES  mcp: 1
+same  legacy=silent without=silent  mcp?: 1
+same  legacy=FIRES without=FIRES  const x = cond ? mcpA : mcpB;
+same  legacy=silent without=silent  mcpServers?:string
+same  legacy=FIRES without=FIRES  mcp_a1?: number; mcpB: number
+same  legacy=FIRES without=FIRES  { mcpServers:string[] }
+same  legacy=FIRES without=FIRES  mcpServers: string[] // optional?
+battery disagreements: 0; tree: 380 files, 117505 lines, legacy firings 11, disagreements 0

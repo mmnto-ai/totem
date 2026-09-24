@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Using split() on markdown headings often misclassifies
+
+target:
+  type: regex
+  pattern: \.split\(\s*(?:\/\^?#+|['"]\^?#+)
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.tsx'
+      - '**/*.jsx'
+
+examples:
+  - bad: const parts = md.split(/^## /m);
+    good: const heads = [...md.matchAll(/^## /gm)];
+
+curation:
+  sourceLesson: lesson-434c51ff64ec74b6
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Regex escape utility is missing the hyphen (-). Add it to prevent unintended range behavior when the escaped string is used inside a character class [...].
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: $STR.replace(/[.*+?^${}()|[\]\\]/g, $REPLACEMENT)
+  scope:
+    fileGlobs:
+      - packages/core/src/**/*.ts
+    excludeGlobs:
+      - '**/*.test.*'
+      - '**/*.spec.*'
+
+examples:
+  - bad: const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    good: const escaped = raw.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+
+curation:
+  sourceLesson: lesson-fe1b4123aa1f679c
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
