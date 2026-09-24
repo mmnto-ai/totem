@@ -3627,6 +3627,19 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     expect(output).not.toContain('Skill twin scaffolding failed');
   }, 60000);
 
+  it('the review-reply skill carries the bus-audit completion recipe (mmnto-ai/totem#2925)', () => {
+    // The one-call shape a reviewer ends an audit with, inside the managed span.
+    const managed = REVIEW_REPLY_SKILL_CONTENT.slice(
+      REVIEW_REPLY_SKILL_CONTENT.indexOf(SKILL_MARKER_START),
+      REVIEW_REPLY_SKILL_CONTENT.indexOf(SKILL_MARKER_END),
+    );
+    expect(managed).toContain('## Ending a blind-round audit on the bus');
+    expect(managed).toContain('totem mail reply <source dispatch path> --body-file <deposit>');
+    expect(managed).toContain('`--no-mark` stages the reply and leaves the source unread');
+    expect(managed).toContain('Never a hand-written mark');
+    expect(managed).toContain("the `read:` line under the item in `totem mail`'s listing");
+  });
+
   it('a failed twin write leaves the existing bytes intact and no temp file, and reports the error — the atomic writer is the seam (mmnto-ai/totem#2902 bot round)', async () => {
     // Every skill copy on either root goes through writeFileAtomicSync, so an
     // interrupted write is the old bytes or the new, never a truncated skill.
