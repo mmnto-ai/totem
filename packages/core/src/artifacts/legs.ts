@@ -131,9 +131,10 @@ function requiredControlFreeText(label: string): z.ZodEffects<z.ZodString, strin
  * The leg's severity vocabulary. Deliberately NOT the verdict family's
  * CRITICAL/WARN/INFO: a leg deposit answers "what did the leg find", and the
  * doctrine spelling for that is BLOCKING (the fold must land) / MATERIAL (the
- * seat rules) / MINOR (disclosed) / QUESTION (a question for the seat, answered
- * rather than folded; counted beside the three, never in blocking or material
- * — mmnto-ai/totem#2944, the typed-deposit shape's fourth class). Order here is
+ * seat rules) / MINOR (disclosed) / QUESTION (a question for the seat: answered,
+ * and marked folded once answered, so it counts in `folded` like any answered
+ * finding; counted beside the three, never in blocking or material —
+ * mmnto-ai/totem#2944, the typed-deposit shape's fourth class). Order here is
  * documentation order; the value is data. One spelling —
  * {@link LegFindingSeveritySchema} is built from this array, never a second
  * literal list.
