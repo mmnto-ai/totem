@@ -3635,9 +3635,14 @@ describe('distributeClaudeSkills writes the .agents twin beside the .claude copy
     );
     expect(managed).toContain('## Ending a blind-round audit on the bus');
     expect(managed).toContain('totem mail reply <source dispatch path> --body-file <deposit>');
+    expect(managed).toContain('writes the `processed/` mark for the source in the same call');
     expect(managed).toContain('`--no-mark` stages the reply and leaves the source unread');
+    expect(managed).toContain('for a later `totem mail mark <source>`');
     expect(managed).toContain('Never a hand-written mark');
+    expect(managed).toContain('never a separate send followed by a hand-written mark');
+    expect(managed).toContain('Run both calls from that resident checkout, never from a worktree');
     expect(managed).toContain("the `read:` line under the item in `totem mail`'s listing");
+    expect(managed).toContain("the item's `filePath` under `--json`");
   });
 
   it('a failed twin write leaves the existing bytes intact and no temp file, and reports the error — the atomic writer is the seam (mmnto-ai/totem#2902 bot round)', async () => {

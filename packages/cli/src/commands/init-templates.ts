@@ -3576,7 +3576,7 @@ ${SKILL_MARKER_END}
 
 export const REVIEW_REPLY_SKILL_CONTENT = `---
 name: review-reply
-description: Unified PR review triage — fetch, normalize, and batch-action bot comments
+description: Unified PR review triage — fetch, normalize, and batch-action bot comments; and the completion recipe that ends a bus audit
 ---
 
 ${SKILL_MARKER_START}
@@ -3697,7 +3697,7 @@ A finished audit or round deposit for a kit that arrived by mail ends with ONE c
 totem mail reply <source dispatch path> --body-file <deposit>
 \`\`\`
 
-It sends the reply into your own outbox AND writes the \`processed/\` mark for the source in the same call. \`--no-mark\` stages the reply and leaves the source unread for a later \`totem mail mark <source>\`. Never a hand-written mark, and never a separate send followed by a hand-written mark: the mark is the consumption record the next poll reads, and only the verb writes it under the same resolved root as the reply (mmnto-ai/totem#2925). The source path is the \`read:\` line under the item in \`totem mail\`'s listing (mmnto-ai/totem#2919) — pass it as printed. When the send's own verify line is not in front of you, \`totem mail verify <written path>\` re-checks the dispatch you wrote.
+It sends the reply into your own outbox AND writes the \`processed/\` mark for the source in the same call. \`--no-mark\` stages the reply and leaves the source unread for a later \`totem mail mark <source>\`. Never a hand-written mark, and never a separate send followed by a hand-written mark: the mark is the consumption record the next poll reads, and the reply verb writes it under the same resolved root as the reply — the resident checkout that hosts your seat (mmnto-ai/totem#2930). Run both calls from that resident checkout, never from a worktree: the reply refuses a worktree, but a standalone \`totem mail mark\` resolves the nearest marker, and from a worktree that is a phantom store no poll drains (mmnto-ai/totem#2968). The source path is the \`read:\` line under the item in \`totem mail\`'s listing (mmnto-ai/totem#2919; the item's \`filePath\` under \`--json\`) — pass it as printed. When the send's own verify line is not in front of you, \`totem mail verify <written path>\` re-checks the dispatch you wrote.
 
 ${SKILL_MARKER_END}
 `;
