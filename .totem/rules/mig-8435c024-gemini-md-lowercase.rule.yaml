@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: error
+message: The Gemini CLI and Gemini Code Assist (GCA) do not
+
+target:
+  type: regex
+  pattern: \bgemini\.md\b
+  scope:
+    fileGlobs:
+      - '**/*.md'
+      - '**/*.sh'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/package.json'
+      - '**/*.txt'
+
+examples:
+  - bad: See gemini.md for the instructions file.
+    good: See GEMINI.md for the instructions file.
+
+curation:
+  sourceLesson: lesson-8435c024569ffa51
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
