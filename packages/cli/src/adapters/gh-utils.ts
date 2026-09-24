@@ -27,9 +27,12 @@ function ghExecOptions(cwd: string, timeout: number) {
 /**
  * Shared error handler for all GitHub CLI interactions.
  * Re-throws [Totem Error] as-is, wraps ZodErrors and ENOENT, and
- * falls through to a generic message for anything else.
+ * falls through to a generic message for anything else. `hint` replaces the
+ * generic recovery line for that fall-through only, so a caller that knows a
+ * likelier cause than authentication (an issue fetch: the wrong repository,
+ * mmnto-ai/totem#2943) can say so without the other callers inheriting it.
  */
-export function handleGhError(err: unknown, context: string): never {
+export function handleGhError(err: unknown, context: string, hint?: string): never {
   if (err instanceof Error && err.message.includes('[Totem Error]')) {
     throw err;
   }
@@ -64,10 +67,7 @@ export function handleGhError(err: unknown, context: string): never {
   throw new TotemError(
     'SHIELD_FAILED',
     `Failed to fetch ${context}: ${wrapperMsg}`,
-    // A wrong repository is the first suspect, not authentication (mmnto-ai/totem#2943):
-    // an issue URL or `owner/repo#N` names its repository, a bare number resolves
-    // against this one.
-    'Check that the target exists in the repository it was looked up in (a URL or `owner/repo#N` names its repository; a bare number resolves against this one), then run `gh auth status` to verify authentication and retry.',
+    hint ?? 'Run `gh auth status` to verify authentication, then retry.',
     err,
   );
 }
@@ -93,6 +93,8 @@ export function ghFetchAndParse<T>(
   schema: z.ZodType<T>,
   context: string,
   cwd: string,
+  /** Replaces the generic recovery line on a fetch failure (see {@link handleGhError}). */
+  hint?: string,
 ): T {
   const isPaginated = args.includes('--paginate');
   try {
@@ -114,6 +116,6 @@ export function ghFetchAndParse<T>(
 
     return schema.parse(parsed);
   } catch (err) {
-    handleGhError(err, context);
+    handleGhError(err, context, hint);
   }
 }

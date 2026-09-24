@@ -76,9 +76,11 @@ export class GitHubCliAdapter implements IssueAdapter {
         'number,title,body,labels,state',
       ],
       GhIssueSchema,
-      // The failure names where the issue was looked up (mmnto-ai/totem#2943).
+      // The failure names where the issue was looked up, and its hint puts a
+      // wrong repository before authentication (mmnto-ai/totem#2943).
       `issue #${issueNumber}${this.repo ? ` in ${this.repo}` : ''}`,
       this.cwd,
+      `Check that issue #${issueNumber} exists in ${this.repo ?? 'this repository'} (an issue URL or \`owner/repo#N\` names its repository; a bare number resolves against this one, or against every repository under \`config.repositories\`), then run \`gh auth status\` to verify authentication and retry.`,
     );
     return {
       number: issue.number,

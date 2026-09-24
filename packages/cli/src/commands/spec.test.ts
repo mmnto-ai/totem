@@ -113,22 +113,32 @@ vi.mock('./qbd-seam.js', () => ({
   recordQbdDerive: async () => ({}),
 }));
 
+// The working directory's adapter records every fetch it is asked for, so a
+// test can assert a cross-repository fetch never fell back to it (mmnto-ai/totem#2943).
+const cwdAdapter = vi.hoisted(() => ({ fetched: [] as number[] }));
 vi.mock('../adapters/create-issue-adapter.js', () => ({
   createIssueAdapter: async () => ({
-    fetchIssue: (num: number): StandardIssue => ({
-      number: num,
-      title: `Issue ${num}`,
-      body: 'issue body',
-      state: 'open',
-      labels: [],
-    }),
+    fetchIssue: (num: number): StandardIssue => {
+      cwdAdapter.fetched.push(num);
+      return {
+        number: num,
+        title: `Issue ${num}`,
+        body: 'issue body',
+        state: 'open',
+        labels: [],
+      };
+    },
   }),
 }));
 
 // mmnto-ai/totem#2943: a qualified input builds a repository-specific adapter;
 // the mock records the repository each one was built for and answers with a
 // title that names it, so a test can tell WHICH repository the fetch ran against.
-const crossRepo = vi.hoisted(() => ({ built: [] as Array<string | undefined> }));
+// A repository listed in `throwOn` fails its fetch, the way a wrong repository does.
+const crossRepo = vi.hoisted(() => ({
+  built: [] as Array<string | undefined>,
+  throwOn: [] as string[],
+}));
 vi.mock('../adapters/github-cli.js', () => ({
   GitHubCliAdapter: class {
     private readonly repo: string | undefined;
@@ -137,6 +147,9 @@ vi.mock('../adapters/github-cli.js', () => ({
       crossRepo.built.push(repo);
     }
     fetchIssue(num: number): StandardIssue {
+      if (this.repo !== undefined && crossRepo.throwOn.includes(this.repo)) {
+        throw new Error(`Failed to fetch issue #${num} in ${this.repo}: boom`);
+      }
       return {
         number: num,
         title: `Cross-repo issue ${num} of ${this.repo ?? 'cwd'}`,
@@ -2324,6 +2337,25 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     await specCommand(['2735'], { stdout: true });
     expect(crossRepo.built).toEqual([]);
     expect(String(harness.orchestratorArgs[0]!['prompt'])).toContain('Issue 2735');
+  });
+
+  it('a cross-repository fetch that fails REJECTS the run and never falls back to the cwd adapter', async () => {
+    // The silent wrong-anchor case the issue names: a fallback to the working
+    // directory's issue of the same number would anchor on a stranger's spec.
+    crossRepo.built.length = 0;
+    crossRepo.throwOn = ['other-org/broken'];
+    cwdAdapter.fetched.length = 0;
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+    try {
+      await expect(
+        specCommand(['https://github.com/other-org/broken/issues/9'], { stdout: true }),
+      ).rejects.toThrow(/issue #9 in other-org\/broken/);
+    } finally {
+      crossRepo.throwOn = [];
+    }
+    expect(crossRepo.built).toEqual(['other-org/broken']);
+    expect(cwdAdapter.fetched).toEqual([]);
+    expect(harness.orchestratorArgs).toEqual([]);
   });
 });
 

@@ -1097,7 +1097,12 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
         fetchAdapter = new GitHubCliAdapter(cwd, issueInput.repo);
       }
       const issueNumber = issueInput.number;
-      log.info(TAG, `Fetching issue #${issueNumber} (${issueInput.repo ?? 'this repository'})...`);
+      // A bare number goes to the default adapter: this repository, or every
+      // repository under `config.repositories`.
+      log.info(
+        TAG,
+        `Fetching issue #${issueNumber} (${issueInput.repo ?? 'the default repository'})...`,
+      );
       const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
       // `issueRef` keeps the input AS TYPED so the anchor's ref round-trips

@@ -388,6 +388,8 @@ Extracts systemic lessons from resolved bot review comments on a merged PR. The 
 
 Fetches GitHub Issues (or takes free-text topics) and synthesizes a pre-work spec. Injects a prior art concierge (shared helper registry) enriched by your project's vector DB lessons to prevent hallucinations.
 
+An issue input takes three forms: a bare number (`2929`, resolved against this repository, or against every repository under `config.repositories`), `owner/repo#N`, or an issue URL. A URL or a qualified ref names its repository, and the fetch runs against that repository, never the working directory's (`github.com` gives `owner/repo`; another host gives `host/owner/repo`, the form `gh --repo` takes). The anchor's `ref` keeps the input as typed. Anything else is a free-text topic.
+
 Inputs are OPTIONAL because `--from <record>` is an alternative subject. Running `totem spec` with neither inputs nor `--from` is an error naming the usage line.
 
 - **Flags:**
