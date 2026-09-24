@@ -1,0 +1,53 @@
+K4 header
+  @mmnto/totem   2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\staging-2.10.0\node_modules\@mmnto\totem\dist\index.js)
+  @mmnto/cli     2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\staging-2.10.0\node_modules\@mmnto\cli)
+  checkout       2.11.0 declared by C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\prepin-clone-b3\packages\core\package.json
+  node           v24.16.0
+  @ast-grep/napi 0.42.3
+  languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
+  packs          none declared (packs.length 0, packsLoaded 0 — packsLoaded === packs.length holds)
+  records        C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\prepin-clone-b3\.totem\rules
+
+set sha256: 2263305cfbbe8b792d8884d8091a311676ba8ddedf75e852fa9ab434de950ca5 (the freeze's splitRef suffix is its first 8 hex)
+set: operations-local/gate5/manifest-2263305c.json — 53 rule(s), manifest order
+--only: 13 entries selected
+note: 29 record file(s) outside the selected set are ignored: mig-06282905-execsync-call-js.rule.yaml, mig-06282905-execsync-call.rule.yaml, mig-1210f02d-raw-error-throw-in-cli.rule.yaml, mig-2266fc0d-static-named-import-totem-barrel.rule.yaml, mig-240f19ca-process-exit-call-js.rule.yaml, mig-240f19ca-process-exit-call.rule.yaml, mig-24f112fe-error-message-prefix.rule.yaml, mig-2d3ac4b9-gemini-md-lowercase-path.rule.yaml, mig-329479bf-zod-string-array-min1.rule.yaml, mig-3c777370-brace-expansion-glob.rule.yaml, mig-427c97fb-partial-matcher-secret-masking.rule.yaml, mig-487a0a23-static-import-in-cli-commands.rule.yaml, mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml, mig-54140f59-bare-issue-number-refs.rule.yaml, mig-5afaf8d0-emoji-in-docs.rule.yaml, mig-61bb8b8b-json-parse-as-cast.rule.yaml, mig-638d6fcc-execfilesync-git-shell-option.rule.yaml, mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml, mig-7056157a-hardcoded-git-hooks-path.rule.yaml, mig-71935fe9-string-cast-on-input-js.rule.yaml, mig-71935fe9-string-cast-on-input.rule.yaml, mig-7cdfa106-dynamic-import-outside-cli-entry.rule.yaml, mig-81f72c85-promise-allsettled.rule.yaml, mig-87aff037-fail-open-catch-ban.rule.yaml, mig-a190836d-raw-git-exec.rule.yaml, mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml, mig-bc8b99e8-console-log-in-mcp.rule.yaml, mig-f202f65f-bare-rejects-tothrow.rule.yaml, mig-fb05f895-direct-child-process-import.rule.yaml
+
+27. 391de7088c633579 (rank 146)  differential-satisfied
+    mig-391de708-hardcoded-main-head-range.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+28. 83b86cd73d637a6c (rank 154)  differential-satisfied
+    mig-83b86cd7-mcp-fields-optional.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+29. cf65e2b445329be2 (rank 155)  differential-satisfied
+    mig-cf65e2b4-inline-json-parse-readfilesync.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+30. 64bb807f4e10ea4f (rank 157)  differential-satisfied
+    mig-64bb807f-typeof-object-without-null-guard.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent
+31. 87e2437431c17ec5 (rank 159)  differential-satisfied
+    mig-87e24374-diff-header-plus-b-literal.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+32. 434c51ff64ec74b6 (rank 160)  differential-satisfied
+    mig-434c51ff-split-on-markdown-heading.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+33. 55797450514d4c3b (rank 161)  differential-satisfied
+    mig-55797450-git-add-all.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+34. 0615c43eb5a9d0e8 (rank 164)  differential-satisfied
+    mig-0615c43e-dot-git-existence-test.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+35. 56c801dfda484c75 (rank 167)  differential-satisfied
+    mig-56c801df-text-embedding-004-literal.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+36. fe1b4123aa1f679c (rank 168)  differential-satisfied
+    mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+37. 6f362fa28abcf94a (rank 170)  differential-satisfied
+    mig-6f362fa2-json-parse-as-cast-core.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+38. 4ac94d6f9c387e1e (rank 173)  differential-satisfied
+    mig-4ac94d6f-bare-start-anchor-regex.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+39. 5da43ea60b66e96e (rank 174)  differential-satisfied
+    mig-5da43ea6-git-double-dash-separator.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent
+
+Validate: 13 record(s) — parsed 13, compiled 13, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Fidelity (records): 11/13 identical, 2 expected divergence(s), 0 UNEXPECTED
+Fidelity (entries): 11/13 identical, 2 expected divergence(s), 0 UNEXPECTED
+Differential split (measured, per entry):
+  differential-satisfied   13  (entries 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39)
+  good-also-fires          0
+  bad-does-not-fire        0
+  not-evaluable            0
+Differential expectation mismatches: 0
+
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0
