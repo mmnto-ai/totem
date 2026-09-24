@@ -1218,6 +1218,9 @@ function gitRead(args) {
   const res = spawnSync('git', args, {
     encoding: 'utf-8',
     timeout: Math.max(250, Math.min(10000, remaining)),
+    // The deadline must bound the hook: SIGTERM can be ignored by a wedged
+    // child, SIGKILL cannot (mmnto-ai/totem#2932; TerminateProcess on win32).
+    killSignal: 'SIGKILL',
   });
   if (res.error || typeof res.status !== 'number' || res.status !== 0) return '';
   return (res.stdout || '').trim();
@@ -1673,6 +1676,9 @@ process.stdin.on('end', () => {
     const result = spawnSync(process.execPath, checkArgs, {
       encoding: 'utf-8',
       timeout: Math.max(1000, deadline - Date.now()),
+      // Same bound as gitRead: a wedged checker dies at the deadline
+      // (mmnto-ai/totem#2932).
+      killSignal: 'SIGKILL',
       input: payloads[p],
     });
 
