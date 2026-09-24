@@ -464,3 +464,168 @@ rules:
         matchedSpan: examples[0].bad
         contentHash: 4ec00acc17f6edc09f3f374fa2b052abff5bed02c8a69f38bd5ab96c01556359
         example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: "884becd45e6380bd: Using 'pnpm run version' instead of the bare 'pnpm version'"
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-884becd4-bare-pnpm-version.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-884becd4-bare-pnpm-version.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 8939fdca0cc1477c6e0dd612d5c96c7ffe16148fdbbc1bf0e790242878926b3f
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '089b0c628b330c16: Core packages should use an injectable logger interface'
+    structuralClass: forbidden-object-member-call
+    record: .totem/rules/mig-089b0c62-console-any-method-core.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-089b0c62-console-any-method-core.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: f85ab03372077a9bd308992877148df3c99c4973449a6bc80edab501b9093aed
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '427481b534fe3392: Refrain from using console.warn within core library'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-427481b5-console-warn-core.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-427481b5-console-warn-core.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 37b463ffd86145a0510ba3ecf434760977d40b96c57d57ebd04e6ae7b2391567
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '5c5fe9d9060bcb6d: Core library modules should use optional callbacks'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-5c5fe9d9-console-warn-core-onwarn.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-5c5fe9d9-console-warn-core-onwarn.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: d61c485da8ad6fb19627e4de17634b55b8746fdb782cfff580d26d8366343cf9
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '61dcb058bd1df15d: Do not delete .totem/lessons.md (load-bearing for 41+ rules)'
+    structuralClass: forbidden-callee-literal-arg
+    record: .totem/rules/mig-61dcb058-delete-totem-lessons-md.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-61dcb058-delete-totem-lessons-md.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 3ced5cf937b3e253504e42ae07bb2615f68369a592ba7533230ae6eb13adca20
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'fb008f77a1f5a49a@javascript: Constructing shell commands with string interpolation'
+    structuralClass: named-callee-argument-shape
+    record: .totem/rules/mig-fb008f77-spawnsync-string-command-js.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-fb008f77-spawnsync-string-command-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 26fd543627531f6083920c96c9288f9a7f4386d7b3f5c9f0fd8abede8b4dbe1b
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'fb008f77a1f5a49a@typescript: Constructing shell commands with string interpolation'
+    structuralClass: named-callee-argument-shape
+    record: .totem/rules/mig-fb008f77-spawnsync-string-command.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-fb008f77-spawnsync-string-command.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 26fd543627531f6083920c96c9288f9a7f4386d7b3f5c9f0fd8abede8b4dbe1b
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '8435c024569ffa51: The Gemini CLI and Gemini Code Assist (GCA) do not'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-8435c024-gemini-md-lowercase.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-8435c024-gemini-md-lowercase.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 37ab443363df2714ffe7874ea2f76e8f4c7ec85f55630f04e82e475eedc13c1c
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '8213cd4e21b375ba: GitHub Closes keyword only applies to the first issue'
+    structuralClass: close-keyword-issue-list
+    record: .totem/rules/mig-8213cd4e-closes-keyword-issue-list.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-8213cd4e-closes-keyword-issue-list.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 595542625edcaca453c22c1b8c81d4b48527f8877551def4ce293732480fb145
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'b34d95158d37f5a9: Junie requires specific file locations for auto-detection,'
+    structuralClass: forbidden-path-literal
+    record: .totem/rules/mig-b34d9515-junie-file-location.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-b34d9515-junie-file-location.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 69da962707c21489cbb3c42da2a68ee727c9b0d323958ebd2e3eb9428c3ab00d
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: "7e3eefeaa85403d0: Manual lessons must use the '## Lesson <separator> <Heading>' structure"
+    structuralClass: heading-missing-required-separator
+    record: .totem/rules/mig-7e3eefea-lesson-heading-separator.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-7e3eefea-lesson-heading-separator.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 8f69c71300be2deded60e82e9dc490cbeccc51bb51c98f84250ccc0d1e8aa6a2
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: "d487264e210913a4: Prefer Vitest's expect().rejects.toHaveProperty()"
+    structuralClass: try-block-expect-fail-with-catch
+    record: .totem/rules/mig-d487264e-try-expect-fail-catch.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-d487264e-try-expect-fail-catch.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: ffef28c2277b67780cda8ceadb4be45947dd5e1bc3c8fbaee1cc1b260d52ed95
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '4ae0a01d912f8742: Use canonical CLI command forms'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-4ae0a01d-bare-totem-extract-alias.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-4ae0a01d-bare-totem-extract-alias.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: d6e8358191dc3823e873edf8e588642e780f6ca9210800791d64bd30c3d09b76
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '63680bf329d59167: Use process.exitCode for CLI exits'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-63680bf3-process-exit-cli.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-63680bf3-process-exit-cli.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 0335548aa49004cdb56e7f1d62c945c664e2095b964f6cecb223f1b1627e3584
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'b3e3e2b380a0b1be: Git output can vary by system locale, causing parsing logic'
+    structuralClass: command-missing-required-env-token
+    record: .totem/rules/mig-b3e3e2b3-git-lc-all.rule.yaml
+    positiveFixtures:
+      - pr: 2950
+        filePath: .totem/rules/mig-b3e3e2b3-git-lc-all.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: c5768f3fc1750f2b9073cc385f079388c8fa26106906024f1130e9e491ff7d51
+        example: 0
