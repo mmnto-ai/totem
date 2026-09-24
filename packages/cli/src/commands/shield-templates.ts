@@ -58,9 +58,12 @@ export const QUERY_DIFF_TRUNCATE = 2_000;
 // that payload could answer in a shape the shared verdict cascade cannot
 // extract (measured: the Gemini lane abstained exactly when the code diff
 // was truncated and completed when it was whole). The cut now lands on a
-// file or hunk boundary and the marker says what was delivered and what was
-// not. ONE helper serves every assembly site and the fan's delivered-segment
-// fallback, so the persisted `<git_diff>` bytes always equal what a lane saw.
+// file, hunk or line boundary whenever that keeps the coverage floors below,
+// else at the window itself, and the marker says what was delivered and what
+// was not. ONE helper serves every assembly site and the fan's
+// delivered-segment fallback, so the persisted `<git_diff>` bytes equal what
+// a lane saw (for a diff carrying no `</git_diff>` tag — `wrapXml` escapes
+// that one tag inside the block).
 
 /** The literal every truncation marker begins with — grep-stable across formats. */
 export const DIFF_TRUNCATION_MARKER_HEAD = '... [diff truncated';
@@ -114,16 +117,17 @@ function stripDiffPathPrefix(operand: string): string {
  * The file's path from its header block: the `+++` operand (the post-image
  * name; a deleted file's is `/dev/null`, so its `---` operand serves), read
  * within the lines between the `diff --git` line and the first hunk or the
- * next file. Falls back to the `diff --git a/<p> b/<p>` shape, then to the raw
- * remainder of the header line. Trailing CRs are dropped.
+ * next file; a hunk-less block (a pure rename, a mode change, a binary) falls
+ * back to its `rename to` line, then to the `diff --git a/<p> b/<p>` shape,
+ * then to the header's `b/` operand, then to the raw remainder of the header
+ * line. Trailing CRs are dropped. The searches are bounded by the next file
+ * header, so a run of hunk-less files costs linear time.
  */
 function diffFilePath(diff: string, lineStart: number): string {
-  const blockEnd = (() => {
-    const nextFile = diff.indexOf(FILE_HEADER_NEEDLE, lineStart);
-    const nextHunk = diff.indexOf(HUNK_NEEDLE, lineStart);
-    const ends = [nextFile, nextHunk].filter((i) => i !== -1);
-    return ends.length === 0 ? diff.length : Math.min(...ends);
-  })();
+  const nextFile = diff.indexOf(FILE_HEADER_NEEDLE, lineStart);
+  const fileEnd = nextFile === -1 ? diff.length : nextFile;
+  const nextHunk = diff.slice(lineStart, fileEnd).indexOf(HUNK_NEEDLE);
+  const blockEnd = nextHunk === -1 ? fileEnd : lineStart + nextHunk;
   const block = diff.slice(lineStart, blockEnd).replace(/\r/g, '');
   const lines = block.split('\n');
   const headerLine = lines[0] ?? '';
@@ -135,8 +139,12 @@ function diffFilePath(diff: string, lineStart: number): string {
   if (minus !== undefined && minus.slice(4).trim() !== '/dev/null') {
     return stripDiffPathPrefix(minus.slice(4));
   }
-  const m = /^diff --git a\/(.+) b\/\1$/.exec(headerLine);
-  if (m) return m[1]!;
+  const renameTo = lines.find((l) => l.startsWith('rename to '));
+  if (renameTo !== undefined) return stripDiffPathPrefix(renameTo.slice('rename to '.length));
+  const same = /^diff --git a\/(.+) b\/\1$/.exec(headerLine);
+  if (same) return same[1]!;
+  const bSide = /^diff --git a\/.+? b\/(.+)$/.exec(headerLine);
+  if (bSide) return bSide[1]!;
   return headerLine.slice('diff --git '.length);
 }
 
@@ -165,13 +173,17 @@ function omittedFilesClause(omittedFiles: readonly string[]): string {
  * count). The cut prefers structure but never at the cost of coverage: the
  * latest file or hunk boundary at or before the limit is taken when it delivers
  * at least nine tenths of the window; else the last line boundary when it
- * delivers at least half; else a hard character cut at the limit. A diff
- * within the limit is returned unchanged with `truncated: false`.
+ * delivers at least half and does not leave a file as a bare header (then the
+ * file boundary before that header, when it clears the half, else the window);
+ * else a hard character cut at the limit. A diff within the limit is returned
+ * unchanged with `truncated: false`. A limit that is not a positive number
+ * (no caller passes one) reads as the default window.
  */
 export function truncateDiffForReview(
   diff: string,
   limit: number = MAX_DIFF_CHARS,
 ): DiffTruncation {
+  if (!(limit > 0)) limit = MAX_DIFF_CHARS;
   const totalChars = diff.length;
   if (totalChars <= limit) {
     return {
@@ -185,11 +197,12 @@ export function truncateDiffForReview(
     };
   }
 
-  // `cut` is the index of the newline that ends the delivered prefix, so the
-  // prefix `diff.slice(0, cut)` is at most `limit` chars and ends on a whole
-  // line. Among structural boundaries the later of the last file boundary and
-  // the last hunk boundary wins (it delivers the most complete hunks); a file
-  // boundary at the same index is cleaner and is preferred on a tie.
+  // For a boundary cut `cut` is the index of the newline that ends the
+  // delivered prefix, so `diff.slice(0, cut)` is at most `limit` chars and ends
+  // on a whole line; a character cut ends wherever the window does. Among
+  // structural boundaries the later of the last file boundary and the last hunk
+  // boundary wins (it delivers the most complete hunks); the two needles differ
+  // at their second char, so they never coincide.
   const fileCut = diff.lastIndexOf(FILE_HEADER_NEEDLE, limit);
   let hunkCut = diff.lastIndexOf(HUNK_NEEDLE, limit);
   // A hunk boundary is useful only when at least one whole hunk of the SAME file
@@ -204,7 +217,7 @@ export function truncateDiffForReview(
   }
   let structuralCut = -1;
   let structuralKind: DiffCutBoundary = 'none';
-  if (fileCut > 0 && fileCut >= hunkCut) {
+  if (fileCut > 0 && fileCut > hunkCut) {
     structuralCut = fileCut;
     structuralKind = 'file';
   } else if (hunkCut > 0) {
@@ -223,6 +236,25 @@ export function truncateDiffForReview(
   } else if (lineCut >= limit * LINE_CUT_FLOOR) {
     cut = lineCut;
     cutAt = 'line';
+    // A line cut must not leave the last file as a bare header (its `---`,
+    // `+++` or first `@@` line with no content): then the file boundary before
+    // that header serves when it clears the line floor, else the window does.
+    const headerBefore = diff.lastIndexOf(FILE_HEADER_NEEDLE, cut);
+    const fileStart = headerBefore === -1 ? 0 : headerBefore + 1;
+    if (headerBefore !== -1 || diff.startsWith('diff --git ')) {
+      const firstHunk = diff.slice(fileStart, cut).indexOf(HUNK_NEEDLE);
+      const hunkLineEnd = firstHunk === -1 ? -1 : diff.indexOf('\n', fileStart + firstHunk + 1);
+      const bareHeader = firstHunk === -1 || hunkLineEnd === -1 || hunkLineEnd >= cut;
+      if (bareHeader) {
+        if (headerBefore > 0 && headerBefore >= limit * LINE_CUT_FLOOR) {
+          cut = headerBefore;
+          cutAt = 'file';
+        } else {
+          cut = limit;
+          cutAt = 'char';
+        }
+      }
+    }
   } else {
     cut = limit;
     cutAt = 'char';

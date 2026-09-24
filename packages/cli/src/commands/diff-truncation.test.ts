@@ -168,6 +168,83 @@ describe('truncateDiffForReview', () => {
     expect(t.deliveredChars).toBeLessThanOrEqual(MAX_DIFF_CHARS);
   });
 
+  it('reads a limit that is not a positive number as the default window', () => {
+    const small = 'a\n'.repeat(10);
+    expect(truncateDiffForReview(small, 0).truncated).toBe(false);
+    expect(truncateDiffForReview(small, -5).truncated).toBe(false);
+    expect(truncateDiffForReview(small, Number.NaN).truncated).toBe(false);
+    const big = 'a\n'.repeat(MAX_DIFF_CHARS);
+    expect(truncateDiffForReview(big, 0).deliveredChars).toBeLessThanOrEqual(MAX_DIFF_CHARS);
+  });
+
+  describe('the coverage floors, pinned at their thresholds', () => {
+    it('a file boundary is taken at nine tenths of the window and refused just below it', () => {
+      const a = multiLineFile('a.ts', 100, 40);
+      const b = multiLineFile('b.ts', 100, 40);
+      const diff = a + b;
+      const boundary = a.length - 1; // the newline before b's header
+      const taken = Math.floor(boundary / 0.9); // boundary >= 0.9 * taken
+      const refused = Math.floor(boundary / 0.9) + 2; // boundary < 0.9 * refused
+      expect(boundary).toBeGreaterThanOrEqual(taken * 0.9);
+      expect(boundary).toBeLessThan(refused * 0.9);
+      const t1 = truncateDiffForReview(diff, taken);
+      expect(t1.cutAt).toBe('file');
+      expect(t1.deliveredChars).toBe(boundary);
+      const t2 = truncateDiffForReview(diff, refused);
+      // The only structural cut failed the floor; b's lines fill the window instead.
+      expect(t2.cutAt).toBe('line');
+      expect(t2.partialFile).toBe('b.ts');
+      expect(t2.deliveredChars).toBeGreaterThan(boundary);
+    });
+
+    it('a line boundary is taken at half the window and refused just below it', () => {
+      // One delivered content line, then one line far wider than any window.
+      const head = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,2 @@\n+first\n';
+      const diff = head + '+' + 'w'.repeat(5_000) + '\n';
+      const boundary = head.length - 1; // the newline ending "+first"
+      const taken = boundary * 2; // boundary >= 0.5 * taken
+      const refused = boundary * 2 + 2; // boundary < 0.5 * refused
+      const t1 = truncateDiffForReview(diff, taken);
+      expect(t1.cutAt).toBe('line');
+      expect(t1.deliveredChars).toBe(boundary);
+      const t2 = truncateDiffForReview(diff, refused);
+      expect(t2.cutAt).toBe('char');
+      expect(t2.deliveredChars).toBe(refused);
+    });
+  });
+
+  describe('a line cut never leaves a file as a bare header', () => {
+    it('falls back to the file boundary before the header when that clears half the window', () => {
+      const a = multiLineFile('a.ts', 500, 60); // ~30 KB
+      const b = `diff --git a/b.ts b/b.ts\n--- /dev/null\n+++ b/b.ts\n@@ -0,0 +1,1 @@\n+${'z'.repeat(60_000)}\n`;
+      const t = truncateDiffForReview(a + b);
+      // The file boundary (~30 KB) fails the nine-tenths floor; the last line
+      // boundary within the window ends b's `@@` line (a bare header), so the
+      // cut falls back to the file boundary, which clears the half-window floor.
+      expect(t.cutAt).toBe('file');
+      expect(t.deliveredChars).toBe(a.length - 1);
+      expect(t.omittedFiles).toEqual(['b.ts']);
+      expect(t.partialFile).toBeNull();
+    });
+
+    it('falls back to the window when the file boundary before the header is below half', () => {
+      const a = multiLineFile('a.ts', 300, 60); // ~18 KB, below half of 50,000
+      const b = `diff --git a/b.ts b/b.ts\n--- /dev/null\n+++ b/b.ts\n@@ -0,0 +1,1 @@\n+${'z'.repeat(60_000)}\n`;
+      const t = truncateDiffForReview(a + b);
+      expect(t.cutAt).toBe('char');
+      expect(t.deliveredChars).toBe(MAX_DIFF_CHARS);
+      expect(t.partialFile).toBe('b.ts');
+      expect(t.omittedFiles).toEqual([]);
+    });
+
+    it('a line cut inside the first file with only its header delivered goes to the window', () => {
+      const diff = `diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,1 @@\n+${'z'.repeat(5_000)}\n`;
+      const t = truncateDiffForReview(diff, 100); // the `@@` line ends at ~62 >= 50
+      expect(t.cutAt).toBe('char');
+      expect(t.deliveredChars).toBe(100);
+    });
+  });
+
   describe('file names in the marker', () => {
     // A complete first file, then the file under test, cut at the boundary between them.
     const first = file('a.ts', 300);
@@ -184,6 +261,18 @@ describe('truncateDiffForReview', () => {
       const second =
         'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"\n--- "a/caf\\303\\251.ts"\n+++ "b/caf\\303\\251.ts"\n@@ -1,1 +1,1 @@\n-x\n+y\n';
       expect(omittedAfter(second)).toEqual(['caf\\303\\251.ts']);
+    });
+
+    it('names a pure rename (no --- / +++ lines) by its rename-to path', () => {
+      const second =
+        'diff --git a/old.ts b/new.ts\nsimilarity index 100%\nrename from old.ts\nrename to new.ts\n';
+      expect(omittedAfter(second)).toEqual(['new.ts']);
+    });
+
+    it('names a hunk-less header with unequal sides by its b/ operand', () => {
+      const second =
+        'diff --git a/old.bin b/new.bin\nBinary files a/old.bin and b/new.bin differ\n';
+      expect(omittedAfter(second)).toEqual(['new.bin']);
     });
 
     it('names a deleted file by its --- operand', () => {
