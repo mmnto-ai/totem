@@ -59,7 +59,10 @@ export interface OrientParkedEntry {
    *  doctrine snapshot (strategy#584 read half). Additive — absent in
    *  pre-cohort reports. */
   provenance?: 'local' | 'cohort';
-  /** Snapshot package version (cohort provenance only). */
+  /**
+   * Snapshot package version: on a plain entry, cohort provenance only; on a
+   * collapsed line, the snapshot side's version whichever side renders.
+   */
   sourceVersion?: string;
   /** The entry's machine match key (strategy#584), when it carries one. */
   id?: string;
@@ -102,13 +105,18 @@ interface EffectiveFreezeEntry {
 /** The fields the two sides of a collapsed pair must carry identically. */
 const MIRROR_BOUND_FIELDS = ['subsystem', 'since', 'do-not'] as const;
 
-/** A bound field's comparison form: `do-not` as a sorted set (absent = empty), the rest as-is. */
+/**
+ * A bound field's comparison form: `do-not` as a sorted list (absent = empty;
+ * duplicates count), the rest as-is with absent and the empty string alike
+ * (both render as `?`).
+ */
 function boundFieldKey(
   entry: EffectiveFreezeEntry['entry'],
   field: (typeof MIRROR_BOUND_FIELDS)[number],
 ): string {
   if (field === 'do-not') return JSON.stringify([...(entry['do-not'] ?? [])].sort());
-  return JSON.stringify(entry[field] ?? null);
+  const value = entry[field];
+  return JSON.stringify(value === undefined || value === '' ? null : value);
 }
 
 /**
@@ -343,8 +351,9 @@ async function deriveParked(
     // of invocation directory (one derivation, two callers — cannot diverge).
     const result = readEffectiveFreezes(repoRoot, totemDir, DOCTRINE_PIN_PACKAGE);
     return {
-      // One line per freeze: a local mirror folds into the cohort entry it
-      // mirrors (mmnto-ai/totem#2937); the union itself stays undeduplicated.
+      // One line per freeze: the two sources' entries for one id fold into one
+      // line, the local entry's own scope deciding which side renders
+      // (mmnto-ai/totem#2937); the union itself stays undeduplicated.
       parked: collapseMirroredFreezes(result.entries),
       freezeChannel: {
         cohortStatus: result.cohortStatus,

@@ -780,8 +780,28 @@ describe('renderOrientForSession — bounded Tier-A projection', () => {
       ],
     });
     const full = renderReport(report);
-    expect(full).toContain(
+    // The whole line, so a regression in the reason split or a trailing addition fails it.
+    expect(full.split('\n')).toContain(
       '  • rule-compilation (legacy lesson-compile path) [local mirror + cohort @ strategy-doctrine 0.1.49] ⚠ local mirror differs (do-not) (since 2026-05-17) — parked',
+    );
+    const publisher = renderReport(
+      makeReport({
+        parked: [
+          {
+            subsystem: 'x',
+            since: '2026-05-17',
+            provenance: 'local',
+            sourceVersion: '0.1.49',
+            id: 'x',
+            mirroredLocally: true,
+            localRole: 'source',
+            mirrorDrift: ['since'],
+          },
+        ],
+      }),
+    );
+    expect(publisher.split('\n')).toContain(
+      '  • x [local source + cohort @ strategy-doctrine 0.1.49] ⚠ snapshot differs (since) (since 2026-05-17)',
     );
   });
 
