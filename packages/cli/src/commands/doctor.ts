@@ -1229,7 +1229,7 @@ export interface StrayTotemMarkers {
 export function gitTracksPath(
   root: string,
   env: NodeJS.ProcessEnv = process.env,
-): (rel: string) => TrackingState | { state: 'unknown'; error: string } {
+): (rel: string) => TrackingState | { state: 'unknown'; reason: string } {
   return (rel) => {
     try {
       // `--literal-pathspecs`: the path is a directory name, never a glob — a
@@ -1239,17 +1239,17 @@ export function gitTracksPath(
         encoding: 'utf-8',
         env,
       });
-      if (result.error) return { state: 'unknown', error: result.error.message };
+      if (result.error) return { state: 'unknown', reason: result.error.message };
       if (result.status !== 0) {
         return {
           state: 'unknown',
-          error: `git ls-files exited ${String(result.status)}${(result.stderr ?? '').trim() ? `: ${(result.stderr ?? '').trim()}` : ''}`,
+          reason: `git ls-files exited ${String(result.status)}${(result.stderr ?? '').trim() ? `: ${(result.stderr ?? '').trim()}` : ''}`,
         };
       }
       return (result.stdout ?? '').trim().length > 0 ? 'tracked' : 'untracked';
       // totem-context: a spawn that throws is the same unknown state as a spawn that reports an error — surfaced on the row as "tracking could not be checked", never swallowed into a tracking verdict.
     } catch (err) {
-      return { state: 'unknown', error: err instanceof Error ? err.message : String(err) };
+      return { state: 'unknown', reason: err instanceof Error ? err.message : String(err) };
     }
   };
 }
@@ -1343,7 +1343,7 @@ export function findStrayTotemMarkers(
     else if (answer === 'untracked') untracked.push(rel);
     else {
       unverified.push(rel);
-      trackingError ??= typeof answer === 'object' ? answer.error : 'unknown';
+      trackingError ??= typeof answer === 'object' ? answer.reason : 'unknown';
     }
   }
   return {

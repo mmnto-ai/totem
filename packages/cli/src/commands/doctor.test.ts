@@ -1772,9 +1772,9 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'a', '.totem'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'b', '.totem'), { recursive: true });
-    const broken = (): { state: 'unknown'; error: string } => ({
+    const broken = (): { state: 'unknown'; reason: string } => ({
       state: 'unknown',
-      error: 'git ls-files exited 128: fatal: not a git repository',
+      reason: 'git ls-files exited 128: fatal: not a git repository',
     });
     const sweep = findStrayTotemMarkers(tmpDir, '.totem', broken);
     expect(sweep.untracked).toEqual([]);
