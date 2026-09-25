@@ -227,6 +227,58 @@ test('RULE_PROVENANCE derives the count from committed data, never a literal', (
     'count must equal rules.length of the committed file',
   );
   assert.ok(result.includes('lessonHash'), 'must name the provenance mechanism');
+  // The active set renders beside the compiled total, from the same predicate
+  // ACTIVE_RULE_COUNT uses, and the page says which measure the receipt takes
+  // (mmnto-ai/totem#2931 item 4).
+  assert.ok(
+    result.includes(`**${transforms.ACTIVE_RULE_COUNT()} are active**`),
+    'active count must equal ACTIVE_RULE_COUNT',
+  );
+  assert.ok(result.includes('the active set at its pinned head'), 'must name the receipt measure');
+});
+
+test('RULE_PROVENANCE takes the active predicate as a parameter and derives the inactive reasons from status', () => {
+  const mixed = writeTmpJson('provenance-mixed.json', {
+    rules: [
+      { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
+      {
+        lessonHash: 'b',
+        compiledAt: '2026-04-07T00:00:00.000Z',
+        engine: 'regex',
+        status: 'archived',
+      },
+      {
+        lessonHash: 'c',
+        compiledAt: '2026-04-08T00:00:00.000Z',
+        engine: 'ast-grep',
+        status: 'untested-against-codebase',
+      },
+      {
+        lessonHash: 'd',
+        compiledAt: '2026-04-09T00:00:00.000Z',
+        engine: 'ast-grep',
+        status: 'pending-verification',
+      },
+    ],
+  });
+  // A predicate that DISAGREES with core's (which would count 1 active here):
+  // everything active. The parameter is honoured only if the text follows it.
+  const all = transforms._renderRuleProvenance(mixed, () => true);
+  assert.ok(all.includes('**4 compiled rules**'));
+  assert.ok(all.includes('**4 are active**'));
+  assert.ok(all.includes('none are inactive'));
+  // A second disagreeing predicate: archived is the only inactive status.
+  const noArchived = transforms._renderRuleProvenance(mixed, (r) => r.status !== 'archived');
+  assert.ok(noArchived.includes('**3 are active**'));
+  assert.ok(noArchived.includes('the other 1 are inactive (1 archived)'));
+  // Core's own shape: every status inactive, each named from the artifact.
+  const coreLike = transforms._renderRuleProvenance(mixed, (r) => r.status === undefined);
+  assert.ok(coreLike.includes('**1 are active**'));
+  assert.ok(
+    coreLike.includes(
+      'the other 3 are inactive (1 archived, 1 pending verification, 1 untested against the codebase)',
+    ),
+  );
 });
 
 // ── Inline figures (fragments for prose) ─────────────────────────────────
@@ -416,6 +468,19 @@ test('DAYS_UNDER_FREEZE derives days from freeze.since and the committed asOf', 
 test('LINT_RECEIPT renders the zero-LLM claim only from an attesting receipt', () => {
   const result = transforms.LINT_RECEIPT();
   assert.ok(result.includes('zero LLM calls'), 'must render the receipted claim');
+  // The page separates what CI recomputes (the pinned fields) from what a
+  // maintainer's regeneration stamps (the environment labels) — the old
+  // sentence read as if CI refreshed the whole receipt (mmnto-ai/totem#2931 item 1).
+  assert.ok(result.includes('the active set at the pinned head'), 'must scope the rule count');
+  assert.ok(result.includes('the pinned fields'), 'must name what CI recomputes');
+  // The consequence is the check that fails, not a merge block the repository's
+  // required checks do not enforce (leg F1 on mmnto-ai/totem#2931).
+  assert.ok(result.includes('the Docs Governance check fails'), 'must name the real consequence');
+  assert.ok(!result.includes('merge blocks'), 'must not claim a merge block');
+  assert.ok(
+    result.includes('the last time a maintainer regenerated the receipt'),
+    'must say what the environment line records',
+  );
   const fullReceipt = {
     baseSha: 'a'.repeat(40),
     headSha: 'b'.repeat(40),

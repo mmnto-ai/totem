@@ -44,5 +44,5 @@ const payload = JSON.parse(rawInput);
 
 This is the deprecated alias for `totem-context:`.
 
-- **Behavior:** It functions identically to `totem-context:`, but emits a one-time console deprecation warning as of 1.6.0.
-- **Status:** **Deprecated.** This directive will be fully removed in `2.0.0`. Please migrate all instances to `// totem-context:`.
+- **Behavior:** It functions identically to `totem-context:`, but emits a one-time console deprecation warning as of 1.5.7 (the 1.6.0 cycle's quick wins).
+- **Status:** **Deprecated** since 1.5.7 and still accepted at 2.x with the warning above. The removal this page once promised for `2.0.0` did not ship; no removal date is set, and a removal rides a major version when it comes. Migrate every instance to `// totem-context:` — the alias keeps warning until then.

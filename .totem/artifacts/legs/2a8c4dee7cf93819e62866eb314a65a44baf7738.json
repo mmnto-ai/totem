@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "2a8c4dee7cf93819e62866eb314a65a44baf7738",
+  "readAt": "2026-09-25T00:28:56Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/maturity.md",
+      "line": 51,
+      "claim": "The new receipt sentence and the page's closing line say a receipt that stops reproducing blocks the merge, but the repository's ruleset requires only the auto-close check, Build & Lint on three platforms and Totem Lint — Docs Governance is not a required check, so only the agent-side merge-ready gate refuses it; the item-1 sentence repeated the defect class the issue exists to cure.",
+      "counterexample": "gh api repos/mmnto-ai/totem/rulesets/19349818 lists the required checks without 'Docs Governance (maturity surface drift gate)'; a red docs-governance job does not stop a merge through the GitHub UI."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 240,
+      "claim": "The test named for predicate threading passed without the predicate — core's default also excludes archived and treats a status-less rule as active — so it could not fail if the function ignored its parameter.",
+      "counterexample": "_renderRuleProvenance(mixed) with no predicate rendered **2 are active** and the other 1 are archived, the same text the test expected from the custom predicate."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "docs/wiki/override-directives.md",
+      "line": 47,
+      "claim": "The deprecation warning shipped in 1.5.7 (commit 9a0521e2 is contained in tag @mmnto/cli@1.5.7; 1.5.6 has no match), one cycle before the 1.6.0 the page named on both lines.",
+      "counterexample": "git show @mmnto/cli@1.5.7:packages/core/src/rule-engine.ts carries the warning at line 109."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 268,
+      "claim": "The inactive reasons were hardcoded (archived by curation or untested) while the count was derived; core's predicate knows a third status, pending-verification, and twenty of the archived rules were archived by the Stage 4 verifier, not curation — true today, false the day a pending rule lands, with every test green.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "docs/wiki/roadmap.md",
+      "line": 5,
+      "claim": "The intro still said the page keeps the dated history of what has shipped while the new milestones line bounds it at 1.25.0.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "totem.config.ts",
+      "line": 117,
+      "claim": "roadmap.md remains a totem docs regeneration target whose prompt rewrites forward-looking sections aggressively, so a manual totem docs run could rewrite the undated goal line or the bounded-history line; CI does not run it and the drift gate is unaffected.",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 505,
+      "claim": "targetMismatchGuardWarning and apiKeysStripped render as facts although neither is a pinned field nor named among the labels; if the guard stopped firing the page would still say true and --verify would pass.",
+      "counterexample": ""
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "tools/gen-lint-receipt.mjs",
+      "line": 186,
+      "claim": "QUESTION: the verify run left .totem/temp/a3-receipt-worktree behind after an EPERM (gitignored, unregistered, swept by the next run); and whether a tools-only change carries a changeset.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F7"
+  ],
+  "verdict": "Leg 1 over 956e098f..2a8c4dee: 0 BLOCKING, 2 MATERIAL, 6 MINOR (one a question, carried as MINOR under this branch's pre-mmnto-ai/totem#2944 schema), nothing blocking. Verified sound: PINNED_FIELDS equals the list the sentence names; --verify fails the job on a mismatch and reproduces on this host (387/0/20/41); 387 is the active set at the pinned head ba8c591d (the replay lints a detached worktree at that head; 485 rules there, 91 archived, 7 untested) and today's corpus is 385 active of 485; the rendered strings appear verbatim in maturity.md; the 2.0.0 changelogs removed DEFAULT_SEARCH_RELEVANCE_FLOOR, not shield-context, which rule-engine.ts still accepts; 1.25.0 is the last dated roadmap entry, packages/cli/CHANGELOG.md carries 2.0.0 through 2.11.1, roadmap.md has no inject markers; the new assertions fail on the base transforms; no absolute-claim word in the added prose; the 485 of 485 ratio is correctly left as hash coverage. Folded in the next commit: F1 (the consequence is the Docs Governance check failing, on both lines; making it a required check is the operator's settings call, surfaced), F2 (predicates that disagree with core: everything active, archived-only inactive, and core's own shape with every status named), F3 (1.5.7 on both lines), F4 (the inactive reasons derived from the artifact's status values, each named), F5 (the intro bounded), F7 (astParseMode named a pinned field, the guard boolean a label at the last regeneration). F6 disclosed in the PR (a manual totem docs run is the postmerge skill's known hazard); F8 answered: tools-only ships without a changeset by precedent, the leftover is gitignored residue the tool sweeps. No fold rewires a mechanism; the branch has converged."
+}

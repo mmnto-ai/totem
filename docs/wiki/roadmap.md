@@ -2,17 +2,19 @@
 
 Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows.
 
-This page keeps the dated history of what has shipped. Current and planned work is not mirrored here — it lives in the trackers:
+This page keeps the dated history of what shipped through 1.25.0. Current and planned work is not mirrored here — it lives in the trackers:
 
 - [Releases](https://github.com/mmnto-ai/totem/releases) — what shipped, when.
 - [GitHub Project: Convergent Spine](https://github.com/orgs/mmnto-ai/projects/1) — in-flight work.
 - [Open issues](https://github.com/mmnto-ai/totem/issues) — the backlog.
 
-**Goal (as of 2026-07):** the Convergent Spine — a certified path from merged-PR lessons to deterministic rules, validated by catching real defects that external review bots miss.
+**Goal:** the Convergent Spine — a certified path from merged-PR lessons to deterministic rules, validated by catching real defects that external review bots miss. The project board above carries its current state; this page does not date it.
 
 ---
 
 ## Shipped Milestones
+
+This history runs through 1.25.0 (2026-05-02) and is not extended here. Every later cut is on the Releases page above and in each package's `CHANGELOG.md`; the [maturity page](maturity.md) carries the derived figures.
 
 ### 1.16.0 → 1.25.0: Ingestion + Pack v0.1 Alpha
 
