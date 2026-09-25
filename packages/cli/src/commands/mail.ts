@@ -30,9 +30,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {
+  // The root classifier feeds `resolveReaderRepoRoot`, which `pollMail` calls
+  // SYNCHRONOUSLY before any scan — the same structural bar as
+  // `readSeatLifecycle` below: no dynamic-import shape can serve a sync
+  // public API, and this statement never runs on the --help startup graph
+  // (mail.ts is action-lazy-loaded by index.ts and ecl-gc).
+  // totem-ignore-next-line mmnto-ai/totem#2938
   classifyTotemRepoRootSync,
   isPathSafeAgentId,
   knownCohortAgents,
+  // Same bar: names the resident in the send's and the reader's worktree
+  // refusal, both synchronous.
+  // totem-ignore-next-line mmnto-ai/totem#2968
   mainCheckoutFromGitFileSync,
   // pollMail is a SYNC public API consumed directly by the SessionStart hook
   // (session-context.mjs), so the #2339 dynamic-import shape is structurally
