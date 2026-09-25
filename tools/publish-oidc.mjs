@@ -37,6 +37,8 @@ import { appendFileSync, existsSync, readdirSync, readFileSync, unlinkSync } fro
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { classifyPublishFailure, stagedCountsAsPublished } from './publish-oidc-lib.mjs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
 const PACKAGES_DIR = join(REPO_ROOT, 'packages');
@@ -142,14 +144,27 @@ for (const dir of PKG_ORDER) {
   }
 
   console.log(`[publish-oidc] Publishing ${pkg.name}@${pkg.version} via OIDC`);
+  // stdout and stderr are captured so a failure can be classified, then
+  // echoed so the job log still shows npm's own lines.
   const publishResult = spawnSync(
     'npm',
     ['publish', tarballName, '--provenance', '--access', 'public'],
     {
       cwd: pkgDir,
-      stdio: 'inherit',
+      encoding: 'utf-8',
+      stdio: ['inherit', 'pipe', 'pipe'],
+      // The file listing of the largest package is about 76 KB; the default
+      // 1 MiB buffer would kill npm with ENOBUFS on a much larger one.
+      maxBuffer: 64 * 1024 * 1024,
     },
   );
+  if (publishResult.stdout) process.stdout.write(publishResult.stdout);
+  if (publishResult.stderr) process.stderr.write(publishResult.stderr);
+  if (publishResult.error) {
+    console.error(
+      `[publish-oidc] npm publish did not run to completion for ${pkg.name}@${pkg.version}: ${publishResult.error.message}`,
+    );
+  }
 
   try {
     unlinkSync(tarballPath);
@@ -158,6 +173,30 @@ for (const dir of PKG_ORDER) {
   }
 
   if (publishResult.status !== 0) {
+    const kind = classifyPublishFailure(
+      `${publishResult.stdout ?? ''}\n${publishResult.stderr ?? ''}`,
+    );
+    if (kind === 'staged' && stagedCountsAsPublished(process.env)) {
+      // A re-run of the run that published it: the registry holds this version
+      // from that earlier publish call and is promoting it (about 20 minutes on
+      // the 2.11.1 cut, mmnto-ai/totem#2953); it cannot be published again. It
+      // IS published, at this very sha: the verify step waits for its
+      // promotion, and the tag and release are made as usual.
+      console.log(
+        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry (E409 on re-publish, attempt ${process.env.GITHUB_RUN_ATTEMPT}): counted as published, awaiting promotion — the verify step waits for it.`,
+      );
+      published.push({ name: pkg.name, version: pkg.version, dir: pkgDir });
+      continue;
+    }
+    if (kind === 'staged') {
+      // A FIRST attempt meeting a staged version: another run's publish, at
+      // another commit, is still promoting it. Counting it here would tag and
+      // release this commit for a tarball it did not build.
+      console.error(
+        `[publish-oidc] ${pkg.name}@${pkg.version} is STAGED on the registry from another run's publish (E409 on a first attempt): this run does not count, tag or release it. Wait for the promotion (npm view ${pkg.name}@${pkg.version} version), then re-run the run that published it.`,
+      );
+      process.exit(1);
+    }
     console.error(`[publish-oidc] npm publish failed for ${pkg.name}@${pkg.version}`);
     console.error(
       '[publish-oidc] If this is E404 on a previously-published package: verify trusted publishers configured on npm.com for this package match repo=mmnto-ai/totem workflow=release.yml.',
