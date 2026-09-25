@@ -223,7 +223,7 @@ function MATURITY_TABLE() {
   return renderMaturityTable(MATURITY_DATA);
 }
 
-function renderRuleProvenance(rulesPath) {
+function renderRuleProvenance(rulesPath, predicate = activeRulePredicate()) {
   const data = readJson(rulesPath, 'RULE_PROVENANCE');
   if (!Array.isArray(data.rules) || data.rules.length === 0) {
     throw new Error(
@@ -255,11 +255,19 @@ function renderRuleProvenance(rulesPath) {
     .join(' / ');
   const compiledDates = data.rules.map((r) => String(r.compiledAt).slice(0, 10)).sort();
   const nonCompilable = Array.isArray(data.nonCompilable) ? data.nonCompilable.length : 0;
+  // The compiled total and the active set are two different measures, and the
+  // page said only the first while its receipt counted the second
+  // (mmnto-ai/totem#2931 item 4): both render, each named, from the same
+  // predicate the linter applies.
+  const active = data.rules.filter(predicate).length;
   return (
     `**${total} compiled rules** stand between a banked mistake and its recurrence, and every one ` +
     `carries the content hash of the lesson it came from (\`lessonHash\`) — the chain from incident ` +
     `to enforcement is mechanical, not editorial. They compile from **${lessons} distinct lessons** ` +
     `(engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}). ` +
+    `**${active} are active** in \`totem lint\` today; the other ${total - active} are archived by ` +
+    `curation or held as untested against the codebase, and the receipt below counts the active set ` +
+    `at its pinned head, not this one. ` +
     `${nonCompilable} lessons currently rest as non-compilable rather than being force-fitted into rules.`
   );
 }
@@ -501,13 +509,22 @@ function renderLintReceipt(receiptPath) {
         `(\`astParseMode\`) plus whether the guard fired (\`targetMismatchGuardWarning: ` +
         `${r.targetMismatchGuardWarning}\`).`
       : '';
+  // Two kinds of field, named as such on the page (mmnto-ai/totem#2931 item 1):
+  // the PINNED fields are recomputed by CI's `--verify` run on every pull
+  // request and must reproduce; the environment labels record the last
+  // regeneration a maintainer committed, and the old sentence read as if CI
+  // refreshed those too.
   return (
     `A real merged diff of this repository (\`${range}\`, ${r.filesChanged} files) linted in ` +
     `**${r.elapsedMs} ms** with **zero LLM calls** — the run executed with every provider API key ` +
-    `stripped from the environment, so there was nothing to silently call. ${r.rules} rules evaluated; ` +
-    `${r.errors} errors, ${r.warnings} warnings. Environment: ${r.platform}, node ${r.node}, ` +
-    `CLI ${r.cliVersion}, generated ${String(r.generatedAt).slice(0, 10)}. CI recomputes this receipt ` +
-    `on every pull request — the counts must match; timing is environment-labeled, never gated.` +
+    `stripped from the environment, so there was nothing to silently call. ${r.rules} rules evaluated ` +
+    `(the active set at the pinned head, not today's corpus); ${r.errors} errors, ${r.warnings} warnings. ` +
+    `CI replays the pinned range on every pull request, and the pinned fields — range, file count, ` +
+    `rule, error and warning counts, LLM calls, parse mode — must reproduce or the merge blocks. ` +
+    `The environment line is a label, not a gate: ${r.platform}, node ${r.node}, CLI ${r.cliVersion}, ` +
+    `generated ${String(r.generatedAt).slice(0, 10)} — the last time a maintainer regenerated the ` +
+    `receipt with \`node tools/gen-lint-receipt.mjs\` and committed it; timing is environment-labeled, ` +
+    `not gated.` +
     posture
   );
 }

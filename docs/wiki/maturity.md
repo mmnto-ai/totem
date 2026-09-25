@@ -32,7 +32,7 @@ Three claims we would rather prove than assert.
 
 <!-- docs RULE_PROVENANCE -->
 
-**485 compiled rules** stand between a banked mistake and its recurrence, and every one carries the content hash of the lesson it came from (`lessonHash`) — the chain from incident to enforcement is mechanical, not editorial. They compile from **485 distinct lessons** (engines: 268 ast-grep / 217 regex; compiled between 2026-04-06 and 2026-06-07). 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
+**485 compiled rules** stand between a banked mistake and its recurrence, and every one carries the content hash of the lesson it came from (`lessonHash`) — the chain from incident to enforcement is mechanical, not editorial. They compile from **485 distinct lessons** (engines: 268 ast-grep / 217 regex; compiled between 2026-04-06 and 2026-06-07). **385 are active** in `totem lint` today; the other 100 are archived by curation or held as untested against the codebase, and the receipt below counts the active set at its pinned head, not this one. 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
 
 <!-- /docs -->
 
@@ -48,7 +48,7 @@ The legacy lesson→rule compiler has been parked under a standing freeze since 
 
 <!-- docs LINT_RECEIPT -->
 
-A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3908 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated; 0 errors, 20 warnings. Environment: win32-x64, node 24.16.0, CLI 1.112.0, generated 2026-08-06. CI recomputes this receipt on every pull request — the counts must match; timing is environment-labeled, never gated. The replay runs with `--ast-parse-mode lenient` — the pinned corpus predates the current target-mismatch load guard — and the receipt records that posture (`astParseMode`) plus whether the guard fired (`targetMismatchGuardWarning: true`).
+A real merged diff of this repository (`c14e90ab..ba8c591d`, 41 files) linted in **3532 ms** with **zero LLM calls** — the run executed with every provider API key stripped from the environment, so there was nothing to silently call. 387 rules evaluated (the active set at the pinned head, not today's corpus); 0 errors, 20 warnings. CI replays the pinned range on every pull request, and the pinned fields — range, file count, rule, error and warning counts, LLM calls, parse mode — must reproduce or the merge blocks. The environment line is a label, not a gate: win32-x64, node 24.16.0, CLI 2.11.1, generated 2026-09-25 — the last time a maintainer regenerated the receipt with `node tools/gen-lint-receipt.mjs` and committed it; timing is environment-labeled, not gated. The replay runs with `--ast-parse-mode lenient` — the pinned corpus predates the current target-mismatch load guard — and the receipt records that posture (`astParseMode`) plus whether the guard fired (`targetMismatchGuardWarning: true`).
 
 <!-- /docs -->
 
@@ -59,4 +59,4 @@ pnpm docs:inject                     # re-derive every injected block (fails lou
 node tools/gen-lint-receipt.mjs      # regenerate the lint receipt from the pinned merged range
 ```
 
-Both run in CI on every pull request; a claim that stops reproducing blocks the merge.
+Both run in CI on every pull request — the inject as a drift gate (`git diff --exit-code -- README.md docs/` after it) and the receipt generator in `--verify` mode, which recomputes the pinned fields against the committed receipt. A claim that stops reproducing blocks the merge. The receipt's environment labels (platform, node, CLI, timestamp) change only when a maintainer runs the generator without `--verify` and commits the result, as with any other data refresh on this page.

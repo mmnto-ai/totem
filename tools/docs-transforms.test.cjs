@@ -227,6 +227,38 @@ test('RULE_PROVENANCE derives the count from committed data, never a literal', (
     'count must equal rules.length of the committed file',
   );
   assert.ok(result.includes('lessonHash'), 'must name the provenance mechanism');
+  // The active set renders beside the compiled total, from the same predicate
+  // ACTIVE_RULE_COUNT uses, and the page says which measure the receipt takes
+  // (mmnto-ai/totem#2931 item 4).
+  assert.ok(
+    result.includes(`**${transforms.ACTIVE_RULE_COUNT()} are active**`),
+    'active count must equal ACTIVE_RULE_COUNT',
+  );
+  assert.ok(result.includes('the active set at its pinned head'), 'must name the receipt measure');
+});
+
+test('RULE_PROVENANCE takes the active predicate as a parameter (fixture-testable)', () => {
+  const mixed = writeTmpJson('provenance-mixed.json', {
+    rules: [
+      {
+        lessonHash: 'a',
+        compiledAt: '2026-04-06T00:00:00.000Z',
+        engine: 'regex',
+        status: 'active',
+      },
+      {
+        lessonHash: 'b',
+        compiledAt: '2026-04-07T00:00:00.000Z',
+        engine: 'regex',
+        status: 'archived',
+      },
+      { lessonHash: 'c', compiledAt: '2026-04-08T00:00:00.000Z', engine: 'ast-grep' },
+    ],
+  });
+  const result = transforms._renderRuleProvenance(mixed, (r) => r.status !== 'archived');
+  assert.ok(result.includes('**3 compiled rules**'));
+  assert.ok(result.includes('**2 are active**'));
+  assert.ok(result.includes('the other 1 are archived'));
 });
 
 // ── Inline figures (fragments for prose) ─────────────────────────────────
@@ -416,6 +448,15 @@ test('DAYS_UNDER_FREEZE derives days from freeze.since and the committed asOf', 
 test('LINT_RECEIPT renders the zero-LLM claim only from an attesting receipt', () => {
   const result = transforms.LINT_RECEIPT();
   assert.ok(result.includes('zero LLM calls'), 'must render the receipted claim');
+  // The page separates what CI recomputes (the pinned fields) from what a
+  // maintainer's regeneration stamps (the environment labels) — the old
+  // sentence read as if CI refreshed the whole receipt (mmnto-ai/totem#2931 item 1).
+  assert.ok(result.includes('the active set at the pinned head'), 'must scope the rule count');
+  assert.ok(result.includes('the pinned fields'), 'must name what CI recomputes');
+  assert.ok(
+    result.includes('the last time a maintainer regenerated the receipt'),
+    'must say what the environment line records',
+  );
   const fullReceipt = {
     baseSha: 'a'.repeat(40),
     headSha: 'b'.repeat(40),
