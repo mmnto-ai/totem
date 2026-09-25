@@ -1473,7 +1473,13 @@ program
         // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc/eclCompact throw ONLY usage errors, printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the janitorial sensor code).
       } catch (err) {
         const { log } = await import('./ui.js');
-        log.error('Totem Error', err instanceof Error ? err.message : String(err));
+        // The logger prefixes its own tag, and a TotemError's message already
+        // carries `[Totem Error]` — print it once.
+        const message = (err instanceof Error ? err.message : String(err)).replace(
+          /^\[Totem Error\]\s*/,
+          '',
+        );
+        log.error('Totem Error', message);
         // The cure rides with the refusal, as handleError prints it: a root
         // refusal names the resident checkout to run from in its hint
         // (mmnto-ai/totem#2946, mmnto-ai/totem#2968).

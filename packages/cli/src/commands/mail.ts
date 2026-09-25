@@ -1803,7 +1803,7 @@ export async function mailCommand(
     // repo — the env identity would shadow the union down to itself. When the
     // structural union is EMPTY (a renamed clone off the cohort map with the
     // gitignored config absent — falsification-leg F4; a worktree is refused
-    // above since mmnto-ai/totem#2968, so it is no longer this case), fall back to the
+    // by the resolver call below since mmnto-ai/totem#2968, so it is no longer this case), fall back to the
     // env-declared list itself: a multi-seat env declaration is the
     // gate-exempt operator-declared shape, and narrowing it is exactly what
     // this flag is for. The reader's own root rule applies here too, so a

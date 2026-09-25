@@ -598,17 +598,16 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     expect(findTotemRepoRootSync(nested)).toBe(path.resolve(tmpDir));
   });
 
-  it('returns null when neither marker is found up the ancestry', () => {
+  it('returns null when neither marker is found up the ancestry', (ctx) => {
     const sub = path.join(tmpDir, 'inner');
     fs.mkdirSync(sub);
-    // Best-effort like findRepoRootSync's null case: a dev box whose temp dir is
-    // nested under a checkout could find a marker upward — assert the shape then.
-    const result = findTotemRepoRootSync(sub);
-    if (result === null) {
-      expect(result).toBeNull();
-    } else {
-      expect(path.isAbsolute(result)).toBe(true);
+    // A dev box whose temp dir is nested under a marker finds it upward: the
+    // case cannot be built there — skipped visibly, never asserted vacuously.
+    if (findTotemRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
     }
+    expect(findTotemRepoRootSync(sub)).toBeNull();
   });
 
   it('prefers the repository toplevel over a nearer stray .totem/ (mmnto-ai/totem#2938)', () => {
@@ -795,6 +794,29 @@ describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)',
     expect(mainCheckoutFromGitFileSync(gitFile)).toBe(path.resolve(tmpDir, '..', 'main'));
     expect(mainCheckoutFromGitFileSync(path.join(tmpDir, 'absent'))).toBeNull();
   });
+
+  it('mainCheckoutFromGitFileSync is anchored: a directory merely named worktrees, a submodule store or a separate git dir names nothing', () => {
+    const gitFile = path.join(tmpDir, '.git');
+    const cases: Array<[string, string | null]> = [
+      // A checkout that LIVES under a directory called worktrees still resolves.
+      [
+        'gitdir: ../worktrees/main/.git/worktrees/w',
+        path.resolve(tmpDir, '..', 'worktrees', 'main'),
+      ],
+      // A submodule inside such a checkout must not name the container.
+      ['gitdir: ../worktrees/super/.git/modules/x', null],
+      // A separate git dir under a worktrees directory is not a worktree.
+      ['gitdir: ../worktrees/repo', null],
+      // A worktree of a submodule's store names nothing (the store is not a checkout).
+      ['gitdir: ../super/.git/modules/sub/worktrees/w', null],
+      // A bare store keeps its name.
+      ['gitdir: ../store.git/worktrees/w', path.resolve(tmpDir, '..', 'store.git')],
+    ];
+    for (const [pointer, expected] of cases) {
+      fs.writeFileSync(gitFile, `${pointer}\n`);
+      expect(mainCheckoutFromGitFileSync(gitFile), pointer).toBe(expected);
+    }
+  });
 });
 
 describe('resolveTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
@@ -822,15 +844,15 @@ describe('resolveTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     expect(resolveTotemRepoRootSync(undefined, sub)).toBe(path.resolve(tmpDir));
   });
 
-  it('uses a marker-less start as-is (bare-fixture contract)', () => {
+  it('uses a marker-less start as-is (bare-fixture contract)', (ctx) => {
     const bare = path.join(tmpDir, 'bare');
     fs.mkdirSync(bare);
-    // Same best-effort guard as the finder's null case: only assert identity
-    // when the host ancestry is genuinely marker-free.
-    if (findTotemRepoRootSync(bare) === null) {
-      expect(resolveTotemRepoRootSync(bare, '/elsewhere')).toBe(path.resolve(bare));
-    } else {
-      expect(path.isAbsolute(resolveTotemRepoRootSync(bare, '/elsewhere'))).toBe(true);
+    // Same guard as the finder's null case: the identity can be asserted only
+    // where the host ancestry is marker-free — skipped visibly otherwise.
+    if (findTotemRepoRootSync(bare) !== null) {
+      ctx.skip();
+      return;
     }
+    expect(resolveTotemRepoRootSync(bare, '/elsewhere')).toBe(path.resolve(bare));
   });
 });

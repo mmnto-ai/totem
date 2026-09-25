@@ -442,23 +442,23 @@ export function findRepoRootSync(start: string): string | null {
  * marker there would capture every start outside a real checkout.
  */
 export function findTotemRepoRootSync(start: string): string | null {
-  const home = os.homedir();
+  // The home directory is canonicalised once per walk, not once per ancestor.
+  const home = canonicalDir(os.homedir());
+  const notHome = (dir: string): boolean => !sameCanonicalDir(canonicalDir(dir), home);
   return (
-    walkUpToMarker(start, (dir) => !sameDir(dir, home) && fs.existsSync(path.join(dir, '.git'))) ??
-    walkUpToMarker(start, (dir) => !sameDir(dir, home) && fs.existsSync(path.join(dir, '.totem')))
+    walkUpToMarker(start, (dir) => notHome(dir) && fs.existsSync(path.join(dir, '.git'))) ??
+    walkUpToMarker(start, (dir) => notHome(dir) && fs.existsSync(path.join(dir, '.totem')))
   );
 }
 
 /**
- * Directory identity for the home exclusion: both sides canonicalised
- * (`realpathSync.native` resolves a Windows 8.3 short name such as
- * `RUNNER~1` to its long form, so a temp path spelled short cannot slip past
- * the exclusion), then exact on POSIX and case-insensitive on win32.
+ * Directory identity for the home exclusion, over paths already canonicalised
+ * by {@link canonicalDir} (`realpathSync.native` resolves a Windows 8.3 short
+ * name such as `RUNNER~1` to its long form, so a temp path spelled short
+ * cannot slip past the exclusion): exact on POSIX, case-insensitive on win32.
  */
-function sameDir(a: string, b: string): boolean {
-  const ra = canonicalDir(a);
-  const rb = canonicalDir(b);
-  return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
+function sameCanonicalDir(a: string, b: string): boolean {
+  return process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
 }
 
 function canonicalDir(p: string): string {
@@ -488,7 +488,8 @@ function isRealDirectorySync(p: string): boolean {
  * contract (mmnto-ai/totem#2312) for the describing probes (the doctor's
  * seat-identity row, `deriveSeat`, the verify roster fallback) and, for now,
  * for `seat add|suspend|remove`, whose lifecycle writes still take this
- * lenient root — their own refusal outside a repository is a follow-up. The
+ * lenient root — their own refusal outside a repository is
+ * mmnto-ai/totem#2970. The
  * mail reader verbs — the poll, `mail mark`, `ecl-gc` — read a workspace as a
  * verdict or write a cursor, so they take {@link classifyTotemRepoRootSync}
  * and refuse the `none`, `worktree` and `unmarked` classes instead of using
@@ -579,10 +580,18 @@ export function mainCheckoutFromGitFileSync(gitFile: string): string | null {
   const m = /^gitdir:\s*(.+)$/m.exec(text);
   if (m === null) return null;
   const gitdir = path.resolve(path.dirname(gitFile), m[1]!.trim()).replace(/\\/g, '/');
-  const idx = gitdir.lastIndexOf('/worktrees/');
-  if (idx <= 0) return null;
-  const store = gitdir.slice(0, idx);
-  return path.resolve(store.endsWith('/.git') ? store.slice(0, -'/.git'.length) : store);
+  // Anchored: the pointer names a worktree only when it ends in
+  // `/worktrees/<name>` and the store before it IS a git directory (`…/.git`
+  // or a bare `<name>.git`). A directory merely called `worktrees` higher up —
+  // this operator keeps checkouts under `D:/Dev/worktrees/` — a submodule's
+  // `.git/modules/…` or a separate git dir must name nothing (leg 2 F3 on
+  // mmnto-ai/totem#2938).
+  const wt = /^(.+)\/worktrees\/[^/]+$/.exec(gitdir);
+  if (wt === null) return null;
+  const store = wt[1]!;
+  if (store.endsWith('/.git')) return path.resolve(store.slice(0, -'/.git'.length));
+  if (/(^|\/)[^/]+\.git$/.test(store)) return path.resolve(store);
+  return null;
 }
 
 /**

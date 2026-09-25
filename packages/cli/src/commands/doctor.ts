@@ -1216,7 +1216,12 @@ export interface StrayTotemMarkers {
 function gitTracksPath(root: string): (rel: string) => boolean {
   return (rel) => {
     try {
-      const result = spawnSync('git', ['ls-files', '--', rel], { cwd: root, encoding: 'utf-8' });
+      // `--literal-pathspecs`: the path is a directory name, never a glob — a
+      // `*`, `?` or `[` in it must not expand (leg 2 F6 on mmnto-ai/totem#2938).
+      const result = spawnSync('git', ['--literal-pathspecs', 'ls-files', '--', rel], {
+        cwd: root,
+        encoding: 'utf-8',
+      });
       return result.status === 0 && (result.stdout ?? '').trim().length > 0;
       // totem-context: a git that cannot be spawned answers "untracked" — the row then names the marker as residue, which is the loud side of the ambiguity.
     } catch {
@@ -1247,11 +1252,16 @@ export function findStrayTotemMarkers(
   const rootMarker = path.resolve(base, totemDir);
   const strays: string[] = [];
   let visited = 0;
-  let truncated = false;
+  // Two bounds, two consequences: the breadth bound ABORTS the sweep (nothing
+  // after it is honest), the depth bound PRUNES the branch it hit and records
+  // the overrun — a first deep branch must not end the sweep before a sibling
+  // stray at depth 1 is seen (leg 2 F1 on mmnto-ai/totem#2938).
+  let aborted = false;
+  let depthCut = false;
   const walk = (dir: string, depth: number): void => {
-    if (truncated) return;
+    if (aborted) return;
     if (depth > STRAY_MARKER_MAX_DEPTH) {
-      truncated = true;
+      depthCut = true;
       return;
     }
     let entries: fs.Dirent[];
@@ -1264,7 +1274,7 @@ export function findStrayTotemMarkers(
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       if (++visited > STRAY_MARKER_MAX_DIRS) {
-        truncated = true;
+        aborted = true;
         return;
       }
       const full = path.join(dir, entry.name);
@@ -1279,9 +1289,11 @@ export function findStrayTotemMarkers(
     }
   };
   walk(base, 0);
-  const tracked = strays.filter((rel) => isTracked(rel));
-  const untracked = strays.filter((rel) => !isTracked(rel));
-  return { untracked, tracked, truncated };
+  // One tracking probe per stray (each is a git spawn).
+  const tracked: string[] = [];
+  const untracked: string[] = [];
+  for (const rel of strays) (isTracked(rel) ? tracked : untracked).push(rel);
+  return { untracked, tracked, truncated: aborted || depthCut };
 }
 
 /** Name the first few paths and count the rest. */

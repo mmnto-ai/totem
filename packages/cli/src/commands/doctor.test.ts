@@ -1800,12 +1800,15 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     expect(findStrayTotemMarkers(tmpDir, '.totem', none).untracked).toEqual(['a/.totem']);
   });
 
-  it('the depth bound sets truncated, so a clean answer is never overclaimed', () => {
+  it('the depth bound prunes its branch and sets truncated; a sibling stray after the deep branch is still found', () => {
     fs.mkdirSync(path.join(tmpDir, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'), {
       recursive: true,
     });
+    // Sorts after `a`: a sweep that ABORTS on the depth overrun misses it
+    // (the regression leg 2 caught on mmnto-ai/totem#2938).
+    fs.mkdirSync(path.join(tmpDir, 'z', '.totem', 'temp'), { recursive: true });
     const sweep = findStrayTotemMarkers(tmpDir, '.totem', none);
-    expect(sweep.untracked).toEqual([]);
+    expect(sweep.untracked).toEqual(['z/.totem']);
     expect(sweep.truncated).toBe(true);
   });
 });
