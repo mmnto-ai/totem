@@ -1,6 +1,6 @@
 ---
 name: review-reply
-description: Unified PR review triage — fetch, normalize, and batch-action bot comments
+description: Unified PR review triage — fetch, normalize, and batch-action bot comments; and the completion recipe that ends a bus audit
 ---
 
 <!-- totem:skill-start -->
@@ -112,5 +112,15 @@ totem resolve-threads $ARGUMENTS --apply
 The verb never posts a comment, a reply or a review — the only mutation it can issue is `resolveReviewThread`, which is what the merge-ready gate's unresolved-bot-threads predicate reads. Exit `2` means it did not do everything asked (an unmatched id, a failed mutation, or a selected thread with no evidence); exit `1` means the read did not complete and NOTHING was resolved. Report what it printed, verbatim.
 
 A clean `--apply` run is NOT an allow verdict, and it clears the unresolved-bot-threads predicate only when no unresolved, non-outdated thread rooted by a known review bot remains: a `skip:no-evidence` row stays unresolved and, under `--apply`, makes the run exit 2; a run narrowed with `--ids` leaves its unnamed rows as `skip:not-selected` and exits 0. The gate re-reads the PR when `gh pr merge` runs, and a bot HIGH inline whose commit cannot be read makes the evaluation UNEVALUABLE once every earlier predicate passes — a deny the resolve run does not predict (under the pilot tier it warns; strict denies). After the apply, read the floor itself — `totem gate check --event merge-ready --payload '{"repo":"<owner/repo>","pr":$ARGUMENTS}'`, with `--tier pilot` where the installed gate is the pilot — and report that verdict beside the resolve rows, before the merge word is asked for.
+
+## Ending a blind-round audit on the bus (the completion recipe)
+
+A finished audit or round deposit for a kit that arrived by mail ends with ONE call:
+
+```bash
+totem mail reply <source dispatch path> --body-file <deposit>
+```
+
+It sends the reply into your own outbox AND writes the `processed/` mark for the source in the same call. `--no-mark` stages the reply and leaves the source unread for a later `totem mail mark <source>`. Never a hand-written mark, and never a separate send followed by a hand-written mark: the mark is the consumption record the next poll reads, and the reply verb writes it under the same resolved root as the reply — the resident checkout that hosts your seat (mmnto-ai/totem#2930). Run both calls from that resident checkout, never from a worktree: the reply refuses a worktree, and since mmnto-ai/totem#2968 so does a standalone `totem mail mark` — on a CLI before that fix the mark resolved the nearest marker, and from a worktree that minted a phantom store no poll drains. The source path is the `read:` line under the item in `totem mail`'s listing (mmnto-ai/totem#2919; the item's `filePath` under `--json`) — pass it as printed. When the send's own verify line is not in front of you, `totem mail verify <written path>` re-checks the dispatch you wrote.
 
 <!-- totem:skill-end -->

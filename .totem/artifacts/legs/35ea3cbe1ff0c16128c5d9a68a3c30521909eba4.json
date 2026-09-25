@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "35ea3cbe1ff0c16128c5d9a68a3c30521909eba4",
+  "readAt": "2026-09-24T23:26:30Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3700,
+      "claim": "The recipe says the mark is written under the same resolved root as the reply; true for the reply's own mark (pinned to the send root, which refuses a worktree) but false for the later standalone totem mail mark, which resolves the nearest marker — a worktree's .git file counts — and mkdirs a phantom processed/ store no poll drains; the skill recommended that path with no cwd caveat.",
+      "counterexample": "markSource(kit, { repoRoot: 'ws/wt', env: { TOTEM_SELF_AGENT: 'seat-a' } }) on a worktree-shaped fixture wrote ws/wt/.totem/orchestration/seat-a/processed/2026-09-24-seat-a-kit.md."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/review-reply-completion-recipe-2925.md",
+      "line": 10,
+      "claim": "The issue says the build picks the surface (review-reply or signoff) and says why; nothing on the branch gave a reason, and the placement is arguable: review-reply is a PR-triage skill routed by a description that names bot comments, while a seat finishing a mailed audit entered through signon's kit-first step.",
+      "counterexample": ""
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3700,
+      "claim": "The same-root sentence cites this issue; the behaviour comes from the mmnto-ai/totem#2940 fold and the resident-only send of mmnto-ai/totem#2930.",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3700,
+      "claim": "'The source path is the read: line' holds for the human listing only: not printed on an identity-less poll nor for withheld directed items, and under --json the same path is the item's filePath.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 3630,
+      "claim": "The locking test pins the heading, the verbatim reply line, the --no-mark sentence, the no-hand-written-mark rule and the read: pointer, and fails if the section moves outside the span or the verb changes; it does not lock the same-call sentence, the later-mark verb or 'never a separate send followed by'; byte parity of the rendered copies is locked elsewhere; the describe's mkdtemp setup is wasted but harmless.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/review-reply-completion-recipe-2925.md",
+      "line": 10,
+      "claim": "QUESTION, answered by the leg itself: the skills-lock claim checks out against source (strategy's tools/agents-skills-lock.test.cjs compares working-tree skills to the installed constant; the pin ^2.11.0 with no committed lockfile and --no-frozen-lockfile in CI resolves the new cut on every open PR); patch matches the mmnto-ai/totem#2890 precedent; the six-package list is redundant under the fixed group; feat vs fix is cosmetic.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5"
+  ],
+  "verdict": "Leg 1 over 35ea3cbe: 0 BLOCKING, 2 MATERIAL, 4 MINOR (one a question the leg answered), nothing blocking; the CLI behaviour behind every sentence, the byte parity of both rendered copies with the built constant (LF, no CR; the next totem init rewrites them unchanged), the section's place inside the managed span, the absence of conflicting text in signon and signoff, prettier, ESLint, totem lint and the qualified refs all verified. F1 folded (both calls from the resident checkout, never a worktree, with the reason; the worktree mark hole filed as mmnto-ai/totem#2968), F2 folded (the reason for review-reply stated in the changeset; the description names the recipe), F3 folded (mmnto-ai/totem#2930 cited), F4 folded (filePath under --json), F5 folded (the same-call sentence and the later-mark verb locked). F6 stands as answered."
+}
