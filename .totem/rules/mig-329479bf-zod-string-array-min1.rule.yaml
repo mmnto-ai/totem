@@ -1,0 +1,21 @@
+schemaVersion: 1
+severity: warning
+message: Use z.array(z.string().min(1)) to reject empty strings at parse time instead of filtering them at runtime
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: z.array(z.string())
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+
+examples:
+  - bad: const schema = z.array(z.string());
+    good: const schema = z.array(z.string().min(1));
+
+curation:
+  sourceLesson: lesson-329479bf34f8816f
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

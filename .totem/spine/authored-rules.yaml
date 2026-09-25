@@ -123,3 +123,168 @@ rules:
         matchedSpan: examples[0].bad
         contentHash: 2320dd1dd8726d2621cfa7643cde5806df612fb7707476a0460c66a310f1ee1d
         example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: fd8846c9d8ba939897a00e5537a2da09ddf9fb33d8391a90a5fb532f47c11a3c
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '329479bf34f8816f: Use .min(1) on string schemas in config arrays'
+    structuralClass: forbidden-fixed-call-expression
+    record: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: a4300d49b89de1c681072505f42b562947a6a0cbbbc7d36433650da60bae08f6
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '638d6fcc8a601da0: Windows requires shell:true for git binary resolution'
+    structuralClass: callee-literal-arg-missing-option
+    record: .totem/rules/mig-638d6fcc-execfilesync-git-shell-option.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-638d6fcc-execfilesync-git-shell-option.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 8f54a1d12a775ea29f45bd31d4745d5ff62ca4827a5363058c7253c3003d1b65
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '06282905d061ca34@javascript: Diagnostic hints must precisely identify the underlying'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '06282905d061ca34@typescript: Diagnostic hints must precisely identify the underlying'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-06282905-execsync-call.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-06282905-execsync-call.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '24f112fe3a6679bd: Standardize exception messages with a consistent prefix'
+    structuralClass: constructor-literal-arg-missing-prefix
+    record: .totem/rules/mig-24f112fe-error-message-prefix.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-24f112fe-error-message-prefix.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 2320dd1dd8726d2621cfa7643cde5806df612fb7707476a0460c66a310f1ee1d
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'fb05f895862808e6: Forbid direct child_process — use safeExec'
+    structuralClass: forbidden-module-import
+    record: .totem/rules/mig-fb05f895-direct-child-process-import.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-fb05f895-direct-child-process-import.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 058e7cd0854a1f5d28633c0916bb3fa59daabbdc755474f62d927dd35ea859ac
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '81f72c855eba4229: 2026-03-06T05:32:34.074Z'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-81f72c85-promise-allsettled.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-81f72c85-promise-allsettled.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: cb943beaeed79f578917612ec9caa01b2ed18abc19b325e3513fed99e4d939c0
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '3c7773706e5b3b2d: Brace expansion (e.g., \*.{ts,js}) is not universally'
+    structuralClass: brace-expansion-glob-literal
+    record: .totem/rules/mig-3c777370-brace-expansion-glob.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-3c777370-brace-expansion-glob.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: ee09672e514ee68efa356763eedd46c6925b8c5fc9573873bf39b88ffadf3a00
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '487a0a23bd24569d: Static top-level imports from heavy internal packages delay'
+    structuralClass: static-import-from-module
+    record: .totem/rules/mig-487a0a23-static-import-in-cli-commands.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-487a0a23-static-import-in-cli-commands.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 3cfcb6b49f0fc0cda25fe67aa30a77627a313c1d2cc8924202636995e4593f59
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '7cdfa1069477b69a: Dynamic imports should be limited to CLI command entry'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-7cdfa106-dynamic-import-outside-cli-entry.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-7cdfa106-dynamic-import-outside-cli-entry.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 2c717193b02a76b4d92e0fc5034b0d70eba84de67dff598e08261fd0f32e2b83
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: 'f202f65f8a198f18: When testing expected failures, assert the specific error'
+    structuralClass: callee-call-without-argument
+    record: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 5ff73cbf8e747ec4a30e45097ca8fffac02d6ea91b3197aa0851c9f35ba5ff94
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '2d3ac4b9516ed9b6: The Gemini CLI and Gemini Code Assist (GCA) do not'
+    structuralClass: forbidden-path-literal
+    record: .totem/rules/mig-2d3ac4b9-gemini-md-lowercase-path.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-2d3ac4b9-gemini-md-lowercase-path.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 193381922c50b73da8d6b60c10794591e79b36e8a3ec4d06002007feb311c9d0
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '240f19cae3e56b10@javascript: Throwing specific error classes like TotemParseError'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
+        example: 0
+  - author: totem-claude
+    authoredAt: '2026-09-23'
+    targetDefect: '240f19cae3e56b10@typescript: Throwing specific error classes like TotemParseError'
+    structuralClass: forbidden-callee-call
+    record: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
+    positiveFixtures:
+      - pr: 2947
+        filePath: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
+        matchedSpan: examples[0].bad
+        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
+        example: 0

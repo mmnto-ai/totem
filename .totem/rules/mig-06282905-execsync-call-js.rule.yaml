@@ -1,0 +1,21 @@
+schemaVersion: 1
+severity: warning
+message: Use execFileSync instead of execSync to avoid shell-parsing overhead and security risks
+
+target:
+  type: ast-grep
+  language: javascript
+  pattern: execSync($$$ARGS)
+  scope:
+    fileGlobs:
+      - '**/*.js'
+
+examples:
+  - bad: const out = execSync('git status');
+    good: const out = execFileSync('git', ['status']);
+
+curation:
+  sourceLesson: lesson-06282905d061ca34
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

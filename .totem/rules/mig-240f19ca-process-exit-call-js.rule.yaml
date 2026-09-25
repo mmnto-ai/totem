@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Avoid calling process.exit() directly. Throw a specific error class (e.g., TotemParseError) instead to ensure consistent error handling and exit behavior across the CLI.
+
+target:
+  type: ast-grep
+  language: javascript
+  pattern: process.exit($CODE)
+  scope:
+    fileGlobs:
+      - '**/*.js'
+    excludeGlobs:
+      - '**/*.test.ts'
+      - '**/*.test.js'
+
+examples:
+  - bad: process.exit(2);
+    good: throw new TotemParseError('bad input');
+
+curation:
+  sourceLesson: lesson-240f19cae3e56b10
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

@@ -1,0 +1,26 @@
+schemaVersion: 1
+severity: warning
+message: Gemini CLI and GCA do not recognize .gemini/gemini.md. Use GEMINI.md (uppercase) at the project root instead.
+
+target:
+  type: regex
+  pattern: \.gemini/gemini\.md
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.sh'
+      - '**/*.md'
+
+examples:
+  - bad: const instructions = '.gemini/gemini.md';
+    good: const instructions = 'GEMINI.md';
+
+curation:
+  sourceLesson: lesson-2d3ac4b9516ed9b6
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

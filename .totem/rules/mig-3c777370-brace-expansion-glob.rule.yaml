@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Brace expansion (e.g., *.{ts,js}) is not universally supported and may silently match zero files. Expand into separate glob strings instead (e.g., ["**/*.ts", "**/*.js"]).
+
+target:
+  type: regex
+  pattern: \*\.\{[^}]+\}
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.json'
+      - '**/*.yml'
+      - '**/*.yaml'
+
+examples:
+  - bad: const glob = '**/*.{ts,js}';
+    good: const globs = ['**/*.ts', '**/*.js'];
+
+curation:
+  sourceLesson: lesson-3c7773706e5b3b2d
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3
