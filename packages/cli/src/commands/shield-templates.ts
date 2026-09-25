@@ -106,12 +106,51 @@ interface DiffFileHeader {
   path: string;
 }
 
-/** Strip git's optional quoting and the a/ or b/ prefix from a `---` / `+++` operand. */
-function stripDiffPathPrefix(operand: string): string {
-  let p = operand.trim();
-  if (p.length >= 2 && p.startsWith('"') && p.endsWith('"')) p = p.slice(1, -1);
-  return p.replace(/^[ab]\//, '');
+/**
+ * Decode a path git C-quoted (`"a/caf\303\251 file.txt"`): the surrounding
+ * quotes, the `\"`, `\\`, `\n`, `\t` and sibling escapes, and the three-digit
+ * octal byte escapes, the bytes read as UTF-8. A name git did not quote is
+ * returned as given.
+ */
+function unquoteGitPath(operand: string): string {
+  if (operand.length < 2 || !operand.startsWith('"') || !operand.endsWith('"')) return operand;
+  const inner = operand.slice(1, -1);
+  const simple: Record<string, number> = {
+    n: 10,
+    t: 9,
+    r: 13,
+    a: 7,
+    b: 8,
+    f: 12,
+    v: 11,
+    '"': 34,
+    '\\': 92,
+  };
+  const bytes: number[] = [];
+  // Tokens: an octal byte escape, a single-character escape, or a run of plain
+  // characters (encoded as one string, so a surrogate pair stays one code point).
+  for (const token of inner.match(/\\[0-7]{3}|\\.|[^\\]+/g) ?? []) {
+    if (!token.startsWith('\\')) {
+      bytes.push(...Buffer.from(token, 'utf8'));
+    } else if (token.length === 4) {
+      bytes.push(parseInt(token.slice(1), 8));
+    } else {
+      const escaped = token.slice(1);
+      bytes.push(simple[escaped] ?? 92, ...(escaped in simple ? [] : Buffer.from(escaped, 'utf8')));
+    }
+  }
+  return Buffer.from(bytes).toString('utf8');
 }
+
+/** Strip git's optional C-quoting and the a/ or b/ prefix from a `---` / `+++` / header operand. */
+function stripDiffPathPrefix(operand: string): string {
+  return unquoteGitPath(operand.trim()).replace(/^[ab]\//, '');
+}
+
+/** One header operand: a bare token, or a C-quoted string with escapes. */
+const HEADER_OPERAND = '(?:"(?:[^"\\\\]|\\\\.)*"|\\S+)';
+/** `diff --git <a-operand> <b-operand>`, either operand possibly quoted (greptile on mmnto-ai/totem#2959). */
+const HEADER_OPERANDS_RE = new RegExp(`^diff --git (${HEADER_OPERAND}) (${HEADER_OPERAND})$`);
 
 /**
  * The file's path from its header block: the `+++` operand (the post-image
@@ -141,10 +180,12 @@ function diffFilePath(diff: string, lineStart: number): string {
   }
   const renameTo = lines.find((l) => l.startsWith('rename to '));
   if (renameTo !== undefined) return stripDiffPathPrefix(renameTo.slice('rename to '.length));
-  const same = /^diff --git a\/(.+) b\/\1$/.exec(headerLine);
-  if (same) return same[1]!;
-  const bSide = /^diff --git a\/.+? b\/(.+)$/.exec(headerLine);
-  if (bSide) return bSide[1]!;
+  // The header's b-side operand (the post-image name), quoted or bare: a
+  // hunk-less mode change to `my file.png` has no `+++` line, and git C-quotes
+  // the header operands, so the marker must unquote them rather than print
+  // both quoted paths (greptile on mmnto-ai/totem#2959).
+  const operands = HEADER_OPERANDS_RE.exec(headerLine);
+  if (operands) return stripDiffPathPrefix(operands[2]!);
   return headerLine.slice('diff --git '.length);
 }
 

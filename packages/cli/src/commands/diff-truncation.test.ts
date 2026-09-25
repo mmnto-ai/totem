@@ -151,6 +151,22 @@ describe('truncateDiffForReview', () => {
     expect(t.omittedFiles).toEqual([]);
   });
 
+  it('names a quoted, hunk-less omitted file by its unquoted path — spaces and octal escapes decoded (greptile on mmnto-ai/totem#2959)', () => {
+    const a = file('a.ts', 400);
+    // A mode-only change has no `+++` line; git C-quotes a name with a space or
+    // a non-ASCII byte in the header operands.
+    const spaced = 'diff --git "a/my file.png" "b/my file.png"\nold mode 100644\nnew mode 100755\n';
+    const escaped =
+      'diff --git "a/caf\\303\\251 \\"x\\".txt" "b/caf\\303\\251 \\"x\\".txt"\nold mode 100644\nnew mode 100755\n';
+    const mixed =
+      'diff --git a/plain.txt "b/re named.txt"\nsimilarity index 100%\nrename from plain.txt\nrename to "re named.txt"\n';
+    const diff = a + spaced + escaped + mixed;
+    const t = truncateDiffForReview(diff, a.length + 10);
+    expect(t.cutAt).toBe('file');
+    expect(t.omittedFiles).toEqual(['my file.png', 'café "x".txt', 're named.txt']);
+    expect(t.delivered).toContain('3 file(s) not shown: my file.png, café "x".txt, re named.txt');
+  });
+
   it('collapses a long omitted-file list after twelve names', () => {
     const files = Array.from({ length: 15 }, (_, i) => file(`f${i}.ts`, 50));
     const diff = files.join('');
@@ -257,10 +273,10 @@ describe('truncateDiffForReview', () => {
       expect(omittedAfter(second)).toEqual(['x b/y.ts']);
     });
 
-    it('unquotes a quoted path', () => {
+    it('unquotes a quoted path and decodes its octal byte escapes (greptile on mmnto-ai/totem#2959)', () => {
       const second =
         'diff --git "a/caf\\303\\251.ts" "b/caf\\303\\251.ts"\n--- "a/caf\\303\\251.ts"\n+++ "b/caf\\303\\251.ts"\n@@ -1,1 +1,1 @@\n-x\n+y\n';
-      expect(omittedAfter(second)).toEqual(['caf\\303\\251.ts']);
+      expect(omittedAfter(second)).toEqual(['café.ts']);
     });
 
     it('names a pure rename (no --- / +++ lines) by its rename-to path', () => {
