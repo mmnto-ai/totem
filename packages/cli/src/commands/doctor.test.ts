@@ -35,6 +35,7 @@ import {
   findLegacyGrandfatheredRules,
   findStaleRules,
   findStrayTotemMarkers,
+  gitTracksPath,
   MIN_CONTEXT_EVENTS,
   MIN_EVENTS,
   NON_CODE_THRESHOLD,
@@ -1796,14 +1797,54 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     expect(sweep.unreadable).toBe(1);
   });
 
-  it('a multi-segment totemDir (state/totem) is matched on its trailing segments: the root marker is descended, a nested one is a stray, a literal .totem still counts', () => {
-    fs.mkdirSync(path.join(tmpDir, 'state', 'totem', 'temp'), { recursive: true });
+  it('a multi-segment totemDir (state/totem) is matched on its trailing segments: both root markers are descended and never strays, a nested one is a stray, a literal .totem elsewhere still counts', () => {
+    fs.mkdirSync(path.join(tmpDir, 'state', 'totem', 'temp', 'run-1', '.totem'), {
+      recursive: true,
+    });
+    // The repository's own `.totem` stays required whatever `totemDir` says (the
+    // mail verbs keep their orchestration tree there; the classifier requires it):
+    // never residue, and descended like the configured marker (leg 3 F1).
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'orchestration', 'seat', 'outbox'), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(tmpDir, '.totem', 'temp', 'spec-y', '.totem'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'x', 'state', 'totem'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'y', '.totem'), { recursive: true });
     // A directory merely named `totem` outside the configured shape is not a marker.
     fs.mkdirSync(path.join(tmpDir, 'z', 'totem'), { recursive: true });
     const sweep = findStrayTotemMarkers(tmpDir, 'state/totem', none);
-    expect([...sweep.untracked].sort()).toEqual(['x/state/totem', 'y/.totem']);
+    expect([...sweep.untracked].sort()).toEqual([
+      '.totem/temp/spec-y/.totem',
+      'state/totem/temp/run-1/.totem',
+      'x/state/totem',
+      'y/.totem',
+    ]);
+  });
+
+  it('the tracking probe runs with git location variables scrubbed: an inherited GIT_DIR pointing at another repository cannot re-label a tracked fixture (greptile on mmnto-ai/totem#2974)', async () => {
+    execSync('git init', { cwd: tmpDir, stdio: 'ignore' });
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'examples', 'fixture', '.totem'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'examples', 'fixture', '.totem', 'config.json'), '{}');
+    execSync('git add examples/fixture/.totem/config.json', { cwd: tmpDir, stdio: 'ignore' });
+    // A second, empty repository whose index knows nothing of the fixture.
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-doctor-other-'));
+    execSync('git init', { cwd: other, stdio: 'ignore' });
+    const saved = process.env['GIT_DIR'];
+    process.env['GIT_DIR'] = path.join(other, '.git');
+    try {
+      // Unscrubbed, ls-files would read the OTHER index and call the fixture untracked.
+      const raw = gitTracksPath(tmpDir)('examples/fixture/.totem');
+      expect(raw).not.toBe('tracked');
+      // The row scrubs, so the fixture is read from THIS repository's index.
+      const result = await checkStrayTotemMarkers(tmpDir);
+      expect(result.status).toBe('pass');
+      expect(result.message).toContain('1 committed fixture marker');
+    } finally {
+      if (saved === undefined) delete process.env['GIT_DIR'];
+      else process.env['GIT_DIR'] = saved;
+      cleanTmpDir(other);
+    }
   });
 
   it('a committed fixture marker is named and passes; a minted one beside it warns; a run from a subdirectory reads the toplevel', async () => {
@@ -1852,6 +1893,17 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     const sweep = findStrayTotemMarkers(tmpDir, '.totem', none);
     expect(sweep.untracked).toEqual(['z/.totem']);
     expect(sweep.truncated).toBe(true);
+  });
+
+  it('an empty leaf at the depth bound is not a cut — the sweep is complete (leg 3 F7 on mmnto-ai/totem#2974)', () => {
+    // Nine segments: `i` sits at the bound with nothing below it.
+    fs.mkdirSync(path.join(tmpDir, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'), {
+      recursive: true,
+    });
+    fs.mkdirSync(path.join(tmpDir, 'z', '.totem'), { recursive: true });
+    const sweep = findStrayTotemMarkers(tmpDir, '.totem', none);
+    expect(sweep.untracked).toEqual(['z/.totem']);
+    expect(sweep.truncated).toBe(false);
   });
 });
 

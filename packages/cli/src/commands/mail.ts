@@ -765,7 +765,8 @@ export function resolveReaderRepoRoot(
  *
  * Never throws on a filesystem failure — those degrade to warnings on the
  * result. The one throw is the root refusal (`REPO_ROOT_REFUSED`) before any
- * scan: a start outside any repository or inside a linked worktree
+ * scan: a start outside any repository, inside a linked worktree, in a
+ * repository with no `.totem/`, or whose `.git` entry cannot be read
  * (mmnto-ai/totem#2946, mmnto-ai/totem#2968; see `resolveReaderRepoRoot`).
  */
 export function pollMail(opts: MailCommandOptions = {}): MailPollResult {

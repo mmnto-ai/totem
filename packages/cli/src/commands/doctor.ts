@@ -1197,8 +1197,8 @@ const STRAY_MARKER_MAX_DIRS = 20_000;
 /** How many strays the row names before it counts the rest. */
 const STRAY_MARKER_LIST_MAX = 8;
 
-/** What a tracking probe answers for one stray: the two facts, or the honest third state. */
-export type TrackingState = 'tracked' | 'untracked' | 'unknown';
+/** What a tracking probe answers for one stray: the two facts, or the honest third state with its reason. */
+export type TrackingAnswer = 'tracked' | 'untracked' | { state: 'unknown'; reason: string };
 
 export interface StrayTotemMarkers {
   /** Minted residue: `.totem/` directories git tracks nothing under. */
@@ -1229,7 +1229,7 @@ export interface StrayTotemMarkers {
 export function gitTracksPath(
   root: string,
   env: NodeJS.ProcessEnv = process.env,
-): (rel: string) => TrackingState | { state: 'unknown'; reason: string } {
+): (rel: string) => TrackingAnswer {
   return (rel) => {
     try {
       // `--literal-pathspecs`: the path is a directory name, never a glob — a
@@ -1265,24 +1265,33 @@ const readDirEntries: ReadDirFn = (dir) => fs.readdirSync(dir, { withFileTypes: 
  * in directory order, split by whether git tracks anything under it. A
  * configured `totemDir` may be multi-segment (`state/totem`), so a marker is
  * matched on its trailing path segments, never on one entry name alone
- * (CodeRabbit on mmnto-ai/totem#2974); a literal `.totem` matches everywhere.
- * The root marker itself is descended (its `temp/` trees are where
- * `totem spec` scratch checkouts leave strays); a STRAY is never descended,
- * since whatever it holds is the same residue; a directory holding its own
- * `.git` (a nested repository, a submodule, a vendored checkout) is neither
- * descended nor listed — its `.totem/` is that repository's root marker.
- * An unreadable directory is skipped AND counted, and `truncated` is set when
- * the breadth or the depth bound stopped the sweep, so a clean answer is never
- * claimed for a tree the row did not finish.
+ * (CodeRabbit on mmnto-ai/totem#2974); a literal `.totem` matches everywhere,
+ * and a single-segment configured name (`totem`) matches every directory of
+ * that name, since nothing else distinguishes a stray from the marker by
+ * shape. Two directories are ROOT markers, never strays, and both are
+ * descended (their `temp/` trees are where `totem spec` scratch checkouts
+ * leave strays): the configured `<root>/<totemDir>` and the literal
+ * `<root>/.totem`, which the mail verbs keep their orchestration tree under
+ * and the reader root classifier requires whatever `totemDir` says (leg 3 on
+ * mmnto-ai/totem#2974 — calling it residue told a configured repository to
+ * delete its mail store). A STRAY is never descended, since whatever it holds
+ * is the same residue; a directory holding its own `.git` (a nested
+ * repository, a submodule, a vendored checkout) is neither descended nor
+ * listed — its `.totem/` is that repository's root marker. An unreadable
+ * directory is skipped AND counted, and `truncated` is set when the breadth
+ * bound stopped the sweep or the depth bound pruned a directory that had
+ * something below it, so a clean answer is never claimed for a tree the row
+ * did not finish — while an empty leaf at the depth bound is not a cut.
  */
 export function findStrayTotemMarkers(
   root: string,
   totemDir = '.totem',
-  isTracked: ReturnType<typeof gitTracksPath> = gitTracksPath(root),
+  isTracked: (rel: string) => TrackingAnswer = gitTracksPath(root),
   readDir: ReadDirFn = readDirEntries,
 ): StrayTotemMarkers {
   const base = path.resolve(root);
   const rootMarker = path.resolve(base, totemDir);
+  const literalRootMarker = path.resolve(base, '.totem');
   const markerSegments = path.relative(base, rootMarker).split(path.sep).filter(Boolean);
   const strays: string[] = [];
   let visited = 0;
@@ -1303,7 +1312,15 @@ export function findStrayTotemMarkers(
   const walk = (dir: string, depth: number): void => {
     if (aborted) return;
     if (depth > STRAY_MARKER_MAX_DEPTH) {
-      depthCut = true;
+      // The bound prunes here; it is a CUT only when something lies below —
+      // an empty leaf at the bound leaves the sweep complete (leg 3 F7 on
+      // mmnto-ai/totem#2974: every deep empty `src/` made the row warn).
+      try {
+        if (readDir(dir).some((e) => e.isDirectory())) depthCut = true;
+        // totem-context: an unreadable directory at the bound is counted like any other unreadable directory — disclosed on the row, never read as a clean leaf.
+      } catch {
+        unreadable += 1;
+      }
       return;
     }
     let entries: fs.Dirent[];
@@ -1322,7 +1339,8 @@ export function findStrayTotemMarkers(
       }
       const full = path.join(dir, entry.name);
       const isMarker = entry.name === '.totem' || isConfiguredMarker(full);
-      if (isMarker && path.resolve(full) !== rootMarker) {
+      const resolved = path.resolve(full);
+      if (isMarker && resolved !== rootMarker && resolved !== literalRootMarker) {
         strays.push(path.relative(base, full).split(path.sep).join('/'));
         continue;
       }
@@ -1343,7 +1361,7 @@ export function findStrayTotemMarkers(
     else if (answer === 'untracked') untracked.push(rel);
     else {
       unverified.push(rel);
-      trackingError ??= typeof answer === 'object' ? answer.reason : 'unknown';
+      trackingError ??= answer.reason;
     }
   }
   return {
@@ -1407,18 +1425,17 @@ export async function checkStrayTotemMarkers(
       ? `; ${unverified.length} marker${unverified.length === 1 ? '' : 's'} whose tracking could not be checked (${trackingError ?? 'git unavailable'}): ${listStrays(unverified)}`
       : '';
   const incomplete = truncated || unreadable > 0 || unverified.length > 0;
+  const uncheckedAdvice =
+    'The markers named as unchecked are neither fixture nor residue here, because git did not answer: run doctor where git answers for this repository, and until it does give each of them the caution residue would get.';
+  const residueAdvice =
+    'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each minted marker, or the tool that mints it.';
   if (untracked.length === 0) {
     return {
       name,
       status: incomplete ? 'warn' : 'pass',
       message: `no minted ${totemDir}/ under this repository other than its root marker${fixtures}${unchecked}${suffix}`,
       ...(incomplete ? { gateExempt: true as const } : {}),
-      ...(unverified.length > 0
-        ? {
-            remediation:
-              'Tracking could not be checked, so no marker above is called a fixture or residue: run doctor where git answers for this repository, and read each unchecked marker as residue until it does.',
-          }
-        : {}),
+      ...(unverified.length > 0 ? { remediation: uncheckedAdvice } : {}),
     };
   }
   return {
@@ -1426,8 +1443,7 @@ export async function checkStrayTotemMarkers(
     status: 'warn',
     gateExempt: true,
     message: `${untracked.length} minted ${totemDir}/ director${untracked.length === 1 ? 'y' : 'ies'} under this repository (untracked residue): ${listStrays(untracked)}${fixtures}${unchecked}${suffix}`,
-    remediation:
-      'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each minted marker, or the tool that mints it.',
+    remediation: unverified.length > 0 ? `${residueAdvice} ${uncheckedAdvice}` : residueAdvice,
   };
 }
 

@@ -439,15 +439,21 @@ export function findRepoRootSync(start: string): string | null {
  * store, resolved the home directory as its repo root and read a home-wide
  * "workspace" as clean — the marker-less class of mmnto-ai/totem#2946 wearing
  * a marker; a `~/.git` is a dotfiles repository the same way. The temp
- * directory is where a phantom lands: the old cwd-based send minted
- * `%TEMP%/.totem/orchestration/<seat>/outbox` on this seat's host, and a
- * stray `/tmp/.totem/` captures every start under `/tmp` — a reader from
- * `/tmp/scratch` then reads an unrelated workspace as clean or marks into
- * the stray store (greptile on mmnto-ai/totem#2974). Only the directory
- * ITSELF is excluded: a fixture at `<tmp>/<suite>-xxxx/repo/.totem` still
- * anchors, since it sits below the excluded directory. A stray elsewhere
- * outside any repository (`/srv/.totem`, say) is not distinguishable from a
- * bare fixture by shape and still anchors the `.totem/` arm — named residue.
+ * directory — `os.tmpdir()`, whatever `TMPDIR`/`TEMP` names, `/var/folders/…/T`
+ * on macOS rather than `/tmp` — is where a phantom lands: the old cwd-based
+ * send minted `%TEMP%/.totem/orchestration/<seat>/outbox` on this seat's
+ * host, and a stray marker AT the temp directory captures every start under
+ * it — a reader from a scratch directory then reads an unrelated workspace as
+ * clean or marks into the stray store (greptile on mmnto-ai/totem#2974). Only
+ * the directory ITSELF is excluded: a fixture at `<tmp>/<suite>-xxxx/repo/.totem`
+ * still anchors, since it sits below the excluded directory, and so does a
+ * leaked fixture — a start beneath one anchors there. Two edges are named,
+ * not cured: a stray elsewhere outside any repository (`/srv/.totem`, or
+ * `/tmp/.totem` on a host whose temp directory is not `/tmp`) is not
+ * distinguishable from a bare fixture by shape and still anchors the
+ * `.totem/` arm; and a `TEMP`/`TMPDIR` that names a checkout's own root
+ * makes that checkout's root anchor nothing (a verb there resolves higher
+ * or is refused).
  */
 export function findTotemRepoRootSync(start: string): string | null {
   // Both excluded directories are canonicalised once per walk, not per ancestor.
