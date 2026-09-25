@@ -934,11 +934,13 @@ export function resolveDefaultSpecPath(
     // URL) keys its draft on that repository too: issue 7 of two repositories
     // must not share `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965).
     // The repository is lower-cased, as GitHub compares it, and its segments
-    // are joined with `_`, a character no host or owner name may contain, so
-    // `a-b/c` and `a/b-c` never meet at one stem (leg 2 on the review-round
-    // fold); a repository NAME whose punctuation sanitizes to another's dashes
-    // still could, and --out names a path. A bare number keeps `<number>.md`,
-    // whatever repository the working directory's adapter resolved it in.
+    // are joined with `_` before the sanitizer runs, so `a-b/c` and `a/b-c`
+    // never meet at one stem (leg 2 on the review-round fold). The stem is not
+    // unique in general (leg 3): a repository name may contain `_`, an
+    // Enterprise Managed User's handle does, and punctuation sanitizes to
+    // dashes, so two repositories can still share one — --out names a path.
+    // A bare number keeps `<number>.md`, whatever repository the working
+    // directory's adapter resolved it in.
     stem = first.namedRepo
       ? `${sanitizeSpecFilename(first.namedRepo.toLowerCase().replace(/\//g, '_'))}-${first.issue.number}`
       : String(first.issue.number);
@@ -984,11 +986,13 @@ function normalizeIssueHost(host: string): string {
  * path before `/issues/` is exactly two segments — `owner/repo/actions/runs/1`
  * is not a repository (GCA on mmnto-ai/totem#2965) — and the number ends its
  * path segment: end of input, `/`, `?` or `#` may follow, so `/issues/7abc` is
- * not issue 7 (CodeRabbit on mmnto-ai/totem#2965). The match is not
- * end-anchored on purpose: a query or a fragment may follow the number, and the
- * anchor's `ref` keeps the input as typed (see the anchor tests).
+ * not issue 7 (CodeRabbit on mmnto-ai/totem#2965). The host ends at the first
+ * `/`, `?` or `#`, so a query or fragment glued to the host is never read as
+ * its path (leg 3 on the leg-2 fold). The match is not end-anchored on
+ * purpose: a query or a fragment may follow the number, and the anchor's
+ * `ref` keeps the input as typed (see the anchor tests).
  */
-const ISSUE_URL_RE = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)(?=$|[/?#])/i;
+const ISSUE_URL_RE = /^https?:\/\/([^/?#]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)(?=$|[/?#])/i;
 
 /** GitLab's issue path, `/-/issues/<n>` — named when a URL in that form is refused. */
 const GITLAB_ISSUE_PATH_RE = /\/-\/issues\/\d+/i;
@@ -1050,7 +1054,7 @@ export function explainUnsupportedIssueUrl(input: string): string | null {
   // The reasons are judged on the PATH alone — `/issues/5` inside a query or
   // a fragment never describes the input — and case-insensitively, as the
   // form regex is (leg 2 on the review-round fold).
-  const pathOnly = input.replace(/^https?:\/\/[^/]*/i, '').replace(/[?#][\s\S]*$/, '');
+  const pathOnly = input.replace(/^https?:\/\/[^/?#]*/i, '').replace(/[?#][\s\S]*$/, '');
   let reason: string;
   if (ISSUE_URL_RE.test(input)) {
     // The form is right and the parser still said no: the number is 0.

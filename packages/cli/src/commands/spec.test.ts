@@ -2461,6 +2461,33 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     // or index can never mask it (leg 2 on the review-round fold).
     expect(harness.connects).toBe(0);
   });
+
+  // Leg 3 on the leg-2 fold: the pre-pass precedes the config RESOLUTION, not
+  // only the store connect. The harness mocks the embedding check away, so the
+  // pin is a config that cannot even be read: the URL refusal must still win.
+  it('an unsupported issue URL is refused before the config is read', async () => {
+    const savedConfig = harness.config;
+    Object.defineProperty(harness, 'config', {
+      configurable: true,
+      get() {
+        throw new Error('the config was read before the URL refusal');
+      },
+    });
+    try {
+      await expect(
+        specCommand(['https://github.com/o/r/pull/5'], { stdout: true }),
+      ).rejects.toThrow(/Unsupported issue URL/);
+    } finally {
+      Object.defineProperty(harness, 'config', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: savedConfig,
+      });
+    }
+    expect(harness.connects).toBe(0);
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
 });
 
 // ─── parseIssueInput (mmnto-ai/totem#2943) ───────────────
@@ -2548,6 +2575,15 @@ describe('parseIssueInput', () => {
     });
   });
 
+  // Leg 3 on the leg-2 fold: the host ends at the first `/`, `?` or `#`, so a
+  // query or fragment glued to the host is never read as the host's path.
+  it('ends the host at the first /, ? or #: a query or fragment glued to the host names no issue', () => {
+    expect(parseIssueInput('https://github.com?q=/o/r/issues/5')).toBeNull();
+    expect(parseIssueInput('https://github.com#x/o/r/issues/5')).toBeNull();
+    expect(parseIssueInput('https://github.com?q=/a/b/c/issues/5')).toBeNull();
+    expect(parseIssueInput('https://gitlab.com?x=/g/p/-/issues/5')).toBeNull();
+  });
+
   it('returns null for a topic, for issue 0, for a non-numeric hash and for a pull URL', () => {
     expect(parseIssueInput('a loose topic')).toBeNull();
     expect(parseIssueInput('0')).toBeNull();
@@ -2601,6 +2637,17 @@ describe('explainUnsupportedIssueUrl', () => {
     // The form is right and the number is 0: that is the reason, not the path.
     expect(explainUnsupportedIssueUrl('https://github.com/o/r/issues/0')).toContain(
       'the issue number is 0',
+    );
+    // A query or fragment glued to the host is not the path either (leg 3):
+    // the real path is `/`, and `/` names no issue.
+    expect(explainUnsupportedIssueUrl('https://github.com?q=/a/b/c/issues/5')).toContain(
+      'it names no issue',
+    );
+    expect(explainUnsupportedIssueUrl('https://gitlab.com?x=/g/p/-/issues/5')).toContain(
+      'it names no issue',
+    );
+    expect(explainUnsupportedIssueUrl('https://github.com#x/o/r/issues/5')).toContain(
+      'it names no issue',
     );
     // `/issues/5` inside a query is not a path defect.
     expect(explainUnsupportedIssueUrl('https://github.com/o/r/pulls?q=/issues/5')).toContain(
