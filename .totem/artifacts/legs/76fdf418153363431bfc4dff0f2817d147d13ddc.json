@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "76fdf418153363431bfc4dff0f2817d147d13ddc",
+  "readAt": "2026-09-24T21:23:11Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 130,
+      "claim": "The structural cut has no coverage floor: a file or hunk boundary is taken however far back it sits, so a small edit followed by one large new file delivers the small edit alone (105 of 50,000 chars); in the strict-tier gate a fan completing with 0 findings over 105 chars admits a push whose main code was never shown. A coverage regression from the old slice.",
+      "counterexample": "A 105-byte edit to src/a.ts then a 68 KB new file src/new-module.ts (one hunk): total 68027, delivered 105, cut file, omitted [src/new-module.ts]. The same two files with the big one sorting first: delivered 49970, cut line. A single line wider than the window: delivered 62 (headers plus a bare hunk line)."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/ci.yml",
+      "line": 46,
+      "claim": "prettier --check warns on four changed files (diff-truncation.test.ts, shield-templates.ts, review-fan.ts, review-fan.test.ts); the three pre-existing files pass at 956e098f, so the commit introduced the drift and CI's format:check goes red.",
+      "counterexample": "prettier --check in the worktree: 4 warnings; the review-fan.ts import block should collapse to one line; the truncateDiffForReview signature exceeds the print width."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": ".changeset/review-fan-truncation-2954.md",
+      "line": 10,
+      "claim": "Three sentences in the changeset and commit body are not true of the code: a line boundary applies only to the first file (later files cut at the file boundary); the marker names at most twelve omitted files, then a count; the notice carries diff-derived file names, so it is not free of author-controlled content.",
+      "counterexample": "smallThenBig observed cut: file. MAX_NAMED_OMITTED = 12 and the code's own test confirms the collapse. diffTruncationNotice interpolates partialFile and omittedFiles."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": ".changeset/review-fan-truncation-2954.md",
+      "line": 10,
+      "claim": "The changeset reads as a fix of the measured symptom, but no test or measurement touches a real lane; the change proves payload structure, not that the Gemini lane extracts, and the issue's data fits size, latency or output-token limits as well as truncation. The branch should reference, not close, the issue until someone measures on the strategy seat; a zero-completed fan still hard-errors before any override.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 97,
+      "claim": "The diff --git header parse garbles a path containing ' b/', a quoted non-ASCII path, a noprefix header and a CRLF header (a trailing CR lands in the marker). Renames, binaries, duplicates and patch-of-a-patch content are handled correctly.",
+      "counterexample": "diff --git a/x b/y.ts b/x b/y.ts gives omitted ['y.ts b/x b/y.ts']; a quoted path gives the whole quoted remainder; a CRLF header gives 'a/b.ts b/b.ts\\r'."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/git.ts",
+      "line": 521,
+      "claim": "The reworded resolver warning is printed under [Lint] and [Estimate] too (lint.ts:302 and shield-estimate.ts:66 share getDiffForReview) while those verbs truncate nothing; it omits the line and char cuts; 'the delivered size is reported' holds only when a cut happens.",
+      "counterexample": "totem lint over a raw diff above 50K prints the review's cut sentence under [Lint]."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield.ts",
+      "line": 167,
+      "claim": "The notice outside the block breaks nothing: VERDICT_RE and the verdict cascade read the response; GIT_DIFF_SEGMENT_RE is lazy and wrapXml escapes the closing tag inside content; a forged notice inside the diff carries a +/-/space prefix. The only new exposure is author-controlled file names in the notice, which the Changed files line already places outside the block.",
+      "counterexample": ""
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/review-fan.test.ts",
+      "line": 1428,
+      "claim": "The invariant-15 test still says it emulates assemblePrompt but builds the old marker; no test drives the real assembler's output through the fan, so the 'can never drift' claim holds by construction, not by test. The fallback also omits wrapXml's closing-tag escaping (pre-existing; matters only with no block).",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/review-fan.test.ts",
+      "line": 0,
+      "claim": "A new comment carries a bare issue ref '(#2452)' against the house rule that every ref is repo-qualified.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F8",
+    "F9"
+  ],
+  "verdict": "Leg 1 over 76fdf418: 1 BLOCKING (no coverage floor on the structural cut), 3 MATERIAL (prettier drift; three untrue changeset sentences; the fix claim stronger than the evidence), 5 MINOR; F1-F6, F8 and F9 folded at the next commit (coverage floors of nine tenths for a boundary cut and one half for a line cut, file names from the +++ operand, the assembler's real output driven through the fan, the changeset claiming only what is proven with the issue referenced not closed, prettier, the qualified ref); F7 stands as read with no change owed."
+}
