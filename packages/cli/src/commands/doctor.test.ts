@@ -1766,7 +1766,7 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     expect(result.message).toContain('3 markers whose tracking could not be checked');
     expect(result.message).toContain('packages/cli/.totem');
     expect(result.message).not.toContain('(untracked residue)');
-    expect(result.remediation).toContain('Tracking could not be checked');
+    expect(result.remediation).toContain('because git did not answer');
   });
 
   it('a probe that cannot answer yields unverified markers carrying its error, never a tracking verdict', () => {
