@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: warning
+message: Never use 'git add -A' or 'git add .' — always stage specific files by name to avoid committing artifacts, lock files, or agent worktree copies
+
+target:
+  type: regex
+  pattern: git add\s+(-A|\.)\b
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/*.ts'
+      - '**/*.js'
+
+examples:
+  - bad: git add -A
+    good: git add packages/cli/package.json .changeset/
+
+curation:
+  sourceLesson: lesson-55797450514d4c3b
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

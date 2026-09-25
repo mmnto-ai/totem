@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: AI tool metadata must treat MCP-related fields as optional
+
+target:
+  type: regex
+  pattern: '\bmcp[a-zA-Z0-9_]*(?!\?)\s*:'
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.tsx'
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: 'interface ToolMeta { mcpServers: string[]; }'
+    good: 'interface ToolMeta { mcpServers?: string[]; }'
+
+curation:
+  sourceLesson: lesson-83b86cd73d637a6c
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
