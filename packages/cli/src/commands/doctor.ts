@@ -1187,6 +1187,266 @@ export function checkSecretsFileTracked(cwd: string, totemDir = '.totem'): Diagn
   };
 }
 
+// ─── Stray `.totem/` markers (mmnto-ai/totem#2938) ───────
+
+/** Directories the stray-marker sweep never descends into. */
+const STRAY_MARKER_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'coverage', '.lancedb']);
+/** Depth and breadth bounds: a doctor row, not a crawl. */
+const STRAY_MARKER_MAX_DEPTH = 8;
+const STRAY_MARKER_MAX_DIRS = 20_000;
+/** How many strays the row names before it counts the rest. */
+const STRAY_MARKER_LIST_MAX = 8;
+
+/** What a tracking probe answers for one stray: the two facts, or the honest third state with its reason. */
+export type TrackingAnswer = 'tracked' | 'untracked' | { state: 'unknown'; reason: string };
+
+export interface StrayTotemMarkers {
+  /** Minted residue: `.totem/` directories git tracks nothing under. */
+  untracked: string[];
+  /** Committed fixtures: `.totem/` directories with tracked content — named, not warned. */
+  tracked: string[];
+  /** Markers whose tracking could not be checked (git failed or could not be spawned). */
+  unverified: string[];
+  /** Why tracking could not be checked, when it could not — the probe's own words. */
+  trackingError: string | null;
+  /** The breadth or depth bound stopped the sweep before it finished. */
+  truncated: boolean;
+  /** Directories the sweep could not read and skipped — a clean answer is never claimed over them. */
+  unreadable: number;
+}
+
+/**
+ * The tracking probe: whether git tracks anything under `rel` (a repo-relative
+ * directory). The split between minted residue and committed fixtures is what
+ * makes the row mean something: the fixtures a test suite needs are permanent,
+ * the residue a tool left is the thing to remove. A git that exits non-zero or
+ * cannot be spawned answers `unknown` — never "untracked", which would call a
+ * fixture residue with every test green (greptile on mmnto-ai/totem#2974).
+ * `env` is the scrubbed environment (`envWithoutGitLocation`): a hook exports
+ * `GIT_DIR`-class variables, and with them `git ls-files` reads ANOTHER
+ * repository's index despite `cwd` (mmnto-ai/totem#2801).
+ */
+export function gitTracksPath(
+  root: string,
+  env: NodeJS.ProcessEnv = process.env,
+): (rel: string) => TrackingAnswer {
+  return (rel) => {
+    try {
+      // `--literal-pathspecs`: the path is a directory name, never a glob — a
+      // `*`, `?` or `[` in it must not expand (leg 2 F6 on mmnto-ai/totem#2938).
+      const result = spawnSync('git', ['--literal-pathspecs', 'ls-files', '--', rel], {
+        cwd: root,
+        encoding: 'utf-8',
+        env,
+      });
+      if (result.error) return { state: 'unknown', reason: result.error.message };
+      if (result.status !== 0) {
+        return {
+          state: 'unknown',
+          reason: `git ls-files exited ${String(result.status)}${(result.stderr ?? '').trim() ? `: ${(result.stderr ?? '').trim()}` : ''}`,
+        };
+      }
+      return (result.stdout ?? '').trim().length > 0 ? 'tracked' : 'untracked';
+      // totem-context: a spawn that throws is the same unknown state as a spawn that reports an error — surfaced on the row as "tracking could not be checked", never swallowed into a tracking verdict.
+    } catch (err) {
+      return { state: 'unknown', reason: err instanceof Error ? err.message : String(err) };
+    }
+  };
+}
+
+/** Test seam for the directory reader; production callers omit it. */
+export type ReadDirFn = (dir: string) => fs.Dirent[];
+
+const readDirEntries: ReadDirFn = (dir) => fs.readdirSync(dir, { withFileTypes: true });
+
+/**
+ * Every `.totem/` (or `<totemDir>/`) directory under `root` that is not the
+ * repository's own root marker, as forward-slash paths relative to `root`,
+ * in directory order, split by whether git tracks anything under it. A
+ * configured `totemDir` may be multi-segment (`state/totem`), so a marker is
+ * matched on its trailing path segments, never on one entry name alone
+ * (CodeRabbit on mmnto-ai/totem#2974); a literal `.totem` matches everywhere,
+ * and a single-segment configured name (`totem`) matches every directory of
+ * that name, since nothing else distinguishes a stray from the marker by
+ * shape. Two directories are ROOT markers, never strays, and both are
+ * descended (their `temp/` trees are where `totem spec` scratch checkouts
+ * leave strays): the configured `<root>/<totemDir>` and the literal
+ * `<root>/.totem`, which the mail verbs keep their orchestration tree under
+ * and the reader root classifier requires whatever `totemDir` says (leg 3 on
+ * mmnto-ai/totem#2974 — calling it residue told a configured repository to
+ * delete its mail store). A STRAY is never descended, since whatever it holds
+ * is the same residue; a directory holding its own `.git` (a nested
+ * repository, a submodule, a vendored checkout) is neither descended nor
+ * listed — its `.totem/` is that repository's root marker. An unreadable
+ * directory is skipped AND counted, and `truncated` is set when the breadth
+ * bound stopped the sweep or the depth bound pruned a directory that had
+ * something below it, so a clean answer is never claimed for a tree the row
+ * did not finish — while an empty leaf at the depth bound is not a cut.
+ */
+export function findStrayTotemMarkers(
+  root: string,
+  totemDir = '.totem',
+  isTracked: (rel: string) => TrackingAnswer = gitTracksPath(root),
+  readDir: ReadDirFn = readDirEntries,
+): StrayTotemMarkers {
+  const base = path.resolve(root);
+  const rootMarker = path.resolve(base, totemDir);
+  const literalRootMarker = path.resolve(base, '.totem');
+  const markerSegments = path.relative(base, rootMarker).split(path.sep).filter(Boolean);
+  const strays: string[] = [];
+  let visited = 0;
+  let unreadable = 0;
+  // Two bounds, two consequences: the breadth bound ABORTS the sweep (nothing
+  // after it is honest), the depth bound PRUNES the branch it hit and records
+  // the overrun — a first deep branch must not end the sweep before a sibling
+  // stray at depth 1 is seen (leg 2 F1 on mmnto-ai/totem#2938).
+  let aborted = false;
+  let depthCut = false;
+  const isConfiguredMarker = (full: string): boolean => {
+    if (markerSegments.length === 0) return false;
+    const parts = path.relative(base, full).split(path.sep);
+    if (parts.length < markerSegments.length) return false;
+    const tail = parts.slice(-markerSegments.length);
+    return tail.every((part, i) => part === markerSegments[i]);
+  };
+  const walk = (dir: string, depth: number): void => {
+    if (aborted) return;
+    if (depth > STRAY_MARKER_MAX_DEPTH) {
+      // The bound prunes here; it is a CUT only when something lies below —
+      // an empty leaf at the bound leaves the sweep complete (leg 3 F7 on
+      // mmnto-ai/totem#2974: every deep empty `src/` made the row warn).
+      try {
+        if (readDir(dir).some((e) => e.isDirectory())) depthCut = true;
+        // totem-context: an unreadable directory at the bound is counted like any other unreadable directory — disclosed on the row, never read as a clean leaf.
+      } catch {
+        unreadable += 1;
+      }
+      return;
+    }
+    let entries: fs.Dirent[];
+    try {
+      entries = readDir(dir);
+      // totem-context: an unreadable directory is skipped AND counted — the row discloses the count beside the bounds, so a permission hole never reads as a clean subtree (greptile on mmnto-ai/totem#2974).
+    } catch {
+      unreadable += 1;
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (++visited > STRAY_MARKER_MAX_DIRS) {
+        aborted = true;
+        return;
+      }
+      const full = path.join(dir, entry.name);
+      const isMarker = entry.name === '.totem' || isConfiguredMarker(full);
+      const resolved = path.resolve(full);
+      if (isMarker && resolved !== rootMarker && resolved !== literalRootMarker) {
+        strays.push(path.relative(base, full).split(path.sep).join('/'));
+        continue;
+      }
+      if (!isMarker && STRAY_MARKER_SKIP_DIRS.has(entry.name)) continue;
+      if (!isMarker && fs.existsSync(path.join(full, '.git'))) continue;
+      walk(full, depth + 1);
+    }
+  };
+  walk(base, 0);
+  // One tracking probe per stray (each is a git spawn).
+  const tracked: string[] = [];
+  const untracked: string[] = [];
+  const unverified: string[] = [];
+  let trackingError: string | null = null;
+  for (const rel of strays) {
+    const answer = isTracked(rel);
+    if (answer === 'tracked') tracked.push(rel);
+    else if (answer === 'untracked') untracked.push(rel);
+    else {
+      unverified.push(rel);
+      trackingError ??= answer.reason;
+    }
+  }
+  return {
+    untracked,
+    tracked,
+    unverified,
+    trackingError,
+    truncated: aborted || depthCut,
+    unreadable,
+  };
+}
+
+/** Name the first few paths and count the rest. */
+function listStrays(paths: readonly string[]): string {
+  const shown = paths.slice(0, STRAY_MARKER_LIST_MAX).join(', ');
+  return paths.length > STRAY_MARKER_LIST_MAX
+    ? `${shown} (+${paths.length - STRAY_MARKER_LIST_MAX} more)`
+    : shown;
+}
+
+/**
+ * Sensor row (never gates): `.totem/` directories under this repository that
+ * are not its root marker. Until mmnto-ai/totem#2938 the nearest-marker walk
+ * every reader verb shares stopped at one of these — a poll from
+ * `<repo>/packages/cli` read an empty workspace as clean, a mark landed in a
+ * store no poll drains. The walk now prefers the repository toplevel, so a
+ * stray no longer captures a verb; the row closes the loop on the residue
+ * and on whatever is still minting it. Minted residue (untracked) warns;
+ * committed fixtures (tracked) are named and pass, since a test suite keeps
+ * them on purpose. The sweep is rooted at the repository toplevel, not the
+ * cwd, so a doctor run from a subdirectory reads the same tree.
+ */
+export async function checkStrayTotemMarkers(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
+  const name = 'Stray Markers';
+  const { envWithoutGitLocation, findRepoRootSync } = await import('@mmnto/totem');
+  const root = findRepoRootSync(cwd) ?? cwd;
+  // The tracking probe runs with git's location variables scrubbed: under a
+  // hook, an inherited GIT_DIR would make `ls-files` read another repository's
+  // index despite `cwd` (mmnto-ai/totem#2801; greptile on mmnto-ai/totem#2974).
+  const sweep = findStrayTotemMarkers(root, totemDir, gitTracksPath(root, envWithoutGitLocation()));
+  const { untracked, tracked, unverified, trackingError, truncated, unreadable } = sweep;
+  const limits: string[] = [];
+  if (truncated) {
+    limits.push(
+      `the sweep stopped at its bounds — ${STRAY_MARKER_MAX_DIRS} directories or depth ${STRAY_MARKER_MAX_DEPTH}`,
+    );
+  }
+  if (unreadable > 0) {
+    limits.push(`${unreadable} unreadable director${unreadable === 1 ? 'y' : 'ies'} skipped`);
+  }
+  const suffix = limits.length > 0 ? ` (${limits.join('; ')} — the list may be incomplete)` : '';
+  const fixtures =
+    tracked.length > 0
+      ? `; ${tracked.length} committed fixture marker${tracked.length === 1 ? '' : 's'} (tracked, no verb runs from ${tracked.length === 1 ? 'it' : 'them'}): ${listStrays(tracked)}`
+      : '';
+  const unchecked =
+    unverified.length > 0
+      ? `; ${unverified.length} marker${unverified.length === 1 ? '' : 's'} whose tracking could not be checked (${trackingError ?? 'git unavailable'}): ${listStrays(unverified)}`
+      : '';
+  const incomplete = truncated || unreadable > 0 || unverified.length > 0;
+  const uncheckedAdvice =
+    'The markers named as unchecked are neither fixture nor residue here, because git did not answer: run doctor where git answers for this repository, and until it does give each of them the caution residue would get.';
+  const residueAdvice =
+    'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each minted marker, or the tool that mints it.';
+  if (untracked.length === 0) {
+    return {
+      name,
+      status: incomplete ? 'warn' : 'pass',
+      message: `no minted ${totemDir}/ under this repository other than its root marker${fixtures}${unchecked}${suffix}`,
+      ...(incomplete ? { gateExempt: true as const } : {}),
+      ...(unverified.length > 0 ? { remediation: uncheckedAdvice } : {}),
+    };
+  }
+  return {
+    name,
+    status: 'warn',
+    gateExempt: true,
+    message: `${untracked.length} minted ${totemDir}/ director${untracked.length === 1 ? 'y' : 'ies'} under this repository (untracked residue): ${listStrays(untracked)}${fixtures}${unchecked}${suffix}`,
+    remediation: unverified.length > 0 ? `${residueAdvice} ${uncheckedAdvice}` : residueAdvice,
+  };
+}
+
 // ─── AGENTS.md canonical-redirect check (Proposal 272 § 6.7 / mmnto-ai/totem#1905) ───
 
 /**
@@ -2580,6 +2840,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, totemDir, doctorThresholds),
     await checkGrandfatheredRules(cwd, totemDir),
     await checkFreezes(cwd, totemDir),
+    await checkStrayTotemMarkers(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.

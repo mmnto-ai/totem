@@ -51,7 +51,9 @@ export type TotemErrorCode =
   /** Selection-manifest schema breach — an emitter programming error (mmnto-ai/totem#2468). */
   | 'SELECTION_MANIFEST_CONTRACT'
   /** A leg deposit already exists for this read sha and `--replace` was not passed (mmnto-ai/totem#2698). */
-  | 'LEG_DEPOSIT_EXISTS';
+  | 'LEG_DEPOSIT_EXISTS'
+  /** A mail reader verb's start resolves to no repository or to a linked worktree — refused before any read or write; exit 2 at the CLI (mmnto-ai/totem#2946, mmnto-ai/totem#2968). */
+  | 'REPO_ROOT_REFUSED';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

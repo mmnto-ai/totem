@@ -245,9 +245,9 @@ const ALLOWLIST: AllowEntry[] = [
   {
     hash: 'c2c09301bb56a02b',
     file: 'packages/cli/src/commands/doctor.ts',
-    expectedCount: 7,
+    expectedCount: 8,
     reason:
-      '`totem doctor` invokes `spawnSync` to run git plumbing (rev-parse, ls-files, checkout) for hook installation, secrets-file checks, and manifest recovery. Literal targets, fixed args.',
+      '`totem doctor` invokes `spawnSync` to run git plumbing (rev-parse, ls-files, checkout) for hook installation, secrets-file checks, manifest recovery, and the Stray Markers row (`git ls-files -- <dir>`, which splits minted `.totem/` residue from committed fixtures — mmnto-ai/totem#2938). Literal targets, fixed args, the one path argument after `--`.',
   },
   {
     hash: 'c2c09301bb56a02b',

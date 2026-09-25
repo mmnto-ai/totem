@@ -79,7 +79,12 @@ function handleError(err: unknown): never {
     console.error('  (Set TOTEM_DEBUG=1 for full stack trace)');
   }
 
-  process.exit(1);
+  // A refusal to read or write in the wrong place (`REPO_ROOT_REFUSED`: a mail
+  // reader verb started outside any repository or inside a linked worktree —
+  // mmnto-ai/totem#2946, mmnto-ai/totem#2968) exits 2, the NOT-DERIVED family
+  // the poll's own identity arms use: nothing was derived, and the cure is the
+  // directory, not the code. Every other error keeps the boundary's exit 1.
+  process.exit(err instanceof Error && 'code' in err && err.code === 'REPO_ROOT_REFUSED' ? 2 : 1);
 }
 
 const program = new Command();
@@ -1042,10 +1047,11 @@ const mailCmd = program
           if (exitCode !== 0) process.exitCode = exitCode;
           return;
         }
-        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
-        // so the wrapper returns the code and we set process.exitCode (never
-        // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
-        // no self agent resolves: the verdict is NOT DERIVED, not a clean inbox.
+        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail throws only
+        // the root refusal (handleError below maps it to exit 2), so the wrapper
+        // returns the code and we set process.exitCode (never process.exit
+        // mid-flow — same pattern as the ecl-gc action). Exit 2 when no self
+        // agent resolves: the verdict is NOT DERIVED, not a clean inbox.
         const { exitCode } = await mailCommand({ json, recursive, workspace, asSeat, allSeats });
         if (exitCode !== 0) process.exitCode = exitCode;
       } catch (err) {
@@ -1482,7 +1488,19 @@ program
         // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc/eclCompact throw ONLY usage errors, printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the janitorial sensor code).
       } catch (err) {
         const { log } = await import('./ui.js');
-        log.error('Totem Error', err instanceof Error ? err.message : String(err));
+        // The logger prefixes its own tag, and a TotemError's message already
+        // carries `[Totem Error]` — print it once.
+        const message = (err instanceof Error ? err.message : String(err)).replace(
+          /^\[Totem Error\]\s*/,
+          '',
+        );
+        log.error('Totem Error', message);
+        // The cure rides with the refusal, as handleError prints it: a root
+        // refusal names the resident checkout to run from in its hint
+        // (mmnto-ai/totem#2946, mmnto-ai/totem#2968).
+        if (err instanceof Error && 'recoveryHint' in err && typeof err.recoveryHint === 'string') {
+          log.error('Totem Error', `Fix: ${err.recoveryHint}`);
+        }
         process.exitCode = 2;
       }
     },

@@ -16,10 +16,12 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  findTotemRepoRootSync,
   SEAT_LIFECYCLE_SCHEMA_VERSION,
   type TotemConfig,
   TotemConfigError,
   TotemConfigSchema,
+  TotemError,
   writeSeatLifecycle,
 } from '@mmnto/totem';
 
@@ -1090,6 +1092,75 @@ describe('loadEclConfig — missing ⇒ undeclared, invalid ⇒ loud', () => {
 });
 
 // ─── Combined exit-code precedence (codex panel) ────────
+
+describe('reader root refusals (mmnto-ai/totem#2946, mmnto-ai/totem#2968)', () => {
+  /** A linked-worktree shape: a `.git` FILE pointing into `resident`'s store. */
+  function worktreeOf(resident: string, name: string): string {
+    mkDir(path.join(resident, '.git', 'worktrees', name));
+    const wt = mkDir(path.join(tmpRoot, 'worktrees', name));
+    mkDir(path.join(wt, '.totem'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(resident, '.git', 'worktrees', name)}\n`,
+    );
+    return wt;
+  }
+
+  it('eclGc from a linked worktree is refused before any scan or unlink', () => {
+    const wt = worktreeOf(path.join(tmpRoot, 'totem'), 'wt-prune');
+    let thrown: unknown;
+    try {
+      eclGc({ repoRoot: wt, apply: true, env: { TOTEM_SELF_AGENT: 'totem-agy' }, now: nowFn });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+    expect((thrown as TotemError).message).toContain('mmnto-ai/totem#2968');
+    expect((thrown as TotemError).recoveryHint).toContain(path.resolve(tmpRoot, 'totem'));
+    expect(fs.existsSync(path.join(wt, '.totem', 'orchestration'))).toBe(false);
+  });
+
+  it('eclCompact from a linked worktree is refused before the roster gate', () => {
+    const wt = worktreeOf(path.join(tmpRoot, 'totem'), 'wt-compact');
+    let thrown: unknown;
+    try {
+      eclCompact({
+        repoRoot: wt,
+        apply: true,
+        env: { TOTEM_SELF_AGENT: 'totem-agy' },
+        expectedRepos: ['totem'],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+  });
+
+  it('a start outside any repository is refused (mmnto-ai/totem#2946)', (ctx) => {
+    const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eclgc-bare-'));
+    try {
+      if (findTotemRepoRootSync(bare) !== null) {
+        // Host ancestry carries a marker: the case cannot be built here —
+        // skipped visibly, never asserted vacuously.
+        ctx.skip();
+        return;
+      }
+      let thrown: unknown;
+      try {
+        eclGc({ repoRoot: bare, env: { TOTEM_SELF_AGENT: 'totem-agy' }, now: nowFn });
+      } catch (err) {
+        thrown = err;
+      }
+      expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+      expect((thrown as TotemError).message).toContain('mmnto-ai/totem#2946');
+      expect(fs.existsSync(path.join(bare, '.totem'))).toBe(false);
+    } finally {
+      fs.rmSync(bare, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('resolveEclGcExitCode — combined prune+compact precedence', () => {
   const clean = { failed: [] };

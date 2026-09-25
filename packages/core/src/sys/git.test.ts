@@ -9,9 +9,47 @@ vi.mock('cross-spawn', () => ({
   sync: vi.fn(),
 }));
 
-import { TotemGitError } from '../errors.js';
+// `findTotemRepoRootSync` skips the user-level `~/.totem` store
+// (mmnto-ai/totem#2946); `homedir` is redirected per test so the exclusion is
+// exercised without touching the real home directory (a frozen ESM namespace
+// cannot be spied — a module mock with a hoisted override instead).
+const osMock = vi.hoisted(() => ({
+  home: undefined as string | undefined,
+  tmp: undefined as string | undefined,
+}));
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  return {
+    ...actual,
+    default: actual,
+    homedir: (): string => osMock.home ?? actual.homedir(),
+    tmpdir: (): string => osMock.tmp ?? actual.tmpdir(),
+  };
+});
+
+// `classifyTotemRepoRootSync` refuses a `.git` entry it cannot stat rather
+// than guessing a class (GCA on mmnto-ai/totem#2974); `statSync` is made to
+// throw for one path per test through the same module-mock shape.
+const fsMock = vi.hoisted(() => ({ statThrowFor: new Set<string>() }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    default: actual,
+    statSync: ((p: fs.PathLike, ...rest: unknown[]) => {
+      const name = String(p);
+      for (const suffix of fsMock.statThrowFor) {
+        if (name.endsWith(suffix)) throw new Error('EACCES: permission denied, stat');
+      }
+      return (actual.statSync as (target: fs.PathLike, ...r: unknown[]) => fs.Stats)(p, ...rest);
+    }) as typeof fs.statSync,
+  };
+});
+
+import { TotemError, TotemGitError } from '../errors.js';
 import { fail, ok } from '../test-utils.js';
 import {
+  classifyTotemRepoRootSync,
   extractChangedFiles,
   filterDiffByPatterns,
   findRepoRootSync,
@@ -24,6 +62,7 @@ import {
   getTagDate,
   inferScopeFromFiles,
   isFileDirty,
+  mainCheckoutFromGitFileSync,
   resolveGitRoot,
   resolveTotemRepoRootSync,
 } from './git.js';
@@ -582,16 +621,267 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     expect(findTotemRepoRootSync(nested)).toBe(path.resolve(tmpDir));
   });
 
-  it('returns null when neither marker is found up the ancestry', () => {
+  it('returns null when neither marker is found up the ancestry', (ctx) => {
     const sub = path.join(tmpDir, 'inner');
     fs.mkdirSync(sub);
-    // Best-effort like findRepoRootSync's null case: a dev box whose temp dir is
-    // nested under a checkout could find a marker upward — assert the shape then.
-    const result = findTotemRepoRootSync(sub);
-    if (result === null) {
-      expect(result).toBeNull();
-    } else {
-      expect(path.isAbsolute(result)).toBe(true);
+    // A dev box whose temp dir is nested under a marker finds it upward: the
+    // case cannot be built there — skipped visibly, never asserted vacuously.
+    if (findTotemRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
+    }
+    expect(findTotemRepoRootSync(sub)).toBeNull();
+  });
+
+  it('prefers the repository toplevel over a nearer stray .totem/ (mmnto-ai/totem#2938)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const stray = path.join(tmpDir, 'packages', 'cli', '.totem', 'temp');
+    fs.mkdirSync(stray, { recursive: true });
+    const start = path.join(tmpDir, 'packages', 'cli', 'src');
+    fs.mkdirSync(start, { recursive: true });
+    // From beneath the stray, from inside it, and from the stray itself: the
+    // toplevel every time. Before the rule the walk stopped at packages/cli.
+    expect(findTotemRepoRootSync(start)).toBe(path.resolve(tmpDir));
+    expect(findTotemRepoRootSync(stray)).toBe(path.resolve(tmpDir));
+    expect(findTotemRepoRootSync(path.join(tmpDir, 'packages', 'cli', '.totem'))).toBe(
+      path.resolve(tmpDir),
+    );
+  });
+
+  it('a .totem-only tree with no .git at any height still resolves to its NEAREST .totem/', (ctx) => {
+    const inner = path.join(tmpDir, 'outer', 'inner');
+    fs.mkdirSync(path.join(tmpDir, 'outer', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(inner, '.totem'), { recursive: true });
+    const start = path.join(inner, 'deep');
+    fs.mkdirSync(start);
+    // A host that nests tmp under a checkout has a .git above, and the toplevel
+    // rule then applies instead: skipped visibly, never asserted vacuously.
+    if (findRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
+    }
+    expect(findTotemRepoRootSync(start)).toBe(path.resolve(inner));
+  });
+
+  it('a ~/.git dotfiles repository never anchors the walk either (mmnto-ai/totem#2946)', () => {
+    // `homedir()` redirected at a tmp dir carrying `.git`: a start beneath it
+    // with no marker of its own must NOT resolve to "home" through the `.git`
+    // arm — on Windows the temp directory sits under home, so a dotfiles repo
+    // there would capture every start outside a real checkout.
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const start = path.join(tmpDir, 'projects', 'scratch');
+    fs.mkdirSync(start, { recursive: true });
+    osMock.home = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(start);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+    } finally {
+      osMock.home = undefined;
+    }
+  });
+
+  it('the temp directory itself never anchors the walk, while a fixture below it still does (greptile on mmnto-ai/totem#2974)', () => {
+    // `tmpdir()` redirected at a marked tmp dir — the shape of a phantom
+    // `%TEMP%/.totem` or `/tmp/.totem`: a start beneath it with no marker of
+    // its own must NOT resolve to the temp directory; a fixture one level
+    // below it, marked on its own, still anchors.
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const scratch = path.join(tmpDir, 'scratch');
+    fs.mkdirSync(scratch);
+    const fixture = path.join(tmpDir, 'suite-abc', 'repo');
+    fs.mkdirSync(path.join(fixture, '.totem'), { recursive: true });
+    osMock.tmp = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(scratch);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+      expect(findTotemRepoRootSync(path.join(fixture, 'src'))).toBe(path.resolve(fixture));
+    } finally {
+      osMock.tmp = undefined;
+    }
+  });
+
+  it('the user-level ~/.totem store never anchors the walk (mmnto-ai/totem#2946)', () => {
+    // `homedir()` is redirected at a marked tmp dir: a start beneath it with no
+    // marker of its own must NOT resolve to "home". The walk continues above it
+    // and lands on whatever the host ancestry holds — nothing (null) on a clean
+    // host, an ancestor marker on a dev box — never the excluded directory.
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const start = path.join(tmpDir, 'projects', 'scratch');
+    fs.mkdirSync(start, { recursive: true });
+    osMock.home = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(start);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+    } finally {
+      osMock.home = undefined;
+    }
+  });
+});
+
+describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-classify-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a .git DIRECTORY with a real .totem/ at the root is the toplevel, from the root and from a subdirectory', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, 'src', 'deep');
+    fs.mkdirSync(sub, { recursive: true });
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
+    expect(classifyTotemRepoRootSync(undefined, tmpDir)).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
+  });
+
+  it('a .git entry that cannot be stat-ed is REFUSED, never guessed into a class (GCA on mmnto-ai/totem#2974)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, 'src');
+    fs.mkdirSync(sub);
+    const gitPath = path.join(tmpDir, '.git');
+    fsMock.statThrowFor.add(gitPath);
+    try {
+      let thrown: unknown;
+      try {
+        classifyTotemRepoRootSync(sub, '/elsewhere');
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(TotemError);
+      expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+      expect((thrown as TotemError).message).toContain('could not be read');
+    } finally {
+      fsMock.statThrowFor.delete(gitPath);
+    }
+  });
+
+  it('a .git DIRECTORY with no .totem/ is `unmarked` — a repository that is not a Totem repository (mmnto-ai/totem#2968)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const sub = path.join(tmpDir, 'src');
+    fs.mkdirSync(sub);
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'unmarked',
+      root: path.resolve(tmpDir),
+    });
+    // A stray .totem/ beneath it does not mark the toplevel.
+    fs.mkdirSync(path.join(sub, '.totem'));
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'unmarked',
+      root: path.resolve(tmpDir),
+    });
+  });
+
+  it('a worktree of a BARE repository names the bare store as its resident', () => {
+    const store = path.join(tmpDir, 'store.git');
+    fs.mkdirSync(path.join(store, 'worktrees', 'w'), { recursive: true });
+    const wt = path.join(tmpDir, 'w');
+    fs.mkdirSync(wt);
+    fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(store, 'worktrees', 'w')}\n`);
+    expect(classifyTotemRepoRootSync(wt, '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(wt),
+      resident: path.resolve(store),
+    });
+  });
+
+  it('a .git FILE is a worktree, naming the resident its gitdir pointer leads to', () => {
+    const resident = path.join(tmpDir, 'res');
+    fs.mkdirSync(path.join(resident, '.git', 'worktrees', 'wt'), { recursive: true });
+    const wt = path.join(tmpDir, 'wt');
+    fs.mkdirSync(path.join(wt, 'a', 'b'), { recursive: true });
+    fs.mkdirSync(path.join(wt, '.totem'));
+    fs.writeFileSync(
+      path.join(wt, '.git'),
+      `gitdir: ${path.join(resident, '.git', 'worktrees', 'wt')}\n`,
+    );
+    expect(classifyTotemRepoRootSync(path.join(wt, 'a', 'b'), '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(wt),
+      resident: path.resolve(resident),
+    });
+  });
+
+  it('a .git FILE with another pointer shape is a worktree with no resident named (a submodule)', () => {
+    const sub = path.join(tmpDir, 'sub');
+    fs.mkdirSync(sub);
+    fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../.git/modules/sub\n');
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(sub),
+      resident: null,
+    });
+  });
+
+  it('a .totem-only tree is a toplevel (the bare-fixture contract)', (ctx) => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    if (findRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
+    }
+    expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere')).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
+  });
+
+  it('no marker at any height is `none`, carrying the resolved start', (ctx) => {
+    const bare = path.join(tmpDir, 'bare');
+    fs.mkdirSync(bare);
+    if (findTotemRepoRootSync(bare) !== null) {
+      // Host ancestry carries a marker: skipped visibly, never asserted vacuously.
+      ctx.skip();
+      return;
+    }
+    expect(classifyTotemRepoRootSync(bare, '/elsewhere')).toEqual({
+      kind: 'none',
+      start: path.resolve(bare),
+    });
+  });
+
+  it('mainCheckoutFromGitFileSync: a relative worktree pointer names the main checkout; a missing file is null', () => {
+    const gitFile = path.join(tmpDir, '.git');
+    fs.writeFileSync(gitFile, 'gitdir: ../main/.git/worktrees/x\n');
+    expect(mainCheckoutFromGitFileSync(gitFile)).toBe(path.resolve(tmpDir, '..', 'main'));
+    expect(mainCheckoutFromGitFileSync(path.join(tmpDir, 'absent'))).toBeNull();
+  });
+
+  it('mainCheckoutFromGitFileSync is anchored: a directory merely named worktrees, a submodule store or a separate git dir names nothing', () => {
+    const gitFile = path.join(tmpDir, '.git');
+    const cases: Array<[string, string | null]> = [
+      // A checkout that LIVES under a directory called worktrees still resolves.
+      [
+        'gitdir: ../worktrees/main/.git/worktrees/w',
+        path.resolve(tmpDir, '..', 'worktrees', 'main'),
+      ],
+      // A submodule inside such a checkout must not name the container.
+      ['gitdir: ../worktrees/super/.git/modules/x', null],
+      // A separate git dir under a worktrees directory is not a worktree.
+      ['gitdir: ../worktrees/repo', null],
+      // A worktree of a submodule's store names nothing (the store is not a checkout).
+      ['gitdir: ../super/.git/modules/sub/worktrees/w', null],
+      // A bare store keeps its name.
+      ['gitdir: ../store.git/worktrees/w', path.resolve(tmpDir, '..', 'store.git')],
+    ];
+    for (const [pointer, expected] of cases) {
+      fs.writeFileSync(gitFile, `${pointer}\n`);
+      expect(mainCheckoutFromGitFileSync(gitFile), pointer).toBe(expected);
     }
   });
 });
@@ -621,15 +911,15 @@ describe('resolveTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     expect(resolveTotemRepoRootSync(undefined, sub)).toBe(path.resolve(tmpDir));
   });
 
-  it('uses a marker-less start as-is (bare-fixture contract)', () => {
+  it('uses a marker-less start as-is (bare-fixture contract)', (ctx) => {
     const bare = path.join(tmpDir, 'bare');
     fs.mkdirSync(bare);
-    // Same best-effort guard as the finder's null case: only assert identity
-    // when the host ancestry is genuinely marker-free.
-    if (findTotemRepoRootSync(bare) === null) {
-      expect(resolveTotemRepoRootSync(bare, '/elsewhere')).toBe(path.resolve(bare));
-    } else {
-      expect(path.isAbsolute(resolveTotemRepoRootSync(bare, '/elsewhere'))).toBe(true);
+    // Same guard as the finder's null case: the identity can be asserted only
+    // where the host ancestry is marker-free — skipped visibly otherwise.
+    if (findTotemRepoRootSync(bare) !== null) {
+      ctx.skip();
+      return;
     }
+    expect(resolveTotemRepoRootSync(bare, '/elsewhere')).toBe(path.resolve(bare));
   });
 });
