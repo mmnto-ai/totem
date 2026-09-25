@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "8e24c0a5ae353f824a7a0e7926b0ec1246c47229",
+  "readAt": "2026-09-25T20:54:37Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1015,
+      "claim": "An http(s) input that fails ISSUE_URL_RE but ends in #<digits> falls through to the owner/repo#N branch, which accepts it with the whole URL prefix as repo; parseIssueInput returns non-null, explainUnsupportedIssueUrl returns null, the pre-pass lets it through, and gh --repo receives a URL — the GitLab and nested-path refusals are bypassed.",
+      "counterexample": "https://github.com/a/b/c/issues/5#7 parses as {number:7, repo:'https://github.com/a/b/c/issues/5'}; https://gitlab.com/g/p/-/issues/5#12 skips the GitLab refusal; https://github.com/o/r/pull/5#12 reaches gh, which answers invalid path: /o/r/pull/5."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1047,
+      "claim": "For a well-formed owner/repo URL whose number is 0, ISSUE_URL_RE matches but the parser rejects the number, and explain falls to the /issues/\\d+ probe and reports a path defect the input does not have; a /issues/5 inside a query is misdescribed the same way.",
+      "counterexample": "https://github.com/o/r/issues/0 gives 'the path before /issues/ is not exactly <owner>/<repo>'; so does https://github.com/o/r/pulls?q=/issues/5."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1040,
+      "claim": "ISSUE_URL_RE carries the i flag, so /ISSUES/ is accepted, while the reason probes are case-sensitive: an upper-cased GitLab or nested-path URL gets the catch-all reason instead of its real one.",
+      "counterexample": "https://gitlab.com/g/p/-/ISSUES/5 gives 'it names no issue' instead of the GitLab reason; https://github.com/a/b/c/ISSUES/5 gives 'it names no issue' instead of 'not exactly <owner>/<repo>'."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".changeset/spec-cross-repo-anchor-2943.md",
+      "line": 12,
+      "claim": "The changeset and docs/wiki/cli-reference.md:391 say the same issue number in two repositories never shares a draft, but sanitizeSpecFilename collapses / and - to the same dash, so two repositories can still collide, and the path is case-sensitive so one repository typed in two cases gets two drafts.",
+      "counterexample": "a-b/c#5 and a/b-c#5 both give .totem/specs/a-b-c-5.md; O/R#5 gives O-R-5.md while https://github.com/o/r/issues/5 gives o-r-5.md."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1166,
+      "claim": "The URL pre-pass is a pure string check but runs after loadConfig, requireEmbedding, the LanceDB connect, the linked-index connects and createIssueAdapter, not beside validateSpecInvocation whose block runs before the store connects; a refusal therefore needs a working config and embedding or is masked.",
+      "counterexample": "In a repository with no embedding configured, totem spec https://github.com/o/r/pull/5 throws 'No embedding provider configured' rather than the Unsupported issue URL refusal."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 967,
+      "claim": "The comment and the changeset say www.github.com/owner/repo is not a repository gh can read; gh 2.99.0 refutes that, so the www-folding fix is harmless but its stated rationale (cure 1's premise) is false as written.",
+      "counterexample": "gh issue view 12 --repo www.github.com/cli/cli --json number returned {\"number\":12}."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 391,
+      "claim": "Only GitLab's /-/issues/ form is refused by name; the legacy GitLab path without /-/ matches ISSUE_URL_RE and is handed to gh as a GitHub Enterprise host, and neither the page nor the changeset says so.",
+      "counterexample": "https://gitlab.com/g/p/issues/5 gives {number:5, repo:'gitlab.com/g/p'}, which reaches gh --repo gitlab.com/g/p."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1037,
+      "claim": "QUESTION (carried as MINOR: this branch's deposit schema predates mmnto-ai/totem#2944). The rule that a URL is never a topic keys on a leading http(s)://; should a schemeless or whitespace-prefixed issue URL, which still becomes a free-text topic, also be refused or parsed?",
+      "counterexample": "github.com/o/r/issues/5 and ' https://github.com/o/r/pull/5' (leading space) both parse to null and explain returns null, so both are drafted as topics."
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 985,
+      "claim": "QUESTION (carried as MINOR: this branch's deposit schema predates mmnto-ai/totem#2944). The host group [^/]+ passes a port, userinfo or a trailing-dot host into gh --repo verbatim; does gh resolve host:port/owner/repo for an Enterprise instance on a non-default port, and should userinfo be stripped or refused by name?",
+      "counterexample": "https://ghe.corp:8443/o/r/issues/5 gives repo 'ghe.corp:8443/o/r'; https://user@github.com/o/r/issues/5 gives 'user@github.com/o/r' (the host is not folded to github.com); https://github.com./o/r/issues/5 gives 'github.com./o/r'."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "Leg 2 (Opus), scoped to the review-round fold 8e24c0a5: 0 BLOCKING, 1 MATERIAL, 6 MINOR, 2 QUESTION carried as MINOR; cures 1, 3a, 4 and 5 held, cures 2 and 3b were bypassed through the owner/repo#N branch on a #<digits> suffix; all nine folded on the next commit (F1-F5 as code, F6-F7 as wording, F8-F9 answered as disclosed design)."
+}

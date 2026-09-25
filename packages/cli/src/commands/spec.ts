@@ -204,6 +204,14 @@ export interface ParsedInput {
    * text and the record path.
    */
   issueRef?: string;
+  /**
+   * The repository the ISSUE input named (`owner/repo`, or `host/owner/repo`
+   * off github.com), present only for `owner/repo#N` and URL inputs. The
+   * default draft path keys on it so issue 7 of two repositories never share
+   * `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965). A bare number
+   * has none, whatever repository the adapter resolved it in.
+   */
+  namedRepo?: string;
 }
 
 // ─── Prompt assembly ────────────────────────────────────
@@ -922,7 +930,20 @@ export function resolveDefaultSpecPath(
   if (first.record) return null;
   let stem: string;
   if (first.issue) {
-    stem = String(first.issue.number);
+    // An issue fetched from a repository the INPUT named (owner/repo#N or a
+    // URL) keys its draft on that repository too: issue 7 of two repositories
+    // must not share `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965).
+    // The repository is lower-cased, as GitHub compares it, and its segments
+    // are joined with `_` before the sanitizer runs, so `a-b/c` and `a/b-c`
+    // never meet at one stem (leg 2 on the review-round fold). The stem is not
+    // unique in general (leg 3): a repository name may contain `_`, an
+    // Enterprise Managed User's handle does, and punctuation sanitizes to
+    // dashes, so two repositories can still share one — --out names a path.
+    // A bare number keeps `<number>.md`, whatever repository the working
+    // directory's adapter resolved it in.
+    stem = first.namedRepo
+      ? `${sanitizeSpecFilename(first.namedRepo.toLowerCase().replace(/\//g, '_'))}-${first.issue.number}`
+      : String(first.issue.number);
   } else if (first.freeText) {
     stem = sanitizeSpecFilename(first.freeText);
     if (!stem) return null;
@@ -931,6 +952,128 @@ export function resolveDefaultSpecPath(
   }
   const root = deps.resolveGitRoot(cwd) ?? cwd;
   return deps.pathJoin(root, '.totem', 'specs', `${stem}.md`);
+}
+
+// ─── Issue inputs ───────────────────────────────────────
+
+/** How one positional input names an issue, and in which repository. */
+export interface IssueInput {
+  number: number;
+  /**
+   * The repository the input names, in the form `gh --repo` takes
+   * (`owner/repo`, or `host/owner/repo` off github.com), or null for a bare
+   * number, which resolves against the working directory's repository.
+   */
+  repo: string | null;
+}
+
+/**
+ * The host of an issue URL as `gh --repo` should see it: lower-cased (hosts
+ * compare case-insensitively), and github.com's `www.` alias folded to
+ * github.com so the repository reaches `gh` in its canonical `owner/repo`
+ * form (greptile on mmnto-ai/totem#2965; gh 2.99 resolves the alias as well —
+ * the form is kept canonical rather than relied on). No other host loses a
+ * `www.`: off github.com the host is taken as written, a GitHub Enterprise
+ * host, a port or user info included, verbatim.
+ */
+function normalizeIssueHost(host: string): string {
+  const lower = host.toLowerCase();
+  return lower === 'www.github.com' ? 'github.com' : lower;
+}
+
+/**
+ * The URL form of an issue: `https://<host>/<owner>/<repo>/issues/<n>`. The
+ * path before `/issues/` is exactly two segments — `owner/repo/actions/runs/1`
+ * is not a repository (GCA on mmnto-ai/totem#2965) — and the number ends its
+ * path segment: end of input, `/`, `?` or `#` may follow, so `/issues/7abc` is
+ * not issue 7 (CodeRabbit on mmnto-ai/totem#2965). The host ends at the first
+ * `/`, `?` or `#`, so a query or fragment glued to the host is never read as
+ * its path (leg 3 on the leg-2 fold). The match is not end-anchored on
+ * purpose: a query or a fragment may follow the number, and the anchor's
+ * `ref` keeps the input as typed (see the anchor tests).
+ */
+const ISSUE_URL_RE = /^https?:\/\/([^/?#]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)(?=$|[/?#])/i;
+
+/** GitLab's issue path, `/-/issues/<n>` — named when a URL in that form is refused. */
+const GITLAB_ISSUE_PATH_RE = /\/-\/issues\/\d+/i;
+
+/**
+ * Parse one positional input as an issue: a bare number (this repository), an
+ * issue URL on github.com or a GitHub Enterprise host in the form
+ * {@link ISSUE_URL_RE} names, or `owner/repo#<n>`. A URL or a qualified ref
+ * NAMES its repository, and the fetch must run against that repository
+ * (mmnto-ai/totem#2943): resolving the number against the working directory's
+ * repository either fails with a misleading hint or, worse, anchors the run on
+ * a stranger's issue of the same number. Returns null for anything else — a
+ * topic, or a URL that {@link explainUnsupportedIssueUrl} refuses — and for the
+ * number 0.
+ */
+export function parseIssueInput(input: string): IssueInput | null {
+  if (/^\d+$/.test(input)) {
+    const number = parseInt(input, 10);
+    return number > 0 ? { number, repo: null } : null;
+  }
+  const urlMatch = input.match(ISSUE_URL_RE);
+  if (urlMatch) {
+    const host = normalizeIssueHost(urlMatch[1]!);
+    const path = `${urlMatch[2]!}/${urlMatch[3]!}`;
+    const number = parseInt(urlMatch[4]!, 10);
+    if (!(number > 0)) return null;
+    return { number, repo: host === 'github.com' ? path : `${host}/${path}` };
+  }
+  // A URL is an issue URL or nothing: one that fails the form above but ends
+  // in `#<digits>` must not fall through to the qualified branch below and
+  // hand its whole prefix to `gh --repo` as a repository (leg 2 on the
+  // review-round fold: `…/a/b/c/issues/5#7` read as issue 7 of a URL).
+  if (/^https?:\/\//i.test(input)) return null;
+  const hashIdx = input.indexOf('#');
+  const isQualified = hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
+  if (isQualified) {
+    const number = parseInt(input.slice(hashIdx + 1), 10);
+    return number > 0 ? { number, repo: input.slice(0, hashIdx) } : null;
+  }
+  return null;
+}
+
+/** The forms an issue input takes — every refusal of a URL names them. */
+const ISSUE_INPUT_FORMS =
+  'An issue input is a bare number, owner/repo#N, or https://<host>/<owner>/<repo>/issues/<n> on github.com or a GitHub Enterprise host.';
+
+/**
+ * Why a URL input is not an issue this tool can fetch, or null when the input
+ * is not a URL (a topic) or {@link parseIssueInput} accepts it. Every http(s)
+ * input is an issue URL or a refusal — never a free-text topic (CodeRabbit on
+ * mmnto-ai/totem#2965): a draft on a URL string is an unanchored run wearing
+ * an issue's clothes, and a GitLab URL handed to the GitHub adapter fails at
+ * `gh` with a message about a host it never had. The reason names what the
+ * input got wrong; the forms line says what is accepted.
+ */
+export function explainUnsupportedIssueUrl(input: string): string | null {
+  if (!/^https?:\/\//i.test(input)) return null;
+  if (parseIssueInput(input) !== null) return null;
+  // The reasons are judged on the PATH alone — `/issues/5` inside a query or
+  // a fragment never describes the input — and case-insensitively, as the
+  // form regex is (leg 2 on the review-round fold).
+  const pathOnly = input.replace(/^https?:\/\/[^/?#]*/i, '').replace(/[?#][\s\S]*$/, '');
+  let reason: string;
+  if (ISSUE_URL_RE.test(input)) {
+    // The form is right and the parser still said no: the number is 0.
+    reason = 'the issue number is 0';
+  } else if (GITLAB_ISSUE_PATH_RE.test(pathOnly)) {
+    reason =
+      "the /-/issues/<n> path is GitLab's, and issues are fetched with gh, which reads github.com and GitHub Enterprise hosts only";
+  } else if (/\/issues\/\d+[^\d/]/i.test(pathOnly)) {
+    // The class excludes digits so the probe cannot backtrack inside the
+    // number and read `456`'s last digit as text after `45`.
+    reason = 'text follows the issue number';
+  } else if (/\/issues\/\d+/i.test(pathOnly)) {
+    reason = 'the path before /issues/ is not exactly <owner>/<repo>';
+  } else if (/\/issues\//i.test(pathOnly)) {
+    reason = 'no issue number follows /issues/';
+  } else {
+    reason = 'it names no issue';
+  }
+  return `Unsupported issue URL ${input}: ${reason}. ${ISSUE_INPUT_FORMS}`;
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -973,6 +1116,22 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Everything here runs before the config resolves, before the store connects
   // and before any LLM call: a bad invocation costs nothing and mints nothing.
   validateSpecInvocation(unique, options, TotemConfigError);
+  // A URL that names no issue this tool can fetch is a refusal, never a topic
+  // (CodeRabbit on mmnto-ai/totem#2965): a draft on a URL string would be an
+  // unanchored run wearing an issue's clothes. Judged over EVERY input here —
+  // before the config resolves, before the store connects and before the
+  // first fetch (leg 2 on the review-round fold) — so a mixed list fetches
+  // nothing it will then throw away and a missing embedding never masks it.
+  for (const input of unique) {
+    const unsupportedUrl = explainUnsupportedIssueUrl(input);
+    if (unsupportedUrl !== null) {
+      throw new TotemConfigError(
+        sanitizeForTerminal(unsupportedUrl),
+        'Pass the issue as owner/repo#N or as its https://<host>/<owner>/<repo>/issues/<n> URL, or pass a topic that is not a URL.',
+        'CONFIG_INVALID',
+      );
+    }
+  }
   const boundRecord =
     options.from !== undefined
       ? loadSpecRecord(options.from, cwd, { resolveGitRoot }, TotemConfigError)
@@ -1039,34 +1198,37 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   }
 
   for (const input of unique) {
-    // Match GitHub, GitLab, or any URL ending in /issues/<number> or /-/issues/<number>
-    const urlMatch = input.match(/^https?:\/\/[^/]+\/.*\/(?:-\/)?issues\/(\d+)/);
-    // Support owner/repo#123 format for multi-repo disambiguation
-    const hashIdx = input.indexOf('#');
-    const isQualified =
-      hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
-    const qualifiedRepo = isQualified ? input.slice(0, hashIdx) : null;
-    const qualifiedNum = isQualified ? parseInt(input.slice(hashIdx + 1), 10) : null;
+    const issueInput = parseIssueInput(input);
 
-    const issueNumber = /^\d+$/.test(input)
-      ? parseInt(input, 10)
-      : urlMatch
-        ? parseInt(urlMatch[1]!, 10)
-        : qualifiedNum;
-
-    if (issueNumber) {
-      // If qualified with owner/repo, create a repo-specific adapter
+    if (issueInput !== null) {
+      // A URL or an `owner/repo#N` names its repository: the fetch runs against
+      // THAT repository (mmnto-ai/totem#2943). A bare number keeps the working
+      // directory's adapter.
       let fetchAdapter = adapter;
-      if (qualifiedRepo) {
+      if (issueInput.repo !== null) {
         const { GitHubCliAdapter } = await import('../adapters/github-cli.js');
-        fetchAdapter = new GitHubCliAdapter(cwd, qualifiedRepo);
+        fetchAdapter = new GitHubCliAdapter(cwd, issueInput.repo);
       }
-      log.info(TAG, `Fetching issue #${issueNumber}...`);
+      const issueNumber = issueInput.number;
+      // A bare number goes to the default adapter: this repository, or every
+      // repository under `config.repositories`.
+      log.info(
+        TAG,
+        `Fetching issue #${issueNumber} (${issueInput.repo ?? 'the default repository'})...`,
+      );
       const issue = fetchAdapter.fetchIssue(issueNumber);
       log.info(TAG, `Title: ${issue.title}`);
       // `issueRef` keeps the input AS TYPED so the anchor's ref round-trips
       // `owner/repo#N` and URL forms (a fetched issue carries only a number).
-      parsed.push({ issue, freeText: null, record: null, issueRef: input });
+      parsed.push({
+        issue,
+        freeText: null,
+        record: null,
+        issueRef: input,
+        // The repository the INPUT named, for the draft's default path; absent
+        // on a bare number, whatever repository the adapter resolved it in.
+        ...(issueInput.repo !== null ? { namedRepo: issueInput.repo } : {}),
+      });
       queryParts.push(buildSearchQuery(issue));
     } else {
       log.info(TAG, `Topic: ${input}`);

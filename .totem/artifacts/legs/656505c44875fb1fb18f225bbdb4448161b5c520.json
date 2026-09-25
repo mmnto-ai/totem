@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "656505c44875fb1fb18f225bbdb4448161b5c520",
+  "readAt": "2026-09-25T21:06:31Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 991,
+      "claim": "The host group in ISSUE_URL_RE ([^/]+) and the host strip in pathOnly ([^/]*) both run past a ? or # that ends the authority, so a URL whose real path is / either parses with the query glued into the host or gets a path reason that describes its query or fragment, against the fold's own rule that /issues/5 inside a query or a fragment never describes the input; gh fails loudly on the accepted form, so no silent wrong anchor results.",
+      "counterexample": "https://github.com?q=/a/b/c/issues/5 -> parse null, reason 'the path before /issues/ is not exactly <owner>/<repo>'; https://gitlab.com?x=/g/p/-/issues/5 -> the GitLab reason for a path of /; https://github.com?q=/o/r/issues/5 -> {number:5, repo:'github.com?q=/o/r'} handed to gh --repo; https://github.com#x/o/r/issues/5 -> {number:5, repo:'github.com#x/o/r'}."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": ".changeset/spec-cross-repo-anchor-2943.md",
+      "line": 12,
+      "claim": "The stated reason the _ join is unambiguous ('no host or owner name may contain _') is false: the sanitizer turns a host's dots into dashes and a dashed string is a valid github.com owner while repository names may contain _, and Enterprise Managed User usernames are {handle}_{shortcode}, so an owner can contain _; the same premise sits in the code comment and the reference page. The sanitizer does run after the join so _ survives, and lower-casing merges no two distinct repositories (GitHub resolves owner/repo case-insensitively).",
+      "counterexample": "https://ghe.example.com/team/proj/issues/7 and ghe-example-com/team_proj#7 both give .totem/specs/ghe-example-com_team_proj-7.md; octo_acme/x#5 and octo/acme_x#5 both give octo_acme_x-5.md."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 391,
+      "claim": "The reference paragraph says without qualification that the same issue number in two repositories does not share a draft, dropping the caveat the changeset and the code comment carry; the code does not make the sentence true even for the collision leg 2 already knew about.",
+      "counterexample": "o/r.x#5 and o/r-x#5 (both valid GitHub repository names) both give .totem/specs/o_r-x-5.md."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.test.ts",
+      "line": 2462,
+      "claim": "The command test asserts connects === 0, which proves the refusal precedes the LanceStore connect, while the prose claims it precedes the config resolution and that a missing embedding never masks it; true at HEAD from source order alone, but nothing pins it. The new parse, explain and stem assertions are not vacuous: every one except the two stated controls fails on 8e24c0a5.",
+      "counterexample": "No test runs the refusal against a config that cannot be read or an embedding that is absent."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 991,
+      "claim": "QUESTION (carried as MINOR: this branch's deposit schema predates mmnto-ai/totem#2944). Dot segments are passed through literally while a browser normalizes them, so one contrived input anchors on a different issue from the one the URL resolves to and others hand gh a .. repository; should . or .. segments be refused by name?",
+      "counterexample": "https://github.com/o/r/issues/5/../6 -> {number:5, repo:'o/r'} (a browser resolves /o/r/issues/6); https://github.com/o/../issues/5 -> {number:5, repo:'o/..'}; https://github.com/./r/issues/5 -> repo './r'."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5"
+  ],
+  "verdict": "Leg 3 (Opus), scoped to the leg-2 fold dd74dc7a read at 656505c4: 0 BLOCKING, 0 MATERIAL, 4 MINOR, 1 QUESTION carried as MINOR; the nine leg-2 findings cured or honestly disclosed at HEAD; convergence answered no on one residual shape (a query or fragment glued to the host), named as a one-class fix needing no further leg unless dot segments or the stem are rewired — neither is; all five folded on the next commit (F1 as code, F2-F3 as wording, F4 as a test, F5 answered as disclosed design)."
+}
