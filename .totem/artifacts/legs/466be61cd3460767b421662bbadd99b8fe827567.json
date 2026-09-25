@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "466be61cd3460767b421662bbadd99b8fe827567",
+  "readAt": "2026-09-24T21:53:43Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 1078,
+      "claim": "The send and reply --workspace help says the default is the parent of cwd, but the lib (mail.ts:2231) uses the parent of the repo root (the git toplevel), as the verify option's help and the MailSendOptions doc already say; from <repo>/packages/cli the help implies <repo>/packages while the lib uses the repo's parent.",
+      "counterexample": ""
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-cli-wiring.test.ts",
+      "line": 98,
+      "claim": "The new send-mirror comment carries a bare issue ref '(the #2097 seam)' against the house rule that every ref is repo-qualified.",
+      "counterexample": ""
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-cli-wiring.test.ts",
+      "line": 30,
+      "claim": "The mirror's header comment still names only the poll, reply and mark registrations; the mirror now covers send and verify too.",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail-cli-wiring.test.ts",
+      "line": 260,
+      "claim": "The no-flag case's toBeUndefined passes on the pre-fix code too (a default guard, not a fix test); the four positional cases carry the fix with exact toEqual; the mirror cannot detect drift from index.ts, which only the real-CLI probe covers. No change owed.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3"
+  ],
+  "verdict": "Leg 1 over 466be61c: 0 BLOCKING, 0 MATERIAL, 4 MINOR, nothing blocking. The real built CLI honours --workspace for send and reply in both positions (a throwaway fixture: the fixed dist verified routable with the flag before or after the subcommand; the 2.11.1 global printed the unknown-recipient warning in both positions); Commander's optsWithGlobals merges globals over locals and the subcommand scope never holds --workspace, so nothing is overwritten with undefined; mark and verify carry no latent copy of the bug; the reply's --no-mark translation and rest are unchanged. F1, F2, F3 folded at the next commit (the two help strings say 'the parent of the repo root'; the ref qualified; the mirror header names send and verify); F4 stands as read."
+}
