@@ -1474,6 +1474,12 @@ program
       } catch (err) {
         const { log } = await import('./ui.js');
         log.error('Totem Error', err instanceof Error ? err.message : String(err));
+        // The cure rides with the refusal, as handleError prints it: a root
+        // refusal names the resident checkout to run from in its hint
+        // (mmnto-ai/totem#2946, mmnto-ai/totem#2968).
+        if (err instanceof Error && 'recoveryHint' in err && typeof err.recoveryHint === 'string') {
+          log.error('Totem Error', `Fix: ${err.recoveryHint}`);
+        }
         process.exitCode = 2;
       }
     },

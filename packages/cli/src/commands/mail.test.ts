@@ -1575,13 +1575,14 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     expect(result.mail[0]!.subject).toBe('from a subdir');
   });
 
-  it('also anchors on a `.git` marker (dir) with no `.totem` at the root', () => {
+  it('anchors on a `.git` marker (dir) from a deep subdirectory when the root carries `.totem`', () => {
     // `.git` created as a plain directory via fs — never a git spawn (Windows
-    // leaves a temp-cwd git process undeletable). Root has ONLY `.git` (no
-    // `.totem`), so this isolates the `.git`-marker arm; basename `totem`
-    // resolves self via the cohort map even without a `.totem/orchestration` tree.
+    // leaves a temp-cwd git process undeletable). The `.git` arm of the walk
+    // is what anchors here (no `.totem` between the start and the root);
+    // basename `totem` resolves self via the cohort map.
     const repoRoot = mkDir(path.join(workspace, 'totem'));
     fs.mkdirSync(path.join(repoRoot, '.git'));
+    mkDir(path.join(repoRoot, '.totem'));
     const subdir = mkDir(path.join(repoRoot, 'src', 'deep'));
     writeOutbox('totem-strategy', 'strategy-claude', [
       { name: '2026-05-18T1800Z-totem-claude.md', to: 'totem-claude', subject: 'git-marked' },
@@ -1593,6 +1594,27 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     expect(result.selfAgents.agents).toContain('totem-claude');
     expect(result.mail).toHaveLength(1);
     expect(result.mail[0]!.subject).toBe('git-marked');
+  });
+
+  it('a `.git` toplevel with no `.totem/` is REFUSED — a repository that is not a Totem repository, as the send refuses it (mmnto-ai/totem#2968)', () => {
+    // Until this fix the poll served it (an empty roster read as clean) and a
+    // mark from it minted `<repo>/.totem/orchestration/<seat>/processed/`.
+    const repoRoot = mkDir(path.join(workspace, 'plain'));
+    fs.mkdirSync(path.join(repoRoot, '.git'));
+    const subdir = mkDir(path.join(repoRoot, 'src'));
+    let thrown: unknown;
+    try {
+      pollMail({ repoRoot: subdir, env: {}, allSeats: true });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    const refusal = thrown as TotemError;
+    expect(refusal.code).toBe('REPO_ROOT_REFUSED');
+    expect(refusal.message).toContain('not a totem repository');
+    expect(refusal.message).toContain(path.resolve(repoRoot));
+    expect(refusal.recoveryHint).toContain('totem init');
+    expect(fs.existsSync(path.join(repoRoot, '.totem'))).toBe(false);
   });
 
   it('a marker-less start dir resolves to its nearest marked ancestor (no garbage; deterministic)', () => {
@@ -1607,14 +1629,14 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
     expect(result.workspace).toBe(path.resolve(tmpRoot)); // parent of anchor-repo
   });
 
-  it('a marker-less start is REFUSED before any scan — never an empty workspace read as clean (mmnto-ai/totem#2946)', () => {
+  it('a marker-less start is REFUSED before any scan — never an empty workspace read as clean (mmnto-ai/totem#2946)', (ctx) => {
     // The old fallback used the start itself: repoRoot = the bare dir, workspace
-    // = its parent, nothing enumerated, "inbox clean" rendered. Guarded like
-    // findRepoRootSync's own null-case test — some dev hosts nest tmp under a
-    // marker (e.g. `~/.totem`), where the walk anchors upward instead.
+    // = its parent, nothing enumerated, "inbox clean" rendered. A host whose
+    // temp ancestry carries a marker (a phantom `%TEMP%/.totem`, say) cannot
+    // build the case — skipped VISIBLY, never asserted vacuously.
     const bare = mkDir(path.join(tmpRoot, 'bare-parent', 'bare-repo'));
     if (findTotemRepoRootSync(bare) !== null) {
-      expect(path.isAbsolute(pollMail({ repoRoot: bare, env: {} }).workspace)).toBe(true);
+      ctx.skip();
       return;
     }
     let thrown: unknown;
@@ -1634,6 +1656,7 @@ describe('pollMail — subdirectory workspace derivation (mmnto-ai/totem#2312)',
   it('a stray .totem/ under a subdirectory no longer captures the poll — the toplevel wins (mmnto-ai/totem#2938)', () => {
     const repoRoot = mkDir(path.join(workspace, 'totem'));
     fs.mkdirSync(path.join(repoRoot, '.git'));
+    mkDir(path.join(repoRoot, '.totem'));
     mkDir(path.join(repoRoot, 'packages', 'cli', '.totem', 'temp'));
     const start = mkDir(path.join(repoRoot, 'packages', 'cli', 'src'));
     writeOutbox('totem-strategy', 'strategy-claude', [
@@ -2918,13 +2941,38 @@ describe('markSource — standalone mail mark (mmnto-ai/totem#2396)', () => {
     expect(poll({ env: SOLO }).mail.map((m) => m.file)).toContain(name);
   });
 
-  it('outside any repository the mark is REFUSED — no phantom processed/ tree (mmnto-ai/totem#2946)', () => {
+  it('from a `.git` toplevel with no `.totem/` the mark is REFUSED and nothing is minted there — parity with the send (mmnto-ai/totem#2968)', () => {
+    // Leg 1 on this fix reproduced the hole: a mark from a plain git repository
+    // minted `<repo>/.totem/orchestration/<seat>/processed/`, a store no poll
+    // drains. The send refuses "not a totem repository"; the reader now does.
+    const name = '2026-07-16T2200Z-totem-claude-plain.md';
+    const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
+    const plain = mkDir(path.join(workspace, 'plain'));
+    fs.mkdirSync(path.join(plain, '.git'));
+    const start = mkDir(path.join(plain, 'src'));
+
+    let thrown: unknown;
+    try {
+      markSource(path.join(outbox, name), { repoRoot: start, env: SOLO });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(TotemError);
+    expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+    expect((thrown as TotemError).message).toContain('not a totem repository');
+    expect((thrown as TotemError).recoveryHint).toContain('totem init');
+    expect(fs.existsSync(path.join(plain, '.totem'))).toBe(false);
+    expect(poll({ env: SOLO }).mail.map((m) => m.file)).toContain(name);
+  });
+
+  it('outside any repository the mark is REFUSED — no phantom processed/ tree (mmnto-ai/totem#2946)', (ctx) => {
     const name = '2026-07-16T2200Z-totem-claude-bare.md';
     const outbox = writeOutbox('totem-strategy', 'strategy-claude', [{ name, to: 'totem-claude' }]);
     const bare = mkDir(path.join(tmpRoot, 'nowhere', 'start'));
     if (findTotemRepoRootSync(bare) !== null) {
-      // Host ancestry carries a marker: the case cannot be built here.
-      expect(path.isAbsolute(bare)).toBe(true);
+      // Host ancestry carries a marker: the case cannot be built here —
+      // skipped visibly, never asserted vacuously.
+      ctx.skip();
       return;
     }
     let thrown: unknown;

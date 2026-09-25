@@ -626,18 +626,37 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     );
   });
 
-  it('a .totem-only tree with no .git at any height still resolves to its NEAREST .totem/', () => {
+  it('a .totem-only tree with no .git at any height still resolves to its NEAREST .totem/', (ctx) => {
     const inner = path.join(tmpDir, 'outer', 'inner');
     fs.mkdirSync(path.join(tmpDir, 'outer', '.totem'), { recursive: true });
     fs.mkdirSync(path.join(inner, '.totem'), { recursive: true });
     const start = path.join(inner, 'deep');
     fs.mkdirSync(start);
-    // Guarded like the null case: a host that nests tmp under a checkout has a
-    // .git above, and the toplevel rule then applies instead.
-    if (findRepoRootSync(tmpDir) === null) {
-      expect(findTotemRepoRootSync(start)).toBe(path.resolve(inner));
-    } else {
-      expect(path.isAbsolute(findTotemRepoRootSync(start)!)).toBe(true);
+    // A host that nests tmp under a checkout has a .git above, and the toplevel
+    // rule then applies instead: skipped visibly, never asserted vacuously.
+    if (findRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
+    }
+    expect(findTotemRepoRootSync(start)).toBe(path.resolve(inner));
+  });
+
+  it('a ~/.git dotfiles repository never anchors the walk either (mmnto-ai/totem#2946)', () => {
+    // `homedir()` redirected at a tmp dir carrying `.git`: a start beneath it
+    // with no marker of its own must NOT resolve to "home" through the `.git`
+    // arm — on Windows the temp directory sits under home, so a dotfiles repo
+    // there would capture every start outside a real checkout.
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const start = path.join(tmpDir, 'projects', 'scratch');
+    fs.mkdirSync(start, { recursive: true });
+    osMock.home = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(start);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+    } finally {
+      osMock.home = undefined;
     }
   });
 
@@ -672,8 +691,9 @@ describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)',
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('a .git DIRECTORY at the root is the toplevel, from the root and from a subdirectory', () => {
+  it('a .git DIRECTORY with a real .totem/ at the root is the toplevel, from the root and from a subdirectory', () => {
     fs.mkdirSync(path.join(tmpDir, '.git'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
     const sub = path.join(tmpDir, 'src', 'deep');
     fs.mkdirSync(sub, { recursive: true });
     expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
@@ -683,6 +703,35 @@ describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)',
     expect(classifyTotemRepoRootSync(undefined, tmpDir)).toEqual({
       kind: 'toplevel',
       root: path.resolve(tmpDir),
+    });
+  });
+
+  it('a .git DIRECTORY with no .totem/ is `unmarked` — a repository that is not a Totem repository (mmnto-ai/totem#2968)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    const sub = path.join(tmpDir, 'src');
+    fs.mkdirSync(sub);
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'unmarked',
+      root: path.resolve(tmpDir),
+    });
+    // A stray .totem/ beneath it does not mark the toplevel.
+    fs.mkdirSync(path.join(sub, '.totem'));
+    expect(classifyTotemRepoRootSync(sub, '/elsewhere')).toEqual({
+      kind: 'unmarked',
+      root: path.resolve(tmpDir),
+    });
+  });
+
+  it('a worktree of a BARE repository names the bare store as its resident', () => {
+    const store = path.join(tmpDir, 'store.git');
+    fs.mkdirSync(path.join(store, 'worktrees', 'w'), { recursive: true });
+    const wt = path.join(tmpDir, 'w');
+    fs.mkdirSync(wt);
+    fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(store, 'worktrees', 'w')}\n`);
+    expect(classifyTotemRepoRootSync(wt, '/elsewhere')).toEqual({
+      kind: 'worktree',
+      root: path.resolve(wt),
+      resident: path.resolve(store),
     });
   });
 
@@ -714,29 +763,30 @@ describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)',
     });
   });
 
-  it('a .totem-only tree is a toplevel (the bare-fixture contract)', () => {
+  it('a .totem-only tree is a toplevel (the bare-fixture contract)', (ctx) => {
     fs.mkdirSync(path.join(tmpDir, '.totem'));
-    if (findRepoRootSync(tmpDir) === null) {
-      expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere')).toEqual({
-        kind: 'toplevel',
-        root: path.resolve(tmpDir),
-      });
-    } else {
-      expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere').kind).not.toBe('none');
+    if (findRepoRootSync(tmpDir) !== null) {
+      ctx.skip();
+      return;
     }
+    expect(classifyTotemRepoRootSync(tmpDir, '/elsewhere')).toEqual({
+      kind: 'toplevel',
+      root: path.resolve(tmpDir),
+    });
   });
 
-  it('no marker at any height is `none`, carrying the resolved start', () => {
+  it('no marker at any height is `none`, carrying the resolved start', (ctx) => {
     const bare = path.join(tmpDir, 'bare');
     fs.mkdirSync(bare);
-    if (findTotemRepoRootSync(bare) === null) {
-      expect(classifyTotemRepoRootSync(bare, '/elsewhere')).toEqual({
-        kind: 'none',
-        start: path.resolve(bare),
-      });
-    } else {
-      expect(classifyTotemRepoRootSync(bare, '/elsewhere').kind).not.toBe('none');
+    if (findTotemRepoRootSync(bare) !== null) {
+      // Host ancestry carries a marker: skipped visibly, never asserted vacuously.
+      ctx.skip();
+      return;
     }
+    expect(classifyTotemRepoRootSync(bare, '/elsewhere')).toEqual({
+      kind: 'none',
+      start: path.resolve(bare),
+    });
   });
 
   it('mainCheckoutFromGitFileSync: a relative worktree pointer names the main checkout; a missing file is null', () => {

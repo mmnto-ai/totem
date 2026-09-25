@@ -714,6 +714,12 @@ const COMMA_TO_HINT =
  *   stays unread forever. The send side refuses the same class
  *   (mmnto-ai/totem#2930); the reader now matches it, naming the resident.
  *
+ * - `unmarked` — a `.git` toplevel with no real `.totem/` (a repository that
+ *   is not a Totem repository; leg 1 on this fix marked a dispatch from a
+ *   plain git repo and minted `<repo>/.totem/orchestration/<seat>/processed/`
+ *   there — the phantom class through a third door). The send refuses the
+ *   same shape (mmnto-ai/totem#2930); the reader matches it.
+ *
  * A `.totem`-only tree with no `.git` at any height (a bare fixture) is a
  * toplevel and is served. The refusal is `REPO_ROOT_REFUSED`, which the CLI
  * maps to exit 2 — the NOT-DERIVED family — because nothing was derived and
@@ -728,6 +734,12 @@ export function resolveReaderRepoRoot(
   switch (cls.kind) {
     case 'toplevel':
       return cls.root;
+    case 'unmarked':
+      throw new TotemError(
+        'REPO_ROOT_REFUSED',
+        `not a totem repository: ${cls.root} (the repository toplevel above the start) carries no real .totem/ directory — ${verb} there would read an empty roster as clean or mint a phantom processed/ store; refusing (mmnto-ai/totem#2968)`,
+        `run ${verb} from the checkout that hosts your seat, or \`totem init\` this repository first.`,
+      );
     case 'worktree': {
       const at = cls.resident !== null ? ` at ${cls.resident}` : '';
       throw new TotemError(
@@ -1789,8 +1801,9 @@ export async function mailCommand(
     // validates against the repo's STRUCTURAL union (config/dirs/map). Without
     // the strip, a seated shell could never `--as` a sibling seat of its own
     // repo — the env identity would shadow the union down to itself. When the
-    // structural union is EMPTY (a per-agent worktree off the cohort map with
-    // the gitignored config absent — falsification-leg F4), fall back to the
+    // structural union is EMPTY (a renamed clone off the cohort map with the
+    // gitignored config absent — falsification-leg F4; a worktree is refused
+    // above since mmnto-ai/totem#2968, so it is no longer this case), fall back to the
     // env-declared list itself: a multi-seat env declaration is the
     // gate-exempt operator-declared shape, and narrowing it is exactly what
     // this flag is for. The reader's own root rule applies here too, so a
@@ -1832,8 +1845,9 @@ export async function mailCommand(
   }
   const result = pollMail(pollOpts);
   // The wrapper decides the exit (AGENTS.md: lib returns data, wrapper maps to a
-  // code — `pollMail` never throws). The `mail` action sets `process.exitCode`
-  // from this (mmnto-ai/totem#2312).
+  // code — `pollMail` throws only the root refusal, which handleError maps to
+  // exit 2). The `mail` action sets `process.exitCode` from this
+  // (mmnto-ai/totem#2312).
   const exitCode = resolveMailExitCode(result);
 
   if (opts.json === true) {
@@ -1841,7 +1855,9 @@ export async function mailCommand(
     // via the standard CLI path. Using process.stdout keeps the JSON stream clean.
     // Emit the FULL result even on the exit-2 unresolved arm — it already exposes
     // `source: 'none'` + warnings, so a --json consumer parses one object AND
-    // reads the exit code (mmnto-ai/totem#2312).
+    // reads the exit code (mmnto-ai/totem#2312). The root refusal throws before
+    // any result exists, so that exit-2 arm carries the refusal on stderr and no
+    // stdout object — the same shape as the flag refusals above.
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     return { result, exitCode };
   }

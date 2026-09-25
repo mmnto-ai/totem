@@ -1138,12 +1138,13 @@ describe('reader root refusals (mmnto-ai/totem#2946, mmnto-ai/totem#2968)', () =
     expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
   });
 
-  it('a start outside any repository is refused (mmnto-ai/totem#2946)', () => {
+  it('a start outside any repository is refused (mmnto-ai/totem#2946)', (ctx) => {
     const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-eclgc-bare-'));
     try {
       if (findTotemRepoRootSync(bare) !== null) {
-        // Host ancestry carries a marker: the case cannot be built here.
-        expect(path.isAbsolute(bare)).toBe(true);
+        // Host ancestry carries a marker: the case cannot be built here —
+        // skipped visibly, never asserted vacuously.
+        ctx.skip();
         return;
       }
       let thrown: unknown;

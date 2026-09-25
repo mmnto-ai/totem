@@ -1197,30 +1197,67 @@ const STRAY_MARKER_MAX_DIRS = 20_000;
 /** How many strays the row names before it counts the rest. */
 const STRAY_MARKER_LIST_MAX = 8;
 
+export interface StrayTotemMarkers {
+  /** Minted residue: `.totem/` directories git tracks nothing under. */
+  untracked: string[];
+  /** Committed fixtures: `.totem/` directories with tracked content — named, not warned. */
+  tracked: string[];
+  /** The breadth or depth bound stopped the sweep before it finished. */
+  truncated: boolean;
+}
+
+/**
+ * Whether git tracks anything under `rel` (a repo-relative directory). The
+ * split between minted residue and committed fixtures is what makes the row
+ * mean something: the fixtures a test suite needs are permanent, the residue
+ * a tool left is the thing to remove. Outside a git repository, or when git is
+ * unavailable, nothing is tracked and every stray reads as residue.
+ */
+function gitTracksPath(root: string): (rel: string) => boolean {
+  return (rel) => {
+    try {
+      const result = spawnSync('git', ['ls-files', '--', rel], { cwd: root, encoding: 'utf-8' });
+      return result.status === 0 && (result.stdout ?? '').trim().length > 0;
+      // totem-context: a git that cannot be spawned answers "untracked" — the row then names the marker as residue, which is the loud side of the ambiguity.
+    } catch {
+      return false;
+    }
+  };
+}
+
 /**
  * Every `.totem/` (or `<totemDir>/`) directory under `root` that is not the
  * repository's own root marker, as forward-slash paths relative to `root`,
- * in directory order. The root marker itself is descended (its `temp/` trees
- * are where `totem spec` scratch checkouts leave strays); a STRAY is never
- * descended, since whatever it holds is the same residue. Unreadable
+ * in directory order, split by whether git tracks anything under it. The
+ * root marker itself is descended (its `temp/` trees are where `totem spec`
+ * scratch checkouts leave strays); a STRAY is never descended, since whatever
+ * it holds is the same residue; a directory holding its own `.git` (a nested
+ * repository, a submodule, a vendored checkout) is neither descended nor
+ * listed — its `.totem/` is that repository's root marker. Unreadable
  * directories are skipped, not reported. `truncated` is set when the breadth
- * bound stopped the sweep, so a clean answer is never claimed for a tree the
- * row did not finish.
+ * or the depth bound stopped the sweep, so a clean answer is never claimed for
+ * a tree the row did not finish.
  */
 export function findStrayTotemMarkers(
   root: string,
   totemDir = '.totem',
-): { strays: string[]; truncated: boolean } {
-  const rootMarker = path.resolve(root, totemDir);
+  isTracked: (rel: string) => boolean = gitTracksPath(root),
+): StrayTotemMarkers {
+  const base = path.resolve(root);
+  const rootMarker = path.resolve(base, totemDir);
   const strays: string[] = [];
   let visited = 0;
   let truncated = false;
   const walk = (dir: string, depth: number): void => {
-    if (truncated || depth > STRAY_MARKER_MAX_DEPTH) return;
+    if (truncated) return;
+    if (depth > STRAY_MARKER_MAX_DEPTH) {
+      truncated = true;
+      return;
+    }
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
-      // totem-context: an unreadable directory is skipped by design — the sweep reports the strays it can see, and a permission hole is not a stray; the breadth bound below is the honesty guard.
+      // totem-context: an unreadable directory is skipped by design — the sweep reports the strays it can see, and a permission hole is not a stray; the bounds set `truncated` so a clean answer is never overclaimed.
     } catch {
       return;
     }
@@ -1233,15 +1270,26 @@ export function findStrayTotemMarkers(
       const full = path.join(dir, entry.name);
       const isMarker = entry.name === totemDir || entry.name === '.totem';
       if (isMarker && path.resolve(full) !== rootMarker) {
-        strays.push(path.relative(root, full).split(path.sep).join('/'));
+        strays.push(path.relative(base, full).split(path.sep).join('/'));
         continue;
       }
       if (!isMarker && STRAY_MARKER_SKIP_DIRS.has(entry.name)) continue;
+      if (!isMarker && fs.existsSync(path.join(full, '.git'))) continue;
       walk(full, depth + 1);
     }
   };
-  walk(path.resolve(root), 0);
-  return { strays, truncated };
+  walk(base, 0);
+  const tracked = strays.filter((rel) => isTracked(rel));
+  const untracked = strays.filter((rel) => !isTracked(rel));
+  return { untracked, tracked, truncated };
+}
+
+/** Name the first few paths and count the rest. */
+function listStrays(paths: readonly string[]): string {
+  const shown = paths.slice(0, STRAY_MARKER_LIST_MAX).join(', ');
+  return paths.length > STRAY_MARKER_LIST_MAX
+    ? `${shown} (+${paths.length - STRAY_MARKER_LIST_MAX} more)`
+    : shown;
 }
 
 /**
@@ -1251,34 +1299,41 @@ export function findStrayTotemMarkers(
  * `<repo>/packages/cli` read an empty workspace as clean, a mark landed in a
  * store no poll drains. The walk now prefers the repository toplevel, so a
  * stray no longer captures a verb; the row closes the loop on the residue
- * and on whatever is still minting it.
+ * and on whatever is still minting it. Minted residue (untracked) warns;
+ * committed fixtures (tracked) are named and pass, since a test suite keeps
+ * them on purpose. The sweep is rooted at the repository toplevel, not the
+ * cwd, so a doctor run from a subdirectory reads the same tree.
  */
-export function checkStrayTotemMarkers(cwd: string, totemDir = '.totem'): DiagnosticResult {
+export async function checkStrayTotemMarkers(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
   const name = 'Stray Markers';
-  const { strays, truncated } = findStrayTotemMarkers(cwd, totemDir);
+  const { findRepoRootSync } = await import('@mmnto/totem');
+  const root = findRepoRootSync(cwd) ?? cwd;
+  const { untracked, tracked, truncated } = findStrayTotemMarkers(root, totemDir);
   const suffix = truncated
-    ? ` (sweep stopped at ${STRAY_MARKER_MAX_DIRS} directories — the list may be incomplete)`
+    ? ` (sweep stopped at its bounds — ${STRAY_MARKER_MAX_DIRS} directories or depth ${STRAY_MARKER_MAX_DEPTH} — so the list may be incomplete)`
     : '';
-  if (strays.length === 0) {
+  const fixtures =
+    tracked.length > 0
+      ? `; ${tracked.length} committed fixture marker${tracked.length === 1 ? '' : 's'} (tracked, no verb runs from ${tracked.length === 1 ? 'it' : 'them'}): ${listStrays(tracked)}`
+      : '';
+  if (untracked.length === 0) {
     return {
       name,
       status: truncated ? 'warn' : 'pass',
-      message: `no ${totemDir}/ directory under this repository other than its root marker${suffix}`,
+      message: `no minted ${totemDir}/ under this repository other than its root marker${fixtures}${suffix}`,
       ...(truncated ? { gateExempt: true as const } : {}),
     };
   }
-  const shown = strays.slice(0, STRAY_MARKER_LIST_MAX).join(', ');
-  const more =
-    strays.length > STRAY_MARKER_LIST_MAX
-      ? ` (+${strays.length - STRAY_MARKER_LIST_MAX} more)`
-      : '';
   return {
     name,
     status: 'warn',
     gateExempt: true,
-    message: `${strays.length} stray ${totemDir}/ director${strays.length === 1 ? 'y' : 'ies'} under this repository, none of them its root marker: ${shown}${more}${suffix}`,
+    message: `${untracked.length} minted ${totemDir}/ director${untracked.length === 1 ? 'y' : 'ies'} under this repository (untracked residue): ${listStrays(untracked)}${fixtures}${suffix}`,
     remediation:
-      'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each stray, or the tool that mints it; a committed fixture belongs under a path no verb runs from.',
+      'A reader verb run beneath one of these resolved it as the repo root before mmnto-ai/totem#2938 (an empty workspace read as clean; a mark in a store no poll drains). The toplevel now wins the walk, but whatever minted these still writes there: remove each minted marker, or the tool that mints it.',
   };
 }
 
@@ -2675,7 +2730,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, totemDir, doctorThresholds),
     await checkGrandfatheredRules(cwd, totemDir),
     await checkFreezes(cwd, totemDir),
-    checkStrayTotemMarkers(cwd, totemDir),
+    await checkStrayTotemMarkers(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's
     // module stays off the cold-start graph, the command-layer discipline.

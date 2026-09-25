@@ -432,30 +432,52 @@ export function findRepoRootSync(start: string): string | null {
  * a separate question — {@link classifyTotemRepoRootSync} answers it for the
  * callers that must refuse a worktree.
  *
- * The user-level store at `~/.totem` (`registry.json`, `worktrees.json`, the
- * estate's records) is not a repository and never anchors the `.totem/` arm:
- * without that exclusion a verb run outside any repository, on a host that
- * keeps the store, resolved the home directory as its repo root and read a
- * home-wide "workspace" as clean — the marker-less class of
- * mmnto-ai/totem#2946 wearing a marker.
+ * The home directory anchors neither arm. Its `~/.totem` is the user-level
+ * store (`registry.json`, `worktrees.json`, the estate's records), not a
+ * repository: without that exclusion a verb run outside any repository, on a
+ * host that keeps the store, resolved the home directory as its repo root and
+ * read a home-wide "workspace" as clean — the marker-less class of
+ * mmnto-ai/totem#2946 wearing a marker. A `~/.git` is a dotfiles repository
+ * the same way, and on Windows the temp directory sits under home, so either
+ * marker there would capture every start outside a real checkout.
  */
 export function findTotemRepoRootSync(start: string): string | null {
   const home = os.homedir();
   return (
-    findRepoRootSync(start) ??
+    walkUpToMarker(start, (dir) => !sameDir(dir, home) && fs.existsSync(path.join(dir, '.git'))) ??
     walkUpToMarker(start, (dir) => !sameDir(dir, home) && fs.existsSync(path.join(dir, '.totem')))
   );
 }
 
 /**
- * Directory identity for the home-store exclusion: exact on POSIX,
- * case-insensitive on win32, where `os.homedir()` and a cwd-derived path can
- * spell the same directory with different casing.
+ * Directory identity for the home exclusion: both sides canonicalised
+ * (`realpathSync.native` resolves a Windows 8.3 short name such as
+ * `RUNNER~1` to its long form, so a temp path spelled short cannot slip past
+ * the exclusion), then exact on POSIX and case-insensitive on win32.
  */
 function sameDir(a: string, b: string): boolean {
-  const ra = path.resolve(a);
-  const rb = path.resolve(b);
+  const ra = canonicalDir(a);
+  const rb = canonicalDir(b);
   return process.platform === 'win32' ? ra.toLowerCase() === rb.toLowerCase() : ra === rb;
+}
+
+function canonicalDir(p: string): string {
+  try {
+    return fs.realpathSync.native(p);
+    // totem-context: a path that cannot be canonicalised (absent, a permission hole) compares by its resolved spelling — the exclusion degrades to the string form rather than throwing from a walker every reader verb runs first.
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+/** No-follow directory probe: a symlinked or junctioned `.totem/` is not a real marker. */
+function isRealDirectorySync(p: string): boolean {
+  try {
+    return fs.lstatSync(p).isDirectory();
+    // totem-context: an absent or unreadable entry is "not a real directory" by contract — the probe answers a yes/no question and never throws from the classifier.
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -463,12 +485,14 @@ function sameDir(a: string, b: string): boolean {
  * `repoRoot` override: treat `repoRoot ?? cwd` as the WALK START and derive
  * the root via {@link findTotemRepoRootSync}; a marker-less start (bare test
  * fixture) is used as-is. Single home for the walk-start-not-definitive-root
- * contract (mmnto-ai/totem#2312) for the verbs that only DESCRIBE a directory
- * (`seat`, the doctor's seat-identity row, `deriveSeat`). The mail reader
- * verbs — the poll, `mail mark`, `ecl-gc` — read or write a cursor, so they
- * take {@link classifyTotemRepoRootSync} and refuse the `none` and `worktree`
- * classes instead of using the start as-is (mmnto-ai/totem#2946,
- * mmnto-ai/totem#2968).
+ * contract (mmnto-ai/totem#2312) for the describing probes (the doctor's
+ * seat-identity row, `deriveSeat`, the verify roster fallback) and, for now,
+ * for `seat add|suspend|remove`, whose lifecycle writes still take this
+ * lenient root — their own refusal outside a repository is a follow-up. The
+ * mail reader verbs — the poll, `mail mark`, `ecl-gc` — read a workspace as a
+ * verdict or write a cursor, so they take {@link classifyTotemRepoRootSync}
+ * and refuse the `none`, `worktree` and `unmarked` classes instead of using
+ * the start as-is (mmnto-ai/totem#2946, mmnto-ai/totem#2968).
  */
 export function resolveTotemRepoRootSync(repoRootOpt: string | undefined, cwd: string): string {
   const start = path.resolve(repoRootOpt ?? cwd);
@@ -478,29 +502,37 @@ export function resolveTotemRepoRootSync(repoRootOpt: string | undefined, cwd: s
 /**
  * What a Totem repo-root walk landed on, for the callers that must refuse
  * rather than read or write in the wrong place:
- * - `toplevel`: a checkout whose `.git` is a DIRECTORY (a resident checkout),
- *   or a `.totem`-only tree with no `.git` at any height (a bare fixture).
+ * - `toplevel`: a checkout whose `.git` is a DIRECTORY and whose `.totem/` is
+ *   a real directory (a resident checkout), or a `.totem`-only tree with no
+ *   `.git` at any height (a bare fixture).
+ * - `unmarked`: a `.git` DIRECTORY toplevel with no real `.totem/` — a
+ *   repository that is not a Totem repository (never initialised, or a
+ *   symlinked marker). A verb served there reads an empty roster as clean or
+ *   mints a `.totem/orchestration/` no poll drains; the send refuses the same
+ *   shape (mmnto-ai/totem#2930).
  * - `worktree`: the nearest `.git` is a FILE — a linked worktree's (or a
  *   submodule's) pointer at another repository's store. A worktree hosts no
  *   seat: its orchestration tree is gitignored and no poll enumerates it as a
  *   workspace child, so a cursor written there is a phantom
  *   (mmnto-ai/totem#2968). `resident` names the main checkout the pointer
- *   points at (`gitdir: <main>/.git/worktrees/<name>`), or is `null` when the
- *   pointer has another shape.
+ *   points at (`gitdir: <main>/.git/worktrees/<name>`; for a worktree of a
+ *   bare repository, the bare store itself), or is `null` when the pointer
+ *   has another shape.
  * - `none`: neither marker at or above `start` — outside any repository
  *   (mmnto-ai/totem#2946).
  */
 export type TotemRepoRootClass =
   | { kind: 'toplevel'; root: string }
+  | { kind: 'unmarked'; root: string }
   | { kind: 'worktree'; root: string; resident: string | null }
   | { kind: 'none'; start: string };
 
 /**
  * Classify the root {@link findTotemRepoRootSync} derives from
  * `repoRoot ?? cwd`. Pure fs, never throws; each caller decides what a class
- * means for its verb. The reader verbs refuse `none` and `worktree`
- * (mmnto-ai/totem#2946, mmnto-ai/totem#2968); the send side has its own
- * resolver with the same shape plus the seat-hosting rule
+ * means for its verb. The reader verbs refuse `none`, `worktree` and
+ * `unmarked` (mmnto-ai/totem#2946, mmnto-ai/totem#2968); the send side has
+ * its own resolver with the same shape plus the seat-hosting rule
  * (mmnto-ai/totem#2930).
  */
 export function classifyTotemRepoRootSync(
@@ -511,23 +543,27 @@ export function classifyTotemRepoRootSync(
   const root = findTotemRepoRootSync(start);
   if (root === null) return { kind: 'none', start };
   const gitPath = path.join(root, '.git');
-  let gitIsFile = false;
+  let git: 'absent' | 'file' | 'directory' = 'absent';
   try {
     const st = fs.statSync(gitPath, { throwIfNoEntry: false });
-    gitIsFile = st !== undefined && !st.isDirectory();
+    if (st !== undefined) git = st.isDirectory() ? 'directory' : 'file';
     // totem-context: best-effort by contract — a `.git` entry that cannot be stat'ed (a permission hole) is classified as the toplevel the walk already found, never thrown from a resolver every reader verb runs first.
   } catch {
-    gitIsFile = false;
+    git = 'absent';
   }
-  if (gitIsFile) {
+  if (git === 'file') {
     return { kind: 'worktree', root, resident: mainCheckoutFromGitFileSync(gitPath) };
+  }
+  if (git === 'directory' && !isRealDirectorySync(path.join(root, '.totem'))) {
+    return { kind: 'unmarked', root };
   }
   return { kind: 'toplevel', root };
 }
 
 /**
- * The main checkout a linked worktree's `.git` FILE points at
- * (`gitdir: <main>/.git/worktrees/<name>`), or `null` when the pointer has
+ * The repository a linked worktree's `.git` FILE points at: the main checkout
+ * for `gitdir: <main>/.git/worktrees/<name>`, the bare store itself for
+ * `gitdir: <store>.git/worktrees/<name>`, or `null` when the pointer has
  * another shape (a submodule's `.git/modules/…`, an unreadable file). Used to
  * NAME the resident in a refusal — never to redirect a write there
  * (mmnto-ai/totem#2930).
@@ -543,8 +579,10 @@ export function mainCheckoutFromGitFileSync(gitFile: string): string | null {
   const m = /^gitdir:\s*(.+)$/m.exec(text);
   if (m === null) return null;
   const gitdir = path.resolve(path.dirname(gitFile), m[1]!.trim()).replace(/\\/g, '/');
-  const idx = gitdir.lastIndexOf('/.git/worktrees/');
-  return idx > 0 ? path.resolve(gitdir.slice(0, idx)) : null;
+  const idx = gitdir.lastIndexOf('/worktrees/');
+  if (idx <= 0) return null;
+  const store = gitdir.slice(0, idx);
+  return path.resolve(store.endsWith('/.git') ? store.slice(0, -'/.git'.length) : store);
 }
 
 /**
