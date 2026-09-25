@@ -727,7 +727,7 @@ describe('resolveDefaultSpecPath', () => {
         '/repo',
         deps,
       ),
-    ).toBe('/repo/.totem/specs/mmnto-ai-totem-7.md');
+    ).toBe('/repo/.totem/specs/mmnto-ai_totem-7.md');
     expect(
       resolveDefaultSpecPath(
         [
@@ -742,7 +742,28 @@ describe('resolveDefaultSpecPath', () => {
         '/repo',
         deps,
       ),
-    ).toBe('/repo/.totem/specs/ghe-example-com-team-proj-7.md');
+    ).toBe('/repo/.totem/specs/ghe-example-com_team_proj-7.md');
+    // Leg 2 on the review-round fold: the `_` join is unambiguous (no host or
+    // owner name may contain `_`), so `a-b/c` and `a/b-c` never meet at one
+    // stem, and the repository is lower-cased as GitHub compares it.
+    const stemOf = (namedRepo: string): string | null =>
+      resolveDefaultSpecPath(
+        [
+          {
+            issue: makeIssue(5),
+            freeText: null,
+            record: null,
+            issueRef: `${namedRepo}#5`,
+            namedRepo,
+          },
+        ],
+        '/repo',
+        deps,
+      );
+    expect(stemOf('a-b/c')).toBe('/repo/.totem/specs/a-b_c-5.md');
+    expect(stemOf('a/b-c')).toBe('/repo/.totem/specs/a_b-c-5.md');
+    expect(stemOf('O/R')).toBe(stemOf('o/r'));
+    expect(stemOf('o/r')).toBe('/repo/.totem/specs/o_r-5.md');
     expect(
       resolveDefaultSpecPath(
         [
@@ -2428,9 +2449,17 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
         stdout: true,
       }),
     ).rejects.toThrow(/not exactly <owner>\/<repo>/);
+    // A URL with a #<digits> suffix is refused for its path, never read as
+    // owner/repo#N (leg 2 on the review-round fold).
+    await expect(
+      specCommand(['https://github.com/a/b/c/issues/5#7'], { stdout: true }),
+    ).rejects.toThrow(/not exactly <owner>\/<repo>/);
     expect(crossRepo.built).toEqual([]);
     expect(cwdAdapter.fetched).toEqual([]);
     expect(harness.orchestratorArgs).toEqual([]);
+    // The refusal is judged before the store connects, so a missing embedding
+    // or index can never mask it (leg 2 on the review-round fold).
+    expect(harness.connects).toBe(0);
   });
 });
 
@@ -2455,7 +2484,9 @@ describe('parseIssueInput', () => {
   });
 
   // greptile on mmnto-ai/totem#2965: github.com's www. alias and the host's
-  // case never reach `gh --repo` — www.github.com/owner/repo is not a repository.
+  // case never reach `gh --repo` — the repository arrives in its canonical
+  // owner/repo form (gh resolves the alias too; the form is kept canonical
+  // rather than relied on).
   it('normalizes the www. alias and the case of github.com to owner/repo', () => {
     expect(parseIssueInput('https://www.github.com/mmnto-ai/totem/issues/3')).toEqual({
       number: 3,
@@ -2498,6 +2529,23 @@ describe('parseIssueInput', () => {
     // GitLab's /-/issues/<n> is not a form gh reads; the refusal names it.
     expect(parseIssueInput('https://gitlab.com/group/sub/proj/-/issues/5')).toBeNull();
     expect(parseIssueInput('https://gitlab.com/group/proj/-/issues/5')).toBeNull();
+    // The form regex is case-insensitive, so an upper-cased segment parses.
+    expect(parseIssueInput('https://github.com/o/r/ISSUES/5')).toEqual({ number: 5, repo: 'o/r' });
+  });
+
+  // Leg 2 on the review-round fold: a URL that fails the form but ends in
+  // `#<digits>` must not fall through to the owner/repo#N branch and hand its
+  // whole prefix to gh --repo as a repository.
+  it('never reads a URL as owner/repo#N: a #<digits> suffix does not rescue a refused URL', () => {
+    expect(parseIssueInput('https://github.com/a/b/c/issues/5#7')).toBeNull();
+    expect(parseIssueInput('https://gitlab.com/g/p/-/issues/5#12')).toBeNull();
+    expect(parseIssueInput('https://github.com/o/r/pull/5#12')).toBeNull();
+    expect(parseIssueInput('HTTP://github.com/o/r/pull/5#12')).toBeNull();
+    // The qualified form itself is untouched.
+    expect(parseIssueInput('ghe.example.com/team/proj#5')).toEqual({
+      number: 5,
+      repo: 'ghe.example.com/team/proj',
+    });
   });
 
   it('returns null for a topic, for issue 0, for a non-numeric hash and for a pull URL', () => {
@@ -2535,6 +2583,33 @@ describe('explainUnsupportedIssueUrl', () => {
     );
     expect(explainUnsupportedIssueUrl('https://github.com/mmnto-ai/totem/pull/5')).toContain(
       'it names no issue',
+    );
+  });
+
+  // Leg 2 on the review-round fold: every reason is TRUE of the input it names.
+  it('judges the reason on the path, case-insensitively, and names issue 0 as such', () => {
+    // A #<digits> suffix does not change the reason for the path.
+    expect(explainUnsupportedIssueUrl('https://github.com/a/b/c/issues/5#7')).toContain(
+      'not exactly <owner>/<repo>',
+    );
+    expect(explainUnsupportedIssueUrl('https://gitlab.com/g/p/-/issues/5#12')).toContain(
+      "GitLab's",
+    );
+    expect(explainUnsupportedIssueUrl('https://github.com/o/r/pull/5#12')).toContain(
+      'it names no issue',
+    );
+    // The form is right and the number is 0: that is the reason, not the path.
+    expect(explainUnsupportedIssueUrl('https://github.com/o/r/issues/0')).toContain(
+      'the issue number is 0',
+    );
+    // `/issues/5` inside a query is not a path defect.
+    expect(explainUnsupportedIssueUrl('https://github.com/o/r/pulls?q=/issues/5')).toContain(
+      'it names no issue',
+    );
+    // Upper-cased segments get their real reason, as the form regex is case-insensitive.
+    expect(explainUnsupportedIssueUrl('https://gitlab.com/g/p/-/ISSUES/5')).toContain("GitLab's");
+    expect(explainUnsupportedIssueUrl('https://github.com/a/b/c/ISSUES/5')).toContain(
+      'not exactly <owner>/<repo>',
     );
   });
 });

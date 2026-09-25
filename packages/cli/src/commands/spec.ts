@@ -933,10 +933,14 @@ export function resolveDefaultSpecPath(
     // An issue fetched from a repository the INPUT named (owner/repo#N or a
     // URL) keys its draft on that repository too: issue 7 of two repositories
     // must not share `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965).
-    // A bare number keeps `<number>.md`, whatever repository the working
-    // directory's adapter resolved it in.
+    // The repository is lower-cased, as GitHub compares it, and its segments
+    // are joined with `_`, a character no host or owner name may contain, so
+    // `a-b/c` and `a/b-c` never meet at one stem (leg 2 on the review-round
+    // fold); a repository NAME whose punctuation sanitizes to another's dashes
+    // still could, and --out names a path. A bare number keeps `<number>.md`,
+    // whatever repository the working directory's adapter resolved it in.
     stem = first.namedRepo
-      ? `${sanitizeSpecFilename(first.namedRepo)}-${first.issue.number}`
+      ? `${sanitizeSpecFilename(first.namedRepo.toLowerCase().replace(/\//g, '_'))}-${first.issue.number}`
       : String(first.issue.number);
   } else if (first.freeText) {
     stem = sanitizeSpecFilename(first.freeText);
@@ -964,9 +968,11 @@ export interface IssueInput {
 /**
  * The host of an issue URL as `gh --repo` should see it: lower-cased (hosts
  * compare case-insensitively), and github.com's `www.` alias folded to
- * github.com — `www.github.com/owner/repo` is not a repository `gh` can read
- * (greptile on mmnto-ai/totem#2965). No other host loses a `www.`: off
- * github.com the host is taken as written, a GitHub Enterprise host.
+ * github.com so the repository reaches `gh` in its canonical `owner/repo`
+ * form (greptile on mmnto-ai/totem#2965; gh 2.99 resolves the alias as well —
+ * the form is kept canonical rather than relied on). No other host loses a
+ * `www.`: off github.com the host is taken as written, a GitHub Enterprise
+ * host, a port or user info included, verbatim.
  */
 function normalizeIssueHost(host: string): string {
   const lower = host.toLowerCase();
@@ -985,7 +991,7 @@ function normalizeIssueHost(host: string): string {
 const ISSUE_URL_RE = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)(?=$|[/?#])/i;
 
 /** GitLab's issue path, `/-/issues/<n>` — named when a URL in that form is refused. */
-const GITLAB_ISSUE_PATH_RE = /\/-\/issues\/\d+/;
+const GITLAB_ISSUE_PATH_RE = /\/-\/issues\/\d+/i;
 
 /**
  * Parse one positional input as an issue: a bare number (this repository), an
@@ -1011,6 +1017,11 @@ export function parseIssueInput(input: string): IssueInput | null {
     if (!(number > 0)) return null;
     return { number, repo: host === 'github.com' ? path : `${host}/${path}` };
   }
+  // A URL is an issue URL or nothing: one that fails the form above but ends
+  // in `#<digits>` must not fall through to the qualified branch below and
+  // hand its whole prefix to `gh --repo` as a repository (leg 2 on the
+  // review-round fold: `…/a/b/c/issues/5#7` read as issue 7 of a URL).
+  if (/^https?:\/\//i.test(input)) return null;
   const hashIdx = input.indexOf('#');
   const isQualified = hashIdx > 0 && input.includes('/') && /^\d+$/.test(input.slice(hashIdx + 1));
   if (isQualified) {
@@ -1036,17 +1047,24 @@ const ISSUE_INPUT_FORMS =
 export function explainUnsupportedIssueUrl(input: string): string | null {
   if (!/^https?:\/\//i.test(input)) return null;
   if (parseIssueInput(input) !== null) return null;
+  // The reasons are judged on the PATH alone — `/issues/5` inside a query or
+  // a fragment never describes the input — and case-insensitively, as the
+  // form regex is (leg 2 on the review-round fold).
+  const pathOnly = input.replace(/^https?:\/\/[^/]*/i, '').replace(/[?#][\s\S]*$/, '');
   let reason: string;
-  if (GITLAB_ISSUE_PATH_RE.test(input)) {
+  if (ISSUE_URL_RE.test(input)) {
+    // The form is right and the parser still said no: the number is 0.
+    reason = 'the issue number is 0';
+  } else if (GITLAB_ISSUE_PATH_RE.test(pathOnly)) {
     reason =
       "the /-/issues/<n> path is GitLab's, and issues are fetched with gh, which reads github.com and GitHub Enterprise hosts only";
-  } else if (/\/issues\/\d+[^\d/?#]/.test(input)) {
+  } else if (/\/issues\/\d+[^\d/]/i.test(pathOnly)) {
     // The class excludes digits so the probe cannot backtrack inside the
     // number and read `456`'s last digit as text after `45`.
     reason = 'text follows the issue number';
-  } else if (/\/issues\/\d+/.test(input)) {
+  } else if (/\/issues\/\d+/i.test(pathOnly)) {
     reason = 'the path before /issues/ is not exactly <owner>/<repo>';
-  } else if (/\/issues\//.test(input)) {
+  } else if (/\/issues\//i.test(pathOnly)) {
     reason = 'no issue number follows /issues/';
   } else {
     reason = 'it names no issue';
@@ -1094,6 +1112,22 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
   // Everything here runs before the config resolves, before the store connects
   // and before any LLM call: a bad invocation costs nothing and mints nothing.
   validateSpecInvocation(unique, options, TotemConfigError);
+  // A URL that names no issue this tool can fetch is a refusal, never a topic
+  // (CodeRabbit on mmnto-ai/totem#2965): a draft on a URL string would be an
+  // unanchored run wearing an issue's clothes. Judged over EVERY input here —
+  // before the config resolves, before the store connects and before the
+  // first fetch (leg 2 on the review-round fold) — so a mixed list fetches
+  // nothing it will then throw away and a missing embedding never masks it.
+  for (const input of unique) {
+    const unsupportedUrl = explainUnsupportedIssueUrl(input);
+    if (unsupportedUrl !== null) {
+      throw new TotemConfigError(
+        sanitizeForTerminal(unsupportedUrl),
+        'Pass the issue as owner/repo#N or as its https://<host>/<owner>/<repo>/issues/<n> URL, or pass a topic that is not a URL.',
+        'CONFIG_INVALID',
+      );
+    }
+  }
   const boundRecord =
     options.from !== undefined
       ? loadSpecRecord(options.from, cwd, { resolveGitRoot }, TotemConfigError)
@@ -1157,21 +1191,6 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     parsed.push({ issue: null, freeText: null, record: boundRecord.record });
     queryParts.push(buildRecordSearchQuery(boundRecord.record));
     log.info(TAG, `Record: ${boundRecord.record.path} (sha256 ${boundRecord.record.sha256})`);
-  }
-
-  // A URL that names no issue this tool can fetch is a refusal, never a topic
-  // (CodeRabbit on mmnto-ai/totem#2965): a draft on a URL string would be an
-  // unanchored run wearing an issue's clothes. Judged over EVERY input before
-  // the first fetch, so a mixed list fetches nothing it will then throw away.
-  for (const input of unique) {
-    const unsupportedUrl = explainUnsupportedIssueUrl(input);
-    if (unsupportedUrl !== null) {
-      throw new TotemConfigError(
-        sanitizeForTerminal(unsupportedUrl),
-        'Pass the issue as owner/repo#N or as its https://<host>/<owner>/<repo>/issues/<n> URL, or pass a topic that is not a URL.',
-        'CONFIG_INVALID',
-      );
-    }
   }
 
   for (const input of unique) {
