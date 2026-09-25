@@ -1,6 +1,6 @@
 {
   "name": "@mmnto/cli",
-  "version": "2.11.1",
+  "version": "2.12.0",
   "description": "Totem: local-first toolkit that keeps AI-agent work queryable, enforceable, and derivable as plain files in your codebase",
   "type": "module",
   "engines": {
