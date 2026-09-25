@@ -30,6 +30,7 @@ import {
   buildRecordSearchQuery,
   evaluateGroundingFloor,
   expandSpecQuery,
+  explainUnsupportedIssueUrl,
   formatGroundingRefusal,
   isRecordPathOutsideRoot,
   loadSpecRecord,
@@ -706,6 +707,56 @@ describe('resolveDefaultSpecPath', () => {
       deps,
     );
     expect(result).toBe('/repo/.totem/specs/1555.md');
+  });
+
+  // CodeRabbit on mmnto-ai/totem#2965: issue 7 of two repositories must not
+  // share one draft path — an input that NAMED its repository keys the stem on
+  // it; a bare number keeps <number>.md even when the adapter resolved a repo.
+  it('keys the stem on the repository the input named, and on the number alone for a bare number', () => {
+    expect(
+      resolveDefaultSpecPath(
+        [
+          {
+            issue: makeIssue(7),
+            freeText: null,
+            record: null,
+            issueRef: 'mmnto-ai/totem#7',
+            namedRepo: 'mmnto-ai/totem',
+          },
+        ],
+        '/repo',
+        deps,
+      ),
+    ).toBe('/repo/.totem/specs/mmnto-ai-totem-7.md');
+    expect(
+      resolveDefaultSpecPath(
+        [
+          {
+            issue: makeIssue(7),
+            freeText: null,
+            record: null,
+            issueRef: 'https://ghe.example.com/team/proj/issues/7',
+            namedRepo: 'ghe.example.com/team/proj',
+          },
+        ],
+        '/repo',
+        deps,
+      ),
+    ).toBe('/repo/.totem/specs/ghe-example-com-team-proj-7.md');
+    expect(
+      resolveDefaultSpecPath(
+        [
+          {
+            issue: { ...makeIssue(7), repo: 'mmnto-ai/totem' },
+            freeText: null,
+            record: null,
+            issueRef: '7',
+          },
+        ],
+        '/repo',
+        deps,
+      ),
+    ).toBe('/repo/.totem/specs/7.md');
   });
 
   it('resolves single free-text input to sanitized filename', () => {
@@ -2357,6 +2408,30 @@ describe('specCommand — anchored evidence, executed against stubbed seams', ()
     expect(cwdAdapter.fetched).toEqual([]);
     expect(harness.orchestratorArgs).toEqual([]);
   });
+
+  // CodeRabbit on mmnto-ai/totem#2965: a URL that names no issue this tool can
+  // fetch is refused before any fetch — never handed to the GitHub adapter as a
+  // repository it cannot read, never drafted as a free-text topic.
+  it('an unsupported issue URL REFUSES the run with its reason, before any fetch and with no draft', async () => {
+    crossRepo.built.length = 0;
+    cwdAdapter.fetched.length = 0;
+    harness.searchResults = { spec: [relevantHit(0.7)] };
+    await expect(
+      specCommand(['https://github.com/other-org/other-repo/issues/7abc'], { stdout: true }),
+    ).rejects.toThrow(/Unsupported issue URL .*: text follows the issue number/);
+    await expect(
+      specCommand(['https://gitlab.com/group/proj/-/issues/5'], { stdout: true }),
+    ).rejects.toThrow(/GitLab/);
+    // A mixed list refuses before the valid input is fetched.
+    await expect(
+      specCommand(['2735', 'https://github.com/owner/repo/actions/runs/1/issues/2'], {
+        stdout: true,
+      }),
+    ).rejects.toThrow(/not exactly <owner>\/<repo>/);
+    expect(crossRepo.built).toEqual([]);
+    expect(cwdAdapter.fetched).toEqual([]);
+    expect(harness.orchestratorArgs).toEqual([]);
+  });
 });
 
 // ─── parseIssueInput (mmnto-ai/totem#2943) ───────────────
@@ -2377,13 +2452,28 @@ describe('parseIssueInput', () => {
       number: 12,
       repo: 'ghe.example.com/team/proj',
     });
-    expect(parseIssueInput('https://gitlab.com/group/sub/proj/-/issues/5')).toEqual({
-      number: 5,
-      repo: 'gitlab.com/group/sub/proj',
+  });
+
+  // greptile on mmnto-ai/totem#2965: github.com's www. alias and the host's
+  // case never reach `gh --repo` — www.github.com/owner/repo is not a repository.
+  it('normalizes the www. alias and the case of github.com to owner/repo', () => {
+    expect(parseIssueInput('https://www.github.com/mmnto-ai/totem/issues/3')).toEqual({
+      number: 3,
+      repo: 'mmnto-ai/totem',
+    });
+    expect(parseIssueInput('HTTPS://GitHub.COM/mmnto-ai/totem/issues/3')).toEqual({
+      number: 3,
+      repo: 'mmnto-ai/totem',
+    });
+    // Another host is lower-cased and otherwise kept: www. is stripped from
+    // github.com's alias only, never from a host of its own.
+    expect(parseIssueInput('https://WWW.ghe.example.com/team/proj/issues/4')).toEqual({
+      number: 4,
+      repo: 'www.ghe.example.com/team/proj',
     });
   });
 
-  it('keeps the URL match not end-anchored: trailing text still resolves the number', () => {
+  it('keeps the URL match not end-anchored: a query, a fragment or a slash may follow the number', () => {
     expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/1?x=y')).toEqual({
       number: 1,
       repo: 'mmnto-ai/totem',
@@ -2392,6 +2482,22 @@ describe('parseIssueInput', () => {
       number: 5,
       repo: 'mmnto-ai/totem',
     });
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/6/')).toEqual({
+      number: 6,
+      repo: 'mmnto-ai/totem',
+    });
+  });
+
+  // CodeRabbit and GCA on mmnto-ai/totem#2965: the number ends its path
+  // segment, and the path before /issues/ is exactly owner/repo.
+  it('refuses text attached to the number and a path that is not exactly owner/repo', () => {
+    expect(parseIssueInput('https://github.com/mmnto-ai/totem/issues/7abc')).toBeNull();
+    expect(parseIssueInput('https://github.com/owner/repo/actions/runs/123/issues/456')).toBeNull();
+    expect(parseIssueInput('https://github.com/owner/issues/1')).toBeNull();
+    expect(parseIssueInput('https://ghe.example.com/a/b/c/issues/1')).toBeNull();
+    // GitLab's /-/issues/<n> is not a form gh reads; the refusal names it.
+    expect(parseIssueInput('https://gitlab.com/group/sub/proj/-/issues/5')).toBeNull();
+    expect(parseIssueInput('https://gitlab.com/group/proj/-/issues/5')).toBeNull();
   });
 
   it('returns null for a topic, for issue 0, for a non-numeric hash and for a pull URL', () => {
@@ -2399,5 +2505,36 @@ describe('parseIssueInput', () => {
     expect(parseIssueInput('0')).toBeNull();
     expect(parseIssueInput('mmnto-ai/totem#abc')).toBeNull();
     expect(parseIssueInput('https://github.com/mmnto-ai/totem/pull/5')).toBeNull();
+  });
+});
+
+// ─── explainUnsupportedIssueUrl (mmnto-ai/totem#2965, CodeRabbit) ───
+
+describe('explainUnsupportedIssueUrl', () => {
+  it('is silent for a topic, a qualified ref and a URL the parser accepts', () => {
+    expect(explainUnsupportedIssueUrl('a loose topic')).toBeNull();
+    expect(explainUnsupportedIssueUrl('mmnto-ai/totem#2929')).toBeNull();
+    expect(explainUnsupportedIssueUrl('https://github.com/mmnto-ai/totem/issues/2929')).toBeNull();
+    expect(explainUnsupportedIssueUrl('https://ghe.example.com/team/proj/issues/12')).toBeNull();
+  });
+
+  it('names the reason a URL is refused, and the forms that are accepted', () => {
+    const forms = 'An issue input is a bare number, owner/repo#N, or';
+    const gitlab = explainUnsupportedIssueUrl('https://gitlab.com/group/proj/-/issues/5')!;
+    expect(gitlab).toContain('Unsupported issue URL https://gitlab.com/group/proj/-/issues/5');
+    expect(gitlab).toContain("GitLab's");
+    expect(gitlab).toContain(forms);
+    expect(explainUnsupportedIssueUrl('https://github.com/mmnto-ai/totem/issues/7abc')).toContain(
+      'text follows the issue number',
+    );
+    expect(
+      explainUnsupportedIssueUrl('https://github.com/owner/repo/actions/runs/123/issues/456'),
+    ).toContain('not exactly <owner>/<repo>');
+    expect(explainUnsupportedIssueUrl('https://github.com/mmnto-ai/totem/issues/')).toContain(
+      'no issue number follows /issues/',
+    );
+    expect(explainUnsupportedIssueUrl('https://github.com/mmnto-ai/totem/pull/5')).toContain(
+      'it names no issue',
+    );
   });
 });

@@ -204,6 +204,14 @@ export interface ParsedInput {
    * text and the record path.
    */
   issueRef?: string;
+  /**
+   * The repository the ISSUE input named (`owner/repo`, or `host/owner/repo`
+   * off github.com), present only for `owner/repo#N` and URL inputs. The
+   * default draft path keys on it so issue 7 of two repositories never share
+   * `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965). A bare number
+   * has none, whatever repository the adapter resolved it in.
+   */
+  namedRepo?: string;
 }
 
 // ─── Prompt assembly ────────────────────────────────────
@@ -922,7 +930,14 @@ export function resolveDefaultSpecPath(
   if (first.record) return null;
   let stem: string;
   if (first.issue) {
-    stem = String(first.issue.number);
+    // An issue fetched from a repository the INPUT named (owner/repo#N or a
+    // URL) keys its draft on that repository too: issue 7 of two repositories
+    // must not share `.totem/specs/7.md` (CodeRabbit on mmnto-ai/totem#2965).
+    // A bare number keeps `<number>.md`, whatever repository the working
+    // directory's adapter resolved it in.
+    stem = first.namedRepo
+      ? `${sanitizeSpecFilename(first.namedRepo)}-${first.issue.number}`
+      : String(first.issue.number);
   } else if (first.freeText) {
     stem = sanitizeSpecFilename(first.freeText);
     if (!stem) return null;
@@ -947,26 +962,52 @@ export interface IssueInput {
 }
 
 /**
+ * The host of an issue URL as `gh --repo` should see it: lower-cased (hosts
+ * compare case-insensitively), and github.com's `www.` alias folded to
+ * github.com — `www.github.com/owner/repo` is not a repository `gh` can read
+ * (greptile on mmnto-ai/totem#2965). No other host loses a `www.`: off
+ * github.com the host is taken as written, a GitHub Enterprise host.
+ */
+function normalizeIssueHost(host: string): string {
+  const lower = host.toLowerCase();
+  return lower === 'www.github.com' ? 'github.com' : lower;
+}
+
+/**
+ * The URL form of an issue: `https://<host>/<owner>/<repo>/issues/<n>`. The
+ * path before `/issues/` is exactly two segments — `owner/repo/actions/runs/1`
+ * is not a repository (GCA on mmnto-ai/totem#2965) — and the number ends its
+ * path segment: end of input, `/`, `?` or `#` may follow, so `/issues/7abc` is
+ * not issue 7 (CodeRabbit on mmnto-ai/totem#2965). The match is not
+ * end-anchored on purpose: a query or a fragment may follow the number, and the
+ * anchor's `ref` keeps the input as typed (see the anchor tests).
+ */
+const ISSUE_URL_RE = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/issues\/(\d+)(?=$|[/?#])/i;
+
+/** GitLab's issue path, `/-/issues/<n>` — named when a URL in that form is refused. */
+const GITLAB_ISSUE_PATH_RE = /\/-\/issues\/\d+/;
+
+/**
  * Parse one positional input as an issue: a bare number (this repository), an
- * issue URL (GitHub, a GitHub Enterprise host, GitLab or any host with
- * `/issues/<n>` or `/-/issues/<n>`) or `owner/repo#<n>`. A URL or a qualified
- * ref NAMES its repository, and the fetch must run against that repository
+ * issue URL on github.com or a GitHub Enterprise host in the form
+ * {@link ISSUE_URL_RE} names, or `owner/repo#<n>`. A URL or a qualified ref
+ * NAMES its repository, and the fetch must run against that repository
  * (mmnto-ai/totem#2943): resolving the number against the working directory's
  * repository either fails with a misleading hint or, worse, anchors the run on
- * a stranger's issue of the same number. The URL match is not end-anchored on
- * purpose (the anchor's `ref` keeps the input as typed; see the anchor tests).
- * Returns null for anything else — a topic — and for the number 0.
+ * a stranger's issue of the same number. Returns null for anything else — a
+ * topic, or a URL that {@link explainUnsupportedIssueUrl} refuses — and for the
+ * number 0.
  */
 export function parseIssueInput(input: string): IssueInput | null {
   if (/^\d+$/.test(input)) {
     const number = parseInt(input, 10);
     return number > 0 ? { number, repo: null } : null;
   }
-  const urlMatch = input.match(/^https?:\/\/([^/]+)\/(.+?)\/(?:-\/)?issues\/(\d+)/);
+  const urlMatch = input.match(ISSUE_URL_RE);
   if (urlMatch) {
-    const host = urlMatch[1]!;
-    const path = urlMatch[2]!;
-    const number = parseInt(urlMatch[3]!, 10);
+    const host = normalizeIssueHost(urlMatch[1]!);
+    const path = `${urlMatch[2]!}/${urlMatch[3]!}`;
+    const number = parseInt(urlMatch[4]!, 10);
     if (!(number > 0)) return null;
     return { number, repo: host === 'github.com' ? path : `${host}/${path}` };
   }
@@ -977,6 +1018,40 @@ export function parseIssueInput(input: string): IssueInput | null {
     return number > 0 ? { number, repo: input.slice(0, hashIdx) } : null;
   }
   return null;
+}
+
+/** The forms an issue input takes — every refusal of a URL names them. */
+const ISSUE_INPUT_FORMS =
+  'An issue input is a bare number, owner/repo#N, or https://<host>/<owner>/<repo>/issues/<n> on github.com or a GitHub Enterprise host.';
+
+/**
+ * Why a URL input is not an issue this tool can fetch, or null when the input
+ * is not a URL (a topic) or {@link parseIssueInput} accepts it. Every http(s)
+ * input is an issue URL or a refusal — never a free-text topic (CodeRabbit on
+ * mmnto-ai/totem#2965): a draft on a URL string is an unanchored run wearing
+ * an issue's clothes, and a GitLab URL handed to the GitHub adapter fails at
+ * `gh` with a message about a host it never had. The reason names what the
+ * input got wrong; the forms line says what is accepted.
+ */
+export function explainUnsupportedIssueUrl(input: string): string | null {
+  if (!/^https?:\/\//i.test(input)) return null;
+  if (parseIssueInput(input) !== null) return null;
+  let reason: string;
+  if (GITLAB_ISSUE_PATH_RE.test(input)) {
+    reason =
+      "the /-/issues/<n> path is GitLab's, and issues are fetched with gh, which reads github.com and GitHub Enterprise hosts only";
+  } else if (/\/issues\/\d+[^\d/?#]/.test(input)) {
+    // The class excludes digits so the probe cannot backtrack inside the
+    // number and read `456`'s last digit as text after `45`.
+    reason = 'text follows the issue number';
+  } else if (/\/issues\/\d+/.test(input)) {
+    reason = 'the path before /issues/ is not exactly <owner>/<repo>';
+  } else if (/\/issues\//.test(input)) {
+    reason = 'no issue number follows /issues/';
+  } else {
+    reason = 'it names no issue';
+  }
+  return `Unsupported issue URL ${input}: ${reason}. ${ISSUE_INPUT_FORMS}`;
 }
 
 // ─── Main command ───────────────────────────────────────
@@ -1084,6 +1159,21 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
     log.info(TAG, `Record: ${boundRecord.record.path} (sha256 ${boundRecord.record.sha256})`);
   }
 
+  // A URL that names no issue this tool can fetch is a refusal, never a topic
+  // (CodeRabbit on mmnto-ai/totem#2965): a draft on a URL string would be an
+  // unanchored run wearing an issue's clothes. Judged over EVERY input before
+  // the first fetch, so a mixed list fetches nothing it will then throw away.
+  for (const input of unique) {
+    const unsupportedUrl = explainUnsupportedIssueUrl(input);
+    if (unsupportedUrl !== null) {
+      throw new TotemConfigError(
+        sanitizeForTerminal(unsupportedUrl),
+        'Pass the issue as owner/repo#N or as its https://<host>/<owner>/<repo>/issues/<n> URL, or pass a topic that is not a URL.',
+        'CONFIG_INVALID',
+      );
+    }
+  }
+
   for (const input of unique) {
     const issueInput = parseIssueInput(input);
 
@@ -1107,7 +1197,15 @@ export async function specCommand(inputs: string[], options: SpecOptions): Promi
       log.info(TAG, `Title: ${issue.title}`);
       // `issueRef` keeps the input AS TYPED so the anchor's ref round-trips
       // `owner/repo#N` and URL forms (a fetched issue carries only a number).
-      parsed.push({ issue, freeText: null, record: null, issueRef: input });
+      parsed.push({
+        issue,
+        freeText: null,
+        record: null,
+        issueRef: input,
+        // The repository the INPUT named, for the draft's default path; absent
+        // on a bare number, whatever repository the adapter resolved it in.
+        ...(issueInput.repo !== null ? { namedRepo: issueInput.repo } : {}),
+      });
       queryParts.push(buildSearchQuery(issue));
     } else {
       log.info(TAG, `Topic: ${input}`);
