@@ -2,7 +2,7 @@
 
 Totem is a standard library for codebase governance — deterministic primitives that let teams enforce architectural boundaries on AI agents without opinionated workflows.
 
-This page keeps the dated history of what has shipped. Current and planned work is not mirrored here — it lives in the trackers:
+This page keeps the dated history of what shipped through 1.25.0. Current and planned work is not mirrored here — it lives in the trackers:
 
 - [Releases](https://github.com/mmnto-ai/totem/releases) — what shipped, when.
 - [GitHub Project: Convergent Spine](https://github.com/orgs/mmnto-ai/projects/1) — in-flight work.
