@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "42c20b3b756f859c27acfed1830d977543b634aa",
+  "readAt": "2026-09-25T18:38:44Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1320,
+      "claim": "With a configured totemDir other than .totem, the row reported the repository's own <repo>/.totem as untracked residue and told the user to remove it, although the mail verbs keep their orchestration tree there and the classifier requires it — pre-existing in the matcher, exposed by this fold's custom-totemDir claim, and the new multi-segment test never planted a root .totem.",
+      "counterexample": "findStrayTotemMarkers(S, 'state/totem').untracked returned ['.totem', 'x/state/totem'] on a scratch tree carrying .totem/orchestration/a/outbox."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1320,
+      "claim": "A single-segment, non-dot totemDir (totem) makes every directory of that name a stray — the reading of 'trailing segments', accepted but undisclosed.",
+      "counterexample": "With totemDir 'totem', src/totem was flagged as residue."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.test.ts",
+      "line": 1760,
+      "claim": "Nothing pinned the envWithoutGitLocation scrub: removing the env argument from checkStrayTotemMarkers passed every test; the scrub itself is correct (exported from the barrel, deletes the seven location variables, reached only by dynamic import) and the file's other git spawns stay unscrubbed, pre-existing.",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 435,
+      "claim": "The docstring, changeset and PR body said a phantom /tmp/.totem is excluded, true only where os.tmpdir() is /tmp (macOS uses /var/folders/…/T; TMPDIR overrides), and 'a reader started under the temp directory is refused' is false below a leaked fixture (this host has about twenty under %TEMP%); a TEMP naming a checkout's own root leaves that root anchoring nothing — disclosed nowhere.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1425,
+      "claim": "The unchecked-state remediation contradicted itself (no marker is called residue, then read each as residue) and disappeared when untracked and unverified markers occurred together; warn outside a repository is defensible since doctor runs in a repository by contract.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1201,
+      "claim": "The exported TrackingState's bare 'unknown' member was never returned by gitTracksPath, which returns the object form — loose typing, not dead code.",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1296,
+      "claim": "The leg-2 fold's depth cut fired for any directory at depth 9, an empty leaf included, so the row always warned 'the list may be incomplete' on this repository although its two deepest directories are empty src/ leaves under the wind-tunnel fixtures and the sweep was complete.",
+      "counterexample": "The sweep on this worktree returned truncated: true with 268 directories, none deeper than 9 segments."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 59,
+      "claim": "The Stray Markers bullet did not describe the unchecked tracking state, the unreadable count or custom totemDir matching, and the exit-2 sentence did not list the unreadable-.git refusal; the ecl-gc sentence matches its siblings.",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.test.ts",
+      "line": 1,
+      "claim": "QUESTION: the premise that the core suite runs with 0 skipped holds for git.test.ts (72/72, no skips) but not the whole package (5 platform skips in fs-atomic.test.ts, unrelated); the mail, ecl-gc, doctor, seat and send-guard suites ran 512/512 with no skips on this host now that the temp exclusion landed.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "Leg 3, scoped over the bot-round fold cd082924..42c20b3b (plus the rename-only b5c8a1ec): 0 BLOCKING, 1 MATERIAL, 8 MINOR (one a question, carried as MINOR under this branch's pre-mmnto-ai/totem#2944 schema); nothing blocks pushing the fold and presenting the disposition. Verified sound: fixtures below the temp directory still anchor and every mkdtemp suite passes; 8.3 spellings expand on both sides; the only classifier caller is resolveReaderRepoRoot and every existing caller handles the code; a symlink loop or a denied search permission never reaches the classifier (existsSync is false), the throw is reachable through a Windows ACL that permits the attribute check but denies the stat handle; the fs mock clears in finally and realpathSync.native passes through; envWithoutGitLocation is exported and scrubs all seven variables, reached only by dynamic import; on this repository from the worktree the probe answers for every stray (two minted, three fixtures, none unchecked); an unreadable root warns; the schema normalises the totemDir spellings and the multi-segment parent is descended; each new test fails on the pre-fold code except the scrub. Folded in the next commit: F1 (the literal <repo>/.totem is a second root marker whatever totemDir says — descended, never residue — and the test plants one), F2 (disclosed in the docstring), F3 (a GIT_DIR test: an inherited pointer at another repository cannot re-label a tracked fixture), F4 (the docstring, changeset and PR body speak of os.tmpdir(), the leaked-fixture and TEMP-at-a-checkout edges named as residue), F5 (one remediation for the unchecked state that does not contradict itself, carried beside the residue advice when both occur), F6 (TrackingAnswer replaces the loose type), F7 (the depth bound records a cut only when the pruned directory has something below it; an empty leaf at the bound is not a cut — tested), F8 (both docs sentences). The F1 and F7 folds change only the doctor sensor's matcher and bound, gate-exempt by construction; their RED tests are the re-check. The resolver side has converged per the leg's own verdict; the doctor row converges with these folds."
+}
