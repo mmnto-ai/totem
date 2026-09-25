@@ -221,8 +221,13 @@ async function resolveCommitSha(cwd: string, ref: string): Promise<string> {
 export async function legsDepositCommand(options: LegsDepositOptions): Promise<void> {
   const fs = await import('node:fs');
   const path = await import('node:path');
-  const { LEG_DEPOSIT_SCHEMA_VERSION, countLegFindings, saveLegDeposit, TotemError } =
-    await import('@mmnto/totem');
+  const {
+    LEG_DEPOSIT_KNOWN_MAJOR,
+    LEG_DEPOSIT_SCHEMA_VERSION,
+    countLegFindings,
+    saveLegDeposit,
+    TotemError,
+  } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
   const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   await loadSanitizer();
@@ -277,9 +282,28 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     );
   }
 
-  // The WRITER's version, always: a findings file copied from an older deposit
-  // carries that deposit's label, and a label must say what vocabulary the
-  // file may use (a 1.0 reader refuses a QUESTION; mmnto-ai/totem#2944).
+  // The WRITER's version, always — after the file's OWN label is checked. A
+  // findings file copied from an older deposit carries that deposit's label,
+  // and the label must say what vocabulary the file may use (a 1.0 reader
+  // refuses a QUESTION; mmnto-ai/totem#2944), so a declared 1.x is relabeled
+  // with the writer's. A declared version of another major, or one that is
+  // not a version at all, is REFUSED with both named: relabeling it would
+  // accept a file this writer does not understand under an inaccurate label
+  // (greptile on mmnto-ai/totem#2964).
+  const declaredVersion = fields['schemaVersion'];
+  if (declaredVersion !== undefined) {
+    const declaredMajor =
+      typeof declaredVersion === 'string' && /^\d+\.\d+\.\d+$/.test(declaredVersion)
+        ? Number.parseInt(declaredVersion.split('.')[0]!, 10)
+        : undefined;
+    if (declaredMajor !== LEG_DEPOSIT_KNOWN_MAJOR) {
+      throw new TotemError(
+        'PARSE_FAILED',
+        `The findings file declares schemaVersion ${echoSafe(String(declaredVersion))}; this writer understands major ${LEG_DEPOSIT_KNOWN_MAJOR}.x and writes ${LEG_DEPOSIT_SCHEMA_VERSION}.`,
+        'Deposit with the @mmnto/cli that wrote the file, or remove schemaVersion from the file so the writer stamps its own.',
+      );
+    }
+  }
   const schemaVersion = LEG_DEPOSIT_SCHEMA_VERSION;
 
   // Assembled as `unknown` and handed to the validate-on-write path: the

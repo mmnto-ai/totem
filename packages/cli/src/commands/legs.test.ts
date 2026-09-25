@@ -275,6 +275,27 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(written.schemaVersion).toBe('1.1.0');
   });
 
+  // greptile on mmnto-ai/totem#2964: the file's OWN label is checked before the
+  // writer's replaces it — another major is refused with both versions named,
+  // never relabeled 1.1.0 and accepted.
+  it('refuses a findings file that declares another major, naming both versions, and writes nothing', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    await expect(
+      legsDepositCommand({ from: writeFindings(findingsBody({ schemaVersion: '2.0.0' })) }),
+    ).rejects.toThrow(
+      'The findings file declares schemaVersion 2.0.0; this writer understands major 1.x and writes 1.1.0.',
+    );
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('refuses a declared schemaVersion that is not a version at all', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    await expect(
+      legsDepositCommand({ from: writeFindings(findingsBody({ schemaVersion: 'two' })) }),
+    ).rejects.toThrow('The findings file declares schemaVersion two;');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
   it('stamps readAt when neither the file nor --read-at carries one, and SAYS so', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const body = findingsBody();
