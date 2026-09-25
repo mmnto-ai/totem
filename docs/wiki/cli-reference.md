@@ -550,7 +550,7 @@ discharge obligation edges and never delete data (retention is a separate contra
 
 ### `totem ecl-gc`
 
-Prunes your own aged ECL outbox dispatches; with `--compact`, also compacts your processed-mark cursor. Self-resolving and dry-run unless `--apply` is passed. Both the prune and the compaction resolve the repository the way the poll does (the nearest `.git` toplevel, never a stray `.totem/` under a subdirectory) and refuse a linked worktree or a start outside any repository with exit `2` before any unlink (mmnto-ai/totem#2938, mmnto-ai/totem#2946, mmnto-ai/totem#2968).
+Prunes your own aged ECL outbox dispatches; with `--compact`, also compacts your processed-mark cursor. Self-resolving and dry-run unless `--apply` is passed. Both the prune and the compaction resolve the repository the way the poll does (the nearest `.git` toplevel, never a stray `.totem/` under a subdirectory) and refuse a linked worktree, a repository with no `.totem/`, or a start outside any repository with exit `2` before any unlink (mmnto-ai/totem#2938, mmnto-ai/totem#2946, mmnto-ai/totem#2968).
 
 - **Flags:**
   - `--apply`: Actually delete aged dispatches (default is a dry-run listing only).

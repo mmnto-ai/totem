@@ -1722,7 +1722,7 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
   });
 
   /** Every marker reads as minted residue: the git-tracked split is tested on its own below. */
-  const none = (): boolean => false;
+  const none = (): 'untracked' => 'untracked';
 
   it('passes when the only .totem/ is the root marker', async () => {
     fs.mkdirSync(path.join(tmpDir, '.totem', 'lessons'), { recursive: true });
@@ -1745,23 +1745,65 @@ describe('checkStrayTotemMarkers / findStrayTotemMarkers (mmnto-ai/totem#2938)',
     fs.mkdirSync(path.join(tmpDir, 'vendor', 'nested', '.git'), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, 'vendor', 'nested', '.totem'), { recursive: true });
 
-    const { untracked, tracked, truncated } = findStrayTotemMarkers(tmpDir, '.totem', none);
-    expect(truncated).toBe(false);
-    expect(tracked).toEqual([]);
-    expect([...untracked].sort()).toEqual([
+    const sweep = findStrayTotemMarkers(tmpDir, '.totem', none);
+    expect(sweep.truncated).toBe(false);
+    expect(sweep.unreadable).toBe(0);
+    expect(sweep.tracked).toEqual([]);
+    expect(sweep.unverified).toEqual([]);
+    expect([...sweep.untracked].sort()).toEqual([
       '.totem/temp/spec-x/.totem',
       'examples/fixture/.totem',
       'packages/cli/.totem',
     ]);
 
-    // The row itself, with the real git predicate: outside a git repository
-    // nothing is tracked, so every marker is residue.
+    // The row itself, with the real git probe: outside a git repository git
+    // cannot answer, so the markers are UNCHECKED — named as such, never called
+    // residue or fixture on a probe that failed (greptile on mmnto-ai/totem#2974).
     const result = await checkStrayTotemMarkers(tmpDir);
     expect(result.status).toBe('warn');
     expect(result.gateExempt).toBe(true);
-    expect(result.message).toContain('3 minted .totem/ directories');
+    expect(result.message).toContain('3 markers whose tracking could not be checked');
     expect(result.message).toContain('packages/cli/.totem');
-    expect(result.remediation).toContain('mmnto-ai/totem#2938');
+    expect(result.message).not.toContain('(untracked residue)');
+    expect(result.remediation).toContain('Tracking could not be checked');
+  });
+
+  it('a probe that cannot answer yields unverified markers carrying its error, never a tracking verdict', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'a', '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'b', '.totem'), { recursive: true });
+    const broken = (): { state: 'unknown'; error: string } => ({
+      state: 'unknown',
+      error: 'git ls-files exited 128: fatal: not a git repository',
+    });
+    const sweep = findStrayTotemMarkers(tmpDir, '.totem', broken);
+    expect(sweep.untracked).toEqual([]);
+    expect(sweep.tracked).toEqual([]);
+    expect([...sweep.unverified].sort()).toEqual(['a/.totem', 'b/.totem']);
+    expect(sweep.trackingError).toContain('exited 128');
+  });
+
+  it('an unreadable directory is counted, so a clean answer is never claimed over it', () => {
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'locked', 'inner'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'open'), { recursive: true });
+    const readDir = (dir: string): fs.Dirent[] => {
+      if (path.basename(dir) === 'locked') throw new Error('EACCES: permission denied');
+      return fs.readdirSync(dir, { withFileTypes: true });
+    };
+    const sweep = findStrayTotemMarkers(tmpDir, '.totem', none, readDir);
+    expect(sweep.untracked).toEqual([]);
+    expect(sweep.unreadable).toBe(1);
+  });
+
+  it('a multi-segment totemDir (state/totem) is matched on its trailing segments: the root marker is descended, a nested one is a stray, a literal .totem still counts', () => {
+    fs.mkdirSync(path.join(tmpDir, 'state', 'totem', 'temp'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'x', 'state', 'totem'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'y', '.totem'), { recursive: true });
+    // A directory merely named `totem` outside the configured shape is not a marker.
+    fs.mkdirSync(path.join(tmpDir, 'z', 'totem'), { recursive: true });
+    const sweep = findStrayTotemMarkers(tmpDir, 'state/totem', none);
+    expect([...sweep.untracked].sort()).toEqual(['x/state/totem', 'y/.totem']);
   });
 
   it('a committed fixture marker is named and passes; a minted one beside it warns; a run from a subdirectory reads the toplevel', async () => {

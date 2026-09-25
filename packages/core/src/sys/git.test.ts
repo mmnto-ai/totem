@@ -13,17 +13,40 @@ vi.mock('cross-spawn', () => ({
 // (mmnto-ai/totem#2946); `homedir` is redirected per test so the exclusion is
 // exercised without touching the real home directory (a frozen ESM namespace
 // cannot be spied — a module mock with a hoisted override instead).
-const osMock = vi.hoisted(() => ({ home: undefined as string | undefined }));
+const osMock = vi.hoisted(() => ({
+  home: undefined as string | undefined,
+  tmp: undefined as string | undefined,
+}));
 vi.mock('node:os', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:os')>();
   return {
     ...actual,
     default: actual,
     homedir: (): string => osMock.home ?? actual.homedir(),
+    tmpdir: (): string => osMock.tmp ?? actual.tmpdir(),
   };
 });
 
-import { TotemGitError } from '../errors.js';
+// `classifyTotemRepoRootSync` refuses a `.git` entry it cannot stat rather
+// than guessing a class (GCA on mmnto-ai/totem#2974); `statSync` is made to
+// throw for one path per test through the same module-mock shape.
+const fsMock = vi.hoisted(() => ({ statThrowFor: new Set<string>() }));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    default: actual,
+    statSync: ((p: fs.PathLike, ...rest: unknown[]) => {
+      const name = String(p);
+      for (const suffix of fsMock.statThrowFor) {
+        if (name.endsWith(suffix)) throw new Error('EACCES: permission denied, stat');
+      }
+      return (actual.statSync as (target: fs.PathLike, ...r: unknown[]) => fs.Stats)(p, ...rest);
+    }) as typeof fs.statSync,
+  };
+});
+
+import { TotemError, TotemGitError } from '../errors.js';
 import { fail, ok } from '../test-utils.js';
 import {
   classifyTotemRepoRootSync,
@@ -659,6 +682,28 @@ describe('findTotemRepoRootSync (mmnto-ai/totem#2312)', () => {
     }
   });
 
+  it('the temp directory itself never anchors the walk, while a fixture below it still does (greptile on mmnto-ai/totem#2974)', () => {
+    // `tmpdir()` redirected at a marked tmp dir — the shape of a phantom
+    // `%TEMP%/.totem` or `/tmp/.totem`: a start beneath it with no marker of
+    // its own must NOT resolve to the temp directory; a fixture one level
+    // below it, marked on its own, still anchors.
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const scratch = path.join(tmpDir, 'scratch');
+    fs.mkdirSync(scratch);
+    const fixture = path.join(tmpDir, 'suite-abc', 'repo');
+    fs.mkdirSync(path.join(fixture, '.totem'), { recursive: true });
+    osMock.tmp = tmpDir;
+    try {
+      const above = findTotemRepoRootSync(path.dirname(tmpDir));
+      const result = findTotemRepoRootSync(scratch);
+      expect(result).not.toBe(path.resolve(tmpDir));
+      expect(result).toBe(above);
+      expect(findTotemRepoRootSync(path.join(fixture, 'src'))).toBe(path.resolve(fixture));
+    } finally {
+      osMock.tmp = undefined;
+    }
+  });
+
   it('the user-level ~/.totem store never anchors the walk (mmnto-ai/totem#2946)', () => {
     // `homedir()` is redirected at a marked tmp dir: a start beneath it with no
     // marker of its own must NOT resolve to "home". The walk continues above it
@@ -703,6 +748,28 @@ describe('classifyTotemRepoRootSync (mmnto-ai/totem#2946, mmnto-ai/totem#2968)',
       kind: 'toplevel',
       root: path.resolve(tmpDir),
     });
+  });
+
+  it('a .git entry that cannot be stat-ed is REFUSED, never guessed into a class (GCA on mmnto-ai/totem#2974)', () => {
+    fs.mkdirSync(path.join(tmpDir, '.git'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'));
+    const sub = path.join(tmpDir, 'src');
+    fs.mkdirSync(sub);
+    const gitPath = path.join(tmpDir, '.git');
+    fsMock.statThrowFor.add(gitPath);
+    try {
+      let thrown: unknown;
+      try {
+        classifyTotemRepoRootSync(sub, '/elsewhere');
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(TotemError);
+      expect((thrown as TotemError).code).toBe('REPO_ROOT_REFUSED');
+      expect((thrown as TotemError).message).toContain('could not be read');
+    } finally {
+      fsMock.statThrowFor.delete(gitPath);
+    }
   });
 
   it('a .git DIRECTORY with no .totem/ is `unmarked` — a repository that is not a Totem repository (mmnto-ai/totem#2968)', () => {

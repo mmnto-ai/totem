@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { TotemGitError } from '../errors.js';
+import { getErrorMessage, TotemError, TotemGitError } from '../errors.js';
 import { safeExec } from './exec.js';
 import { matchesGlob } from './glob.js';
 
@@ -432,22 +432,33 @@ export function findRepoRootSync(start: string): string | null {
  * a separate question — {@link classifyTotemRepoRootSync} answers it for the
  * callers that must refuse a worktree.
  *
- * The home directory anchors neither arm. Its `~/.totem` is the user-level
- * store (`registry.json`, `worktrees.json`, the estate's records), not a
- * repository: without that exclusion a verb run outside any repository, on a
- * host that keeps the store, resolved the home directory as its repo root and
- * read a home-wide "workspace" as clean — the marker-less class of
- * mmnto-ai/totem#2946 wearing a marker. A `~/.git` is a dotfiles repository
- * the same way, and on Windows the temp directory sits under home, so either
- * marker there would capture every start outside a real checkout.
+ * Two directories anchor neither arm: the HOME directory and the TEMP
+ * directory. Home's `~/.totem` is the user-level store (`registry.json`,
+ * `worktrees.json`, the estate's records), not a repository: without that
+ * exclusion a verb run outside any repository, on a host that keeps the
+ * store, resolved the home directory as its repo root and read a home-wide
+ * "workspace" as clean — the marker-less class of mmnto-ai/totem#2946 wearing
+ * a marker; a `~/.git` is a dotfiles repository the same way. The temp
+ * directory is where a phantom lands: the old cwd-based send minted
+ * `%TEMP%/.totem/orchestration/<seat>/outbox` on this seat's host, and a
+ * stray `/tmp/.totem/` captures every start under `/tmp` — a reader from
+ * `/tmp/scratch` then reads an unrelated workspace as clean or marks into
+ * the stray store (greptile on mmnto-ai/totem#2974). Only the directory
+ * ITSELF is excluded: a fixture at `<tmp>/<suite>-xxxx/repo/.totem` still
+ * anchors, since it sits below the excluded directory. A stray elsewhere
+ * outside any repository (`/srv/.totem`, say) is not distinguishable from a
+ * bare fixture by shape and still anchors the `.totem/` arm — named residue.
  */
 export function findTotemRepoRootSync(start: string): string | null {
-  // The home directory is canonicalised once per walk, not once per ancestor.
-  const home = canonicalDir(os.homedir());
-  const notHome = (dir: string): boolean => !sameCanonicalDir(canonicalDir(dir), home);
+  // Both excluded directories are canonicalised once per walk, not per ancestor.
+  const excluded = [canonicalDir(os.homedir()), canonicalDir(os.tmpdir())];
+  const anchors = (dir: string): boolean => {
+    const c = canonicalDir(dir);
+    return !excluded.some((e) => sameCanonicalDir(c, e));
+  };
   return (
-    walkUpToMarker(start, (dir) => notHome(dir) && fs.existsSync(path.join(dir, '.git'))) ??
-    walkUpToMarker(start, (dir) => notHome(dir) && fs.existsSync(path.join(dir, '.totem')))
+    walkUpToMarker(start, (dir) => anchors(dir) && fs.existsSync(path.join(dir, '.git'))) ??
+    walkUpToMarker(start, (dir) => anchors(dir) && fs.existsSync(path.join(dir, '.totem')))
   );
 }
 
@@ -530,11 +541,16 @@ export type TotemRepoRootClass =
 
 /**
  * Classify the root {@link findTotemRepoRootSync} derives from
- * `repoRoot ?? cwd`. Pure fs, never throws; each caller decides what a class
- * means for its verb. The reader verbs refuse `none`, `worktree` and
- * `unmarked` (mmnto-ai/totem#2946, mmnto-ai/totem#2968); the send side has
- * its own resolver with the same shape plus the seat-hosting rule
- * (mmnto-ai/totem#2930).
+ * `repoRoot ?? cwd`. Pure fs; each caller decides what a class means for its
+ * verb. The reader verbs refuse `none`, `worktree` and `unmarked`
+ * (mmnto-ai/totem#2946, mmnto-ai/totem#2968); the send side has its own
+ * resolver with the same shape plus the seat-hosting rule
+ * (mmnto-ai/totem#2930). The one throw: a `.git` entry the walk found but
+ * `stat` cannot read (a permission hole) — a resolver that decides refusals
+ * must not guess a class from an unreadable marker, so it refuses as
+ * `REPO_ROOT_REFUSED` rather than serving the root as a toplevel (GCA on
+ * mmnto-ai/totem#2974). An ABSENT `.git` is not an error: `throwIfNoEntry`
+ * makes it `undefined`, and the root is then a `.totem`-only tree.
  */
 export function classifyTotemRepoRootSync(
   repoRootOpt: string | undefined,
@@ -548,9 +564,13 @@ export function classifyTotemRepoRootSync(
   try {
     const st = fs.statSync(gitPath, { throwIfNoEntry: false });
     if (st !== undefined) git = st.isDirectory() ? 'directory' : 'file';
-    // totem-context: best-effort by contract — a `.git` entry that cannot be stat'ed (a permission hole) is classified as the toplevel the walk already found, never thrown from a resolver every reader verb runs first.
-  } catch {
-    git = 'absent';
+  } catch (err) {
+    throw new TotemError(
+      'REPO_ROOT_REFUSED',
+      `cannot classify ${root}: its .git entry could not be read (${getErrorMessage(err)}) — refusing to guess whether it is a checkout or a worktree`,
+      'fix the permissions on that .git entry, or run the verb from a checkout you can read.',
+      err,
+    );
   }
   if (git === 'file') {
     return { kind: 'worktree', root, resident: mainCheckoutFromGitFileSync(gitPath) };
