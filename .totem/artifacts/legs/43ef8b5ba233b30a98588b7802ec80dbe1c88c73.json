@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "43ef8b5ba233b30a98588b7802ec80dbe1c88c73",
+  "readAt": "2026-09-24T22:38:04Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 579,
+      "claim": "The CLI reference still documents the old contract: three severities, a four-count success line, and an example evidence line without the question count — the patch shipped a reference page wrong about the verb it changes.",
+      "counterexample": ""
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/legs-question-severity-2944.md",
+      "line": 10,
+      "claim": "The changeset and the agent file claim doctrine's Typed deposits section carries four classes; model-tiering.md names three (lines 101 and 132) and 'question' only as a verdict value; the four-class practice is real (strategy journals record it) but is not doctrine, and the section says the agent files are its renderings.",
+      "counterexample": "D:/Dev/totem-strategy/doctrine/model-tiering.md:132 'ranked BLOCKING · MATERIAL · MINOR'; :101 'severity: BLOCKING | MATERIAL | MINOR'."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": ".claude/agents/falsification-leg.md",
+      "line": 18,
+      "claim": "The agent text said a QUESTION is 'answered rather than folded' while the schema accepts a QUESTION id in folded and counts it, raising the covariate's folded with no matching blocking or material — the ambiguity MINOR already has.",
+      "counterexample": "{findings:[Q1 QUESTION], folded:['Q1']} parses; counts question 1 folded 1; the field reads blocking=0 material=0 folded=1."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 497,
+      "claim": "The gate evidence assertion was weaker than the change: the fixture has one BLOCKING and the test asserted only the literal question=0, so a hard-coded question=0 or question=minor would pass; no gate test used a deposit carrying a QUESTION.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 280,
+      "claim": "The deposit verb kept whatever schemaVersion the findings file carried, so a file copied from a committed 1.0.0 deposit that carries a QUESTION was stored as 1.0.0 and the label did not say what vocabulary the file uses.",
+      "counterexample": "{schemaVersion:'1.0.0', findings:[QUESTION]} parses and is stored as 1.0.0."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/legs-question-severity-2944.md",
+      "line": 10,
+      "claim": "The changeset stated the old reader's refusal but not its consequence: a legs-owed push blocks when the gate runs on a pre-1.1 CLI (a worktree whose dist predates the merge, or an older global), with the named sensor line — failing closed is right, and it should be said.",
+      "counterexample": "The 2.11.1 core's loadLegDeposits on a QUESTION deposit: corrupt with 'schema-invalid: findings.0.severity: Invalid enum value … received QUESTION'."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 584,
+      "claim": "The evidence line printed question= but still not minor=, an unexplained asymmetry against the issue's proposed line and the changeset's own reasoning.",
+      "counterexample": "… covers 1/1 owed paths · blocking=0 material=0 question=1 folded=1"
+    },
+    {
+      "id": "F8",
+      "severity": "QUESTION",
+      "file": ".changeset/legs-question-severity-2944.md",
+      "line": 2,
+      "claim": "Patch or minor? The diff adds a severity value the verb accepts and a required member to the exported LegFindingCounts; precedent shipped the hooks.legsOwed.enforce knob as minor; all consumers are internal.",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 268,
+      "claim": "The 'as never' cast on writeFindings' argument is unnecessary (the helper takes unknown); cosmetic.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "Leg 1 over 43ef8b5b: 0 BLOCKING, 2 MATERIAL, 6 MINOR, 1 QUESTION, nothing blocking; consumers, the covariate field (byte-identical with a question present), the CI readers (exit codes only), the version handling, the QUESTION-only deposit, the tests' RED on the old code and the gates all verified clean. All nine folded at the next commit: the reference page; the changeset and agent text cite the practice and the issue, with the doctrine amendment named as owed in the strategy lane; a folded question is 'answered, then marked folded'; a gate test with a QUESTION-bearing deposit; the writer always stamps its own schemaVersion; the old-reader consequence stated; minor= on the evidence line beside question=; the bump raised to minor for cli and core; the cast dropped."
+}

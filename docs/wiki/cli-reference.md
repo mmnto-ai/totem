@@ -577,12 +577,12 @@ The two verbs over the falsification-leg deposit store under `<totemDir>/artifac
 
 `totem legs deposit --sha <ref> --from <file> [--replace] [--read-at <iso>]` is the single writer.
 
-- `--from <file>` (required): the leg's findings JSON. Each finding carries `id` (unique, `[A-Za-z0-9_-]{1,32}`), `severity` (`BLOCKING` | `MATERIAL` | `MINOR`), `file`, `line`, `claim` and `counterexample`; `folded` may only name ids that exist in `findings`.
+- `--from <file>` (required): the leg's findings JSON. Each finding carries `id` (unique, `[A-Za-z0-9_-]{1,32}`), `severity` (`BLOCKING` | `MATERIAL` | `MINOR` | `QUESTION` — a question for the seat, counted beside the three, never in blocking or material), `file`, `line`, `claim` and `counterexample`; `folded` may only name ids that exist in `findings`.
 - `--sha <ref>` (default `HEAD`): the head the leg read, resolved through `git rev-parse --verify <ref>^{commit}`. A ref that is not a commit in this repository is refused by name, and a file whose own `diffSha` disagrees with the resolved sha is refused naming both — a deposit must name the head it read.
 - `--replace`: overwrite an existing deposit for this sha. Without it an occupied address is refused, carrying the incumbent's `readAt`; with it, the replaced instant is printed.
 - `--read-at <iso>`: the leg's own instant. Absent from both the flag and the file, `now` is stamped and the substitution is printed (`readAt defaulted to … — pass --read-at for the leg's own instant`), because ties between deposits are broken on it.
 
-The write is validated before the filesystem is touched, so a refused deposit leaves no file and no temp behind; a schema violation is reported with its path (`findings.0.severity`, `folded.0`). On success the stored path is printed with `blocking=N material=N minor=N folded=N`.
+The write is validated before the filesystem is touched, so a refused deposit leaves no file and no temp behind; a schema violation is reported with its path (`findings.0.severity`, `folded.0`). On success the stored path is printed with `blocking=N material=N minor=N question=N folded=N`; the deposit is written with the writer's `schemaVersion` when the findings file carries no label or a 1.x label, and a file that declares another major (or a value that is not a version) is refused with both versions named, never relabeled and accepted.
 
 `totem legs gate [--advisory]` is the reader the managed pre-push hook and the CI arm call. It judges `HEAD` and only `HEAD` — there is deliberately no flag for choosing another, because a caller-chosen head turns a block into a pass (a deposit written on a sibling branch answers for a commit the push does not contain). It writes nothing, and it never judges a finding's severity or disposition — the floor is that a leg read this diff.
 
@@ -599,7 +599,7 @@ A push is legs-owed when a changed path in the branch-vs-base diff matches `hook
 A deposit answers for its own head and for every descendant of it (ancestor-or-equal), with the exact read outranking the nearest ancestor — and, for an ancestor, only when it COVERS at least one of the owed paths (the branch diff up to its own head, intersected with what this push owes). The pass line carries the read's age, how far the head has moved since, and how much of the owed set that read could have seen, so a stale-but-valid pass is visible rather than silent:
 
 ```text
-[Totem] legs evidence: .totem/artifacts/legs/b7d3e0a1f4c25e6890ab3d71c0e4f2a8b95d6c37.json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · covers 2/3 owed paths · blocking=2 material=1 folded=3
+[Totem] legs evidence: .totem/artifacts/legs/b7d3e0a1f4c25e6890ab3d71c0e4f2a8b95d6c37.json (read 2026-09-02T04:00:00.000Z, 1 days old) · head 4f21ab90 · nearest ancestor, +3 commits since the leg read · covers 2/3 owed paths · blocking=2 material=1 minor=0 question=0 folded=3
 ```
 
 Owed with nothing fresh names the basis — which glob matched which file — plus every stale candidate with its own reason, and the cure:
