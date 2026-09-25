@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ac0a4d3d91924863824fc633ad1762aa1b616572",
+  "readAt": "2026-09-25T00:30:51Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1252,
+      "claim": "The leg-1 fold made a depth overrun set truncated, and the unchanged early return at the top of walk then ended the whole sweep at the first deep branch instead of pruning it, so a sibling stray at depth 1 sorted after that branch was missed and the row always reported its bounds; the new depth test asserted only the flag.",
+      "counterexample": "A root holding a/1/…/9 and z/.totem/temp swept to {untracked: [], truncated: true}; on this repository the row missed the tracked wind-tunnel good/.totem fixture leg 1 had seen."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/reader-root-toplevel-2938.md",
+      "line": 10,
+      "claim": "The home exclusion now covers both reader arms while resolveSendRepoRoot walks to the nearest .git directory without it, so the parity headline is false at home, and the older divergence on .totem-only trees (reader serves, send refuses) was not named either.",
+      "counterexample": "With a fake home holding ~/.git and ~/.totem/orchestration/totem-claude, a reader start at ~/projects/x (a .totem-only tree) is served as toplevel while the send writes ~/.totem/orchestration/totem-claude/outbox/…probe.md; from ~/projects/nonrepo and ~ the reader refuses or resolves elsewhere and the send writes into ~/.totem again."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 582,
+      "claim": "lastIndexOf('/worktrees/') was unanchored, so a submodule pointer or a separate git dir under any directory named worktrees named the wrong resident (this operator keeps checkouts under D:/Dev/worktrees/).",
+      "counterexample": "gitdir: /srv/worktrees/super/.git/modules/x named C:\\srv; gitdir: /srv/worktrees/repo named C:\\srv; gitdir: /srv/super/.git/modules/sub/worktrees/w named the modules store."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 1476,
+      "claim": "Leg 1's F4 was half folded: the Fix line prints once and the exit code is 2, but the prefix still doubled ('[Totem Error] [Totem Error] not a totem repository…').",
+      "counterexample": "ecl-gc from a plain .git repository printed the doubled prefix, then the Fix line, exit 2."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.test.ts",
+      "line": 601,
+      "claim": "Two pre-existing walker tests kept vacuous guards (a null-or-absolute fallback) and reported passed on this host while the four folded tests skipped visibly.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1219,
+      "claim": "isTracked ran twice per stray (two git spawns each) and git ls-files -- <rel> treated the path as a pathspec, so a directory name holding *, ? or [ would glob-expand; an ignored-but-present deliberate fixture reads as residue (none exists on this repository).",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 444,
+      "claim": "QUESTION: the none refusal is defeated wherever an ancestor outside any repository holds a stray .totem — this host's phantom %TEMP%/.totem serves a start under Temp as toplevel with workspace C:/Users/jmatt/AppData/Local, the false-clean case mmnto-ai/totem#2946 meant to close; it follows from the bare-fixture contract and the fold treated it only as a reason for tests to skip.",
+      "counterexample": "A reader start under %TEMP% outside any repository resolved C:/Users/jmatt/AppData/Local/Temp as its repo root."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 455,
+      "claim": "realpathSync.native(home) was recomputed for every ancestor (about three filesystem calls per ancestor per arm, roughly 126 for a start 20 levels deep outside any repository); no caller loops the walker, so the cost was negligible, and a drive root, a trailing separator and an absent start neither throw nor confuse home.",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1806,
+      "claim": "Comment nits: the --as branch said a worktree is refused 'above' though the resolver call sits below it, and the resolveTotemRepoRootSync docstring named the seat refusal a follow-up without citing mmnto-ai/totem#2970.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9"
+  ],
+  "verdict": "Leg 2, re-armed and scoped over the leg-1 fold 06031857..ac0a4d3d: 0 BLOCKING, 2 MATERIAL, 7 MINOR (one a question, carried as MINOR under this branch's pre-mmnto-ai/totem#2944 schema); nothing blocks presenting as a safety matter — every refusal fires before any read or write and no reproduction minted a store through the reader. Verified sound: the unmarked class reaches every reader verb and never a .totem-only tree; a .totem that is a file or a junction is unmarked and the reader and the send agree on marked, unmarked, stray-beneath, file, junction and worktree layouts; the full cli suite (184 files) and core's git suite pass with the row async; both .git-only reader fixtures were updated; no hook polls from a .totem-less repository; the hook catch yields scanError; the row roots correctly from a worktree and from subdirectories; the leg-1 deposit's folded list matches the diff except the half-folded F4 and the two regressions its F6 and F11 folds carried. Folded at 0258d0a9: F1 (the depth bound prunes its branch, the breadth bound aborts; the test plants a sibling stray), F3 (the pointer parser anchored to /worktrees/<name> under a git directory, five pointer shapes tested), F4 (the prefix printed once), F5 (visible skips), F6 (--literal-pathspecs, one probe per stray), F8 (home canonicalised once per walk), F9 (the comments); F2 and F7 by disclosure — the changeset scopes the parity claim to the toplevel preference and the three refusals and names the home and .totem-only divergences and the stray-ancestor residue; the send's own home exclusion is filed as mmnto-ai/totem#2972. Convergence NAMED per the leg's own criterion: F1 and F3 folded as described, F2 taken as disclosure, nothing rewired, no further leg."
+}
