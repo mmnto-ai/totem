@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "635737b269cf31400f57c47de9ffb431b1357d6b",
+  "readAt": "2026-09-23T22:18:05Z",
+  "findings": [
+    {
+      "id": "b2-F1",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 19,
+      "claim": "The stacking disclosure names only the base and the retarget to main; the translation-pin D2 manifest refresh (0689f778) is not in the notes.",
+      "counterexample": "Four foreseeable conflicts are not disclosed. (a) .totem/compile-manifest.json compiled_at/records_hash lines are edited on both branches (bf0cc635 and batch-1's intake-pin refresh vs 0689f778), so a conflict is certain after batch 1 squash-merges. (b) Prereg 3.3 drops a review-rejected batch-1 entry from the envelope at batch 1's intake pin, so batch 2's copy of batch-1's 14 entries conflicts or reintroduces them. (c) judgedBy is inside structuralEligibility, which feeds authoringContentHash (packages/cli/src/authored-rule-intake.ts:668-689; :696 upsert reads revised), so batch 2's intake under static-whitelist@gate5-<set2Sha8> re-judges every carried batch-1 entry as revised (prereg 3.3 calls that an apparatus fault); without batch-1's ledger rows merged forward they mint again and authoring-ledger.ndjson hits an add/add conflict. (d) After a squash, 49754e9c is not an ancestor of main: bring forward by merge (legs gate matches by ancestry), and a raw base-ref delete closes mmnto-ai/totem#2947. pr 2945 vs 2947 is inert under the free-text splitRef (:516-579), so not a problem. FOLDED: the notes' stacking paragraph names (a)-(d), the sequencing rule they impose (batch 2's intake only after batch 1 merges and main is merged in by MERGE, the envelope reconciled to batch 1's post-intake entries with the generator's --exclude, the ledger rows carried forward, the manifest refreshed again), and the D2 refresh at this pin; the pin mail's 8 (a) says the same; verified at source by the seat (authored-rule-intake.ts structuralEligibility inside authoringContentHash; the prereg 3.3 sentence)."
+    },
+    {
+      "id": "b2-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 33,
+      "claim": "The generalized harness's fidelity leg re-verifies the copy with the real parser.",
+      "counterexample": "mig-harness.mjs:568-574 excuses any payload difference under a declared (ii) as 'payload (inventory ii)'; :569 checks only that requires is present. The target pattern and requires.pattern of 638d6fcc, 24f112fe and 487a0a23 are checked by nothing pinned, and a narrowed payload would pass C3 as window-widened. This leg confirmed each is the legacy pattern with exactly one contiguous lookahead substring removed and requires = the lookahead body. FOLDED: the Method bullet now states the gap on the three (ii) rows and cites the generator's assertion and this leg's independent check; the per-rule notes quote both sides for the scorer's C3 read."
+    },
+    {
+      "id": "b2-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 56,
+      "claim": "(ii) is the honest first-class translation and the widening is a measurement, not a choice.",
+      "counterexample": "Charter 7(b) offers keep-verbatim or (ii) 'where the lookaround is a must-contain'. The notes (:49-50) concede a verbatim pattern parses and lowers, and rule-record.ts/record-lower.ts have no lookaround gate, so the two removed firings (hook-run.ts:5 a real weakening) follow from the seat's choice. 487a0a23's lookaheads are exemptions (notes :330), not must-contains; they qualify only under C3's mechanical rule for any lookaround. FOLDED: the bullet now states the choice and its ground (C3's 'no opaque escape or regex hack standing in for a first-class construct' read with 2 item 8's line window) and that 487a0a23's two lookaheads are exemptions qualifying under C3's mechanical rule for any lookaround, not under the charter's must-contain wording."
+    },
+    {
+      "id": "b2-F4",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 209,
+      "claim": "638d6fcc's must-contain is bounded by the call's closing parenthesis; the widening is only shell: outside the call and after the target.",
+      "counterexample": "[^)]* stops at the FIRST ')', possibly inside an argument, and the line window also covers text before the target. Legacy fires and the record is silent on execFileSync('git', a.map(f()), { shell: true }) and on const o={ shell: true }; execFileSync('git', ['x']). The tree delta is still 0. FOLDED: the per-rule note describes the window as the text up to the first ')' and the line window as covering text before the target, quotes both shapes (reproduced by the seat under both matchers), and keeps the measured zero delta."
+    },
+    {
+      "id": "b2-F5",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 97,
+      "claim": "The whitelist keys on the (engine, class) pair, so a batch-1 class name under the other engine is simply a new pair.",
+      "counterexample": "Correct per packages/core/src/spine/authored-rule.ts:385-389, but the header at packages/cli/src/commands/authored-whitelist.ts:11-13 says a class under two engines is AMBIGUOUS, so non-decidable, and is not flagged for the review. basis is whitelist:<class> with no engine (authored-rule.ts:390), so (regex|ast-grep, forbidden-callee-call) admissions would carry the same basis string. FOLDED: a disclosure for the class review and the delivery PR added to the Method's classes bullet and to the pin mail (8 (k)); verified at source by the seat."
+    },
+    {
+      "id": "b2-F6",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/prepin-intake.log",
+      "line": 1,
+      "claim": "The pre-pin pass ran in a scratch clone at 4732a1c4 and the intake exited 1, recorded by the logs.",
+      "counterexample": "4732a1c4 appears only in the notes (:427). prepin-validate.log's K4 header names the clone path, not its commit. prepin-intake.log has no header, invocation or exit code, so exit 1 is attested only in prose (same shape as batch 1). FOLDED: prepin-run.txt beside the logs attests the clone commit, both invocations and both exit codes; the captured logs stay verbatim; the notes point at it."
+    },
+    {
+      "id": "b2-F7",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-2/mig-translation-notes.md",
+      "line": 171,
+      "claim": "The emoji pattern's lone surrogates match any surrogate code unit.",
+      "counterexample": "The legacy code units run d83c-dbff and dc00-dfff; lone high surrogates D800-D83B do not match. 'Any astral character' holds only through the DC00-DFFF low range. FOLDED: reworded — code-unit classes, high surrogates from D83C up and every low surrogate, so every astral character matches through its low surrogate."
+    }
+  ],
+  "folded": [
+    "b2-F1",
+    "b2-F2",
+    "b2-F3",
+    "b2-F4",
+    "b2-F5",
+    "b2-F6",
+    "b2-F7"
+  ],
+  "verdict": "Leg 1 over 49754e9c..635737b2 (Gate 5 batch 2): 0 BLOCKING, 1 MATERIAL, 6 MINOR. Fidelity, (ii) record-subset-of-legacy, C5 scope sets, envelope, census, the harness replay (byte-identical JSONL) and the emoji round trip all converged; convergence once F1 lands as a disclosure plus sequencing rule and F2-F7 are reworded, with a re-armed leg owed only if the F1 fold changes the envelope shape or the intake order."
+}

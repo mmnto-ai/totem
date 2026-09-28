@@ -1,0 +1,27 @@
+schemaVersion: 1
+severity: warning
+message: Windows requires shell:true for git binary resolution
+
+target:
+  type: regex
+  pattern: execFileSync\s*\(\s*['"]git['"]
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.tsx'
+      - '**/*.jsx'
+
+requires:
+  pattern: shell:\s*(?:true|IS_WIN)
+  scope: line
+
+examples:
+  - bad: execFileSync('git', ['rev-parse', 'HEAD']);
+    good: "execFileSync('git', ['rev-parse', 'HEAD'], { shell: IS_WIN });"
+
+curation:
+  sourceLesson: lesson-638d6fcc8a601da0
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

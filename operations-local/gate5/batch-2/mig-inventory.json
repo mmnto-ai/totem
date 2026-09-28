@@ -1,0 +1,75 @@
+{
+  "_schema": "gate5-declared-inventory/1",
+  "_batch": 2,
+  "_positions": "manifest rules[] positions 14-26 (ranks 77-141)",
+  "_inventory": {
+    "i": "negated legacy globs -> excludeGlobs (positive form)",
+    "ii": "a must-contain lookaround -> requires: (the line window): the negative lookahead removed from the pattern as one exact substring, its body less the window prefix it carried becoming requires.pattern — declared on 638d6fcc, 24f112fe and 487a0a23 (the three target-adjacent lookaheads of this batch; the widening is measured at the firing-set leg, not decided here)",
+    "iii": "the N-record language split; a language whose legacy globs match zero files in the pinned tree 5293614b is not written (R14's rule, scoring.md item 5), the count disclosed in the notes"
+  },
+  "5afaf8d03f059a41": {
+    "inventory": [],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "329479bf34f8816f": {
+    "inventory": ["iii"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "638d6fcc8a601da0": {
+    "inventory": ["ii"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "06282905d061ca34": {
+    "inventory": ["iii"],
+    "records": 2,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "24f112fe3a6679bd": {
+    "inventory": ["i", "ii"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "fb05f895862808e6": {
+    "inventory": ["i"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "81f72c855eba4229": {
+    "inventory": [],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "3c7773706e5b3b2d": {
+    "inventory": [],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "487a0a23bd24569d": {
+    "inventory": ["i", "ii"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "7cdfa1069477b69a": {
+    "inventory": ["i"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "f202f65f8a198f18": {
+    "inventory": ["iii"],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "2d3ac4b9516ed9b6": {
+    "inventory": [],
+    "records": 1,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  },
+  "240f19cae3e56b10": {
+    "inventory": ["i", "iii"],
+    "records": 2,
+    "expect": { "validate": "compiled", "differential": "differential-satisfied" }
+  }
+}

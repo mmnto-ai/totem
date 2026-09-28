@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: 2026-03-06T05:32:34.074Z
+
+target:
+  type: regex
+  pattern: Promise\.allSettled
+  scope:
+    fileGlobs:
+      - '**/cli/**/*.ts'
+      - '**/totem/**/*.ts'
+      - '**/orchestrator/**/*.ts'
+
+examples:
+  - bad: const results = await Promise.allSettled(tasks);
+    good: const results = await Promise.all(tasks);
+
+curation:
+  sourceLesson: lesson-81f72c855eba4229
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

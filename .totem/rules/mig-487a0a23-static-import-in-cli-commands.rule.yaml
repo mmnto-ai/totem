@@ -1,0 +1,26 @@
+schemaVersion: 1
+severity: warning
+message: Static top-level imports from heavy internal packages delay
+
+target:
+  type: regex
+  pattern: ^import\s+.*from\s+['"](?:\.\.\/|@[\w-]+\/)
+  scope:
+    fileGlobs:
+      - packages/cli/src/commands/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+
+requires:
+  pattern: type\s|\s*\{[^}]*Error
+  scope: line
+
+examples:
+  - bad: import { runIndex } from '../core/index.js';
+    good: const { runIndex } = await import('../core/index.js');
+
+curation:
+  sourceLesson: lesson-487a0a23bd24569d
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

@@ -1,0 +1,27 @@
+schemaVersion: 1
+severity: error
+message: Forbid direct child_process — use safeExec
+
+target:
+  type: regex
+  pattern: (?:from|require\()\s*['"](?:node:)?child_process['"]
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+    excludeGlobs:
+      - packages/core/src/sys/**
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+      - '**/*.test.js'
+      - '**/*.spec.js'
+
+examples:
+  - bad: import { execSync } from 'node:child_process';
+    good: import { safeExec } from '@mmnto/totem';
+
+curation:
+  sourceLesson: lesson-fb05f895862808e6
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

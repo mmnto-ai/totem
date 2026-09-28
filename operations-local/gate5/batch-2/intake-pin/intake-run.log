@@ -1,0 +1,8 @@
+[RuleAuthor] 7 authored rule(s): 7 minted, 0 revised, 0 unchanged.
+  + 6e5b15c0ae7e2285  totem-claude :: 5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere
+  + c032b983b4d29fd5  totem-claude :: 329479bf34f8816f: Use .min(1) on string schemas in config arrays
+  + 908731caddc8d971  totem-claude :: 06282905d061ca34@javascript: Diagnostic hints must precisely identify the underlying
+  + 69318419666ecf84  totem-claude :: 06282905d061ca34@typescript: Diagnostic hints must precisely identify the underlying
+  + ddfb040050ecb87b  totem-claude :: f202f65f8a198f18: When testing expected failures, assert the specific error
+  + cb8d7b8c83a6da34  totem-claude :: 240f19cae3e56b10@javascript: Throwing specific error classes like TotemParseError
+  + feae92d194761d35  totem-claude :: 240f19cae3e56b10@typescript: Throwing specific error classes like TotemParseError

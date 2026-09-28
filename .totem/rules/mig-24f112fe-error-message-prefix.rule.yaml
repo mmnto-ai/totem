@@ -1,0 +1,27 @@
+schemaVersion: 1
+severity: error
+message: Standardize exception messages with a consistent prefix
+
+target:
+  type: regex
+  pattern: \bnew\s+\w*Error\(\s*['"`]
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+    excludeGlobs:
+      - '**/*.test.ts'
+
+requires:
+  pattern: \[Totem Error\]
+  scope: line
+
+examples:
+  - bad: throw new Error('bad config');
+    good: throw new Error('[Totem Error] bad config');
+
+curation:
+  sourceLesson: lesson-24f112fe3a6679bd
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

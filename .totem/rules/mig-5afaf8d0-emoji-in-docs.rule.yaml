@@ -1,0 +1,21 @@
+schemaVersion: 1
+severity: warning
+message: Emojis are not allowed in documentation files — project standards require professional formatting without emoji characters
+
+target:
+  type: regex
+  pattern: "[☀-➿\ud83c-􏰀-\udfff⌀-⏿⭐-⭕⌚-⌛▪-◾☔-☕♈-♓⚪-⚫✅✔✖❌❎❓-❕❗➡⤴-⤵©®‼⁉⃣〰〽㊗㊙]"
+  scope:
+    fileGlobs:
+      - '**/*.md'
+      - '**/*.mdx'
+
+examples:
+  - bad: '## Results ✅'
+    good: '## Results'
+
+curation:
+  sourceLesson: lesson-5afaf8d03f059a41
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3
