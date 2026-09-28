@@ -187,6 +187,15 @@ test('deadline covers the measured 7-minute propagation', () => {
   );
 });
 
+test('deadline covers a staged promotion: the measured 20-minute stage plus margin', () => {
+  // mmnto-ai/totem#2953: on the 2.11.1 cut the registry staged @mmnto/cli for
+  // 20 min 19 s (E404 on the version, E409 on a re-publish) before promoting it.
+  assert.ok(
+    VISIBILITY_DEADLINE_MS >= 22 * 60_000,
+    `VISIBILITY_DEADLINE_MS = ${VISIBILITY_DEADLINE_MS}ms, expected >= ${22 * 60_000}ms (mmnto-ai/totem#2953 measured 20m19s)`,
+  );
+});
+
 test('a persistently invisible package is polled until the deadline, not a fixed attempt count', async () => {
   const clock = fakeClock();
   // Local mirrors of the shipped defaults, for the assertions only: the

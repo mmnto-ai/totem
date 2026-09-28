@@ -1,0 +1,12 @@
+[RuleAuthor] 11 authored rule(s): 11 minted, 0 revised, 0 unchanged.
+  + 2570e3a8e586b038  totem-claude :: 427c97fb0063f0cb: Avoid using partial matchers like toContain when testing
+  + 50607353e7df1a01  totem-claude :: 71935fe9a742137b@javascript: Using String() casting on input patterns can lead to silent
+  + 0c8013d89fad7e27  totem-claude :: 71935fe9a742137b@typescript: Using String() casting on input patterns can lead to silent
+  + d811d974ef7502eb  totem-claude :: 4f283f5495489a19: Replacing inline fs.rmSync calls with a shared helper
+  + c44ad4f8085381c7  totem-claude :: bc8b99e815c3943f: Standard console.log or console.error calls in MCP tools
+  + c16cbd890dc398ea  totem-claude :: 2266fc0dfe824f24: Static top-level imports from heavy internal packages delay
+  + 2095327f92d4e486  totem-claude :: 87aff037d7de47a7: Ban fail-open catch blocks that skip re-throwing
+  + 417585267efbff76  totem-claude :: a1fd35ee696110b0: Dynamic imports intended for performance optimization
+  + fe1af7a58d7469b8  totem-claude :: 61bb8b8b88d2ecab: Perform explicit null and type checks on the results
+  + 923841006dd9c024  totem-claude :: 6ad0d4d5c760a5d6: Technical documentation must avoid marketing-centric terms
+  + c8442aeefa7b31f0  totem-claude :: 1210f02da9f16e5b: Using domain-specific error subclasses instead of raw Error

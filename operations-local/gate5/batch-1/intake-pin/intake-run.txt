@@ -1,0 +1,20 @@
+Gate (5) batch 1 — intake pin (pre-registration § 3.3), the seat's attestation of what the captured log beside this file does not print itself.
+
+apparatus:    strategy 682cd362 (mmnto-ai/totem-strategy#1428) — the re-freeze after batch 1, named per the scorer's 08:50Z receipt; the class set delivered 2026-09-24T00:28:55Z (corrected 01:05Z) from the class-review table at 729fa215
+class set:    mmnto-ai/totem#2949 → main 0279deec (the five ast-grep rows; set id static-whitelist@gate5-6cba5706); cut as @mmnto/cli 2.11.1 (Version Packages mmnto-ai/totem#2951 → main 7e375235; Release run 35977740363: the cli publish STAGED by the registry for ~20 min, visible 2026-09-24T09:13:11Z, provenance attested)
+checkout:     D:/Dev/worktrees/totem-totem-claude-gate5-b1 on gate5/batch-1-2263305c (the checkout of record — the ledger rows are committed here, never a scratch clone)
+envelope:     4943e0ebd7eb3f19ee8c96422a0894a73eae1b30 — 14 → 11 entries: 54140f59, a190836d, 7056157a kept out (intake-ineligible (engine-typing)); 6ad0d4d5 kept under the operator's (A); the header and every kept entry byte-identical (asserted by the reconciliation script); no record changed
+staging:      <scratchpad>/staging-2.11.1 — a fresh `npm i @mmnto/cli@2.11.1 @mmnto/totem@2.11.1` of the PUBLISHED versions (never a workspace build)
+K4 header:    @mmnto/cli 2.11.1 · @mmnto/totem 2.11.1 · @ast-grep/napi 0.42.3 · node v24.16.0; `npm audit signatures` in the staging install: 13 packages have verified attestations; `npm view @mmnto/cli@2.11.1 dist.attestations`: provenance predicateType https://slsa.dev/provenance/v1; the published dist carries the five delivered rows and the set id (grep in node_modules/@mmnto/cli/dist/commands/authored-whitelist.js)
+precondition: no .totem/spine/authoring-ledger.ndjson in the checkout before the run (asserted)
+
+intake (cwd = the checkout root; the published binary runs itself):
+  TOTEM_NO_REEXEC=1 node <staging>/node_modules/@mmnto/cli/dist/index.js rule author --judged-by static-whitelist@gate5-6cba5706
+  started:    2026-09-24T09:15:12Z
+  ended:      2026-09-24T09:15:17Z
+  exit code:  0  (intake-exit.txt)
+  captured:   intake-run.log (stdout + stderr, verbatim): 11 authored rule(s): 11 minted, 0 revised, 0 unchanged; 0 rejected
+  ledger:     .totem/spine/authoring-ledger.ndjson — 11 rows, every row structuralEligibility.judgedBy = static-whitelist@gate5-6cba5706, decidable 11/11; committed on the branch
+  minted:     2570e3a8e586b038 (427c97fb) · 50607353e7df1a01 (71935fe9@javascript) · 0c8013d89fad7e27 (71935fe9@typescript) · d811d974ef7502eb (4f283f54) · c44ad4f8085381c7 (bc8b99e8) · c16cbd890dc398ea (2266fc0d) · 2095327f92d4e486 (87aff037) · 417585267efbff76 (a1fd35ee) · fe1af7a58d7469b8 (61bb8b8b) · 923841006dd9c024 (6ad0d4d5, the exemplar row, under (A)) · c8442aeefa7b31f0 (1210f02d)
+
+attested by totem-claude, 2026-09-24.

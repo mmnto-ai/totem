@@ -48,8 +48,12 @@ import { writeFileAtomicSync } from '../fs-atomic.js';
 
 // ─── Schema version (mirrors the RunArtifact / panel F1 policy) ─────────────
 
-/** The leg-deposit schemaVersion WRITTEN by this code. Readers accept any 1.x. */
-export const LEG_DEPOSIT_SCHEMA_VERSION = '1.0.0';
+/**
+ * The leg-deposit schemaVersion WRITTEN by this code. Readers accept any 1.x.
+ * 1.1.0: the severity vocabulary gains QUESTION (mmnto-ai/totem#2944) — an
+ * additive change a 1.0 reader refuses only on a deposit that carries one.
+ */
+export const LEG_DEPOSIT_SCHEMA_VERSION = '1.1.0';
 
 /** The major this reader understands; another major needs a migration entry. */
 export const LEG_DEPOSIT_KNOWN_MAJOR = 1;
@@ -127,11 +131,15 @@ function requiredControlFreeText(label: string): z.ZodEffects<z.ZodString, strin
  * The leg's severity vocabulary. Deliberately NOT the verdict family's
  * CRITICAL/WARN/INFO: a leg deposit answers "what did the leg find", and the
  * doctrine spelling for that is BLOCKING (the fold must land) / MATERIAL (the
- * seat rules) / MINOR (disclosed). Order here is documentation order; the
- * value is data. One spelling — {@link LegFindingSeveritySchema} is built
- * from this array, never a second literal list.
+ * seat rules) / MINOR (disclosed) / QUESTION (a question for the seat: answered,
+ * and marked folded once answered, so it counts in `folded` like any answered
+ * finding; counted beside the three, never in blocking or material —
+ * mmnto-ai/totem#2944, the typed-deposit shape's fourth class). Order here is
+ * documentation order; the value is data. One spelling —
+ * {@link LegFindingSeveritySchema} is built from this array, never a second
+ * literal list.
  */
-export const LEG_FINDING_SEVERITIES = ['BLOCKING', 'MATERIAL', 'MINOR'] as const;
+export const LEG_FINDING_SEVERITIES = ['BLOCKING', 'MATERIAL', 'MINOR', 'QUESTION'] as const;
 
 export type LegFindingSeverity = (typeof LEG_FINDING_SEVERITIES)[number];
 
@@ -737,6 +745,8 @@ export interface LegFindingCounts {
   blocking: number;
   material: number;
   minor: number;
+  /** Questions for the seat — beside the three, never inside them (mmnto-ai/totem#2944). */
+  question: number;
   /** `folded.length` — the ids the seat folded, which are STILL counted above. */
   folded: number;
 }
@@ -747,17 +757,20 @@ export interface LegFindingCounts {
  * A folded finding is still a finding: it is counted in its severity bucket
  * AND in `folded`. The covariate prints both, so a reader can see "3 blocking,
  * 3 folded" (all addressed) apart from "3 blocking, 0 folded" (none were).
+ * Every severity has its own bucket — a QUESTION is never re-typed as MINOR.
  */
 export function countLegFindings(deposit: LegDeposit): LegFindingCounts {
   let blocking = 0;
   let material = 0;
   let minor = 0;
+  let question = 0;
   for (const finding of deposit.findings) {
     if (finding.severity === 'BLOCKING') blocking++;
     else if (finding.severity === 'MATERIAL') material++;
-    else minor++;
+    else if (finding.severity === 'MINOR') minor++;
+    else question++;
   }
-  return { blocking, material, minor, folded: deposit.folded.length };
+  return { blocking, material, minor, question, folded: deposit.folded.length };
 }
 
 /**

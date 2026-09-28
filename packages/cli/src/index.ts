@@ -79,7 +79,12 @@ function handleError(err: unknown): never {
     console.error('  (Set TOTEM_DEBUG=1 for full stack trace)');
   }
 
-  process.exit(1);
+  // A refusal to read or write in the wrong place (`REPO_ROOT_REFUSED`: a mail
+  // reader verb started outside any repository or inside a linked worktree —
+  // mmnto-ai/totem#2946, mmnto-ai/totem#2968) exits 2, the NOT-DERIVED family
+  // the poll's own identity arms use: nothing was derived, and the cure is the
+  // directory, not the code. Every other error keeps the boundary's exit 1.
+  process.exit(err instanceof Error && 'code' in err && err.code === 'REPO_ROOT_REFUSED' ? 2 : 1);
 }
 
 const program = new Command();
@@ -1042,10 +1047,11 @@ const mailCmd = program
           if (exitCode !== 0) process.exitCode = exitCode;
           return;
         }
-        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail never throws,
-        // so the wrapper returns the code and we set process.exitCode (never
-        // process.exit mid-flow — same pattern as the ecl-gc action). Exit 2 when
-        // no self agent resolves: the verdict is NOT DERIVED, not a clean inbox.
+        // Custom exit-code contract (mmnto-ai/totem#2312): pollMail throws only
+        // the root refusal (handleError below maps it to exit 2), so the wrapper
+        // returns the code and we set process.exitCode (never process.exit
+        // mid-flow — same pattern as the ecl-gc action). Exit 2 when no self
+        // agent resolves: the verdict is NOT DERIVED, not a clean inbox.
         const { exitCode } = await mailCommand({ json, recursive, workspace, asSeat, allSeats });
         if (exitCode !== 0) process.exitCode = exitCode;
       } catch (err) {
@@ -1075,24 +1081,34 @@ mailCmd
   )
   .option(
     '--workspace <path>',
-    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else the parent of the repo root)',
   )
   .action(
-    async (opts: {
-      to: string;
-      subject: string;
-      from?: string;
-      bodyFile?: string;
-      inReplyTo?: string;
-      priority?: string;
-      related?: string[];
-      expectedAction?: string;
-      slug?: string;
-      workspace?: string;
-    }) => {
+    async (
+      opts: {
+        to: string;
+        subject: string;
+        from?: string;
+        bodyFile?: string;
+        inReplyTo?: string;
+        priority?: string;
+        related?: string[];
+        expectedAction?: string;
+        slug?: string;
+        workspace?: string;
+      },
+      cmd: Command,
+    ) => {
       try {
         const { mailSend, mailSendCommand } = await import('./commands/mail.js');
-        await mailSendCommand(mailSend(opts));
+        // The parent `mail` command declares `--workspace` too, and Commander lets
+        // a parent claim its option even when it is typed after the subcommand
+        // (the mmnto-ai/totem#2097 seam), so the flag lands on the PARENT's scope
+        // and the local `opts` never carries it. Read it back with optsWithGlobals
+        // as the poll and `verify` actions do (mmnto-ai/totem#2939); every other
+        // option is the subcommand's own.
+        const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+        await mailSendCommand(mailSend({ ...opts, workspace }));
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);
@@ -1118,7 +1134,7 @@ mailCmd
   )
   .option(
     '--workspace <path>',
-    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else parent of cwd)',
+    'Workspace for dir-derived recipient validation (default: $TOTEM_WORKSPACE, else the parent of the repo root)',
   )
   .option(
     '--no-mark',
@@ -1140,13 +1156,18 @@ mailCmd
         // Commander `--no-mark` sets `mark: false`; absent ⇒ `true` (default).
         mark?: boolean;
       },
+      cmd: Command,
     ) => {
       try {
         const { mailReply, mailSendCommand } = await import('./commands/mail.js');
         // Translate the Commander boolean-negation flag into the lib's opt-out
         // and keep `mark` out of the spread (mmnto-ai/totem#2396).
         const { mark, ...rest } = opts;
-        await mailSendCommand(mailReply(source, { ...rest, noMark: mark === false }));
+        // `--workspace` is claimed by the parent `mail` command even after the
+        // subcommand (the mmnto-ai/totem#2097 seam): read it back with
+        // optsWithGlobals (mmnto-ai/totem#2939).
+        const { workspace } = cmd.optsWithGlobals<{ workspace?: string }>();
+        await mailSendCommand(mailReply(source, { ...rest, workspace, noMark: mark === false }));
         // totem-context: handleError is the CLI error boundary (returns `never` — prints + process.exit), identical to every sibling command action; nothing is swallowed.
       } catch (err) {
         handleError(err);
@@ -1467,7 +1488,19 @@ program
         // totem-context: the catch below is the deliberate CLI exit-code boundary, not a silent swallow — eclGc/eclCompact throw ONLY usage errors, printed LOUDLY via log.error and mapped to exit 2 (handleError is intentionally NOT used here: it exits 1, colliding with the janitorial sensor code).
       } catch (err) {
         const { log } = await import('./ui.js');
-        log.error('Totem Error', err instanceof Error ? err.message : String(err));
+        // The logger prefixes its own tag, and a TotemError's message already
+        // carries `[Totem Error]` — print it once.
+        const message = (err instanceof Error ? err.message : String(err)).replace(
+          /^\[Totem Error\]\s*/,
+          '',
+        );
+        log.error('Totem Error', message);
+        // The cure rides with the refusal, as handleError prints it: a root
+        // refusal names the resident checkout to run from in its hint
+        // (mmnto-ai/totem#2946, mmnto-ai/totem#2968).
+        if (err instanceof Error && 'recoveryHint' in err && typeof err.recoveryHint === 'string') {
+          log.error('Totem Error', `Fix: ${err.recoveryHint}`);
+        }
         process.exitCode = 2;
       }
     },

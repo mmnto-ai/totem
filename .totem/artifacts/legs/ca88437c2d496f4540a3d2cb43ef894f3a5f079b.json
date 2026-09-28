@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "ca88437c2d496f4540a3d2cb43ef894f3a5f079b",
+  "readAt": "2026-09-24T22:57:20Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/adapters/gh-utils.ts",
+      "line": 70,
+      "claim": "The new generic hint is only right for issue fetches: handleGhError also serves issue creation ('Check that the target exists' is wrong for a create), project-board reads (a project is org-owned; 'a bare number resolves against this one' is false), repository info, the merged-PR list and the PR/comment/review/alert fetches, whose verbs take no URL or owner/repo#N. No test asserts the hint text.",
+      "counterexample": "A failing gh issue create would surface the wrong-repository sentence."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/spec.test.ts",
+      "line": 2304,
+      "claim": "The RED cases are exact on the happy path but the mocked cross-repo fetch never throws, so an implementation that catches the cross-repo failure and falls back to the cwd adapter — the silent wrong-anchor case the issue names — would pass every test; the 'in <repo>' label, the hint text and the log line are untested.",
+      "counterexample": "try { fetchAdapter.fetchIssue(n) } catch { adapter.fetchIssue(n) } passes the whole suite."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1105,
+      "claim": "QUESTION (re-typed as MINOR: this branch's deposit schema predates mmnto-ai/totem#2944, the workaround that issue names): the issue's cure says the run artifact records the resolved owner/repo#n; the diff keeps issueRef as typed (the URL names the repository, the anchor invariant is intact) and does not write the resolved repo separately, nor normalise a URL with trailing text. The seat should say it chose not to follow that part.",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 966,
+      "claim": "Old and new parsers disagree on 36 probed inputs only where the new one is a fix (a URL now names its repo: /issues/12abc, http, -/issues on github.com, GHE, GitLab, a fragment after the number, a leading zero, trailing text) or now fails loud at gh instead of silently using the cwd repo (a port, userinfo, a # in the path, /pull/3/issues/4, an orgs/…/projects path); two contrived inputs change (https://github.com//issues/4 → a topic; …/issues/1/issues/2 → #1); www./mixed-case hosts pass through to gh unverified.",
+      "counterexample": "https://github.com/o/r/issues/5#9: old passed the whole URL as --repo; new gives {5, 'o/r'}."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spec.ts",
+      "line": 1100,
+      "claim": "'(this repository)' in the log line and 'a bare number resolves against this one' in the hint are false under config.repositories, where the default adapter is the multi-repo one and a bare number is looked up in every configured repository.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": ".changeset/spec-cross-repo-anchor-2943.md",
+      "line": 10,
+      "claim": "'a GitLab path is kept as written and fails at gh naming the repository' is verified only for a nested path (gh 2.99.0 refuses the [HOST/]OWNER/REPO format offline); a two-segment GitLab project is a valid format that would fail on the network with a message that may not name the repo, though totem's own failure line does.",
+      "counterexample": "gh issue view 1 --repo gitlab.com/g/s/p → expected the \"[HOST/]OWNER/REPO\" format, got \"gitlab.com/g/s/p\", exit 1."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 387,
+      "claim": "The totem spec section never lists the input forms (pre-existing); a good place to say a URL's repository is honoured.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "verdict": "Leg 1 over ca88437c: 0 BLOCKING, 2 MATERIAL, 4 MINOR, 1 QUESTION (carried as MINOR: this branch's schema predates mmnto-ai/totem#2944), nothing blocking; the mock scope, isolation and shape, the anchor invariant and its tests, and the changeset's package list verified clean; 211 tests pass. F1, F2, F5, F6, F7 folded at the next commit (the wrong-repository hint on the issue-fetch path only via a hint override on ghFetchAndParse/handleGhError, the generic hint restored for the other callers; a case where the cross-repo fetch throws asserting the run rejects, the cwd adapter is never asked and no draft runs; 'the default repository' in the log and the config.repositories case in the hint; the GitLab sentence bounded to a nested path; the input forms documented). F3 ruled: the anchor ref stays as typed (the invariant the anchor tests pin; a qualified ref already names the repository) and the resolved repository is not written separately — stated in the changeset and the PR. F4 stands as measured and disclosed."
+}

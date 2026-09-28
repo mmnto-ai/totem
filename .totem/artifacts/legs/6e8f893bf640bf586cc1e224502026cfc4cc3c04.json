@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "6e8f893bf640bf586cc1e224502026cfc4cc3c04",
+  "readAt": "2026-09-24T21:38:12Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 117,
+      "claim": "Every local entry sharing an id with a cohort entry is treated as a MIRROR of it. On the publisher repo (totem-strategy) the local file is the SOURCE the snapshot was cut from, so the collapsed line labels the authority 'local mirror' and, when the source moves ahead of the snapshot, renders the stale snapshot fields with the drift flag pointing the wrong way.",
+      "counterexample": "readEffectiveFreezes over D:/Dev/totem-strategy yields local:cohort:rule-compilation and cohort:cohort:rule-compilation; after the collapse the session render reads 'parked/frozen (1): rule-compilation (legacy lesson-compile path) [local mirror + cohort@0.1.49]'."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 2287,
+      "claim": "totem doctor's Freeze state row still lists the one hold twice ([local] and [cohort@0.1.49]); the issue is orient-scoped and doctor tags each entry's provenance, but the stated harm (a reader counts two freezes) applies there too. The other readers (verify-manifest, help-freeze, lint) only test id membership.",
+      "counterexample": ""
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 140,
+      "claim": "The drift check is order-sensitive on do-not and treats absent vs empty as different; a differing subsystem under the same id still collapses and is flagged (defensible: the gate engine matches on subsystem).",
+      "counterexample": "local do-not ['b','a'] vs cohort ['a','b'] gives mirrorDrift ['do-not']; local do-not [] vs cohort absent gives ['do-not']."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.test.ts",
+      "line": 269,
+      "claim": "The assertion that mirrorDrift does not contain 'reason' cannot fail (the local reason equals the cohort's, and toMatchObject already pins the array); a differing tracking is never tested, so the prose-fields exclusion is half-verified.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 626,
+      "claim": "No test covers the full renderReport with a collapsed mirror or drift; the tags are shared helpers, so the risk is low, but the full-surface string is unasserted while the changeset says 'both surfaces'.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.test.ts",
+      "line": 203,
+      "claim": "Test isolation holds: the staged snapshot under the temp repo root is the first candidate the package walk checks, and the temp dir is not under the worktree, so the real 0.1.49 package cannot be reached; the new tests fail on the pre-fix code (two entries, no 'local mirror +').",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 761,
+      "claim": "Order, the SESSION_PARKED_CAP slice, JSON consumers, types, the changeset and the same-id edge cases all check out; the only visible JSON change is that the collapsed side's own reason, tracking and provenance row disappears.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F3",
+    "F4",
+    "F5"
+  ],
+  "verdict": "Leg 1 over 6e8f893b: 0 BLOCKING, 1 MATERIAL (the publisher's local entry is the source, not a mirror), 6 MINOR; F1, F3, F4, F5 folded at the next commit (a localRole of mirror or source from the local entry's own scope, the source's fields rendering on the publisher with 'snapshot differs' as the drift wording; do-not compared as a set with absent as empty; a tracking-only and do-not-order test; a full-render assertion); F2 routed to a follow-up issue on doctor; F6 and F7 confirm as read."
+}

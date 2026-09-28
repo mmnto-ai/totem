@@ -262,12 +262,35 @@ describe('LegDepositSchema — the parse boundary', () => {
   });
 
   it('pins the severity vocabulary as a set', () => {
-    expect([...LEG_FINDING_SEVERITIES]).toEqual(['BLOCKING', 'MATERIAL', 'MINOR']);
+    expect([...LEG_FINDING_SEVERITIES]).toEqual(['BLOCKING', 'MATERIAL', 'MINOR', 'QUESTION']);
     expect(
       LegDepositSchema.safeParse(
         deposit({ findings: [finding({ severity: 'CRITICAL' as never })], folded: [] }),
       ).success,
     ).toBe(false);
+  });
+
+  // mmnto-ai/totem#2944: a leg's QUESTION is its own class, never re-typed as MINOR.
+  it('admits QUESTION and counts it beside the three, never inside them', () => {
+    const withQuestion = deposit({
+      findings: [
+        finding({ id: 'F1', severity: 'MINOR' }),
+        finding({ id: 'Q1', severity: 'QUESTION', claim: 'Is the base the merge-base?' }),
+      ],
+      folded: [],
+    });
+    expect(LegDepositSchema.safeParse(withQuestion).success).toBe(true);
+    expect(countLegFindings(withQuestion)).toEqual({
+      blocking: 0,
+      material: 0,
+      minor: 1,
+      question: 1,
+      folded: 0,
+    });
+    // The covariate field rules on blocking and material; a question moves it no more than a minor does.
+    expect(renderLegField(withQuestion)).toBe(
+      `leg: ${HEAD.slice(0, 8)} blocking=0 material=0 folded=0`,
+    );
   });
 });
 
@@ -527,7 +550,7 @@ describe('countLegFindings + renderLegField — the covariate v1.2 field', () =>
         folded: ['F1', 'F3'],
       }),
     );
-    expect(counts).toEqual({ blocking: 2, material: 1, minor: 1, folded: 2 });
+    expect(counts).toEqual({ blocking: 2, material: 1, minor: 1, question: 0, folded: 2 });
   });
 
   it('renders EXACTLY `leg: <sha8> blocking=N material=N folded=N`', () => {

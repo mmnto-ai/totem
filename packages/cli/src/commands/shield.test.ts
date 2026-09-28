@@ -346,7 +346,39 @@ describe('structural mode', () => {
   it('structural prompt truncates large diffs', () => {
     const largeDiff = 'x'.repeat(MAX_DIFF_CHARS + 10_000);
     const prompt = assembleStructuralPrompt(largeDiff, ['big.ts'], STRUCTURAL_SYSTEM_PROMPT);
-    expect(prompt).toContain(`diff truncated at ${MAX_DIFF_CHARS} chars`);
+    // No newline anywhere: a hard character cut at the window, named as such.
+    expect(prompt).toContain(
+      `... [diff truncated: ${MAX_DIFF_CHARS} of ${MAX_DIFF_CHARS + 10_000} chars delivered, cut at a char boundary;`,
+    );
+    expect(prompt).toContain('=== DIFF TRUNCATION NOTICE ===');
+  });
+
+  // mmnto-ai/totem#2954: the cut lands on a file boundary, the marker names the file
+  // not shown, and the notice sits OUTSIDE the <git_diff> block.
+  it('assemblePrompt cuts an over-window diff on a file boundary, names the omitted file, and puts the notice after the block', () => {
+    const fileA = `diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,1 +1,1 @@\n-${'a'.repeat(MAX_DIFF_CHARS - 200)}\n+x\n`;
+    const fileB = `diff --git a/b.ts b/b.ts\n--- a/b.ts\n+++ b/b.ts\n@@ -1,1 +1,1 @@\n-${'b'.repeat(2_000)}\n+y\n`;
+    const emptyContext = { specs: [], sessions: [], code: [], lessons: [] };
+    const prompt = assemblePrompt(fileA + fileB, ['a.ts', 'b.ts'], emptyContext, 'SYS');
+    const block = prompt.match(/<git_diff>\n([\s\S]*?)\n<\/git_diff>/)![1]!;
+    // The whole of a.ts, nothing of b.ts, then the marker.
+    expect(block.startsWith(fileA.slice(0, -1))).toBe(true);
+    expect(block).not.toContain('diff --git a/b.ts');
+    expect(block).toContain('cut at a file boundary; 1 file(s) not shown: b.ts]');
+    // The old shape — a mid-hunk cut naming only the limit — is gone.
+    expect(block).not.toContain(`diff truncated at ${MAX_DIFF_CHARS} chars`);
+    // The notice follows the block; it is not inside it.
+    expect(prompt.indexOf('=== DIFF TRUNCATION NOTICE ===')).toBeGreaterThan(
+      prompt.indexOf('</git_diff>'),
+    );
+    expect(block).not.toContain('DIFF TRUNCATION NOTICE');
+  });
+
+  it('assemblePrompt leaves a diff within the window whole and adds no notice', () => {
+    const emptyContext = { specs: [], sessions: [], code: [], lessons: [] };
+    const prompt = assemblePrompt(sampleDiff, changedFiles, emptyContext, 'SYS');
+    expect(prompt).not.toContain('... [diff truncated');
+    expect(prompt).not.toContain('DIFF TRUNCATION NOTICE');
   });
 });
 
