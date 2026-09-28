@@ -13,9 +13,10 @@
 // `evaluateStructuralEligibility` in core — so a class name listed under two
 // engines is two distinct pairs, each with exactly one match: the predicate would
 // judge BOTH decidable, never ambiguous. What refuses a class under two engines is
-// this table's POLICY, not the predicate — rule 2 below types a class to ONE
-// engine, and authored-whitelist.test.ts pins class-name uniqueness across the
-// whole table. (Corrected 2026-09-27 on the batch-2 class review's finding: this
+// this table's POLICY, not the predicate — rule 2 below keeps a prose-token class
+// off regex, and authored-whitelist.test.ts pins class-name uniqueness across the
+// whole table (a registry invariant whose policy basis is an open demand row of
+// the batch-2 class review). (Corrected 2026-09-27 on that review's finding: this
 // sentence used to call such a class "AMBIGUOUS ⇒ non-decidable", which was false
 // of the shipped code.) What the predicate's exactly-one DOES read as
 // non-decidable is a DUPLICATE pair, and `assertNoDuplicateEntries` fails loud at
@@ -85,9 +86,10 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // withdrawn). Two ast-grep rows in the delivered order. Engine typing is MODAL from this
   // batch on (D7 = (a)): the eight rules whose regex classes fail it — seven pairs, one of
   // them batch 1's withheld `forbidden-path-literal` carried — are intake-ineligible and
-  // never rows; the exemplar row `forbidden-literal-token` above stays in the envelope under
-  // the operator's (A), its rule's admission measured at the intake pin; batch 1's
-  // `ast-grep/forbidden-callee-call` pair is reviewed IN with no second row. Set id
+  // never rows; the exemplar row's rule `5afaf8d0` (`regex/forbidden-literal-token`, the row
+  // above) stays in the envelope under the operator's (A), its admission measured at the
+  // intake pin; batch 1's `ast-grep/forbidden-callee-call` pair is already a row — its
+  // batch-2 records (`06282905`, `240f19ca`) ride IN the envelope with no second review. Set id
   // `static-whitelist@gate5-9668b633`: the SAME rule as batch 1's — the first 8 hex of the
   // sha256 over ONE compact JSON array of THESE TWO rows in this order (`JSON.stringify` of
   // `{ engine, structuralClass }` objects: no whitespace, no trailing newline) — the batch's

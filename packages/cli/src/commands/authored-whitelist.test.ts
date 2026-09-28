@@ -96,7 +96,11 @@ describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1
     }
   });
 
-  it('pins each batch set id over its OWN slice in committed order (compact JSON bytes), and the union is neither id', () => {
+  it('pins each batch set id over its OWN slice in committed order (compact JSON bytes)', () => {
+    // Each batch's id is the digest of ITS slice: a digest over batches 1 and 2 together is not
+    // a set id while the batches ride separate patches (the scorer's set-id form), and no
+    // assertion here compares against it — an inequality between digests of different arrays
+    // holds by construction and would pin nothing (leg b2r-F3).
     const table = authoredWhitelist();
     let start = SHIPPED_ROWS.length;
     for (const batch of DELIVERED_BATCHES) {
@@ -106,11 +110,6 @@ describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1
       expect(`static-whitelist@gate5-${sha.slice(0, 8)}`, batch.name).toBe(batch.judgedBy);
       start += batch.rows.length;
     }
-    // A digest over batches 1 and 2 together is NOT a set id while the batches ride separate
-    // patches: neither intake pin may pass it as `--judged-by`.
-    const unionSha = setDigest(table.slice(SHIPPED_ROWS.length));
-    expect(unionSha).not.toBe(GATE5_BATCH_1_SET_SHA256);
-    expect(unionSha).not.toBe(GATE5_BATCH_2_SET_SHA256);
   });
 
   it('keeps every (engine, structuralClass) pair unique and no class name under two engines', () => {
