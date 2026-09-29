@@ -104,24 +104,26 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // strategy-claude's delivery dispatch of 2026-09-29T19:47:14Z under D1 (C): the scorer's
   // class-review table at strategy 2470a0ab (mmnto-ai/totem-strategy#1444) and, per that
   // dispatch, the codex D3 (i) replay converged on all ten pairs with nothing withdrawn —
-  // admitted with no re-arm under the operator's D11 = (b), its rule-1 verdicts on the four
-  // absence-named pairs recorded as non-BLIND concurrences, the delivered pair outside that
-  // reach). One ast-grep row. The name's breadth, disclosed with the row: the fixed first
-  // argument is a string literal OR a regex literal (`fe1b4123`'s is a regex literal); rules 1
-  // and 2 hold for either kind, so no verdict depends on it. Seven rules are intake-ineligible
-  // and never rows: six on engine typing (MODAL) — among them this name's own REGEX pair
+  // admitted with no re-arm under the operator's D11 = (b) as recorded at that commit, its
+  // rule-1 verdicts on the four absence-named pairs recorded as non-BLIND concurrences, the
+  // delivered pair outside that reach). One ast-grep row. The name's breadth, disclosed with
+  // the row: the fixed first argument is a string literal OR a regex literal (`fe1b4123`'s is
+  // a regex literal); rules 1 and 2 hold for either kind, so no verdict depends on it. Seven
+  // rules are intake-ineligible and never rows. Six on engine typing: two only under the MODAL
+  // reading (`cf65e2b4`, `4ac94d6f`), two under either reading (`83b86cd7`, `5da43ea6`), and
+  // two on batch 1's census, carried with no second review — this name's own REGEX pair
   // (withheld in batch 1 on `a190836d`, carried here on `434c51ff`), which stays rejected
-  // because the predicate keys on the pair, and batch 1's withheld
-  // `regex/forbidden-path-literal` (carried on `0615c43e`) — and one on DECIDABILITY
-  // (`64bb807f`, `typeof-comparison-missing-null-guard`: a rule-1 FAIL on the name, the first
-  // rule that gate keeps out). In the envelope with no new row: the exemplar row's four rules
-  // (`regex/forbidden-literal-token`, under the operator's (A) and D9 = (a)), their admission
-  // measured at the intake pin, and `6f362fa2` under batch 1's
-  // `ast-grep/type-assertion-on-call`. Set id `static-whitelist@gate5-21c0175a`: the SAME rule
-  // as batches 1 and 2 — the first 8 hex of the sha256 over ONE compact JSON array of THIS ONE
-  // row (`JSON.stringify` of `{ engine, structuralClass }` objects: no whitespace, no trailing
-  // newline; a one-element ARRAY, 72 bytes, not the bare object) — the batch's OWN slice;
-  // pinned by authored-whitelist.test.ts; the batch-3 intake pin passes it as `--judged-by`. ──
+  // because the predicate keys on the pair, and `regex/forbidden-path-literal` (carried on
+  // `0615c43e`). One on DECIDABILITY (`64bb807f`, `typeof-comparison-missing-null-guard`: a
+  // rule-1 FAIL on the name, the first rule that gate keeps out). In the envelope with no new
+  // row: the exemplar row's four rules (`regex/forbidden-literal-token`, under the operator's
+  // (A) and D9 = (a)), their admission measured at the intake pin, and `6f362fa2` under
+  // batch 1's `ast-grep/type-assertion-on-call`. Set id `static-whitelist@gate5-21c0175a`: the
+  // SAME rule as batches 1 and 2 — the first 8 hex of the sha256 over ONE compact JSON array
+  // of THIS ONE row (`JSON.stringify` of `{ engine, structuralClass }` objects: no whitespace,
+  // no trailing newline; a one-element ARRAY, 72 bytes, not the bare object) — the batch's OWN
+  // slice; pinned by authored-whitelist.test.ts; the batch-3 intake pin passes it as
+  // `--judged-by`. ──
   Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-literal-arg' }),
 ]);
 

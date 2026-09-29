@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "730682ee58509db70f29dc6829a25a0bd5e63ff6",
+  "readAt": "2026-09-29T22:05:05Z",
+  "findings": [
+    {
+      "id": "b3r-F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 112,
+      "claim": "The batch-3 row comment says 'six on engine typing (MODAL)' and the changeset says the six are kept out on engine typing 'read MODAL at the class level since batch 2', which gives MODAL as the ground for all six rules. Only two of the six turn on the MODAL reading.",
+      "counterexample": "class-review/batch-3.json on strategy main (2470a0ab), reading.rule2: 'the carried-over 434c51ff, 0615c43e were withheld on batch 1's own census and carry over regardless'. classes[] row for 434c51ff: 'batch 1's withheld pair (its row 8, a190836d, 3 comment-context firings there); carried over with no second review'. Row for 5da43ea6: 'FAIL (both readings - a string-context firing)'. Row for 83b86cd7: 'FAIL under both readings'. Rows for cf65e2b4 and 4ac94d6f: 'FAIL-by-modal (PASS measured)'. Under a MEASURED reading 434c51ff and 0615c43e would still be withheld, so MODAL is not their ground. Batch 2's comment used the same framing, so this is a precedent-consistent imprecision. FOLDED (the seat read each of the six rows at source): the comment and the changeset now say two only under the MODAL reading (cf65e2b4, 4ac94d6f), two under either reading (83b86cd7, 5da43ea6), two on batch 1's census carried with no second review (434c51ff, 0615c43e)."
+    },
+    {
+      "id": "b3r-F2",
+      "severity": "MINOR",
+      "file": ".changeset/gate5-b3-class-rows.md",
+      "line": 10,
+      "claim": "The changeset says an envelope entry declaring the ast-grep pair 'is now decidable (minted) where it was rejected with exit 1', which treats passing the whitelist predicate as the same thing as being minted and treats exit 1 as a per-entry outcome.",
+      "counterexample": "authored-rule-intake.ts:634-643: 'if (!structuralEligibility.decidable) { rejected.push(...); continue; }' - the predicate is the first gate and the rest of the intake still runs after it. authored-rule-intake.ts:657-658: 'if (existing) { ruleId = existing.ruleId; // reuse the persisted id - NEVER re-mint an existing identity' - an existing identity reads unchanged or revised, not minted. rule-author.ts:183-192: 'if (result.rejected.length > 0) { ... process.exitCode = 1;' - a run-level signal set when any rule is rejected. A re-run of an already-minted identity passes the predicate and reads unchanged. FOLDED (the seat read the three sites at source): the changeset now says the entry passes the whitelist predicate (decidable) and goes on through the rest of the intake, where it was rejected at that gate (a rejection sets the run's exit code to 1)."
+    },
+    {
+      "id": "b3r-F3",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 107,
+      "claim": "QUESTION for the seat: the comment states 'admitted with no re-arm under the operator's D11 = (b)' as settled, while the scorer's table at 2470a0ab records that a corrected statement of D11 was put to the operator after both words with no answer on record at that commit and an open re-ruling slot. Was the corrected statement answered after 2470a0ab?",
+      "counterexample": "class-review/batch-3.json operatorDecisions.D11.ruling.order: 'both words were given before read 2 returned; the corrected statement was put to the operator in session after it, the same day; no answer to it is on the record at this commit; a re-ruling, if one comes, is recorded under this key'. The same key's question: 'no pair moves between delivered and withheld whatever is ruled'. The dispatch of 2026-09-29T19:47Z says 'D11, RULED (b) by the operator and confirmed by name'. ANSWERED by the seat: no answer to the corrected statement is on any record this seat can read (the file is unchanged on strategy main at e875d27d since 2470a0ab); the ruling of record is (b), confirmed by name, and no D11 option moves the row, the set id or a verdict. The comment now reads 'as recorded at that commit', so it states the record at 2470a0ab and no later state; the open slot is disclosed in the PR body and carried to the pin mail for the scorer."
+    }
+  ],
+  "folded": [
+    "b3r-F1",
+    "b3r-F2",
+    "b3r-F3"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 2 MINOR, 1 QUESTION over c75b85d0..730682ee (gate5 b3 class row). Not falsified: the row (bytes, engine, position), set id 21c0175a (independently recomputed; no collision among 8 wrong-input variants; the rule reproduces batches 1 and 2's ids), test strength on six mutant tables (every mutant caught by at least two tests, no test holds by construction), the predicate keying on the pair (ast-grep decidable, regex twin not), the comment's hashes and keep-out account (7 rules: 6 engine typing, 1 decidability), the changeset fixed group and default, no stale consumer of the table. F1 and F2 are comment or changeset wording; F3 is a question answered with one scoping clause; no fold rewires semantics, so no re-armed leg is owed."
+}
