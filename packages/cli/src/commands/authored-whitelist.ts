@@ -40,7 +40,8 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * (retained as predicate proofs; they are decidable classes in their own right),
  * plus the Gate 5 class sets, one block per batch (batch 1: five ast-grep rows
  * delivered as data on 2026-09-24; batch 2: two ast-grep rows delivered on
- * 2026-09-27; each row comment below names its set, its dispatch and its set id).
+ * 2026-09-27; batch 3: one ast-grep row delivered on 2026-09-29; each row comment
+ * below names its set, its dispatch and its set id).
  * The engine typing follows the 2026-06-28 ruling above: `is_finite` and
  * `procgen-entropy-clock-source` tokens can appear in prose/doc-comments ⇒
  * ast-grep only; `debug-assert-len-mismatch` matches a code-only construct ⇒
@@ -49,7 +50,9 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * regex class of that batch. From batch 2 on, rule 2 is read MODAL at the class
  * level (the operator's D7 = (a), 2026-09-27): a class whose token CAN appear in
  * prose or doc-comments is ast-grep-only, and a per-rule measured zero at one tree
- * carries no class-level guarantee — so batch 2 delivered no regex class either.
+ * carries no class-level guarantee — so batch 2 delivered no regex class either,
+ * and batch 3 none: six of its rules are kept out on engine typing and one on
+ * DECIDABILITY (rule 1), the first rule that gate keeps out.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
@@ -97,6 +100,29 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // authored-whitelist.test.ts; the batch-2 intake pin passes it as `--judged-by`. ──
   Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-fixed-call-expression' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'callee-call-without-argument' }),
+  // ── The Gate 5 batch-3 class set (strategy-owned data; set `gate5-2263305c` batch 3,
+  // strategy-claude's delivery dispatch of 2026-09-29T19:47:14Z under D1 (C): the scorer's
+  // class-review table at strategy 2470a0ab (mmnto-ai/totem-strategy#1444) and, per that
+  // dispatch, the codex D3 (i) replay converged on all ten pairs with nothing withdrawn —
+  // admitted with no re-arm under the operator's D11 = (b), its rule-1 verdicts on the four
+  // absence-named pairs recorded as non-BLIND concurrences, the delivered pair outside that
+  // reach). One ast-grep row. The name's breadth, disclosed with the row: the fixed first
+  // argument is a string literal OR a regex literal (`fe1b4123`'s is a regex literal); rules 1
+  // and 2 hold for either kind, so no verdict depends on it. Seven rules are intake-ineligible
+  // and never rows: six on engine typing (MODAL) — among them this name's own REGEX pair
+  // (withheld in batch 1 on `a190836d`, carried here on `434c51ff`), which stays rejected
+  // because the predicate keys on the pair, and batch 1's withheld
+  // `regex/forbidden-path-literal` (carried on `0615c43e`) — and one on DECIDABILITY
+  // (`64bb807f`, `typeof-comparison-missing-null-guard`: a rule-1 FAIL on the name, the first
+  // rule that gate keeps out). In the envelope with no new row: the exemplar row's four rules
+  // (`regex/forbidden-literal-token`, under the operator's (A) and D9 = (a)), their admission
+  // measured at the intake pin, and `6f362fa2` under batch 1's
+  // `ast-grep/type-assertion-on-call`. Set id `static-whitelist@gate5-21c0175a`: the SAME rule
+  // as batches 1 and 2 — the first 8 hex of the sha256 over ONE compact JSON array of THIS ONE
+  // row (`JSON.stringify` of `{ engine, structuralClass }` objects: no whitespace, no trailing
+  // newline; a one-element ARRAY, 72 bytes, not the bare object) — the batch's OWN slice;
+  // pinned by authored-whitelist.test.ts; the batch-3 intake pin passes it as `--judged-by`. ──
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-literal-arg' }),
 ]);
 
 /**
