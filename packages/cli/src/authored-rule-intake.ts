@@ -483,8 +483,20 @@ export function runRuleAuthor(
   // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream; a blank
   // judgedBy is rejected here, not deferred to the downstream `StructEligResult` non-empty refine.
   // `{ fromLedger: true }` (mmnto-ai/totem#2982) carries no run-level id: `judgedBy` stays
-  // undefined and each entry is judged under its own ledger row's id in pass 1.
-  const fromLedger = typeof opts.judgedBy !== 'string';
+  // undefined and each entry is judged under its own ledger row's id in pass 1. The discriminant
+  // is strict at this exported boundary: a value that is neither a string nor exactly
+  // `{ fromLedger: true }` is a caller error, never silently the per-row source.
+  const fromLedger =
+    typeof opts.judgedBy === 'object' &&
+    opts.judgedBy !== null &&
+    opts.judgedBy.fromLedger === true;
+  if (!fromLedger && typeof opts.judgedBy !== 'string') {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'judgedBy must be the check id (a string) or exactly { fromLedger: true } (ADR-112 §3; mmnto-ai/totem#2982)',
+      'Pass the check id as a string for an authoring run, or { fromLedger: true } with verifyOnly: true for a cert-run re-derive.',
+    );
+  }
   if (fromLedger && opts.verifyOnly !== true) {
     throw new TotemError(
       'CONFIG_INVALID',

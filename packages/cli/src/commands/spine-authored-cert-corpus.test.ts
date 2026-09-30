@@ -305,8 +305,11 @@ describe('buildAuthoredCertifyingCorpus — per-row judgedBy (mmnto-ai/totem#298
       new Set([idByDefect.get(rule1.targetDefect), idByDefect.get(rule2.targetDefect)]),
     );
 
-    // The corpus carries no record's structuralEligibility, so the per-record judgedBy is read
-    // from the same read-only re-derive the build runs (step 1), checked against each row.
+    // The build's success is the proof of per-row sourcing: `judgedBy` sits inside each row's
+    // material hash, so a record re-derived under any id but its own row's would have read
+    // `revised` and the verifyOnly gate would have thrown. The corpus's CompiledRule carries no
+    // structuralEligibility, so the ids are read out through a second, separate call of the same
+    // read-only re-derive and checked against each row.
     const rederived = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
     const rowJudgedBy = new Map(ledger.map((e) => [e.ruleId, e.structuralEligibility.judgedBy]));
     expect(rederived.records).toHaveLength(2);
@@ -328,8 +331,10 @@ describe('buildAuthoredCertifyingCorpus — per-row judgedBy (mmnto-ai/totem#298
     writeAuthoredYaml(totemDir, { rules: [rule1, rule2, rule3], seedLedger: false });
     const before = ledgerBytes();
 
+    // Exactly ONE would-author entry, and it is `minted`: the two ledgered rules re-derived
+    // `unchanged` under their own ids (a wrong id would have read `revised` and been listed too).
     await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(
-      /would be authored \(minted\/revised\)/,
+      /: 1 authored rule\(s\) would be authored \(minted\/revised\) during cert-run assembly — [0-9a-f]+ \(minted\)\./,
     );
     expect(ledgerBytes()).toBe(before);
   });

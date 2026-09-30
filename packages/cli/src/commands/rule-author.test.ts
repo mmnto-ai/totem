@@ -1034,4 +1034,54 @@ describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 
     expect(byDefect.get(ruleB.targetDefect as string)).toBe('static-whitelist@test-b');
     expect(snapshot()).toBe(before);
   });
+
+  it('{ fromLedger: true } reads the EFFECTIVE row — a rule revised under a second id re-derives under that id', () => {
+    const rule = decidableRule();
+    writeYaml([rule]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-a' });
+    // Same envelope, a second id: `judgedBy` sits in the material, so the row is `revised`.
+    const second = runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-b' });
+    expect(second.revised).toBe(1);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(2);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(1);
+    expect(res.minted + res.revised).toBe(0);
+    expect(res.records[0]?.structuralEligibility.judgedBy).toBe('static-whitelist@test-b');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('{ fromLedger: true } + verifyOnly still reports a row-less UNDECIDABLE entry as rejected, nothing written', () => {
+    // The placeholder id is used only for the throwaway re-derive of a row-less entry; decidability
+    // does not depend on it, so an undecidable row-less entry reaches `rejected`, not the gate.
+    writeYaml([decidableRule()]);
+    run();
+    writeRecord(
+      'ast-grep-rule',
+      recordBody({
+        target: {
+          type: 'ast-grep',
+          language: 'typescript',
+          pattern: 'console.log($MSG)',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
+    writeYaml([
+      decidableRule(),
+      decidableRule({
+        targetDefect: 'never authored, and undecidable',
+        record: recordRef('ast-grep-rule'),
+      }),
+    ]);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(1);
+    expect(res.minted + res.revised).toBe(0);
+    expect(res.rejected).toHaveLength(1);
+    expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
+    expect(snapshot()).toBe(before);
+  });
 });
