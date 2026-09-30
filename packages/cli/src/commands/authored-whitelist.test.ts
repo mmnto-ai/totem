@@ -53,6 +53,22 @@ const GATE5_BATCH_2_ROWS = [
 const GATE5_BATCH_2_SET_SHA256 = '9668b6332b838f4f3f360e1af05bc1ba7f41291f1d64fc3f21f5e2db0f376d86';
 const GATE5_BATCH_2_JUDGED_BY = 'static-whitelist@gate5-9668b633';
 
+/**
+ * The Gate 5 batch-3 class set as DELIVERED (strategy-claude's dispatch of
+ * 2026-09-29T19:47:14Z, set `gate5-2263305c` batch 3): ONE ast-grep row, appended
+ * after batch 2's two. The set id follows the SAME rule over the batch's OWN slice:
+ * a one-row batch still digests a one-element ARRAY (72 bytes), not the bare object.
+ * The name's regex twin was withheld in batch 1 and again here, so it is no row — the
+ * class-name uniqueness test below is what would refuse it. The ids of batches 1 and
+ * 2 do not move when batch 3 lands.
+ */
+const GATE5_BATCH_3_ROWS = [
+  { engine: 'ast-grep', structuralClass: 'forbidden-callee-literal-arg' },
+] as const;
+
+const GATE5_BATCH_3_SET_SHA256 = '21c0175af0f54906db87e0b95273632c9982f272f9a99d125386df4b1aecd205';
+const GATE5_BATCH_3_JUDGED_BY = 'static-whitelist@gate5-21c0175a';
+
 /** The delivered batches in table order: each slice's start index and its pinned digest. */
 const DELIVERED_BATCHES = [
   {
@@ -67,6 +83,12 @@ const DELIVERED_BATCHES = [
     sha256: GATE5_BATCH_2_SET_SHA256,
     judgedBy: GATE5_BATCH_2_JUDGED_BY,
   },
+  {
+    name: 'batch 3',
+    rows: GATE5_BATCH_3_ROWS,
+    sha256: GATE5_BATCH_3_SET_SHA256,
+    judgedBy: GATE5_BATCH_3_JUDGED_BY,
+  },
 ] as const;
 
 /** The one set-id rule: sha256 over ONE compact JSON array of `{ engine, structuralClass }` rows. */
@@ -77,27 +99,31 @@ function setDigest(rows: readonly { engine: string; structuralClass: string }[])
   return createHash('sha256').update(bytes, 'utf8').digest('hex');
 }
 
-describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1 and 2)', () => {
-  it('carries the five shipped rows first, then batch 1 and batch 2 in their delivered orders', () => {
+describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1, 2 and 3)', () => {
+  it('carries the five shipped rows first, then batches 1, 2 and 3 in their delivered orders', () => {
     const table = authoredWhitelist();
     const batch1Start = SHIPPED_ROWS.length;
     const batch2Start = batch1Start + GATE5_BATCH_1_ROWS.length;
-    expect(table).toHaveLength(batch2Start + GATE5_BATCH_2_ROWS.length);
+    const batch3Start = batch2Start + GATE5_BATCH_2_ROWS.length;
+    expect(table).toHaveLength(batch3Start + GATE5_BATCH_3_ROWS.length);
     expect(table.slice(0, batch1Start)).toEqual(SHIPPED_ROWS);
     expect(table.slice(batch1Start, batch2Start)).toEqual(GATE5_BATCH_1_ROWS);
-    expect(table.slice(batch2Start)).toEqual(GATE5_BATCH_2_ROWS);
+    expect(table.slice(batch2Start, batch3Start)).toEqual(GATE5_BATCH_2_ROWS);
+    expect(table.slice(batch3Start)).toEqual(GATE5_BATCH_3_ROWS);
   });
 
-  it('types every delivered row ast-grep (batch 1: rule 2 measured; batch 2: rule 2 modal under D7 = (a); no regex class delivered)', () => {
+  it('types every delivered row ast-grep (batch 1: rule 2 measured; batches 2 and 3: rule 2 modal under D7 = (a); no regex class delivered)', () => {
     const delivered = authoredWhitelist().slice(SHIPPED_ROWS.length);
-    expect(delivered).toHaveLength(GATE5_BATCH_1_ROWS.length + GATE5_BATCH_2_ROWS.length);
+    expect(delivered).toHaveLength(
+      GATE5_BATCH_1_ROWS.length + GATE5_BATCH_2_ROWS.length + GATE5_BATCH_3_ROWS.length,
+    );
     for (const row of delivered) {
       expect(row.engine).toBe('ast-grep');
     }
   });
 
   it('pins each batch set id over its OWN slice in committed order (compact JSON bytes)', () => {
-    // Each batch's id is the digest of ITS slice: a digest over batches 1 and 2 together is not
+    // Each batch's id is the digest of ITS slice: a digest over several batches together is not
     // a set id while the batches ride separate patches (the scorer's set-id form), and no
     // assertion here compares against it — an inequality between digests of different arrays
     // holds by construction and would pin nothing (leg b2r-F3).
