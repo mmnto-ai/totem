@@ -4,83 +4,6 @@ heldOutNonInspectionAttestation: true
 rules:
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere'
-    structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: fd8846c9d8ba939897a00e5537a2da09ddf9fb33d8391a90a5fb532f47c11a3c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '329479bf34f8816f: Use .min(1) on string schemas in config arrays'
-    structuralClass: forbidden-fixed-call-expression
-    record: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: a4300d49b89de1c681072505f42b562947a6a0cbbbc7d36433650da60bae08f6
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '06282905d061ca34@javascript: Diagnostic hints must precisely identify the underlying'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '06282905d061ca34@typescript: Diagnostic hints must precisely identify the underlying'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-06282905-execsync-call.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-06282905-execsync-call.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'f202f65f8a198f18: When testing expected failures, assert the specific error'
-    structuralClass: callee-call-without-argument
-    record: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 5ff73cbf8e747ec4a30e45097ca8fffac02d6ea91b3197aa0851c9f35ba5ff94
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '240f19cae3e56b10@javascript: Throwing specific error classes like TotemParseError'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '240f19cae3e56b10@typescript: Throwing specific error classes like TotemParseError'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: '391de7088c633579: 2026-03-03T01:52:20.000Z'
     structuralClass: forbidden-literal-token
     record: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
@@ -89,39 +12,6 @@ rules:
         filePath: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: 0682ff7b55eee59937776a2ed134a6a051398afca22e323798fa1c154749965c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '83b86cd73d637a6c: AI tool metadata must treat MCP-related fields as optional'
-    structuralClass: property-key-missing-optional-marker
-    record: .totem/rules/mig-83b86cd7-mcp-fields-optional.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-83b86cd7-mcp-fields-optional.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 178992f38f29102167c1d497b3171eae3d6be10431f92602f45245720ea573f3
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'cf65e2b445329be2: Forbid inline JSON.parse(readFileSync) — use readJsonSafe'
-    structuralClass: forbidden-nested-callee-call
-    record: .totem/rules/mig-cf65e2b4-inline-json-parse-readfilesync.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-cf65e2b4-inline-json-parse-readfilesync.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 11d035be331580097b2a1c09c2e70431f71d1eaa394508b01c90aa0a5580b081
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '64bb807f4e10ea4f: 2026-03-07T06:05:56.069Z'
-    structuralClass: typeof-comparison-missing-null-guard
-    record: .totem/rules/mig-64bb807f-typeof-object-without-null-guard.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-64bb807f-typeof-object-without-null-guard.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: d54d5a28c7b9f8898abb56f56e5dc0e6d45256e334d89de0a2fbd1b9955663b7
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
@@ -136,17 +26,6 @@ rules:
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '434c51ff64ec74b6: Using split() on markdown headings often misclassifies'
-    structuralClass: forbidden-callee-literal-arg
-    record: .totem/rules/mig-434c51ff-split-on-markdown-heading.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-434c51ff-split-on-markdown-heading.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 3e86896541626112f2b0cb6cb75f0b6be8ae4ad3eb3abff9b296f409d459f645
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: '55797450514d4c3b: Never use git add -A or git add .'
     structuralClass: forbidden-literal-token
     record: .totem/rules/mig-55797450-git-add-all.rule.yaml
@@ -155,17 +34,6 @@ rules:
         filePath: .totem/rules/mig-55797450-git-add-all.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: c942c8c34ef080542c9570c072f220d3db62ce9ecb0fdbd39d3603f3914a83ce
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '0615c43eb5a9d0e8: Resolve git root via rev-parse for monorepo compatibility'
-    structuralClass: forbidden-path-literal
-    record: .totem/rules/mig-0615c43e-dot-git-existence-test.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-0615c43e-dot-git-existence-test.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 7588d7efefadb26833720a4cff3b78936477b8ddafdfc8e898e72b02ccfe6b5f
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
@@ -199,26 +67,4 @@ rules:
         filePath: .totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: 0318d2bc8358722a323dabf098cfa69710e0be3f03107e1d0c1078f59a50c622
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '4ac94d6f9c387e1e: Account for leading whitespace in line-start parsers'
-    structuralClass: regex-literal-bare-start-anchor
-    record: .totem/rules/mig-4ac94d6f-bare-start-anchor-regex.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-4ac94d6f-bare-start-anchor-regex.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 5b21e80bef4e666b6e8ffbe2fb127db98c7f99dc6621f83b8150d8eb3c813901
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: "5da43ea60b66e96e: Always use the '--' separator before positional arguments in git commands (e.g., 'git log -- <ref>') to prevent argument"
-    structuralClass: command-arg-missing-separator
-    record: .totem/rules/mig-5da43ea6-git-double-dash-separator.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-5da43ea6-git-double-dash-separator.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 4ec00acc17f6edc09f3f374fa2b052abff5bed02c8a69f38bd5ab96c01556359
         example: 0
