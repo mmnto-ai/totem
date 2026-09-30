@@ -38,6 +38,10 @@ jobs:
       # release workflow's outer timeout-minutes cap (mmnto-ai/totem#2748).
       - run: pnpm test:verify-oidc
 
+      # Root tool test: the publish script's failure classification — a
+      # re-run's E409 on a staged version counts as published (mmnto-ai/totem#2953).
+      - run: pnpm test:publish-oidc
+
       - name: Wind Tunnel (rule fixture tests)
         run: node packages/cli/dist/index.js test
 

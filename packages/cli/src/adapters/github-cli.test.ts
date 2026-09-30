@@ -65,6 +65,43 @@ describe('GitHubCliAdapter', () => {
       );
       expect(adapter.fetchIssue(1).labels).toEqual(['enhancement', 'P2', 'architecture']);
     });
+
+    // greptile on mmnto-ai/totem#2965: the failure hint is measured where it is
+    // built — a failing fetch names the repository it looked in, and its hint
+    // puts the wrong-repository check before authentication.
+    it('a failing fetch names the repository it looked in, and the hint puts a wrong repository before authentication', () => {
+      const ghFailure = () => {
+        throw new Error('gh: GraphQL: Could not resolve to an Issue with the number of 9.');
+      };
+      const named = new GitHubCliAdapter('/test/cwd', 'other-org/broken');
+      mockedExec.mockImplementationOnce(ghFailure);
+      let thrown: unknown;
+      try {
+        named.fetchIssue(9);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown).toBeInstanceOf(Error);
+      const { message, recoveryHint } = thrown as Error & { recoveryHint: string };
+      expect(message).toContain('Failed to fetch issue #9 in other-org/broken');
+      expect(recoveryHint).toContain('Check that issue #9 exists in other-org/broken');
+      expect(recoveryHint.indexOf('exists in other-org/broken')).toBeLessThan(
+        recoveryHint.indexOf('gh auth status'),
+      );
+      // The working directory's adapter says "this repository", in the same order.
+      mockedExec.mockImplementationOnce(ghFailure);
+      let cwdThrown: unknown;
+      try {
+        adapter.fetchIssue(9);
+      } catch (err) {
+        cwdThrown = err;
+      }
+      const cwdHint = (cwdThrown as Error & { recoveryHint: string }).recoveryHint;
+      expect(cwdHint).toContain('Check that issue #9 exists in this repository');
+      expect(cwdHint.indexOf('exists in this repository')).toBeLessThan(
+        cwdHint.indexOf('gh auth status'),
+      );
+    });
   });
 
   describe('fetchOpenIssues', () => {

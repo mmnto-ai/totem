@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "06031857de883948d930cecc5e496622621e1549",
+  "readAt": "2026-09-25T00:10:54Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 714,
+      "claim": "The reader served a .git toplevel with no .totem/ while the send refuses that shape, so the changeset's parity claim was false and a mark from a plain git repository minted <repo>/.totem/orchestration/<seat>/processed/, a phantom store no poll drains; the toplevel rule opened a second path into the class (a .totem sub-tree under a non-totem .git ancestor).",
+      "counterexample": "markSource(<dispatch>, { repoRoot: '<ws>/plain/src', env: { TOTEM_SELF_AGENT: 'totem-claude' } }) with <ws>/plain holding only a .git directory returned normally and wrote <ws>/plain/.totem/orchestration/totem-claude/processed/2026-09-24T1000Z-totem-claude-x.md."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 3700,
+      "claim": "The clause shipped on mmnto-ai/totem#2969 ('a standalone totem mail mark resolves the nearest marker, and from a worktree that is a phantom store no poll drains') becomes false once this diff lands; the locked instruction ('run both calls from that resident checkout, never from a worktree') still matches the CLI.",
+      "counterexample": "From a scratch worktree fixture, mail mark exits 2 with REPO_ROOT_REFUSED before anything is read."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 455,
+      "claim": "The ~/.totem exclusion compared path strings, so a Windows 8.3 short-name spelling of the home directory (RUNNER~1 on GitHub Windows runners) got past it.",
+      "counterexample": "With homedir set to a long-named scratch directory holding .totem, the walk from the long-form start skipped it and the walk from the 8.3 short-form start returned it as toplevel."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 1474,
+      "claim": "The ecl-gc boundary printed only err.message, dropping the recoveryHint and doubling the prefix, so the none-class refusal printed no cure at all.",
+      "counterexample": "ecl-gc from a worktree fixture exits 2 with '[Totem Error] [Totem Error] …' on stderr and no Fix line."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 466,
+      "claim": "Stale or false comments: mail.ts still said pollMail never throws and justified the env fallback with a per-agent worktree that is now refused earlier; the resolveTotemRepoRootSync docstring called seat a describing verb although seat add|suspend|remove write lifecycle markers under the lenient root, so outside any repository seat add mints <cwd>/.totem/orchestration/<seat>/.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1210,
+      "claim": "The Stray Markers row warned permanently on this repository (three committed fixtures among the five strays), listed a nested repository's own root marker as a stray, hid the depth bound (a depth-stopped sweep still claimed a clean tree) and swept from doctor's cwd rather than the repository toplevel.",
+      "counterexample": "The sweep on the worktree returned examples/proof-kit/fixture/.totem, packages/cli/.totem, packages/core/.totem and the wind-tunnel bad and good fixtures; the resident returned seven, adding two under .totem/temp."
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.test.ts",
+      "line": 1610,
+      "claim": "The three outside-any-repository tests and the classify none test were silently vacuous on this host (a phantom %TEMP%/.totem from 2026-09-22 anchors the walk; each guard asserted path.isAbsolute, always true), which is why they did not fail under RED; no test locks the REPO_ROOT_REFUSED to exit-2 mapping; the RED run predated the home-exclusion commit.",
+      "counterexample": ""
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": ".changeset/reader-root-toplevel-2938.md",
+      "line": 10,
+      "claim": "QUESTION: pollMail was a documented never-throws public API consumed from node_modules by liquid-city's SessionStart hook and by totem's own; both wrap the call and turn a throw into scanError, so nothing breaks — minor is defensible under the no-legacy-before-a-consumer-we-don't-control rule, but the seat should rule on the contract narrowing deliberately.",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": ".claude/hooks/session-context.mjs",
+      "line": 296,
+      "claim": "A SessionStart in a per-agent worktree now renders 'Poll failed: [Totem Error] <wt>: its .git is a file … refusing' without the hint — louder than the old false-clean poll of D:/Dev/worktrees, not a regression, but it reads as a malfunction rather than a designed refusal.",
+      "counterexample": ""
+    },
+    {
+      "id": "F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/mail.ts",
+      "line": 1834,
+      "claim": "Under --json the refusal arm writes no stdout object (the refusal goes to stderr, exit 2) while the comment says the full result is emitted on every exit-2 arm; the existing CONFIG_INVALID arms behave the same way.",
+      "counterexample": "mail --json from a worktree fixture: 0 bytes on stdout, the refusal on stderr, exit 2."
+    },
+    {
+      "id": "F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 540,
+      "claim": "mainCheckoutFromGitFileSync returned null for a worktree of a bare repository (gitdir <x>.git/worktrees/w), so the refusal said 'not into any worktree layout' for a real worktree layout; a --separate-git-dir main checkout is refused as a worktree, with parity to the send.",
+      "counterexample": "A .git file reading gitdir: <tmp>/store.git/worktrees/w classified as worktree with resident null."
+    },
+    {
+      "id": "F12",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/git.ts",
+      "line": 442,
+      "claim": "QUESTION: the home exclusion covered only the .totem arm, so on a host with a ~/.git dotfiles repository every start under home outside another repository resolved to home as a toplevel, the none refusal never fired there, and on Windows (temp under home) every .totem-only fixture would resolve to home.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F10",
+    "F11",
+    "F12"
+  ],
+  "verdict": "Leg 1 over 956e098f..06031857: 0 BLOCKING, 2 MATERIAL, 10 MINOR (two of them questions the leg posed, carried as MINOR because this branch's deposit schema predates mmnto-ai/totem#2944), nothing blocking. Verified sound: the walker rule and every consumer of it (seat, doctor-seat-identity, deriveSeat, mail verify; none in mcp, orient or totem-status), no test passes a committed fixture as repoRoot, exit 2 reproduced end to end for mail, mail --json, mail mark, ecl-gc and ecl-gc --compact, the mark refusal fires before the source is read, the --as refusal fires before the membership error, the doctor wiring order, gateExempt under both strict tiers, the skill-text claim. Folded in the next commit: F1 as the unmarked class refused by every reader verb (parity with the send; the poll stray fixture gains a root .totem; the .git-only poll test becomes a refusal), F3 canonicalised comparison, F4 the hint printed, F5 the comments and the seat docstring (the seat write outside a repository filed as its own issue), F6 the row rooted at the toplevel with a git-tracked split, a nested-repository stop and a truncated depth bound, F7 visible skips (the exit-2 lock stays reproduced-not-locked, disclosed), F10 the comment, F11 the bare-store pointer, F12 the home exclusion on both arms. F2 is a merge-order coupling with mmnto-ai/totem#2969: its clause is amended on that branch so it reads true in either order. F8 ruled: minor stands, the narrowing named in the changeset. F9 filed as a follow-up. The F1 and F12 folds rewire semantics, so a scoped leg is re-armed over the fold diff."
+}

@@ -19,9 +19,10 @@ import {
 } from '../utils.js';
 // totem-context: shield-templates is a pure constants + types + prompt-strings module with no runtime logic — static import is correct and the dynamic-imports-in-CLI lint rule is a false positive here
 import {
+  describeDiffTruncation,
+  diffTruncationNotice,
   DISPLAY_TAG, // totem-context: pure constants module import
   MAX_CODE_RESULTS,
-  MAX_DIFF_CHARS,
   MAX_FILE_CONTEXT_CHARS,
   MAX_FILE_LINES,
   MAX_LESSONS,
@@ -36,6 +37,7 @@ import {
   STRUCTURAL_SYSTEM_PROMPT_V2,
   SYSTEM_PROMPT_V2,
   TAG,
+  truncateDiffForReview,
   VERDICT_RE,
 } from './shield-templates.js';
 
@@ -156,19 +158,15 @@ export function assemblePrompt(
 ): string {
   const sections: string[] = [systemPrompt];
 
-  // Diff section
+  // Diff section — cut on a file/hunk boundary when over the window, the notice
+  // outside the block (mmnto-ai/totem#2954).
   sections.push('=== DIFF ===');
   sections.push(`Changed files: ${changedFiles.join(', ')}`);
   sections.push('');
-  if (diff.length > MAX_DIFF_CHARS) {
-    sections.push(
-      wrapXml(
-        'git_diff',
-        diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`,
-      ),
-    );
-  } else {
-    sections.push(wrapXml('git_diff', diff));
+  const truncation = truncateDiffForReview(diff);
+  sections.push(wrapXml('git_diff', truncation.delivered));
+  if (truncation.truncated) {
+    sections.push(diffTruncationNotice(truncation));
   }
 
   // Excluded generated-artifact summary (mmnto-ai/totem#2398) — bytes excluded,
@@ -232,15 +230,10 @@ export function assembleStructuralPrompt(
     sections.push(`Changed files: ${changedFiles.join(', ')}`);
   }
   sections.push('');
-  if (diff.length > MAX_DIFF_CHARS) {
-    sections.push(
-      wrapXml(
-        'git_diff',
-        diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`,
-      ),
-    );
-  } else {
-    sections.push(wrapXml('git_diff', diff));
+  const truncation = truncateDiffForReview(diff);
+  sections.push(wrapXml('git_diff', truncation.delivered));
+  if (truncation.truncated) {
+    sections.push(diffTruncationNotice(truncation));
   }
 
   // Excluded generated-artifact summary (mmnto-ai/totem#2398) — bytes excluded,
@@ -931,12 +924,7 @@ export async function learnFromVerdict(
     wrapXml('shield_verdict', verdictContent),
     '',
     '=== DIFF UNDER REVIEW ===',
-    wrapXml(
-      'diff_under_review',
-      diff.length > MAX_DIFF_CHARS
-        ? diff.slice(0, MAX_DIFF_CHARS) + `\n... [diff truncated at ${MAX_DIFF_CHARS} chars] ...`
-        : diff,
-    ),
+    wrapXml('diff_under_review', truncateDiffForReview(diff).delivered),
   ];
 
   // Add existing lessons for dedup if embedding is available
@@ -2395,6 +2383,14 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   // now run inside the admission evaluator's `prepareReviewPayload` (one
   // emission path, mmnto-ai/totem#2473) — the admitted payload above already
   // carries `filteredDiff` / `filteredFiles` / `generatedArtifactSummary`.
+
+  // The delivered payload's own size (mmnto-ai/totem#2954): the resolver's
+  // raw-size warning speaks of the diff BEFORE file filtering; this one names
+  // what the lanes will actually receive and where it was cut.
+  const deliveredTruncation = truncateDiffForReview(filteredDiff);
+  if (deliveredTruncation.truncated) {
+    log.warn(DISPLAY_TAG, describeDiffTruncation(deliveredTruncation));
+  }
 
   // Extract annotations once (shared between hints and ledger)
   const annotations = extractShieldContextAnnotations(filteredFiles, cwd);

@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "0be27901fccf83c1eac5c4b28a597f9d163c6b4b",
+  "readAt": "2026-09-24T21:53:10Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 62,
+      "claim": "Two doc comments went stale with the fold: sourceVersion is documented as cohort-provenance-only while a collapsed publisher line has provenance 'local' and a sourceVersion; the deriveParked comment still says a local mirror folds into the cohort entry while on the publisher the cohort entry folds into the local source.",
+      "counterexample": "The live totem-strategy read yields provenance 'local', sourceVersion '0.1.49', localRole 'source'."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 164,
+      "claim": "The role comes only from the local entry's scope: a consumer whose mirror is scoped cohort (a verbatim copy of the publisher's entry) renders its local fields as the authority, flags drift as 'snapshot differs' pointing at the wrong side, and shows 'local source' with no warning when the fields match; today's one consumer mirror is scoped local, so this cannot happen on current files, and the changeset did not disclose it.",
+      "counterexample": "local {id:'x', scope:'cohort', since:'2026-01-01'} with cohort {id:'x', since:'2026-05-17'} renders '[local source + cohort@1] ⚠ snapshot differs (since)' with the stale local date as the value."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 106,
+      "claim": "since '' compares as different from an absent since although both render as '?'; do-not is compared as a sorted list so duplicates count, which the changeset's 'as a set' understates; neither case occurs in the real files.",
+      "counterexample": "local {since:''} vs cohort {} gives mirrorDrift ['since']; local do-not ['a','a'] vs cohort ['a'] gives ['do-not']."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 157,
+      "claim": "On the publisher the collapsed line sits at the cohort entry's position, after all local entries, although the local entry renders; cosmetic, and stated in the docstring.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".changeset/orient-mirror-collapse-2937.md",
+      "line": 10,
+      "claim": "'(additive)' is true of the fields but understates that the collapsed side's own row (reason, tracking, provenance) disappears from the JSON report; no in-repo JSON consumer is affected.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.test.ts",
+      "line": 783,
+      "claim": "The full-render assertion is a substring check that would pass with trailing text on the line; the source role's full render is unasserted; the publisher derivation test is contract-strength (toEqual, fails on the pre-fold code).",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": ".changeset/orient-mirror-collapse-2937.md",
+      "line": 10,
+      "claim": "'a follow-up covers it' does not name mmnto-ai/totem#2958; 'compared as a set' is imprecise.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "verdict": "Leg 2 (re-armed, scoped to the role fold 6e8f893b..0be27901): 0 BLOCKING, 0 MATERIAL, 7 MINOR, nothing blocking; on the live repos the fold renders one line with the right role and no drift (totem-strategy '[local source + cohort@0.1.49]', totem '[local mirror + cohort@0.1.49]'); leg 1's F1, F3, F4, F5 answered. F1, F2, F3, F5, F6, F7 folded at the next commit (the two comments; the mis-scope case disclosed in the changeset; the empty string normalised with absent; the JSON change stated; the full render asserted by whole line for both roles; mmnto-ai/totem#2958 named); F4 stands as documented."
+}

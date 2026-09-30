@@ -518,7 +518,7 @@ export async function getDiffForReview(
   if (diff.length > REVIEW_DIFF_TRUNCATION_THRESHOLD && options.suppressScopeNarration !== true) {
     log.warn(
       tag,
-      `Diff exceeds ${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars (${diff.length}). LLM review will see truncated content; re-run with a narrower --diff <range> to avoid degraded findings.`,
+      `Diff exceeds ${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars (${diff.length} raw, before file filtering). An LLM review delivers code files only, at most ${REVIEW_DIFF_TRUNCATION_THRESHOLD} chars, cut on a file, hunk or line boundary or at the window, and names the cut after filtering; lint and estimate truncate nothing. Re-run with a narrower --diff <range> for a whole-diff review.`,
     );
   }
 

@@ -804,8 +804,9 @@ export {
 } from './sys/bash-resolver.js';
 
 // Git utilities (pure helpers — no CLI dependencies)
-export type { GitBranchDiffResult } from './sys/git.js';
+export type { GitBranchDiffResult, TotemRepoRootClass } from './sys/git.js';
 export {
+  classifyTotemRepoRootSync,
   envWithoutGitLocation,
   extractChangedFiles,
   filterDiffByPatterns,
@@ -825,6 +826,7 @@ export {
   getTagDate,
   inferScopeFromFiles,
   isFileDirty,
+  mainCheckoutFromGitFileSync,
   repoNameFromRemoteUrl,
   resolveGitRoot,
   resolveTotemRepoRootSync,

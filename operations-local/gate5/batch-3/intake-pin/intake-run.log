@@ -1,0 +1,7 @@
+[RuleAuthor] 6 authored rule(s): 6 minted, 0 revised, 0 unchanged.
+  + f4538a6aa67863a3  totem-claude :: 391de7088c633579: 2026-03-03T01:52:20.000Z
+  + 53926c1a10b531b9  totem-claude :: 87e2437431c17ec5: Git diff headers wrap file paths containing spaces
+  + d6da524c3aec39c7  totem-claude :: 55797450514d4c3b: Never use git add -A or git add .
+  + 1c3a3c4e61a2d666  totem-claude :: 56c801dfda484c75: The text-embedding-004 identifier is frequently unavailable
+  + fdf4498c9a60c3ea  totem-claude :: fe1b4123aa1f679c: Always escape hyphens in regex utilities
+  + bbb8e021107952c2  totem-claude :: 6f362fa28abcf94a: Validate JSON at system boundaries

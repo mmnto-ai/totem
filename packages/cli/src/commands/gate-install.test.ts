@@ -2570,6 +2570,57 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(elapsed).toBeLessThan(6000);
     });
 
+    /**
+     * The slow-git preload that also IGNORES SIGTERM: a wedged child of this
+     * shape outlives the SIGTERM a spawn timeout sends by default, so only a
+     * SIGKILL at the deadline keeps the wrapper inside its budget
+     * (mmnto-ai/totem#2932). The listener is installed before the blocking
+     * wait, which removes SIGTERM's default disposition for the shim process.
+     */
+    const SIGTERM_IGNORING_GIT_PRELOAD = SLOW_GIT_PRELOAD.replace(
+      'if (me.includes("git")) {',
+      'if (me.includes("git")) {\n  process.on("SIGTERM", () => {});',
+    );
+
+    function sigtermIgnoringGitEnv(): NodeJS.ProcessEnv {
+      const env = slowGitEnv();
+      const preload = path.join(cwd, 'slow-ignoring-term.cjs');
+      fs.writeFileSync(preload, SIGTERM_IGNORING_GIT_PRELOAD);
+      env.NODE_OPTIONS = '--require=' + preload.split(path.sep).join('/');
+      return env;
+    }
+
+    it.skipIf(process.platform === 'win32')(
+      'a git that ignores SIGTERM is still bounded by the budget: the deadline kills it (mmnto-ai/totem#2932)',
+      () => {
+        // THE FALSIFIER for mmnto-ai/totem#2932. The hung-git row above dies
+        // on SIGTERM, so it passed before the option existed; this shim ignores
+        // SIGTERM, and only a SIGKILL at the spawn timeout keeps the wrapper
+        // inside its budget. On win32 the kill is TerminateProcess whatever
+        // signal is named, so the row runs on the POSIX legs only.
+        writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+        const env = sigtermIgnoringGitEnv();
+
+        const started = Date.now();
+        const { status, stderr } = runWrapper(
+          bash('gh pr merge 5'),
+          ['--budget-ms', '1500'],
+          'merge-ready',
+          env,
+        );
+        const elapsed = Date.now() - started;
+
+        expect(status).toBe(2);
+        expect(stderr).toContain(
+          'the 1500 ms budget was spent before gate "merge-ready" could be evaluated',
+        );
+        expect(stubArgv()).toBeNull();
+        // Before the option, spawnSync waited out the shim's 8 s sleep past the
+        // SIGTERM it ignored; with SIGKILL the read ends at the deadline.
+        expect(elapsed).toBeLessThan(6000);
+      },
+    );
+
     it('an evaluation failure on an APPLICABLE merge blocks (fail-closed), pilot exits 0', () => {
       initGitRepo();
       writeStubCli({ exit: 1 });

@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "f1964c27c1d15b7fe00f0be24acdb3de823d723b",
+  "readAt": "2026-09-24T21:41:14Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 223,
+      "claim": "When the structural cut fails the 0.9 floor, the line cut can land on the next file's @@ line, delivering a bare header while the marker says the file is 'shown in part'; coverage is well under the character cut's.",
+      "counterexample": "a.ts 30,000 chars of 60-char lines then b.ts one 60,000-char line: the fold delivered 30,076 as a line cut ending on b's bare header (partialFile b.ts, omitted []); leg 1 delivered 30,013 as a file cut; a character cut would deliver 50,000."
+    },
+    {
+      "id": "F2",
+      "severity": "MATERIAL",
+      "file": ".changeset/review-fan-truncation-2954.md",
+      "line": 12,
+      "claim": "The sentence 'the delivered payload now ends on a whole line, hunk or file … and is described exactly' is untrue: a character cut ends mid-line and the fold makes character cuts more common; two comments (the module head and the cut-rule comment) still say the cut lands on a boundary or on a whole line.",
+      "counterexample": "The test 'hard-cuts at the window when the last line boundary would give up more than half' asserts cutAt 'char' with 1,000 chars delivered mid-line."
+    },
+    {
+      "id": "F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 138,
+      "claim": "A pure rename (similarity 100%, no --- / +++ lines) regressed from leg 1: the equal-paths regex fails and the raw header remainder is returned; the changeset's 'a rename by its new path' holds only for a rename with hunks.",
+      "counterexample": "diff --git a/old.ts b/new.ts / similarity index 100% / rename from old.ts / rename to new.ts: the fold gives omitted ['a/old.ts b/new.ts']; leg 1's non-greedy regex gave 'new.ts'."
+    },
+    {
+      "id": "F4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/diff-truncation.test.ts",
+      "line": 88,
+      "claim": "The tests do not pin either floor at its contract value: all 19 pass with STRUCTURAL_CUT_FLOOR at 0.5 or 0.94 and LINE_CUT_FLOOR at 0.2; the 'at most a tenth' case sits at a 0.944 ratio and the 'at least half' case actually takes a hunk cut at 91.7%.",
+      "counterexample": "Mutation runs against copies of the test with the floors changed."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 121,
+      "claim": "diffFilePath searches for the next hunk with no upper bound, so a run of hunk-less files (pure renames, mode changes, binaries) scans to the end once per file — quadratic; the helper runs at least three times per review.",
+      "counterexample": "5,000 pure renames (670 KB): 249 ms vs 1 ms at leg 1; 20,000 (2.7 MB): 4,221 ms vs 4 ms."
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/review-fan.test.ts",
+      "line": 1554,
+      "claim": "The assembler-through-fan test uses an ordinary diff, so it proves block === helper bytes only for diffs with no closing git_diff tag; wrapXml escapes that tag inside the block and the fallback hashes unescaped bytes (pre-existing), so the changeset's 'holds on both paths' is slightly too strong.",
+      "counterexample": ""
+    },
+    {
+      "id": "F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 176,
+      "claim": "A limit of 0, negative or NaN is not guarded (no caller can reach it): 0 returns an empty payload plus the marker; -5 returns truncated with cutAt 'none'; NaN returns a char cut of 0 chars.",
+      "counterexample": "truncateDiffForReview('abc', 0) → '' plus the marker '0 of 3'."
+    },
+    {
+      "id": "F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 190,
+      "claim": "'file preferred on a tie' can never happen: the two needles differ at their second char, so fileCut never equals hunkCut; the comment is dead.",
+      "counterexample": ""
+    },
+    {
+      "id": "F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-templates.ts",
+      "line": 240,
+      "claim": "A crafted path can place marker-like text inside the marker and the notice; nothing parses the marker, so the effect is cosmetic and no change is owed.",
+      "counterexample": "a path 'x] ... [diff truncated: 1 of 1 chars.ts' appears verbatim in the omitted list."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "verdict": "Leg 2 (re-armed, scoped to the fold 76fdf418..f1964c27): 0 BLOCKING, 4 MATERIAL, 5 MINOR; nothing blocking; leg 1's F1, F4, F6, F8, F9 answered, F3 and F5 partly (a new untrue sentence; pure renames). F1-F8 folded at the next commit: a line cut that would leave a file as a bare header falls back to the file boundary before it when that clears the half, else the window; pure renames by their rename-to line and a hunk-less unequal header by its b/ side; the hunk search bounded by the next file; a non-positive or NaN limit read as the default; the dead tie comment removed; floor-pinning tests just above and below both thresholds; the changeset and comments claiming exactly what the code does. F9 stands as read. Convergence named by the seat after this fold: the residual limits (noprefix and mnemonic prefixes undecoded, the marker unparsed, the closing-tag escaping gap on the fallback) are disclosed in the changeset, not chased."
+}

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "abb9015fea91885d326872a98cd9d20f211e41b3",
+  "readAt": "2026-09-24T23:04:46Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "tools/publish-oidc.mjs",
+      "line": 171,
+      "claim": "After a 'staged' classification the package joins the tag loop and the force-pushed tags; on a run at a DIFFERENT commit than the one that built the tarball (a staged window longer than the verify ceiling, then a changeset-less merge) the staged branch would tag and force-push the release tag to a commit that did not build it, while the provenance names the original. The checkout has no tags locally, so the local tag-exists guard never fires in CI.",
+      "counterexample": "Run B at a new sha: isAlreadyOnNpm false (staged reads E404), npm publish E409 staged → counted → git tag at the new HEAD → git push --tags --force moves the remote tag; v0 repointed."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "tools/publish-oidc.mjs",
+      "line": 149,
+      "claim": "The captured spawn uses the default 1 MiB maxBuffer; on overflow Node kills npm (status null, error ENOBUFS), the code classifies the truncated output as 'failed' and prints the trusted-publisher hint, and publishResult.error is never printed. The largest measured publish output is about 76 KB, so the margin is 13x, and an overflow would kill npm before the upload, never after.",
+      "counterexample": "A probe child writing 2 MiB to stderr under the same options: status null, signal SIGTERM, error ENOBUFS, stderr 1,114,112 chars."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "tools/publish-oidc.mjs",
+      "line": 158,
+      "claim": "Buffering removes live progress and reorders the log: every npm line carries the exit-time timestamp and stdout is echoed before stderr; the per-line timestamps that were this issue's evidence are lost in future logs. OIDC publish does not prompt and stdout was already a non-TTY pipe on the runner.",
+      "counterexample": ""
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "tools/publish-oidc-lib.test.mjs",
+      "line": 18,
+      "claim": "The negative-control fixture 'E409 … previously published versions' is invented (npm returns that text as E403); still a valid control for the text half of the match; npm's real E403 re-publish line is not a fixture.",
+      "counterexample": ""
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": ".totem/specs/2953.md",
+      "line": 0,
+      "claim": "QUESTION (carried as MINOR: this branch's deposit schema predates mmnto-ai/totem#2944): recent fix PRs committed .totem/specs/<issue>.md; this one anchors on the run artifact only (totem spec --stdout). AGENTS.md mandates no spec file.",
+      "counterexample": ""
+    },
+    {
+      "id": "F6",
+      "severity": "MINOR",
+      "file": "tools/verify-oidc-provenance.test.mjs",
+      "line": 190,
+      "claim": "The new pin requires at least 22 minutes against a shipped 25: about 1.7 minutes over the 20 min 19 s datum measured from the publish call, while the poller's clock starts at the verify step 20 to 36 s later; acceptable as a floor, and RED is real (the base script fails only this pin).",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F4"
+  ],
+  "verdict": "Leg 1 over abb9015f: 0 BLOCKING, 1 MATERIAL, 5 MINOR (one a question), nothing blocking; the spawn-error status, the re-run chain (attempt 2 skipped the three published packages and re-tried the staged cli, which the new path counts and the verify step then waits for), the deadline arithmetic (four publishable packages; worstCaseMs(4) = 26 min 35 s under the 30-minute cap; no job-level cap), prettier, the qualified refs, the CI step's independence from the build, and the no-changeset precedent all verified. F1 folded at the next commit: a staged version counts as published only on a re-run of the same workflow run (GITHUB_RUN_ATTEMPT > 1, the sha that built the tarball); a first attempt meeting a staged version fails loud naming the wait and the run to re-run; F2 folded (a 64 MiB maxBuffer; publishResult.error printed); F4 folded (npm's real E403 re-publish line as a control). F3 stands as disclosed (live progress traded for a classifiable capture). F5 ruled: no spec file is owed; the run artifact anchors the commits, as every PR tonight. F6 stands as a floor."
+}

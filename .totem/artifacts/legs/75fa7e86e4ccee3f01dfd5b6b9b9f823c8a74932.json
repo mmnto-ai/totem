@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "75fa7e86e4ccee3f01dfd5b6b9b9f823c8a74932",
+  "readAt": "2026-09-28T01:03:15Z",
+  "findings": [
+    {
+      "id": "b2r-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 15,
+      "claim": "The corrected header says 'What refuses a class under two engines is this table's POLICY ... rule 2 below types a class to ONE engine'; the changeset repeats it as 'rule 2's policy'. Rule 2 does not type every class to one engine, so the correction overstates the policy that refuses a regex twin.",
+      "counterexample": "The header's own rule 2 (authored-whitelist.ts ENGINE-TYPING paragraph) only makes a class ast-grep-only when its token can appear in prose, and ends 'Classes whose tokens never appear in prose may be regex'. It says nothing that stops a code-only class (e.g. debug-assert-len-mismatch) being listed under both engines. Only the test's class-name limb refuses that. The scorer's table records this invariant as unsettled: batch-2.md:15 says the class-name limb 'encodes the header's parenthetical (shown not to hold in code) and rule 2's listed-only-under-ast-grep limb', and batch-2.md:59 says 'The registry's one-name-one-engine invariant stays a demand row for the report'. Proposed fix: 'rule 2 below keeps a prose-token class off regex, and authored-whitelist.test.ts pins class-name uniqueness across the whole table (a registry invariant whose policy basis is an open demand row of the batch-2 class review)'. Mirror the change in the changeset parenthesis. Comment-only fold; no semantics change. FOLDED (the seat verified batch-2.md:15 and the demand-row line at source): the header sentence and the changeset parenthesis now say rule 2 keeps a prose-token class off regex and the test's class-name limb pins one name to one engine, an invariant whose policy basis is an open demand row of the batch-2 class review."
+    },
+    {
+      "id": "b2r-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 88,
+      "claim": "The batch-2 row comment says 'the exemplar row forbidden-literal-token above stays in the envelope' and 'batch 1's ast-grep/forbidden-callee-call pair is reviewed IN'. The sources say a RULE (5afaf8d0) stays in the envelope, and that the forbidden-callee-call pair gets NO second review.",
+      "counterexample": "Dispatch 2026-09-27T2135Z: '5afaf8d03f059a41 (regex/forbidden-literal-token ...) stays IN the envelope' and '06282905... and 240f19ca... are batch 1's pair, already in the table — IN the envelope, no second review'. batch-2.md row 4 verdict: 'ALREADY IN TABLE ... no second review'. Proposed fix: 'the exemplar row's rule 5afaf8d0 stays in the envelope under the operator's (A)'; 'batch 1's ast-grep/forbidden-callee-call pair is already a row: its batch-2 records (06282905, 240f19ca) ride IN the envelope with no second review'. Wording only. FOLDED as proposed (the seat re-read both dispatch sentences)."
+    },
+    {
+      "id": "b2r-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.test.ts",
+      "line": 110,
+      "claim": "The test title says 'the union is neither id', but that assertion cannot fail under any realistic edit. It compares the sha256 of a 7-row array with two pinned digests of different arrays, so it pins nothing about what an intake pin passes as --judged-by.",
+      "counterexample": "My recompute: union = e18291efc923244f..., batch 1 = 6cba5706..., batch 2 = 9668b633.... The inequality holds by construction. The binding checks are the two per-slice equality assertions above it, which do fail on a row swap (92f5b7b8), a regex retype (645547eb) and the pre-diff 10-row table (the length check and the empty slice). DISCLOSURE, not a defect: keep it as documentation or drop the 'neither id' limb from the title. Nothing contractual depends on it. FOLDED: the vacuous union assertion and the title limb removed; the per-batch rule stays as a comment in the test and in the batch-2 constant's JSDoc; the two binding per-slice assertions are unchanged."
+    },
+    {
+      "id": "b2r-F4",
+      "severity": "MINOR",
+      "file": ".changeset/gate5-b2-class-rows.md",
+      "line": 10,
+      "claim": "`totem lint --base origin/main` on the worktree returns PASS with 2 warnings. Both are on lines this diff adds, and both are false positives.",
+      "counterexample": "Run: TOTEM_NO_REEXEC=1 node packages/cli/dist/index.js lint --base origin/main, 3 changed files, 385 rules. Warning 1: the absolute-claims regex fires on 'never' at .changeset/gate5-b2-class-rows.md:10 ('never the union with batch 1'), which is a precise scope statement. Warning 2: the 'orchestrator tests timeout' rule fires on authored-whitelist.test.ts:80 (the renamed describe line), a pure-data unit test with no IO. Batch 1's leg b1r-F4 found the same class of false positive. NOT A DEFECT; attribute both to this diff in the PR body. HALF FOLDED: the changeset's 'never the union' reworded to 'not the union' (the sentence loses nothing); the timeout warning is disclosed in the PR body, not pacified — a timeout on a millisecond data suite would satisfy a rule whose premise does not hold here (batch 1's disposition)."
+    },
+    {
+      "id": "b2r-F5",
+      "severity": "QUESTION",
+      "file": ".totem/spine/authored-rules.yaml",
+      "line": 5,
+      "claim": "The batch-2 envelope on gate5/batch-2-2263305c at c97c4410 still carries batch 1's 11 entries (lines 5-115: 427c97fb through 1210f02d) ahead of batch 2's 15. If the intake pin ran over it as-is under --judged-by static-whitelist@gate5-9668b633, the result would be 11 'revised' appends.",
+      "counterexample": "authored-rule-intake.ts:666-699: contentHash includes structuralEligibility (and so judgedBy), and action = existing.contentHash === contentHash ? 'unchanged' : 'revised'. Main's ledger (blob 9b7c55a3) holds exactly those 11 identities under static-whitelist@gate5-6cba5706. The intake only reads byIdentity for identities in the envelope and only appends (line ~800), so an envelope trimmed to batch 2 does not touch batch-1 rows. Batch 2's 15 identities are all distinct from the ledger's 11. Trimmed per the dispatch's conduct note (15 less the 8 kept out = 7: 5afaf8d0, 329479bf, 06282905 x2, f202f65f, 240f19ca x2), exactly two entries declare the delivered pairs: 329479bf (forbidden-fixed-call-expression, record type ast-grep) and f202f65f (callee-call-without-argument, record type ast-grep). Not a defect of this diff. For the seat: confirm the pin runs on a trimmed envelope, not c97c4410's file as committed. ANSWERED by the seat: the intake pin runs on a reconciled envelope carrying batch 2's seven surviving entries only — batch 1's eleven and the eight kept-out removed by the reconcile step batch 1's pin used — exactly as the dispatch's intake-conduct note requires; carried to the PR body and the intake-pin plan."
+    },
+    {
+      "id": "b2r-F6",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/spine-authored-cert-corpus.ts",
+      "line": 128,
+      "claim": "Once the batch-2 intake appends rows under static-whitelist@gate5-9668b633, the authoring ledger will hold two distinct judgedBy values. Any authored cert-corpus run over that ledger will then throw GATE_INVALID (batch 1's F5, now live on the ledger itself).",
+      "counterexample": "spine-authored-cert-corpus.ts:125-139 builds the set of judgedBy values over the effective ledger entries and throws when judgedBys.size !== 1. Main's ledger today has exactly 1 value (11 rows @6cba5706), so no path is live yet. The only caller is packages/cli/src/commands/spine-cert-run-corpus.ts. git grep over totem-strategy operations/310-migration finds no cert-run or authored-cert-corpus use; batch-2.json setIdForm names the bind as the alternative that is not taken. I could not verify whether any gate-5 scorer step calls the cert corpus. For the seat or the scorer: is a cert run over the ledger on gate 5's path before the bind is resolved? Not a defect of this diff. CARRIED by the seat: not on gate 5's path as far as this seat knows (the scorer's setIdForm names the bind as the road not taken); disclosed in the PR body and carried to the intake-pin mail for the scorer, as batch 1's F5 was; the single-judgedBy bind becomes a real product limit once the ledger holds two set ids — an issue at cadence."
+    }
+  ],
+  "folded": [
+    "b2r-F1",
+    "b2r-F2",
+    "b2r-F3",
+    "b2r-F4"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 3 MINOR, 2 QUESTION over origin/main..75fa7e86 (gate5 b2 class rows). Not falsified: the two rows (bytes, engine, order, position), set id 9668b633 (independently recomputed; no collision among 10 wrong-input variants), test strength on swap, retype and the pre-diff table, the predicate keying on the pair, the assertNoDuplicateEntries claim, the MODAL/D7 sentence, the keep-out account (8 rules, 7 pairs), the changeset fixed group, the exit-1 path. F1 and F2 are comment or changeset wording; F3 removes a vacuous assertion; F4 rewords one changeset word; no fold rewires semantics, so no re-armed leg is owed."
+}

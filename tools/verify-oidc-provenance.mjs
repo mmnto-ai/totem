@@ -33,12 +33,19 @@
  * POLL_INTERVAL_MS, and a spec resolved in an earlier round is never fetched
  * again. One slow package therefore cannot hide the others.
  *
- *   FLOOR   — VISIBILITY_DEADLINE_MS (10 min). A package that stays invisible
+ *   FLOOR   — VISIBILITY_DEADLINE_MS (25 min). A package that stays invisible
  *             is polled for AT LEAST this long from the start of polling.
  *             The 1.124.0 datum is 6 min 57 s measured from the merge but
  *             5 min 45 s measured from this step's start, and the poller's
- *             clock starts at the step — so the deadline bounds the step's
- *             clock, with margin over both figures.
+ *             clock starts at the step. A third datum raised the floor
+ *             (mmnto-ai/totem#2953): on the 2.11.1 cut the registry STAGED
+ *             `@mmnto/cli` — accepted the publish, then served E404 on the
+ *             version for 20 min 19 s while its siblings promoted in seconds,
+ *             and answered a re-run's publish with E409 "previously staged
+ *             version" — so the deadline covers a staged promotion with
+ *             margin, and `tools/publish-oidc.mjs` counts a staged version as
+ *             published so this step waits for it instead of the job failing
+ *             twice.
  *   CEILING — worstCaseMs(n) = VISIBILITY_DEADLINE_MS + POLL_INTERVAL_MS
  *             + n × SPAWN_TIMEOUT_MS. The deadline is checked AFTER a round
  *             and BEFORE the sleep, so the final round can start up to one
@@ -58,7 +65,7 @@ import { pathToFileURL } from 'node:url';
 /** How long to wait between polling rounds. */
 export const POLL_INTERVAL_MS = 15_000;
 /** FLOOR: a package that stays invisible is polled for at least this long. */
-export const VISIBILITY_DEADLINE_MS = 10 * 60_000;
+export const VISIBILITY_DEADLINE_MS = 25 * 60_000;
 // Bound the per-call npm view to defend against a wedged registry/network
 // (otherwise the CI step could hang up to the job-level timeout).
 export const SPAWN_TIMEOUT_MS = 20_000;
