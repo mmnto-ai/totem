@@ -484,13 +484,15 @@ export function runRuleAuthor(
   // judgedBy is rejected here, not deferred to the downstream `StructEligResult` non-empty refine.
   // `{ fromLedger: true }` (mmnto-ai/totem#2982) carries no run-level id: `judgedBy` stays
   // undefined and each entry is judged under its own ledger row's id in pass 1. The discriminant
-  // is strict at this exported boundary: a value that is neither a string nor an object whose
-  // `fromLedger` is `true` is a caller error, never silently the per-row source (extra keys on
-  // the object are TypeScript's excess-property check to refuse, not this runtime check's).
+  // is strict at this exported boundary: a value that is neither a string nor EXACTLY the object
+  // `{ fromLedger: true }` (one own key, that value) is a caller error, never silently the
+  // per-row source — an untyped caller's extra key is refused here, not silently ignored
+  // (fail-loud; Greptile on mmnto-ai/totem#2987).
   const fromLedger =
     typeof opts.judgedBy === 'object' &&
     opts.judgedBy !== null &&
-    opts.judgedBy.fromLedger === true;
+    opts.judgedBy.fromLedger === true &&
+    Object.keys(opts.judgedBy).length === 1;
   if (!fromLedger && typeof opts.judgedBy !== 'string') {
     throw new TotemError(
       'CONFIG_INVALID',

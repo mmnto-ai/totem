@@ -1087,12 +1087,20 @@ describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 
 
   it('a judgedBy that is neither a string nor { fromLedger: true } is a caller error (CONFIG_INVALID), ledger untouched', () => {
     // The exported boundary is callable from untyped JavaScript; the runtime discriminant must
-    // never read such a value as the per-row source. TypeScript refuses these shapes, so the
-    // test reaches the branch through a cast.
+    // never read such a value as the per-row source, and an object carrying an extra key beside
+    // `fromLedger` is refused too (fail-loud, not silently ignored). TypeScript refuses these
+    // shapes, so the test reaches the branch through a cast.
     writeYaml([decidableRule()]);
     run();
     const before = snapshot();
-    for (const bad of [{ fromLedger: false }, { other: 1 }, null, undefined, 7]) {
+    for (const bad of [
+      { fromLedger: false },
+      { other: 1 },
+      { fromLedger: true, unexpected: 1 },
+      null,
+      undefined,
+      7,
+    ]) {
       let caught: unknown;
       try {
         runRuleAuthor(totemDir, {
