@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Avoid type assertions on JSON.parse results — perform element-level validation instead to prevent crashes from corrupted or manually edited files.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: JSON.parse($INPUT) as $TYPE
+  scope:
+    fileGlobs:
+      - packages/core/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+
+examples:
+  - bad: const rows = JSON.parse(raw) as RetiredLesson[];
+    good: const rows = RetiredLessonsSchema.parse(JSON.parse(raw));
+
+curation:
+  sourceLesson: lesson-6f362fa28abcf94a
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

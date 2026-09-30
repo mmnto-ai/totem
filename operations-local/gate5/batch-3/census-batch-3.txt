@@ -1,0 +1,107 @@
+census: @mmnto/totem 2.10.0 · @mmnto/cli 2.10.0 · @ast-grep/napi 0.42.3 · node v24.16.0
+tree D:/Dev/worktrees/totem-totem-claude-gate5-tree @ 5293614badd3cc5a67993abd8a6db46afb1c400f — 2702 tracked path(s); classifier: the shipped classifyLines (AST context per line)
+
+== 391de7088c633579 — pattern \b(main|master)\.\.\.HEAD\b — globs **/*.ts **/*.js **/*.sh — in-scope files 733
+   firings by AST context: code=3 comment=1 string=3 no-grammar=1 (total 8)
+   [code] packages/cli/src/commands/shield-estimate.test.ts:255: { estimate: true, staged: true, diff: 'main...HEAD' },
+   [code] packages/core/src/sys/git.test.ts:145: ['diff', 'origin/main...HEAD'],
+   [code] packages/core/src/sys/git.test.ts:160: ['diff', 'origin/main...HEAD'],
+   [comment] packages/core/src/sys/git.test.ts:151: // base='origin/main' must resolve `origin/main...HEAD`, never `origin/origin/main`.
+   [string] packages/cli/src/git.test.ts:439: 'Diff source: branch-vs-base (--branch; origin/main...HEAD, else local main)',
+   [string] packages/cli/src/index.ts:488: '    totem review --estimate --diff main...HEAD',
+   [string] packages/core/src/sys/git.test.ts:167: 'origin/main': { fail: "fatal: ambiguous argument 'origin/main...HEAD'" },
+   [no-grammar] tests/clean-room/stress-test.sh:89: TOTAL_LINES=$(git diff main...HEAD --stat | tail -1)
+
+== 83b86cd73d637a6c — pattern \bmcp[a-zA-Z0-9_]*(?!\?)\s*: — globs **/*.ts **/*.tsx !**/*.test.ts — in-scope files 380
+   firings by AST context: code=10 comment=1 (total 11)
+   [code] packages/cli/src/commands/doctor-parity.ts:528: mcpJsonPath: path.join(gitRoot, '.mcp.json'),
+   [code] packages/cli/src/commands/doctor-parity.ts:943: ...(p.mcpJsonPath !== undefined ? { mcpJsonPath: p.mcpJsonPath } : {}),
+   [code] packages/cli/src/commands/init-detect.ts:47: mcpPath: string | null;
+   [code] packages/cli/src/commands/init-detect.ts:98: mcpPath: '.mcp.json',
+   [code] packages/cli/src/commands/init-detect.ts:104: mcpPath: '.gemini/settings.json',
+   [code] packages/cli/src/commands/init-detect.ts:110: mcpPath: '.cursor/mcp.json',
+   [code] packages/cli/src/commands/init-detect.ts:116: mcpPath: '.junie/mcp/mcp.json',
+   [code] packages/cli/src/commands/init-detect.ts:122: mcpPath: null,
+   [comment] packages/core/src/config-schema.ts:562: /** Optional: named partitions mapping logical aliases to file path prefixes for context isolation (e.g., { core: ['pack
+
+== cf65e2b445329be2 — pattern JSON\.parse\(\s*\S*readFileSync — globs packages/core/src/**/*.ts !packages/core/src/sys/** !**/*.test.ts !**/*.spec.ts — in-scope files 150
+   firings by AST context: code=6 (total 6)
+   [code] packages/core/src/describe.ts:31: const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+   [code] packages/core/src/describe.ts:51: const parsed = JSON.parse(fs.readFileSync(rulesPath, 'utf-8'));
+   [code] packages/core/src/ingest/pipeline.ts:40: const parsed = JSON.parse(fs.readFileSync(metaPath, 'utf-8')) as IndexMeta;
+   [code] packages/core/src/ingest/pipeline.ts:153: const parsed = JSON.parse(fs.readFileSync(cpPath, 'utf-8')) as FullSyncCheckpoint;
+   [code] packages/core/src/pack-manifest-writer.ts:186: parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')); // totem-context: sync read at boot; sync command is itself sync
+   [code] packages/core/src/pack-manifest-writer.ts:231: parsed = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')); // totem-context: sync read at boot; sync command is itself sync
+
+== 64bb807f4e10ea4f — pattern typeof\s+[^\s!&|=]+\s*===\s*['"]object['"](?!\s*&&) — globs **/*.ts **/*.tsx **/*.js **/*.jsx !**/*.test.ts — in-scope files 387
+   firings by AST context: code=6 string=1 (total 7)
+   [code] packages/cli/src/commands/eject.ts:309: : h && typeof h === 'object'
+   [code] packages/cli/src/commands/init-detect.ts:282: } else if (value && typeof value === 'object') {
+   [code] packages/cli/src/commands/init.ts:779: if (parsed !== null && typeof parsed === 'object') {
+   [code] packages/cli/src/orchestrators/orchestrator.ts:223: (typeof current === 'object' || typeof current === 'function') &&
+   [code] packages/core/src/pack-discovery.ts:284: (typeof callbackResult === 'object' || typeof callbackResult === 'function') &&
+   [code] packages/core/src/spine/authoring-ledger.ts:123: if (value !== null && typeof value === 'object') {
+   [string] packages/cli/src/commands/init-templates.ts:1576: } else if (bin && typeof bin === 'object') {
+
+== 87e2437431c17ec5 — pattern (['"\/])\^?\+\+\+\s+b\\?\/ — globs **/*.ts **/*.js **/*.py **/*.sh **/*.go **/*.rs — in-scope files 733
+   firings by AST context: code=1 comment=2 string=34 (total 37)
+   [code] packages/core/src/spine/derive-labels.test.ts:72: [disposition(1, [thread({ diffHunk: '+++ b/forbiddenCall()\n context();' })])],
+   [comment] packages/core/src/compiler.test.ts:267: // When a test file contains template literal diffs with "+++ b/file.ts",
+   [comment] packages/core/src/diff-parser.ts:27: // containing embedded diff headers like "+++ b/some-file.ts").
+   [string] packages/cli/src/commands/bootstrap-wiring.test.ts:63: '+++ b/src/index.ts',
+   [string] packages/cli/src/commands/run-compiled-rules.test.ts:167: '+++ b/src/app.ts',
+   [string] packages/cli/src/commands/run-compiled-rules.test.ts:329: '+++ b/src/handler.ts',
+   [string] packages/cli/src/commands/run-compiled-rules.test.ts:496: '+++ b/src/app.ts',
+   [string] packages/cli/src/commands/run-compiled-rules.test.ts:1202: '+++ b/src/app.ts',
+   [string] packages/cli/src/commands/shield-estimate.test.ts:919: '+++ b/poisonword.ts\n' +
+   [string] packages/cli/src/commands/shield-estimate.test.ts:946: '+++ b/foo.ts\n' +
+   [string] packages/cli/src/commands/shield-generated.test.ts:200: '+++ b/dist/gen.c',
+
+== 434c51ff64ec74b6 — pattern \.split\(\s*(?:\/\^?#+|['"]\^?#+) — globs **/*.ts **/*.js **/*.tsx **/*.jsx — in-scope files 724
+   firings by AST context: code=2 (total 2)
+   [code] packages/cli/src/commands/init.test.ts:1157: const sections = UNIVERSAL_BASELINE_MARKDOWN.split(/^## Lesson — /m).filter(Boolean);
+   [code] packages/cli/src/commands/init.test.ts:3861: const parts = REVIEW_REPLY_SKILL_CONTENT.split('## Consolidated round-disposition comment');
+
+== 55797450514d4c3b — pattern git add\s+(-A|\.)\b — globs **/*.sh **/*.bash **/*.yml **/*.yaml **/*.ts **/*.js — in-scope files 755
+   firings by AST context: code=1 string=1 no-grammar=3 (total 5)
+   [code] packages/cli/src/commands/doctor.test.ts:918: execSync('git add .totem/secrets.json', { cwd: tmpDir, stdio: 'ignore' });
+   [string] packages/cli/src/commands/wrap.ts:61: '  git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .juni
+   [no-grammar] tests/clean-room/stress-test.sh:83: git add -A
+   [no-grammar] tools/wind-tunnel-sha.test.sh:40: git add .totem/tests
+   [no-grammar] tools/wind-tunnel-sha.test.sh:75: git add .totem/tests/test-rule-a.md
+
+== 0615c43eb5a9d0e8 — pattern (-d\s+['"]?\.git['"]?|existsSync\([^)]*['"]\.git['"]\)) — globs **/*.sh **/*.bash **/*.js **/*.ts **/*.yml **/*.yaml — in-scope files 755
+   firings by AST context: code=7 string=2 (total 9)
+   [code] packages/cli/src/commands/doctor.ts:878: const hasGitDir = fs.existsSync(path.join(cwd, '.git')); // totem-context: predicate is "is THIS cwd a project root" (Pr
+   [code] packages/cli/src/commands/hooks.integration.test.ts:115: expect(fs.existsSync(path.join(subDir, '.git'))).toBe(false);
+   [code] packages/cli/src/commands/install-hooks.test.ts:923: expect(fs.existsSync(path.join(subDir, '.git'))).toBe(false);
+   [code] packages/cli/src/commands/install-hooks.test.ts:1126: expect(hook).toContain('if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then');
+   [code] packages/core/src/substrate-resolver.ts:92: fs.existsSync(path.join(dir, '.git')) && // totem-context: shape gate, not gitRoot probe; submodule/worktree compat.
+   [code] packages/core/src/sys/git.ts:404: return walkUpToMarker(start, (dir) => fs.existsSync(path.join(dir, '.git')));
+   [code] packages/core/src/sys/git.ts:426: (dir) => fs.existsSync(path.join(dir, '.totem')) || fs.existsSync(path.join(dir, '.git')),
+   [string] packages/cli/src/commands/install-hooks.ts:177: # PRIMARY checkout only ([ -d .git ]): in a linked worktree .git is a FILE, and a
+   [string] packages/cli/src/commands/install-hooks.ts:181: if [ -d .git ] && command -v totem-status >/dev/null 2>&1; then
+
+== 56c801dfda484c75 — pattern text-embedding-004 — globs **/*.ts **/*.js **/*.tsx **/*.jsx **/*.json **/*.env **/*.yaml **/*.yml — in-scope files 793
+   firings by AST context: code=3 no-grammar=15 (total 18)
+   [code] scripts/eval-embeddings.ts:126: query: 'Gemini text-embedding-004 model unavailable API version fallback',
+   [code] scripts/eval-embeddings.ts:435: config: { provider: 'gemini', model: 'text-embedding-004' },
+   [code] scripts/eval-embeddings.ts:452: config: { provider: 'gemini', model: 'text-embedding-004' },
+   [no-grammar] .totem/compiled-rules.json:3805: "lessonHeading": "The text-embedding-004 identifier is frequently unavailable",
+   [no-grammar] .totem/compiled-rules.json:3806: "pattern": "text-embedding-004",
+   [no-grammar] .totem/compiled-rules.json:3807: "message": "Use 'gemini-embedding-2-preview' instead of 'text-embedding-004' — the latter is frequently unavailable and 
+   [no-grammar] .totem/compiled-rules.json:7264: "lessonHeading": "Specific LLM models, such as Gemini's text-embedding-004,",
+   [no-grammar] .totem/compiled-rules.json:7265: "pattern": "text-embedding-004",
+   [no-grammar] .totem/compiled-rules.json:7266: "message": "Specific LLM models, such as Gemini's text-embedding-004,",
+   [no-grammar] .totem/compiled-rules.json:7837: "lessonHeading": "The text-embedding-004 identifier is frequently unavailable",
+   [no-grammar] .totem/compiled-rules.json:7838: "pattern": "\\btext-embedding-004\\b",
+
+== 4ac94d6f9c387e1e — pattern /\^[^\s\\] — globs packages/mcp/src/tools/**/*.ts — in-scope files 8
+   firings by AST context: code=2 regex=1 (total 3)
+   [code] packages/mcp/src/tools/add-lesson.test.ts:357: const matches = entry.match(/^## Lesson[\s\u2014\u2013-]+/gm);
+   [code] packages/mcp/src/tools/add-lesson.test.ts:416: const headingLineCount = lines.filter((l) => /^## Lesson[\s\u2014\u2013-]+/.test(l)).length;
+   [regex] packages/mcp/src/tools/search-knowledge.test.ts:565: /^<size-disclosure chars="\d+" approxTokens="\d+" sessionChars="\d+" sessionCalls="1" scope="server-process" \/>$/,
+
+== 5da43ea60b66e96e — pattern git\s+(?:log|show|diff|checkout|branch|tag|describe|rev-parse|ls-files|stash)\s+(?!.*\s--\s)(?:['"`]?\$[{(]?\w|['"`]?\$\w) — globs **/*.ts **/*.js **/*.sh **/*.bash **/*.mjs **/*.cjs — in-scope files 756
+   firings by AST context: string=1 (total 1)
+   [string] packages/core/src/sys/git.ts:219: `Verify the range is valid. Try 'git diff ${trimmed}' to confirm git accepts it; missing refs may need 'git fetch origin

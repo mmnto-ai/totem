@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: error
+message: Git diff headers wrap file paths containing spaces
+
+target:
+  type: regex
+  pattern: (['"\/])\^?\+\+\+\s+b\\?\/
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.py'
+      - '**/*.sh'
+      - '**/*.go'
+      - '**/*.rs'
+
+examples:
+  - bad: if (line.startsWith('+++ b/')) path = line.slice(6);
+    good: const m = /^\+\+\+ "?b\/(.+?)"?$/.exec(line);
+
+curation:
+  sourceLesson: lesson-87e2437431c17ec5
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

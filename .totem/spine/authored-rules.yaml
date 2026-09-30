@@ -4,78 +4,67 @@ heldOutNonInspectionAttestation: true
 rules:
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '5afaf8d03f059a41: Emojis are excluded from all documentation files to adhere'
+    targetDefect: '391de7088c633579: 2026-03-03T01:52:20.000Z'
     structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
+    record: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: fd8846c9d8ba939897a00e5537a2da09ddf9fb33d8391a90a5fb532f47c11a3c
+        contentHash: 0682ff7b55eee59937776a2ed134a6a051398afca22e323798fa1c154749965c
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '329479bf34f8816f: Use .min(1) on string schemas in config arrays'
-    structuralClass: forbidden-fixed-call-expression
-    record: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
+    targetDefect: '87e2437431c17ec5: Git diff headers wrap file paths containing spaces'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-87e24374-diff-header-plus-b-literal.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-87e24374-diff-header-plus-b-literal.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: a4300d49b89de1c681072505f42b562947a6a0cbbbc7d36433650da60bae08f6
+        contentHash: 089977464b9c6d158a1893e4098a51aa15b35518eaedd1166f0349898144c91d
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '06282905d061ca34@javascript: Diagnostic hints must precisely identify the underlying'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
+    targetDefect: '55797450514d4c3b: Never use git add -A or git add .'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-55797450-git-add-all.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-06282905-execsync-call-js.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-55797450-git-add-all.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
+        contentHash: c942c8c34ef080542c9570c072f220d3db62ce9ecb0fdbd39d3603f3914a83ce
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '06282905d061ca34@typescript: Diagnostic hints must precisely identify the underlying'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-06282905-execsync-call.rule.yaml
+    targetDefect: '56c801dfda484c75: The text-embedding-004 identifier is frequently unavailable'
+    structuralClass: forbidden-literal-token
+    record: .totem/rules/mig-56c801df-text-embedding-004-literal.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-06282905-execsync-call.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-56c801df-text-embedding-004-literal.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: 21a8eb185becbaa329c6d0440b7d7ef2dfe24cdbb6aeb59804c77666851f0175
+        contentHash: a6d0931648f7570fe6e4a8b81cfc489198884619702ce360b87d0039f8d93b6f
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: 'f202f65f8a198f18: When testing expected failures, assert the specific error'
-    structuralClass: callee-call-without-argument
-    record: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
+    targetDefect: 'fe1b4123aa1f679c: Always escape hyphens in regex utilities'
+    structuralClass: forbidden-callee-literal-arg
+    record: .totem/rules/mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: 5ff73cbf8e747ec4a30e45097ca8fffac02d6ea91b3197aa0851c9f35ba5ff94
+        contentHash: 3359f62831c5da5313e234c0df3c729cc8145bdb03763ebbe77ec372c6906cad
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '240f19cae3e56b10@javascript: Throwing specific error classes like TotemParseError'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
+    targetDefect: '6f362fa28abcf94a: Validate JSON at system boundaries'
+    structuralClass: type-assertion-on-call
+    record: .totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml
     positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml
+      - pr: 2948
+        filePath: .totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml
         matchedSpan: examples[0].bad
-        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '240f19cae3e56b10@typescript: Throwing specific error classes like TotemParseError'
-    structuralClass: forbidden-callee-call
-    record: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
-    positiveFixtures:
-      - pr: 2947
-        filePath: .totem/rules/mig-240f19ca-process-exit-call.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 08c22dba889de09ef2ca2245c933fe22e1798056963f9be0ea988e7f332bd20c
+        contentHash: 0318d2bc8358722a323dabf098cfa69710e0be3f03107e1d0c1078f59a50c622
         example: 0

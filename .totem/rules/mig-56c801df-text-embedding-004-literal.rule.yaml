@@ -1,0 +1,27 @@
+schemaVersion: 1
+severity: warning
+message: Use 'gemini-embedding-2-preview' instead of 'text-embedding-004' — the latter is frequently unavailable and causes API initialization failures
+
+target:
+  type: regex
+  pattern: text-embedding-004
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.tsx'
+      - '**/*.jsx'
+      - '**/*.json'
+      - '**/*.env'
+      - '**/*.yaml'
+      - '**/*.yml'
+
+examples:
+  - bad: const MODEL = 'text-embedding-004';
+    good: const MODEL = 'gemini-embedding-2-preview';
+
+curation:
+  sourceLesson: lesson-56c801dfda484c75
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

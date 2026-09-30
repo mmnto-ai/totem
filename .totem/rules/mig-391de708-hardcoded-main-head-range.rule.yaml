@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: 2026-03-03T01:52:20.000Z
+
+target:
+  type: regex
+  pattern: \b(main|master)\.\.\.HEAD\b
+  scope:
+    fileGlobs:
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.sh'
+
+examples:
+  - bad: const range = 'main...HEAD';
+    good: const range = dynamicRange;
+
+curation:
+  sourceLesson: lesson-391de7088c633579
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3

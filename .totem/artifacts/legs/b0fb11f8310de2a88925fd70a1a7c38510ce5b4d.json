@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "b0fb11f8310de2a88925fd70a1a7c38510ce5b4d",
+  "readAt": "2026-09-24T00:49:55Z",
+  "findings": [
+    {
+      "id": "b3-F1",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 120,
+      "claim": "Four source-scope rules (391de708, 87e24374, 55797450, 56c801df) are named regex/forbidden-literal-token and read under the operator's (A).",
+      "counterexample": "The relay names only 6ad0d4d5 and 5afaf8d0. The scorer's ground for recommending (A) was 'the record's scope is prose-only' (batch-1.md @729fa215). authored-whitelist.ts:15-22 says a forbidden-token class whose token appears in doc-comments must never be regex. The replayed census shows doc-comment firings on 391de708 (1, git.test.ts:151) and 87e24374 (2, compiler.test.ts:267, diff-parser.ts:27). The notes do not say (A) is being applied past its ruled ground, and do not name the alternative shape names the review could weigh (e.g. git add -A as a command plus literal argument). FOLDED: a disclosure section in the notes (and the pin's 8c) says (A) was ruled on prose-only records, is being read past that ground here, names the doc-comment counts per rule, leaves the reach of (A) to the scorer or operator, and names the alternative shape reading without renaming (section 3.4)."
+    },
+    {
+      "id": "b3-F2",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 287,
+      "claim": "Honest class typeof-comparison-missing-null-guard: a comparison lacking a conjoined null guard; new for the review.",
+      "counterexample": "The batch-1 table's rule-1 FAIL criterion names 'missing null check on results' as a semantic name no engine decides. The record cannot decide null guards: requires \\s*&& suppresses on any && on the line (an unguarded '(typeof x === 'object' || ...) && x.foo' is suppressed), and previous-line guards are invisible (orchestrator.ts:222-223, pack-discovery.ts:282-284 at 5293614b). The likely rule-1 question is not disclosed. FOLDED: disclosed in the notes' section and in the pin as a likely rule-1 question, with the syntactic reading of the same shape stated; the name not revised after the refusal."
+    },
+    {
+      "id": "b3-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 140,
+      "claim": "Legacy manual/unverified flags dropped: 7.",
+      "counterexample": "Manifest rules[26..38] carry both flags on exactly six rows (391de708, 83b86cd7, 64bb807f, 87e24374, 434c51ff, 0615c43e); the row itself lists six. FOLDED: 6."
+    },
+    {
+      "id": "b3-F4",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 84,
+      "claim": "All seven removed 64bb807f lines carry a null guard BEFORE the typeof; the curated good is exactly the guarded form.",
+      "counterexample": "On orchestrator.ts:223 and pack-discovery.ts:284 the guard is on the previous line; the record suppresses them because of the trailing ') &&' conjunction. The curated good places its guard after the typeof. The conclusion (seven false positives, removed 7, added 0) stands. FOLDED: the mechanism reworded for the two compound lines; the curated good's guard position stated."
+    },
+    {
+      "id": "b3-F5",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 280,
+      "claim": "The anchored requires shows a target-relative window would carry the rule without loss; a re-pin with the anchored form is one mail away.",
+      "counterexample": "The anchored form is still a line window: on \"typeof a === 'object' && typeof b === 'object')\" the legacy fires and the anchored form suppresses. 7/7 holds on this tree only (reproduced). The anchored requires is not the lookahead body, so it is outside the closed inventory item (ii) and the harness's (ii) excusal would not catch it; it needs a revision, not a re-pin. FOLDED: scoped to this tree with the two-comparison counterexample; the verbatim route named as the re-pin within 7 (b) and the anchored route as a revision of the pre-registration."
+    },
+    {
+      "id": "b3-F6",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/inert-83b86cd7.mjs",
+      "line": 9,
+      "claim": "Notes :92: the inertness is proved, not asserted, over every in-scope line of the pinned tree.",
+      "counterexample": "The committed script hard-codes absolute WT/TREE paths (not replayable from a clone), does not check the manifest's sha256, silently skips unreadable files (catch { continue; }), and its committed log does not print the tree HEAD. It replays to its log at 5293614b and the argument is sound. Uncommitted working-tree edits observed during the read appear to be this fold. FOLDED: the rewritten script (--tree required, exit 2 without it; the manifest resolved relative to the script and sha256-checked; unreadable files counted; the tree HEAD printed) committed with its regenerated log; the leg's scoped condition run by the seat: a second replay at 5293614b is byte-identical to the committed log."
+    },
+    {
+      "id": "b3-F7",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 89,
+      "claim": "83b86cd7's lookahead is kept verbatim as an admitted inert construct.",
+      "counterexample": "Pre-registration section 2 item 1 lists 83b86cd7 (?!\\?) among lookaheads a line-window requires would widen (a (ii) candidate), and R14's precedent for an inert lookahead was to remove it (E26, 0e01112d (?!Totem)). The notes cite neither, nor the reason removal is unavailable (outside the closed inventory). FOLDED: both sources cited and the reason stated."
+    },
+    {
+      "id": "b3-F8",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 183,
+      "claim": "83b86cd7's comment firing is a JSDoc line carrying mcpServers:; no-grammar counts .sh/.yml/.json/.env files; 55797450's are .sh/.yml, 56c801df's .json/.yaml.",
+      "counterexample": "config-schema.ts:562 matches on 'mcp: [...]' inside the JSDoc example. no-grammar counts firing lines, not files. 55797450's three are all .sh; 56c801df's fifteen are all .json lessonHeading/message strings in two compiled-rules.json files, i.e. the token in prose that the instrument cannot classify. FOLDED: the sample and the bucket described exactly, in the census paragraph and both per-rule notes."
+    },
+    {
+      "id": "b3-F9",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 324,
+      "claim": "55797450: the heading is the message's first 60 characters.",
+      "counterexample": "The heading 'Never use git add -A or git add .' is not a prefix of the message \"Never use 'git add -A' or 'git add .' — ...\" (manifest rules[32].legacy). FOLDED: the heading called a separate, shorter text."
+    },
+    {
+      "id": "b3-F10",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 402,
+      "claim": "The 5da43ea6 per-rule note quotes the legacy and record pattern and globs verbatim.",
+      "counterexample": "Markdown formatting garbled it: the globs read '**/_.js', '\\*\\*/_.sh', '**/_.mjs', '\\*\\*/_.cjs' and the code spans have collapsed. The record and manifest are correct; the quotation the scorer's C3 read relies on is not. FOLDED: the four values re-quoted in a fenced text block, which prettier leaves alone; verified byte-for-byte after the reformat."
+    },
+    {
+      "id": "b3-F11",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-3/mig-translation-notes.md",
+      "line": 384,
+      "claim": "6f362fa2's pair (ast-grep, type-assertion-on-call) is DELIVERED; carries over as deliverable, no second review.",
+      "counterexample": "The batch-1 table marks DELIVER, but the scorer's receipt section 4 says rows go out only after the codex D3 (i) re-derivation lands, and a class it rejects is withdrawn first; 'deliverable pending D3 (i)' is the supported reading. FOLDED: 'deliverable pending the codex D3 (i) re-derivation' in both places."
+    }
+  ],
+  "folded": [
+    "b3-F1",
+    "b3-F2",
+    "b3-F3",
+    "b3-F4",
+    "b3-F5",
+    "b3-F6",
+    "b3-F7",
+    "b3-F8",
+    "b3-F9",
+    "b3-F10",
+    "b3-F11"
+  ],
+  "verdict": "Leg 1 over ef21defc..b0fb11f8 (Gate 5 batch 3): 0 BLOCKING, 2 MATERIAL, 9 MINOR. Fidelity, (ii) mechanics, the inertness proof, envelope, census, harness, K3 and records_hash converged with byte-identical replays; terminates on disclosure-only folds, with a re-armed leg owed only if a fold changes a class, the envelope or admission routing, or the seat commits the pending inert-script rewrite (the seat ran that scoped check: the rewritten script replays byte-identically to its committed log at 5293614b)."
+}

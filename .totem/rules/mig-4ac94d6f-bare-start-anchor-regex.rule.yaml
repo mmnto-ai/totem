@@ -1,0 +1,20 @@
+schemaVersion: 1
+severity: warning
+message: Start-of-string anchor (^) used without accounting for leading whitespace. Use trimStart() on input or include optional whitespace (^\s*) to prevent failures from leading blank lines.
+
+target:
+  type: regex
+  pattern: /\^[^\s\\]
+  scope:
+    fileGlobs:
+      - packages/mcp/src/tools/**/*.ts
+
+examples:
+  - bad: const re = /^ERROR/;
+    good: const re = /^\s*ERROR/;
+
+curation:
+  sourceLesson: lesson-4ac94d6f9c387e1e
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Forbid inline JSON.parse(readFileSync) — use readJsonSafe
+
+target:
+  type: regex
+  pattern: JSON\.parse\(\s*\S*readFileSync
+  scope:
+    fileGlobs:
+      - packages/core/src/**/*.ts
+    excludeGlobs:
+      - packages/core/src/sys/**
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    good: const cfg = readJsonSafe(configPath, ConfigSchema);
+
+curation:
+  sourceLesson: lesson-cf65e2b445329be2
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

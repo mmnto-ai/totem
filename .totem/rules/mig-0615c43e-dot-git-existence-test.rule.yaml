@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: warning
+message: Resolve git root via rev-parse for monorepo compatibility
+
+target:
+  type: regex
+  pattern: (-d\s+['"]?\.git['"]?|existsSync\([^)]*['"]\.git['"]\))
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.yml'
+      - '**/*.yaml'
+
+examples:
+  - bad: if (existsSync('.git')) return;
+    good: const root = execFileSync('git', ['rev-parse', '--show-toplevel']);
+
+curation:
+  sourceLesson: lesson-0615c43eb5a9d0e8
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3
