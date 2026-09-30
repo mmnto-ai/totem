@@ -994,3 +994,44 @@ describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strate
     expect(readAuthoringLedger(totemDir)).toHaveLength(1);
   });
 });
+
+describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 = (a))', () => {
+  const snapshot = () => JSON.stringify(readAuthoringLedger(totemDir));
+
+  it('{ fromLedger: true } without verifyOnly throws CONFIG_INVALID; ledger untouched', () => {
+    writeYaml([decidableRule()]);
+    run();
+    const before = snapshot();
+    let caught: unknown;
+    try {
+      runRuleAuthor(totemDir, { judgedBy: { fromLedger: true } });
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Error | undefined)?.message).toMatch(/requires verifyOnly/);
+    expect((caught as { code?: string } | undefined)?.code).toBe('CONFIG_INVALID');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('{ fromLedger: true } + verifyOnly re-derives each entry under the id it was authored under', () => {
+    const ruleA = decidableRule();
+    const ruleB = decidableRule({ targetDefect: 'another defect' });
+    writeYaml([ruleA]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-a' });
+    writeYaml([ruleB]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-b' });
+    writeYaml([ruleA, ruleB]);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(2);
+    expect(res.minted).toBe(0);
+    expect(res.revised).toBe(0);
+    const byDefect = new Map(
+      res.records.map((r) => [r.provenance.targetDefect, r.structuralEligibility.judgedBy]),
+    );
+    expect(byDefect.get(ruleA.targetDefect as string)).toBe('static-whitelist@test-a');
+    expect(byDefect.get(ruleB.targetDefect as string)).toBe('static-whitelist@test-b');
+    expect(snapshot()).toBe(before);
+  });
+});
