@@ -1084,4 +1084,29 @@ describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 
     expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
     expect(snapshot()).toBe(before);
   });
+
+  it('a judgedBy that is neither a string nor { fromLedger: true } is a caller error (CONFIG_INVALID), ledger untouched', () => {
+    // The exported boundary is callable from untyped JavaScript; the runtime discriminant must
+    // never read such a value as the per-row source. TypeScript refuses these shapes, so the
+    // test reaches the branch through a cast.
+    writeYaml([decidableRule()]);
+    run();
+    const before = snapshot();
+    for (const bad of [{ fromLedger: false }, { other: 1 }, null, undefined, 7]) {
+      let caught: unknown;
+      try {
+        runRuleAuthor(totemDir, {
+          judgedBy: bad as unknown as { fromLedger: true },
+          verifyOnly: true,
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect((caught as Error | undefined)?.message).toMatch(
+        /must be the check id .* or exactly \{ fromLedger: true \}/,
+      );
+      expect((caught as { code?: string } | undefined)?.code).toBe('CONFIG_INVALID');
+    }
+    expect(snapshot()).toBe(before);
+  });
 });
