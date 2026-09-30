@@ -50,6 +50,31 @@ describe('evaluateStructuralEligibility (ADR-112 §3 — closed predicate)', () 
     expect(r.judgedBy).toBe('static-whitelist@cert-1');
   });
 
+  it('the verdict does not depend on judgedBy — only the recorded id differs (mmnto-ai/totem#2982 relies on this)', () => {
+    // The cert path's `{ fromLedger: true }` re-derive judges a row-less entry under a placeholder
+    // id and trusts that decidability and basis are the same under any id. Pin that invariant here,
+    // in the predicate's own suite, so a future change that reads `judgedBy` for the verdict fails
+    // this test before it silently breaks the intake.
+    const input = { declaredEngine: 'regex' as const, structuralClass: 'float-finite-assert' };
+    const a = evaluateStructuralEligibility(input, WHITELIST, 'static-whitelist@cert-1');
+    const b = evaluateStructuralEligibility(input, WHITELIST, 'unrecorded:no-authoring-ledger-row');
+    expect(b.decidable).toBe(a.decidable);
+    expect(b.basis).toBe(a.basis);
+    expect(b.judgedBy).toBe('unrecorded:no-authoring-ledger-row');
+    const unknownA = evaluateStructuralEligibility(
+      { declaredEngine: 'regex', structuralClass: 'unbounded-recursion-behavioral' },
+      WHITELIST,
+      'static-whitelist@cert-1',
+    );
+    const unknownB = evaluateStructuralEligibility(
+      { declaredEngine: 'regex', structuralClass: 'unbounded-recursion-behavioral' },
+      WHITELIST,
+      'unrecorded:no-authoring-ledger-row',
+    );
+    expect(unknownB.decidable).toBe(unknownA.decidable);
+    expect(unknownB.basis).toBe(unknownA.basis);
+  });
+
   it('decidable:false on an UNKNOWN class (no default-to-structural)', () => {
     const r = evaluateStructuralEligibility(
       { declaredEngine: 'regex', structuralClass: 'unbounded-recursion-behavioral' },

@@ -22,6 +22,7 @@ import type {
 import {
   CertCorpusSeedSchema,
   firingLabelId,
+  readAuthoringLedger,
   scoreWindtunnel,
   WindtunnelLockSchema,
 } from '@mmnto/totem';
@@ -116,7 +117,14 @@ function authoredRuleInput(overrides: Partial<AuthoredRuleInputLike> = {}): Auth
 /** Write a valid `.totem/spine/authored-rules.yaml` into the temp totemDir. */
 function writeAuthoredYaml(
   totemDir: string,
-  opts: { splitRef?: string; rules?: AuthoredRuleInputLike[] } = {},
+  opts: {
+    splitRef?: string;
+    rules?: AuthoredRuleInputLike[];
+    /** The §3 check id the seeding author run records (default JUDGED_BY). */
+    judgedBy?: string;
+    /** false ⇒ write the envelope only, no author run (default true). */
+    seedLedger?: boolean;
+  } = {},
 ): void {
   const fileDoc = {
     splitRef: opts.splitRef ?? SPLIT_REF,
@@ -132,7 +140,7 @@ function writeAuthoredYaml(
   // production order (`totem rule author` runs BEFORE a cert run). buildAuthoredCertifyingCorpus
   // now sources judgedBy from the pre-existing ledger (no lock/deps judgedBy), so the ledger
   // must exist before the build. JUDGED_BY is the §3 check id the ledger records per-rule.
-  runRuleAuthor(totemDir, { judgedBy: JUDGED_BY });
+  if (opts.seedLedger !== false) runRuleAuthor(totemDir, { judgedBy: opts.judgedBy ?? JUDGED_BY });
 }
 
 /**
@@ -255,6 +263,80 @@ describe('buildAuthoredCertifyingCorpus — production path', () => {
     // The scoring substrate is passed through untouched.
     expect(corpus.prDiffs).toEqual([]);
     expect(corpus.groundTruth.size).toBe(0);
+  });
+});
+
+// ─── 1b. Per-row judgedBy (mmnto-ai/totem#2982 = (a)) ─────────────────────────
+
+describe('buildAuthoredCertifyingCorpus — per-row judgedBy (mmnto-ai/totem#2982 = (a))', () => {
+  const ID_A = 'static-whitelist@gate5-aaaaaaaa';
+  const ID_B = 'static-whitelist@gate5-bbbbbbbb';
+  const ledgerBytes = (): string =>
+    fs.readFileSync(path.join(totemDir, 'spine', 'authoring-ledger.ndjson'), 'utf-8');
+
+  /** Rule 1 under id A, then rule 2 alone under id B — the migration's conduct (one id per batch). */
+  function seedTwoIds(): { rule1: AuthoredRuleInputLike; rule2: AuthoredRuleInputLike } {
+    const rule1 = authoredRuleInput();
+    writeAuthoredYaml(totemDir, { rules: [rule1], judgedBy: ID_A });
+    const rule2 = authoredRuleInput({
+      targetDefect: 'a second real lc defect',
+      record: writeRecord(totemDir, 'forbidden-call-2', 'forbiddenCall\\(\\)'),
+    });
+    writeAuthoredYaml(totemDir, { rules: [rule2], judgedBy: ID_B });
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(2);
+    expect(new Set(ledger.map((e) => e.structuralEligibility.judgedBy))).toEqual(
+      new Set([ID_A, ID_B]),
+    );
+    return { rule1, rule2 };
+  }
+
+  it('builds ONE corpus over a ledger whose rows carry two set ids', async () => {
+    const { rule1, rule2 } = seedTwoIds();
+    writeAuthoredYaml(totemDir, { rules: [rule1, rule2], seedLedger: false });
+    const before = ledgerBytes();
+
+    const corpus = await buildAuthoredCertifyingCorpus(baseDeps(totemDir));
+    expect(corpus.rules).toHaveLength(2);
+
+    const ledger = readAuthoringLedger(totemDir);
+    const idByDefect = new Map(ledger.map((e) => [e.targetDefect, e.ruleId]));
+    expect(new Set(corpus.rules.map((r) => r.lessonHash))).toEqual(
+      new Set([idByDefect.get(rule1.targetDefect), idByDefect.get(rule2.targetDefect)]),
+    );
+
+    // The build's success is the proof of per-row sourcing: `judgedBy` sits inside each row's
+    // material hash, so a record re-derived under any id but its own row's would have read
+    // `revised` and the verifyOnly gate would have thrown. The corpus's CompiledRule carries no
+    // structuralEligibility, so the ids are read out through a second, separate call of the same
+    // read-only re-derive and checked against each row.
+    const rederived = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    const rowJudgedBy = new Map(ledger.map((e) => [e.ruleId, e.structuralEligibility.judgedBy]));
+    expect(rederived.records).toHaveLength(2);
+    for (const record of rederived.records) {
+      expect(record.structuralEligibility.judgedBy).toBe(rowJudgedBy.get(record.ruleId));
+    }
+    const judgedByDefect = new Map(
+      rederived.records.map((r) => [r.provenance.targetDefect, r.structuralEligibility.judgedBy]),
+    );
+    expect(judgedByDefect.get(rule1.targetDefect)).toBe(ID_A);
+    expect(judgedByDefect.get(rule2.targetDefect)).toBe(ID_B);
+
+    expect(ledgerBytes()).toBe(before);
+  });
+
+  it('a two-id ledger plus an unledgered third entry still fails the no-mint gate, nothing written', async () => {
+    const { rule1, rule2 } = seedTwoIds();
+    const rule3 = authoredRuleInput({ targetDefect: 'a third, never-authored defect' });
+    writeAuthoredYaml(totemDir, { rules: [rule1, rule2, rule3], seedLedger: false });
+    const before = ledgerBytes();
+
+    // Exactly ONE would-author entry, and it is `minted`: the two ledgered rules re-derived
+    // `unchanged` under their own ids (a wrong id would have read `revised` and been listed too).
+    await expect(buildAuthoredCertifyingCorpus(baseDeps(totemDir))).rejects.toThrow(
+      /: 1 authored rule\(s\) would be authored \(minted\/revised\) during cert-run assembly — [0-9a-f]+ \(minted\)\./,
+    );
+    expect(ledgerBytes()).toBe(before);
   });
 });
 

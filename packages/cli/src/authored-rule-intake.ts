@@ -44,6 +44,7 @@ import {
   type AuthoringLedgerEntry,
   buildAuthoredIdentityIndex,
   evaluateStructuralEligibility,
+  foldEffectiveLedgerEntries,
   type FrozenSplitArtifact,
   identityKey,
   mintAuthoredRuleId,
@@ -418,6 +419,18 @@ export interface RuleAuthorResult {
   rejected: RejectedAuthoredRule[];
 }
 
+/**
+ * The `judgedBy` a `{ fromLedger: true }` re-derive uses for an entry with NO authoring-ledger
+ * row (mmnto-ai/totem#2982). It cannot escape: `fromLedger` requires `verifyOnly`; a row-less
+ * entry has no `existing`, so its action is always `minted`, so `write` is true, so the
+ * verifyOnly gate throws before pass 2 appends anything — the placeholder never reaches the
+ * ledger or a returned record. It is a value for the throwaway re-derive of an entry the gate
+ * is about to refuse, not a second source of `judgedBy`. Decidability does not depend on it
+ * (`evaluateStructuralEligibility` only records the id), so a row-less entry the whitelist
+ * cannot decide is still reported as rejected.
+ */
+const UNRECORDED_JUDGED_BY = 'unrecorded:no-authoring-ledger-row';
+
 /** One pending ledger write paired with its constructed record (pass-1 product). */
 interface PendingRule {
   record: AuthoredRuleRecord;
@@ -430,11 +443,20 @@ interface PendingRule {
  * ADR-112 §8 — ingest `.totem/spine/authored-rules.yaml` into authored records +
  * the authoring-ledger. `judgedBy` names the independent check (NEVER the author)
  * recorded on every eligibility verdict. Pure + deterministic except the ledger IO.
+ *
+ * `judgedBy` takes two forms. A string is the authoring run's check id (`totem rule
+ * author --judged-by <id>`, one id per run): every entry is judged under it. The
+ * object `{ fromLedger: true }` is the cert path's read-only source and requires
+ * `verifyOnly`: each entry is re-derived under the `judgedBy` its OWN effective
+ * authoring-ledger row carries, so a ledger holding one static-whitelist id per
+ * Gate 5 batch re-derives whole (mmnto-ai/totem#2982, ruled (a) by the operator
+ * 2026-09-30; record: strategy `operations/310-migration-preregistration.md` § 7
+ * record additions of 2026-09-30, second paragraph, item (i)).
  */
 export function runRuleAuthor(
   totemDir: string,
   opts: {
-    judgedBy: string;
+    judgedBy: string | { fromLedger: true };
     verifyOnly?: boolean;
     /**
      * ADR-112 §5.1/§8 R1 — the VERIFIED frozen split this authoring run binds to.
@@ -460,8 +482,33 @@ export function runRuleAuthor(
   // function is exported + callable directly, so an untrimmed `' Alice '` must not bypass the
   // §3 independence guard against `author: 'Alice'`. Trim once, use everywhere downstream; a blank
   // judgedBy is rejected here, not deferred to the downstream `StructEligResult` non-empty refine.
-  const judgedBy = opts.judgedBy.trim();
-  if (judgedBy.length === 0) {
+  // `{ fromLedger: true }` (mmnto-ai/totem#2982) carries no run-level id: `judgedBy` stays
+  // undefined and each entry is judged under its own ledger row's id in pass 1. The discriminant
+  // is strict at this exported boundary: a value that is neither a string nor EXACTLY the object
+  // `{ fromLedger: true }` (one own key, that value) is a caller error, never silently the
+  // per-row source — an untyped caller's extra key is refused here, not silently ignored
+  // (fail-loud; Greptile on mmnto-ai/totem#2987).
+  const fromLedger =
+    typeof opts.judgedBy === 'object' &&
+    opts.judgedBy !== null &&
+    opts.judgedBy.fromLedger === true &&
+    Object.keys(opts.judgedBy).length === 1;
+  if (!fromLedger && typeof opts.judgedBy !== 'string') {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      'judgedBy must be the check id (a string) or exactly { fromLedger: true } (ADR-112 §3; mmnto-ai/totem#2982)',
+      'Pass the check id as a string for an authoring run, or { fromLedger: true } with verifyOnly: true for a cert-run re-derive.',
+    );
+  }
+  if (fromLedger && opts.verifyOnly !== true) {
+    throw new TotemError(
+      'CONFIG_INVALID',
+      "judgedBy: { fromLedger: true } is the cert path's read-only source and requires verifyOnly — an authoring run declares its check id (ADR-112 §3; mmnto-ai/totem#2982)",
+      'Pass the check id as a string for an authoring run, or set verifyOnly: true for a cert-run re-derive.',
+    );
+  }
+  const judgedBy = typeof opts.judgedBy === 'string' ? opts.judgedBy.trim() : undefined;
+  if (judgedBy !== undefined && judgedBy.length === 0) {
     throw new TotemError(
       'CONFIG_INVALID',
       'judgedBy must name the independent eligibility check — it cannot be blank (ADR-112 §3)',
@@ -592,7 +639,9 @@ export function runRuleAuthor(
     // Case-INSENSITIVE (GCA diff-review): `author: Alice` + `--judged-by alice` is the same
     // human self-judging — a case variant must not slip past the §3 independence guard. Both
     // sides are already trimmed (author at intake, judgedBy in the command).
-    if (r.author.toLowerCase() === judgedBy.toLowerCase()) {
+    // Under `{ fromLedger: true }` there is no run-level id; pass 1 checks each entry
+    // against its own row's id instead.
+    if (judgedBy !== undefined && r.author.toLowerCase() === judgedBy.toLowerCase()) {
       throw new TotemError(
         'CONFIG_INVALID',
         `judgedBy '${judgedBy}' is the rule author '${r.author}' (case-insensitive) — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
@@ -610,9 +659,19 @@ export function runRuleAuthor(
     seenInFile.add(key);
   }
 
-  // Upsert index from the persisted ledger (fail-loud on a corrupt chain).
-  const { byIdentity, allRuleIds } = buildAuthoredIdentityIndex(readAuthoringLedger(totemDir));
+  // Upsert index from the persisted ledger (fail-loud on a corrupt chain). ONE read of the
+  // ledger feeds both indexes below.
+  const ledgerEntries = readAuthoringLedger(totemDir);
+  const { byIdentity, allRuleIds } = buildAuthoredIdentityIndex(ledgerEntries);
   const mintedIds = new Set<string>(allRuleIds);
+  // The effective row per ruleId (last row wins), read by `{ fromLedger: true }` for each
+  // entry's `judgedBy` (mmnto-ai/totem#2982, ruled (a) by the operator 2026-09-30; record:
+  // strategy `operations/310-migration-preregistration.md` § 7 record additions of
+  // 2026-09-30, second paragraph, item (i)). The ledger row stays the fact's one home: this
+  // map is an in-memory index over the same read of the same bytes, not a second source
+  // (Tenet 20 — a second HOME would be a second write path; an index over one read is not one).
+  const effectiveById = new Map<string, AuthoringLedgerEntry>();
+  for (const e of foldEffectiveLedgerEntries(ledgerEntries)) effectiveById.set(e.ruleId, e);
 
   // ── Pass 1 (PURE): eligibility, identity, record construction — no writes ──
   const pending: PendingRule[] = [];
@@ -625,11 +684,53 @@ export function runRuleAuthor(
     const ingested = ingestRecord(totemDir, r.record);
     const declaredEngine = ingested.parsed.derivedEngine;
 
+    // The identity LOOKUP runs before eligibility so `{ fromLedger: true }` can source this
+    // entry's `judgedBy` from its own ledger row (mmnto-ai/totem#2982). Only the lookup
+    // moved: the MINT of a new id stays below, after eligibility, so a rejected entry still
+    // reserves no id and the minted ids do not change.
+    const key = identityKey(r.author, r.targetDefect);
+    const existing = byIdentity.get(key);
+
+    let entryJudgedBy: string;
+    if (judgedBy !== undefined) {
+      entryJudgedBy = judgedBy;
+    } else if (existing === undefined) {
+      // `{ fromLedger: true }` (verifyOnly, enforced above) with no ledger row: re-derive under
+      // the placeholder, read `minted`, and let the verifyOnly gate below refuse it with every
+      // other row-less entry (see UNRECORDED_JUDGED_BY).
+      entryJudgedBy = UNRECORDED_JUDGED_BY;
+    } else {
+      const row = effectiveById.get(existing.ruleId);
+      if (row === undefined) {
+        // Unreachable by construction: both indexes are built from the same ledger read, and
+        // `buildAuthoredIdentityIndex` (core authoring-ledger.ts) fails loud unless identities and
+        // ruleIds are one-to-one, so every ruleId the identity index maps is a ruleId the
+        // effective fold (last row per ruleId) carries.
+        throw new TotemError(
+          'GATE_INVALID',
+          `authoring-ledger index is inconsistent: identity (${sanitizeForTerminal(r.author)} · ${sanitizeForTerminal(r.targetDefect)}) ` +
+            `maps to ruleId '${sanitizeForTerminal(existing.ruleId)}', which has no effective ledger row`,
+          'The ledger read produced inconsistent indexes; the ledger is corrupt.',
+        );
+      }
+      entryJudgedBy = row.structuralEligibility.judgedBy;
+      // §3 independence, per entry against the row's id (same text and code as the pre-loop
+      // check). A backstop: the producer cannot create such a row — the pre-loop guard refuses
+      // it at authoring.
+      if (r.author.toLowerCase() === entryJudgedBy.toLowerCase()) {
+        throw new TotemError(
+          'CONFIG_INVALID',
+          `judgedBy '${entryJudgedBy}' is the rule author '${r.author}' (case-insensitive) — the independent structural-eligibility check must never be the author (ADR-112 §3)`,
+          'Pass a --judged-by that names the CHECK (e.g. static-whitelist@cert-1), distinct from any rule author.',
+        );
+      }
+    }
+
     // Re-run the INDEPENDENT eligibility check; the author's structuralClass is a CLAIM.
     const structuralEligibility = evaluateStructuralEligibility(
       { declaredEngine, structuralClass: r.structuralClass },
       authoredWhitelist(),
-      judgedBy,
+      entryJudgedBy,
     );
     if (!structuralEligibility.decidable) {
       rejected.push({
@@ -650,9 +751,8 @@ export function runRuleAuthor(
     // has to be resolved first. The DECISION is unchanged: an existing identity
     // reuses its persisted id and is judged by hash equality; only a genuinely new
     // one mints. `ruleId` is stable per identity, so putting it inside the material
-    // cannot churn a rule that did not change.
-    const key = identityKey(r.author, r.targetDefect);
-    const existing = byIdentity.get(key);
+    // cannot churn a rule that did not change. (The identity LOOKUP now runs above
+    // eligibility for mmnto-ai/totem#2982; the mint stays here.)
     let ruleId: string;
     if (existing) {
       ruleId = existing.ruleId; // reuse the persisted id — NEVER re-mint an existing identity
@@ -773,7 +873,12 @@ export function runRuleAuthor(
   // (Q1: single source of the mint/revise decision; a separate pre-check would be a second source,
   // the Tenet-20 mirror strategy#787 closed). Composes with — never replaces — the producer's step-0
   // empty-ledger and step-3 judgedBy/split gates (Q3). The authoring path leaves verifyOnly unset
-  // and still mints/revises below (Q4: cert-path-only).
+  // and still mints/revises below (Q4: cert-path-only). The cert path passes
+  // `judgedBy: { fromLedger: true }`, so each entry is re-derived under its OWN ledger row's
+  // `judgedBy` (mmnto-ai/totem#2982, ruled (a) by the operator 2026-09-30; record: strategy
+  // `operations/310-migration-preregistration.md` § 7 record additions of 2026-09-30, second
+  // paragraph, item (i)); an entry with no row is re-derived under a placeholder id and reads
+  // `minted`, which this gate refuses.
   if (opts.verifyOnly) {
     const wouldAuthor = pending.filter((p) => p.write);
     if (wouldAuthor.length > 0) {

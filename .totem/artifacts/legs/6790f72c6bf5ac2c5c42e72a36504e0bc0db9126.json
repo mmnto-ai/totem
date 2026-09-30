@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "6790f72c6bf5ac2c5c42e72a36504e0bc0db9126",
+  "readAt": "2026-09-30T03:43:58Z",
+  "findings": [
+    {
+      "id": "2982-F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spine-authored-cert-corpus.test.ts",
+      "line": 384,
+      "claim": "Corpus test (b) would still pass if the fold picked the wrong rows: it asserts only /would be authored \\(minted\\/revised\\)/, and a rule re-derived under the wrong id reads `revised`, which the same message matches.",
+      "counterexample": "spine-authored-cert-corpus.test.ts:384-386 at 6790f72c; the verifyOnly gate's message lists every would-author entry with its action (authored-rule-intake.ts, the gate block). FOLDED (the seat read the gate's message format at source): the assertion now requires exactly ': 1 authored rule(s) would be authored (minted/revised) during cert-run assembly — <ruleId> (minted).', so the unledgered third entry is the only offender and a wrong-row `revised` would fail it."
+    },
+    {
+      "id": "2982-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/spine-authored-cert-corpus.test.ts",
+      "line": 361,
+      "claim": "Test (a)'s comment calls its second runRuleAuthor({ fromLedger: true }) call 'the same read-only re-derive the build runs (step 1)'; it is a separate, second call. The check itself holds: judgedBy sits inside the material hash, so the build's success already forces each record to have been re-derived under its own row's id (a first-row-id regression reads `revised` and throws).",
+      "counterexample": "spine-authored-cert-corpus.test.ts:361-363 at 6790f72c; packages/core/src/spine/authoring-ledger.ts:186,197 (structuralEligibility inside authoringContentHash via canonicalStringify). FOLDED: the comment now states that the build's success is the proof and the second call only reads the ids out, since the corpus's CompiledRule carries no structuralEligibility."
+    },
+    {
+      "id": "2982-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/authored-rule-intake.ts",
+      "line": 486,
+      "claim": "The fromLedger discriminant was `typeof opts.judgedBy !== 'string'`, so an untyped caller passing undefined, null or { fromLedger: false } with verifyOnly: true would silently get per-row sourcing where the pre-fix code crashed on .trim(). TypeScript blocks it and runRuleAuthor is not a public export, but the file's own comment says the function is exported and callable directly.",
+      "counterexample": "authored-rule-intake.ts:482-486 at 6790f72c; packages/cli/package.json exports '.' only; src/index.ts has no re-export. FOLDED: the discriminant is now `typeof opts.judgedBy === 'object' && opts.judgedBy !== null && opts.judgedBy.fromLedger === true`, and any value that is neither a string nor exactly { fromLedger: true } throws CONFIG_INVALID before the YAML is read."
+    },
+    {
+      "id": "2982-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/authored-rule-intake.ts",
+      "line": 421,
+      "claim": "Two claims were correct by reading but untested: the UNRECORDED_JUDGED_BY doc comment's 'a row-less entry the whitelist cannot decide is still reported as rejected', and the effective-row (last row wins) semantics for a rule revised across two ids.",
+      "counterexample": "authored-rule-intake.ts:421-432 at 6790f72c; packages/core/src/spine/authored-rule.ts:380-393 (decidable iff exactly one pair match; judgedBy only recorded); authoring-ledger.ts:297-304 (foldEffectiveLedgerEntries, last row per ruleId). FOLDED: two tests added to rule-author.test.ts — a rule authored under test-a then revised under test-b re-derives under test-b with `unchanged` 1; a row-less undecidable ast-grep entry under { fromLedger: true } reaches rejected[] (reason names the pair), nothing written, the ledgered rule `unchanged`."
+    },
+    {
+      "id": "2982-F5",
+      "severity": "QUESTION",
+      "file": ".changeset/2982-per-row-judgedby.md",
+      "line": 10,
+      "claim": "QUESTION for the seat: the ruling says 'one corpus over the whole ledger' and the commit title and changeset say a multi-id ledger 'builds one corpus', but the corpus is built over the envelope's entries; effective rows missing from the envelope are neither certified nor refused. Is 'whole ledger' a completeness requirement (refuse if an effective row is missing from the envelope) or only the removal of the refusal?",
+      "counterexample": "strategy operations/310-migration-preregistration.md:163 item (i) at e5797584; spine-authored-cert-corpus.ts step 1 (runRuleAuthor over .totem/spine/authored-rules.yaml); the pre-fix code had no completeness check and the issue's build sentence (mmnto-ai/totem#2982, comment of 2026-09-30T01:29Z) asks for none. ANSWERED by the seat: the ruling's 'whole ledger' contrasts with (b)'s one-set-id-per-run — one corpus covers rows under every id — and adds no completeness requirement; a completeness gate would be a new gate the ruling did not ask for and would refuse every per-batch envelope the migration's conduct produces. FOLDED: the changeset now says the ledger 'no longer refuses, and one corpus covers the envelope's entries under any number of ids', that the corpus still assembles from the envelope, and that an effective row with no envelope entry is neither certified nor refused, as before."
+    },
+    {
+      "id": "2982-F6",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/authored-rule-intake.ts",
+      "line": 706,
+      "claim": "QUESTION for the seat: under (a) the re-derive judges every entry against the CURRENT authoredWhitelist() while each row's id names the table version that judged it (static-whitelist@gate5-<setSha8>); the id is carried and hash-bound, not re-checked against the table it names. The pending (C) re-scope of the exemplar row could make an earlier batch's rule undecidable under the current table while its row still names the old one. Is that the intended reading of 'ledger-sourced per row'?",
+      "counterexample": "authored-rule-intake.ts pass 1 at 6790f72c (evaluateStructuralEligibility over authoredWhitelist() with entryJudgedBy); the pre-fix code judged against the current table the same way, so not a regression. ANSWERED by the seat: intended — the row's id is PROVENANCE (which check judged the row when it was written), and admissibility at a cert run is the current table's; an entry whose pair has left the table reads decidable: false, is rejected, and the build refuses whole, so such entries are kept out of the cert envelope. The (C) proposal (.totem/temp/c-proposal-exemplar-row.v2.md § S4) already routes that consequence. No code change."
+    }
+  ],
+  "folded": [
+    "2982-F1",
+    "2982-F2",
+    "2982-F3",
+    "2982-F4",
+    "2982-F5",
+    "2982-F6"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 4 MINOR, 2 QUESTION over 91a2edd9..6790f72c (mmnto-ai/totem#2982 = (a), per-row judgedBy). Not falsified: the per-row lookup (identities and ruleIds one-to-one in buildAuthoredIdentityIndex, so last-row-per-identity equals last-row-per-ruleId); a wrong id cannot pass silently (judgedBy inside the material hash turns unchanged into revised and the verifyOnly gate throws); the identity-lookup move is behavior-preserving for the string form (minted ids unchanged, rejected entries reserve no id); the placeholder cannot reach the ledger, a returned record, rejected[] or an error string under any option combination; no persist, report or lock reader assumes one judgedBy per corpus; step 3's per-row assert-equal compares the record with the post-re-derive effective row; the four new tests fail on the parent code; the citations and the patch-level changeset. The four MINORs were folded (a strict discriminant, a tighter regex on test (b), a comment, two coverage tests); the two QUESTIONs were answered with no code change and one changeset sentence. No fold rewires semantics, so no re-armed leg is owed."
+}

@@ -994,3 +994,127 @@ describe('runRuleAuthor — verifyOnly no-mint precondition (ADR-112 §8, strate
     expect(readAuthoringLedger(totemDir)).toHaveLength(1);
   });
 });
+
+describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 = (a))', () => {
+  const snapshot = () => JSON.stringify(readAuthoringLedger(totemDir));
+
+  it('{ fromLedger: true } without verifyOnly throws CONFIG_INVALID; ledger untouched', () => {
+    writeYaml([decidableRule()]);
+    run();
+    const before = snapshot();
+    let caught: unknown;
+    try {
+      runRuleAuthor(totemDir, { judgedBy: { fromLedger: true } });
+    } catch (err) {
+      caught = err;
+    }
+    expect((caught as Error | undefined)?.message).toMatch(/requires verifyOnly/);
+    expect((caught as { code?: string } | undefined)?.code).toBe('CONFIG_INVALID');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('{ fromLedger: true } + verifyOnly re-derives each entry under the id it was authored under', () => {
+    const ruleA = decidableRule();
+    const ruleB = decidableRule({ targetDefect: 'another defect' });
+    writeYaml([ruleA]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-a' });
+    writeYaml([ruleB]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-b' });
+    writeYaml([ruleA, ruleB]);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(2);
+    expect(res.minted).toBe(0);
+    expect(res.revised).toBe(0);
+    const byDefect = new Map(
+      res.records.map((r) => [r.provenance.targetDefect, r.structuralEligibility.judgedBy]),
+    );
+    expect(byDefect.get(ruleA.targetDefect as string)).toBe('static-whitelist@test-a');
+    expect(byDefect.get(ruleB.targetDefect as string)).toBe('static-whitelist@test-b');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('{ fromLedger: true } reads the EFFECTIVE row — a rule revised under a second id re-derives under that id', () => {
+    const rule = decidableRule();
+    writeYaml([rule]);
+    runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-a' });
+    // Same envelope, a second id: `judgedBy` sits in the material, so the row is `revised`.
+    const second = runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test-b' });
+    expect(second.revised).toBe(1);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(2);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(1);
+    expect(res.minted + res.revised).toBe(0);
+    expect(res.records[0]?.structuralEligibility.judgedBy).toBe('static-whitelist@test-b');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('{ fromLedger: true } + verifyOnly still reports a row-less UNDECIDABLE entry as rejected, nothing written', () => {
+    // The placeholder id is used only for the throwaway re-derive of a row-less entry; decidability
+    // does not depend on it, so an undecidable row-less entry reaches `rejected`, not the gate.
+    writeYaml([decidableRule()]);
+    run();
+    writeRecord(
+      'ast-grep-rule',
+      recordBody({
+        target: {
+          type: 'ast-grep',
+          language: 'typescript',
+          pattern: 'console.log($MSG)',
+          scope: { fileGlobs: ['src/**/*.ts'] },
+        },
+      }),
+    );
+    writeYaml([
+      decidableRule(),
+      decidableRule({
+        targetDefect: 'never authored, and undecidable',
+        record: recordRef('ast-grep-rule'),
+      }),
+    ]);
+    const before = snapshot();
+
+    const res = runRuleAuthor(totemDir, { judgedBy: { fromLedger: true }, verifyOnly: true });
+    expect(res.unchanged).toBe(1);
+    expect(res.minted + res.revised).toBe(0);
+    expect(res.rejected).toHaveLength(1);
+    expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
+    expect(snapshot()).toBe(before);
+  });
+
+  it('a judgedBy that is neither a string nor { fromLedger: true } is a caller error (CONFIG_INVALID), ledger untouched', () => {
+    // The exported boundary is callable from untyped JavaScript; the runtime discriminant must
+    // never read such a value as the per-row source, and an object carrying an extra key beside
+    // `fromLedger` is refused too (fail-loud, not silently ignored). TypeScript refuses these
+    // shapes, so the test reaches the branch through a cast.
+    writeYaml([decidableRule()]);
+    run();
+    const before = snapshot();
+    for (const bad of [
+      { fromLedger: false },
+      { other: 1 },
+      { fromLedger: true, unexpected: 1 },
+      null,
+      undefined,
+      7,
+    ]) {
+      let caught: unknown;
+      try {
+        runRuleAuthor(totemDir, {
+          judgedBy: bad as unknown as { fromLedger: true },
+          verifyOnly: true,
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect((caught as Error | undefined)?.message).toMatch(
+        /must be the check id .* or exactly \{ fromLedger: true \}/,
+      );
+      expect((caught as { code?: string } | undefined)?.code).toBe('CONFIG_INVALID');
+    }
+    expect(snapshot()).toBe(before);
+  });
+});
