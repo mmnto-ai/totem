@@ -1575,21 +1575,47 @@ const C0_CONTROL_END = 0x20;
 /** DEL through the end of the C1 control range, inclusive. */
 const C1_CONTROL_START = 0x7f;
 const C1_CONTROL_END = 0x9f;
+/** LEFT-TO-RIGHT MARK and RIGHT-TO-LEFT MARK. */
+const BIDI_MARK_START = 0x200e;
+const BIDI_MARK_END = 0x200f;
+/** The bidirectional embedding and override controls (LRE through RLO). */
+const BIDI_EMBED_START = 0x202a;
+const BIDI_EMBED_END = 0x202e;
+/** The bidirectional isolate controls (LRI through PDI). */
+const BIDI_ISOLATE_START = 0x2066;
+const BIDI_ISOLATE_END = 0x2069;
 
-export type GeminiTrustVerdict = 'trusted' | 'do-not-trust' | 'untrusted';
+/** The character that marks a Windows 8.3 short-name segment. */
+const WINDOWS_SHORT_NAME_MARK = '~';
+
+/**
+ * `undecidable`: a path the judgment would compare carries a Windows short
+ * name, which Gemini CLI expands natively and this port does not.
+ */
+export type GeminiTrustVerdict = 'trusted' | 'do-not-trust' | 'untrusted' | 'undecidable';
+
+function isDisplayHostile(code: number): boolean {
+  return (
+    code < C0_CONTROL_END ||
+    (code >= C1_CONTROL_START && code <= C1_CONTROL_END) ||
+    (code >= BIDI_MARK_START && code <= BIDI_MARK_END) ||
+    (code >= BIDI_EMBED_START && code <= BIDI_EMBED_END) ||
+    (code >= BIDI_ISOLATE_START && code <= BIDI_ISOLATE_END)
+  );
+}
 
 /**
  * Terminal-safe rendering of file-controlled text. Sync on purpose: the core
  * `sanitizeForTerminal` rides a dynamic import, and this row stays sync. Every
- * control code point (C0, DEL, C1 — the ANSI and line-forging vectors) is
- * replaced, and the result is capped on code points, so the cap never splits
- * a surrogate pair.
+ * control code point (C0, DEL, C1 — the ANSI and line-forging vectors) and
+ * every bidirectional mark, embedding, override and isolate control (the
+ * display-reordering vectors) is replaced, and the result is capped on code
+ * points, so the cap never splits a surrogate pair.
  */
 function sanitizeGeminiTrustText(text: string): string {
-  const points = Array.from(text).map((ch) => {
-    const code = ch.codePointAt(0) ?? 0;
-    return code < C0_CONTROL_END || (code >= C1_CONTROL_START && code <= C1_CONTROL_END) ? '?' : ch;
-  });
+  const points = Array.from(text).map((ch) =>
+    isDisplayHostile(ch.codePointAt(0) ?? 0) ? '?' : ch,
+  );
   return points.length > GEMINI_TRUST_DISPLAY_MAX
     ? `${points.slice(0, GEMINI_TRUST_DISPLAY_MAX).join('')}…`
     : points.join('');
@@ -1637,8 +1663,16 @@ function isMissingFileError(err: unknown): boolean {
  * - the winner decides: `DO_NOT_TRUST` is not trusted, `TRUST_FOLDER` and
  *   `TRUST_PARENT` are trusted; no matching rule is unlisted.
  *
- * Not ported: the source's win32 short-name (`~`) realpath step inside
- * `isSubpath`.
+ * Not ported, and refused instead: on win32, when either path contains `~`,
+ * the source's `isSubpath` sends both through the native realpath, which
+ * expands 8.3 short names. This port does not, so on win32 a target, key or
+ * effective folder containing `~` returns `undecidable` rather than a verdict
+ * that could differ from Gemini's (measured: a short-name `DO_NOT_TRUST` key
+ * under a `TRUST_FOLDER` ancestor read as trusted). On darwin and linux `~`
+ * is an ordinary character and is judged as any other.
+ *
+ * `realpath` defaults to identity: a caller who omits it does not follow
+ * junctions or symlinks. The row always passes the real one.
  */
 export function judgeGeminiTrust(
   target: string,
@@ -1681,12 +1715,16 @@ export function judgeGeminiTrust(
   const source = trust instanceof Map ? trust.entries() : Object.entries(trust);
   for (const [key, value] of source) rules.set(normalise(key), value);
 
+  const hasShortName = (p: string): boolean => isWin && p.includes(WINDOWS_SHORT_NAME_MARK);
   const location = normalise(real(target));
+  if (hasShortName(normalise(target)) || hasShortName(location)) return 'undecidable';
   let longest = -1;
   let winner: string | undefined;
   for (const [rulePath, level] of rules) {
     const effective = level === GEMINI_TRUST_PARENT ? pm.dirname(rulePath) : rulePath;
-    if (isSubpath(normalise(real(effective)), location) && rulePath.length > longest) {
+    const realEffective = normalise(real(effective));
+    if (hasShortName(rulePath) || hasShortName(realEffective)) return 'undecidable';
+    if (isSubpath(realEffective, location) && rulePath.length > longest) {
       longest = rulePath.length;
       winner = level;
     }
@@ -1736,13 +1774,18 @@ function geminiTrustFilePath(
  * `GEMINI_RESTRICTED_MODE`, `GEMINI_CLI_TRUST_WORKSPACE`, the
  * `security.folderTrust.enabled` setting (when that is false Gemini CLI trusts
  * every folder), IDE workspace trust, or user-level and extension MCP servers.
- * It parses strict JSON, where Gemini CLI also accepts comments. It declines
- * (`skip`, with its reason) on anything it does not recognise and never
- * reports `pass` on a state it could not read. It never throws, and every
- * result carries `gateExempt: true`.
+ * It parses strict JSON, where Gemini CLI also accepts comments. On Windows it
+ * declines when a path it would compare uses a short name (`~`), which Gemini
+ * CLI resolves natively and this row does not. Relative keys and a relative
+ * `GEMINI_CLI_TRUSTED_FOLDERS_PATH` resolve against the doctor's cwd, where
+ * Gemini CLI uses its own launch cwd. It declines (`skip`, with its reason)
+ * on anything it does not recognise and never reports `pass` on a state it
+ * could not read. It never throws, and every result carries
+ * `gateExempt: true`.
  *
- * `deps` injects the OS home directory, the environment, the file read and
- * the realpath, so no test touches the real `~/.gemini` or the file system.
+ * `deps` injects the OS home directory, the environment, the file read, the
+ * existence probe and the realpath, so no test touches the real `~/.gemini`
+ * or the file system.
  */
 export function checkGeminiWorkspaceTrust(
   cwd: string,
@@ -1750,12 +1793,22 @@ export function checkGeminiWorkspaceTrust(
     homeDir?: string;
     readFile?: (p: string) => string;
     realpath?: (p: string) => string;
+    exists?: (p: string) => boolean;
     env?: Readonly<Record<string, string | undefined>>;
+    /** Test seam for the platform branch; production callers omit it. */
+    platform?: NodeJS.Platform;
   },
 ): DiagnosticResult {
   const name = 'Gemini Workspace Trust';
   const readFile = deps?.readFile ?? ((p: string) => fs.readFileSync(p, 'utf-8'));
   const realpath = deps?.realpath ?? ((p: string) => fs.realpathSync(p));
+  const exists = deps?.exists ?? ((p: string) => fs.existsSync(p));
+  const remediation =
+    'Run /permissions in Gemini CLI to change this folder\'s trust level (an unlisted folder also prompts on an interactive start), or use the CLI in the meantime: totem search "<query>"';
+  const mayFilter =
+    'so it may filter MCP servers here and the Totem MCP tools may be absent from a Gemini session';
+  const rejected =
+    'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start); trust state not derivable';
   const skip = (message: string): DiagnosticResult => ({
     name,
     status: 'skip',
@@ -1807,9 +1860,31 @@ export function checkGeminiWorkspaceTrust(
     // totem-context: a read failure is this sensor declining to judge — reported as a skip with its reason, never a throw (Tenet 13)
   } catch (err) {
     if (isMissingFileError(err)) {
-      return skip(
-        `Gemini CLI trust file not found (${shownTrustPath}) — trust state not derivable`,
-      );
+      // Gemini CLI reads a missing trust file as an empty one: no rule
+      // matches, so the folder is unlisted. A machine with no Gemini CLI home
+      // at all has never set Gemini up, and is not nagged.
+      const trustDir = path.dirname(trustPath);
+      let homeExists: boolean;
+      try {
+        homeExists = exists(trustDir);
+        // totem-context: a failed existence probe is this sensor declining to judge — a skip with its reason, never a throw (Tenet 13)
+      } catch (probeErr) {
+        return skip(
+          `Gemini CLI trust file not found (${shownTrustPath}) and its directory could not be probed: ${errorReason(probeErr)} — trust state not derivable`,
+        );
+      }
+      if (!homeExists) {
+        return skip(
+          `no Gemini CLI home found (${sanitizeGeminiTrustText(trustDir)}) — Gemini CLI has not been set up for this user, nothing to judge`,
+        );
+      }
+      return {
+        name,
+        status: 'warn',
+        message: `no Gemini CLI trust file at ${shownTrustPath} — Gemini CLI treats this folder as unlisted, ${mayFilter}`,
+        remediation,
+        gateExempt: true,
+      };
     }
     return skip(
       `Gemini CLI trust file unreadable (${shownTrustPath}): ${errorReason(err)} — trust state not derivable`,
@@ -1826,38 +1901,50 @@ export function checkGeminiWorkspaceTrust(
   }
   if (!isPlainJsonObject(trust)) {
     return skip(
-      `Gemini CLI trust file is not a JSON object (${shownTrustPath}; found ${describeJsonKind(trust)}) — trust state not derivable`,
+      `Gemini CLI trust file is not a JSON object (${shownTrustPath}; found ${describeJsonKind(trust)}) — ${rejected}`,
     );
   }
-  // A Map, not an object: a `__proto__` key is judged, never dropped.
+  // A Map, not an object: a `__proto__` key is judged, never dropped. Each key
+  // is resolved against `cwd` here, so a relative key reads the same whoever
+  // calls the row (Gemini CLI resolves it against its own launch cwd).
   const validated = new Map<string, string>();
   for (const [key, value] of Object.entries(trust)) {
     if (typeof value !== 'string' || !GEMINI_TRUST_VALUES.has(value)) {
       const shown = sanitizeGeminiTrustText(JSON.stringify(value) ?? String(value));
       return skip(
-        `Gemini CLI trust file carries an unrecognised trust value ${shown} (${shownTrustPath}) — its format may have moved; trust state not derivable`,
+        `Gemini CLI trust file carries an unrecognised trust value ${shown} (${shownTrustPath}) — ${rejected}`,
       );
     }
-    validated.set(key, value);
+    validated.set(path.resolve(cwd, key), value);
   }
 
   // 3. The judgment: Gemini CLI's own rule (see judgeGeminiTrust).
-  const verdict = judgeGeminiTrust(path.resolve(cwd), validated, process.platform, realpath);
+  const verdict = judgeGeminiTrust(
+    path.resolve(cwd),
+    validated,
+    deps?.platform ?? process.platform,
+    realpath,
+  );
+  if (verdict === 'undecidable') {
+    return skip(
+      'a path here uses a Windows short name (~), which Gemini CLI resolves natively and this row does not — trust state not derived',
+    );
+  }
   if (verdict === 'trusted') {
     return {
       name,
       status: 'pass',
-      message: "this folder is listed as trusted in Gemini CLI's trust file",
+      message: "this folder is trusted by a rule in Gemini CLI's trust file",
       gateExempt: true,
     };
   }
-  const state = verdict === 'do-not-trust' ? 'is marked DO_NOT_TRUST' : 'is not listed as trusted';
+  const state =
+    verdict === 'do-not-trust' ? 'falls under a DO_NOT_TRUST rule' : 'is not listed as trusted';
   return {
     name,
     status: 'warn',
     message: `this folder ${state} in Gemini CLI's trust file — Gemini CLI may filter MCP servers here, so the Totem MCP tools may be absent from a Gemini session`,
-    remediation:
-      'Run /permissions in Gemini CLI to change this folder\'s trust level (an unlisted folder also prompts on an interactive start), or use the CLI in the meantime: totem search "<query>"',
+    remediation,
     gateExempt: true,
   };
 }

@@ -204,9 +204,12 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(item).toContain('totem search "<query>"');
     expect(item).toContain('totem lesson add "<text>"');
     expect(item).toContain('Tell the user');
-    expect(item).toContain(
-      '`totem doctor` can report the Gemini trust state when this repository wires Gemini CLI',
-    );
+    // The item names no cause and no doctor row: in the one cause it once
+    // named (an untrusted Gemini CLI folder) Gemini CLI does not load the
+    // project GEMINI.md, so the item could not reach that seat.
+    expect(item).not.toContain('Gemini');
+    expect(item).not.toContain('totem doctor');
+    expect(item.endsWith('in place of `add_lesson`.')).toBe(true);
   });
 });
 
