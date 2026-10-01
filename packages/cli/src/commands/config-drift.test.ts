@@ -204,7 +204,9 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(item).toContain('totem search "<query>"');
     expect(item).toContain('totem lesson add "<text>"');
     expect(item).toContain('Tell the user');
-    expect(item).toContain('totem doctor');
+    expect(item).toContain(
+      '`totem doctor` can report the Gemini trust state when this repository wires Gemini CLI',
+    );
   });
 });
 

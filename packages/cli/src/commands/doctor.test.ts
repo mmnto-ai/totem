@@ -4094,12 +4094,14 @@ describe('checkEstate — wt-registry roots', () => {
 
 describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
   // Every read rides the injected seam: a fake file map keyed by absolute
-  // path, and a fake home directory. No test touches the real `~/.gemini`.
+  // path, a fake home directory, an empty environment and an identity
+  // realpath. No test touches the real `~/.gemini` or the file system.
   const home = path.resolve('/fake-home');
   const cwd = path.resolve('/dev/work/totem');
   const settingsPath = path.join(cwd, '.gemini', 'settings.json');
   const trustPath = path.join(home, '.gemini', 'trustedFolders.json');
   const WIRED = JSON.stringify({ mcpServers: { totem: { command: 'node' } } });
+  const identity = (p: string): string => p;
 
   function enoent(p: string): Error {
     return Object.assign(new Error(`ENOENT: no such file or directory, open '${p}'`), {
@@ -4107,15 +4109,25 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
     });
   }
 
-  function seam(files: Record<string, string>): {
+  function seam(
+    files: Record<string, string>,
+    extra: {
+      env?: Record<string, string | undefined>;
+      realpath?: (p: string) => string;
+    } = {},
+  ): {
     homeDir: string;
     readFile: (p: string) => string;
+    realpath: (p: string) => string;
+    env: Record<string, string | undefined>;
     reads: string[];
   } {
     const reads: string[] = [];
     return {
       homeDir: home,
       reads,
+      env: extra.env ?? {},
+      realpath: extra.realpath ?? identity,
       readFile: (p: string) => {
         reads.push(p);
         const content = files[p];
@@ -4147,7 +4159,10 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
     it('settings not valid JSON', () => {
       const result = run({ [settingsPath]: '{ not json' });
       expect(result.status).toBe('skip');
-      expect(result.message).toContain('.gemini/settings.json is not valid JSON');
+      expect(result.message).toContain('.gemini/settings.json is not valid strict JSON');
+      expect(result.message).toContain(
+        'Gemini CLI accepts comments in this file; this row reads strict JSON only',
+      );
     });
 
     it('settings not an object', () => {
@@ -4161,7 +4176,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       const result = run({ [settingsPath]: JSON.stringify({ hooks: {} }) });
       expect(result.status).toBe('skip');
       expect(result.message).toBe(
-        '.gemini/settings.json declares no mcpServers — nothing for workspace trust to filter',
+        '.gemini/settings.json declares no mcpServers — no project-level Gemini MCP wiring to judge (user-level and extension MCP servers are not checked by this row)',
       );
     });
 
@@ -4201,6 +4216,8 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
     it('trust file unreadable', () => {
       const result = checkGeminiWorkspaceTrust(cwd, {
         homeDir: home,
+        env: {},
+        realpath: identity,
         readFile: (p: string) => {
           if (p === settingsPath) return WIRED;
           throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
@@ -4214,7 +4231,10 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
     it('malformed JSON', () => {
       const result = run({ [settingsPath]: WIRED, [trustPath]: '{ "a": ' });
       expect(result.status).toBe('skip');
-      expect(result.message).toContain('Gemini CLI trust file is not valid JSON');
+      expect(result.message).toContain('Gemini CLI trust file is not valid strict JSON');
+      expect(result.message).toContain(
+        'Gemini CLI accepts comments in this file; this row reads strict JSON only',
+      );
     });
 
     it('a JSON array', () => {
@@ -4279,6 +4299,127 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       const result = wiredWithTrust({ [path.resolve('/dev/work/other')]: 'TRUST_PARENT' });
       expect(result.status).toBe('pass');
     });
+
+    it('a longer TRUST_PARENT key beats a shorter exact DO_NOT_TRUST (Gemini: trusted)', () => {
+      const result = wiredWithTrust({
+        [path.join(cwd, 'packages')]: 'TRUST_PARENT',
+        [cwd]: 'DO_NOT_TRUST',
+      });
+      expect(result.status).toBe('pass');
+    });
+
+    it('a __proto__ key is judged, not dropped', () => {
+      const protoCwd = path.resolve('__proto__');
+      const protoSettings = path.join(protoCwd, '.gemini', 'settings.json');
+      const result = checkGeminiWorkspaceTrust(
+        protoCwd,
+        seam({ [protoSettings]: WIRED, [trustPath]: '{"__proto__": "TRUST_FOLDER"}' }),
+      );
+      expect(result.status).toBe('pass');
+    });
+  });
+
+  // ─── the trust file's location (Gemini CLI's own inputs) ─
+  describe('locating the trust file through the env seam', () => {
+    const TRUSTED = JSON.stringify({ [cwd]: 'TRUST_FOLDER' });
+
+    it('GEMINI_CLI_TRUSTED_FOLDERS_PATH names the file outright', () => {
+      const custom = path.resolve('/custom/trust.json');
+      const s = seam(
+        { [settingsPath]: WIRED, [custom]: TRUSTED },
+        {
+          env: {
+            GEMINI_CLI_TRUSTED_FOLDERS_PATH: custom,
+            GEMINI_CLI_HOME: path.resolve('/gemini-home'),
+          },
+        },
+      );
+      expect(checkGeminiWorkspaceTrust(cwd, s).status).toBe('pass');
+      expect(s.reads).toContain(custom);
+    });
+
+    it('GEMINI_CLI_HOME replaces the OS home', () => {
+      const geminiHome = path.resolve('/gemini-home');
+      const file = path.join(geminiHome, '.gemini', 'trustedFolders.json');
+      const s = seam(
+        { [settingsPath]: WIRED, [file]: TRUSTED },
+        { env: { GEMINI_CLI_HOME: geminiHome } },
+      );
+      expect(checkGeminiWorkspaceTrust(cwd, s).status).toBe('pass');
+      expect(s.reads).not.toContain(trustPath);
+    });
+
+    it('an empty GEMINI_CLI_HOME falls through to the OS home', () => {
+      const s = seam(
+        { [settingsPath]: WIRED, [trustPath]: TRUSTED },
+        { env: { GEMINI_CLI_HOME: '' } },
+      );
+      expect(checkGeminiWorkspaceTrust(cwd, s).status).toBe('pass');
+    });
+
+    it('SANDBOX=sandbox-exec reads the runtime directory under .cache', () => {
+      const file = path.join(home, '.cache', '.gemini', 'trustedFolders.json');
+      const s = seam(
+        { [settingsPath]: WIRED, [file]: TRUSTED },
+        { env: { SANDBOX: 'sandbox-exec' } },
+      );
+      expect(checkGeminiWorkspaceTrust(cwd, s).status).toBe('pass');
+    });
+  });
+
+  // ─── realpath (Gemini's getRealPath2) ─────────────────
+  describe('realpath through the seam', () => {
+    const trustedRoot = path.resolve('/trusted');
+    const link = path.join(trustedRoot, 'link');
+    const realRepo = path.resolve('/real/repo');
+    const linkSettings = path.join(link, '.gemini', 'settings.json');
+    const realSettings = path.join(realRepo, '.gemini', 'settings.json');
+    // The judgment realpaths keys AFTER Gemini's normalisation (forward
+    // slashes, case folded on Windows and macOS), so the fake resolver
+    // compares resolved, case-folded paths, as a case-insensitive file system
+    // would.
+    const resolveLink = (p: string): string =>
+      path.resolve(p).toLowerCase() === link.toLowerCase() ? realRepo : p;
+
+    it('a junctioned cwd under a trusted key is judged at its real path (no false pass)', () => {
+      const result = checkGeminiWorkspaceTrust(
+        link,
+        seam(
+          {
+            [linkSettings]: WIRED,
+            [trustPath]: JSON.stringify({ [trustedRoot]: 'TRUST_FOLDER' }),
+          },
+          { realpath: resolveLink },
+        ),
+      );
+      expect(result.status).toBe('warn');
+    });
+
+    it('a trusted key that is a junction trusts its real target (no false warn)', () => {
+      const result = checkGeminiWorkspaceTrust(
+        realRepo,
+        seam(
+          { [realSettings]: WIRED, [trustPath]: JSON.stringify({ [link]: 'TRUST_FOLDER' }) },
+          { realpath: resolveLink },
+        ),
+      );
+      expect(result.status).toBe('pass');
+    });
+
+    it('a realpath that throws leaves the path as it is', () => {
+      const result = checkGeminiWorkspaceTrust(
+        cwd,
+        seam(
+          { [settingsPath]: WIRED, [trustPath]: JSON.stringify({ [cwd]: 'TRUST_FOLDER' }) },
+          {
+            realpath: (p: string) => {
+              throw enoent(p);
+            },
+          },
+        ),
+      );
+      expect(result.status).toBe('pass');
+    });
   });
 
   // ─── warn ─────────────────────────────────────────────
@@ -4306,10 +4447,9 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       expect(result.status).toBe('warn');
     });
 
-    it('exact DO_NOT_TRUST, even under a trusting ancestor', () => {
+    it('exact DO_NOT_TRUST under a shorter trusting ancestor (the longer key wins)', () => {
       const result = wiredWithTrust({
         [path.resolve('/dev')]: 'TRUST_FOLDER',
-        [path.join(cwd, 'packages')]: 'TRUST_PARENT',
         [cwd]: 'DO_NOT_TRUST',
       });
       expect(result.status).toBe('warn');
@@ -4318,10 +4458,23 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       );
     });
 
-    it('the remediation names the trust step and totem search', () => {
+    // Regression for the falsification leg's BLOCKING finding on fa795775: the
+    // old rule let any trusting ancestor win unless the target itself was
+    // keyed DO_NOT_TRUST, so a DO_NOT_TRUST on an intermediate folder read as a
+    // false `pass`. Gemini CLI's longest-key rule distrusts the target.
+    it('a DO_NOT_TRUST between a trusting ancestor and the target distrusts it (no false pass)', () => {
+      const result = wiredWithTrust({
+        [path.resolve('/dev')]: 'TRUST_FOLDER',
+        [path.resolve('/dev/work')]: 'DO_NOT_TRUST',
+      });
+      expect(result.status).toBe('warn');
+      expect(result.message).toContain('is marked DO_NOT_TRUST');
+    });
+
+    it('the remediation names /permissions and totem search', () => {
       const result = wiredWithTrust({});
       expect(result.remediation).toBe(
-        'Trust this folder in Gemini CLI (it asks when the folder is opened), or use the CLI in the meantime: totem search "<query>"',
+        'Run /permissions in Gemini CLI to change this folder\'s trust level (an unlisted folder also prompts on an interactive start), or use the CLI in the meantime: totem search "<query>"',
       );
     });
   });
@@ -4346,15 +4499,14 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
     const throwing = (): string => {
       throw new Error('boom');
     };
-    expect(() =>
-      checkGeminiWorkspaceTrust(cwd, { homeDir: home, readFile: throwing }),
-    ).not.toThrow();
-    const result = checkGeminiWorkspaceTrust(cwd, { homeDir: home, readFile: throwing });
+    const hermetic = { homeDir: home, env: {}, realpath: identity };
+    expect(() => checkGeminiWorkspaceTrust(cwd, { ...hermetic, readFile: throwing })).not.toThrow();
+    const result = checkGeminiWorkspaceTrust(cwd, { ...hermetic, readFile: throwing });
     expect(result.status).toBe('skip');
     expect(result.message).toContain('boom');
 
     const throwsOnTrust = checkGeminiWorkspaceTrust(cwd, {
-      homeDir: home,
+      ...hermetic,
       readFile: (p: string) => {
         if (p === settingsPath) return WIRED;
         throw 'not an Error';
@@ -4408,7 +4560,123 @@ describe('judgeGeminiTrust — the platform branches (mmnto-ai/totem#2933)', () 
     });
   });
 
-  describe('posix: case-sensitive', () => {
+  describe("Gemini CLI's longest-key rule", () => {
+    it('an intermediate DO_NOT_TRUST beats a shorter trusting ancestor', () => {
+      expect(
+        judgeGeminiTrust(
+          'D:\\D\\work\\totem',
+          { 'D:\\D': 'TRUST_FOLDER', 'D:\\D\\work': 'DO_NOT_TRUST' },
+          'win32',
+        ),
+      ).toBe('do-not-trust');
+    });
+
+    it('a longer TRUST_PARENT key beats a shorter exact DO_NOT_TRUST', () => {
+      expect(
+        judgeGeminiTrust(
+          '/t',
+          new Map([
+            ['/t/packages', 'TRUST_PARENT'],
+            ['/t', 'DO_NOT_TRUST'],
+          ]),
+          'linux',
+        ),
+      ).toBe('trusted');
+    });
+
+    it('length is measured on the KEY, not the effective folder', () => {
+      // '/x/cd' (TRUST_PARENT, effective '/x') and '/x/ab' (DO_NOT_TRUST) are
+      // both 5 characters: a tie goes to the first in file order.
+      const target = '/x/ab/t';
+      expect(
+        judgeGeminiTrust(
+          target,
+          new Map([
+            ['/x/ab', 'DO_NOT_TRUST'],
+            ['/x/cd', 'TRUST_PARENT'],
+          ]),
+          'linux',
+        ),
+      ).toBe('do-not-trust');
+      expect(
+        judgeGeminiTrust(
+          target,
+          new Map([
+            ['/x/cd', 'TRUST_PARENT'],
+            ['/x/ab', 'DO_NOT_TRUST'],
+          ]),
+          'linux',
+        ),
+      ).toBe('trusted');
+    });
+
+    it('a DO_NOT_TRUST ancestor distrusts its whole subtree', () => {
+      expect(judgeGeminiTrust('/a/b/c', { '/a': 'DO_NOT_TRUST' }, 'linux')).toBe('do-not-trust');
+    });
+
+    it('a later duplicate key (after normalisation) replaces the earlier value', () => {
+      expect(
+        judgeGeminiTrust(
+          'D:\\Dev\\totem',
+          new Map([
+            ['D:\\Dev\\totem', 'TRUST_FOLDER'],
+            ['d:/dev/totem', 'DO_NOT_TRUST'],
+          ]),
+          'win32',
+        ),
+      ).toBe('do-not-trust');
+    });
+
+    it('no matching rule is unlisted', () => {
+      expect(judgeGeminiTrust('/a/b', { '/c': 'TRUST_FOLDER' }, 'linux')).toBe('untrusted');
+    });
+  });
+
+  describe('realpath (the injected resolver)', () => {
+    it('resolves the target before matching', () => {
+      const real = (p: string): string => (p === '/t/link' ? '/r/repo' : p);
+      expect(judgeGeminiTrust('/t/link', { '/t': 'TRUST_FOLDER' }, 'linux', real)).toBe(
+        'untrusted',
+      );
+    });
+
+    it("resolves each rule's effective folder before matching", () => {
+      const real = (p: string): string => (p === '/t/link' ? '/r/repo' : p);
+      expect(judgeGeminiTrust('/r/repo', { '/t/link': 'TRUST_FOLDER' }, 'linux', real)).toBe(
+        'trusted',
+      );
+      expect(
+        judgeGeminiTrust('/r/repo/x', { '/t/link/child': 'TRUST_PARENT' }, 'linux', real),
+      ).toBe('trusted');
+    });
+
+    it('a resolver that throws leaves the path as it is', () => {
+      const failing = (): string => {
+        throw new Error('ENOENT');
+      };
+      expect(judgeGeminiTrust('/a/b', { '/a': 'TRUST_FOLDER' }, 'linux', failing)).toBe('trusted');
+    });
+  });
+
+  describe('darwin: case-insensitive, as Gemini CLI folds it', () => {
+    it('a key differing only in case matches', () => {
+      expect(judgeGeminiTrust('/home/u/totem', { '/HOME/u': 'TRUST_FOLDER' }, 'darwin')).toBe(
+        'trusted',
+      );
+    });
+
+    it('a differently-cased DO_NOT_TRUST on the target is the target', () => {
+      expect(
+        judgeGeminiTrust(
+          '/home/u/totem',
+          { '/home/u': 'TRUST_FOLDER', '/home/u/TOTEM': 'DO_NOT_TRUST' },
+          'darwin',
+        ),
+      ).toBe('do-not-trust');
+    });
+  });
+
+  describe('linux: case-sensitive', () => {
     it('matches an exact key', () => {
       expect(judgeGeminiTrust('/home/u/totem', { '/home/u/totem': 'TRUST_FOLDER' }, 'linux')).toBe(
         'trusted',
@@ -4419,7 +4687,7 @@ describe('judgeGeminiTrust — the platform branches (mmnto-ai/totem#2933)', () 
       expect(judgeGeminiTrust('/home/u/totem', { '/home/u/Totem': 'TRUST_FOLDER' }, 'linux')).toBe(
         'untrusted',
       );
-      expect(judgeGeminiTrust('/home/u/totem', { '/HOME/u': 'TRUST_FOLDER' }, 'darwin')).toBe(
+      expect(judgeGeminiTrust('/home/u/totem', { '/HOME/u': 'TRUST_FOLDER' }, 'linux')).toBe(
         'untrusted',
       );
     });
