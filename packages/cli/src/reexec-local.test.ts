@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import type { MockInstance } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FreshnessFs } from './reexec-local.js';
 import { maybeReexecLocal, resolveLocalEntry } from './reexec-local.js';
 import { cleanTmpDir } from './test-utils.js';
 
@@ -236,7 +237,8 @@ describe('maybeReexecLocal', () => {
 });
 
 // ─── The stale-build sensor (mmnto-ai/totem#2934) ───────────────────────────
-// Mtimes are set explicitly with utimesSync — never write order or a sleep.
+// Delegation path only. Mtimes are set explicitly with utimesSync — never
+// write order or a sleep.
 
 const BEFORE_BUILD = new Date('2026-01-01T00:00:00.000Z');
 const BUILT_AT = new Date('2026-01-02T00:00:00.000Z');
@@ -273,12 +275,37 @@ function banner(version: string, entry: string, built?: Date): string {
   return `[totem] Delegating to the project-local @mmnto/cli@${version}${builtLabel} at ${entry} (this binary: 1.0.0) — set TOTEM_NO_REEXEC=1 to disable.\n`;
 }
 
-function delegatedStaleLine(pkg: string, source: Date, dist: Date): string {
-  return `[totem] The project-local build is STALE: packages/${pkg}/src changed ${source.toISOString()}, after its dist was built ${dist.toISOString()} — run pnpm build. Delegating anyway.\n`;
+function staleLine(pkg: string, source: Date, dist: Date): string {
+  return `[totem] The project-local build may be stale: a file under packages/${pkg}/src was modified ${source.toISOString()}, after its dist was built ${dist.toISOString()}. If the source changed, run pnpm build --force (a cached turbo build does not re-stamp dist). Delegating anyway.\n`;
 }
 
-function directStaleLine(pkg: string, source: Date, dist: Date): string {
-  return `[totem] This workspace build is STALE: packages/${pkg}/src changed ${source.toISOString()}, after its dist was built ${dist.toISOString()} — run pnpm build.\n`;
+/** The real filesystem behind counting spies. */
+function countingFs() {
+  return {
+    exists: vi.fn((p: string) => fs.existsSync(p)),
+    stat: vi.fn((p: string) => fs.statSync(p)),
+    readdir: vi.fn((p: string) => fs.readdirSync(p, { withFileTypes: true })),
+  } satisfies FreshnessFs;
+}
+
+const PROBE_FAILURE = 'EACCES: permission denied';
+
+/** Every read throws — the portable "unreadable tree" (chmod is a no-op on Windows). */
+function unreadableFs() {
+  const deny = (): never => {
+    throw new Error(PROBE_FAILURE);
+  };
+  return {
+    exists: vi.fn(deny),
+    stat: vi.fn(deny),
+    readdir: vi.fn(deny),
+  } satisfies FreshnessFs;
+}
+
+function seamCalls(seam: ReturnType<typeof countingFs> | ReturnType<typeof unreadableFs>): number {
+  return (
+    seam.exists.mock.calls.length + seam.stat.mock.calls.length + seam.readdir.mock.calls.length
+  );
 }
 
 describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
@@ -287,6 +314,21 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
   let foreignSelf: string;
 
   const writes = (): string[] => stderr.mock.calls.map((c) => String(c[0]));
+
+  /** Delegate from a foreign binary; returns the exit code and the spawn mock. */
+  function delegate(extra?: { env?: NodeJS.ProcessEnv; freshnessFs?: FreshnessFs }) {
+    const spawn = vi.fn().mockReturnValue({ status: 7 });
+    const status = maybeReexecLocal({
+      cwd: tmpRoot,
+      argv: ['lint', '--branch'],
+      env: extra?.env ?? { PATH: 'x' },
+      selfPath: foreignSelf,
+      selfVersion: '1.0.0',
+      spawn,
+      freshnessFs: extra?.freshnessFs,
+    });
+    return { status, spawn };
+  }
 
   beforeEach(() => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-reexec-fresh-'));
@@ -299,25 +341,34 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     cleanTmpDir(tmpRoot);
   });
 
-  it('pinned tier: the banner is byte-identical to the pre-sensor string, no freshness, no stale line', () => {
+  it('resolveLocalEntry keeps its base shape on the workspace tier — no freshness field', () => {
+    const entry = writeBuiltWorkspace(tmpRoot);
+    writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
+    expect(resolveLocalEntry(tmpRoot)).toEqual({ entry, version: '9.9.9', tier: 'workspace' });
+  });
+
+  it('pinned tier: the banner is byte-identical to the pre-sensor string and no freshness read happens', () => {
     const entry = writePinnedTier(tmpRoot);
     // A src tree beside the pinned install, newer than everything: never read.
     writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
-    fs.mkdirSync(path.join(tmpRoot, 'src'), { recursive: true });
-    fs.writeFileSync(path.join(tmpRoot, 'src', 'x.ts'), '');
-    setMtime(path.join(tmpRoot, 'src', 'x.ts'), AFTER_BUILD);
-    expect(resolveLocalEntry(tmpRoot)?.freshness).toBeUndefined();
+    const seam = countingFs();
+    const { status } = delegate({ env: {}, freshnessFs: seam });
+    expect(status).toBe(7);
+    expect(writes()).toEqual([
+      `[totem] Delegating to the project-local @mmnto/cli@8.8.8 at ${entry} (this binary: 1.0.0) — set TOTEM_NO_REEXEC=1 to disable.\n`,
+    ]);
+    expect(seamCalls(seam)).toBe(0);
+  });
 
-    const spawn = vi.fn().mockReturnValue({ status: 0 });
-    const status = maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: ['lint'],
-      env: {},
-      selfPath: foreignSelf,
-      selfVersion: '1.0.0',
-      spawn,
-    });
-    expect(status).toBe(0);
+  it('pinned tier under TOTEM_DEBUG=1 with a throwing seam: no throw, zero seam calls', () => {
+    const entry = writePinnedTier(tmpRoot);
+    const seam = unreadableFs();
+    let result: ReturnType<typeof delegate> | undefined;
+    expect(() => {
+      result = delegate({ env: { TOTEM_DEBUG: '1' }, freshnessFs: seam });
+    }).not.toThrow();
+    expect(result?.status).toBe(7);
+    expect(seamCalls(seam)).toBe(0);
     expect(writes()).toEqual([
       `[totem] Delegating to the project-local @mmnto/cli@8.8.8 at ${entry} (this binary: 1.0.0) — set TOTEM_NO_REEXEC=1 to disable.\n`,
     ]);
@@ -326,39 +377,31 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
   it('workspace tier, fresh: the banner carries the dist entry build instant, no stale line', () => {
     const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
-    const spawn = vi.fn().mockReturnValue({ status: 0 });
-    maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: ['lint'],
-      env: {},
-      selfPath: foreignSelf,
-      selfVersion: '1.0.0',
-      spawn,
-    });
+    const { status } = delegate();
+    expect(status).toBe(7);
     expect(fs.statSync(entry).mtime.toISOString()).toBe(BUILT_AT.toISOString());
     expect(writes()).toEqual([banner('9.9.9', entry, BUILT_AT)]);
-    expect(resolveLocalEntry(tmpRoot)?.freshness).toEqual({ builtAt: BUILT_AT.toISOString() });
+  });
+
+  it('a source mtime EQUAL to the dist mtime is fresh — stale means strictly newer', () => {
+    const entry = writeBuiltWorkspace(tmpRoot);
+    writeSource(tmpRoot, 'cli', 'index.ts', BUILT_AT);
+    writeCoreDist(tmpRoot, BUILT_AT);
+    writeSource(tmpRoot, 'core', 'index.ts', BUILT_AT);
+    delegate();
+    expect(writes()).toEqual([banner('9.9.9', entry, BUILT_AT)]);
   });
 
   it('workspace tier, cli source newer than cli dist: one stale line, delegation unchanged', () => {
     const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
     writeSource(tmpRoot, 'cli', path.join('commands', 'lint.ts'), AFTER_BUILD);
-    const spawn = vi.fn().mockReturnValue({ status: 7 });
-    const status = maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: ['lint', '--branch'],
-      env: { PATH: 'x' },
-      selfPath: foreignSelf,
-      selfVersion: '1.0.0',
-      spawn,
-    });
+    const { status, spawn } = delegate();
 
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      delegatedStaleLine('cli', AFTER_BUILD, BUILT_AT),
+      staleLine('cli', AFTER_BUILD, BUILT_AT),
     ]);
-
     expect(status).toBe(7);
     expect(spawn).toHaveBeenCalledTimes(1);
     const [cmd, args, opts] = spawn.mock.calls[0]!;
@@ -372,59 +415,58 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
     writeCoreDist(tmpRoot, BUILT_AT);
     writeSource(tmpRoot, 'core', 'index.ts', AFTER_BUILD);
-    const spawn = vi.fn().mockReturnValue({ status: 0 });
-    maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: [],
-      env: {},
-      selfPath: foreignSelf,
-      selfVersion: '1.0.0',
-      spawn,
-    });
+    const { spawn } = delegate();
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      delegatedStaleLine('core', AFTER_BUILD, BUILT_AT),
+      staleLine('core', AFTER_BUILD, BUILT_AT),
     ]);
     expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it('a stale cli is reported first when core is stale too', () => {
-    writeBuiltWorkspace(tmpRoot);
+    const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
     writeCoreDist(tmpRoot, BUILT_AT);
     writeSource(tmpRoot, 'core', 'index.ts', AFTER_BUILD);
-    expect(resolveLocalEntry(tmpRoot)?.freshness?.stale?.package).toBe('cli');
+    delegate();
+    expect(writes()).toEqual([
+      banner('9.9.9', entry, BUILT_AT),
+      staleLine('cli', AFTER_BUILD, BUILT_AT),
+    ]);
   });
 
   it('packages/core absent: cli alone is judged, no throw', () => {
-    writeBuiltWorkspace(tmpRoot);
+    const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
     expect(fs.existsSync(path.join(tmpRoot, 'packages', 'core'))).toBe(false);
-    expect(() => resolveLocalEntry(tmpRoot, { debug: true })).not.toThrow();
-    expect(resolveLocalEntry(tmpRoot)?.freshness).toEqual({ builtAt: BUILT_AT.toISOString() });
+    expect(() => delegate({ env: { TOTEM_DEBUG: '1' } })).not.toThrow();
+    expect(writes()).toEqual([banner('9.9.9', entry, BUILT_AT)]);
 
+    stderr.mockClear();
     writeSource(tmpRoot, 'cli', 'later.ts', AFTER_BUILD);
-    expect(resolveLocalEntry(tmpRoot)?.freshness?.stale).toEqual({
-      package: 'cli',
-      sourceNewestAt: AFTER_BUILD.toISOString(),
-      distBuiltAt: BUILT_AT.toISOString(),
-    });
+    delegate();
+    expect(writes()).toEqual([
+      banner('9.9.9', entry, BUILT_AT),
+      staleLine('cli', AFTER_BUILD, BUILT_AT),
+    ]);
   });
 
   it('files under a nested node_modules or dist inside src are ignored', () => {
-    writeBuiltWorkspace(tmpRoot);
+    const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
     writeSource(tmpRoot, 'cli', path.join('node_modules', 'dep', 'index.js'), AFTER_BUILD);
     writeSource(tmpRoot, 'cli', path.join('nested', 'dist', 'out.js'), AFTER_BUILD);
     writeCoreDist(tmpRoot, BUILT_AT);
     writeSource(tmpRoot, 'core', 'index.ts', BEFORE_BUILD);
     writeSource(tmpRoot, 'core', path.join('dist', 'index.js'), AFTER_BUILD);
-    expect(resolveLocalEntry(tmpRoot)?.freshness).toEqual({ builtAt: BUILT_AT.toISOString() });
+    delegate();
+    expect(writes()).toEqual([banner('9.9.9', entry, BUILT_AT)]);
   });
 
-  it('already running the workspace dist + stale: one "This workspace build" line, runs in place', () => {
+  it('already running the workspace dist + stale source: no output, no spawn, no freshness read', () => {
     const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
+    const seam = countingFs();
     const spawn = vi.fn();
     const status = maybeReexecLocal({
       cwd: tmpRoot,
@@ -433,31 +475,18 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
       selfPath: entry,
       selfVersion: '1.0.0',
       spawn,
-    });
-    expect(status).toBeUndefined();
-    expect(spawn).not.toHaveBeenCalled();
-    expect(writes()).toEqual([directStaleLine('cli', AFTER_BUILD, BUILT_AT)]);
-  });
-
-  it('already running the workspace dist + fresh: no output', () => {
-    const entry = writeBuiltWorkspace(tmpRoot);
-    writeSource(tmpRoot, 'cli', 'index.ts', BEFORE_BUILD);
-    const spawn = vi.fn();
-    const status = maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: ['lint'],
-      env: {},
-      selfPath: entry,
-      spawn,
+      freshnessFs: seam,
     });
     expect(status).toBeUndefined();
     expect(spawn).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
+    expect(seamCalls(seam)).toBe(0);
   });
 
   it('TOTEM_NO_REEXEC=1: no output at all, even when stale', () => {
     const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
+    const seam = countingFs();
     const spawn = vi.fn();
     for (const selfPath of [foreignSelf, entry]) {
       const status = maybeReexecLocal({
@@ -466,53 +495,36 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
         env: { TOTEM_NO_REEXEC: '1' },
         selfPath,
         spawn,
+        freshnessFs: seam,
       });
       expect(status).toBeUndefined();
     }
     expect(spawn).not.toHaveBeenCalled();
     expect(writes()).toEqual([]);
+    expect(seamCalls(seam)).toBe(0);
   });
 
-  it('a freshness read that throws: banner without a build instant, no stale line, delegation proceeds', () => {
+  it('a freshness read that throws, without debug: banner without a build instant, no stale line, delegation proceeds', () => {
     const entry = writeBuiltWorkspace(tmpRoot);
     writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
-    const unreadable = {
-      stat: (): never => {
-        throw new Error('EACCES: permission denied');
-      },
-      readdir: (): never => {
-        throw new Error('EACCES: permission denied');
-      },
-    };
-    expect(resolveLocalEntry(tmpRoot, { freshnessFs: unreadable })).toEqual({
-      entry,
-      version: '9.9.9',
-      tier: 'workspace',
-    });
-
-    const spawn = vi.fn().mockReturnValue({ status: 5 });
-    const status = maybeReexecLocal({
-      cwd: tmpRoot,
-      argv: ['lint'],
-      env: {},
-      selfPath: foreignSelf,
-      selfVersion: '1.0.0',
-      spawn,
-      freshnessFs: unreadable,
-    });
-    expect(status).toBe(5);
+    const { status, spawn } = delegate({ freshnessFs: unreadableFs() });
+    expect(status).toBe(7);
     expect(spawn).toHaveBeenCalledTimes(1);
     expect(writes()).toEqual([banner('9.9.9', entry)]);
+  });
 
-    expect(() =>
-      maybeReexecLocal({
-        cwd: tmpRoot,
-        argv: ['lint'],
-        env: { TOTEM_DEBUG: '1' },
-        selfPath: foreignSelf,
-        spawn: vi.fn(),
-        freshnessFs: unreadable,
-      }),
-    ).toThrow('EACCES: permission denied');
+  it('a freshness read that throws under TOTEM_DEBUG=1: one probe-failed line, delegation proceeds, nothing thrown', () => {
+    const entry = writeBuiltWorkspace(tmpRoot);
+    writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
+    let result: ReturnType<typeof delegate> | undefined;
+    expect(() => {
+      result = delegate({ env: { TOTEM_DEBUG: '1' }, freshnessFs: unreadableFs() });
+    }).not.toThrow();
+    expect(result?.status).toBe(7);
+    expect(result?.spawn).toHaveBeenCalledTimes(1);
+    expect(writes()).toEqual([
+      `[totem] freshness probe failed: ${PROBE_FAILURE}\n`,
+      banner('9.9.9', entry),
+    ]);
   });
 });

@@ -41,13 +41,13 @@ type WorkspacePackage = typeof CLI_PACKAGE | typeof CORE_PACKAGE;
 const JUDGED_PACKAGES: readonly WorkspacePackage[] = [CLI_PACKAGE, CORE_PACKAGE];
 
 /**
- * How current a workspace build is against its source (mmnto-ai/totem#2934).
- * A sensor only: it shapes stderr, never the delegation.
+ * How current a workspace build looks against its source (mmnto-ai/totem#2934).
+ * A sensor only: it shapes stderr on the delegation path, never the delegation.
  */
 export interface WorkspaceFreshness {
   /** ISO instant of the cli dist entry's mtime — what the banner prints. */
   builtAt: string;
-  /** Present iff a source file is newer than its package's dist entry. */
+  /** Present iff a source file's mtime is newer than its package's dist entry. */
   stale?: { package: WorkspacePackage; sourceNewestAt: string; distBuiltAt: string };
 }
 
@@ -58,31 +58,24 @@ export interface LocalEntry {
   version?: string;
   /** Which cascade tier matched: workspace-HEAD or the pinned dependency. */
   tier: 'workspace' | 'pinned';
-  /**
-   * Workspace tier only, and only when the probe could read the trees. The
-   * pinned tier never carries it: npm tarballs ship fixed mtimes, so an mtime
-   * read there would say nothing true.
-   */
-  freshness?: WorkspaceFreshness;
 }
 
-/** The two filesystem reads the freshness probe makes — a seam for tests. */
+/**
+ * Every filesystem read the freshness probe makes (existence, mtime, directory
+ * listing) — a seam for tests. The cascade walk in `resolveLocalEntry` does
+ * not use it.
+ */
 export interface FreshnessFs {
+  exists(p: string): boolean;
   stat(p: string): { mtimeMs: number };
   readdir(p: string): fs.Dirent[];
 }
 
 const NODE_FRESHNESS_FS: FreshnessFs = {
+  exists: (p) => fs.existsSync(p),
   stat: (p) => fs.statSync(p),
   readdir: (p) => fs.readdirSync(p, { withFileTypes: true }),
 };
-
-export interface ResolveOptions {
-  /** Overrides the freshness probe's filesystem reads (tests). */
-  freshnessFs?: FreshnessFs;
-  /** Rethrow a freshness-probe failure instead of dropping the sensor. */
-  debug?: boolean;
-}
 
 /** Probe-grade version read — no JSON.parse, no fail-open catch. */
 function readVersion(pkgJsonPath: string): string | undefined {
@@ -111,10 +104,17 @@ function newestSourceMtimeMs(dir: string, fsx: FreshnessFs): number | undefined 
 
 /**
  * Judge the workspace build at `root` (the directory holding `packages/cli`)
- * against its source: a package is stale iff its newest source file is
- * STRICTLY newer than its `dist/index.js`. A package whose `src` or dist entry
- * is absent is not judged (a checkout without `packages/core` judges cli only).
- * Throws on an unreadable path; the caller decides the posture.
+ * against its source: a package reads as stale iff the newest mtime of a file
+ * under its `src` is STRICTLY newer than its `dist/index.js`. A package whose
+ * `src` or dist entry is absent is not judged (a checkout without
+ * `packages/core` judges cli only). Throws on an unreadable path; the caller
+ * decides the posture.
+ *
+ * Limits — it compares modification times, nothing else: it does not see a
+ * deleted source file or a rename that keeps its mtime, it skips symlinked
+ * sources, and it reads a touched or reverted file (same content, newer
+ * mtime) as newer. A cached turbo build does not re-stamp `dist` either. That
+ * is why the line it feeds says "may be stale" and "if the source changed".
  */
 function readWorkspaceFreshness(root: string, fsx: FreshnessFs): WorkspaceFreshness {
   const cliEntry = path.join(root, PACKAGES_DIR, CLI_PACKAGE, DIST_DIR, ENTRY_FILE);
@@ -124,7 +124,7 @@ function readWorkspaceFreshness(root: string, fsx: FreshnessFs): WorkspaceFreshn
   for (const pkg of JUDGED_PACKAGES) {
     const srcDir = path.join(root, PACKAGES_DIR, pkg, SRC_DIR);
     const distEntry = path.join(root, PACKAGES_DIR, pkg, DIST_DIR, ENTRY_FILE);
-    if (!fs.existsSync(srcDir) || !fs.existsSync(distEntry)) continue;
+    if (!fsx.exists(srcDir) || !fsx.exists(distEntry)) continue;
     const distMs = fsx.stat(distEntry).mtimeMs;
     const sourceMs = newestSourceMtimeMs(srcDir, fsx);
     if (sourceMs !== undefined && sourceMs > distMs) {
@@ -139,9 +139,10 @@ function readWorkspaceFreshness(root: string, fsx: FreshnessFs): WorkspaceFreshn
   return freshness;
 }
 
-/** The shared tail of both stale lines — the package, both instants, the cure. */
-function staleDetail(stale: NonNullable<WorkspaceFreshness['stale']>): string {
-  return `${PACKAGES_DIR}/${stale.package}/${SRC_DIR} changed ${stale.sourceNewestAt}, after its dist was built ${stale.distBuiltAt} — run pnpm build.`;
+/** The workspace root (the directory holding `packages/cli`) of a workspace entry. */
+function workspaceRootOf(entry: string): string {
+  // entry = <root>/packages/cli/dist/index.js
+  return path.dirname(path.dirname(path.dirname(path.dirname(entry))));
 }
 
 /**
@@ -157,13 +158,8 @@ function staleDetail(stale: NonNullable<WorkspaceFreshness['stale']>): string {
  * Both tiers require the BUILT entry to exist — an unbuilt checkout falls
  * through to running in place (where the mmnto-ai/totem#2018 L2 hint explains
  * the build step).
- *
- * The workspace tier also carries `freshness` (mmnto-ai/totem#2934). Its read
- * is best-effort with the same posture as the probe in `maybeReexecLocal`, but
- * it never disables the tier: when it throws, `freshness` is absent and the
- * entry still resolves (`debug` rethrows instead).
  */
-export function resolveLocalEntry(cwd: string, opts?: ResolveOptions): LocalEntry | undefined {
+export function resolveLocalEntry(cwd: string): LocalEntry | undefined {
   let dir = path.resolve(cwd);
   for (;;) {
     const workspacePkg = path.join(dir, PACKAGES_DIR, CLI_PACKAGE, PACKAGE_JSON);
@@ -173,21 +169,7 @@ export function resolveLocalEntry(cwd: string, opts?: ResolveOptions): LocalEntr
       fs.existsSync(workspacePkg) &&
       NAME_IS_CLI_RE.test(fs.readFileSync(workspacePkg, 'utf-8'))
     ) {
-      const local: LocalEntry = {
-        entry: workspaceEntry,
-        version: readVersion(workspacePkg),
-        tier: 'workspace',
-      };
-      try {
-        local.freshness = readWorkspaceFreshness(dir, opts?.freshnessFs ?? NODE_FRESHNESS_FS);
-      } catch (err) {
-        // The freshness read is a sensor, never a gate: an unreadable source
-        // tree or dist entry drops the build instant and the stale line but
-        // keeps the delegation (mmnto-ai/totem#2934, the mmnto-ai/totem#2153
-        // posture). TOTEM_DEBUG=1 surfaces it.
-        if (opts?.debug === true) throw err;
-      }
-      return local;
+      return { entry: workspaceEntry, version: readVersion(workspacePkg), tier: 'workspace' };
     }
 
     const pinnedDir = path.join(dir, NODE_MODULES_DIR, '@mmnto', CLI_PACKAGE);
@@ -244,10 +226,7 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
   let local: LocalEntry | undefined;
   let alreadyLocal = false;
   try {
-    local = resolveLocalEntry(cwd, {
-      freshnessFs: opts?.freshnessFs,
-      debug: env['TOTEM_DEBUG'] === '1',
-    });
+    local = resolveLocalEntry(cwd);
     if (local !== undefined) {
       const selfPath = opts?.selfPath ?? process.argv[1] ?? '';
       alreadyLocal = safeRealpath(local.entry) === safeRealpath(selfPath);
@@ -260,18 +239,33 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
     if (env['TOTEM_DEBUG'] === '1') throw err;
     return undefined;
   }
-  if (local === undefined) return undefined;
+  if (local === undefined || alreadyLocal) return undefined;
 
-  const freshness = local.tier === 'workspace' ? local.freshness : undefined;
-  if (alreadyLocal) {
-    // Running the workspace dist directly (`node packages/cli/dist/index.js`)
-    // never delegates, so it prints no banner; a stale build still says so.
-    if (freshness?.stale !== undefined) {
-      process.stderr.write(
-        `[totem] This workspace build is STALE: ${staleDetail(freshness.stale)}\n`,
+  // Delegation is now certain. Only here, and only on the workspace tier, is
+  // the freshness read paid (mmnto-ai/totem#2934): a direct run of the
+  // workspace dist prints nothing and walks nothing, and the pinned tier never
+  // reads an mtime (npm tarballs ship fixed mtimes).
+  let freshness: WorkspaceFreshness | undefined;
+  if (local.tier === 'workspace') {
+    // totem-context: intentional best-effort sensor read — the catch below
+    // does not rethrow by design (ruled in the mmnto-ai/totem#2934 fold): a
+    // stale-build hint must never crash or block the delegation it decorates.
+    try {
+      freshness = readWorkspaceFreshness(
+        workspaceRootOf(local.entry),
+        opts?.freshnessFs ?? NODE_FRESHNESS_FS,
       );
+      // totem-context: intentional degradation — see directive above the try; placed on the line before the catch keyword, where the rule reads it.
+    } catch (err) {
+      // A sensor, never a gate, and never a crash — not even under
+      // TOTEM_DEBUG=1: a file vanishing between readdir and stat is ordinary
+      // while an editor or agent writes. Without debug the sensor is dropped
+      // silently; with it, one line names the failure. Delegation proceeds.
+      if (env['TOTEM_DEBUG'] === '1') {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[totem] freshness probe failed: ${message}\n`);
+      }
     }
-    return undefined;
   }
 
   const localLabel = local.version !== undefined ? `@mmnto/cli@${local.version}` : '@mmnto/cli';
@@ -280,10 +274,12 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
   process.stderr.write(
     `[totem] Delegating to the project-local ${localLabel}${builtLabel} at ${local.entry}${selfLabel} — set TOTEM_NO_REEXEC=1 to disable.\n`,
   );
-  // A sensor, never a gate: a stale build is named, and delegated to anyway.
-  if (freshness?.stale !== undefined) {
+  // Says what was measured (an mtime), names a cure that works on a cached
+  // turbo build, and delegates anyway.
+  const stale = freshness?.stale;
+  if (stale !== undefined) {
     process.stderr.write(
-      `[totem] The project-local build is STALE: ${staleDetail(freshness.stale)} Delegating anyway.\n`,
+      `[totem] The project-local build may be stale: a file under ${PACKAGES_DIR}/${stale.package}/${SRC_DIR} was modified ${stale.sourceNewestAt}, after its dist was built ${stale.distBuiltAt}. If the source changed, run pnpm build --force (a cached turbo build does not re-stamp dist). Delegating anyway.\n`,
     );
   }
 
