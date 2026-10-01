@@ -4279,7 +4279,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       expect(result.message).toContain('Gemini CLI trust file is not a JSON object');
       expect(result.message).toContain('found an array');
       expect(result.message).toContain(
-        'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start); trust state not derivable',
+        'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start) when folder trust is on, the default; trust state not derivable',
       );
     });
 
@@ -4288,7 +4288,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       expect(result.status).toBe('skip');
       expect(result.message).toContain('unrecognised trust value "TRUST_ALWAYS"');
       expect(result.message).toContain(
-        'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start); trust state not derivable',
+        'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start) when folder trust is on, the default; trust state not derivable',
       );
 
       const hostile = wiredWithTrust({ [cwd]: `X${String.fromCharCode(27)}[31mY` });
@@ -4308,11 +4308,16 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       const LRE = 0x202a;
       const RLI = 0x2067;
       const PDI = 0x2069;
-      const controls = [LRM, RLM, RLO, LRE, RLI, PDI].map((c) => String.fromCodePoint(c));
+      const ALM = 0x061c;
+      const LS = 0x2028;
+      const PS = 0x2029;
+      const controls = [LRM, RLM, RLO, LRE, RLI, PDI, ALM, LS, PS].map((c) =>
+        String.fromCodePoint(c),
+      );
       const result = wiredWithTrust({ [cwd]: `A${controls.join('B')}Z` });
       expect(result.status).toBe('skip');
       for (const ch of controls) expect(result.message).not.toContain(ch);
-      expect(result.message).toContain('"A?B?B?B?B?B?Z"');
+      expect(result.message).toContain('"A?B?B?B?B?B?B?B?B?Z"');
     });
 
     it('each skip reason is distinct', () => {
@@ -4436,6 +4441,18 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       expect(checkGeminiWorkspaceTrust(cwd, s).status).toBe('pass');
       expect(s.reads).toContain(resolved);
     });
+
+    it('an override location with no file and no directory skips, naming the override, not a home', () => {
+      const custom = path.resolve('/custom/absent/trust.json');
+      const result = checkGeminiWorkspaceTrust(
+        cwd,
+        seam({ [settingsPath]: WIRED }, { env: { GEMINI_CLI_TRUSTED_FOLDERS_PATH: custom } }),
+      );
+      expect(result.status).toBe('skip');
+      expect(result.message).toBe(
+        `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${path.dirname(custom)}) — nothing to judge`,
+      );
+    });
   });
 
   // ─── an absent trust file (Gemini: unlisted) ─────────
@@ -4466,7 +4483,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
   // ─── Windows short names (refuse to decide) ──────────
   describe('a Windows short name (~) on win32', () => {
     const SHORT_NAME_SKIP =
-      'a path here uses a Windows short name (~), which Gemini CLI resolves natively and this row does not — trust state not derived';
+      "a key in Gemini CLI's trust file, or this folder's path, contains ~ (a Windows short name is resolved natively by Gemini CLI and not by this row) — trust state not derived";
 
     it('skips rather than judge a short-name key on win32', () => {
       const result = checkGeminiWorkspaceTrust(

@@ -204,6 +204,10 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(item).toContain('totem search "<query>"');
     expect(item).toContain('totem lesson add "<text>"');
     expect(item).toContain('Tell the user');
+    // The item claims only what the agent can see: the tools, not the server.
+    expect(item).toContain('(hosts may prefix MCP tool names)');
+    expect(item).toContain('the Totem MCP tools are not available in this session');
+    expect(item).not.toContain('server is not connected');
     // The item names no cause and no doctor row: in the one cause it once
     // named (an untrusted Gemini CLI folder) Gemini CLI does not load the
     // project GEMINI.md, so the item could not reach that seat.

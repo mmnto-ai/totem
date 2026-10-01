@@ -31,7 +31,7 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
    - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
    - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
 5. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like \`gh issue view\` or \`curl\`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
-6. **When the Totem tools are absent:** If \`search_knowledge\` or \`add_lesson\` is not in your tool list, the Totem MCP server is not connected to this session. Tell the user, then use the terminal instead: \`totem search "<query>"\` in place of \`search_knowledge\`, and \`totem lesson add "<text>"\` in place of \`add_lesson\`.
+6. **When the Totem tools are absent:** If no \`search_knowledge\` or \`add_lesson\` tool is in your tool list (hosts may prefix MCP tool names), the Totem MCP tools are not available in this session. Tell the user, then use the terminal instead: \`totem search "<query>"\` in place of \`search_knowledge\`, and \`totem lesson add "<text>"\` in place of \`add_lesson\`.
 
 Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
 

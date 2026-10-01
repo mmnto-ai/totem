@@ -1584,6 +1584,11 @@ const BIDI_EMBED_END = 0x202e;
 /** The bidirectional isolate controls (LRI through PDI). */
 const BIDI_ISOLATE_START = 0x2066;
 const BIDI_ISOLATE_END = 0x2069;
+/** ARABIC LETTER MARK, a bidirectional mark outside the ranges above. */
+const ARABIC_LETTER_MARK = 0x061c;
+/** LINE SEPARATOR and PARAGRAPH SEPARATOR (line-forging in some terminals). */
+const LINE_SEPARATOR = 0x2028;
+const PARAGRAPH_SEPARATOR = 0x2029;
 
 /** The character that marks a Windows 8.3 short-name segment. */
 const WINDOWS_SHORT_NAME_MARK = '~';
@@ -1600,17 +1605,21 @@ function isDisplayHostile(code: number): boolean {
     (code >= C1_CONTROL_START && code <= C1_CONTROL_END) ||
     (code >= BIDI_MARK_START && code <= BIDI_MARK_END) ||
     (code >= BIDI_EMBED_START && code <= BIDI_EMBED_END) ||
-    (code >= BIDI_ISOLATE_START && code <= BIDI_ISOLATE_END)
+    (code >= BIDI_ISOLATE_START && code <= BIDI_ISOLATE_END) ||
+    code === ARABIC_LETTER_MARK ||
+    code === LINE_SEPARATOR ||
+    code === PARAGRAPH_SEPARATOR
   );
 }
 
 /**
  * Terminal-safe rendering of file-controlled text. Sync on purpose: the core
- * `sanitizeForTerminal` rides a dynamic import, and this row stays sync. Every
- * control code point (C0, DEL, C1 — the ANSI and line-forging vectors) and
- * every bidirectional mark, embedding, override and isolate control (the
- * display-reordering vectors) is replaced, and the result is capped on code
- * points, so the cap never splits a surrogate pair.
+ * `sanitizeForTerminal` rides a dynamic import, and this row stays sync.
+ * Replaced: the C0, DEL and C1 controls (the ANSI and line-forging vectors);
+ * the bidirectional marks (LRM, RLM, ALM), embeddings, overrides and isolates
+ * (the display-reordering vectors); and the line and paragraph separators.
+ * The result is capped on code points, so the cap never splits a surrogate
+ * pair.
  */
 function sanitizeGeminiTrustText(text: string): string {
   const points = Array.from(text).map((ch) =>
@@ -1775,8 +1784,9 @@ function geminiTrustFilePath(
  * `security.folderTrust.enabled` setting (when that is false Gemini CLI trusts
  * every folder), IDE workspace trust, or user-level and extension MCP servers.
  * It parses strict JSON, where Gemini CLI also accepts comments. On Windows it
- * declines when a path it would compare uses a short name (`~`), which Gemini
- * CLI resolves natively and this row does not. Relative keys and a relative
+ * declines when this folder's path or ANY trust-file key contains `~` (a short
+ * name, which Gemini CLI resolves natively and this row does not), so one such
+ * key makes the row decline for every folder on that machine. Relative keys and a relative
  * `GEMINI_CLI_TRUSTED_FOLDERS_PATH` resolve against the doctor's cwd, where
  * Gemini CLI uses its own launch cwd. It declines (`skip`, with its reason)
  * on anything it does not recognise and never reports `pass` on a state it
@@ -1795,7 +1805,13 @@ export function checkGeminiWorkspaceTrust(
     realpath?: (p: string) => string;
     exists?: (p: string) => boolean;
     env?: Readonly<Record<string, string | undefined>>;
-    /** Test seam for the platform branch; production callers omit it. */
+    /**
+     * Test seam for the platform branch; production callers omit it. The row
+     * resolves relative keys with the HOST's `path`, so a row-level test that
+     * sets `platform: 'win32'` on a posix host exercises the short-name
+     * refusal faithfully but not win32 path resolution; the pure
+     * `judgeGeminiTrust` tests cover that for every platform.
+     */
     platform?: NodeJS.Platform;
   },
 ): DiagnosticResult {
@@ -1808,7 +1824,7 @@ export function checkGeminiWorkspaceTrust(
   const mayFilter =
     'so it may filter MCP servers here and the Totem MCP tools may be absent from a Gemini session';
   const rejected =
-    'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start); trust state not derivable';
+    'Gemini CLI 0.61.0 itself rejects this file (a fatal configuration error at start) when folder trust is on, the default; trust state not derivable';
   const skip = (message: string): DiagnosticResult => ({
     name,
     status: 'skip',
@@ -1848,11 +1864,10 @@ export function checkGeminiWorkspaceTrust(
   }
 
   // 2. The trust file, located as Gemini CLI locates it.
-  const trustPath = geminiTrustFilePath(
-    cwd,
-    deps?.env ?? process.env,
-    deps?.homeDir ?? os.homedir(),
-  );
+  const env = deps?.env ?? process.env;
+  const trustPath = geminiTrustFilePath(cwd, env, deps?.homeDir ?? os.homedir());
+  // An explicit override names a location, not a Gemini CLI home.
+  const fromOverride = Boolean(env[GEMINI_ENV_TRUST_FILE_PATH]);
   const shownTrustPath = sanitizeGeminiTrustText(trustPath);
   let trustRaw: string;
   try {
@@ -1874,8 +1889,11 @@ export function checkGeminiWorkspaceTrust(
         );
       }
       if (!homeExists) {
+        const shownDir = sanitizeGeminiTrustText(trustDir);
         return skip(
-          `no Gemini CLI home found (${sanitizeGeminiTrustText(trustDir)}) — Gemini CLI has not been set up for this user, nothing to judge`,
+          fromOverride
+            ? `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${shownDir}) — nothing to judge`
+            : `no Gemini CLI home found (${shownDir}) — Gemini CLI has not been set up for this user, nothing to judge`,
         );
       }
       return {
@@ -1927,7 +1945,7 @@ export function checkGeminiWorkspaceTrust(
   );
   if (verdict === 'undecidable') {
     return skip(
-      'a path here uses a Windows short name (~), which Gemini CLI resolves natively and this row does not — trust state not derived',
+      "a key in Gemini CLI's trust file, or this folder's path, contains ~ (a Windows short name is resolved natively by Gemini CLI and not by this row) — trust state not derived",
     );
   }
   if (verdict === 'trusted') {
