@@ -115,6 +115,10 @@ function newestSourceMtimeMs(dir: string, fsx: FreshnessFs): number | undefined 
  * sources, and it reads a touched or reverted file (same content, newer
  * mtime) as newer. A cached turbo build does not re-stamp `dist` either. That
  * is why the line it feeds says "may be stale" and "if the source changed".
+ * Two more: EVERY file under `src` counts, tests and fixtures that are never
+ * compiled into `dist` included, so editing a test trips the line although the
+ * build is current; and a source file stamped in the future keeps the line
+ * printing after a forced build until the clock passes that stamp.
  */
 function readWorkspaceFreshness(root: string, fsx: FreshnessFs): WorkspaceFreshness {
   const cliEntry = path.join(root, PACKAGES_DIR, CLI_PACKAGE, DIST_DIR, ENTRY_FILE);
