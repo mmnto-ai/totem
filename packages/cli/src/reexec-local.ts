@@ -250,15 +250,13 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
   // workspace dist prints nothing and walks nothing, and the pinned tier never
   // reads an mtime (npm tarballs ship fixed mtimes).
   let freshness: WorkspaceFreshness | undefined;
+  const workspaceRoot = workspaceRootOf(local.entry);
   if (local.tier === 'workspace') {
     // totem-context: intentional best-effort sensor read — the catch below
     // does not rethrow by design (ruled in the mmnto-ai/totem#2934 fold): a
     // stale-build hint must never crash or block the delegation it decorates.
     try {
-      freshness = readWorkspaceFreshness(
-        workspaceRootOf(local.entry),
-        opts?.freshnessFs ?? NODE_FRESHNESS_FS,
-      );
+      freshness = readWorkspaceFreshness(workspaceRoot, opts?.freshnessFs ?? NODE_FRESHNESS_FS);
       // totem-context: intentional degradation — see directive above the try; placed on the line before the catch keyword, where the rule reads it.
     } catch (err) {
       // A sensor, never a gate, and never a crash — not even under
@@ -279,11 +277,12 @@ export function maybeReexecLocal(opts?: ReexecOptions): number | undefined {
     `[totem] Delegating to the project-local ${localLabel}${builtLabel} at ${local.entry}${selfLabel} — set TOTEM_NO_REEXEC=1 to disable.\n`,
   );
   // Says what was measured (an mtime), names a cure that works on a cached
-  // turbo build, and delegates anyway.
+  // turbo build and WHERE it works (inside a package, `pnpm build --force`
+  // hands `--force` to that package's `tsc` and fails), and delegates anyway.
   const stale = freshness?.stale;
   if (stale !== undefined) {
     process.stderr.write(
-      `[totem] The project-local build may be stale: a file under ${PACKAGES_DIR}/${stale.package}/${SRC_DIR} was modified ${stale.sourceNewestAt}, after its dist was built ${stale.distBuiltAt}. If the source changed, run pnpm build --force (a cached turbo build does not re-stamp dist). Delegating anyway.\n`,
+      `[totem] The project-local build may be stale: a file under ${PACKAGES_DIR}/${stale.package}/${SRC_DIR} was modified ${stale.sourceNewestAt}, after its dist was built ${stale.distBuiltAt}. If the source changed, run pnpm build --force from the workspace root (${workspaceRoot}); a cached turbo build does not re-stamp dist. Delegating anyway.\n`,
     );
   }
 

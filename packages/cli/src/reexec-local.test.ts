@@ -275,8 +275,9 @@ function banner(version: string, entry: string, built?: Date): string {
   return `[totem] Delegating to the project-local @mmnto/cli@${version}${builtLabel} at ${entry} (this binary: 1.0.0) — set TOTEM_NO_REEXEC=1 to disable.\n`;
 }
 
-function staleLine(pkg: string, source: Date, dist: Date): string {
-  return `[totem] The project-local build may be stale: a file under packages/${pkg}/src was modified ${source.toISOString()}, after its dist was built ${dist.toISOString()}. If the source changed, run pnpm build --force (a cached turbo build does not re-stamp dist). Delegating anyway.\n`;
+/** `root` is the workspace root as the probe resolves it — never the cwd. */
+function staleLine(root: string, pkg: string, source: Date, dist: Date): string {
+  return `[totem] The project-local build may be stale: a file under packages/${pkg}/src was modified ${source.toISOString()}, after its dist was built ${dist.toISOString()}. If the source changed, run pnpm build --force from the workspace root (${root}); a cached turbo build does not re-stamp dist. Delegating anyway.\n`;
 }
 
 /** The real filesystem behind counting spies. */
@@ -316,10 +317,10 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
   const writes = (): string[] => stderr.mock.calls.map((c) => String(c[0]));
 
   /** Delegate from a foreign binary; returns the exit code and the spawn mock. */
-  function delegate(extra?: { env?: NodeJS.ProcessEnv; freshnessFs?: FreshnessFs }) {
+  function delegate(extra?: { env?: NodeJS.ProcessEnv; freshnessFs?: FreshnessFs; cwd?: string }) {
     const spawn = vi.fn().mockReturnValue({ status: 7 });
     const status = maybeReexecLocal({
-      cwd: tmpRoot,
+      cwd: extra?.cwd ?? tmpRoot,
       argv: ['lint', '--branch'],
       env: extra?.env ?? { PATH: 'x' },
       selfPath: foreignSelf,
@@ -400,7 +401,7 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
 
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      staleLine('cli', AFTER_BUILD, BUILT_AT),
+      staleLine(path.resolve(tmpRoot), 'cli', AFTER_BUILD, BUILT_AT),
     ]);
     expect(status).toBe(7);
     expect(spawn).toHaveBeenCalledTimes(1);
@@ -408,6 +409,22 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     expect(cmd).toBe(process.execPath);
     expect(args).toEqual([entry, 'lint', '--branch']);
     expect(opts).toEqual({ stdio: 'inherit', env: { PATH: 'x', TOTEM_NO_REEXEC: '1' } });
+  });
+
+  it('delegating from inside packages/cli: the stale line names the workspace ROOT, not the cwd', () => {
+    // From a package directory, `pnpm build --force` hands --force to that
+    // package's tsc and fails — the cure must name where it works.
+    const entry = writeBuiltWorkspace(tmpRoot);
+    writeSource(tmpRoot, 'cli', 'index.ts', AFTER_BUILD);
+    const packageCwd = path.join(tmpRoot, 'packages', 'cli');
+    const { spawn } = delegate({ cwd: packageCwd });
+    const root = path.resolve(tmpRoot);
+    expect(writes()).toEqual([
+      banner('9.9.9', entry, BUILT_AT),
+      staleLine(root, 'cli', AFTER_BUILD, BUILT_AT),
+    ]);
+    expect(root).not.toBe(path.resolve(packageCwd));
+    expect(spawn).toHaveBeenCalledTimes(1);
   });
 
   it('a stale core dist under a fresh cli dist is reported as packages/core/src', () => {
@@ -418,7 +435,7 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     const { spawn } = delegate();
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      staleLine('core', AFTER_BUILD, BUILT_AT),
+      staleLine(path.resolve(tmpRoot), 'core', AFTER_BUILD, BUILT_AT),
     ]);
     expect(spawn).toHaveBeenCalledTimes(1);
   });
@@ -431,7 +448,7 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     delegate();
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      staleLine('cli', AFTER_BUILD, BUILT_AT),
+      staleLine(path.resolve(tmpRoot), 'cli', AFTER_BUILD, BUILT_AT),
     ]);
   });
 
@@ -447,7 +464,7 @@ describe('workspace freshness sensor (mmnto-ai/totem#2934)', () => {
     delegate();
     expect(writes()).toEqual([
       banner('9.9.9', entry, BUILT_AT),
-      staleLine('cli', AFTER_BUILD, BUILT_AT),
+      staleLine(path.resolve(tmpRoot), 'cli', AFTER_BUILD, BUILT_AT),
     ]);
   });
 
