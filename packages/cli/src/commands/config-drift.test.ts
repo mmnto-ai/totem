@@ -189,7 +189,22 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(AI_PROMPT_BLOCK).toContain('`CURSOR_TRACE_ID`');
     expect(AI_PROMPT_BLOCK).toContain('totem hook install --strict');
     expect(AI_PROMPT_BLOCK).not.toContain('which AI agents get automatically');
-    expect(REFLEX_VERSION).toBe(16);
+    expect(REFLEX_VERSION).toBe(17);
+  });
+
+  // The degradation item (mmnto-ai/totem#2933 ask 3): when the Totem MCP tools
+  // are absent from a session, the two MUST-call reflexes name their CLI
+  // fallbacks instead of failing silently. Both verbs are locked by name inside
+  // the new item, so a later edit that drops either one is loud.
+  it('the reflex block names the CLI fallbacks for absent Totem tools', () => {
+    const start = AI_PROMPT_BLOCK.indexOf('**When the Totem tools are absent:**');
+    expect(start).toBeGreaterThan(-1);
+    const end = AI_PROMPT_BLOCK.indexOf('\n', start);
+    const item = AI_PROMPT_BLOCK.slice(start, end);
+    expect(item).toContain('totem search "<query>"');
+    expect(item).toContain('totem lesson add "<text>"');
+    expect(item).toContain('Tell the user');
+    expect(item).toContain('totem doctor');
   });
 });
 
