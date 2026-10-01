@@ -75,6 +75,11 @@ const SHA_PREFIX_LENGTH = 8;
  * The deposit store's own address shape (core's `DIFF_SHA_RE`): a 40-character
  * lowercase hex sha. A verdict whose sha is anything else is not a verdict the
  * knob can name honestly, so it reads as not-derived — the gate stands.
+ *
+ * A restatement, not a second authority: core keeps its rule private, so
+ * `shield-enforce.test.ts` pins this one against `LegDepositSchema` shape by
+ * shape. If the two ever part, the drift fails closed (an evidence verdict
+ * reads not-derived) and that test says so first.
  */
 const DEPOSIT_SHA_RE = /^[0-9a-f]{40}$/;
 

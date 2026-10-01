@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { TotemConfig } from '@mmnto/totem';
+import { LEG_DEPOSIT_SCHEMA_VERSION, LegDepositSchema, type TotemConfig } from '@mmnto/totem';
 
 import {
   legsVerdictFromOutcome,
@@ -136,6 +136,44 @@ describe('resolveShieldEnforce — the decision table (mmnto-ai/totem#2525)', ()
         }),
       ).toEqual({ softens: false, line: LINE_LEGGED_NOT_DERIVED });
     }
+  });
+
+  it("agrees with core's deposit address rule on every sha shape (a parity pin: the knob restates a rule core owns)", () => {
+    // The knob's 40-hex assertion is a restatement of the deposit store's own
+    // address shape, which core keeps private. This pin is what stops the two
+    // drifting apart: for each shape, the knob names the deposit if and only if
+    // core's schema accepts that sha as a deposit address.
+    const coreAccepts = (diffSha: string): boolean =>
+      LegDepositSchema.safeParse({
+        schemaVersion: LEG_DEPOSIT_SCHEMA_VERSION,
+        diffSha,
+        readAt: '2026-10-01T00:00:00.000Z',
+        findings: [],
+        folded: [],
+        verdict: 'parity probe',
+      }).success;
+    const knobNames = (diffSha: string): boolean =>
+      resolveShieldEnforce('advisory-when-legged', {
+        state: 'evidence',
+        diffSha,
+        covered: 1,
+        owed: 1,
+      }).softens;
+    const shapes = [
+      SHA,
+      SHA.toUpperCase(),
+      SHA.slice(0, 39),
+      `${SHA}0`,
+      '',
+      'f'.repeat(40),
+      'g'.repeat(40),
+    ];
+    for (const diffSha of shapes) {
+      expect(knobNames(diffSha), JSON.stringify(diffSha)).toBe(coreAccepts(diffSha));
+    }
+    // The table is not vacuous: both verdicts occur in it.
+    expect(shapes.some(coreAccepts)).toBe(true);
+    expect(shapes.every(coreAccepts)).toBe(false);
   });
 });
 
