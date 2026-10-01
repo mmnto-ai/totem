@@ -1769,8 +1769,9 @@ function geminiTrustFilePath(
 
 /**
  * Sensor row (never gates): whether Gemini CLI's trust file trusts this
- * folder, for a repository whose `.gemini/settings.json` declares a
- * project-level MCP server. Gemini CLI suppresses MCP servers in a workspace
+ * folder, for a directory whose `.gemini/settings.json` declares a
+ * project-level MCP server. It reads the directory `totem doctor` runs in, as
+ * Gemini CLI 0.61.0 reads `<cwd>/.gemini/settings.json` with no walk up. Gemini CLI suppresses MCP servers in a workspace
  * folder it does not trust, so a Gemini seat here can lose the Totem MCP tools
  * without a word; this row is what that seat can run to get the diagnosis
  * (mmnto-ai/totem#2933, ask 2).
@@ -1832,7 +1833,7 @@ export function checkGeminiWorkspaceTrust(
     gateExempt: true,
   });
 
-  // 1. Applicability: the repository wires Gemini CLI to at least one MCP server.
+  // 1. Applicability: this directory wires Gemini CLI to at least one MCP server.
   const settingsPath = path.join(cwd, GEMINI_SETTINGS_RELATIVE_PATH);
   let settingsRaw: string;
   try {
@@ -1840,7 +1841,9 @@ export function checkGeminiWorkspaceTrust(
     // totem-context: a read failure is this sensor declining to judge — reported as a skip with its reason, never a throw (Tenet 13)
   } catch (err) {
     if (isMissingFileError(err)) {
-      return skip('no .gemini/settings.json — no Gemini CLI wiring in this repository');
+      return skip(
+        'no .gemini/settings.json in this directory — no project-level Gemini CLI wiring here (this row checks the directory doctor runs in, the same directory it judges trust for)',
+      );
     }
     return skip(`.gemini/settings.json is unreadable: ${errorReason(err)}`);
   }
@@ -1859,7 +1862,7 @@ export function checkGeminiWorkspaceTrust(
   const servers = settings['mcpServers'];
   if (!isPlainJsonObject(servers) || Object.keys(servers).length === 0) {
     return skip(
-      '.gemini/settings.json declares no mcpServers — no project-level Gemini MCP wiring to judge (user-level and extension MCP servers are not checked by this row)',
+      '.gemini/settings.json declares no mcpServers — no project-level Gemini MCP wiring in this directory to judge (user-level and extension MCP servers are not checked by this row)',
     );
   }
 
@@ -1892,8 +1895,8 @@ export function checkGeminiWorkspaceTrust(
         const shownDir = sanitizeGeminiTrustText(trustDir);
         return skip(
           fromOverride
-            ? `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${shownDir}) — nothing to judge`
-            : `no Gemini CLI home found (${shownDir}) — Gemini CLI has not been set up for this user, nothing to judge`,
+            ? `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${shownDir}) — nothing to judge; a Gemini CLI session here will treat this folder as unlisted until it is trusted`
+            : `no Gemini CLI home found (${shownDir}) — Gemini CLI has not been set up for this user, so there is nothing to judge yet; a first Gemini CLI session here will treat this folder as unlisted until it is trusted`,
         );
       }
       return {

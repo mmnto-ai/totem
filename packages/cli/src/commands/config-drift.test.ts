@@ -213,7 +213,10 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     // project GEMINI.md, so the item could not reach that seat.
     expect(item).not.toContain('Gemini');
     expect(item).not.toContain('totem doctor');
-    expect(item.endsWith('in place of `add_lesson`.')).toBe(true);
+    // Scoped to agents with a terminal: a cloud bot with no local CLI (the
+    // block's own Cloud / PR Review Bots section) stops at telling the user.
+    expect(item).toContain('Tell the user. If you have a terminal, use it instead:');
+    expect(item.endsWith('A cloud bot with no local CLI stops at telling the user.')).toBe(true);
   });
 });
 

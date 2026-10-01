@@ -4159,7 +4159,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       expect(result.name).toBe('Gemini Workspace Trust');
       expect(result.status).toBe('skip');
       expect(result.message).toBe(
-        'no .gemini/settings.json — no Gemini CLI wiring in this repository',
+        'no .gemini/settings.json in this directory — no project-level Gemini CLI wiring here (this row checks the directory doctor runs in, the same directory it judges trust for)',
       );
     });
 
@@ -4183,7 +4183,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       const result = run({ [settingsPath]: JSON.stringify({ hooks: {} }) });
       expect(result.status).toBe('skip');
       expect(result.message).toBe(
-        '.gemini/settings.json declares no mcpServers — no project-level Gemini MCP wiring to judge (user-level and extension MCP servers are not checked by this row)',
+        '.gemini/settings.json declares no mcpServers — no project-level Gemini MCP wiring in this directory to judge (user-level and extension MCP servers are not checked by this row)',
       );
     });
 
@@ -4228,7 +4228,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       );
       expect(result.status).toBe('skip');
       expect(result.message).toBe(
-        `no Gemini CLI home found (${path.dirname(trustPath)}) — Gemini CLI has not been set up for this user, nothing to judge`,
+        `no Gemini CLI home found (${path.dirname(trustPath)}) — Gemini CLI has not been set up for this user, so there is nothing to judge yet; a first Gemini CLI session here will treat this folder as unlisted until it is trusted`,
       );
       expect(probed).toEqual([path.dirname(trustPath)]);
     });
@@ -4450,7 +4450,7 @@ describe('checkGeminiWorkspaceTrust (mmnto-ai/totem#2933)', () => {
       );
       expect(result.status).toBe('skip');
       expect(result.message).toBe(
-        `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${path.dirname(custom)}) — nothing to judge`,
+        `no trust file or directory at the GEMINI_CLI_TRUSTED_FOLDERS_PATH location (${path.dirname(custom)}) — nothing to judge; a Gemini CLI session here will treat this folder as unlisted until it is trusted`,
       );
     });
   });
