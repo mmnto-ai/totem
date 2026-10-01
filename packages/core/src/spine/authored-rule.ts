@@ -29,7 +29,7 @@ import {
 } from '../compiler-schema.js';
 import type { CompileInputCandidate } from './candidate-rule.js';
 import type { ClassifierLedger } from './ledgers.js';
-import { ParsedRuleRecordSchema } from './rule-record.js';
+import { checkGlobDialect, ParsedRuleRecordSchema } from './rule-record.js';
 
 /** The matcher engines an authored rule may declare (mirrors `CompiledRule.engine`). */
 export const DeclaredEngineSchema = z.enum(['regex', 'ast', 'ast-grep']);
@@ -53,8 +53,12 @@ const ELIGIBILITY_BASIS_RE = /^(?:whitelist:.+|capability-check|draft-classifier
  */
 export const PROSE_EXTENSIONS = Object.freeze(['md', 'mdx', 'rst', 'txt'] as const);
 
-/** A whitelist row's scope tag (mmnto-ai/totem#2988): `'prose'` admits prose globs only. */
+/**
+ * A whitelist row's scope tag (mmnto-ai/totem#2988): `'prose'` admits prose globs only. The
+ * literal's one home: `WhitelistScope` (the `WhitelistEntry.scope` type) is inferred from it.
+ */
 const WhitelistScopeSchema = z.literal('prose');
+export type WhitelistScope = z.infer<typeof WhitelistScopeSchema>;
 
 /**
  * ADR-112 §3 — the recorded verdict of the scope conjunct a scope-tagged whitelist row adds to
@@ -64,7 +68,10 @@ const WhitelistScopeSchema = z.literal('prose');
  *
  *   - `{ scope: 'prose', satisfied: true }` — every declared glob is a prose glob;
  *   - `{ scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob }` — `glob` is the FIRST
- *     declared glob (array order) that is not, byte-verbatim;
+ *     declared glob (array order) that is not, byte-verbatim. Any string, the empty one
+ *     included: a caller of the public predicate can pass a glob outside the V1 dialect (`''`,
+ *     or a glob with surrounding whitespace), which is not a prose glob, and the refusal must be
+ *     recordable exactly as passed;
  *   - `{ scope: 'prose', satisfied: false, cause: 'no-globs' }` — no globs were supplied (fail
  *     closed: the predicate is a public export, and the parse-time `fileGlobs.min(1)` guards only
  *     the intake path).
@@ -81,7 +88,7 @@ const ScopeConjunctSchema = z.union([
       scope: WhitelistScopeSchema,
       satisfied: z.literal(false),
       cause: z.literal('non-prose-glob'),
-      glob: z.string().min(1, { message: 'scopeConjunct.glob must name the failing glob' }),
+      glob: z.string(),
     })
     .strict(),
   z
@@ -440,23 +447,29 @@ export type AuthoredRulesFile = z.infer<typeof AuthoredRulesFileSchema>;
 export interface WhitelistEntry {
   engine: DeclaredEngine;
   structuralClass: string;
-  scope?: 'prose';
+  scope?: WhitelistScope;
 }
 
 /** The wildcard-only last segments that name no extension at all (`docs/**`, `*`). */
 const WILDCARD_ONLY_SEGMENTS: ReadonlySet<string> = new Set(['**', '*']);
 
-// mmnto-ai/totem#2988 — is `glob` a PROSE glob? Judged on the glob's LAST path segment (the
-// text after the last `/`, the whole glob when there is none), byte-verbatim as the V1 dialect
-// keeps it. NOT prose when that segment is `**` or `*`, has no `.`, or its final extension (the
-// text after the LAST `.`, lower-cased) is not in `PROSE_EXTENSIONS`. So `**/*.md`,
-// `docs/**/*.TXT` and `README.md` are prose; `**/Makefile` (no extension), `**/*.md.ts` (a
-// compound suffix whose final extension is `ts`), `**/package.json`, `docs/**`, `**/*.md*`
-// (final extension `md*`) and `*.txt.` (an empty final extension) are not. Only `fileGlobs` are
-// judged: `excludeGlobs` only narrow a scope and are not an input. Pure and deterministic; the
-// algorithm is in no set-id digest (precedent-consistent — the pair predicate's code is not
-// either). Line comments, not a doc block: the globs above would close one.
+// mmnto-ai/totem#2988 — is `glob` a PROSE glob? First, a glob OUTSIDE the V1 dialect
+// (`checkGlobDialect`, § Design 7) is not: the intake's record parse already refuses one, but
+// the predicate is a public export, and a caller could otherwise pass `!**/*.md` (negation under
+// the legacy matcher), ` **/*.md` (surrounding whitespace) or `''` and read them as prose. Then
+// the test is on the glob's LAST path segment (the text after the last `/`, the whole glob when
+// there is none), byte-verbatim as the V1 dialect keeps it. NOT prose when that segment is `**`
+// or `*`, has no `.`, or its final extension (the text after the LAST `.`, lower-cased) is not
+// in `PROSE_EXTENSIONS`. So `**/*.md`, `docs/**/*.TXT` and `README.md` are prose; `**/Makefile`
+// (no extension), `**/*.md.ts` (a compound suffix whose final extension is `ts`),
+// `**/package.json`, `docs/**`, `**/*.md*` (final extension `md*`), `*.txt.` (an empty final
+// extension) and every dialect-illegal glob (`''`, ` **/*.md`, `!**/*.md`, `/docs/*.md`,
+// `docs//*.md`, …) are not. Only `fileGlobs` are judged: `excludeGlobs` only narrow a scope and
+// are not an input. Pure and deterministic; the algorithm is in no set-id digest
+// (precedent-consistent — the pair predicate's code is not either). Line comments, not a doc
+// block: the globs above would close one.
 export function isProseGlob(glob: string): boolean {
+  if (checkGlobDialect(glob) !== null) return false;
   const segment = glob.slice(glob.lastIndexOf('/') + 1);
   if (WILDCARD_ONLY_SEGMENTS.has(segment)) return false;
   const dot = segment.lastIndexOf('.');

@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
@@ -192,6 +194,21 @@ describe('authoredWhitelist — the prose scope tag and the owner-form set id (m
     const sha = createHash('sha256').update(bytes, 'utf8').digest('hex');
     expect(sha).toBe(OWNER_SET_SHA256);
     expect(`static-whitelist@owner-${sha.slice(0, 8)}`).toBe(OWNER_JUDGED_BY);
+  });
+
+  it('the header carries P1’s clause verbatim on one line, immediately after rule 2’s regex sentence (source-text pin)', () => {
+    const P1_CLAUSE =
+      "A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard.";
+    const PRECEDING_SENTENCE = 'Classes whose tokens never appear in prose may be regex.';
+    const lines = fs
+      .readFileSync(path.join(__dirname, 'authored-whitelist.ts'), 'utf-8')
+      .split('\n')
+      .map((l) => l.replace(/\r$/, ''));
+    const at = lines.flatMap((l, i) => (l.includes(P1_CLAUSE) ? [i] : []));
+    expect(at).toHaveLength(1);
+    const i = at[0]!;
+    expect(lines[i]).toBe(`// ${P1_CLAUSE}`);
+    expect(lines[i - 1]?.endsWith(PRECEDING_SENTENCE)).toBe(true);
   });
 
   it('each prose extension classifies NON_CODE in the review classifier (the prose four ⊂ its non-code set)', () => {

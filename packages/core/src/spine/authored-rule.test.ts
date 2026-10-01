@@ -13,7 +13,13 @@ import {
   toCompileFeed,
   type WhitelistEntry,
 } from './authored-rule.js';
-import { type ParsedRuleRecord, parseRuleRecord } from './rule-record.js';
+import {
+  checkGlobDialect,
+  GLOB_DIALECT_RULES,
+  type GlobDialectRule,
+  type ParsedRuleRecord,
+  parseRuleRecord,
+} from './rule-record.js';
 
 // ── Prop 310 § Design 1 — the record carrier the envelope now holds ──────────
 
@@ -271,6 +277,47 @@ describe('isProseGlob — the last-segment prose test (mmnto-ai/totem#2988)', ()
   it.each(NOT_PROSE)('%s is not a prose glob', (glob) => {
     expect(isProseGlob(glob)).toBe(false);
   });
+
+  // One dialect-illegal glob per § Design 7 rule, each built to END in a prose extension, so the
+  // dialect is the only thing that can make it non-prose. Typed as a total record over
+  // `GlobDialectRule`, so a rule added to the dialect without a row here fails the type check.
+  const BACKSLASH = String.fromCharCode(92);
+  const DIALECT_ILLEGAL: Record<GlobDialectRule, string> = {
+    empty: '',
+    'surrounding-whitespace': ' **/*.md',
+    separator: ['docs', '*.md'].join(BACKSLASH),
+    'absolute-path': '/docs/*.md',
+    'drive-letter': 'C:/docs/*.md',
+    'brace-expansion': '{docs,wiki}/*.md',
+    negation: '!**/*.md',
+    'regex-syntax': 'doc[s]/*.md',
+    'empty-segment': 'docs//*.md',
+    'current-segment': './docs/*.md',
+    'parent-segment': '../docs/*.md',
+    'embedded-globstar': 'docs**/*.md',
+    'adjacent-globstar': '**/**/*.md',
+  };
+  it('a glob outside the V1 dialect is never a prose glob — one per dialect rule', () => {
+    expect(Object.keys(DIALECT_ILLEGAL).sort()).toEqual([...GLOB_DIALECT_RULES].sort());
+    for (const rule of GLOB_DIALECT_RULES) {
+      const glob = DIALECT_ILLEGAL[rule];
+      expect(checkGlobDialect(glob)?.rule, rule).toBe(rule);
+      expect(isProseGlob(glob), rule).toBe(false);
+    }
+  });
+
+  it('the public predicate refuses a dialect-illegal glob with a recordable result (the falsification leg F3)', () => {
+    for (const glob of ['', '!**/*.md', ' **/*.md']) {
+      const r = judgeProse([glob]);
+      expect(r, JSON.stringify(glob)).toEqual({
+        decidable: false,
+        basis: 'whitelist:forbidden-literal-token',
+        judgedBy: 'static-whitelist@test',
+        scopeConjunct: { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob },
+      });
+      expect(StructEligResultSchema.safeParse(r).success, JSON.stringify(glob)).toBe(true);
+    }
+  });
 });
 
 describe('PROSE_EXTENSIONS (mmnto-ai/totem#2988, Q6)', () => {
@@ -295,6 +342,9 @@ describe('StructEligResultSchema — strict, with the three closed scopeConjunct
     for (const scopeConjunct of [
       { scope: 'prose', satisfied: true },
       { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob: '**/*.ts' },
+      // An empty-string glob is recordable byte-verbatim: a public caller can pass one, and the
+      // refusal must be representable for every input (the falsification leg's F3).
+      { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob: '' },
       { scope: 'prose', satisfied: false, cause: 'no-globs' },
     ]) {
       expect(StructEligResultSchema.safeParse({ ...base, scopeConjunct }).success).toBe(true);
@@ -308,7 +358,6 @@ describe('StructEligResultSchema — strict, with the three closed scopeConjunct
       { scope: 'prose', satisfied: true, cause: 'non-prose-glob', glob: '**/*.ts' },
       { scope: 'prose', satisfied: false, cause: 'no-globs', glob: '**/*.ts' },
       { scope: 'prose', satisfied: false, cause: 'non-prose-glob' },
-      { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob: '' },
       { scope: 'prose', satisfied: false, cause: 'other' },
       { scope: 'source', satisfied: true },
       { satisfied: true },

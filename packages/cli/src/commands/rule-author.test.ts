@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { stringify as yamlStringify } from 'yaml';
 
 import {
+  appendAuthoringLedgerEntry,
   AuthoredRuleInputSchema,
+  authoringContentHash,
+  mintAuthoredRuleId,
   type ParsedRuleRecord,
   parseRuleRecord,
   readAuthoringLedger,
@@ -800,6 +803,76 @@ describe('runRuleAuthor — the prose-only exemplar row (mmnto-ai/totem#2988)', 
     });
     // The recorded conjunct round-trips the strict ledger read: a re-read is `unchanged`.
     expect(run().unchanged).toBe(1);
+  });
+
+  it('a PRE-CHANGE three-key row of a prose-scoped rule re-derives `revised`, and verifyOnly refuses it as (revised)', () => {
+    // The row is written BY HAND, as the pre-change intake wrote it: the same material, with the
+    // three-key verdict the untagged row produced (no `scopeConjunct`). It is built from the
+    // exported material pieces, never through the predicate, so it is what a ledger recorded
+    // before mmnto-ai/totem#2988 holds; on the pre-change code it re-derives `unchanged`.
+    const ref = writeRecord('prose-only', proseRecord(['**/*.md', '**/*.txt']));
+    const envelopeRule = decidableRule({ structuralClass: EXEMPLAR, record: ref });
+    writeYaml([envelopeRule]);
+    const input = AuthoredRuleInputSchema.parse(envelopeRule);
+    const text = fs
+      .readFileSync(path.join(rulesDir, 'prose-only.rule.yaml'), 'utf-8')
+      .replace(/\r\n/g, '\n');
+    const recordContentHash = createHash('sha256').update(text).digest('hex');
+    const ingested = {
+      path: ref,
+      contentHash: recordContentHash,
+      parsed: parseRuleRecord(text, ref),
+    };
+    const ruleId = mintAuthoredRuleId(input.author, input.targetDefect, new Set());
+    const threeKey = {
+      decidable: true,
+      basis: `whitelist:${EXEMPLAR}`,
+      judgedBy: 'static-whitelist@test',
+    };
+    const origin = { kind: 'from-scratch' as const };
+    const header = {
+      splitRef: 'split-2026-06-27',
+      authoredAfterSplit: true as const,
+      heldOutNonInspectionAttestation: true as const,
+    };
+    const contentHash = authoringContentHash({
+      declaredEngine: 'regex',
+      structuralClass: EXEMPLAR,
+      recordContentHash,
+      positiveFixtures: deriveRecordFixtures(input, ingested, ruleId),
+      negativeFixtures: input.negativeFixtures,
+      origin,
+      ...header,
+      structuralEligibility: threeKey,
+    });
+    appendAuthoringLedgerEntry(totemDir, {
+      ruleId,
+      author: input.author,
+      targetDefect: input.targetDefect,
+      authoredAt: input.authoredAt,
+      declaredEngine: 'regex',
+      ...header,
+      structuralEligibility: threeKey,
+      origin,
+      record: { path: ref, contentHash: recordContentHash },
+      positiveFixturePrs: input.positiveFixtures.map((f) => f.pr),
+      contentHash,
+    });
+    const before = fs.readFileSync(ledgerPath(), 'utf-8');
+
+    expect(() =>
+      runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test', verifyOnly: true }),
+    ).toThrow(`${ruleId} (revised)`);
+    expect(fs.readFileSync(ledgerPath(), 'utf-8')).toBe(before);
+
+    const res = run();
+    expect(res.revised).toBe(1);
+    expect(res.minted + res.unchanged).toBe(0);
+    expect(res.records[0]?.ruleId).toBe(ruleId);
+    expect(readAuthoringLedger(totemDir)[1]?.structuralEligibility.scopeConjunct).toEqual({
+      scope: 'prose',
+      satisfied: true,
+    });
   });
 
   it('a source-scoped record under the exemplar row is REJECTED before minting, the reason naming the glob; no ledger row', () => {
