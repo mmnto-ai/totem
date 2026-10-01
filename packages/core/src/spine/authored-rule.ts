@@ -42,33 +42,103 @@ export type DeclaredEngine = z.infer<typeof DeclaredEngineSchema>;
 const ELIGIBILITY_BASIS_RE = /^(?:whitelist:.+|capability-check|draft-classifier\+stage4)$/;
 
 /**
+ * The prose extensions a prose-tagged whitelist row admits — the extension WITHOUT the dot.
+ *
+ * The four the Gate 5 batch-1 class review names for the held scope clause (mmnto-ai/totem#2988,
+ * Q6): one data constant, read by the scope conjunct below (`isProseGlob`) and by the CLI's
+ * owner-form set-id test, which digests it — so a change here moves that pinned id. Disclosed
+ * residue, ruled with the four: `txt` also reaches build inputs (`requirements.txt`,
+ * `CMakeLists.txt`) whose `#` comments are a no-grammar comment seam, and `mdx` carries ESM and
+ * JSX — looser than "reaches no source file" read strictly.
+ */
+export const PROSE_EXTENSIONS = Object.freeze(['md', 'mdx', 'rst', 'txt'] as const);
+
+/** A whitelist row's scope tag (mmnto-ai/totem#2988): `'prose'` admits prose globs only. */
+const WhitelistScopeSchema = z.literal('prose');
+
+/**
+ * ADR-112 §3 — the recorded verdict of the scope conjunct a scope-tagged whitelist row adds to
+ * the check (mmnto-ai/totem#2988, P2). Exactly three shapes, each closed, so an inconsistent one
+ * (a `satisfied: false` with no cause, a `glob` on `no-globs`, a `cause` on `satisfied: true`) is
+ * unrepresentable:
+ *
+ *   - `{ scope: 'prose', satisfied: true }` — every declared glob is a prose glob;
+ *   - `{ scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob }` — `glob` is the FIRST
+ *     declared glob (array order) that is not, byte-verbatim;
+ *   - `{ scope: 'prose', satisfied: false, cause: 'no-globs' }` — no globs were supplied (fail
+ *     closed: the predicate is a public export, and the parse-time `fileGlobs.min(1)` guards only
+ *     the intake path).
+ */
+const ScopeConjunctSchema = z.union([
+  z
+    .object({
+      scope: WhitelistScopeSchema,
+      satisfied: z.literal(true),
+    })
+    .strict(),
+  z
+    .object({
+      scope: WhitelistScopeSchema,
+      satisfied: z.literal(false),
+      cause: z.literal('non-prose-glob'),
+      glob: z.string().min(1, { message: 'scopeConjunct.glob must name the failing glob' }),
+    })
+    .strict(),
+  z
+    .object({
+      scope: WhitelistScopeSchema,
+      satisfied: z.literal(false),
+      cause: z.literal('no-globs'),
+    })
+    .strict(),
+]);
+
+/**
  * ADR-112 §3 — the result of the INDEPENDENT structural-eligibility check.
  * Produced by `evaluateStructuralEligibility` (NOT by the author): only
  * `decidable: true` reaches the compiler, mapping to the compiler's
  * `classifierDisposition: 'structural'`. `judgedBy` records who/what judged it
  * (ledger-recorded, never the author), so a human cannot smuggle a behavioral
  * policy past ADR-091's gate by hand-asserting "structural" (FM(d)).
+ *
+ * `.strict()` since mmnto-ai/totem#2988: a reader of this version fails LOUD on a field it does
+ * not know, where the pre-change (non-strict) schema stripped it silently — the mixed-version
+ * gap, in which an older reader drops a newer recorded verdict without a word. The result rides
+ * inside the authoring-ledger row, whose own schema is strict for the same reason.
  */
-export const StructEligResultSchema = z.object({
-  decidable: z.boolean(),
-  /**
-   * `whitelist:<class>` for the cert-#1 static-whitelist basis; the
-   * `capability-check` / `draft-classifier+stage4` bases are contract-legal but
-   * deferred (slice-A uses the deterministic whitelist only). On a `decidable:
-   * false` verdict the basis still names the attempted whitelist class — the
-   * diagnostic is "no/ambiguous whitelist match", carried in `judgedBy`'s log.
-   * Constrained to the §3 forms (strategy item 2, #2259) so a typo'd/free-form
-   * basis can't validate — non-mutating (no `.trim()`), matching the hash-stability
-   * discipline on the other reference fields.
-   */
-  basis: z.string().refine((s) => ELIGIBILITY_BASIS_RE.test(s), {
-    message:
-      'basis must be a §3 eligibility basis: whitelist:<class> | capability-check | draft-classifier+stage4',
-  }),
-  judgedBy: z.string().refine((s) => s.trim().length > 0, {
-    message: 'judgedBy must name the check/agent that judged eligibility (never the author)',
-  }),
-});
+export const StructEligResultSchema = z
+  .object({
+    decidable: z.boolean(),
+    /**
+     * `whitelist:<class>` for the cert-#1 static-whitelist basis; the
+     * `capability-check` / `draft-classifier+stage4` bases are contract-legal but
+     * deferred (slice-A uses the deterministic whitelist only). On a `decidable:
+     * false` verdict the basis still names the attempted whitelist class — the
+     * diagnostic is "no/ambiguous whitelist match", carried in `judgedBy`'s log.
+     * Constrained to the §3 forms (strategy item 2, #2259) so a typo'd/free-form
+     * basis can't validate — non-mutating (no `.trim()`), matching the hash-stability
+     * discipline on the other reference fields.
+     */
+    basis: z.string().refine((s) => ELIGIBILITY_BASIS_RE.test(s), {
+      message:
+        'basis must be a §3 eligibility basis: whitelist:<class> | capability-check | draft-classifier+stage4',
+    }),
+    judgedBy: z.string().refine((s) => s.trim().length > 0, {
+      message: 'judgedBy must name the check/agent that judged eligibility (never the author)',
+    }),
+    /**
+     * The scope conjunct's recorded verdict (mmnto-ai/totem#2988, P2). Present iff the pair
+     * matched EXACTLY ONE whitelist row AND that row carries a scope tag; absent otherwise, so an
+     * untagged row's result keeps exactly the three keys above and its ledger material hash is
+     * byte-identical to the pre-change one. Recorded on BOTH outcomes because ADR-112 §3 requires
+     * the check that judged to record who judged and why — an admitted entry carries the
+     * conjunct's outcome, a refused one its cause. An optional field rather than a `basis` suffix
+     * because `whitelist:.+` is not injective (a class literally named with the suffix would
+     * collide) and the ADR's basis form is `whitelist:<class>`.
+     */
+    scopeConjunct: ScopeConjunctSchema.optional(),
+  })
+  .strict();
 export type StructEligResult = z.infer<typeof StructEligResultSchema>;
 
 /** ADR-112 §3/§7 — accelerant-lineage marker. A mined hint that informed a human is recorded, never erased. */
@@ -361,35 +431,97 @@ export type AuthoredRulesFile = z.infer<typeof AuthoredRulesFileSchema>;
  * in the CLI registry (slice B); the registry lists ONLY pairs the engine can
  * actually represent, so "exactly one match" subsumes ADR-112 §3's "AND the
  * engine can represent that class" condition.
+ *
+ * `scope` (mmnto-ai/totem#2988, P2): a row tagged `'prose'` is decidable only for a record
+ * whose every declared `fileGlobs` entry is a prose glob (`isProseGlob`); the conjunct is the
+ * predicate's, mechanical, and recorded in its result. Written only in the CLI table, read only
+ * by the predicate. Absent on an untagged row, which judges on the pair alone as before.
  */
 export interface WhitelistEntry {
   engine: DeclaredEngine;
   structuralClass: string;
+  scope?: 'prose';
+}
+
+/** The wildcard-only last segments that name no extension at all (`docs/**`, `*`). */
+const WILDCARD_ONLY_SEGMENTS: ReadonlySet<string> = new Set(['**', '*']);
+
+// mmnto-ai/totem#2988 — is `glob` a PROSE glob? Judged on the glob's LAST path segment (the
+// text after the last `/`, the whole glob when there is none), byte-verbatim as the V1 dialect
+// keeps it. NOT prose when that segment is `**` or `*`, has no `.`, or its final extension (the
+// text after the LAST `.`, lower-cased) is not in `PROSE_EXTENSIONS`. So `**/*.md`,
+// `docs/**/*.TXT` and `README.md` are prose; `**/Makefile` (no extension), `**/*.md.ts` (a
+// compound suffix whose final extension is `ts`), `**/package.json`, `docs/**`, `**/*.md*`
+// (final extension `md*`) and `*.txt.` (an empty final extension) are not. Only `fileGlobs` are
+// judged: `excludeGlobs` only narrow a scope and are not an input. Pure and deterministic; the
+// algorithm is in no set-id digest (precedent-consistent — the pair predicate's code is not
+// either). Line comments, not a doc block: the globs above would close one.
+export function isProseGlob(glob: string): boolean {
+  const segment = glob.slice(glob.lastIndexOf('/') + 1);
+  if (WILDCARD_ONLY_SEGMENTS.has(segment)) return false;
+  const dot = segment.lastIndexOf('.');
+  if (dot === -1) return false;
+  const extension = segment.slice(dot + 1).toLowerCase();
+  return PROSE_EXTENSIONS.some((e) => e === extension);
 }
 
 /**
  * ADR-112 §3 — the INDEPENDENT structural-eligibility check. A CLOSED registry
  * predicate, NOT prose: `decidable` is true iff EXACTLY ONE whitelist entry
- * matches `(declaredEngine, structuralClass)`. Unknown class, unsupported
- * engine, or multiple matches → `decidable: false` (NO default-to-structural).
+ * matches `(declaredEngine, structuralClass)` AND, when that entry carries a
+ * scope tag, the scope conjunct holds over the record's declared `fileGlobs`.
+ * Unknown class, unsupported engine, or multiple matches → `decidable: false`
+ * (NO default-to-structural), with no `scopeConjunct` recorded.
  * The author supplies `declaredEngine` + `structuralClass`; this check OWNS the
  * verdict — any author-supplied disposition is irrelevant here (FM(d)).
+ *
+ * The ADR-112 §3 check has a THIRD input for a tagged row (mmnto-ai/totem#2988, P2): the
+ * record's declared `fileGlobs`. For a row tagged `'prose'`, absent or empty globs fail closed
+ * (`cause: 'no-globs'`), the first non-prose glob in array order refuses (`cause:
+ * 'non-prose-glob'`, the glob byte-verbatim), and otherwise the entry is decidable; the verdict
+ * is recorded in `scopeConjunct` on BOTH outcomes, so the check that judged is the check that
+ * records why. An untagged row's result is byte-identical to the pre-change one — exactly
+ * `decidable`, `basis`, `judgedBy` — whether or not globs were passed. `basis` is always
+ * `whitelist:<class>`.
  * Deterministic + pure (no IO, no LLM) — the same input always yields the same
  * verdict (Tenet-15).
  */
 export function evaluateStructuralEligibility(
-  input: { declaredEngine: DeclaredEngine; structuralClass: string },
+  input: {
+    declaredEngine: DeclaredEngine;
+    structuralClass: string;
+    fileGlobs?: readonly string[];
+  },
   whitelist: readonly WhitelistEntry[],
   judgedBy: string,
 ): StructEligResult {
   const matches = whitelist.filter(
     (e) => e.engine === input.declaredEngine && e.structuralClass === input.structuralClass,
   );
-  return {
-    decidable: matches.length === 1,
-    basis: `whitelist:${input.structuralClass}`,
-    judgedBy,
-  };
+  const basis = `whitelist:${input.structuralClass}`;
+  const row = matches.length === 1 ? matches[0] : undefined;
+  if (row === undefined || row.scope === undefined) {
+    return { decidable: row !== undefined, basis, judgedBy };
+  }
+  const globs = input.fileGlobs ?? [];
+  if (globs.length === 0) {
+    return {
+      decidable: false,
+      basis,
+      judgedBy,
+      scopeConjunct: { scope: row.scope, satisfied: false, cause: 'no-globs' },
+    };
+  }
+  const failing = globs.find((g) => !isProseGlob(g));
+  if (failing !== undefined) {
+    return {
+      decidable: false,
+      basis,
+      judgedBy,
+      scopeConjunct: { scope: row.scope, satisfied: false, cause: 'non-prose-glob', glob: failing },
+    };
+  }
+  return { decidable: true, basis, judgedBy, scopeConjunct: { scope: row.scope, satisfied: true } };
 }
 
 // ── Stable rule-id mint (ADR-112 §8) ──────────────────────────────────────────

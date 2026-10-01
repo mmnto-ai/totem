@@ -50,11 +50,13 @@ import {
   mintAuthoredRuleId,
   type ParsedRuleRecord,
   parseRuleRecord,
+  PROSE_EXTENSIONS,
   readAuthoringLedger,
   RECORD_FILE_SUFFIX,
   RECORDS_DIR_REL,
   sanitizeForTerminal,
   SPLIT_REF_RE,
+  type StructEligResult,
   TotemError,
 } from '@mmnto/totem';
 
@@ -431,6 +433,29 @@ export interface RuleAuthorResult {
  */
 const UNRECORDED_JUDGED_BY = 'unrecorded:no-authoring-ledger-row';
 
+/**
+ * The `rejected[]` reason for a `decidable: false` verdict, DERIVED from the cause the check
+ * recorded (mmnto-ai/totem#2988, P2) — never the pair-mismatch sentence for a pair that matched.
+ * A refused scope conjunct says the pair IS whitelisted but for prose scopes only, and names the
+ * failing glob (terminal-sanitized, as this file's other echoes of record text are) or the
+ * absence of globs; every other refusal keeps the pre-change sentence byte-for-byte.
+ */
+function ineligibleReason(
+  declaredEngine: string,
+  structuralClass: string,
+  verdict: StructEligResult,
+): string {
+  const conjunct = verdict.scopeConjunct;
+  const proseOnly = `(${declaredEngine}, ${structuralClass}) is whitelisted for prose scopes only (${PROSE_EXTENSIONS.join(', ')})`;
+  if (conjunct?.satisfied === false && conjunct.cause === 'non-prose-glob') {
+    return `${proseOnly}, but the record declares the non-prose file glob '${sanitizeForTerminal(conjunct.glob)}' — not structurally decidable (ADR-112 §3)`;
+  }
+  if (conjunct?.satisfied === false && conjunct.cause === 'no-globs') {
+    return `${proseOnly}, but the record declares no file globs — not structurally decidable (ADR-112 §3)`;
+  }
+  return `no unambiguous whitelist match for (${declaredEngine}, ${structuralClass}) — not structurally decidable (ADR-112 §3)`;
+}
+
 /** One pending ledger write paired with its constructed record (pass-1 product). */
 interface PendingRule {
   record: AuthoredRuleRecord;
@@ -726,9 +751,15 @@ export function runRuleAuthor(
       }
     }
 
-    // Re-run the INDEPENDENT eligibility check; the author's structuralClass is a CLAIM.
+    // Re-run the INDEPENDENT eligibility check; the author's structuralClass is a CLAIM. The
+    // record's own declared globs ride along: a scope-tagged row judges them as the check's third
+    // input and records the verdict (mmnto-ai/totem#2988, P2).
     const structuralEligibility = evaluateStructuralEligibility(
-      { declaredEngine, structuralClass: r.structuralClass },
+      {
+        declaredEngine,
+        structuralClass: r.structuralClass,
+        fileGlobs: ingested.parsed.record.target.scope.fileGlobs,
+      },
       authoredWhitelist(),
       entryJudgedBy,
     );
@@ -738,7 +769,7 @@ export function runRuleAuthor(
         targetDefect: r.targetDefect,
         structuralClass: r.structuralClass,
         declaredEngine,
-        reason: `no unambiguous whitelist match for (${declaredEngine}, ${r.structuralClass}) — not structurally decidable (ADR-112 §3)`,
+        reason: ineligibleReason(declaredEngine, r.structuralClass, structuralEligibility),
       });
       continue;
     }

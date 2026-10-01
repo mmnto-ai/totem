@@ -26,10 +26,33 @@
 // class whose token can also appear in PROSE / doc-comments (e.g. `determinism`,
 // `unwrap`) MUST be whitelisted for `ast-grep` (matches import/call NODES), never
 // `regex` — a regex would fire on a doc-comment occurrence, and one corpus false
-// positive fails the cert. The registry carries this as DATA: such a class is
+// positive fails the cert. (Corrected 2026-10-01 on the owner's measurement,
+// mmnto-ai/totem#2988 S2b: a regex match on a FULL-LINE comment in a file with a
+// registered grammar is telemetry-only on the normal path, in lint and in the cert;
+// the hazard is live in any in-scope file with no registered grammar, on a trailing
+// comment on a code line, and on fail-open parses and lint's raw fallback.) The
+// registry carries this as DATA: such a class is
 // listed only under `ast-grep`, so the predicate (which matches on BOTH engine and
 // class) REJECTS a `regex` declaration of it — the FP-prevention is mechanical, not
 // a reviewer's vigilance. Classes whose tokens never appear in prose may be regex.
+// A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard.
+//
+// THE PROSE SCOPE TAG (mmnto-ai/totem#2988, confirmed by letter 2026-09-30; P1 is the
+// clause above, P2 is this block): the exemplar row `regex/forbidden-literal-token`
+// carries `scope: 'prose'`, the only tagged row. The prose conjunct is the PREDICATE's
+// — core's `evaluateStructuralEligibility` takes the record's declared `fileGlobs` for
+// a tagged row, admits only when every glob is a prose glob, and records the verdict
+// in its result (`scopeConjunct`) on both outcomes — so it is mechanical, not this
+// table's policy and not a reviewer's: the tag makes this header's "mechanical, not a
+// reviewer's vigilance" true for this row outside Gate 5 as well, where `totem rule
+// author` is a product intake nothing reviews. The prose extensions are one data
+// constant in core (`PROSE_EXTENSIONS`: `md`, `mdx`, `rst`, `txt`). Owner-form set id
+// `static-whitelist@owner-4efdb174`: the first 8 hex of the sha256 over the compact JSON
+// of `{ rows: [{ engine, structuralClass, scope }], proseExtensions: [...] }` for the
+// tagged row, key order as written (`static-whitelist@owner-<sha8>`; no whitespace, no
+// trailing newline, 132 bytes) — a second digest construction on purpose, because
+// the `gate5-` form digests `{ engine, structuralClass }` only and cannot carry the tag
+// or the constant. Pinned by authored-whitelist.test.ts; no production code computes it.
 
 import type { WhitelistEntry } from '@mmnto/totem';
 
@@ -53,6 +76,13 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * carries no class-level guarantee — so batch 2 delivered no regex class either,
  * and batch 3 none: six of its rules are kept out on engine typing and one on
  * DECIDABILITY (rule 1), the first rule that gate keeps out.
+ * The exemplar row `regex/forbidden-literal-token` is prose-only by mechanism since
+ * mmnto-ai/totem#2988: its `scope: 'prose'` tag (the only tagged row) makes core's
+ * predicate admit it only for a record whose every declared glob is a prose glob
+ * (`PROSE_EXTENSIONS`, core: `md`, `mdx`, `rst`, `txt`), the verdict recorded in the
+ * result's `scopeConjunct`; its set id is the owner form `static-whitelist@owner-4efdb174`
+ * (the digest input — the tagged row and the extension constant — is in the header
+ * above), pinned by authored-whitelist.test.ts.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
@@ -63,7 +93,8 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   Object.freeze({ engine: 'ast-grep', structuralClass: 'procgen-entropy-clock-source' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'is_finite' }),
   // ── Mechanism-validating exemplars (the original predicate proofs) ──
-  Object.freeze({ engine: 'regex', structuralClass: 'forbidden-literal-token' }),
+  // Prose-only by mechanism (mmnto-ai/totem#2988): the tag is the predicate's scope conjunct.
+  Object.freeze({ engine: 'regex', structuralClass: 'forbidden-literal-token', scope: 'prose' }),
   Object.freeze({ engine: 'ast-grep', structuralClass: 'node-shape-presence' }),
   // ── The Gate 5 batch-1 class set (strategy-owned data; set `gate5-2263305c` batch 1,
   // strategy-claude's delivery dispatch of 2026-09-24T00:28:55Z under D1 (C): the scorer's

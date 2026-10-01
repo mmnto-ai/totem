@@ -1,0 +1,12 @@
+---
+'@mmnto/totem': minor
+'@mmnto/cli': minor
+---
+
+**Added refusal: the whitelist row `regex/forbidden-literal-token` is now prose-only, so `totem rule author` refuses a record under it whose `fileGlobs` include any non-prose glob, and every rule already recorded under that row re-derives `revised` at this version (a cert of such a rule needs a re-pin first).** This is mmnto-ai/totem#2988, confirmed by letter on 2026-09-30.
+
+- **API (`@mmnto/totem`).** `evaluateStructuralEligibility` takes an optional `fileGlobs` input, and `WhitelistEntry` an optional `scope` (`'prose'`). `StructEligResult` gains the optional `scopeConjunct`, the recorded verdict of the scope conjunct, present only when the pair matched exactly one row and that row carries a scope tag. It has three shapes: `{ scope: 'prose', satisfied: true }`, `{ scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob }` and `{ scope: 'prose', satisfied: false, cause: 'no-globs' }`. `StructEligResultSchema` is now strict: an unknown key on the result fails the read instead of being stripped. `PROSE_EXTENSIONS` (`md`, `mdx`, `rst`, `txt`) is exported. An untagged row's result is unchanged: the same three keys, with or without globs.
+- **Added refusal (`@mmnto/cli`).** `regex/forbidden-literal-token` is a prose-only row (`md`, `mdx`, `rst`, `txt`). A record declared under it whose `fileGlobs` include any glob outside those four extensions, or that declares no globs, lands in `rejected[]` before minting, with a reason naming the first failing glob (or the absence of globs), and appends no ledger row. Re-scope such a record to prose globs, or declare a class the table admits for its engine.
+- **Re-derive.** Every rule already recorded under that row re-derives `revised` at this version, because the recorded conjunct enters the ledger material. A cert of such a rule needs a re-pin first, and `verifyOnly` refuses it until then.
+- **Mixed versions.** A reader OLDER than this version silently strips `scopeConjunct` from a row written at this version, because its schema was not strict. Read a re-pinned ledger at this version or later.
+- **Rule 2's text.** The whitelist header's rule 2 gains the scope clause: "A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard." Its owner-form set id is `static-whitelist@owner-4efdb174`, pinned by test.

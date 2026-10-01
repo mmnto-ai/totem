@@ -2,19 +2,38 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
+import { PROSE_EXTENSIONS } from '@mmnto/totem';
+
 import { authoredWhitelist } from './authored-whitelist.js';
+import { classifyFile } from './shield-classify.js';
 
 /**
  * The five rows shipped before the Gate 5 sets, in table order: the cert-#1 set
  * (ADR-112 §3 / mmnto-ai/totem#2291) and the two mechanism-validating exemplars.
+ * The exemplar `regex/forbidden-literal-token` carries the prose scope tag since
+ * mmnto-ai/totem#2988.
  */
 const SHIPPED_ROWS = [
   { engine: 'regex', structuralClass: 'debug-assert-len-mismatch' },
   { engine: 'ast-grep', structuralClass: 'procgen-entropy-clock-source' },
   { engine: 'ast-grep', structuralClass: 'is_finite' },
-  { engine: 'regex', structuralClass: 'forbidden-literal-token' },
+  { engine: 'regex', structuralClass: 'forbidden-literal-token', scope: 'prose' },
   { engine: 'ast-grep', structuralClass: 'node-shape-presence' },
 ] as const;
+
+/** The one tagged row's class (mmnto-ai/totem#2988). */
+const EXEMPLAR_CLASS = 'forbidden-literal-token';
+
+/**
+ * The owner-form set id (mmnto-ai/totem#2988, Q2): `static-whitelist@owner-<sha8>`, the first 8
+ * hex of the sha256 over the compact `JSON.stringify` of `{ rows: [{ engine, structuralClass,
+ * scope }], proseExtensions: [...] }` for the tagged row, key order as written. A second digest
+ * construction on purpose: the `gate5-` form digests `{ engine, structuralClass }` only and
+ * cannot carry the tag or the constant. Built below from the LIVE table row and the LIVE core
+ * constant, so a change to either moves the digest and this test says so.
+ */
+const OWNER_SET_SHA256 = '4efdb174a16e037c7b889a0a334fe25ef07fbb5b5e97550baec3656b9de5dde5';
+const OWNER_JUDGED_BY = 'static-whitelist@owner-4efdb174';
 
 /**
  * The Gate 5 batch-1 class set as DELIVERED (strategy-claude's dispatch of
@@ -151,6 +170,33 @@ describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1
     expect(Object.isFrozen(table)).toBe(true);
     for (const row of table) {
       expect(Object.isFrozen(row)).toBe(true);
+    }
+  });
+});
+
+describe('authoredWhitelist — the prose scope tag and the owner-form set id (mmnto-ai/totem#2988)', () => {
+  it('the exemplar row is the ONLY tagged row, and its tag is prose', () => {
+    const tagged = authoredWhitelist().filter((r) => r.scope !== undefined);
+    expect(tagged).toEqual([{ engine: 'regex', structuralClass: EXEMPLAR_CLASS, scope: 'prose' }]);
+  });
+
+  it('pins the owner-form set id over the LIVE tagged row and the LIVE prose-extension constant', () => {
+    // A second digest construction on purpose: `setDigest` (the gate5- form) maps rows to
+    // `{ engine, structuralClass }` and cannot carry the tag or the constant.
+    const row = authoredWhitelist().find((r) => r.structuralClass === EXEMPLAR_CLASS);
+    expect(row).toBeDefined();
+    const bytes = JSON.stringify({
+      rows: [{ engine: row!.engine, structuralClass: row!.structuralClass, scope: row!.scope }],
+      proseExtensions: [...PROSE_EXTENSIONS],
+    });
+    const sha = createHash('sha256').update(bytes, 'utf8').digest('hex');
+    expect(sha).toBe(OWNER_SET_SHA256);
+    expect(`static-whitelist@owner-${sha.slice(0, 8)}`).toBe(OWNER_JUDGED_BY);
+  });
+
+  it('each prose extension classifies NON_CODE in the review classifier (the prose four ⊂ its non-code set)', () => {
+    for (const ext of PROSE_EXTENSIONS) {
+      expect(classifyFile(`x.${ext}`), ext).toBe('NON_CODE');
     }
   });
 });

@@ -6,7 +6,10 @@ import {
   type AuthoredRuleRecord,
   AuthoredRuleRecordSchema,
   evaluateStructuralEligibility,
+  isProseGlob,
   mintAuthoredRuleId,
+  PROSE_EXTENSIONS,
+  StructEligResultSchema,
   toCompileFeed,
   type WhitelistEntry,
 } from './authored-rule.js';
@@ -125,6 +128,200 @@ describe('evaluateStructuralEligibility (ADR-112 §3 — closed predicate)', () 
       );
       expect(again).toBe(first);
     }
+  });
+});
+
+// ── mmnto-ai/totem#2988 (P2) — the scope conjunct of a prose-tagged row ──────
+
+const UNTAGGED_KEYS = ['decidable', 'basis', 'judgedBy'];
+
+const SCOPED_WHITELIST: readonly WhitelistEntry[] = [
+  { engine: 'regex', structuralClass: 'float-finite-assert' },
+  { engine: 'regex', structuralClass: 'forbidden-literal-token', scope: 'prose' },
+];
+
+const judgeProse = (fileGlobs?: readonly string[]) =>
+  evaluateStructuralEligibility(
+    {
+      declaredEngine: 'regex',
+      structuralClass: 'forbidden-literal-token',
+      ...(fileGlobs !== undefined ? { fileGlobs } : {}),
+    },
+    SCOPED_WHITELIST,
+    'static-whitelist@test',
+  );
+
+describe('evaluateStructuralEligibility — the prose scope conjunct (mmnto-ai/totem#2988)', () => {
+  it('an untagged row keeps EXACTLY the three keys, with and without globs (byte-identical to the pre-change result)', () => {
+    const input = { declaredEngine: 'regex' as const, structuralClass: 'float-finite-assert' };
+    const without = evaluateStructuralEligibility(input, SCOPED_WHITELIST, 'static-whitelist@test');
+    const withGlobs = evaluateStructuralEligibility(
+      { ...input, fileGlobs: ['src/**/*.ts'] },
+      SCOPED_WHITELIST,
+      'static-whitelist@test',
+    );
+    for (const r of [without, withGlobs]) {
+      expect(Object.keys(r)).toEqual(UNTAGGED_KEYS);
+      expect(r).toEqual({
+        decidable: true,
+        basis: 'whitelist:float-finite-assert',
+        judgedBy: 'static-whitelist@test',
+      });
+    }
+    expect(JSON.stringify(withGlobs)).toBe(JSON.stringify(without));
+  });
+
+  it('a pair matching NO row carries no scopeConjunct, globs or not', () => {
+    const r = evaluateStructuralEligibility(
+      { declaredEngine: 'ast-grep', structuralClass: 'forbidden-literal-token', fileGlobs: [] },
+      SCOPED_WHITELIST,
+      'static-whitelist@test',
+    );
+    expect(r.decidable).toBe(false);
+    expect(Object.keys(r)).toEqual(UNTAGGED_KEYS);
+  });
+
+  it('a pair matching TWO tagged rows carries no scopeConjunct (ambiguity is decided before the conjunct)', () => {
+    const dupes: WhitelistEntry[] = [
+      { engine: 'regex', structuralClass: 'forbidden-literal-token', scope: 'prose' },
+      { engine: 'regex', structuralClass: 'forbidden-literal-token', scope: 'prose' },
+    ];
+    const r = evaluateStructuralEligibility(
+      {
+        declaredEngine: 'regex',
+        structuralClass: 'forbidden-literal-token',
+        fileGlobs: ['**/*.md'],
+      },
+      dupes,
+      'static-whitelist@test',
+    );
+    expect(r.decidable).toBe(false);
+    expect(Object.keys(r)).toEqual(UNTAGGED_KEYS);
+  });
+
+  it('a tagged row with every glob prose is decidable and records the satisfied conjunct', () => {
+    const r = judgeProse(['**/*.md', '**/*.mdx', 'docs/**/*.RST', '**/*.txt']);
+    expect(r).toEqual({
+      decidable: true,
+      basis: 'whitelist:forbidden-literal-token',
+      judgedBy: 'static-whitelist@test',
+      scopeConjunct: { scope: 'prose', satisfied: true },
+    });
+  });
+
+  it('a tagged row refuses on the FIRST non-prose glob in array order, recording it byte-verbatim', () => {
+    const r = judgeProse(['**/*.md', 'src/**/*.TS', '**/Makefile']);
+    expect(r).toEqual({
+      decidable: false,
+      basis: 'whitelist:forbidden-literal-token',
+      judgedBy: 'static-whitelist@test',
+      scopeConjunct: {
+        scope: 'prose',
+        satisfied: false,
+        cause: 'non-prose-glob',
+        glob: 'src/**/*.TS',
+      },
+    });
+  });
+
+  it('a tagged row fails CLOSED on absent globs and on empty globs (cause no-globs)', () => {
+    for (const r of [judgeProse(undefined), judgeProse([])]) {
+      expect(r).toEqual({
+        decidable: false,
+        basis: 'whitelist:forbidden-literal-token',
+        judgedBy: 'static-whitelist@test',
+        scopeConjunct: { scope: 'prose', satisfied: false, cause: 'no-globs' },
+      });
+    }
+  });
+
+  it('every result the predicate builds validates against the strict schema', () => {
+    for (const r of [
+      judgeProse(['**/*.md']),
+      judgeProse(['**/*.ts']),
+      judgeProse([]),
+      evaluateStructuralEligibility(
+        { declaredEngine: 'regex', structuralClass: 'float-finite-assert' },
+        SCOPED_WHITELIST,
+        'static-whitelist@test',
+      ),
+    ]) {
+      expect(StructEligResultSchema.parse(r)).toEqual(r);
+    }
+  });
+});
+
+describe('isProseGlob — the last-segment prose test (mmnto-ai/totem#2988)', () => {
+  const PROSE = ['**/*.md', 'docs/**/*.TXT', 'README.md', 'docs/wiki/**/*.mdx', '*.rst'];
+  const NOT_PROSE = [
+    '**/Makefile',
+    '**/*.md.ts',
+    '**/package.json',
+    'docs/**',
+    '*',
+    '**',
+    '**/*.md*',
+    '*.txt.',
+    'src/**/*.ts',
+    'notes.md/**',
+  ];
+  it.each(PROSE)('%s is a prose glob', (glob) => {
+    expect(isProseGlob(glob)).toBe(true);
+  });
+  it.each(NOT_PROSE)('%s is not a prose glob', (glob) => {
+    expect(isProseGlob(glob)).toBe(false);
+  });
+});
+
+describe('PROSE_EXTENSIONS (mmnto-ai/totem#2988, Q6)', () => {
+  it('is frozen and is exactly the four, without the dot', () => {
+    expect(Object.isFrozen(PROSE_EXTENSIONS)).toBe(true);
+    expect([...PROSE_EXTENSIONS]).toEqual(['md', 'mdx', 'rst', 'txt']);
+  });
+});
+
+describe('StructEligResultSchema — strict, with the three closed scopeConjunct shapes (mmnto-ai/totem#2988)', () => {
+  const base = {
+    decidable: false,
+    basis: 'whitelist:forbidden-literal-token',
+    judgedBy: 'static-whitelist@test',
+  };
+
+  it('still accepts the three-key shape every ledger row on record carries', () => {
+    expect(StructEligResultSchema.safeParse({ ...base, decidable: true }).success).toBe(true);
+  });
+
+  it('accepts each of the three conjunct shapes', () => {
+    for (const scopeConjunct of [
+      { scope: 'prose', satisfied: true },
+      { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob: '**/*.ts' },
+      { scope: 'prose', satisfied: false, cause: 'no-globs' },
+    ]) {
+      expect(StructEligResultSchema.safeParse({ ...base, scopeConjunct }).success).toBe(true);
+    }
+  });
+
+  it('refuses every inconsistent conjunct shape', () => {
+    for (const scopeConjunct of [
+      { scope: 'prose', satisfied: false },
+      { scope: 'prose', satisfied: true, cause: 'no-globs' },
+      { scope: 'prose', satisfied: true, cause: 'non-prose-glob', glob: '**/*.ts' },
+      { scope: 'prose', satisfied: false, cause: 'no-globs', glob: '**/*.ts' },
+      { scope: 'prose', satisfied: false, cause: 'non-prose-glob' },
+      { scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob: '' },
+      { scope: 'prose', satisfied: false, cause: 'other' },
+      { scope: 'source', satisfied: true },
+      { satisfied: true },
+      { scope: 'prose', satisfied: true, extra: 1 },
+    ]) {
+      expect(StructEligResultSchema.safeParse({ ...base, scopeConjunct }).success).toBe(false);
+    }
+  });
+
+  it('refuses an unknown extra key on the result itself (strict — never stripped silently)', () => {
+    expect(StructEligResultSchema.safeParse({ ...base, scopeValidation: true }).success).toBe(
+      false,
+    );
   });
 });
 

@@ -44,9 +44,12 @@ afterEach(() => {
 //
 // The rule half now lives in `.totem/rules/<slug>.rule.yaml`. Every assertion in
 // this file is the one it always made; only the CARRIER moved (OQ-1 records-only).
-// The whitelist row exercised is the shipped `(regex, forbidden-literal-token)`
-// exemplar, so the record declares `target.type: regex` and the intake DERIVES
-// that engine — the envelope never states it.
+// The whitelist row exercised is the shipped `(regex, debug-assert-len-mismatch)`
+// cert-1 row (code-only by construct, untagged), so the record declares
+// `target.type: regex` and the intake DERIVES that engine — the envelope never
+// states it. (Re-typed from the exemplar `(regex, forbidden-literal-token)` by
+// mmnto-ai/totem#2988: that row is prose-only by mechanism, and this file's default
+// record is source-scoped, `src/**/*.ts`.)
 
 const DEFAULT_RECORD_SLUG = 'no-console-log';
 
@@ -96,12 +99,12 @@ const nearMissFixture = () => ({
   nearMissSource: { kind: 'lesson', example: 'logger.debug("ok")' },
 });
 
-// A rule the inert exemplar whitelist (regex, forbidden-literal-token) decides true.
+// A rule the shipped untagged row (regex, debug-assert-len-mismatch) decides true.
 const decidableRule = (over: Record<string, unknown> = {}) => ({
   author: 'alice',
   authoredAt: '2026-06-27',
   targetDefect: 'forbidden console.log in prod', // spaces → exercises the injective identity key
-  structuralClass: 'forbidden-literal-token',
+  structuralClass: 'debug-assert-len-mismatch',
   record: recordRef(DEFAULT_RECORD_SLUG),
   positiveFixtures: [fixture(101)],
   ...over,
@@ -625,7 +628,7 @@ describe('runRuleAuthor — the engine is derived, the record is content-address
   });
 
   it('judges the whitelist on the DERIVED engine — an ast-grep record fails the regex-only class', () => {
-    // `(regex, forbidden-literal-token)` is whitelisted; `(ast-grep, …)` is not.
+    // `(regex, debug-assert-len-mismatch)` is whitelisted; `(ast-grep, …)` is not.
     // The author cannot state the engine, so the record's own `target.type` decides.
     writeRecord(
       'ast-grep-rule',
@@ -643,7 +646,7 @@ describe('runRuleAuthor — the engine is derived, the record is content-address
     expect(res.records).toHaveLength(0);
     expect(res.rejected).toHaveLength(1);
     expect(res.rejected[0]?.declaredEngine).toBe('ast-grep');
-    expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
+    expect(res.rejected[0]?.reason).toContain('(ast-grep, debug-assert-len-mismatch)');
   });
 
   it('an ast-grep record IS decided when its class is whitelisted for that engine', () => {
@@ -751,7 +754,7 @@ describe('runRuleAuthor — eligibility re-run OVERWRITES the author claim', () 
     expect(res.records).toHaveLength(1);
     expect(res.records[0]?.structuralEligibility.decidable).toBe(true);
     expect(res.records[0]?.structuralEligibility.judgedBy).toBe('static-whitelist@test');
-    expect(res.records[0]?.structuralEligibility.basis).toBe('whitelist:forbidden-literal-token');
+    expect(res.records[0]?.structuralEligibility.basis).toBe('whitelist:debug-assert-len-mismatch');
   });
   it('a non-whitelisted structuralClass is REJECTED even though the author declared it', () => {
     writeYaml([decidableRule({ structuralClass: 'behavioral-smell' })]);
@@ -764,6 +767,79 @@ describe('runRuleAuthor — eligibility re-run OVERWRITES the author claim', () 
     // The record derives `regex`; `node-shape-presence` is whitelisted for ast-grep only.
     writeYaml([decidableRule({ structuralClass: 'node-shape-presence' })]);
     expect(run().rejected).toHaveLength(1);
+  });
+});
+
+// ── mmnto-ai/totem#2988 (P2) — the prose-tagged exemplar row at the REAL intake ─
+
+describe('runRuleAuthor — the prose-only exemplar row (mmnto-ai/totem#2988)', () => {
+  const EXEMPLAR = 'forbidden-literal-token';
+  const proseRecord = (fileGlobs: string[]) =>
+    recordBody({
+      target: { type: 'regex', pattern: 'console\\.log', scope: { fileGlobs } },
+    });
+  const ledgerPath = () => path.join(totemDir, 'spine', 'authoring-ledger.ndjson');
+
+  it('a prose-only record under the exemplar row mints, its ledger row recording the satisfied conjunct', () => {
+    writeRecord('prose-only', proseRecord(['**/*.md', '**/*.mdx', '**/*.rst', '**/*.txt']));
+    writeYaml([decidableRule({ structuralClass: EXEMPLAR, record: recordRef('prose-only') })]);
+    const res = run();
+    expect(res.rejected).toHaveLength(0);
+    expect(res.minted).toBe(1);
+    expect(res.records[0]?.structuralEligibility).toEqual({
+      decidable: true,
+      basis: `whitelist:${EXEMPLAR}`,
+      judgedBy: 'static-whitelist@test',
+      scopeConjunct: { scope: 'prose', satisfied: true },
+    });
+    const ledger = readAuthoringLedger(totemDir);
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0]?.structuralEligibility.scopeConjunct).toEqual({
+      scope: 'prose',
+      satisfied: true,
+    });
+    // The recorded conjunct round-trips the strict ledger read: a re-read is `unchanged`.
+    expect(run().unchanged).toBe(1);
+  });
+
+  it('a source-scoped record under the exemplar row is REJECTED before minting, the reason naming the glob; no ledger row', () => {
+    // The default record is source-scoped: `src/**/*.ts`.
+    writeYaml([decidableRule({ structuralClass: EXEMPLAR })]);
+    const res = run();
+    expect(res.records).toHaveLength(0);
+    expect(res.minted + res.revised + res.unchanged).toBe(0);
+    expect(res.rejected).toHaveLength(1);
+    // The reason is DERIVED from the recorded cause — never the pair-mismatch sentence for a
+    // pair that matched — and names the failing glob and the four prose extensions.
+    expect(res.rejected[0]?.reason).toBe(
+      `(regex, ${EXEMPLAR}) is whitelisted for prose scopes only (md, mdx, rst, txt), but the ` +
+        "record declares the non-prose file glob 'src/**/*.ts' — not structurally decidable (ADR-112 §3)",
+    );
+    expect(fs.existsSync(ledgerPath())).toBe(false);
+    expect(readAuthoringLedger(totemDir)).toEqual([]);
+  });
+
+  it('a MIXED record (prose + source) is rejected on its FIRST non-prose glob, byte-verbatim', () => {
+    writeRecord('mixed', proseRecord(['**/*.md', '**/*.sh', '**/Makefile']));
+    writeYaml([decidableRule({ structuralClass: EXEMPLAR, record: recordRef('mixed') })]);
+    const res = run();
+    expect(res.records).toHaveLength(0);
+    expect(res.rejected[0]?.reason).toBe(
+      `(regex, ${EXEMPLAR}) is whitelisted for prose scopes only (md, mdx, rst, txt), but the ` +
+        "record declares the non-prose file glob '**/*.sh' — not structurally decidable (ADR-112 §3)",
+    );
+    expect(fs.existsSync(ledgerPath())).toBe(false);
+  });
+
+  it('an untagged-row record’s ledger row carries no scopeConjunct (three keys), and re-derives `unchanged`', () => {
+    writeYaml([decidableRule()]); // (regex, debug-assert-len-mismatch), untagged, `src/**/*.ts`
+    expect(run().minted).toBe(1);
+    const row = readAuthoringLedger(totemDir)[0]!;
+    expect(Object.keys(row.structuralEligibility)).toEqual(['decidable', 'basis', 'judgedBy']);
+    const again = runRuleAuthor(totemDir, { judgedBy: 'static-whitelist@test', verifyOnly: true });
+    expect(again.unchanged).toBe(1);
+    expect(again.minted + again.revised).toBe(0);
+    expect(readAuthoringLedger(totemDir)).toHaveLength(1);
   });
 });
 
@@ -1081,7 +1157,7 @@ describe('runRuleAuthor — judgedBy: { fromLedger: true } (mmnto-ai/totem#2982 
     expect(res.unchanged).toBe(1);
     expect(res.minted + res.revised).toBe(0);
     expect(res.rejected).toHaveLength(1);
-    expect(res.rejected[0]?.reason).toContain('(ast-grep, forbidden-literal-token)');
+    expect(res.rejected[0]?.reason).toContain('(ast-grep, debug-assert-len-mismatch)');
     expect(snapshot()).toBe(before);
   });
 

@@ -1323,6 +1323,7 @@ export {
   DeclaredEngineSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
+  PROSE_EXTENSIONS,
   RecordFixtureInputSchema,
   StructEligResultSchema,
   toCompileFeed,

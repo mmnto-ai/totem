@@ -107,7 +107,9 @@ function authoredRuleInput(overrides: Partial<AuthoredRuleInputLike> = {}): Auth
     author: 'agent-x',
     authoredAt: '2026-06-01',
     targetDefect: 'a real lc defect',
-    structuralClass: 'forbidden-literal-token',
+    // The untagged cert-1 regex row: the record is source-scoped (`src/**/*.ts`), which the
+    // prose-only exemplar row refuses since mmnto-ai/totem#2988.
+    structuralClass: 'debug-assert-len-mismatch',
     record: recordRef(DEFAULT_RECORD_SLUG),
     positiveFixtures: [posFixture()],
     ...overrides,
