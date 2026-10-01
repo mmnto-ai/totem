@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "fa795775140153443185440744effa712497345a",
+  "readAt": "2026-10-01T19:36:09.752Z",
+  "findings": [
+    {
+      "id": "2933-F1",
+      "severity": "BLOCKING",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1640,
+      "claim": "The row's precedence rule is not Gemini CLI's and gives a false pass: Gemini picks the single longest matching rule by normalised key, while the row let an exact DO_NOT_TRUST win and otherwise any trusting ancestor.",
+      "counterexample": "Measured against Gemini CLI 0.61.0's own isPathTrusted with scratch homes: a trust file with a TRUST_FOLDER on a drive-level folder and a DO_NOT_TRUST on its child, target a folder under that child, read trusted by the row and distrusted by Gemini; the reverse (a longer TRUST_PARENT key against an exact DO_NOT_TRUST) read do-not-trust by the row and trusted by Gemini. The error originated in the seat's build spec, written from documentation. FOLDED at 823460ee: judgeGeminiTrust is a port of the longest-matching-key rule as read from the 0.61.0 source, and the false-pass case is a regression test that fails on the pre-fold code."
+    },
+    {
+      "id": "2933-F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.test.ts",
+      "line": 1,
+      "claim": "A test locked in behaviour that contradicts Gemini: an exact DO_NOT_TRUST expected to warn although a longer TRUST_PARENT key wins in Gemini.",
+      "counterexample": "The fixture with a TRUST_FOLDER ancestor, a TRUST_PARENT on a child key and a DO_NOT_TRUST on the target expected warn; Gemini returns trusted. FOLDED at 823460ee: the test asserts what Gemini's own function returned, and the false-pass counterexample is added."
+    },
+    {
+      "id": "2933-F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1640,
+      "claim": "The row did not resolve real paths, so a junctioned working directory gave a false pass, and the reverse a false warn.",
+      "counterexample": "Gemini realpaths the location and each rule's effective path. With a TRUST_FOLDER key on a folder and the cwd a junction under it pointing elsewhere, the row passed and Gemini found no rule; PowerShell keeps the junction path in a child's cwd. FOLDED at 823460ee: the target and each effective folder pass through an injected realpath that falls back to the input on failure, as Gemini's helper does; tested through the seam in both directions."
+    },
+    {
+      "id": "2933-F4",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1640,
+      "claim": "Case folding was applied on Windows only, while Gemini folds case on Windows and macOS, and a test asserted the wrong macOS behaviour.",
+      "counterexample": "Gemini's normalizePath treats win32 and darwin as case-insensitive; on macOS the row warned where Gemini trusts. FOLDED at 823460ee: case folds on darwin too and the darwin assertion is flipped."
+    },
+    {
+      "id": "2933-F5",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1700,
+      "claim": "The skip message said there was nothing for workspace trust to filter when the repository declares no project-level MCP server, which is false: Gemini also suppresses user-level and extension MCP servers in an untrusted folder.",
+      "counterexample": "Gemini's own message says user-level servers are also suppressed in untrusted folders, and its MCP start returns early when the folder is not trusted. FOLDED at 823460ee as wording: the skip, the changeset and the wiki now say only project-level wiring was checked."
+    },
+    {
+      "id": "2933-F6",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1770,
+      "claim": "The remediation said Gemini asks when the folder is opened, which holds only for an unlisted folder in an interactive session; for a distrusted folder no prompt appears.",
+      "counterexample": "The interactive trust hook opens the dialog only when the state is unlisted and shows a permissions-command hint for a distrusted folder; headless mode never opens it. FOLDED at 823460ee: the remediation names the permissions command, as read from the 0.61.0 source, and says an unlisted folder also prompts on an interactive start."
+    },
+    {
+      "id": "2933-F7",
+      "severity": "MINOR",
+      "file": ".changeset/gemini-trust-degradation-2933.md",
+      "line": 7,
+      "claim": "The stated basis was out of date: the surfaces said the TRUST_PARENT reading and DO_NOT_TRUST came from documentation, and cli-reference described the row's old rule.",
+      "counterexample": "The 0.61.0 source is now read. FOLDED at 823460ee: the code comment, the changeset and both wiki pages state the rule as read from the source."
+    },
+    {
+      "id": "2933-F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1690,
+      "claim": "A commented settings or trust file that Gemini accepts was reported as not valid JSON.",
+      "counterexample": "Gemini strips comments before parsing both files. No package in the repository ships a comment-stripping parser and no dependency was added. FOLDED at 823460ee as wording: both skips say Gemini accepts comments in the file and this row reads strict JSON only."
+    },
+    {
+      "id": "2933-F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1720,
+      "claim": "Inputs to Gemini's trust decision that the row ignored were not disclosed, and two environment variables move the trust file.",
+      "counterexample": "The trusted-folders path variable and the Gemini home variable relocate the file; a restricted-mode variable, a trust-workspace variable, the folder-trust setting and IDE workspace trust can each change the verdict. FOLDED at 823460ee: the two path variables and the sandbox path are honoured through an injected env, and the limit sentence names the inputs the row does not read."
+    },
+    {
+      "id": "2933-F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1750,
+      "claim": "A trust-file key spelled as the prototype accessor was silently dropped by a plain-object assignment instead of being judged.",
+      "counterexample": "Assigning a string to that key on a plain object is ignored. FOLDED at 823460ee: validated entries are collected in a Map, with a test."
+    },
+    {
+      "id": "2933-F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1545,
+      "claim": "Five exported constants had no consumer, and the display cap could split a surrogate pair.",
+      "counterexample": "No import of the five names exists under packages, and the package's export map exposes only its root. FOLDED at 823460ee: the constants are module-private and the cap counts code points."
+    },
+    {
+      "id": "2933-F12",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 34,
+      "claim": "The reflex item said totem doctor reports the Gemini trust state, which is true only when the repository wires Gemini CLI's MCP servers and the trust file is readable.",
+      "counterexample": "The row skips otherwise, and the item ships to every agent file. FOLDED at 823460ee: the sentence is conditional; the reflex version stays 17."
+    }
+  ],
+  "folded": [
+    "2933-F1",
+    "2933-F2",
+    "2933-F3",
+    "2933-F4",
+    "2933-F5",
+    "2933-F6",
+    "2933-F7",
+    "2933-F8",
+    "2933-F9",
+    "2933-F10",
+    "2933-F11",
+    "2933-F12"
+  ],
+  "verdict": "1 BLOCKING, 5 MATERIAL, 5 MINOR, 1 QUESTION over d27e5588..fa795775 (asks 2 and 3 of mmnto-ai/totem#2933): the diff did not hold as it stood; the row's trust rule was not Gemini CLI 0.61.0's and gave a false pass. Not falsified: the reflex version bump gates nothing in any consumer (one reader, reached only from totem init); the row never throws and never gates; the tests do not touch the real home; nothing of ask 1 slipped in. The fold rewires the row's semantics, so a scoped re-armed read was run over it."
+}

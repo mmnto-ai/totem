@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "0d4c40b9e0cc84c1555b33fc30bf4ce2c8646e72",
+  "readAt": "2026-10-01T20:14:22.268Z",
+  "findings": [
+    {
+      "id": "2933-T1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1931,
+      "claim": "The short-name refusal fires for the whole trust file whenever any key contains a tilde, even a key for an unrelated folder, and the message said only a path here without naming that breadth.",
+      "counterexample": "With a root TRUST_FOLDER key, a DO_NOT_TRUST key in short-name form and a longer long-form trusting ancestor, Gemini returns trusted and the row skips; Gemini takes the native branch only for the pair whose path has a tilde. A machine whose trust file once recorded a short-name path skips for every repository. The skip is honest (a skip is not a pass). FOLDED in the wording fold: the message says a key in the trust file or this folder's path contains a tilde, and the changeset and both wiki pages state the breadth."
+    },
+    {
+      "id": "2933-T2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1918,
+      "claim": "The platform seam does not make win32 path resolution testable on a posix host: relative keys are resolved with the host's path module.",
+      "counterexample": "On a posix host with the platform seam set to win32 a drive-letter key resolves under the posix cwd; the one row-level win32 test still passes because the tilde survives (inferred, not run on Linux). Production always passes the process platform. FOLDED in the wording fold as a doc comment on the seam; the pure judge tests cover win32 resolution on every host."
+    },
+    {
+      "id": "2933-T3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1882,
+      "claim": "With the trusted-folders override variable set to a path whose directory is absent, the skip said no Gemini CLI home was found and that Gemini has not been set up, which is false for a path the user set explicitly.",
+      "counterexample": "Measured with the built row: the override pointing at an absent directory produced the no-home wording; Gemini would read the missing file as empty and treat the folder as unlisted. FOLDED in the wording fold: the verdict stays skip and the message names the override location and makes no claim about setup."
+    },
+    {
+      "id": "2933-T4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1578,
+      "claim": "The sanitizer's comment claimed every bidirectional control is replaced, but the Arabic letter mark and the line separator passed through.",
+      "counterexample": "Measured: a value containing those two code points came back unreplaced in the skip message while a right-to-left override was replaced. FOLDED in the wording fold: the three code points join the replaced set, with a test."
+    },
+    {
+      "id": "2933-T5",
+      "severity": "MINOR",
+      "file": ".changeset/gemini-trust-degradation-2933.md",
+      "line": 7,
+      "claim": "The rejected-file wording said Gemini itself rejects the file, which holds only on the default path: four inputs make Gemini's trust check return before it loads the file.",
+      "counterexample": "A restricted-mode variable, a trust-workspace variable, folder trust disabled, or IDE trust each bypass the load. FOLDED in the wording fold: the skips and the docs say when folder trust is on, the default."
+    },
+    {
+      "id": "2933-T6",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/doctor.test.ts",
+      "line": 1,
+      "claim": "Two of the fold's tests would pass on the parent commit, so they are regression guards rather than tests of the fold: the relative override path, and the tilde as an ordinary character on linux and darwin.",
+      "counterexample": "The override path was already resolved against the cwd at the parent, and the tilde check is gated on win32. ANSWERED with no change: intended; both pin behaviour the fold must not move."
+    },
+    {
+      "id": "2933-T7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 34,
+      "claim": "Reflex item 6 said that when the tools are not in the tool list the Totem MCP server is not connected, which overclaims: a host can prefix MCP tool names and a tool filter can hide a tool while the server is connected.",
+      "counterexample": "Inferred, not measured: prefixed tool names are a common host convention. FOLDED in the wording fold: the item says no such tool is in the list, that hosts may prefix MCP tool names, and that the tools are not available in this session."
+    }
+  ],
+  "folded": [
+    "2933-T1",
+    "2933-T2",
+    "2933-T3",
+    "2933-T4",
+    "2933-T5",
+    "2933-T6",
+    "2933-T7"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 6 MINOR, 1 QUESTION over 823460ee..0d4c40b9, the third read: the chain converges at 0d4c40b9. Measured: a verbatim copy of Gemini CLI 0.61.0's lines against the built row over 22,725 cases; the 16,920 with no tilde show zero disagreements and zero verdict changes against the previous fold, and all 5,805 with a tilde skip; the four short-name cases that were wrong now skip. An absent trust file is unlisted in Gemini and the warn text is true; every result is gate-exempt; nothing throws. What remains is a limit to disclose, not a fold: the refusal is broader than Gemini's own short-name handling, and closing it would mean porting Gemini's native realpath. The wording fold after this read changes no verdict, so no further read is owed."
+}

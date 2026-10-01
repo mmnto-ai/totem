@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "823460ee1b23c455ce7b2aaad56b21ab7648f9c0",
+  "readAt": "2026-10-01T19:54:55.199Z",
+  "findings": [
+    {
+      "id": "2933-R1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 34,
+      "claim": "The wiki said the managed reflex block tells the agent the same, and reflex item 6 named the Gemini untrusted-folder cause, but Gemini CLI 0.61.0 does not load the project GEMINI.md in an untrusted folder, so a Gemini seat never reads the item in the one case it named.",
+      "counterexample": "Gemini gathers project memory paths only when the folder is trusted and its trust dialog says project settings, hooks, MCPs and GEMINI.md files will not be applied; the reflex block lives in the project GEMINI.md. FOLDED at 0d4c40b9 as text: item 6 drops the Gemini clause, and the wiki and the changeset say the block is not read there and the doctor row is the signal."
+    },
+    {
+      "id": "2933-R2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1870,
+      "claim": "An absent trust file was reported as not derivable, but Gemini treats an absent file exactly like an empty one: the folder is unlisted and not trusted unless a session dialog trusts it.",
+      "counterexample": "Gemini's loader reads a missing file as an empty config with no errors, its trust check then finds no rule, and folder trust is on by default; the row warned on an empty object and skipped on a missing file. FOLDED at 0d4c40b9: an absent file warns as unlisted when the directory that would hold it exists, and skips when Gemini has no home on the machine, so a machine that never ran Gemini is not nagged."
+    },
+    {
+      "id": "2933-R3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1667,
+      "claim": "The port omitted Gemini's native realpath step for Windows short names, disclosed only in a code comment, and that gap gave a measured false pass.",
+      "counterexample": "On win32 with short names enabled: a DO_NOT_TRUST key spelled with short-name segments plus a TRUST_FOLDER ancestor, the target in long-name form; Gemini returned distrusted and the row returned pass. Gemini resolves both paths natively when either contains a tilde; the row's realpath does not expand short names. FOLDED at 0d4c40b9 by refusing to decide: on win32 a tilde in the target, any key or any effective folder makes the row skip with the reason, and the limit is stated in the changeset and both wiki pages."
+    },
+    {
+      "id": "2933-R4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1930,
+      "claim": "The warn and pass messages said the folder is marked or listed, which is not literally true when the winning rule sits on an ancestor or is a TRUST_PARENT.",
+      "counterexample": "A winning DO_NOT_TRUST on an ancestor read as this folder is marked DO_NOT_TRUST. FOLDED at 0d4c40b9: the warn says the folder falls under a DO_NOT_TRUST rule and the pass says it is trusted by a rule."
+    },
+    {
+      "id": "2933-R5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1900,
+      "claim": "For an unknown trust value or a non-object trust file the skip said the format may have moved, which understates that Gemini itself refuses to start on such a file.",
+      "counterexample": "Gemini collects these as errors and its trust check throws a fatal configuration error while folder trust is on. FOLDED at 0d4c40b9 and in the wording fold after it: the skips say Gemini CLI 0.61.0 itself rejects the file when folder trust is on, the default."
+    },
+    {
+      "id": "2933-R6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1710,
+      "claim": "Never-throws holds only over the production domain: a non-string environment value or a realpath seam returning undefined throws, and the exported judge defaults realpath to identity.",
+      "counterexample": "Injected non-string values reach path functions that throw; process environment values are strings and the real realpath returns a string, so production cannot reach it. FOLDED at 0d4c40b9 as a doc comment: the judge's default does not follow junctions and the row always passes the real one."
+    },
+    {
+      "id": "2933-R7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.test.ts",
+      "line": 1,
+      "claim": "No test covered a relative trust-file key or a relative override path, and the docs omitted the sandbox location and how relative paths resolve.",
+      "counterexample": "The first read's relative-key case had no test. FOLDED at 0d4c40b9: both are tested, relative keys resolve against the doctor's cwd, and the changeset and cli-reference name the sandbox variable and the relative-resolution limit."
+    },
+    {
+      "id": "2933-R8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 1578,
+      "claim": "The local sanitizer replaced C0 and C1 controls only, so bidirectional and isolate format controls passed through into a skip message.",
+      "counterexample": "A right-to-left override in an unknown trust value was echoed as is. FOLDED at 0d4c40b9 and in the wording fold after it: the bidi marks, embeddings, overrides, isolates, the Arabic letter mark and the line and paragraph separators are replaced."
+    }
+  ],
+  "folded": [
+    "2933-R1",
+    "2933-R2",
+    "2933-R3",
+    "2933-R4",
+    "2933-R5",
+    "2933-R6",
+    "2933-R7",
+    "2933-R8"
+  ],
+  "verdict": "0 BLOCKING, 3 MATERIAL, 5 MINOR over fa795775..823460ee, the scoped re-armed read of the first fold: not converged. The port itself held: 7,956 generated cases on win32, with real junctions in both directions, showed zero disagreements between judgeGeminiTrust and Gemini CLI 0.61.0's own function. Three branches around the rule were wrong or undisclosed (the reflex item's unreachable cause, the absent trust file, Windows short names with one measured false pass). The fold changes verdicts in two of them, so a third scoped read was run."
+}
