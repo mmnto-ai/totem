@@ -786,6 +786,24 @@ export const TotemConfigSchema = z.object({
           enforce: z.enum(['block', 'advisory']).optional(),
         })
         .default({}),
+
+      /** The shield gate's OWN exit knob (mmnto-ai/totem#2525). Read at RUN
+       *  time by `totem review --gate` — the run loads this config itself, so
+       *  setting it needs no `totem hook install --force`. `'advisory'`: every
+       *  failure raised after the config is loaded exits 0, printing the same
+       *  error text plus one `hooks.shield.enforce` line. `'advisory-when-legged'`:
+       *  the same, only when `totem legs gate` derives evidence for HEAD (a
+       *  legs-owed push with an accepted deposit); otherwise the failure stands.
+       *  `'block'`: the explicit spelling of the default — a failure exits
+       *  non-zero, plus the line. It does NOT arm a standard-tier install: the
+       *  managed hook invokes the shield only on the strict tier and agent
+       *  seats, unlike `legsOwed.enforce: 'block'`. ABSENT ⇒ today's behaviour,
+       *  so no consumer changes on upgrade. */
+      shield: z
+        .object({
+          enforce: z.enum(['block', 'advisory', 'advisory-when-legged']).optional(),
+        })
+        .default({}),
     })
     .optional(),
 

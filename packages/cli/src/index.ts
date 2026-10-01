@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { initCommand } from './commands/init.js';
 import { TOTEM_DESCRIPTION } from './description.js';
+import { renderCliError } from './error-render.js';
 import { REVIEW_DIFF_TRUNCATION_THRESHOLD } from './git.js';
 import { TotemHelp } from './help.js';
 import { reapOrphanedTempFiles } from './utils.js';
@@ -48,36 +49,7 @@ function requireGhCli(): void {
 }
 
 function handleError(err: unknown): never {
-  const debug = process.env['TOTEM_DEBUG'] === '1' || process.argv.includes('--debug');
-
-  if (err instanceof Error) {
-    const msg = err.message.startsWith('[Totem Error]')
-      ? err.message
-      : `[Totem Error] ${err.message}`;
-    console.error(msg);
-    if ('recoveryHint' in err && typeof err.recoveryHint === 'string') {
-      console.error(`  Fix: ${err.recoveryHint}`);
-    }
-    if (debug && err.stack) {
-      console.error('\nStack trace:');
-      console.error(err.stack);
-      // Traverse cause chain
-      const seen = new Set<unknown>([err]);
-      let current: unknown = err.cause;
-      while (current instanceof Error && !seen.has(current)) {
-        seen.add(current);
-        console.error(`\nCaused by: ${current.message}`);
-        if (current.stack) console.error(current.stack);
-        current = current.cause;
-      }
-    }
-  } else {
-    console.error('[Totem Error] An unknown error occurred:', err);
-  }
-
-  if (!debug) {
-    console.error('  (Set TOTEM_DEBUG=1 for full stack trace)');
-  }
+  renderCliError(err);
 
   // A refusal to read or write in the wrong place (`REPO_ROOT_REFUSED`: a mail
   // reader verb started outside any repository or inside a linked worktree —
@@ -479,7 +451,7 @@ const reviewOptions = (cmd: Command) =>
     )
     .option(
       '--gate',
-      'Declared disposition→exit mapping for gate wiring (the managed pre-push hook form, mmnto-ai/totem#2473): known not-applicable admissions and completed rounds exit 0 (findings are report-only in hook context), hard failures exit non-zero, an unknown disposition fails CLOSED. Contradictory with --fail-on.',
+      'Declared disposition→exit mapping for gate wiring (the managed pre-push hook form, mmnto-ai/totem#2473): known not-applicable admissions and completed rounds exit 0 (findings are report-only in hook context), hard failures exit non-zero, an unknown disposition fails CLOSED. Contradictory with --fail-on. When hooks.shield.enforce is set, the exit of a failing gate run follows it (mmnto-ai/totem#2525).',
     )
     .addHelpText(
       'after',

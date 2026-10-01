@@ -367,6 +367,102 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
   });
 
+  // mmnto-ai/totem#2525: the REAL wiring of hooks.shield.enforce. An admitted
+  // code diff under a lanes value that hard-errors validation is a failure
+  // raised AFTER the config loads — a cheap, LLM-free failing gate run.
+  describe('hooks.shield.enforce on a failing --gate run (mmnto-ai/totem#2525)', () => {
+    const KNOB_ADVISORY = '[Totem] shield: hooks.shield.enforce = advisory';
+
+    function failingConfig(shield?: { enforce: string }): TotemConfig {
+      return {
+        ...(TEST_CONFIG as object),
+        review: { sourceExtensions: ['.ts'], lanes: 12345 },
+        ...(shield === undefined ? {} : { hooks: { shield } }),
+      } as unknown as TotemConfig;
+    }
+
+    function codeDiff(): void {
+      getDiffForReviewSpy.mockResolvedValue({
+        diff: diffFor('src/a.ts'),
+        changedFiles: ['src/a.ts'],
+        source: 'uncommitted',
+      });
+    }
+
+    it('knob unset: the --gate run rejects, the error text names the cause, and no knob line prints', async () => {
+      currentConfig = failingConfig();
+      codeDiff();
+      const { shieldCommand } = await import('./shield.js');
+      let caught: unknown;
+      try {
+        await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      // The failure under test is the lanes refusal, raised after config load.
+      expect((caught as Error).message).toMatch(/lanes/);
+      // The knob prints nothing of its own on the unset path.
+      expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
+      expect(fs.existsSync(stampPath())).toBe(false);
+      // The rejection reaches the CLI boundary, which prints it through the
+      // shared renderer — the same bytes the softened path prints below.
+      const { renderCliError } = await import('../error-render.js');
+      renderCliError(caught);
+      const message = (caught as Error).message;
+      const branded = message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`;
+      expect(output).toContain(branded);
+    });
+
+    it("knob 'advisory': the SAME failure resolves, its error text on stderr, then the knob line", async () => {
+      currentConfig = failingConfig();
+      codeDiff();
+      const { shieldCommand } = await import('./shield.js');
+      let unsoftened: unknown;
+      try {
+        await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
+      } catch (err) {
+        unsoftened = err;
+      }
+      expect(unsoftened).toBeInstanceOf(Error);
+      const message = (unsoftened as Error).message;
+
+      output.length = 0;
+      currentConfig = failingConfig({ enforce: 'advisory' });
+      codeDiff();
+      await expect(
+        shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]),
+      ).resolves.toBeUndefined();
+      const branded = message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`;
+      const errorIndex = output.indexOf(branded);
+      expect(errorIndex).toBeGreaterThanOrEqual(0);
+      // The knob line is the LAST line, after the rendered error.
+      expect(output.at(-1)).toBe(KNOB_ADVISORY);
+      expect(output.filter((l) => l === KNOB_ADVISORY)).toHaveLength(1);
+      // Softening writes nothing the failing run does not: no stamp.
+      expect(fs.existsSync(stampPath())).toBe(false);
+    });
+
+    it("a bare (no --gate) failing run still rejects under 'advisory', with no knob line", async () => {
+      currentConfig = failingConfig({ enforce: 'advisory' });
+      codeDiff();
+      const { shieldCommand } = await import('./shield.js');
+      await expect(shieldCommand({} as Parameters<typeof shieldCommand>[0])).rejects.toBeInstanceOf(
+        Error,
+      );
+      expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
+    });
+
+    it("a failure BEFORE the config loads is never softened, even under 'advisory'", async () => {
+      currentConfig = failingConfig({ enforce: 'advisory' });
+      const { shieldCommand } = await import('./shield.js');
+      await expect(
+        shieldCommand({ gate: true, failOn: 'critical' } as Parameters<typeof shieldCommand>[0]),
+      ).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
+      expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
+    });
+  });
+
   it('a failed record write degrades to a loud warning — the line still prints, exit unchanged', async () => {
     // A FILE at the admissions-dir path makes mkdirSync/writeFileSync fail.
     fs.mkdirSync(path.join(tmpDir, '.totem', 'artifacts'), { recursive: true });

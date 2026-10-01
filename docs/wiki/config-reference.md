@@ -153,6 +153,12 @@ export default {
       // 'block' | 'advisory'; unset keeps the tier-derived behaviour.
       enforce: 'block',
     },
+
+    // The strict shield gate's OWN exit knob (mmnto-ai/totem#2525):
+    // 'block' | 'advisory' | 'advisory-when-legged'; unset keeps today's exits.
+    shield: {
+      enforce: 'advisory-when-legged',
+    },
   },
 };
 ```
@@ -222,6 +228,19 @@ It is read at run time by the gate itself, like the globs, so setting it needs n
 **The CI arm reads the same knob.** A workflow step running `totem legs gate` exits the derived state with the knob unset or `'block'`; `'advisory'` softens that step as well. A repo adopting the CI arm of the `legs-gate` parity row (a hard `totem legs gate` step in its lint workflow over deposits committed under `.totem/artifacts/legs/`) therefore leaves the knob unset or sets `'block'` — Totem's own repository takes the CI arm with the knob unset, so its local pushes stay advisory and its pull requests are gated.
 
 **The floor sees the unfiltered diff.** The gate resolves the same branch-vs-base scope the push gate lints, but with the ignore configuration EMPTY: neither `ignorePatterns` nor `shieldIgnorePatterns` can hide a path from the floor. Those keys carry index-exclusion semantics that were merged into the review/lint diff filter for back-compat, and letting them narrow this predicate would mean a repo that keeps `README.md` out of its index silently stops owing a leg for its public copy. Every run discloses it: `[Legs] Diff source: branch-vs-base (unfiltered — ignorePatterns do not apply to the floor)`.
+
+## The Shield Exit Knob (`hooks.shield.enforce`)
+
+Optional; `'block'`, `'advisory'` or `'advisory-when-legged'` (mmnto-ai/totem#2525). It decides what a `totem review --gate` run **exits** when it fails — the run that the managed pre-push hook makes on the strict tier and on agent seats. It does not change a lane, a prompt, a verdict or the reviewed-content stamp; it changes the exit status and adds one line.
+
+- **`'advisory'`**: every failure raised after the config is loaded exits `0`. The run prints the same error text it prints today, then `[Totem] shield: hooks.shield.enforce = advisory`. That includes a lane's own config-class refusal such as `No model specified`, not only a round in which no lane completed.
+- **`'advisory-when-legged'`**: the same softening, applied only when `totem legs gate` derives evidence for HEAD — a legs-owed push whose deposit the legs gate accepts. The line names the deposit and its coverage: `[Totem] shield: hooks.shield.enforce = advisory-when-legged (legs deposit <sha8> covers K/N)`. A push that is not legs-owed, an owed push with no fresh deposit, and a legs derivation that fails all keep the block, and the line says which. The legs gate reads no deposit for a push that is not legs-owed, so a repo that wants code pushes covered widens `hooks.legsOwed.globs`.
+- **`'block'`**: the explicit spelling of the default — a failure exits non-zero — plus the line `[Totem] shield: hooks.shield.enforce = block`. It does not arm a standard-tier install: the managed hook runs the shield only on the strict tier and agent seats, and this knob does not change that (unlike `hooks.legsOwed.enforce: 'block'`).
+- **Unset**: today's behaviour, with no extra line. Nothing changes on upgrade.
+
+It is read at run time by `totem review --gate` itself, so setting it needs no `totem hook install --force`, and the rendered hook is unchanged. The line prints on a passing gate run too, so a reader can see which key is in force.
+
+**What stays hard.** A failure raised before the config is loaded — a contradictory flag such as `--gate` with `--fail-on`, a config that does not load, or a `hooks.shield.enforce` value outside the three — exits non-zero under every value. A bare `totem review` (no `--gate`) does not read the knob. The `doctor --strict` step of the same hook block is not affected.
 
 ## Secrets Management
 

@@ -574,6 +574,61 @@ describe('totem legs gate (mmnto-ai/totem#2698)', () => {
     );
   });
 
+  // mmnto-ai/totem#2525: the structured verdict the shield knob reads. Present
+  // in the winner arm only; every other state carries none.
+  it('the evidence arm carries a structured `evidence` (exact): the winner sha, rank and coverage', async () => {
+    storeDeposit();
+    const outcome = await runLegsGate({}, makeDeps());
+    expect(outcome.derived).toBe(0);
+    expect(outcome.evidence).toEqual({ diffSha: HEAD_SHA, rank: 'exact', covered: 1, owed: 1 });
+  });
+
+  it('the evidence arm carries a structured `evidence` (ancestor, partial coverage)', async () => {
+    storeDeposit({ diffSha: OTHER_SHA });
+    const outcome = await runLegsGate(
+      {},
+      makeDeps({
+        changedFiles: async () => ({
+          files: ['docs/wiki/enforcement-model.md', 'docs/wiki/cli-reference.md'],
+          base: BASE,
+        }),
+        git: fakeGit({
+          isAncestor: () => true,
+          distance: () => 3,
+          changedFiles: () => ['docs/wiki/enforcement-model.md'],
+        }),
+      }),
+    );
+    expect(outcome.derived).toBe(0);
+    expect(outcome.stdout[0]).toContain('· covers 1/2 owed paths ·');
+    expect(outcome.evidence).toEqual({ diffSha: OTHER_SHA, rank: 'ancestor', covered: 1, owed: 2 });
+  });
+
+  it('`evidence` is ABSENT in the not-owed, owed-unanswered (3) and not-derived (2) states', async () => {
+    const notOwed = await runLegsGate(
+      {},
+      makeDeps({ changedFiles: async () => ({ files: ['a.ts'], base: BASE }) }),
+    );
+    expect(notOwed.derived).toBe(0);
+    expect(notOwed.evidence).toBeUndefined();
+    expect('evidence' in notOwed).toBe(false);
+
+    const unanswered = await runLegsGate({}, makeDeps());
+    expect(unanswered.derived).toBe(3);
+    expect('evidence' in unanswered).toBe(false);
+
+    const notDerived = await runLegsGate(
+      {},
+      makeDeps({
+        changedFiles: async () => {
+          throw new Error('fatal: not a git repository');
+        },
+      }),
+    );
+    expect(notDerived.derived).toBe(2);
+    expect('evidence' in notDerived).toBe(false);
+  });
+
   it('a corrupt sibling is disclosed on stderr and never masks the valid deposit', async () => {
     storeDeposit();
     storeCorrupt(ABSENT_SHA, '{"schemaVersion":"1.0.0"}');
@@ -854,6 +909,35 @@ describe('the legs floor classifies the UNFILTERED branch diff (mmnto-ai/totem#2
     // Exactly ONE `Changed files` line: the suppressed resolver no longer
     // prints its own C-quoted one beside the gate's raw one (fold 5).
     expect(narration.split('Changed files (')).toHaveLength(2);
+  });
+
+  it('a PRELOADED config builds the same seam with no second load, and can silence the scope lines (mmnto-ai/totem#2525)', async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '));
+    });
+    loadConfigMock.mockClear();
+    const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+    const deps = await buildLegsGateDeps({
+      cwd: tmpDir,
+      configRoot: tmpDir,
+      config: {
+        totemDir: '.totem',
+        ignorePatterns: ['README.md'],
+        hooks: { legsOwed: { globs: ['README.md'], enforce: 'advisory' } },
+      } as unknown as TotemConfig,
+      suppressScopeNarration: true,
+    });
+    expect(loadConfigMock).not.toHaveBeenCalled();
+    expect(deps.root).toBe(tmpDir);
+    expect(deps.totemDirAbs).toBe(path.join(tmpDir, '.totem'));
+    expect(deps.globs).toEqual(['README.md']);
+    expect(deps.enforce).toBe('advisory');
+    const outcome = await runLegsGate({}, deps);
+    expect(outcome.derived).toBe(3);
+    expect(outcome.stdout[0]).toContain('README.md → README.md');
+    expect(lines.join('\n')).not.toContain('Diff source:');
+    expect(lines.join('\n')).not.toContain('Changed files (');
   });
 });
 
