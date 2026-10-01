@@ -70,6 +70,18 @@ vi.mock('../git.js', async (importOriginal) => {
   return { ...actual, getDiffForReview: getDiffForReviewSpy };
 });
 
+// The legs gate's two entry points the shield knob calls under
+// `advisory-when-legged` (mmnto-ai/totem#2525) — spies, so each legs state is
+// driven through the REAL `shieldCommand`. Everything else in the module is the
+// actual implementation, so the file's other cases are unaffected.
+const buildLegsGateDepsSpy = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({}));
+const runLegsGateSpy = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({}));
+
+vi.mock('./legs.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./legs.js')>();
+  return { ...actual, buildLegsGateDeps: buildLegsGateDepsSpy, runLegsGate: runLegsGateSpy };
+});
+
 /** A minimal single-file diff section for `file`. */
 function diffFor(file: string): string {
   return [
@@ -136,6 +148,8 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     upgradePrePushHookSpy.mockClear();
     getDiffForReviewSpy.mockClear();
     getDiffForReviewSpy.mockReset();
+    buildLegsGateDepsSpy.mockClear();
+    runLegsGateSpy.mockClear();
     // The production resolver shape: a no-changes resolution is a discriminated
     // empty carrying the RESOLVED scope (conformance note 1), never null.
     getDiffForReviewSpy.mockResolvedValue({ empty: true, source: 'branch-vs-base', base: 'main' });
@@ -367,9 +381,11 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
   });
 
-  // mmnto-ai/totem#2525: the REAL wiring of hooks.shield.enforce. An admitted
-  // code diff under a lanes value that hard-errors validation is a failure
-  // raised AFTER the config loads — a cheap, LLM-free failing gate run.
+  // mmnto-ai/totem#2525: the REAL wiring of hooks.shield.enforce. The fixture
+  // config carries an unvalidated `lanes` number, cast past the config schema
+  // (a real load would reject it), which makes the admitted code-diff run
+  // throw a TypeError — a failure raised AFTER the config loads, and a cheap,
+  // LLM-free failing gate run.
   describe('hooks.shield.enforce on a failing --gate run (mmnto-ai/totem#2525)', () => {
     const KNOB_ADVISORY = '[Totem] shield: hooks.shield.enforce = advisory';
 
@@ -400,7 +416,8 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
         caught = err;
       }
       expect(caught).toBeInstanceOf(Error);
-      // The failure under test is the lanes refusal, raised after config load.
+      // The failure under test is the TypeError the unvalidated `lanes` value
+      // throws on the admitted run, raised after config load.
       expect((caught as Error).message).toMatch(/lanes/);
       // The knob prints nothing of its own on the unset path.
       expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
@@ -460,6 +477,125 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
         shieldCommand({ gate: true, failOn: 'critical' } as Parameters<typeof shieldCommand>[0]),
       ).rejects.toMatchObject({ code: 'CONFIG_INVALID' });
       expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
+    });
+
+    // ── advisory-when-legged: the legs-to-knob wiring, one case per legs state ──
+
+    const DEPOSIT_SHA = '0123456789abcdef0123456789abcdef01234567';
+    const SENSOR_ROW = '[Totem] legs: sensor — ignoring corrupt deposit .totem/x.json: not json';
+    const LEGS_DEPS_SENTINEL = { sentinel: 'legs-deps' };
+
+    /** The unsoftened failure's message, from a knob-unset run of the same fixture. */
+    async function unsoftenedMessage(): Promise<string> {
+      currentConfig = failingConfig();
+      codeDiff();
+      const { shieldCommand } = await import('./shield.js');
+      let caught: unknown;
+      try {
+        await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      output.length = 0;
+      return (caught as Error).message;
+    }
+
+    function armLegs(outcome: Record<string, unknown>): void {
+      buildLegsGateDepsSpy.mockResolvedValueOnce(LEGS_DEPS_SENTINEL);
+      runLegsGateSpy.mockResolvedValueOnce({
+        status: outcome['derived'],
+        stdout: ['[Totem] legs: a verdict line the knob does not print'],
+        stderr: [SENSOR_ROW],
+        ...outcome,
+      });
+    }
+
+    function expectRealLegsSeam(): void {
+      expect(buildLegsGateDepsSpy).toHaveBeenCalledTimes(1);
+      expect(buildLegsGateDepsSpy).toHaveBeenCalledWith({
+        cwd: tmpDir,
+        configRoot: tmpDir,
+        config: currentConfig,
+        suppressScopeNarration: true,
+      });
+      expect(runLegsGateSpy).toHaveBeenCalledTimes(1);
+      expect(runLegsGateSpy).toHaveBeenCalledWith({}, LEGS_DEPS_SENTINEL);
+      // The gate's stderr row (the corrupt-deposit sensor) is printed, never dropped.
+      expect(output).toContain(SENSOR_ROW);
+      // Its stdout is the legs verb's to print, not the knob's.
+      expect(output).not.toContain('[Totem] legs: a verdict line the knob does not print');
+    }
+
+    it("'advisory-when-legged' + legs evidence: the failure resolves, error text first, the deposit line last", async () => {
+      const message = await unsoftenedMessage();
+      currentConfig = failingConfig({ enforce: 'advisory-when-legged' });
+      codeDiff();
+      armLegs({
+        derived: 0,
+        evidence: { diffSha: DEPOSIT_SHA, rank: 'exact', covered: 2, owed: 3 },
+      });
+      const { shieldCommand } = await import('./shield.js');
+      await expect(
+        shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]),
+      ).resolves.toBeUndefined();
+      expectRealLegsSeam();
+      const branded = message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`;
+      const errorIndex = output.indexOf(branded);
+      expect(errorIndex).toBeGreaterThanOrEqual(0);
+      const knobLine =
+        '[Totem] shield: hooks.shield.enforce = advisory-when-legged (legs deposit 01234567 covers 2/3)';
+      expect(output.at(-1)).toBe(knobLine);
+      expect(output.indexOf(knobLine)).toBeGreaterThan(errorIndex);
+    });
+
+    for (const [derived, knobLine] of [
+      [
+        0,
+        '[Totem] shield: hooks.shield.enforce = advisory-when-legged (this push is not legs-owed, so no deposit is read; the shield gate stands)',
+      ],
+      [
+        3,
+        '[Totem] shield: hooks.shield.enforce = advisory-when-legged (legs-owed with no fresh deposit; the shield gate stands)',
+      ],
+      [
+        2,
+        '[Totem] shield: hooks.shield.enforce = advisory-when-legged (the legs gate could not derive; run totem legs gate for the cause; the shield gate stands)',
+      ],
+    ] as const) {
+      it(`'advisory-when-legged' + legs derived ${derived} without evidence: the ORIGINAL failure rejects, after the matching knob line`, async () => {
+        const message = await unsoftenedMessage();
+        currentConfig = failingConfig({ enforce: 'advisory-when-legged' });
+        codeDiff();
+        armLegs({ derived });
+        const { shieldCommand } = await import('./shield.js');
+        let caught: unknown;
+        try {
+          await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
+        } catch (err) {
+          caught = err;
+        }
+        expect(caught).toBeInstanceOf(Error);
+        expect((caught as Error).message).toBe(message);
+        expectRealLegsSeam();
+        expect(output.at(-1)).toBe(knobLine);
+        expect(output.filter((l) => l.startsWith('[Totem] shield:'))).toEqual([knobLine]);
+      });
+    }
+
+    it("'advisory' and 'block' never consult the legs gate", async () => {
+      const { shieldCommand } = await import('./shield.js');
+      for (const enforce of ['advisory', 'block']) {
+        currentConfig = failingConfig({ enforce });
+        codeDiff();
+        try {
+          await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
+        } catch {
+          // 'block' rejects by design; only the legs spies are under test here.
+        }
+      }
+      expect(buildLegsGateDepsSpy).not.toHaveBeenCalled();
+      expect(runLegsGateSpy).not.toHaveBeenCalled();
     });
   });
 

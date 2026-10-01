@@ -2045,6 +2045,7 @@ async function legCoverageForCovariate(
  */
 async function deriveLegsVerdictForShield(ctx: ShieldKnobContext): Promise<ShieldLegsVerdict> {
   const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+  const { legsVerdictFromOutcome } = await import('./shield-enforce.js');
   const deps = await buildLegsGateDeps({
     cwd: ctx.cwd,
     configRoot: ctx.configRoot,
@@ -2053,22 +2054,7 @@ async function deriveLegsVerdictForShield(ctx: ShieldKnobContext): Promise<Shiel
   });
   const outcome = await runLegsGate({}, deps);
   for (const line of outcome.stderr) console.error(line);
-  if (outcome.evidence !== undefined) {
-    return {
-      state: 'evidence',
-      diffSha: outcome.evidence.diffSha,
-      ...(outcome.evidence.covered === undefined ? {} : { covered: outcome.evidence.covered }),
-      ...(outcome.evidence.owed === undefined ? {} : { owed: outcome.evidence.owed }),
-    };
-  }
-  switch (outcome.derived) {
-    case 0:
-      return { state: 'not-owed' };
-    case 3:
-      return { state: 'unanswered' };
-    case 2:
-      return { state: 'not-derived' };
-  }
+  return legsVerdictFromOutcome(outcome);
 }
 
 /**

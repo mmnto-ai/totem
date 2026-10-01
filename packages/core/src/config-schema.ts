@@ -794,11 +794,14 @@ export const TotemConfigSchema = z.object({
        *  error text plus one `hooks.shield.enforce` line. `'advisory-when-legged'`:
        *  the same, only when `totem legs gate` derives evidence for HEAD (a
        *  legs-owed push with an accepted deposit); otherwise the failure stands.
-       *  `'block'`: the explicit spelling of the default — a failure exits
-       *  non-zero, plus the line. It does NOT arm a standard-tier install: the
-       *  managed hook invokes the shield only on the strict tier and agent
-       *  seats, unlike `legsOwed.enforce: 'block'`. ABSENT ⇒ today's behaviour,
-       *  so no consumer changes on upgrade. */
+       *  Under this value only, the run also prints the legs gate's own
+       *  corrupt-deposit sensor rows, which the derivation prints rather than
+       *  drops. `'block'`: the explicit spelling of the default — a failure
+       *  exits non-zero, plus the line. It does NOT arm a standard-tier
+       *  install: the managed hook invokes the shield only on the strict tier
+       *  and agent seats, unlike `legsOwed.enforce: 'block'`. ABSENT ⇒ a
+       *  `--gate` run prints and exits as before (no line, the outcome
+       *  propagates untouched). */
       shield: z
         .object({
           enforce: z.enum(['block', 'advisory', 'advisory-when-legged']).optional(),

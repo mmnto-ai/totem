@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { TotemConfig } from '@mmnto/totem';
 
 import {
+  legsVerdictFromOutcome,
   resolveShieldEnforce,
   runUnderShieldEnforce,
   type ShieldEnforce,
@@ -28,6 +29,36 @@ const LINE_LEGGED_UNANSWERED =
   '[Totem] shield: hooks.shield.enforce = advisory-when-legged (legs-owed with no fresh deposit; the shield gate stands)';
 const LINE_LEGGED_NOT_DERIVED =
   '[Totem] shield: hooks.shield.enforce = advisory-when-legged (the legs gate could not derive; run totem legs gate for the cause; the shield gate stands)';
+
+describe('legsVerdictFromOutcome — the legs-to-knob mapping (mmnto-ai/totem#2525)', () => {
+  it('a structured evidence field yields the evidence verdict, carrying its coverage', () => {
+    expect(
+      legsVerdictFromOutcome({
+        derived: 0,
+        evidence: { diffSha: SHA, rank: 'exact', covered: 2, owed: 3 },
+      }),
+    ).toEqual({ state: 'evidence', diffSha: SHA, covered: 2, owed: 3 });
+  });
+
+  it('evidence without coverage yields the evidence verdict with no coverage keys', () => {
+    const verdict = legsVerdictFromOutcome({
+      derived: 0,
+      evidence: { diffSha: SHA, rank: 'ancestor' },
+    });
+    expect(verdict).toEqual({ state: 'evidence', diffSha: SHA });
+    expect('covered' in verdict).toBe(false);
+    expect('owed' in verdict).toBe(false);
+  });
+
+  it('derived 0 WITHOUT evidence is not-owed — never the evidence verdict', () => {
+    expect(legsVerdictFromOutcome({ derived: 0 })).toEqual({ state: 'not-owed' });
+  });
+
+  it('derived 3 is unanswered and derived 2 is not-derived', () => {
+    expect(legsVerdictFromOutcome({ derived: 3 })).toEqual({ state: 'unanswered' });
+    expect(legsVerdictFromOutcome({ derived: 2 })).toEqual({ state: 'not-derived' });
+  });
+});
 
 describe('resolveShieldEnforce — the decision table (mmnto-ai/totem#2525)', () => {
   const verdicts: Array<ShieldLegsVerdict | undefined> = [

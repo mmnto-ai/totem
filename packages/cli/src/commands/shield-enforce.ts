@@ -4,12 +4,14 @@
  * The knob is read at RUN time by `totem review --gate` and applied to that
  * run's exit status at ONE point: around the command body, after it has either
  * returned or thrown. It never changes a line the run would otherwise print,
- * never writes a stamp and never alters a verdict; it adds exactly one line
- * when it is set, and when the value softens, a thrown failure is rendered
- * with the CLI boundary's own bytes and the run exits 0.
+ * never writes a stamp and never alters a verdict. When it is set it adds one
+ * line, plus — under `advisory-when-legged` only — the legs gate's own
+ * corrupt-deposit sensor rows, which the derivation prints rather than drops.
+ * When the value softens, a thrown failure is rendered with the CLI boundary's
+ * own bytes and the run exits 0.
  *
- * Unset is today's behaviour byte for byte: no line, and the body's outcome
- * propagates untouched. A failure raised BEFORE the config is loaded (a flag
+ * Unset, a `--gate` run's output and exit are unchanged — no line, and the
+ * body's outcome propagates untouched. A failure raised BEFORE the config is loaded (a flag
  * contradiction, an unloadable config) is never softened under any value — the
  * knob is unreadable there.
  *
@@ -19,6 +21,8 @@
 
 import type { TotemConfig } from '@mmnto/totem';
 
+import type { LegsGateOutcome } from './legs.js';
+
 export type ShieldEnforce = 'block' | 'advisory' | 'advisory-when-legged';
 
 /** What the knob needs from the legs gate's verdict for HEAD. */
@@ -27,6 +31,35 @@ export type ShieldLegsVerdict =
   | { state: 'not-owed' }
   | { state: 'unanswered' }
   | { state: 'not-derived' };
+
+/**
+ * Map the legs gate's outcome onto the verdict the knob reads. Pure, so the
+ * one wiring that decides whether `advisory-when-legged` can soften is pinned
+ * by a table: ONLY the structured `evidence` field yields the evidence verdict
+ * — a derived `0` without it is a push that is not legs-owed.
+ */
+export function legsVerdictFromOutcome(
+  outcome: Pick<LegsGateOutcome, 'derived' | 'evidence'>,
+): ShieldLegsVerdict {
+  if (outcome.evidence !== undefined) {
+    return {
+      state: 'evidence',
+      diffSha: outcome.evidence.diffSha,
+      ...(outcome.evidence.covered === undefined ? {} : { covered: outcome.evidence.covered }),
+      ...(outcome.evidence.owed === undefined ? {} : { owed: outcome.evidence.owed }),
+    };
+  }
+  // Exhaustive with no default arm: a code added to the gate's vocabulary
+  // later fails the build here instead of silently adopting a verdict.
+  switch (outcome.derived) {
+    case 0:
+      return { state: 'not-owed' };
+    case 3:
+      return { state: 'unanswered' };
+    case 2:
+      return { state: 'not-derived' };
+  }
+}
 
 export interface ShieldEnforceResolution {
   /** Whether a failure of this gate run is reported and exits 0. */
