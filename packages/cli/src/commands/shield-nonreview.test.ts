@@ -26,7 +26,12 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LEG_DEPOSIT_SCHEMA_VERSION, saveLegDeposit, type TotemConfig } from '@mmnto/totem';
+import {
+  LEG_DEPOSIT_SCHEMA_VERSION,
+  saveLegDeposit,
+  type TotemConfig,
+  TotemConfigSchema,
+} from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import { log } from '../ui.js';
@@ -80,6 +85,23 @@ const runLegsGateSpy = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({
 vi.mock('./legs.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./legs.js')>();
   return { ...actual, buildLegsGateDeps: buildLegsGateDepsSpy, runLegsGate: runLegsGateSpy };
+});
+
+// The knowledge store a standard review queries before its orchestrator call
+// (mmnto-ai/totem#2525's real-refusal cases): a stub embedder and an EMPTY
+// store, so an admitted run reaches the REAL `runOrchestrator` with no network
+// and no LanceDB on disk. Everything else in core is the actual module. The
+// stubs live inside the factory because this file imports core statically and
+// the factory runs before any top-level declaration.
+vi.mock('@mmnto/totem', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mmnto/totem')>();
+  class EmptyStore {
+    async connect(): Promise<void> {}
+    async search(): Promise<never[]> {
+      return [];
+    }
+  }
+  return { ...actual, createEmbedder: () => ({}), LanceStore: EmptyStore };
 });
 
 /** A minimal single-file diff section for `file`. */
@@ -381,20 +403,72 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
     expect(upgradePrePushHookSpy).not.toHaveBeenCalled();
   });
 
-  // mmnto-ai/totem#2525: the REAL wiring of hooks.shield.enforce. The fixture
-  // config carries an unvalidated `lanes` number, cast past the config schema
-  // (a real load would reject it), which makes the admitted code-diff run
-  // throw a TypeError — a failure raised AFTER the config loads, and a cheap,
-  // LLM-free failing gate run.
+  // mmnto-ai/totem#2525: the REAL wiring of hooks.shield.enforce, failing
+  // through a REAL refusal on a VALID config. Every fixture below is passed
+  // through core's own `TotemConfigSchema.parse` — what `loadConfig` runs — so
+  // no knob case depends on a config a real load would reject. An admitted
+  // code diff then fails after the config loads with one of two config-class
+  // refusals the product raises itself:
+  //   - `No model specified` — the real `runOrchestrator` refusal (the case the
+  //     `advisory` value was asked for), reached with an embedding configured,
+  //     a stub embedder and an EMPTY knowledge store (the core mock above);
+  //   - `No embedding provider configured` — the real `requireEmbedding`
+  //     refusal a valid config with no embedding hits first.
   describe('hooks.shield.enforce on a failing --gate run (mmnto-ai/totem#2525)', () => {
     const KNOB_ADVISORY = '[Totem] shield: hooks.shield.enforce = advisory';
+    const KNOB_BLOCK = '[Totem] shield: hooks.shield.enforce = block';
 
+    /** The two real refusals, with the exact error each one throws. */
+    const REFUSALS = [
+      {
+        name: 'No model specified',
+        withEmbedding: true,
+        code: 'CONFIG_INVALID',
+        message: '[Totem Error] No model specified.',
+        fix: "  Fix: Provide one with --model, set a command-specific model in 'overrides', or set a 'defaultModel' in your orchestrator config.",
+      },
+      {
+        name: 'No embedding provider configured',
+        withEmbedding: false,
+        code: 'CONFIG_MISSING',
+        message:
+          '[Totem Error] No embedding provider configured. This command requires embeddings (Lite tier does not support it).',
+        fix: "  Fix: Set OPENAI_API_KEY or GEMINI_API_KEY in your .env and re-run 'totem init'.",
+      },
+    ] as const;
+
+    /**
+     * A VALID config: a shell orchestrator with no model, and (optionally) an
+     * embedding provider — parsed by core's schema, never cast.
+     */
+    function validConfig(options: { withEmbedding: boolean; enforce?: string }): TotemConfig {
+      return TotemConfigSchema.parse({
+        targets: [{ glob: '**/*.md', type: 'spec', strategy: 'markdown-heading' }],
+        review: { sourceExtensions: ['.ts'] },
+        orchestrator: { provider: 'shell', command: 'echo {file}' },
+        ...(options.withEmbedding
+          ? { embedding: { provider: 'openai', model: 'text-embedding-3-small' } }
+          : {}),
+        ...(options.enforce === undefined
+          ? {}
+          : { hooks: { shield: { enforce: options.enforce } } }),
+      });
+    }
+
+    /** The `No model specified` fixture — the one the remaining knob cases fail through. */
     function failingConfig(shield?: { enforce: string }): TotemConfig {
-      return {
-        ...(TEST_CONFIG as object),
-        review: { sourceExtensions: ['.ts'], lanes: 12345 },
-        ...(shield === undefined ? {} : { hooks: { shield } }),
-      } as unknown as TotemConfig;
+      return validConfig({ withEmbedding: true, enforce: shield?.enforce });
+    }
+
+    /** Run the real command, returning what it threw (undefined when it resolved). */
+    async function runGate(options: Record<string, unknown> = { gate: true }): Promise<unknown> {
+      const { shieldCommand } = await import('./shield.js');
+      try {
+        await shieldCommand(options as Parameters<typeof shieldCommand>[0]);
+      } catch (err) {
+        return err;
+      }
+      return undefined;
     }
 
     function codeDiff(): void {
@@ -405,68 +479,60 @@ describe('deterministic skips are not-applicable ADMISSIONS: record + calm line,
       });
     }
 
-    it('knob unset: the --gate run rejects, the error text names the cause, and no knob line prints', async () => {
-      currentConfig = failingConfig();
-      codeDiff();
-      const { shieldCommand } = await import('./shield.js');
-      let caught: unknown;
-      try {
-        await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      // The failure under test is the TypeError the unvalidated `lanes` value
-      // throws on the admitted run, raised after config load.
-      expect((caught as Error).message).toMatch(/lanes/);
-      // The knob prints nothing of its own on the unset path.
-      expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
-      expect(fs.existsSync(stampPath())).toBe(false);
-      // The rejection reaches the CLI boundary, which prints it through the
-      // shared renderer — the same bytes the softened path prints below.
-      const { renderCliError } = await import('../error-render.js');
-      renderCliError(caught);
-      const message = (caught as Error).message;
-      const branded = message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`;
-      expect(output).toContain(branded);
-    });
+    for (const refusal of REFUSALS) {
+      describe(`the real '${refusal.name}' refusal on a valid config`, () => {
+        it('knob unset: the --gate run rejects with that exact error, and no knob line prints', async () => {
+          currentConfig = validConfig({ withEmbedding: refusal.withEmbedding });
+          codeDiff();
+          const caught = await runGate();
+          expect(caught).toBeInstanceOf(Error);
+          expect(caught).toMatchObject({ code: refusal.code, message: refusal.message });
+          expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
+          expect(fs.existsSync(stampPath())).toBe(false);
+        });
 
-    it("knob 'advisory': the SAME failure resolves, its error text on stderr, then the knob line", async () => {
-      currentConfig = failingConfig();
-      codeDiff();
-      const { shieldCommand } = await import('./shield.js');
-      let unsoftened: unknown;
-      try {
-        await shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]);
-      } catch (err) {
-        unsoftened = err;
-      }
-      expect(unsoftened).toBeInstanceOf(Error);
-      const message = (unsoftened as Error).message;
+        it("knob 'advisory': the run resolves, the error's rendered text on stderr, then the knob line last", async () => {
+          currentConfig = validConfig({
+            withEmbedding: refusal.withEmbedding,
+            enforce: 'advisory',
+          });
+          codeDiff();
+          expect(await runGate()).toBeUndefined();
+          // The bytes the CLI boundary prints for this error: message, then Fix.
+          const errorIndex = output.indexOf(refusal.message);
+          expect(errorIndex).toBeGreaterThanOrEqual(0);
+          expect(output[errorIndex + 1]).toBe(refusal.fix);
+          expect(output.at(-1)).toBe(KNOB_ADVISORY);
+          expect(output.filter((l) => l === KNOB_ADVISORY)).toHaveLength(1);
+          // Softening writes nothing the failing run does not: no stamp.
+          expect(fs.existsSync(stampPath())).toBe(false);
+        });
 
-      output.length = 0;
-      currentConfig = failingConfig({ enforce: 'advisory' });
-      codeDiff();
-      await expect(
-        shieldCommand({ gate: true } as Parameters<typeof shieldCommand>[0]),
-      ).resolves.toBeUndefined();
-      const branded = message.startsWith('[Totem Error]') ? message : `[Totem Error] ${message}`;
-      const errorIndex = output.indexOf(branded);
-      expect(errorIndex).toBeGreaterThanOrEqual(0);
-      // The knob line is the LAST line, after the rendered error.
-      expect(output.at(-1)).toBe(KNOB_ADVISORY);
-      expect(output.filter((l) => l === KNOB_ADVISORY)).toHaveLength(1);
-      // Softening writes nothing the failing run does not: no stamp.
-      expect(fs.existsSync(stampPath())).toBe(false);
-    });
+        it("knob 'block': the run rejects with the same error, the knob line printed before it", async () => {
+          currentConfig = validConfig({ withEmbedding: refusal.withEmbedding, enforce: 'block' });
+          codeDiff();
+          const caught = await runGate();
+          expect(caught).toMatchObject({ code: refusal.code, message: refusal.message });
+          // The command prints the knob line and rethrows; the CLI boundary
+          // prints the error after it, through the shared renderer.
+          expect(output.at(-1)).toBe(KNOB_BLOCK);
+          expect(output).not.toContain(refusal.message);
+          const { renderCliError } = await import('../error-render.js');
+          renderCliError(caught);
+          expect(output.indexOf(refusal.message)).toBeGreaterThan(output.indexOf(KNOB_BLOCK));
+          expect(fs.existsSync(stampPath())).toBe(false);
+        });
+      });
+    }
 
     it("a bare (no --gate) failing run still rejects under 'advisory', with no knob line", async () => {
       currentConfig = failingConfig({ enforce: 'advisory' });
       codeDiff();
-      const { shieldCommand } = await import('./shield.js');
-      await expect(shieldCommand({} as Parameters<typeof shieldCommand>[0])).rejects.toBeInstanceOf(
-        Error,
-      );
+      const caught = await runGate({});
+      expect(caught).toMatchObject({
+        code: 'CONFIG_INVALID',
+        message: '[Totem Error] No model specified.',
+      });
       expect(output.some((l) => l.includes('hooks.shield.enforce'))).toBe(false);
     });
 
