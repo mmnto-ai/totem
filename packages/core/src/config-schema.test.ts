@@ -1382,6 +1382,67 @@ describe('hooks.legsOwed.globs — the judgment-dense path floor (mmnto-ai/totem
   });
 });
 
+describe('hooks.shield.enforce — the shield gate exit knob (mmnto-ai/totem#2525)', () => {
+  it('accepts block | advisory | advisory-when-legged', () => {
+    for (const enforce of ['block', 'advisory', 'advisory-when-legged'] as const) {
+      const result = TotemConfigSchema.safeParse({
+        targets: BASE_TARGETS,
+        hooks: { shield: { enforce } },
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.hooks?.shield.enforce).toBe(enforce);
+        // Declaring the shield knob alone leaves the legs keys at their
+        // defaults — the two blocks are independent.
+        expect(result.data.hooks?.legsOwed.globs).toEqual([...DEFAULT_LEGS_OWED_GLOBS]);
+        expect(result.data.hooks?.legsOwed.enforce).toBeUndefined();
+      }
+    }
+  });
+
+  it('rejects any other spelling as a parse error', () => {
+    for (const enforce of ['sometimes', 'Advisory', '', true]) {
+      expect(
+        TotemConfigSchema.safeParse({
+          targets: BASE_TARGETS,
+          hooks: { shield: { enforce } },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('absent stays absent: no default is minted', () => {
+    const absent = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { tier: 'strict' },
+    });
+    expect(absent.success).toBe(true);
+    if (absent.success) expect(absent.data.hooks?.shield.enforce).toBeUndefined();
+  });
+
+  it('`hooks: {}` parses to `shield: {}`, with the legs block unchanged', () => {
+    const result = TotemConfigSchema.safeParse({ targets: BASE_TARGETS, hooks: {} });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hooks?.shield).toEqual({});
+      expect(result.data.hooks?.legsOwed).toEqual({ globs: [...DEFAULT_LEGS_OWED_GLOBS] });
+      expect(result.data.hooks?.tier).toBe('standard');
+    }
+  });
+
+  it('a legs knob beside the shield knob parses each independently', () => {
+    const result = TotemConfigSchema.safeParse({
+      targets: BASE_TARGETS,
+      hooks: { legsOwed: { enforce: 'block' }, shield: { enforce: 'advisory' } },
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.hooks?.legsOwed.enforce).toBe('block');
+      expect(result.data.hooks?.shield.enforce).toBe('advisory');
+    }
+  });
+});
+
 describe('searchRelevanceFloor — optional, NO default (mmnto-ai/totem#2727)', () => {
   // The whole point of the slice: an unconfigured repo must come out of the
   // parse with NO floor, so the below-floor arms are unreachable rather than

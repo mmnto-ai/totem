@@ -37,7 +37,14 @@
  * `import type` is erased at build and stays static.
  */
 
-import type { LegCoverageQuery, LegDeposit, LegFindingCounts, LegGitAdapter } from '@mmnto/totem';
+import type {
+  LegCoverageQuery,
+  LegDeposit,
+  LegDepositRank,
+  LegFindingCounts,
+  LegGitAdapter,
+  TotemConfig,
+} from '@mmnto/totem';
 
 /** Log tag for this command pair's human output (`log.*` writes to stderr). */
 const TAG = 'Legs';
@@ -465,6 +472,15 @@ export interface LegsGateOutcome {
   stdout: string[];
   /** stderr lines (the corrupt-deposit sensor rows). */
   stderr: string[];
+  /**
+   * The deposit that answers for HEAD — present iff the gate derived the
+   * evidence state. The structured form of the `legs evidence:` line, for a
+   * caller that must read the verdict rather than parse text
+   * (mmnto-ai/totem#2525). `covered` / `owed` are absent iff the winner
+   * carries no coverage, which the gate's own query rules out on the owed
+   * path but core's shared type does not prove.
+   */
+  evidence?: { diffSha: string; rank: LegDepositRank; covered?: number; owed?: number };
 }
 
 /**
@@ -621,7 +637,19 @@ export async function runLegsGate(
         `[Totem] legs: ${superseded.length} superseded candidate(s) for this head: ${named}`,
       );
     }
-    return finish(0, stdout, stderr);
+    // The structured verdict rides beside the lines, never in place of them:
+    // `stdout`, `stderr`, `derived` and `status` are what `finish` composes for
+    // every state, so the evidence arm prints byte for byte what it did before.
+    return {
+      ...finish(0, stdout, stderr),
+      evidence: {
+        diffSha: winner.diffSha,
+        rank: winner.rank,
+        ...(winner.coverage === undefined
+          ? {}
+          : { covered: winner.coverage.covered, owed: winner.coverage.owed }),
+      },
+    };
   }
 
   // Owed, and nothing answers for this head. The basis is what makes the block
@@ -849,24 +877,44 @@ export async function deriveLegsCoverageForHead(
  * checkout without capturing a process exit: a test resolves these deps in a
  * fixture repo and asserts what `changedFiles()` actually returns.
  *
- * It takes no options: since `--head` was removed (mmnto-ai/totem#2698 fold 2)
+ * It takes no flags: since `--head` was removed (mmnto-ai/totem#2698 fold 2)
  * nothing about the seam varies with a flag — `--advisory` is applied to the
- * STATUS, after the derivation, and never to what is derived.
+ * STATUS, after the derivation, and never to what is derived. The one optional
+ * input is for a caller that has ALREADY loaded the config — the shield's
+ * `hooks.shield.enforce` knob (mmnto-ai/totem#2525) — so it reuses this real
+ * seam without a second load and, when asked, without the `[Legs]` scope lines
+ * in the middle of its own run. With no argument the seam is built exactly as
+ * `totem legs gate` has always built it.
  */
-export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
+export async function buildLegsGateDeps(preloaded?: {
+  cwd: string;
+  configRoot: string;
+  config: TotemConfig;
+  suppressScopeNarration?: boolean;
+}): Promise<LegsGateDeps> {
   const path = await import('node:path');
   const { safeExec, TotemError } = await import('@mmnto/totem');
   // The branch scope (and its `Diff source:` disclosure) now lives in the
   // shared `resolveUnfilteredBranchScope`, which the covariate calls too.
   const { isAncestor } = await import('../git.js');
-  const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
   await loadSanitizer();
 
-  const cwd = process.cwd();
-  const configPath = resolveConfigPath(cwd);
-  loadEnv(cwd);
-  const config = await loadConfig(configPath);
-  const root = path.dirname(configPath);
+  let cwd: string;
+  let config: TotemConfig;
+  let root: string;
+  if (preloaded === undefined) {
+    const { loadConfig, loadEnv, resolveConfigPath } = await import('../utils.js');
+    cwd = process.cwd();
+    const configPath = resolveConfigPath(cwd);
+    loadEnv(cwd);
+    config = await loadConfig(configPath);
+    root = path.dirname(configPath);
+  } else {
+    cwd = preloaded.cwd;
+    config = preloaded.config;
+    root = preloaded.configRoot;
+  }
+  const suppressScopeNarration = preloaded?.suppressScopeNarration === true;
 
   const git: LegGitAdapter = {
     isCommit(sha) {
@@ -916,6 +964,7 @@ export async function buildLegsGateDeps(): Promise<LegsGateDeps> {
     changedFiles: () =>
       resolveUnfilteredBranchScope(cwd, {
         run: (args) => safeExec('git', [...args], { cwd }),
+        ...(suppressScopeNarration ? { suppressScopeNarration: true } : {}),
       }),
   };
   return deps;

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "ea0441f8387cbf3249908f108ce94e95cb071d2c",
+  "readAt": "2026-10-01T19:12:21.094Z",
+  "findings": [
+    {
+      "id": "2525-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/shield.ts",
+      "line": 2047,
+      "claim": "The only real wiring between runLegsGate and the knob (deriveLegsVerdictForShield) had no test, so the invariant that advisory-when-legged softens if and only if the legs gate derives evidence was pinned only at the pure decision table, where the verdicts are injected.",
+      "counterexample": "At ea0441f8 no test outside shield-enforce.test.ts and config-schema.test.ts names advisory-when-legged or deriveLegsVerdictForShield; mutating the derived-0 arm to return an evidence verdict softens a not-owed push and all 115 tests in the five touched files still pass. FOLDED at a4a7defd (the seat read the fold diff): the mapping is the pure exported legsVerdictFromOutcome in shield-enforce.ts with a four-row table test, and five integration cases drive the real shieldCommand with the legs module's two functions as spies, one per legs state, asserting the deps argument, the printed sensor row and that advisory and block never call the legs gate. Mutation RED after the commit: the derived-0 arm returning evidence fails 2 of 49."
+    },
+    {
+      "id": "2525-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-enforce.ts",
+      "line": 189,
+      "claim": "On a failing run that is not softened the knob line prints BEFORE the error text, while the approved design's failure-mode table said the error comes first.",
+      "counterexample": "A scratch repo with hooks.shield.enforce advisory-when-legged and a not-owed code push: exit 1, stderr ends with the knob line, then the Totem Error line, its Fix line and the debug hint. The build spec and the seam test pin this order, so the build is deliberate and the design table was wrong. FOLDED at a4a7defd as wording, no code change: config-reference and the changeset now state both orders; the design table was corrected by the seat."
+    },
+    {
+      "id": "2525-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/shield-enforce.ts",
+      "line": 6,
+      "claim": "Five sites claimed the knob adds exactly one line, but under advisory-when-legged the run also prints every corrupt-deposit sensor row of the legs gate.",
+      "counterexample": "deriveLegsVerdictForShield prints each row of the legs outcome's stderr, and runLegsGate puts one sensor row per corrupt sibling deposit there, on passing and failing runs alike. FOLDED at a4a7defd: the module header, the changeset, config-reference, cli-reference, enforcement-model and the config-schema comment now say one line plus, under advisory-when-legged only, the legs gate's corrupt-deposit sensor rows."
+    },
+    {
+      "id": "2525-F4",
+      "severity": "MINOR",
+      "file": ".changeset/shield-enforce-knob-2525.md",
+      "line": 8,
+      "claim": "Two absolutes overclaimed: with the knob unset the review help text still changed and a debug stack gains wrapper frames, so byte-for-byte and nothing-changes-on-upgrade were not true of the code.",
+      "counterexample": "The gate option's help string gained one sentence in index.ts (the managed hook's help probe still matches); under TOTEM_DEBUG=1 the async stack of a thrown failure includes the wrapper's frames (read, not run). FOLDED at a4a7defd and by the seat's one-line docs commit: every site now scopes the claim to a gate run printing and exiting as before."
+    },
+    {
+      "id": "2525-F5",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/shield-enforce.ts",
+      "line": 185,
+      "claim": "The seat measured about 4 s for a softened run against under 1 s unset and asked whether the softened path, which returns instead of force-exiting, pays a new drain.",
+      "counterexample": "The leg measured 630 ms unset and 665 ms under advisory on the same failure, and read that lane timers are cleared, timed-out children are tree-killed, the fan awaits all lanes before its throw and a successful run at base already exits naturally. ANSWERED with no code change: the seat re-measured three times on a quiet machine, about 750 ms for every value (900 ms for advisory-when-legged, which also runs the legs derivation); the 4 s was machine load from three concurrent build legs."
+    }
+  ],
+  "folded": [
+    "2525-F1",
+    "2525-F2",
+    "2525-F3",
+    "2525-F4",
+    "2525-F5"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 3 MINOR, 1 QUESTION over d27e5588..ea0441f8 (hooks.shield.enforce, mmnto-ai/totem#2525): the diff holds for merge after a test-and-wording fold. Not falsified: unset gate runs print and exit as at base (the same error object rethrown, the error renderer a verbatim move); a softened run leaves on disk what the blocked run leaves; advisory-when-legged cannot soften a push the legs gate would not accept as evidence; the knob is never read without the gate flag and never softens a failure before config load; the schema admits exactly three values; runLegsGate's lines, derived code and status are byte-unchanged; block is never described as arming. The fold adds tests and scopes claims and changes no behaviour, so no re-armed read is owed."
+}

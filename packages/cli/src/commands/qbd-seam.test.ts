@@ -310,8 +310,11 @@ describe('review seam placement', () => {
     expect(recordIdx).toBeLessThan(failThrowIdx);
   });
 
+  // The command's body is `shieldCommandBody` since mmnto-ai/totem#2525: the
+  // exported `shieldCommand` is now the thin `hooks.shield.enforce` wrapper
+  // around it, so the pins below slice the body by that name.
   it('routes the structural branch through that shared handler before returning', () => {
-    const body = functionBody('shieldCommand');
+    const body = functionBody('shieldCommandBody');
     const structuralIdx = body.indexOf("options.mode === 'structural'");
     expect(structuralIdx).toBeGreaterThan(-1);
 
@@ -329,7 +332,7 @@ describe('review seam placement', () => {
     // verdict and only then throw, so a record placed after the call skipped
     // exactly those reviews — completed derives escaping the denominator, with
     // the query correlation left consumable by a later derive.
-    const body = functionBody('shieldCommand');
+    const body = functionBody('shieldCommandBody');
     const fanIdx = body.indexOf('runReviewFan(');
     expect(fanIdx).toBeGreaterThan(-1);
     // Between the fan call and the branch's `return`, nothing records.
