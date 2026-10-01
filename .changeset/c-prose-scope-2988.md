@@ -11,5 +11,5 @@
   - A prose-scoped rule re-derives `revised` at this version, because the recorded conjunct enters the ledger material, and `verifyOnly` refuses it until a re-pin.
   - A source-scoped or mixed-scope rule is refused by the intake at this version (it lands in `rejected[]`), and a re-pin cannot admit it.
   - A cert corpus over an envelope that still carries such a refused rule refuses as a whole until the envelope drops it.
-- **Mixed versions.** A reader OLDER than this version silently strips `scopeConjunct` from a row written at this version, because its schema was not strict. Read a re-pinned ledger at this version or later.
+- **Mixed versions.** A reader OLDER than this version silently strips `scopeConjunct` from a row written at this version, because its schema was not strict. A WRITER older than this version re-derives such a rule to the three-key result, reads `revised` and appends a three-key row, which this version then reads as `revised` again. Read and write a re-pinned ledger at this version or later.
 - **Rule 2's text.** The whitelist header's rule 2 gains the scope clause: "A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard." Its owner-form set id is `static-whitelist@owner-4efdb174`, pinned by test.

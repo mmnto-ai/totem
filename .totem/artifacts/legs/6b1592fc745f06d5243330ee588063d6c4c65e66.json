@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "6b1592fc745f06d5243330ee588063d6c4c65e66",
+  "readAt": "2026-10-01T19:38:00.496Z",
+  "findings": [
+    {
+      "id": "2988-R1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/rule-author.test.ts",
+      "line": 808,
+      "claim": "The pre-change-row test's outcome, revised, is not discriminating on its own: a wrongly hand-built row would also re-derive revised, and the premise that the row is what the pre-change intake wrote is only a comment.",
+      "counterexample": "Nothing in the test asserts the hand-built row's fidelity. The leg measured it externally: the real intake's four-key row and the test's construction with that same verdict, appended through appendAuthoringLedgerEntry, give byte-identical ledger lines, and the test does fail on the base sources, where a faithful three-key row reads unchanged. DECLINED by the seat: a strength gap, not a falsehood; the fidelity is measured and recorded here, and the control assertion is optional polish on a test that already fails on the pre-change code."
+    },
+    {
+      "id": "2988-R2",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/authored-rule.ts",
+      "line": 458,
+      "claim": "The isProseGlob comment called the predicate a public export, but isProseGlob is not exported from core's index; only evaluateStructuralEligibility and PROSE_EXTENSIONS are.",
+      "counterexample": "packages/core/src/index.ts exports evaluateStructuralEligibility and PROSE_EXTENSIONS and not isProseGlob; the rationale holds because the public predicate passes caller globs straight into it. FOLDED in the deposit commit: the comment now says the test is reachable through the public evaluateStructuralEligibility."
+    },
+    {
+      "id": "2988-R3",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/authored-rule.test.ts",
+      "line": 1,
+      "claim": "The dialect table's absolute-path row also breaks the empty-segment rule, so it does not fail only for its named rule.",
+      "counterexample": "A leading slash always yields an empty first segment, so a single-violation row for absolute-path cannot exist; the test asserts the first violation in the checker's fixed order, which is the right assertion. DECLINED: no fold is possible or needed; the seat's brief overstated the property, the test does not."
+    },
+    {
+      "id": "2988-R4",
+      "severity": "QUESTION",
+      "file": ".changeset/c-prose-scope-2988.md",
+      "line": 14,
+      "claim": "The Mixed-versions line names the older reader's silent strip but not the older writer, which re-derives a three-key result, reads revised and appends a three-key row that this version reads as revised again.",
+      "counterexample": "At d27e5588 the result schema is not strict and the predicate produces three keys, so an older totem rule author run over a re-pinned ledger flips the row back; that half is loud, not silent. FOLDED in the deposit commit: the changeset now states the older-writer case and says to read and write a re-pinned ledger at this version or later."
+    }
+  ],
+  "folded": [
+    "2988-R2",
+    "2988-R4"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 3 MINOR, 1 QUESTION over 8d9f619b..6b1592fc, the scoped re-armed read of the fold: converged. Not falsified: the dialect guard changes no verdict for any glob the intake can deliver and adds no import cycle; every dialect-illegal glob reads not prose with a result the schema accepts, and a refused verdict is never persisted; the owner-form id did not move; every sentence of the reworded changeset is true of the code; the header pin and the dialect table hold; nothing under the spine or rules directories, the materializer, the cert corpus or the ledger module moved. The two folds taken are a comment and one changeset sentence, so no further read is owed."
+}

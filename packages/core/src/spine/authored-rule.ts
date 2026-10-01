@@ -455,7 +455,8 @@ const WILDCARD_ONLY_SEGMENTS: ReadonlySet<string> = new Set(['**', '*']);
 
 // mmnto-ai/totem#2988 — is `glob` a PROSE glob? First, a glob OUTSIDE the V1 dialect
 // (`checkGlobDialect`, § Design 7) is not: the intake's record parse already refuses one, but
-// the predicate is a public export, and a caller could otherwise pass `!**/*.md` (negation under
+// this test is reachable through the public `evaluateStructuralEligibility`, whose caller could
+// otherwise pass `!**/*.md` (negation under
 // the legacy matcher), ` **/*.md` (surrounding whitespace) or `''` and read them as prose. Then
 // the test is on the glob's LAST path segment (the text after the last `/`, the whole glob when
 // there is none), byte-verbatim as the V1 dialect keeps it. NOT prose when that segment is `**`
