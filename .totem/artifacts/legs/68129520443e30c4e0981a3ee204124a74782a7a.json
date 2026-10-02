@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "68129520443e30c4e0981a3ee204124a74782a7a",
+  "readAt": "2026-10-02T21:47:42.609Z",
+  "folded": [
+    "3005-F1",
+    "3005-F2",
+    "3005-F3",
+    "3005-F4",
+    "3005-F5",
+    "3005-F6",
+    "3005-F7",
+    "3005-F8",
+    "3005-F9"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 6 MINOR, 2 QUESTION over f9a5192a..68129520 (mmnto-ai/totem#3005): the deletion holds and the defects are in the doc wording the design set. Not falsified: 7c854b53 (2026-03-29) removed the only call of scaffoldClaudeHooks and the CLAUDE_SHIELD_GATE import, so totem init output is unchanged; no installer on the base tree wrote shield-gate.cjs or a shield-gate PreToolUse entry; eject.ts is untouched and still lists and scrubs the legacy file and entry; the gate names and matchers in the new doc section match the registry (gate-engine.ts:89-91) and the write shield's matcher and file match init.ts:480 and :508; only the Gemini BeforeTool template runs totem lint, no Claude template does; @mmnto/cli exports only its entry and src/index.ts exports nothing, so a patch is the right changeset class; nothing dangles and tsc --noEmit passes; the ported unexpected-shape test has the strength of the original. Every finding is folded in 496feaed; a scoped re-armed read covers the fold.",
+  "findings": [
+    {
+      "id": "3005-F1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "\"blocks on a match\" is stated with no condition and is false for a --pilot install (the wrapper exits 2 on a deny only outside the pilot tier, init-templates.ts:3110-3115; gate.ts:46) and for warn verdicts (init-templates.ts:3106-3108; transport-shield warns on oversize heredocs, cli-reference.md:123; merge-ready's unevaluable class is warn under pilot, merge-ready.ts:34-39).",
+      "counterexample": "A pilot-tier gate never blocks and some strict-tier verdicts only warn. The ruled design itself said a gate's refusal is never stated as unconditional and then used the unconditional wording, so the defect sat in the design text. FOLDED: the doc and the changeset now say the write shield refuses a matching write, a deny blocks at the strict tier and is reported at the pilot tier while the call proceeds, and a warn never blocks; the phrase block-on-match is gone."
+    },
+    {
+      "id": "3005-F2",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "\"stateless\" and \"judges the one tool call in front of it\" mislead for merge-ready, whose verdict depends on the pull request's state on GitHub (merge-ready.ts:6-12), and for freeze-check, which reads the freeze file (gate-engine.ts:56-81); no state is persisted by either (no write call in the wrapper, merge-ready.ts, transport-shield.ts or gate-engine.ts).",
+      "counterexample": "FOLDED: the doc says each keeps no state of its own between calls, that merge-ready reads the pull request off GitHub through gh, and that freeze-check reads the freeze file."
+    },
+    {
+      "id": "3005-F3",
+      "severity": "MINOR",
+      "file": "docs/manual/why-totem.md",
+      "line": 16,
+      "claim": "The same stale row survived in a second doc: \"totem review — LLM analysis | PreToolUse hook (optional)\".",
+      "counterexample": "FOLDED: the row now reads as enforcement-model.md's does (the strict pre-push block, the shield gate, and on demand)."
+    },
+    {
+      "id": "3005-F4",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 92,
+      "claim": "The limit sentence named a position (\"sits above them\") without the consequence, the version or the evidence class, which only half-met the design's rule that a refusal is never stated as unconditional.",
+      "counterexample": "FOLDED: the sentence now says that on Claude Code 2.1.287 and 2.1.288 a user-installed mod or a managed-settings hook runs above these hooks and can allow a call they would refuse, read from the build's declarations and reproduced in a scratch repository (mmnto-ai/totem#3002)."
+    },
+    {
+      "id": "3005-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 562,
+      "claim": "The deleted scaffoldClaudeHooks block held three cases that tested the shared primitive mergeClaudeHooksKey (a file with no hooks key, the bare-string hook arm, the bare-string skip) and only the unexpected-shape case was ported; the string branch of hasPreWriteShield (init.ts:466) had no test.",
+      "counterexample": "FOLDED: the three cases are ported into the scaffoldClaudeWriteShield suite with the originals' inputs and assertion strength, the skip case exercising the bare-string branch of hasPreWriteShield."
+    },
+    {
+      "id": "3005-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/host-hooks.ts",
+      "line": 313,
+      "claim": "Three comments were stale after the deletion: preToolUseHasMatcher described as what both the shield-gate and gate-install installers key on (its only caller is the write-shield installer), and settings.local.json named as a merge target at lines 4 and 153 while no installer targets it; the 'Bash' arm of PreToolUseMatcher has no caller left.",
+      "counterexample": "FOLDED for the three comments. The 'Bash' type arm is left as it is, by the seat's ruling: a type narrowing with no behaviour."
+    },
+    {
+      "id": "3005-F7",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "The doc named one install path for the gates and none of the write shield's preconditions: totem init --gates= shares installGates (init.ts:1374-1377, 2213-2270), and the write shield is installed only when Claude Code is the selected tool (init.ts:929).",
+      "counterexample": "FOLDED: both install paths and the precondition are named."
+    },
+    {
+      "id": "3005-F8",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3005.md",
+      "line": 133,
+      "claim": "The second commit adds a test while the design's invariants say no new test; is that an amendment, and should the PR say so?",
+      "counterexample": "ANSWERED: it is an amendment to the design's no-new-test line, made because the deletion had removed the only coverage of a live error path in a helper that stays; the PR body discloses it."
+    },
+    {
+      "id": "3005-F9",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3005.md",
+      "line": 1,
+      "claim": "The spec file is untracked while older specs are tracked; is it meant to be committed with the PR?",
+      "counterexample": "ANSWERED: not committed, by the seat's current practice for build worktrees; the design is carried by the PR body."
+    }
+  ]
+}
