@@ -68,6 +68,8 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Hooks (Enforced by Harness)
 
+This table covers the session hooks. The `PreToolUse` hooks that ship on Claude Code (the write shield on `Write|Edit`; the gate-engine interlocks on `Write|Edit` and `Bash|PowerShell`) are listed in [enforcement-model.md](../wiki/enforcement-model.md) § What Ships on Claude Code; none of them gates `git commit` or `git push`.
+
 | Hook          | Event                     | Purpose                                         | Status |
 | ------------- | ------------------------- | ----------------------------------------------- | ------ |
 | `PostCompact` | After context compression | Re-inject rules + capability manifest (ADR-063) | Active |
