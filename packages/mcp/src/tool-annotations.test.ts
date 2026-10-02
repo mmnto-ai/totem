@@ -31,9 +31,9 @@ const EXPECTED: Record<
   string,
   { readOnlyHint: boolean; destructiveHint: boolean; openWorldHint: boolean }
 > = {
-  search_knowledge: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  search_knowledge: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   describe_project: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-  add_lesson: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  add_lesson: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
   verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 };
 

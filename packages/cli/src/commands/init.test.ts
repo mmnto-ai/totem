@@ -33,6 +33,7 @@ import {
   detectEmbeddingTier,
   detectReflexStatus,
   distributeClaudeSkills,
+  ensureTotemGitignore,
   findUnownedHookSibling,
   generateConfig,
   initCommand,
@@ -49,6 +50,7 @@ import {
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
+  TOTEM_LOCAL_STATE_IGNORES,
   upgradeReflexes,
 } from './init.js';
 import { detectProject, type HookInstallerResult } from './init-detect.js';
@@ -5074,5 +5076,83 @@ describe('scaffoldAgentsFloor', () => {
     const result = scaffoldAgentsFloor(tmpDir, 'x');
     expect(result.action).toBe('refreshed');
     expect(result.err).toContain('a managed span by definition');
+  });
+});
+
+// ─── .gitignore: Totem's local state (mmnto-ai/totem#3004) ──────────────────
+
+describe('ensureTotemGitignore', () => {
+  const LOCAL_STATE = [
+    '.totem/ledger/',
+    '.totem/cache/',
+    '.totem/temp/',
+    '.totem/*.jsonl',
+    '.totem/sync.lock',
+    '.totem/sync.lock.*',
+    '.totem/index-manifest.json',
+    '.totem/installed-packs.json',
+    '.totem/review-extensions.txt',
+  ];
+  let tmpDir: string;
+
+  const readGitignore = () => fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gitignore-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('pins the local-state entry list', () => {
+    expect([...TOTEM_LOCAL_STATE_IGNORES]).toEqual(LOCAL_STATE);
+  });
+
+  it('creates .gitignore with every Totem entry in a fresh directory', () => {
+    const summary = ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+    for (const entry of ['.lancedb/', '.totem/secrets.json', ...LOCAL_STATE]) {
+      expect(lines, entry).toContain(entry);
+    }
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toMatch(/^Created with /);
+  });
+
+  it('adds only the missing lines to an existing .gitignore and leaves the rest untouched', () => {
+    const original = [
+      'node_modules/',
+      '# Totem',
+      '.lancedb/',
+      '.totem/secrets.json',
+      '.totem/ledger/',
+      '.totem/*.jsonl',
+      'dist/',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith(original)).toBe(true);
+    const added = after
+      .slice(original.length)
+      .split('\n')
+      .filter((line) => line.length > 0);
+    expect(added).toEqual(
+      LOCAL_STATE.filter((entry) => entry !== '.totem/ledger/' && entry !== '.totem/*.jsonl'),
+    );
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toContain('.totem/cache/');
+    expect(summary[0]!.action).not.toContain('.totem/ledger/');
+  });
+
+  it('adds nothing on a second run', () => {
+    ensureTotemGitignore(tmpDir);
+    const first = readGitignore();
+    const summary = ensureTotemGitignore(tmpDir);
+    expect(readGitignore()).toBe(first);
+    expect(summary).toEqual([]);
   });
 });

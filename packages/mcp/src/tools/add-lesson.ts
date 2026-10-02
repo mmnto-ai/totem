@@ -141,7 +141,7 @@ export function registerAddLesson(server: McpServer): void {
     'add_lesson',
     {
       description:
-        'Persist a lesson learned to .totem/lessons/. An incremental re-index runs automatically and the result is returned — unless a full re-index is already in progress, in which case the sync is deferred (the response says so) and the lesson indexes on the next sync.',
+        'Persist a lesson learned to .totem/lessons/. An incremental re-index runs automatically and the result is returned — unless a full re-index is already in progress, in which case the sync is deferred (the response says so) and the lesson indexes on the next sync. Adds a lesson file under .totem/lessons/ and runs an incremental sync.',
       inputSchema: {
         lesson: z.string().describe('The lesson text to persist'),
         context_tags: z
@@ -157,14 +157,16 @@ export function registerAddLesson(server: McpServer): void {
               'infrastructure, presentation, any. Omit to default to ["any"].',
           ),
       },
-      // Adds a lesson file under .totem/lessons/ (tracked; the name is a content hash), then spawns
-      // `totem sync --incremental`, which rewrites ignored index artifacts (index-manifest.json,
-      // installed-packs.json, review-extensions.txt), deletes index rows for changed files, and
-      // embeds changed files through the configured embedding provider (may be a cloud API).
+      // Adds a lesson file under .totem/lessons/ (tracked; an 8-character content hash names it, and
+      // a collision would overwrite in place, since the write takes no exclusive flag), then spawns
+      // `totem sync --incremental`: it takes .totem/sync.lock, rewrites ignored index artifacts
+      // (index-manifest.json, installed-packs.json, review-extensions.txt), deletes index rows for
+      // changed files in the LanceDB store at lanceDir, writes ~/.totem/registry.json outside the
+      // project, and embeds changed files through the configured provider (open-world: may be remote).
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
       },
     },
     async ({ lesson, context_tags, applies_to }) => {

@@ -113,7 +113,9 @@ export function registerVerifyExecution(server: McpServer): void {
       description:
         'Run deterministic lint checks against your current changes to mathematically verify ' +
         'no project rules were violated. Call this BEFORE declaring a task complete. ' +
-        'Returns PASS or FAIL with specific violations. Zero LLM — pure AST/regex checks.',
+        'Returns PASS or FAIL with specific violations. Zero LLM — pure AST/regex checks. ' +
+        'Writes rule metrics under .totem/ and, on a pending pack promotion, rewrites ' +
+        'compiled-rules.json in place.',
       inputSchema: {
         staged_only: z
           .boolean()
@@ -123,9 +125,10 @@ export function registerVerifyExecution(server: McpServer): void {
           ),
       },
       // Destructive: on a pending pack promotion the spawned lint rewrites the tracked
-      // compiled-rules.json in place and writes verification-outcomes.json. On every run that
-      // evaluates rules it writes .totem/cache/rule-metrics.json, the telemetry sink
-      // .totem/temp/telemetry.jsonl and, on a suppression, a Trap Ledger event (all ignored).
+      // compiled-rules.json in place and writes verification-outcomes.json (committable). On every
+      // run that evaluates rules it writes .totem/cache/rule-metrics.json, the telemetry sink
+      // .totem/temp/telemetry.jsonl and, on a suppression, a Trap Ledger event (all ignored). The
+      // handler's `git diff --name-only` may refresh git's own index cache.
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,

@@ -1200,7 +1200,7 @@ export function registerSearchKnowledge(server: McpServer): void {
   server.registerTool(
     'search_knowledge',
     {
-      description: `Search the Totem knowledge index for relevant code, session logs, specs, or lessons. Use this BEFORE writing code, reviewing PRs, or making architectural decisions to retrieve domain constraints, past traps, and established patterns.`,
+      description: `Search the Totem knowledge index for relevant code, session logs, specs, or lessons. Use this BEFORE writing code, reviewing PRs, or making architectural decisions to retrieve domain constraints, past traps, and established patterns. Writes its own audit log under .totem/ and changes no tracked file.`,
       inputSchema: {
         query: z.string().describe('The search query'),
         type_filter: z
@@ -1244,13 +1244,15 @@ export function registerSearchKnowledge(server: McpServer): void {
           ),
       },
       // Changes no tracked file. Reads the project's index and its linked indexes; may start local
-      // git subprocesses; the query goes to the configured embedding provider (may be a cloud API).
-      // Every call writes under ignored paths: a ledger mcp_call event, .totem/.search-log.jsonl,
-      // the selection manifest and the corpus-query correlation pointer (.totem/ledger/).
+      // git subprocesses. Open-world: the query goes to the configured embedding provider, which
+      // may be remote. Every call writes a ledger mcp_call event; every call but a dimension-mismatch
+      // return appends to .totem/.search-log.jsonl (error results included); a successful call also
+      // writes the selection manifest, and the corpus-query ledger event and correlation pointer
+      // under .totem/ledger/ (Totem's local state, ignored by totem init).
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
-        openWorldHint: false,
+        openWorldHint: true,
       },
     },
     async ({ query, type_filter, max_results, boundary, min_relevance }) => {

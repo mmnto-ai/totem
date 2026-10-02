@@ -1374,6 +1374,76 @@ interface InitSummaryEntry {
 }
 
 /**
+ * Totem's own local state under `.totem/` (mmnto-ai/totem#3004): regenerable,
+ * never meant to be committed. The MCP tool hints are judged over tracked
+ * content, so `totem init` ignores this state to make that designation
+ * mechanical in a consumer's repository.
+ */
+export const TOTEM_LOCAL_STATE_IGNORES = [
+  '.totem/ledger/',
+  '.totem/cache/',
+  '.totem/temp/',
+  '.totem/*.jsonl',
+  '.totem/sync.lock',
+  '.totem/sync.lock.*',
+  '.totem/index-manifest.json',
+  '.totem/installed-packs.json',
+  '.totem/review-extensions.txt',
+] as const;
+
+/**
+ * Write Totem's `.gitignore` entries idempotently: `.lancedb/`, the secrets
+ * file and {@link TOTEM_LOCAL_STATE_IGNORES}. An existing file gains only the
+ * lines it lacks (exact trimmed-line match), appended at the end; every other
+ * line is left untouched. No `.gitignore` → one is created with all of them.
+ */
+export function ensureTotemGitignore(cwd: string): InitSummaryEntry[] {
+  const summary: InitSummaryEntry[] = [];
+  const gitignorePath = path.join(cwd, '.gitignore');
+  if (fs.existsSync(gitignorePath)) {
+    const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
+    if (!gitignore.includes('.lancedb')) {
+      fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
+      summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
+    }
+    // Ensure secrets.json is gitignored (safety net — add-secret also does this)
+    const refreshed = fs.readFileSync(gitignorePath, 'utf-8');
+    const lines = refreshed.split(/\r?\n/);
+    if (!lines.some((line) => line.trim() === '.totem/secrets.json')) {
+      const separator = refreshed.endsWith('\n') ? '' : '\n';
+      fs.writeFileSync(gitignorePath, `${refreshed}${separator}.totem/secrets.json\n`, 'utf-8');
+      summary.push({ file: '.gitignore', action: 'Added .totem/secrets.json exclusion' });
+    }
+    // Totem's local state, line by line, the same way as the secrets line.
+    const current = fs.readFileSync(gitignorePath, 'utf-8');
+    const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+    const missing = TOTEM_LOCAL_STATE_IGNORES.filter((entry) => !present.has(entry));
+    if (missing.length > 0) {
+      const separator = current.endsWith('\n') ? '' : '\n';
+      const marker = present.has('# Totem') ? '' : '# Totem\n';
+      fs.writeFileSync(
+        gitignorePath,
+        `${current}${separator}${marker}${missing.join('\n')}\n`,
+        'utf-8',
+      );
+      summary.push({
+        file: '.gitignore',
+        action: `Added Totem local-state exclusions: ${missing.join(', ')}`,
+      });
+    }
+  } else {
+    // No .gitignore exists yet — create one with every Totem entry
+    const entries = ['.lancedb/', '.totem/secrets.json', ...TOTEM_LOCAL_STATE_IGNORES];
+    fs.writeFileSync(gitignorePath, `# Totem\n${entries.join('\n')}\n`, 'utf-8');
+    summary.push({
+      file: '.gitignore',
+      action: `Created with ${entries.join(', ')} exclusions`,
+    });
+  }
+  return summary;
+}
+
+/**
  * Resolve the AI-tool selection prompt's answer. Anything that is not an explicit
  * `none` / `select` is the Enter default, `all` — which is also the answer the
  * non-interactive path takes without raising the prompt (mmnto-ai/totem#2601).
@@ -2172,29 +2242,7 @@ export default {
       await installPostMergeHook(cwd, rl, { interactive });
 
       // --- Always run: .gitignore ---
-      const gitignorePath = path.join(cwd, '.gitignore');
-      if (fs.existsSync(gitignorePath)) {
-        const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
-        if (!gitignore.includes('.lancedb')) {
-          fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
-          summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
-        }
-        // Ensure secrets.json is gitignored (safety net — add-secret also does this)
-        const refreshed = fs.readFileSync(gitignorePath, 'utf-8');
-        const lines = refreshed.split(/\r?\n/);
-        if (!lines.some((line) => line.trim() === '.totem/secrets.json')) {
-          const separator = refreshed.endsWith('\n') ? '' : '\n';
-          fs.writeFileSync(gitignorePath, `${refreshed}${separator}.totem/secrets.json\n`, 'utf-8');
-          summary.push({ file: '.gitignore', action: 'Added .totem/secrets.json exclusion' });
-        }
-      } else {
-        // No .gitignore exists yet — create one with .lancedb/ and secrets entry
-        fs.writeFileSync(gitignorePath, '# Totem\n.lancedb/\n.totem/secrets.json\n', 'utf-8');
-        summary.push({
-          file: '.gitignore',
-          action: 'Created with .lancedb/ and .totem/secrets.json exclusions',
-        });
-      }
+      summary.push(...ensureTotemGitignore(cwd));
 
       // --- Auto-ingest cursor rules (ADR-048) ---
       const { scanCursorInstructions } = await import('@mmnto/totem');
