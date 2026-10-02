@@ -34,17 +34,21 @@ Requires Node >= 24 and a Totem-initialized project (`totem init` from [`@mmnto/
 
 Each tool declares three MCP hints explicitly, so a client never falls back to the schema's defaults (an absent `destructiveHint` or `openWorldHint` reads as `true`).
 
+The hints are judged over the project's git-tracked content: a tool is read-only if it changes no git-tracked file of the project, and additive-only if every tracked-file change is a new file. Writes to ignored Totem artifacts (ledger, logs, telemetry, metrics cache, the index manifest) and to git's own cache are disclosed per tool below, not encoded in the hints.
+
 | Tool               | `readOnlyHint` | `destructiveHint` | `openWorldHint` |
 | ------------------ | -------------- | ----------------- | --------------- |
 | `search_knowledge` | `true`         | `false`           | `false`         |
 | `describe_project` | `true`         | `false`           | `false`         |
 | `add_lesson`       | `false`        | `false`           | `false`         |
-| `verify_execution` | `false`        | `false`           | `false`         |
+| `verify_execution` | `false`        | `true`            | `false`         |
 
-- `search_knowledge` reads the project's index and its linked indexes and may start local `git` subprocesses; it reaches no network except that the query goes to the configured embedding provider, which may be a cloud API.
-- `describe_project` reads config, local state and local `git` (local subprocesses, no network); `git status` may refresh git's own index cache.
-- `add_lesson` writes a new lesson file under `.totem/lessons/` and then runs an incremental sync; it overwrites nothing.
-- `verify_execution` is not read-only because the lint it spawns writes local state under `.totem/`: the rule metrics file on every run, the telemetry sink, a Trap Ledger event on a suppression, and `compiled-rules.json` on a pending pack promotion.
+Both spawning tools (`add_lesson` and `verify_execution`) fall back to `npx totem …` when no local CLI resolves, which may fetch the CLI from the npm registry.
+
+- `search_knowledge` changes no tracked file. It reads the project's index and its linked indexes and may start local `git` subprocesses; the query goes to the configured embedding provider, which may be a cloud API. Every call writes under ignored paths: a ledger `mcp_call` event, the search log `.totem/.search-log.jsonl`, the selection manifest and the corpus-query correlation pointer (both under `.totem/ledger/`).
+- `describe_project` changes no tracked file. It reads config, local state and local `git` (local subprocesses, no network); the rich-state `git status` read runs with `--no-optional-locks`, so it takes no index lock.
+- `add_lesson` adds a lesson file under `.totem/lessons/` (a tracked path; the file name is a content hash), then spawns `totem sync --incremental`, which rewrites ignored index artifacts (`index-manifest.json`, `installed-packs.json`, `review-extensions.txt`), deletes index rows for changed files, and embeds changed files through the configured embedding provider, which may be a cloud API.
+- `verify_execution` is destructive: on a pending pack promotion the lint it spawns rewrites the tracked `compiled-rules.json` in place (not additive) and writes `verification-outcomes.json`. On every run that evaluates rules it writes `.totem/cache/rule-metrics.json`, the telemetry sink `.totem/temp/telemetry.jsonl` and, on a suppression, a Trap Ledger event, all ignored.
 
 ## Docs
 

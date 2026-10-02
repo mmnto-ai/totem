@@ -122,12 +122,13 @@ export function registerVerifyExecution(server: McpServer): void {
             'If true, verifies only staged changes. If false, verifies all uncommitted changes.',
           ),
       },
-      // Not read-only: the spawned lint writes under .totem/ (the rule metrics file on every
-      // run, the telemetry sink, a Trap Ledger event on a suppression, and compiled-rules.json
-      // on a pending pack promotion).
+      // Destructive: on a pending pack promotion the spawned lint rewrites the tracked
+      // compiled-rules.json in place and writes verification-outcomes.json. On every run that
+      // evaluates rules it writes .totem/cache/rule-metrics.json, the telemetry sink
+      // .totem/temp/telemetry.jsonl and, on a suppression, a Trap Ledger event (all ignored).
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         openWorldHint: false,
       },
     },

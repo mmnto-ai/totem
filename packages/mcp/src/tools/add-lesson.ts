@@ -157,8 +157,10 @@ export function registerAddLesson(server: McpServer): void {
               'infrastructure, presentation, any. Omit to default to ["any"].',
           ),
       },
-      // Writes a new lesson file under .totem/lessons/, then spawns an
-      // incremental `totem sync`; additive, nothing existing is overwritten.
+      // Adds a lesson file under .totem/lessons/ (tracked; the name is a content hash), then spawns
+      // `totem sync --incremental`, which rewrites ignored index artifacts (index-manifest.json,
+      // installed-packs.json, review-extensions.txt), deletes index rows for changed files, and
+      // embeds changed files through the configured embedding provider (may be a cloud API).
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,

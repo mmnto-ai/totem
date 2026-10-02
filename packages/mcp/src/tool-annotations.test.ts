@@ -34,7 +34,7 @@ const EXPECTED: Record<
   search_knowledge: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   describe_project: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   add_lesson: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
-  verify_execution: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 };
 
 const HINTS = ['readOnlyHint', 'destructiveHint', 'openWorldHint'] as const;
@@ -58,6 +58,8 @@ afterAll(async () => {
 });
 
 describe('MCP tool annotations (tools/list)', () => {
+  // Limit: this matches `register*(server);` lines in index.ts textually, so it would
+  // miss a registration written another way (a loop, an alias, a wrapped call).
   it('registers the same tools as the server entrypoint', () => {
     const here = path.dirname(fileURLToPath(import.meta.url));
     const entry = fs.readFileSync(path.join(here, 'index.ts'), 'utf-8');
