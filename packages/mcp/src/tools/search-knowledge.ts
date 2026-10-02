@@ -1243,8 +1243,13 @@ export function registerSearchKnowledge(server: McpServer): void {
             'Relevance floor for this call (0..1, vector-leg similarity), compared against the BEST relevance of the whole retrieval — a whole-run gate, never a per-hit filter: one hit at or above it returns the full set, siblings below it included. Overrides the configured `searchRelevanceFloor`; with neither set, no floor applies and `status` is `no_useful_hits` only when EVERY hit carried a faulted relevance (not a finite number in [0, 1] — disclosed by path, never counted as signal or exemption).',
           ),
       },
+      // Reads the project's index and its linked indexes; may start local git
+      // subprocesses and reaches no network, except that the query goes to the
+      // configured embedding provider, which may be a cloud API.
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
       },
     },
     async ({ query, type_filter, max_results, boundary, min_relevance }) => {

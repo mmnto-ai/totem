@@ -122,8 +122,13 @@ export function registerVerifyExecution(server: McpServer): void {
             'If true, verifies only staged changes. If false, verifies all uncommitted changes.',
           ),
       },
+      // Not read-only: the spawned lint writes under .totem/ (the rule metrics file on every
+      // run, the telemetry sink, a Trap Ledger event on a suppression, and compiled-rules.json
+      // on a pending pack promotion).
       annotations: {
-        readOnlyHint: true,
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
       },
     },
     async ({ staged_only }) => {

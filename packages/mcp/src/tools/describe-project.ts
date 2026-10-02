@@ -134,8 +134,12 @@ export function registerDescribeProject(server: McpServer): void {
       inputSchema: {
         includeRichState: z.boolean().optional(),
       },
+      // Reads config, local state and local git (local git subprocesses, no
+      // network); `git status` may refresh git's own index cache.
       annotations: {
         readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
       },
     },
     async (args: { includeRichState?: boolean }) => {

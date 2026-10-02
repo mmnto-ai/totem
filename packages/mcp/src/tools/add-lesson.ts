@@ -157,8 +157,12 @@ export function registerAddLesson(server: McpServer): void {
               'infrastructure, presentation, any. Omit to default to ["any"].',
           ),
       },
+      // Writes a new lesson file under .totem/lessons/, then spawns an
+      // incremental `totem sync`; additive, nothing existing is overwritten.
       annotations: {
         readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
       },
     },
     async ({ lesson, context_tags, applies_to }) => {

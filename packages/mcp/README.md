@@ -30,6 +30,22 @@ Requires Node >= 24 and a Totem-initialized project (`totem init` from [`@mmnto/
 | `describe_project` | Structured JSON summary of project governance scope (rules, lessons, config tier, targets, hooks); no LLM |
 | `verify_execution` | Run deterministic lint checks against current changes; returns PASS or FAIL with violations; zero LLM     |
 
+### Tool annotations
+
+Each tool declares three MCP hints explicitly, so a client never falls back to the schema's defaults (an absent `destructiveHint` or `openWorldHint` reads as `true`).
+
+| Tool               | `readOnlyHint` | `destructiveHint` | `openWorldHint` |
+| ------------------ | -------------- | ----------------- | --------------- |
+| `search_knowledge` | `true`         | `false`           | `false`         |
+| `describe_project` | `true`         | `false`           | `false`         |
+| `add_lesson`       | `false`        | `false`           | `false`         |
+| `verify_execution` | `false`        | `false`           | `false`         |
+
+- `search_knowledge` reads the project's index and its linked indexes and may start local `git` subprocesses; it reaches no network except that the query goes to the configured embedding provider, which may be a cloud API.
+- `describe_project` reads config, local state and local `git` (local subprocesses, no network); `git status` may refresh git's own index cache.
+- `add_lesson` writes a new lesson file under `.totem/lessons/` and then runs an incremental sync; it overwrites nothing.
+- `verify_execution` is not read-only because the lint it spawns writes local state under `.totem/`: the rule metrics file on every run, the telemetry sink, a Trap Ledger event on a suppression, and `compiled-rules.json` on a pending pack promotion.
+
 ## Docs
 
 - Repository: <https://github.com/mmnto-ai/totem>
