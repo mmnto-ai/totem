@@ -34,7 +34,7 @@ const EXPECTED: Record<
   search_knowledge: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   describe_project: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   add_lesson: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
 };
 
 const HINTS = ['readOnlyHint', 'destructiveHint', 'openWorldHint'] as const;

@@ -128,11 +128,12 @@ export function registerVerifyExecution(server: McpServer): void {
       // compiled-rules.json in place and writes verification-outcomes.json (committable). On every
       // run that evaluates rules it writes .totem/cache/rule-metrics.json, the telemetry sink
       // .totem/temp/telemetry.jsonl and, on a suppression, a Trap Ledger event (all ignored). The
-      // handler's `git diff --name-only` may refresh git's own index cache.
+      // handler's `git diff --name-only` may refresh git's own index cache. Open-world until
+      // mmnto-ai/totem#3008 lands: the spawn's npx arm may reach the npm registry.
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
-        openWorldHint: false,
+        openWorldHint: true,
       },
     },
     async ({ staged_only }) => {

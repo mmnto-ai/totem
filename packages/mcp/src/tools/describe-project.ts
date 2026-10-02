@@ -125,7 +125,7 @@ export function registerDescribeProject(server: McpServer): void {
     'describe_project',
     {
       description:
-        'Returns a structured JSON summary of the project governance scope: rules, lessons, config tier, partitions, targets, and hooks. Pass `includeRichState: true` to append a session-briefing payload (git state, strategy pointer, package versions, rule/lesson counts, milestone, recent PRs). Fast, deterministic, no LLM required. Reads only; runs local git without taking its optional index lock.',
+        'Returns a structured JSON summary of the project governance scope: rules, lessons, config tier, partitions, targets, and hooks. Pass `includeRichState: true` to append a session-briefing payload (git state, strategy pointer, package versions, rule/lesson counts, milestone, recent PRs). Fast, deterministic, no LLM required. Changes no tracked file; runs local git without taking its optional index lock.',
       // MCP SDK's registerTool accepts a Zod raw shape, not a JSON Schema
       // object — same convention as search-knowledge.ts and add-lesson.ts.
       // The SDK converts the shape to JSON Schema internally before
