@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "496feaed68fa9f60c0ac2dbe201c7503a9e58ee5",
+  "readAt": "2026-10-02T21:54:38.190Z",
+  "folded": ["3005-R1", "3005-R2", "3005-R3", "3005-R4"],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 1 MINOR, 1 QUESTION over 68129520..496feaed, the scoped re-armed read of the first fold (mmnto-ai/totem#3005): the code and tests are settled, the wording was not. Not falsified: the write shield refuses a matching write (init-templates.ts:936-942) and fails soft on its own errors (:770-777); the warn path writes and continues on every path (:3106-3108); both install paths share installGates (init.ts:2213-2270, gate.ts:121) and the write shield is installed only for a selected Claude Code tool (init.ts:929, :1981-1984); the three ported tests take the originals' inputs and assertions and the bare-string skip case reaches hasPreWriteShield's string branch (removing it fails the test); the three host-hooks.ts comments are true at the head. The three wording findings and the question are folded in the second fold commit; the seat checked the rewritten sentences against init-templates.ts:2958-3124 and the mmnto-ai/totem#3002 record and named convergence.",
+  "findings": [
+    {
+      "id": "3005-R1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 92,
+      "claim": "The mods-limit sentence claimed more than mmnto-ai/totem#3002 supports: the declarations say only that a managed block ends the chain above every mod and managed-settings hooks were not exercised, the reproduction ran on 2.1.288 with a mod loaded by --plugin-dir (not installed) and covered tool.check and classic.PreToolUse only.",
+      "counterexample": "FOLDED: the paragraph now attributes each clause to its evidence — the 2.1.287 declarations for the chain order (a mod above the project hooks, a managed-settings hook above every mod) and the 2.1.288 scratch-repository reproduction for a --plugin-dir mod allowing a refused call at tool.check and classic.PreToolUse; the managed-settings allow claim is gone."
+    },
+    {
+      "id": "3005-R2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "The tier sentence let a reader conclude a pilot install never blocks, while the wrapper exits 2 at either tier on its fail-closed arms (no resolvable CLI :2958, budget spent :3039, evaluation failed :3077, unparseable verdict :3089, unknown disposition :3124); only the deny arm at :3112-3113 is tier-gated.",
+      "counterexample": "FOLDED: the doc and the changeset add that an interlock that applies but cannot be evaluated blocks at either tier."
+    },
+    {
+      "id": "3005-R3",
+      "severity": "MINOR",
+      "file": "docs/reference/workflow-automation.md",
+      "line": 47,
+      "claim": "A pre-existing doc still claims a PreToolUse hook blocks agent git push on a reviewed-content hash and lists PreToolUse(Bash) commit and push blocks as Active; the committed .claude/settings.json carries no such entry.",
+      "counterexample": "FOLDED as the same class as the issue: the rows and the sentence no longer claim an unwired block; the review gate is placed where it runs, the strict pre-push block."
+    },
+    {
+      "id": "3005-R4",
+      "severity": "QUESTION",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 92,
+      "claim": "Whether 'On Claude Code 2.1.287 and 2.1.288' meant observed on those builds or true of them.",
+      "counterexample": "ANSWERED by the R1 fold: each version is named for what it backs — 2.1.287 for the declarations read, 2.1.288 for the reproduction."
+    }
+  ]
+}

@@ -730,30 +730,6 @@ This ensures you build on existing knowledge rather than repeating past mistakes
 
 // --- Claude Code hook templates ---
 
-export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code review gate hook
-// Intercepts git push/commit to run \`totem review\` before proceeding.
-const { execSync } = require('child_process');
-
-const input = process.env.TOOL_INPUT || '';
-if (/\bgit\s+(push|commit)\b/.test(input)) {
-  try {
-    execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
-  } catch (err) {
-    process.exit(1);
-  }
-}
-`;
-
-export const CLAUDE_PRETOOLUSE_ENTRY = {
-  matcher: 'Bash',
-  hooks: [
-    {
-      type: 'command',
-      command: 'node .totem/hooks/shield-gate.cjs',
-    },
-  ],
-};
-
 // ─── PreWriteShield: write-time xrepo-qualify-refs enforcement ──────────
 //
 // Intercepts Write/Edit tool calls in substrate-participating paths
@@ -776,11 +752,9 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
 // Exit-code contract is load-bearing — see hook source for details.
 //
 // Per OQ 2 of mmnto-ai/totem#1846 design: this entry installs into
-// committed `.claude/settings.json` (team-level guarantee) — distinct
-// from CLAUDE_PRETOOLUSE_ENTRY which lives in `.claude/settings.local.json`
-// (per-developer environment safety). The asymmetry reflects the
-// architectural distinction between seal-anchored substrate enforcement
-// and per-developer command interception.
+// committed `.claude/settings.json` (team-level guarantee), not the
+// per-developer `.claude/settings.local.json`, because seal-anchored
+// substrate enforcement is a team-level guarantee.
 
 export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code PreWriteShield hook
 // Rule 1: xrepo-qualify-refs (bare cross-repo refs) —
