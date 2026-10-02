@@ -1,0 +1,22 @@
+schemaVersion: 1
+severity: warning
+message: Prefer expect().rejects.toHaveProperty() over try/catch with expect.fail() — the latter can cause tests to accidentally pass if no error is thrown
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }
+  scope:
+    fileGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: try { await doThing(); expect.fail('no throw'); } catch (e) { expect(e).toHaveProperty('code'); }
+    good: await expect(doThing()).rejects.toHaveProperty('code', 'E_BAD');
+
+curation:
+  sourceLesson: lesson-d487264e210913a4
+  curatedBy: status-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

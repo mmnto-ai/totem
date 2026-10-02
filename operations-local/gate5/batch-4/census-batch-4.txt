@@ -1,0 +1,65 @@
+census: @mmnto/totem 2.10.0 · @mmnto/cli 2.10.0 · @ast-grep/napi 0.42.3 · node v24.16.0
+tree D:/Dev/worktrees/totem-totem-claude-gate5-tree @ 5293614badd3cc5a67993abd8a6db46afb1c400f — 2702 tracked path(s); classifier: the shipped classifyLines (AST context per line)
+
+== 884becd45e6380bd — pattern \bpnpm\s+version\b — globs **/*.sh **/*.bash **/*.yml **/*.yaml **/Makefile **/*.md — in-scope files 1887
+   firings by AST context: no-grammar=9 (total 9)
+   [no-grammar] .claude/docs/contributing.md:16: - Use `pnpm run version` (never bare `pnpm version`).
+   [no-grammar] .github/copilot-instructions.md:1256: - **Using 'pnpm run version' instead of the bare 'pnpm version'** - Using 'pnpm run version' instead of the bare 'pnpm v
+   [no-grammar] .junie/guidelines.md:23: - Changesets (write `.changeset/` files manually). Use `pnpm run version` (never bare `pnpm version`).
+   [no-grammar] .junie/skills/totem-rules/rules.md:1256: - **Using 'pnpm run version' instead of the bare 'pnpm version'** - Using 'pnpm run version' instead of the bare 'pnpm v
+   [no-grammar] .totem/lessons/lesson-7301928e.md:1: ## Lesson — Using 'pnpm run version' instead of the bare 'pnpm version'
+   [no-grammar] .totem/lessons/lesson-7301928e.md:5: Using 'pnpm run version' instead of the bare 'pnpm version' command is necessary to correctly trigger the Changesets wor
+   [no-grammar] .totem/lessons/maintainer-release-process.md:4: **Symptom:** Developers sometimes rely on interactive CLI tools that fail with piped stdin, causing issues during the re
+   [no-grammar] .totem/lessons/maintainer-release-process.md:9: When preparing a release, NEVER use bare `pnpm version`. Always run the repository script `pnpm run version`, which cons
+
+== 61dcb058bd1df15d — pattern \b(?:git\s+rm|rm)\s+[^\n]{0,40}\.totem/lessons\.md\b — globs **/*.sh **/*.bash **/*.zsh **/*.md **/*.ts **/*.js **/*.cjs **/*.mjs .claude/**/* !**/*.test.* !**/*.spec.* !.totem/lessons/** !.totem/lessons.md !.totem/tests/** — in-scope files 658
+   firings by AST context: no-grammar=2 (total 2)
+   [no-grammar] .github/copilot-instructions.md:2436: - **Do not delete .totem/lessons.md (load-bearing for 41+ rules)** - \*\*Pattern:\*\* \b(?:git\s+rm|rm)\s+[^\n]{0,40}\.t
+   [no-grammar] .junie/skills/totem-rules/rules.md:2436: - **Do not delete .totem/lessons.md (load-bearing for 41+ rules)** - \*\*Pattern:\*\* \b(?:git\s+rm|rm)\s+[^\n]{0,40}\.t
+
+== 8435c024569ffa51 — pattern \bgemini\.md\b — globs **/*.md **/*.sh **/*.yml **/*.yaml **/package.json **/*.txt — in-scope files 1900
+   firings by AST context: no-grammar=12 (total 12)
+   [no-grammar] .github/copilot-instructions.md:290: - **The Gemini CLI and Gemini Code Assist (GCA) do not** - The Gemini CLI and Gemini Code Assist (GCA) do not recognize 
+   [no-grammar] .github/copilot-instructions.md:672: When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical
+   [no-grammar] .junie/skills/totem-rules/rules.md:290: - **The Gemini CLI and Gemini Code Assist (GCA) do not** - The Gemini CLI and Gemini Code Assist (GCA) do not recognize 
+   [no-grammar] .junie/skills/totem-rules/rules.md:672: When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical
+   [no-grammar] .totem/lessons/lesson-07135f9a.md:5: The Gemini CLI and Gemini Code Assist (GCA) do not recognize lowercase configuration files such as .gemini/gemini.md. Us
+   [no-grammar] .totem/lessons/lesson-2de13dca.md:17: When scaffolding configs via totem init, each agent needs its own format but the instruction content should be identical
+   [no-grammar] docs/wiki/agent-gemini-code-assist.md:22: - **File Confusion:** Developers mistakenly placing `gemini.md` (lowercase) inside `.gemini/` expecting GCA to read it.
+   [no-grammar] docs/wiki/platform-notes.md:41: - Ensure your Gemini CLI instruction file is exactly `GEMINI.md` (uppercase). If you create `gemini.md` locally on a Mac
+
+== 8213cd4e21b375ba — pattern \b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)?|[Rr]esolves?|[Rr]esolved)\s+#\d+\s*,\s*#\d+ — globs **/CHANGELOG.md .github/**/*.md .changeset/*.md — in-scope files 11
+   firings by AST context: no-grammar=2 (total 2)
+   [no-grammar] .github/copilot-instructions.md:1917: - **GitHub Closes keyword only applies to the first issue** - \*\*Pattern:\*\* \b(?:[Cc]loses?|[Cc]losed|[Ff]ix(?:es|ed)
+   [no-grammar] packages/core/CHANGELOG.md:2574: **Quality sweep Phase 1 (#1387, closes #1380, #1352, #1355):**
+
+== b34d95158d37f5a9 — pattern \.junie\/(?!mcp\/mcp\.json|guidelines\.md)[^'"\s>]+\.(json|md) — globs **/*.js **/*.ts **/*.json **/*.md **/*.sh **/*.yml **/*.yaml **/.gitignore — in-scope files 2659
+   firings by AST context: code=1 string=1 no-grammar=15 (total 17)
+   [code] totem.config.ts:57: junie: '.junie/skills/totem-rules/rules.md',
+   [string] packages/cli/src/commands/wrap.ts:61: '  git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .juni
+   [no-grammar] .claude/skills/postmerge/SKILL.md:81: `git add .totem/lessons/ .totem/compiled-rules.json .totem/compile-manifest.json .github/copilot-instructions.md .junie/
+   [no-grammar] .github/copilot-instructions.md:670: \*\*Junie:\*\* Uses .junie/guidelines.md or .junie/AGENTS.md for instructions (project only, loaded into every prompt). 
+   [no-grammar] .github/copilot-instructions.md:787: - **Avoid metaphorical terms in documentation** - \*\*Scope:\*\* docs/\*\*/\*.md Project voice rules prohibit metaphoric
+   [no-grammar] .github/copilot-instructions.md:2274: - **Use canonical totem lesson compile command** - \*\*Scope:\*\* .gemini/styleguide.md, docs/\*\*/\*.md Documentation m
+   [no-grammar] .junie/skills/totem-rules/SKILL.md:6: This skill is populated by `totem compile --export`. See `.junie/skills/totem-rules/rules.md` for the compiled rules.
+   [no-grammar] .junie/skills/totem-rules/rules.md:670: \*\*Junie:\*\* Uses .junie/guidelines.md or .junie/AGENTS.md for instructions (project only, loaded into every prompt). 
+   [no-grammar] .junie/skills/totem-rules/rules.md:787: - **Avoid metaphorical terms in documentation** - \*\*Scope:\*\* docs/\*\*/\*.md Project voice rules prohibit metaphoric
+   [no-grammar] .junie/skills/totem-rules/rules.md:2274: - **Use canonical totem lesson compile command** - \*\*Scope:\*\* .gemini/styleguide.md, docs/\*\*/\*.md Documentation m
+
+== 7e3eefeaa85403d0 — pattern ^## Lesson(?! [—–-] .+) — globs **/*.md — in-scope files 1856
+   firings by AST context: no-grammar=1 (total 1)
+   [no-grammar] packages/pack-rust-architecture/README.md:22: ## Lesson manifest
+
+== 4ae0a01d912f8742 — pattern `totem\s+extract\b — globs docs/wiki/**/*.md — in-scope files 36
+   firings by AST context:  (total 0)
+
+== b3e3e2b380a0b1be — pattern \bgit\s+(?!.*LC_ALL=C) — globs **/*.sh **/*.bash — in-scope files 9
+   firings by AST context: no-grammar=26 (total 26)
+   [no-grammar] .claude/hooks/content-hash.sh:7: GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+   [no-grammar] .claude/hooks/content-hash.sh:42: git ls-files -z "${LS_ARGS[@]}" \
+   [no-grammar] .claude/hooks/content-hash.sh:45: | git hash-object --stdin-paths 2>/dev/null \
+   [no-grammar] .claude/hooks/pre-compact.sh:3: # Claude Code auto-compaction. Preserves branch, HEAD, git status, and
+   [no-grammar] .claude/hooks/pre-compact.sh:22: # no-timeout — acceptable because git read-only calls on a local repo
+   [no-grammar] .claude/hooks/pre-compact.sh:33: $TIMEOUT_CMD git "$@"
+   [no-grammar] .claude/hooks/pre-compact.sh:35: git "$@"
+   [no-grammar] .claude/hooks/pre-compact.sh:40: # git cannot determine a toplevel (not a git repo, or git missing).

@@ -1,0 +1,31 @@
+schemaVersion: 1
+severity: warning
+message: Junie requires specific file locations for auto-detection,
+
+target:
+  type: regex
+  pattern: \.junie\/[^'"\s>]+\.(json|md)
+  scope:
+    fileGlobs:
+      - '**/*.js'
+      - '**/*.ts'
+      - '**/*.json'
+      - '**/*.md'
+      - '**/*.sh'
+      - '**/*.yml'
+      - '**/*.yaml'
+      - '**/.gitignore'
+
+requires:
+  pattern: mcp\/mcp\.json|guidelines\.md
+  scope: line
+
+examples:
+  - bad: cp config.json .junie/config.json
+    good: cp config.json .junie/mcp/mcp.json
+
+curation:
+  sourceLesson: lesson-b34d95158d37f5a9
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3

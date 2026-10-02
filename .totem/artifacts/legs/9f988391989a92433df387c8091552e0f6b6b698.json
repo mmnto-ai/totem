@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.0.0",
+  "diffSha": "9f988391989a92433df387c8091552e0f6b6b698",
+  "readAt": "2026-09-24T02:03:46Z",
+  "findings": [
+    {
+      "id": "b4-F1",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 47,
+      "claim": "The notes state the engine-typing test more weakly than the scorer's rule-2 reading: they count only comment-context firings, but the scorer's reading also counts a prose-file firing as the token appearing in prose, so the headline 'zero comment-context firings on all eight' (also in the 076fe123 message and the PR body) reads as a clean rule-2 result when it is not.",
+      "counterexample": "batch-1.json at 729fa215, reading.rule2: a comment-context firing over an in-scope file, or a prose-file firing, is that appearance; batch-1.md:25 row 6 fails forbidden-literal-token as written on prose-file firings alone. census-batch-4.txt (replayed byte-identical) puts .md firings on 6 of the 8 regex rules, including the two NEW prose-scoped regex pairs 8213cd4e (2) and 7e3eefea (1). b3e3e2b3's 26 no-grammar firings include 4 shell # comment lines the classifier cannot see (pre-compact.sh:3, :22, :40; tools/wind-tunnel-sha.test.sh:6; reproduced by the seat). FOLDED: the header paragraph and the census section state both limbs with the per-rule prose-file counts; the first class-review disclosure is rewritten around the prose limb (the three exemplar-row rules under (A) with their scopes; the two withheld carry-overs; the two new prose-scoped pairs placed in row 6's position for the review; the four shell comment lines); the pin mail and the PR body carry both limbs; the 076fe123 commit message is immutable and is named as carrying the first wording."
+    },
+    {
+      "id": "b4-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 247,
+      "claim": "The notes place all of b3e3e2b3's census firings under .claude/hooks/, but most of them sit elsewhere.",
+      "counterexample": "Replaying the legacy regex per line over the 9 in-scope files at 5293614b: .claude/hooks/content-hash.sh 3, .claude/hooks/pre-compact.sh 8, tests/clean-room/stress-test.sh 4, tools/update-wind-tunnel-sha.sh 3, tools/wind-tunnel-sha.test.sh 8 (total 26; reproduced by the seat). The census prints at most 8 samples per context, so the file cannot back the claim. FOLDED: the table row, the (ii) bullet and the class bullet name the five files and their counts; the census section says the per-file figures were replayed over every in-scope line."
+    },
+    {
+      "id": "b4-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 244,
+      "claim": "The b34d9515 census row says 'the rest .md', but 2 of the 15 no-grammar firings are in a .json file.",
+      "counterexample": "By extension at 5293614b: md 13, json 2 (.totem/compiled-rules.json:5568 and :5607, archivedReason strings), ts 2 (reproduced by the seat). FOLDED: '13 .md + 2 .json' in the table row and the class bullet."
+    },
+    {
+      "id": "b4-F4",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 491,
+      "claim": "The b3e3e2b3 note shows the line-window widening only through the pair's cure and the agreement at the pinned tree, never the general widening (as 7e3eefea's note does); b34d9515's requirement is also unanchored and the notes do not say so.",
+      "counterexample": "With the frozen legacy regex against the record (target AND NOT requires): 'LC_ALL=C git log && git status', 'git status && LC_ALL=C git log', 'LC_ALL=C sort f; git diff' give legacy true, record false; for b34d9515, 'cp x .junie/config.json docs/guidelines.md' and 'see .junie/foo.md and CONTRIBUTING-guidelines.md' give legacy true, record false (the requirement matches the allowed name anywhere on the line). All removed-only, PASS under C3's rule; no added firing is possible at line granularity. FOLDED: both notes state the general widening with an example and its removed-only character."
+    },
+    {
+      "id": "b4-F5",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 168,
+      "claim": "The 'missing X' disclosure gives batch 3's typeof-comparison-missing-null-guard as the only precedent, omitting that four earlier names use the -missing- convention and that batch 3's command-arg-missing-separator has the same shape as b3e3e2b3's new name — against the notes' own rule that names are shared with batches 1-3 where the shape is theirs.",
+      "counterexample": "batch-3 notes :437 command-arg-missing-separator (regex): a git subcommand invocation with no -- separator on the line, a (ii) line-window requires row (5da43ea6); batch 4: command-missing-required-env-token (regex): a fixed command invocation whose line lacks a required literal token. The 7c145212 envelope carries callee-literal-arg-missing-option, constructor-literal-arg-missing-prefix, property-key-missing-optional-marker and command-arg-missing-separator. FOLDED: the disclosure names the four precedents and the shape analogy, states that the notes' sharing rule would put the two under one name, that section 3.4 forbids a rename after the refusal, and that the review decides whether they are one row; asked in the pin mail's 8c."
+    },
+    {
+      "id": "b4-F6",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 487,
+      "claim": "The notes attribute the quote 'verifies only under the section Design 8 requires form' to 'the manifest row's receipt', but the manifest row has no receipt field; the quote is the curation ledger's.",
+      "counterexample": "manifest rules[52]'s non-legacy keys carry no receipt; the text is at totem-strategy operations/310-curation/ledger.ndjson:179 receipts[2] (reproduced by the seat: 'good ALSO fires on the frozen lookahead matcher — the pair verifies only under the section Design 8 requires form'); the pre-registration :7 cites it as b3e3e2b3's receipt. FOLDED: attributed to the curation ledger's receipt for the row (row 179), with the pre-registration's citation named."
+    },
+    {
+      "id": "b4-F7",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/batch-4/mig-translation-notes.md",
+      "line": 420,
+      "claim": "A formatter turned the 'pattern + requires' joiner in the 7e3eefea note into a nested list item, so the record's two halves read as separate bullets.",
+      "counterexample": ":419 ends with the pattern and :420 opens '  - requires: ...' where b34d9515's note keeps '+ requires' inline; the record file itself is correct (verified by parse). FOLDED: the joiner reworded ('with requires: ...') so no line begins with a list marker."
+    }
+  ],
+  "folded": [
+    "b4-F1",
+    "b4-F2",
+    "b4-F3",
+    "b4-F4",
+    "b4-F5",
+    "b4-F6",
+    "b4-F7"
+  ],
+  "verdict": "Leg 1 over 7c145212..9f988391 (Gate 5 batch 4): 0 BLOCKING, 1 MATERIAL, 6 MINOR. Every artifact the scorer scores from was replayed and matched byte-for-byte (the 15 records, the envelope, the compile-manifest, the harness, the census, the intake logs); all seven findings are in the notes' prose (the rule-2 framing, the census locations, the widening and naming disclosures, one misattributed quote); the folds edit only notes text and change no semantics, so no re-armed leg is owed; a fold touching a record, an envelope entry or a class name would owe one (none did)."
+}

@@ -1,0 +1,25 @@
+schemaVersion: 1
+severity: warning
+message: Git commands should be run with LC_ALL=C to ensure consistent output format across different system locales
+
+target:
+  type: regex
+  pattern: \bgit\s+
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+
+requires:
+  pattern: LC_ALL=C
+  scope: line
+
+examples:
+  - bad: git log --oneline
+    good: LC_ALL=C git log --oneline
+
+curation:
+  sourceLesson: lesson-b3e3e2b380a0b1be
+  curatedBy: totem-claude
+  curatedAt: '2026-08-24'
+  baseline5Phase: 3
