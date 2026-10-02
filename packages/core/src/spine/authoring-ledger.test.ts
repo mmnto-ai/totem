@@ -34,7 +34,7 @@ const baseEntry = (over: Partial<AuthoringLedgerEntry> = {}): AuthoringLedgerEnt
   heldOutNonInspectionAttestation: true,
   structuralEligibility: {
     decidable: true,
-    basis: 'whitelist:forbidden-literal-token',
+    basis: 'whitelist:debug-assert-len-mismatch',
     judgedBy: 'static-whitelist@cert-1',
   },
   origin: { kind: 'from-scratch' },
@@ -146,7 +146,7 @@ describe('authoring-ledger fail-loud round-trip (FM(e))', () => {
 describe('authoringContentHash (§8 revision detection — material-only)', () => {
   const material = {
     declaredEngine: 'regex',
-    structuralClass: 'forbidden-literal-token',
+    structuralClass: 'debug-assert-len-mismatch',
     // Prop 310 § Design 1: the matcher's stand-in is the RECORD's content hash.
     recordContentHash: 'a'.repeat(64),
     positiveFixtures: [{ pr: 1 }],
@@ -156,7 +156,7 @@ describe('authoringContentHash (§8 revision detection — material-only)', () =
     heldOutNonInspectionAttestation: true as const,
     structuralEligibility: {
       decidable: true,
-      basis: 'whitelist:forbidden-literal-token',
+      basis: 'whitelist:debug-assert-len-mismatch',
       judgedBy: 'static-whitelist@cert-1',
     },
   };

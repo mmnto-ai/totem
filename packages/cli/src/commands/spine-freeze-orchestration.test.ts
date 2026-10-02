@@ -183,7 +183,9 @@ function writeAuthoredYaml(
         author: 'alice',
         authoredAt: authoredAtAfterFreeze(w),
         targetDefect: 'forbidden console.log in prod',
-        structuralClass: 'forbidden-literal-token',
+        // The untagged cert-1 regex row: the record is source-scoped (`src/**/*.rs`), which the
+        // prose-only exemplar row refuses since mmnto-ai/totem#2988.
+        structuralClass: 'debug-assert-len-mismatch',
         record: AUTHORED_RECORD_REF,
         positiveFixtures: [
           {
