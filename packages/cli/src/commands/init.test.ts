@@ -1955,6 +1955,54 @@ describe('scaffoldClaudeWriteShield', () => {
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('unexpected shape');
   });
+
+  it('merges into existing config without hooks', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, JSON.stringify({ theme: 'dark' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.theme).toBe('dark');
+    expect(content.hooks.PreToolUse).toBeDefined();
+  });
+
+  it('deep merges when hooks exist but no totem entry (bare-string hook)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = { hooks: { PreToolUse: [{ matcher: 'custom', hooks: ['echo hi'] }] } };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // Preserves existing entry
+    expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
+    // Appends totem entry
+    expect(content.hooks.PreToolUse[1].matcher).toBe('Write|Edit');
+    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('PreWriteShield');
+  });
+
+  it('skips when PreWriteShield hook exists (bare string format)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = {
+      hooks: {
+        PreToolUse: [{ matcher: 'Write|Edit', hooks: ['node .claude/hooks/PreWriteShield.cjs'] }],
+      },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
+  });
 });
 
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).

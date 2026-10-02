@@ -87,9 +87,9 @@ Two disclosures:
 
 ### What Ships on Claude Code
 
-On Claude Code, Totem installs `PreToolUse` hooks into the project's committed `.claude/settings.json`: the write shield (`PreWriteShield`, on `Write|Edit`, installed by `totem init`) and the gate-engine interlocks installed by `totem gate install` — `freeze-check` on `Write|Edit`, `transport-shield` and `merge-ready` on `Bash|PowerShell`. They are stateless block-on-match hooks: each judges the one tool call in front of it, keeps nothing between calls, and blocks on a match. They do not run the compiled rules — rule enforcement is the pre-push Git hook and CI.
+On Claude Code, Totem installs `PreToolUse` hooks into the project's committed `.claude/settings.json`: the write shield (`PreWriteShield`, on `Write|Edit`, installed by `totem init` when Claude Code is the selected tool) and the gate-engine interlocks installed by `totem gate install` or `totem init --gates=…` — `freeze-check` on `Write|Edit`, `transport-shield` and `merge-ready` on `Bash|PowerShell`. Each judges the one tool call in front of it and keeps no state of its own between calls: `merge-ready` reads the pull request off GitHub through `gh`, and `freeze-check` reads the freeze file. The write shield refuses a matching write. For a gate interlock, a `deny` verdict blocks the call at the strict tier, and at the pilot tier it is reported and the call proceeds; a `warn` verdict never blocks. They do not run the compiled rules — rule enforcement is the pre-push Git hook and CI.
 
-These are project-settings hooks, and a managed-settings hook or a user-installed Claude Code mod sits above them (mmnto-ai/totem#3002).
+These are project-settings hooks. On Claude Code 2.1.287 and 2.1.288 a user-installed mod or a managed-settings hook runs above them and can allow a call they would refuse — read from the build's declarations and reproduced in a scratch repository (mmnto-ai/totem#3002).
 
 ## Handling False Positives
 
