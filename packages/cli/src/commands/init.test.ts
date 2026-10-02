@@ -1943,6 +1943,18 @@ describe('scaffoldClaudeWriteShield', () => {
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
   });
+
+  it('returns error when hooks has unexpected shape', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('unexpected shape');
+  });
 });
 
 // Phase C slice 1 — symmetric Claude SessionStart hook (mmnto-ai/totem#1845).
