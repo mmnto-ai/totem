@@ -34,7 +34,6 @@ import {
   agentsFloorBlockFor,
   agentsFloorMarkerPositions,
   AI_PROMPT_BLOCK,
-  CLAUDE_PRETOOLUSE_ENTRY,
   CLAUDE_PREWRITESHIELD,
   CLAUDE_PREWRITESHIELD_ENTRY,
   CLAUDE_SESSION_START,
@@ -446,19 +445,8 @@ export async function installGeminiHooks(cwd: string): Promise<HookInstallerResu
 // ParsedSettings / ClaudeHooksKey types) lives in host-hooks.js — the
 // namespace-neutral install primitive shared by gate-install, init, and
 // later Prop 257 (PR-C, mmnto-ai/totem#2048). The Totem-specific
-// idempotency probes (hasTotemShield, etc.) and the per-lifecycle scaffold
+// idempotency probes (hasPreWriteShield, etc.) and the per-lifecycle scaffold
 // wrappers stay here.
-
-/** Check whether a hook entry already contains a totem review/shield reference. */
-function hasTotemShield(entry: z.infer<typeof HookCommandSchema>): boolean {
-  if (typeof entry === 'string')
-    return entry.includes('totem review') || entry.includes('totem shield');
-  return (
-    entry.command.includes('totem review') ||
-    entry.command.includes('totem shield') ||
-    entry.command.includes('shield-gate')
-  );
-}
 
 /** Check whether a hook entry already contains a PreWriteShield reference. */
 function hasPreWriteShield(entry: z.infer<typeof HookCommandSchema>): boolean {
@@ -481,23 +469,11 @@ function sessionStartHas(
 }
 
 /**
- * Merge Totem hooks into .claude/settings.local.json without overwriting
- * existing user-defined hooks. Installs the Bash matcher for shield-gate.
- */
-export function scaffoldClaudeHooks(filePath: string): ScaffoldOutcome {
-  return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_PRETOOLUSE_ENTRY, (parsed) =>
-    preToolUseHasMatcher(parsed, 'Bash', hasTotemShield),
-  );
-}
-
-/**
  * Merge the PreWriteShield hook into .claude/settings.json (committed,
  * team-level) without overwriting existing user-defined hooks. Installs
  * the Write|Edit matcher for write-time xrepo-qualify-refs enforcement.
- *
- * Distinct from scaffoldClaudeHooks: that targets settings.local.json
- * (per-developer environment safety); this targets settings.json
- * (team-level governance, sealed at mmnto-ai/totem-strategy#145).
+ * It targets settings.json (team-level governance, sealed at
+ * mmnto-ai/totem-strategy#145), not the per-developer settings.local.json.
  */
 export function scaffoldClaudeWriteShield(filePath: string): ScaffoldOutcome {
   return mergeClaudeHooksKey(filePath, 'PreToolUse', CLAUDE_PREWRITESHIELD_ENTRY, (parsed) =>

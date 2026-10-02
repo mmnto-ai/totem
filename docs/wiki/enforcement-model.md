@@ -8,11 +8,11 @@ Totem provides the **primitives**: the knowledge index, the compiler, the compil
 
 Totem does **not** force a specific workflow. It doesn't dictate when to block, inject, or enforce. You decide how to wire these primitives into your own Git hooks, CI config, or IDE plugins. Totem ships reference wiring, not a mandatory policy.
 
-| Layer             | What Totem Provides                     | Where You Wire It            |
-| ----------------- | --------------------------------------- | ---------------------------- |
-| **Deterministic** | `totem lint` (compiled rules, zero LLM) | Git pre-push hook            |
-| **Knowledge**     | `search_knowledge` (vector index)       | SessionStart hook, MCP tools |
-| **Review**        | `totem review` (LLM-powered analysis)   | PreToolUse hook (optional)   |
+| Layer             | What Totem Provides                     | Where You Wire It                                  |
+| ----------------- | --------------------------------------- | -------------------------------------------------- |
+| **Deterministic** | `totem lint` (compiled rules, zero LLM) | Git pre-push hook                                  |
+| **Knowledge**     | `search_knowledge` (vector index)       | SessionStart hook, MCP tools                       |
+| **Review**        | `totem review` (LLM-powered analysis)   | Strict pre-push block (the shield gate), on demand |
 
 ### The Git Hook (Product, All Users)
 
@@ -85,11 +85,11 @@ Two disclosures:
 
 **The shield gate's own knob** (mmnto-ai/totem#2525). The same strict pre-push block runs `totem review --gate`, the shield gate, and `hooks.shield.enforce` decides what a failing run of it exits: `'advisory'` softens every failure raised after the config loads to exit `0`, `'advisory-when-legged'` softens one only when the legs gate above derives evidence for HEAD, and `'block'` or unset keep today's exits. The run prints the same error text either way and adds one `[Totem] shield: hooks.shield.enforce = …` line when the knob is set, plus — under `advisory-when-legged` only — the legs gate's own corrupt-deposit sensor rows, which the derivation prints rather than drops. It is read at run time, so the rendered hook is unchanged; it does not arm the shield on a standard-tier install, and the `doctor --strict` step of the same block is not affected. See [Configuration Reference](config-reference.md) § The Shield Exit Knob.
 
-### The PreToolUse Hook (Reference Implementation, Opt-In)
+### What Ships on Claude Code
 
-For teams using AI agents, Totem provides a reference `PreToolUse` hook that uses **content hashing** to verify the agent reviewed the code before pushing. This is actor-aware. It only fires for the AI agent, never for the human developer.
+On Claude Code, Totem installs `PreToolUse` hooks into the project's committed `.claude/settings.json`: the write shield (`PreWriteShield`, on `Write|Edit`, installed by `totem init`) and the gate-engine interlocks installed by `totem gate install` — `freeze-check` on `Write|Edit`, `transport-shield` and `merge-ready` on `Bash|PowerShell`. They are stateless block-on-match hooks: each judges the one tool call in front of it, keeps nothing between calls, and blocks on a match. They do not run the compiled rules — rule enforcement is the pre-push Git hook and CI.
 
-This is a reference implementation. You can use it as-is, or use Totem's primitives to build your own.
+These are project-settings hooks, and a managed-settings hook or a user-installed Claude Code mod sits above them (mmnto-ai/totem#3002).
 
 ## Handling False Positives
 
