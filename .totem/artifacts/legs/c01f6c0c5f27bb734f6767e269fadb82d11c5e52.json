@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c01f6c0c5f27bb734f6767e269fadb82d11c5e52",
+  "readAt": "2026-10-01T19:58:45.078Z",
+  "findings": [
+    {
+      "id": "2934-R1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 113,
+      "claim": "A common false positive was not disclosed: every file under src counts, including tests and fixtures that are never compiled into dist, so editing a test trips the line although the build is current.",
+      "counterexample": "The walk counts 189 test files under the cli package's src, fixture files tsc never emits, and one entry file the package's tsconfig excludes; after a test edit the next delegation says the build may be stale and names the forced build, which clears it, but the dist was not stale. FOLDED in the deposit commit as text: the helper's doc comment and the changeset name it. Excluding test files from the walk was not taken: it would change behaviour for a sensor the follow-up issue replaces with a content-accurate stamp."
+    },
+    {
+      "id": "2934-R2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 278,
+      "claim": "There is a state where the named cure does not clear the line: a source file whose mtime is in the future.",
+      "counterexample": "A forced build stamps dist at the current time, still older than a future-stamped source file, so the line prints on every delegation until the clock passes that stamp (reasoned, not run). FOLDED in the deposit commit as text: the doc comment and the changeset disclose it."
+    },
+    {
+      "id": "2934-R3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 265,
+      "claim": "The freshness catch is not literally watertight: a thrown null-prototype object makes the debug line's string conversion throw inside the catch.",
+      "counterexample": "Only an injected test seam can throw such a value; the production reads throw Node errors only (reasoned, not run). DECLINED: unreachable in production, and guarding it is a defensive fold on a path only a test can construct."
+    }
+  ],
+  "folded": [
+    "2934-R1",
+    "2934-R2"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 3 MINOR over c18ae6a0..c01f6c0c, the scoped re-armed read of the fold: converged. Not falsified: a direct run, an opt-out run and a no-local-entry run each do exactly what base does, with no output and no source walk; resolveLocalEntry returns its base shape and four dirname steps recover the matched root for drive roots, trailing separators and a network path; delegation's spawn call is textually identical to base and the new try cannot catch a spawn failure; pnpm build --force forwards to a forced turbo build and plain tsc re-emits dist every time; the lint directive on the catch is an honest justification with precedent; the base tests are byte-unchanged and the new ones pin what they name; every changeset sentence is true. The two folds taken are disclosure text, so no further read is owed."
+}
