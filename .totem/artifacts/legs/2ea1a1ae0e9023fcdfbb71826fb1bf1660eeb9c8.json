@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "2ea1a1ae0e9023fcdfbb71826fb1bf1660eeb9c8",
+  "readAt": "2026-10-02T23:07:09.667Z",
+  "folded": ["3004-R1", "3004-R2", "3004-R3", "3004-R4", "3004-R5", "3004-R6", "3004-R7", "3004-R8"],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 5 MINOR, 1 QUESTION over 6420b2de..2ea1a1ae, the scoped re-armed read of the first fold (mmnto-ai/totem#3004): converged on the code and the hint values, not on the prose. Not falsified: the git-level --no-optional-locks spelling is the one git accepts (exit 0; the subcommand spelling exits 129 and extractGitState would report it as a clean tree), measured to leave .git/index untouched where plain git status rewrote it; safeExec passes argv unchanged; destructiveHint true on verify_execution is grounded in the in-place rewrite of the tracked compiled-rules.json, which runs before the empty-diff return; the metrics and telemetry paths are what the README names and every path called ignored is ignored in this repository; lesson names are content hashes. The two material findings (the ignore class held for this repository only; the npx sentence false on both clauses) and the five minor ones are folded at 685de3d3 and fcaaaa5d; the operator ruled that totem init now writes the local-state ignores so the class is mechanical in consumers.",
+  "findings": [
+    {
+      "id": "3004-R1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 2155,
+      "claim": "The README called the server's local-state writes 'ignored', which was true of this repository only: totem init wrote just .lancedb/ and .totem/secrets.json into a consumer's .gitignore, so in a consumer the ledger, logs, cache, telemetry and index manifest were untracked and not ignored, and a git add .totem would make every search_knowledge call append to a tracked file.",
+      "counterexample": "FOLDED on the operator's ruling: totem init now writes the ignore lines for Totem's local state (ensureTotemGitignore, nine patterns, idempotent, tested), and the rule names that state as regenerable, never meant to be committed and ignored by totem init, with the earlier-version caveat."
+    },
+    {
+      "id": "3004-R2",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/utils.ts",
+      "line": 8,
+      "claim": "The npx sentence misstated both the trigger (the command is picked from the lockfile, never from whether a CLI resolves) and the target (npx totem resolves to totem@5.2.0, an unrelated avatar library with an empty bin; Totem's CLI is @mmnto/cli).",
+      "counterexample": "FOLDED as prose: the README states the lockfile pick and that the npx arm names a package that is not Totem's; the defect itself is filed as mmnto-ai/totem#3008 and is not changed in this PR."
+    },
+    {
+      "id": "3004-R3",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/search-knowledge.ts",
+      "line": 1292,
+      "claim": "'every call writes' overstated search_knowledge's writes: a dimension-mismatch return writes only the mcp_call event, the correlation pointer and the selection manifest are written on a non-error result only, and logCorpusQuery appends its own ledger event, undisclosed.",
+      "counterexample": "FOLDED, with the build leg's correction measured at source: every call writes mcp_call; every call but a dimension-mismatch return appends the search log, error results included; a successful call also writes the selection manifest and the corpus-query ledger event with its pointer."
+    },
+    {
+      "id": "3004-R4",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/verify-execution.ts",
+      "line": 32,
+      "claim": "The README promised git's cache writes 'disclosed per tool' but only describe_project mentioned it; verify_execution's git diff --name-only rewrote .git/index when measured with a stat-dirty file.",
+      "counterexample": "FOLDED: verify_execution's bullet discloses the index refresh."
+    },
+    {
+      "id": "3004-R5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/sync.ts",
+      "line": 219,
+      "claim": "add_lesson's sync writes were listed as if complete: the sync also writes ~/.totem/registry.json outside the project, takes .totem/sync.lock and writes the LanceDB store at lanceDir.",
+      "counterexample": "FOLDED: all three named in the bullet."
+    },
+    {
+      "id": "3004-R6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/first-lint-promote-runner.ts",
+      "line": 94,
+      "claim": ".totem/verification-outcomes.json is neither tracked nor ignored here and the source calls it committable; the rule's two classes left that third class unnamed.",
+      "counterexample": "FOLDED: '(committable)' beside the file."
+    },
+    {
+      "id": "3004-R7",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/state-extractors.test.ts",
+      "line": 63,
+      "claim": "Nothing pinned the --no-optional-locks argument; only the fixture test would catch a misspelling, through its empty-list symptom.",
+      "counterexample": "FOLDED: a test mocks the exec seam with the original module spread and asserts the status call's argv exactly."
+    },
+    {
+      "id": "3004-R8",
+      "severity": "QUESTION",
+      "file": "packages/core/src/lesson-io.ts",
+      "line": 15,
+      "claim": "Should 'a content hash' say the name is truncated to 8 hex characters and that a collision overwrites, since the write takes no exclusive flag?",
+      "counterexample": "ANSWERED: the README says so."
+    }
+  ]
+}

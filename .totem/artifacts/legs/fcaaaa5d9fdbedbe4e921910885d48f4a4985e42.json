@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "fcaaaa5d9fdbedbe4e921910885d48f4a4985e42",
+  "readAt": "2026-10-02T23:25:23.914Z",
+  "folded": ["3004-T1", "3004-T2", "3004-T3", "3004-T4", "3004-T5", "3004-T6", "3004-T7", "3004-T8", "3004-T9", "3004-T10", "3004-T11"],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 6 MINOR, 3 QUESTION over 2ea1a1ae..fcaaaa5d, the scoped re-armed read of the second fold (mmnto-ai/totem#3004): the init mechanism, its tests, the lock-flag pin and the write-set structure hold; the two material findings were one new axis (the vector store's connect-time rebuild, outside .totem/, reachable from both read-only tools) and one inconsistency (verify_execution closed-world while its npx arm may reach the registry). Not falsified: the .lancedb/ and secrets behaviour of init is byte-for-byte preserved on the existing-file branch; every one of the nine ignore patterns has a writer; the lock-flag test fails if the flag is removed and leaves every other test on real git; the only other git on describe_project's path is rev-parse and log, neither of which writes the index; the add_lesson facts, the committable outcomes file, the EXPECTED table and the changeset hold. Both material findings and the precision items are folded at fd2c874a by the seat (prose and one hint value, on facts the read measured); the seat names convergence: the two folds after the second read were prose and one literal each, a fourth leg would mirror the third.",
+  "findings": [
+    {
+      "id": "3004-T1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/store/lance-store.ts",
+      "line": 147,
+      "claim": "describe_project's new clause said 'Reads only' and the README rule said a tool writing outside the named .totem/ class is not read-only, while LanceStore.connect() calls nukeAndReset() on an embedder dimension change or a healable error, deleting and recreating the store directory at lanceDir (and a linked repository's store), a path both read-only tools reach through getContext() and search_knowledge's reconnect.",
+      "counterexample": "FOLDED: the store at the configured lanceDir (and a linked store) joins the not-counted class in the README rule, the rebuild is disclosed in the rule and in both tools' bullets, and the describe_project clause now says 'changes no tracked file'."
+    },
+    {
+      "id": "3004-T2",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/tools/verify-execution.ts",
+      "line": 135,
+      "claim": "verify_execution kept openWorldHint false with 'the lint is local' while its spawn's npx arm (every project without a pnpm or yarn lockfile) may reach the npm registry, the same 'may' standard that made the embedding tools open-world.",
+      "counterexample": "FOLDED: openWorldHint true on verify_execution until mmnto-ai/totem#3008 lands, with the reason in the comment, the README and the changeset; the test's EXPECTED matches."
+    },
+    {
+      "id": "3004-T3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 5082,
+      "claim": "The init tests pin the entry list, no mid-file insertion, the missing subset and the second-run no-op, but not the three legs composing on a file lacking .lancedb or the secrets line, the marker-absent path, a file without a trailing newline, a padded line or a CRLF file.",
+      "counterexample": "ACCEPTED as disclosed: the claims hold by reading and the untested edges match the pre-existing secrets leg's behaviour; no further test added."
+    },
+    {
+      "id": "3004-T4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 2155,
+      "claim": "Exact-trimmed-line matching treats a slash-less or commented variant as absent (a harmless duplicate), silently overrides a user's negation line since the appended line comes later, counts a leading-space line as present though git would not, writes LF into a CRLF file, and hard-codes .totem/ although totemDir is configurable.",
+      "counterexample": "ACCEPTED: the negation override is the one edge that changes what a user meant and is the same behaviour the pre-existing lines have; carried as a note on mmnto-ai/totem#3007's audit rows, not folded."
+    },
+    {
+      "id": "3004-T5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/eject.ts",
+      "line": 170,
+      "claim": "totem eject does not remove the new .gitignore lines; it already left .lancedb/ and the secrets line behind, so the asymmetry grows from two lines to eleven.",
+      "counterexample": "ACCEPTED as pre-existing in kind; not folded here."
+    },
+    {
+      "id": "3004-T6",
+      "severity": "MINOR",
+      "file": "packages/core/src/artifacts/storage.ts",
+      "line": 28,
+      "claim": "Every one of the nine patterns has a writer; not in the set are .totem/artifacts/runs/ (machine-local run records this repository ignores; no MCP tool writes them), the two .tmp crash leftovers, and the dead .search-called line in this repository's .gitignore (no writer in source).",
+      "counterexample": "ACCEPTED: correct for the hints' purpose; the run-artifact ignore is a question for the init set beyond this PR; .search-called is left out."
+    },
+    {
+      "id": "3004-T7",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/ledger-writer.ts",
+      "line": 48,
+      "claim": "'every call writes' the mcp_call event and the search log overstated: logMcpCall and setLogDir run only after a successful getContext(), so a call that fails to load the project context writes neither.",
+      "counterexample": "FOLDED: 'Once the project context loads, every call writes…'."
+    },
+    {
+      "id": "3004-T8",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/add-lesson.ts",
+      "line": 160,
+      "claim": "add_lesson's one-clause disclosure repeats its first sentence and omits the write outside the project; the handler itself also takes the sync lock before writing.",
+      "counterexample": "ACCEPTED as thin but true; the README bullet carries the registry write and the lock; the description clause is left short."
+    },
+    {
+      "id": "3004-T9",
+      "severity": "QUESTION",
+      "file": "packages/core/src/lesson-io.ts",
+      "line": 63,
+      "claim": "Does the disclosed 8-character name collision contradict destructiveHint false on add_lesson?",
+      "counterexample": "ANSWERED: the disclosure suffices for this PR; an exclusive write that fails on differing content is a behaviour change for the audit's rows (mmnto-ai/totem#3007), not for a hint."
+    },
+    {
+      "id": "3004-T10",
+      "severity": "QUESTION",
+      "file": "packages/mcp/README.md",
+      "line": 37,
+      "claim": "A project that already tracks one of the nine paths keeps tracking it after totem init, since .gitignore never untracks; the README covered only the untracked case.",
+      "counterexample": "ANSWERED and FOLDED: the rule names git rm --cached for that case."
+    },
+    {
+      "id": "3004-T11",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3004.md",
+      "line": 164,
+      "claim": "The design table still showed openWorldHint false for the embedding tools and the pre-fold rule wording, contradicting the amendment paragraph above it.",
+      "counterexample": "ANSWERED and FOLDED: the table's three open-world values are corrected; the spec stays untracked and the PR body carries the design."
+    }
+  ]
+}
