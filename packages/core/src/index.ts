@@ -40,10 +40,15 @@ export {
 } from './badge-verifier.js';
 
 // Error hierarchy
-export type { TotemErrorCode } from './errors.js';
+export type {
+  StoreNeedsRebuildDetails,
+  StoreNeedsRebuildReason,
+  TotemErrorCode,
+} from './errors.js';
 export {
   getErrorMessage,
   rethrowAsParseError,
+  StoreNeedsRebuildError,
   TotemCompileError,
   TotemConfigError,
   TotemDatabaseError,
@@ -267,6 +272,7 @@ export { createEmbedder, isOllamaAvailable } from './embedders/embedder.js';
 
 // Store
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
+export type { ConnectOptions } from './store/lance-store.js';
 export { LanceStore } from './store/lance-store.js';
 export type { DistanceMetric } from './store/relevance.js';
 export {

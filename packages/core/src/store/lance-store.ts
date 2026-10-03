@@ -6,7 +6,7 @@ import * as lancedb from '@lancedb/lancedb';
 import type { ContentType } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
 import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
-import { TotemConfigError } from '../errors.js';
+import { StoreNeedsRebuildError, TotemConfigError } from '../errors.js';
 import type {
   Chunk,
   HealthCheckResult,
@@ -85,6 +85,16 @@ function isNoEmbedderError(err: unknown): boolean {
   return err instanceof TotemConfigError && err.message.includes(NO_EMBEDDER_AVAILABLE_MESSAGE);
 }
 
+/** Options for `LanceStore.connect()` (mmnto-ai/totem#3009). */
+export interface ConnectOptions {
+  /**
+   * Repair a store that only a rebuild can fix by deleting it and opening an
+   * empty one. Default `false`: a reader never repairs what it reads.
+   * Only the sync pipeline, the one rebuilder, passes `true`.
+   */
+  heal?: boolean;
+}
+
 export class LanceStore {
   private db: lancedb.Connection | null = null;
   private table: lancedb.Table | null = null;
@@ -127,11 +137,27 @@ export class LanceStore {
   }
 
   /**
-   * Connect to LanceDB. Auto-heals on version mismatch, corruption,
-   * or embedder dimension change by deleting the index and signaling
-   * that a full rebuild is needed.
+   * Connect to LanceDB.
+   *
+   * A store whose vector dimensions differ from the embedder's (#548), or
+   * whose open fails with a healable error (version mismatch, corruption,
+   * schema incompatibility, #500), can only be repaired by a rebuild.
+   *
+   * - Default (`heal: false`): a reader never repairs what it reads. Both
+   *   cases throw `StoreNeedsRebuildError`, which names the store and the
+   *   cure (`totem sync --full`); the store directory is left untouched
+   *   (mmnto-ai/totem#3009).
+   * - `heal: true`: delete the store directory and open an empty one, so
+   *   the caller can rebuild it. Only the sync pipeline, the one rebuilder,
+   *   passes this; no reader or row writer may.
+   *
+   * `reconnect()` calls this with the default, so it never heals either;
+   * every caller of `reconnect()` is reader-side.
+   *
+   * Any other open error propagates as itself under both settings.
    */
-  async connect(): Promise<void> {
+  async connect(options?: ConnectOptions): Promise<void> {
+    const heal = options?.heal ?? false;
     try {
       this.db = await lancedb.connect(this.dbPath);
 
@@ -140,7 +166,17 @@ export class LanceStore {
         this.table = await this.db.openTable(TOTEM_TABLE_NAME);
 
         // Check for embedder dimension mismatch (#548)
-        if (this.table && (await this.hasDimensionMismatch())) {
+        const storedDimensions = this.table ? await this.mismatchedStoredDimensions() : null;
+        if (storedDimensions !== null) {
+          if (!heal) {
+            this.releaseHandles();
+            throw new StoreNeedsRebuildError({
+              dbPath: this.dbPath,
+              reason: 'dimension-mismatch',
+              storedDimensions,
+              expectedDimensions: this.embedder.dimensions,
+            });
+          }
           this.onWarn(
             `[Totem] Embedding dimensions changed. Rebuilding index... Run \`totem sync --full\` if this persists.`,
           );
@@ -151,14 +187,41 @@ export class LanceStore {
         await this.detectFtsIndex();
       }
     } catch (err) {
+      if (err instanceof StoreNeedsRebuildError) throw err;
       // Auto-heal: version mismatch, corruption, or schema incompatibility (#500)
       if (this.isHealableError(err)) {
+        if (!heal) {
+          this.releaseHandles();
+          throw new StoreNeedsRebuildError(
+            {
+              dbPath: this.dbPath,
+              reason: 'healable-open-error',
+              expectedDimensions: this.embedder.dimensions,
+              underlyingMessage: (err as Error).message,
+            },
+            err,
+          );
+        }
         this.onWarn(`[Totem] Index format incompatible. Upgrading index...`);
         await this.nukeAndReset();
         return;
       }
+      this.releaseHandles(); // a failed open never leaves a half-open handle for a retry to overwrite
       throw err;
     }
+  }
+
+  /**
+   * Drop the half-open handles a refused connect leaves behind, without
+   * touching anything on disk. A failed close is swallowed with a warning,
+   * like `closeReadSnapshot`, so it never masks the typed error.
+   */
+  private releaseHandles(): void {
+    const db = this.db;
+    this.db = null;
+    this.table = null;
+    this.hasFtsIndex = false;
+    if (db) closeReadSnapshot(db, this.onWarn);
   }
 
   /**
@@ -184,18 +247,21 @@ export class LanceStore {
     }
   }
 
-  /** Check if the stored vector dimensions differ from the current embedder. */
-  private async hasDimensionMismatch(): Promise<boolean> {
-    if (!this.table) return false;
+  /**
+   * The stored vector width when it differs from the current embedder's,
+   * else `null` (no table, no rows, or matching widths).
+   */
+  private async mismatchedStoredDimensions(): Promise<number | null> {
+    if (!this.table) return null;
     // Let query errors bubble up to connect()'s catch block for auto-healing
     const sample = await this.table.query().limit(1).toArray();
-    if (sample.length === 0) return false;
+    if (sample.length === 0) return null;
     const row = sample[0] as Record<string, unknown>;
     const vec = row['vector'];
     if (Array.isArray(vec)) {
-      return vec.length !== this.embedder.dimensions;
+      return vec.length !== this.embedder.dimensions ? vec.length : null;
     }
-    return false;
+    return null;
   }
 
   /** Detect errors that warrant auto-healing (nuke + rebuild). */
@@ -407,7 +473,10 @@ export class LanceStore {
     this.hasFtsIndex = false;
   }
 
-  /** Re-open the LanceDB connection, picking up rebuilt files after a full sync. */
+  /**
+   * Re-open the LanceDB connection, picking up rebuilt files after a full sync.
+   * Uses `connect()`'s default, so it never heals (mmnto-ai/totem#3009).
+   */
   async reconnect(): Promise<void> {
     this.db = null;
     this.table = null;

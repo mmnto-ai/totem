@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "65a740ba848d4815127266358538377ef6a56cbd",
+  "readAt": "2026-10-03T01:03:13.771Z",
+  "folded": ["3009-F1", "3009-F2", "3009-F3", "3009-F4", "3009-F5", "3009-F6"],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 3 MINOR, 1 QUESTION over e33173c5..65a740ba (mmnto-ai/totem#3009): converged on the core semantics. Not falsified: heal:true matches the base commit byte for byte (warn strings, nukeAndReset, return, detectFtsIndex order); no heal:false path reaches nukeAndReset; releaseHandles is synchronous, cannot throw and touches nothing on disk; the typed error's class identity holds across packages (core built by tsc, one import); search_knowledge's per-query reconnect failures are caught and rendered with the cure and a refused reconnect leaves no half-open state for the next query (reads reopen a snapshot); the CLI boundary prints Fix: <recoveryHint> and exits 1; shield.ts:939 is the learn-path dedup only; the pipeline's heal runs before its empty check, so the corruption arm never leaves a partial index; both totem-context directives sit on catches that record or warn in every branch. The two material findings (a skipped linked store stayed skipped for the server session; a primary-store fault failed every tool that loads the context) and the minors are folded at 8760a1fc; a scoped re-armed read covers that fold.",
+  "findings": [
+    {
+      "id": "3009-F1",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/context.ts",
+      "line": 452,
+      "claim": "A linked store that throws StoreNeedsRebuildError at init was dropped from linkedStores and the context cached, so after the user ran the cure the link stayed out of federated search until a server restart; at base the emptied store was registered and a later sync was picked up.",
+      "counterexample": "FOLDED: the skipped link is kept in pendingLinkedStores; _reconnectOnContext retries connect() on each pending store and on success moves it into linkedStores and clears its init warning; the skip message says until it opens on a later reconnect or the server restarts; a test rebuilds the store and sees it rejoin. The retry fires only on the two reconnect callers (after add_lesson's sync, or on a failed search), which the changeset states."
+    },
+    {
+      "id": "3009-F2",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/context.ts",
+      "line": 225,
+      "claim": "The uncaught primary connect in initContext made getContext() reject for every tool, so verify_execution (which needs only the project root) and add_lesson (whose own spawned sync is the rebuilder) failed on a store fault that base had healed silently.",
+      "counterexample": "FOLDED: getProjectBasics() resolves root and config without opening the store; verify_execution uses it and never opens the store; add_lesson catches StoreNeedsRebuildError, writes the lesson, runs its sync and reports the rebuild; describe_project already caught any context error and was not affected. Tests on each."
+    },
+    {
+      "id": "3009-F3",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/context.ts",
+      "line": 455,
+      "claim": "The linked warnings embedded the full error message (with its [Totem Error] prefix and the cure) and then appended the cure again.",
+      "counterexample": "FOLDED: StoreNeedsRebuildError.detail carries the bare reason; both warnings print detail then recoveryHint once."
+    },
+    {
+      "id": "3009-F4",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 227,
+      "claim": "The doc listed the MCP server as hands-off while review --learn's and add_lesson's embedded syncs still rebuild, and neither the doc nor the changeset said the strict pre-push review gate now fails closed and loud on a store fault.",
+      "counterexample": "FOLDED: the doc names every reader that stops with the cure, the two embedded syncs that still rebuild, and the gate's loud failure; review-learn and lesson extract, which open the store before their sync, are named as stopping before writing."
+    },
+    {
+      "id": "3009-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/search.ts",
+      "line": 66,
+      "claim": "The CLI linked-skip branch, releaseHandles() and the per-query reconnect throw had no test.",
+      "counterexample": "ACCEPTED in part: search.test.ts inspects source text only and a harness for a damaged linked fixture is more than this PR; disclosed. The reconnect and rejoin paths are now covered by the context tests."
+    },
+    {
+      "id": "3009-F6",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3009.md",
+      "line": 228,
+      "claim": "Was the semver class ruled, given a public method's default flips from success to a throw?",
+      "counterexample": "ANSWERED: the operator approved the design with minor as its open-question recommendation; the fixed group moves every package to the same minor."
+    }
+  ]
+}

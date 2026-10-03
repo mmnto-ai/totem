@@ -119,6 +119,7 @@ describe('_reconnectOnContext', () => {
       embedder: {} as never,
       linkedStores: linkedStoresMap as never,
       linkedStoreInitErrors: new Map(opts.initErrors),
+      pendingLinkedStores: new Map(),
     };
   }
 
