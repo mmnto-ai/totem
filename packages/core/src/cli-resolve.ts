@@ -8,15 +8,24 @@
  * 1. **Workspace build** — `packages/cli/dist/index.js`, identity-guarded on
  *    `packages/cli/package.json` naming `@mmnto/cli`, walking up.
  * 2. **Pinned install** — `node_modules/@mmnto/cli/dist/index.js`, walking up.
- * 3. **npm-layout global on PATH** — the two npm global layouts only, each
- *    identity-checked against its own `package.json`.
+ * 3. **npm-layout global on PATH** — the two npm global layouts only.
  *
- * Otherwise a refusal that names what was looked for. These tiers differ on
- * purpose from the git hooks' cascade (`buildResolveBlock` in the CLI's
- * install-hooks): a spawn inside a tool call runs unattended, with nobody at a
- * terminal to see what was fetched or run, so it stops at an identity-checked
- * local entry or npm-layout global and never falls back to a package manager
- * or the network.
+ * Otherwise a refusal that names what was looked for.
+ *
+ * **Identity is the install path.** An install that sits at
+ * `node_modules/@mmnto/cli` is ours by the package manager's own namespace,
+ * whatever its manifest is called, so a fork installed under that alias runs
+ * here as it does in the CLI's re-exec and the git hooks, and the result
+ * carries its real name (`aliasOf`). Where there is no such path, the
+ * manifest's name decides: the workspace build (`packages/cli`), and a global
+ * whose `totem` link resolves outside `node_modules` (a linked development
+ * install). A bare `totem` name is never the identity.
+ *
+ * These tiers differ on purpose from the git hooks' cascade
+ * (`buildResolveBlock` in the CLI's install-hooks): a spawn inside a tool call
+ * runs unattended, with nobody at a terminal to see what was fetched or run,
+ * so it stops at a local entry or an npm-layout global and never falls back to
+ * a package manager or the network.
  *
  * Light by contract: imports only `node:fs` and `node:path`, so it is also
  * exported as the `@mmnto/totem/cli-resolve` subpath for callers that must
@@ -36,7 +45,16 @@ const ENTRY_FILE = 'index.js';
 const PACKAGE_JSON = 'package.json';
 const CLI_PACKAGE = 'cli';
 const SCOPE_DIR = '@mmnto';
+const CLI_NAME = '@mmnto/cli';
 const BIN_NAME = 'totem';
+/** The path tail that identifies an install of the CLI under a `node_modules` directory. */
+const ENTRY_TAIL: readonly string[] = [
+  NODE_MODULES_DIR,
+  SCOPE_DIR,
+  CLI_PACKAGE,
+  DIST_DIR,
+  ENTRY_FILE,
+];
 /** Executable names a non-npm-layout `totem` may carry on PATH (reported, never run). */
 const BIN_VARIANTS: readonly string[] = [
   BIN_NAME,
@@ -76,6 +94,8 @@ export interface GlobalEntry {
   /** The global install's version, when its package.json is readable. */
   version?: string;
   tier: 'global';
+  /** The manifest's own name when it is not `@mmnto/cli`: a fork installed under the alias. */
+  aliasOf?: string;
 }
 
 export interface GlobalProbe {
@@ -90,6 +110,12 @@ export type CliResolution =
       entry: string;
       version?: string;
       tier: 'workspace' | 'pinned' | 'global';
+      /**
+       * Present on a pinned or global hit whose manifest names another package:
+       * a fork installed under the `@mmnto/cli` alias. It runs, because the
+       * install path is the identity, and the caller can name what it really is.
+       */
+      aliasOf?: string;
       /**
        * Present on a global hit only, and only when a `totem` earlier on PATH
        * was skipped because it could not be verified: the CLI that runs is then
@@ -169,28 +195,69 @@ function attempt<T>(probe: () => T): T | undefined {
   }
 }
 
+/** The manifest's TOP-LEVEL `name`; undefined when it is absent, unreadable or not JSON. Never throws. */
+function manifestName(pkgJsonPath: string, fsx: CliResolveFs): string | undefined {
+  if (!fsx.exists(pkgJsonPath)) return undefined;
+  const parsed = attempt(() => JSON.parse(fsx.readText(pkgJsonPath)) as unknown);
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const name = (parsed as { name?: unknown }).name;
+  return typeof name === 'string' ? name : undefined;
+}
+
+/** The manifest's own name when it is readable and is not `@mmnto/cli` (a fork under the alias). */
+function aliasOf(pkgJsonPath: string, fsx: CliResolveFs): string | undefined {
+  const name = manifestName(pkgJsonPath, fsx);
+  return name !== undefined && name !== CLI_NAME ? name : undefined;
+}
+
+/** True when `entry` sits at `…/node_modules/@mmnto/cli/dist/index.js`: the install path is the identity. */
+function sitsAtCliPath(entry: string): boolean {
+  const tail = entry.split(/[\\/]/).slice(-ENTRY_TAIL.length);
+  return tail.length === ENTRY_TAIL.length && tail.every((part, i) => part === ENTRY_TAIL[i]);
+}
+
+/** True when a `totem` FILE (any of the shim names) sits in `dir`. Never throws. */
+function findShim(dir: string, fsx: CliResolveFs): string | undefined {
+  for (const name of BIN_VARIANTS) {
+    const candidate = path.join(dir, name);
+    if (fsx.exists(candidate) && attempt(() => fsx.isFile(candidate)) === true) return candidate;
+  }
+  return undefined;
+}
+
+function globalEntry(entry: string, pkgJsonPath: string, fsx: CliResolveFs): GlobalEntry {
+  const alias = aliasOf(pkgJsonPath, fsx);
+  return {
+    entry,
+    version: attempt(() => readVersion(pkgJsonPath, fsx)),
+    tier: 'global',
+    ...(alias !== undefined ? { aliasOf: alias } : {}),
+  };
+}
+
 /** A global hit in one PATH directory, by the two npm layouts, or undefined. Never throws. */
 function probeGlobalDir(dir: string, fsx: CliResolveFs): GlobalEntry | undefined {
-  // (a) The win32 npm layout: `<prefix>/node_modules/@mmnto/cli` beside the shim.
+  // (a) The win32 npm layout: the `totem` shim sits beside `node_modules`, and
+  // the install is `<prefix>/node_modules/@mmnto/cli`. Identity is that path,
+  // so a fork installed under the alias is a hit. A directory that holds the
+  // package but no shim is not a global install: nothing a shell would run.
   const packagedDir = path.join(dir, NODE_MODULES_DIR, SCOPE_DIR, CLI_PACKAGE);
   const packagedEntry = path.join(packagedDir, DIST_DIR, ENTRY_FILE);
-  const packagedPkg = path.join(packagedDir, PACKAGE_JSON);
-  if (fsx.exists(packagedEntry) && attempt(() => namesCli(packagedPkg, fsx)) === true) {
-    return {
-      entry: packagedEntry,
-      version: attempt(() => readVersion(packagedPkg, fsx)),
-      tier: 'global',
-    };
+  if (fsx.exists(packagedEntry) && findShim(dir, fsx) !== undefined) {
+    return globalEntry(packagedEntry, path.join(packagedDir, PACKAGE_JSON), fsx);
   }
 
   // (b) The POSIX npm layout: `<bin>/totem` is a symlink to `<pkg>/dist/index.js`.
+  // Ours when the resolved entry sits at `node_modules/@mmnto/cli` (the path),
+  // or, where the link resolves elsewhere (a linked development install), when
+  // the manifest's top-level name is `@mmnto/cli`.
   const shim = path.join(dir, BIN_NAME);
   if (!fsx.exists(shim)) return undefined;
   const real = attempt(() => fsx.realpath(shim));
   if (real === undefined || !real.endsWith('.js') || !fsx.exists(real)) return undefined;
   const realPkg = path.join(path.dirname(path.dirname(real)), PACKAGE_JSON);
-  if (attempt(() => namesCli(realPkg, fsx)) !== true) return undefined;
-  return { entry: real, version: attempt(() => readVersion(realPkg, fsx)), tier: 'global' };
+  if (!sitsAtCliPath(real) && manifestName(realPkg, fsx) !== CLI_NAME) return undefined;
+  return globalEntry(real, realPkg, fsx);
 }
 
 /**
@@ -207,13 +274,8 @@ export function resolveGlobalEntry(
     if (!dir) continue;
     const hit = probeGlobalDir(dir, fsx);
     if (hit !== undefined) return { hit, unverified };
-    for (const name of BIN_VARIANTS) {
-      const candidate = path.join(dir, name);
-      if (fsx.exists(candidate) && attempt(() => fsx.isFile(candidate)) === true) {
-        unverified.push(candidate);
-        break;
-      }
-    }
+    const shim = findShim(dir, fsx);
+    if (shim !== undefined) unverified.push(shim);
   }
   return { unverified };
 }
@@ -230,7 +292,15 @@ export function resolveTotemCli(
 ): CliResolution {
   const fsx = opts?.fs ?? NODE_CLI_RESOLVE_FS;
   const local = resolveLocalEntry(startDir, fsx);
-  if (local !== undefined) return { ok: true, ...local };
+  if (local !== undefined) {
+    // The pinned tier is identified by its path under `node_modules`, so a fork
+    // installed under the alias runs; its manifest's own name rides along.
+    const alias =
+      local.tier === 'pinned'
+        ? aliasOf(path.join(path.dirname(path.dirname(local.entry)), PACKAGE_JSON), fsx)
+        : undefined;
+    return alias !== undefined ? { ok: true, ...local, aliasOf: alias } : { ok: true, ...local };
+  }
 
   const globalProbe = resolveGlobalEntry(opts?.pathEnv ?? process.env.PATH, fsx);
   if (globalProbe.hit !== undefined) {

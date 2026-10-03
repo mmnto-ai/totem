@@ -6,6 +6,7 @@ type Resolution =
       entry: string;
       version?: string;
       tier: 'workspace' | 'pinned' | 'global';
+      aliasOf?: string;
       unverified?: string[];
     }
   | { ok: false; looked: string[]; unverified: string[] };
@@ -44,6 +45,20 @@ describe('resolveCliSpawn (mmnto-ai/totem#3008)', () => {
     mockResolve = () => ({ ok: true, entry: '/g/index.js', tier: 'global' });
     const target = resolveCliSpawn('/repo');
     expect(target.ok && target.label).toBe('@mmnto/cli, global');
+  });
+
+  it('names a fork installed under the alias by its own name', () => {
+    mockResolve = () => ({
+      ok: true,
+      entry: '/repo/node_modules/@mmnto/cli/dist/index.js',
+      version: '2.13.0-acme.1',
+      tier: 'pinned',
+      aliasOf: '@acme/cli',
+    });
+    const target = resolveCliSpawn('/repo');
+    expect(target.ok && target.label).toBe(
+      '@acme/cli@2.13.0-acme.1 (installed as @mmnto/cli), pinned',
+    );
   });
 
   it('says so in the label when an unverified totem earlier on PATH was skipped', () => {

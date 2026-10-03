@@ -5,8 +5,9 @@ const CURE =
 
 /**
  * What a spawning tool runs (mmnto-ai/totem#3008): `node` (this server's own
- * `process.execPath`) plus a resolved, identity-checked CLI entry, never a
- * package-manager command and never a shell. `label` names which CLI ran.
+ * `process.execPath`) plus a resolved CLI entry, recognised by its install path
+ * or, where there is none, by its manifest's name; never a package-manager
+ * command and never a shell. `label` names which CLI ran.
  */
 export type CliSpawnTarget =
   | { ok: true; cmd: string; entry: string; label: string }
@@ -35,7 +36,13 @@ export function resolveCliSpawn(projectRoot: string): CliSpawnTarget {
     };
   }
   if (resolved.ok) {
-    const name = resolved.version !== undefined ? `@mmnto/cli@${resolved.version}` : '@mmnto/cli';
+    // An install is recognised by its path (`node_modules/@mmnto/cli`), so a fork
+    // installed under that alias runs; the label then names what it really is.
+    const version = resolved.version !== undefined ? `@${resolved.version}` : '';
+    const name =
+      resolved.aliasOf !== undefined
+        ? `${resolved.aliasOf}${version} (installed as @mmnto/cli)`
+        : `@mmnto/cli${version}`;
     // A `totem` earlier on PATH that could not be verified was skipped: the CLI
     // that runs is not the one the user's shell would run, so the label says so.
     const skipped =

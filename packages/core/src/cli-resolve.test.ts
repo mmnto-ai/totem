@@ -58,6 +58,8 @@ function fakeFs(
 
 const CLI_PKG = '{"name":"@mmnto/cli","version":"7.7.7"}';
 const OTHER_PKG = '{"name":"totem","version":"5.2.0"}';
+const FORK_PKG = '{"name":"@acme/cli","version":"2.13.0-acme.1"}';
+const NESTED_PKG = '{"name":"someone-else","config":{"name":"@mmnto/cli"},"version":"1.0.0"}';
 
 describe('resolveLocalEntry (moved from the CLI re-exec; mmnto-ai/totem#3008)', () => {
   let tmpRoot: string;
@@ -130,10 +132,14 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
   const binB = path.join(path.sep, 'bin-b');
   const pathEnv = [binA, binB].join(path.delimiter);
 
-  it('win32 npm layout: <dir>/node_modules/@mmnto/cli/dist/index.js with a matching package.json', () => {
+  it('win32 npm layout: the totem shim beside <dir>/node_modules/@mmnto/cli/dist/index.js', () => {
     const pkgDir = path.join(binB, 'node_modules', '@mmnto', 'cli');
     const entry = path.join(pkgDir, 'dist', 'index.js');
-    const fsx = fakeFs({ [entry]: '', [path.join(pkgDir, 'package.json')]: CLI_PKG });
+    const fsx = fakeFs({
+      [path.join(binB, 'totem.cmd')]: '',
+      [entry]: '',
+      [path.join(pkgDir, 'package.json')]: CLI_PKG,
+    });
     expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({
       hit: { entry, version: '7.7.7', tier: 'global' },
       unverified: [],
@@ -166,13 +172,51 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     expect(probe.unverified).toEqual([shim]);
   });
 
-  it('a win32-layout directory whose package.json names another package is not a hit', () => {
+  it('a directory holding node_modules/@mmnto/cli but no totem shim is not a global install', () => {
     const pkgDir = path.join(binA, 'node_modules', '@mmnto', 'cli');
     const fsx = fakeFs({
       [path.join(pkgDir, 'dist', 'index.js')]: '',
-      [path.join(pkgDir, 'package.json')]: OTHER_PKG,
+      [path.join(pkgDir, 'package.json')]: CLI_PKG,
     });
     expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({ unverified: [] });
+  });
+
+  it('a fork installed globally under the alias is a hit by its path, and its own name is reported', () => {
+    const pkgDir = path.join(binA, 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const fsx = fakeFs({
+      [path.join(binA, 'totem.cmd')]: '',
+      [entry]: '',
+      [path.join(pkgDir, 'package.json')]: FORK_PKG,
+    });
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({
+      hit: { entry, version: '2.13.0-acme.1', tier: 'global', aliasOf: '@acme/cli' },
+      unverified: [],
+    });
+  });
+
+  it('POSIX: a link that resolves outside node_modules is a hit when the manifest names @mmnto/cli (a linked install)', () => {
+    const pkgDir = path.join(path.sep, 'src', 'totem', 'packages', 'cli');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const fsx = fakeFs(
+      { [entry]: '', [path.join(pkgDir, 'package.json')]: CLI_PKG },
+      { [path.join(binA, 'totem')]: entry },
+    );
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({
+      hit: { entry, version: '7.7.7', tier: 'global' },
+      unverified: [],
+    });
+  });
+
+  it('POSIX: a manifest that carries @mmnto/cli only as a nested name is not a hit', () => {
+    const pkgDir = path.join(path.sep, 'opt', 'someone-else');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const shim = path.join(binA, 'totem');
+    const fsx = fakeFs(
+      { [entry]: '', [path.join(pkgDir, 'package.json')]: NESTED_PKG },
+      { [shim]: entry },
+    );
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({ unverified: [shim] });
   });
 
   it('a totem.cmd on PATH with no npm layout lands in unverified', () => {
@@ -193,6 +237,7 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     const entry = path.join(pkgDir, 'dist', 'index.js');
     const fsx = fakeFs({
       [cmd]: '',
+      [path.join(binB, 'totem.cmd')]: '',
       [entry]: '',
       [path.join(pkgDir, 'package.json')]: CLI_PKG,
     });
@@ -202,7 +247,7 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     });
   });
 
-  it('an unreadable package.json in one PATH directory is not a hit there, and a valid install later on PATH is still found', () => {
+  it('an unreadable package.json never stops the scan: a shimless directory is skipped and a valid install later on PATH is found', () => {
     const badDir = path.join(binA, 'node_modules', '@mmnto', 'cli');
     const badPkg = path.join(badDir, 'package.json');
     const goodDir = path.join(binB, 'node_modules', '@mmnto', 'cli');
@@ -210,6 +255,7 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     const fsx = fakeFs(
       {
         [path.join(badDir, 'dist', 'index.js')]: '',
+        [path.join(binB, 'totem.cmd')]: '',
         [entry]: '',
         [path.join(goodDir, 'package.json')]: CLI_PKG,
       },
@@ -222,8 +268,23 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     });
   });
 
-  it('an unreadable package.json behind a POSIX link is not a hit, and nothing throws', () => {
+  it('an unreadable package.json behind a POSIX link: the path still identifies the install, the version is unknown, nothing throws', () => {
     const pkgDir = path.join(path.sep, 'lib', 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const shim = path.join(binA, 'totem');
+    const fsx = fakeFs(
+      { [entry]: '' },
+      { [shim]: entry },
+      { unreadable: [path.join(pkgDir, 'package.json')] },
+    );
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({
+      hit: { entry, version: undefined, tier: 'global' },
+      unverified: [],
+    });
+  });
+
+  it('an unreadable package.json behind a POSIX link that resolves outside node_modules is not a hit', () => {
+    const pkgDir = path.join(path.sep, 'opt', 'unknown');
     const entry = path.join(pkgDir, 'dist', 'index.js');
     const shim = path.join(binA, 'totem');
     const fsx = fakeFs(
@@ -270,12 +331,29 @@ describe('resolveTotemCli (mmnto-ai/totem#3008)', () => {
     const bin = path.join(path.sep, 'bin');
     const globalDir = path.join(bin, 'node_modules', '@mmnto', 'cli');
     const entry = path.join(globalDir, 'dist', 'index.js');
-    const fsx = fakeFs({ [entry]: '', [path.join(globalDir, 'package.json')]: CLI_PKG });
+    const fsx = fakeFs({
+      [path.join(bin, 'totem.cmd')]: '',
+      [entry]: '',
+      [path.join(globalDir, 'package.json')]: CLI_PKG,
+    });
     expect(resolveTotemCli(start, { pathEnv: bin, fs: fsx })).toEqual({
       ok: true,
       entry,
       version: '7.7.7',
       tier: 'global',
+    });
+  });
+
+  it('a pinned fork installed under the alias resolves by its path, and its own name is reported', () => {
+    const pkgDir = path.join(start, 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const fsx = fakeFs({ [entry]: '', [path.join(pkgDir, 'package.json')]: FORK_PKG });
+    expect(resolveTotemCli(start, { pathEnv: '', fs: fsx })).toEqual({
+      ok: true,
+      entry,
+      version: '2.13.0-acme.1',
+      tier: 'pinned',
+      aliasOf: '@acme/cli',
     });
   });
 
@@ -287,6 +365,7 @@ describe('resolveTotemCli (mmnto-ai/totem#3008)', () => {
     const entry = path.join(globalDir, 'dist', 'index.js');
     const fsx = fakeFs({
       [cmd]: '',
+      [path.join(bin, 'totem.cmd')]: '',
       [entry]: '',
       [path.join(globalDir, 'package.json')]: CLI_PKG,
     });
