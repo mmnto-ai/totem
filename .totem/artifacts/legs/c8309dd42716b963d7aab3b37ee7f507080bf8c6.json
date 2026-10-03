@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c8309dd42716b963d7aab3b37ee7f507080bf8c6",
+  "readAt": "2026-10-03T04:13:09.462Z",
+  "folded": ["3004-C1", "3004-C2", "3004-C3", "3004-C4", "3004-C5"],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 4 MINOR, 1 QUESTION over c111e26b..c8309dd4, the scoped re-armed read of the round-two fold (mmnto-ai/totem#3004): the move, scope, bare/non-bare reach, the ENOTDIR ordering test (fails on c111e26b for the ordering reason), the guard's call-site coverage and the dual-directive LOUD-default shape hold; the remainder is prose and one literal. The leg named convergence: no behavioural surface remains in this region for a further read.",
+  "findings": [
+    {
+      "id": "3004-C1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1970,
+      "claim": "The .gitignore block is written before any installer or scan that can throw, so a partial init never leaves Totem's local state exposed.",
+      "counterexample": "FOLDED as prose: the comment now names what the write precedes (the AI-tool installers, the hook installers and the cursor scan) and no longer says 'never'; unguarded writes of Totem's own state still precede it (readPilotState -> writePilotState with no catch, init.ts:1846 and utils/pilot.ts:94; the lessons mkdirSync and .gitkeep write, init.ts:1856-1860; the fresh config writeFileSync, init.ts:1822), which are not installers. The scan was the LAST unhandled site before the old position; the move also puts the write ahead of hookInstaller (2149), distributeClaudeSkills (2188), installEnforcementHooks (2248) and installPostMergeHook (2313)."
+    },
+    {
+      "id": "3004-C2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 1703,
+      "claim": "The test proves the ignores are written before the cursor scan.",
+      "counterexample": "FOLDED as prose: the test comment now says it pins the order against the scan only (the last unhandled site) and that the installers between are covered by reading. Measured by the leg: ENOTDIR on Windows (Node v24.16.0) reads 'ENOTDIR: not a directory, scandir ...', libuv's uniform form; on c111e26b the test fails at readFileSync ENOENT, the ordering reason."
+    },
+    {
+      "id": "3004-C3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1423,
+      "claim": "A skipped totemDir is described as '(the repository root, a '..' segment or a gitignore pattern character)'.",
+      "counterexample": "FOLDED as a literal: the row now says 'not a plain directory name (segments of letters, digits, '.', '_' or '-', and neither the repository root nor a '.' or '..' segment)', which is what isPlainIgnoreDir (init.ts:1392-1396) refuses; the leg measured the guard false for 'my state', 'state@v2', 'a//b', 'a/./b' and '.totem/.', none of which the old closed list named."
+    },
+    {
+      "id": "3004-C4",
+      "severity": "MINOR",
+      "file": "packages/mcp/README.md",
+      "line": 37,
+      "claim": "README and changeset: totem init ignores the local state for a configured totemDir beside the default .totem/.",
+      "counterexample": "FOLDED as prose in both: 'for a configured totemDir that is a plain directory name (the repository root or another name is skipped with a summary row)'."
+    },
+    {
+      "id": "3004-C5",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1376,
+      "claim": "totemLocalStateIgnores is exported with a doc-only precondition (a dir already accepted by isPlainIgnoreDir); called with '.' it yields './ledger/', which matches nothing.",
+      "counterexample": "ANSWERED: acceptable. The function is a pure mapper exported for the test; its one production caller sits behind the guard (init.ts:1418 before 1433 and 1463), the doc comment states the precondition, and a self-guard would duplicate the summary-row decision that belongs to ensureTotemGitignore. No change."
+    }
+  ]
+}
