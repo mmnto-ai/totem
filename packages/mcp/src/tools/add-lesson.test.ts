@@ -50,6 +50,15 @@ vi.mock('@mmnto/totem', async () => {
   };
 });
 
+/** The absolute CLI entry the mocked resolver returns on a hit (mmnto-ai/totem#3008). */
+const FAKE_ENTRY = '/fake/project/node_modules/@mmnto/cli/dist/index.js';
+const RESOLVED_HIT = { ok: true as const, entry: FAKE_ENTRY, version: '9.9.9', tier: 'pinned' };
+let mockResolution: unknown = RESOLVED_HIT;
+
+vi.mock('@mmnto/totem/cli-resolve', () => ({
+  resolveTotemCli: vi.fn(() => mockResolution),
+}));
+
 vi.mock('../context.js', () => ({
   getContext: vi.fn(async () => ({
     projectRoot: '/fake/project',
@@ -263,9 +272,9 @@ describe('add_lesson auth model (#844)', () => {
     expect(headingLine).not.toContain('>');
   });
 
-  // --- Spawn options (#1023) ---
+  // --- Spawn options (#1023; no shell since mmnto-ai/totem#3008) ---
 
-  it('passes env and shell options to spawn for Windows compat (#1023)', async () => {
+  it('passes env to spawn and no shell (node runs the entry directly)', async () => {
     const { spawn } = await import('node:child_process');
 
     await handle({ lesson: 'Windows compat test', context_tags: ['test'] });
@@ -275,7 +284,61 @@ describe('add_lesson auth model (#844)', () => {
     const env = opts.env as Record<string, unknown>;
     expect(env).toBeDefined();
     expect(Object.keys(env).some((k) => k.toLowerCase() === 'path')).toBe(true);
-    expect(typeof opts.shell).toBe('boolean');
+    expect(opts.shell).toBeFalsy();
+  });
+
+  // --- The resolved CLI (mmnto-ai/totem#3008) ---
+
+  it('the sync spawns node with the resolved entry, never a package manager, npx, a bare totem or a shell', async () => {
+    const { spawn } = await import('node:child_process');
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    const result = (await handle({ lesson: 'Resolved sync', context_tags: ['test'] })) as {
+      content: Array<{ text: string }>;
+    };
+
+    // The reply names the CLI that ran, as verify_execution's does.
+    expect(result.content[0]!.text).toMatch(
+      / CLI: @mmnto\/cli(@\S+)?, (workspace|pinned|global)\./,
+    );
+    expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore + 1);
+    const [cmd, args, opts] = vi.mocked(spawn).mock.calls.at(-1)!;
+    expect(cmd).toBe(process.execPath);
+    expect(args).toEqual([FAKE_ENTRY, 'sync', '--incremental']);
+    for (const arg of args as string[]) {
+      expect(['npx', 'pnpm', 'yarn', 'totem']).not.toContain(arg);
+    }
+    expect((opts as { shell?: unknown }).shell).toBeFalsy();
+  });
+
+  it('with nothing resolvable, the sync spawns nothing, the lesson stays written and the refusal is the sync output', async () => {
+    const { spawn } = await import('node:child_process');
+    mockResolution = {
+      ok: false,
+      looked: [
+        'a workspace build at packages/cli/dist/index.js, walking up from /fake/project',
+        'a pinned install at node_modules/@mmnto/cli/dist/index.js, walking up from /fake/project',
+        'an npm-layout global install of @mmnto/cli on PATH',
+      ],
+      unverified: [],
+    };
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    try {
+      const result = (await handle({
+        lesson: 'Written with no CLI',
+        context_tags: ['test'],
+      })) as { isError?: boolean; content: Array<{ text: string }> };
+
+      expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore);
+      expect(lastWrittenEntry).toContain('Written with no CLI');
+      const text = result.content[0]!.text;
+      expect(text).toContain('Sync failed: Totem CLI not found. Looked for: (1) a workspace build');
+      expect(text).toContain('(3) an npm-layout global install of @mmnto/cli on PATH.');
+      expect(text).not.toContain('was found on PATH');
+    } finally {
+      mockResolution = RESOLVED_HIT;
+    }
   });
 
   // --- Live full-sync epoch deferral (#2562, falsification round 3 MAJOR 1) ---

@@ -424,7 +424,8 @@ lessonCmd
   .action(async (text: string) => {
     try {
       const { lessonAddCommand } = await import('./commands/lesson.js');
-      await lessonAddCommand(text);
+      // The lite build has no `sync` command (mmnto-ai/totem#3008): no background re-index.
+      await lessonAddCommand(text, { backgroundSync: false });
     } catch (err) {
       handleError(err);
     }

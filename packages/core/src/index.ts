@@ -66,6 +66,23 @@ export { buildMissingSdkHint } from './missing-sdk.js';
 export type { AtomicWriteOptions } from './fs-atomic.js';
 export { writeFileAtomicSync } from './fs-atomic.js';
 
+// Totem's own CLI, resolved explicitly for unattended spawns (mmnto-ai/totem#3008).
+// Also exported as the `@mmnto/totem/cli-resolve` subpath so callers that must
+// not load this barrel (the CLI's re-exec) can static-import it.
+export type {
+  CliResolution,
+  CliResolveFs,
+  GlobalEntry,
+  GlobalProbe,
+  LocalEntry,
+} from './cli-resolve.js';
+export {
+  NODE_CLI_RESOLVE_FS,
+  resolveGlobalEntry,
+  resolveLocalEntry,
+  resolveTotemCli,
+} from './cli-resolve.js';
+
 // Gate engine (WS3 — Proposal 288 §6.2)
 export type {
   ActiveFreeze,

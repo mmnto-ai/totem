@@ -27,7 +27,6 @@ import {
   buildResolveBlock,
   checkHooksInstalled,
   declaredHookTier,
-  detectTotemPrefix,
   generateHookHelpers,
   getFallbackCommand,
   installGitHook,
@@ -231,54 +230,6 @@ describe('the anchored-evidence fixtures parse as real run artifacts (mmnto-ai/t
     );
     expect(parsed.admission?.runMetadata?.promptSource).toBe(PROMPT_SOURCE_OVERRIDE);
     expect(parsed.output.content).toBe(DOCUMENT_DRAFT);
-  });
-});
-
-describe('detectTotemPrefix', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-detect-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  it('returns pnpm exec when pnpm-lock.yaml exists', () => {
-    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('pnpm exec totem');
-  });
-
-  it('returns yarn when yarn.lock exists', () => {
-    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('yarn totem');
-  });
-
-  it('returns bunx when bun.lockb exists (legacy)', () => {
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('bunx totem');
-  });
-
-  it('returns bunx when bun.lock exists (Bun >= 1.2)', () => {
-    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('bunx totem');
-  });
-
-  it('falls back to npx when no lockfile exists', () => {
-    expect(detectTotemPrefix(tmpDir)).toBe('npx totem');
-  });
-
-  it('prefers pnpm over bun when both lockfiles exist', () => {
-    fs.writeFileSync(path.join(tmpDir, 'pnpm-lock.yaml'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('pnpm exec totem');
-  });
-
-  it('prefers yarn over bun when both lockfiles exist', () => {
-    fs.writeFileSync(path.join(tmpDir, 'yarn.lock'), '');
-    fs.writeFileSync(path.join(tmpDir, 'bun.lockb'), '');
-    expect(detectTotemPrefix(tmpDir)).toBe('yarn totem');
   });
 });
 

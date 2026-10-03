@@ -139,15 +139,6 @@ export function getFallbackCommand(cwd: string): string {
   return 'totem';
 }
 
-/** @deprecated Use {@link getFallbackCommand} instead. Kept for backwards compatibility. */
-export function detectTotemPrefix(cwd: string): string {
-  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm exec totem';
-  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn totem';
-  if (fs.existsSync(path.join(cwd, 'bun.lockb')) || fs.existsSync(path.join(cwd, 'bun.lock')))
-    return 'bunx totem';
-  return 'npx totem';
-}
-
 // ─── Hook render options (mmnto-ai/totem#2692) ────────────────
 
 /** The `totemDir` every hook renders when the repo configures none. */

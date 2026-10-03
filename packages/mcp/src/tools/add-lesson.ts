@@ -16,8 +16,8 @@ import {
   writeLessonFileAsync,
 } from '@mmnto/totem';
 
+import { resolveCliSpawn } from '../cli-spawn.js';
 import { getContext, getProjectBasics, reconnectStore } from '../context.js';
-import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
 // ---------------------------------------------------------------------------
@@ -50,16 +50,6 @@ function sanitizeHeading(heading: string): string {
   return heading.replace(/[<>]/g, '');
 }
 
-/**
- * Build the correct package-manager command for running `totem sync`.
- */
-function detectSyncCommand(projectRoot: string): { cmd: string; args: string[] } {
-  const pm = detectPackageManager(projectRoot);
-  if (pm === 'pnpm') return { cmd: 'pnpm', args: ['exec', 'totem', 'sync', '--incremental'] };
-  if (pm === 'yarn') return { cmd: 'yarn', args: ['totem', 'sync', '--incremental'] };
-  return { cmd: 'npx', args: ['totem', 'sync', '--incremental'] };
-}
-
 const SYNC_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 10_000;
 
@@ -77,6 +67,8 @@ interface SyncRunResult {
   success: boolean;
   outcome: SyncOutcome;
   output: string;
+  /** Which CLI the sync ran (`@mmnto/cli@<version>, <tier>`); absent when none resolved. */
+  cli?: string;
 }
 
 /**
@@ -101,21 +93,26 @@ function killTree(child: ReturnType<typeof spawn>): void {
 /**
  * Spawn `totem sync --incremental` and await its completion (up to SYNC_TIMEOUT_MS).
  * Returns { success, output } with captured stdout/stderr (capped at MAX_OUTPUT_BYTES).
+ * The command is `node` plus the resolved CLI entry, no shell; with no CLI
+ * resolvable nothing is spawned and the refusal is the output (mmnto-ai/totem#3008).
  */
 function runSync(projectRoot: string): Promise<SyncRunResult> {
   return new Promise((resolve) => {
-    const { cmd, args } = detectSyncCommand(projectRoot);
+    const target = resolveCliSpawn(projectRoot);
+    if (!target.ok) {
+      resolve({ success: false, outcome: 'spawn-error', output: target.message });
+      return;
+    }
     const chunks: string[] = [];
     let totalBytes = 0;
     let capped = false;
 
-    const child = spawn(cmd, args, {
+    const child = spawn(target.cmd, [target.entry, 'sync', '--incremental'], {
       cwd: projectRoot,
       detached: process.platform !== 'win32', // enables process group kill on Unix
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       env: { ...process.env },
-      shell: process.platform === 'win32', // resolve .cmd shims on Windows (#1023)
     });
 
     const capture = (data: Buffer) => {
@@ -136,7 +133,12 @@ function runSync(projectRoot: string): Promise<SyncRunResult> {
 
     const timer = setTimeout(() => {
       killTree(child);
-      resolve({ success: false, outcome: 'timed-out', output: 'Sync timed out after 60s.' });
+      resolve({
+        success: false,
+        outcome: 'timed-out',
+        output: 'Sync timed out after 60s.',
+        cli: target.label,
+      });
     }, SYNC_TIMEOUT_MS);
 
     child.on('close', (code) => {
@@ -145,12 +147,18 @@ function runSync(projectRoot: string): Promise<SyncRunResult> {
         success: code === 0,
         outcome: code === 0 ? 'ok' : 'failed',
         output: chunks.join(''),
+        cli: target.label,
       });
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ success: false, outcome: 'spawn-error', output: `Spawn error: ${err.message}` });
+      resolve({
+        success: false,
+        outcome: 'spawn-error',
+        output: `Spawn error: ${err.message}`,
+        cli: target.label,
+      });
     });
   });
 }
@@ -392,7 +400,7 @@ export function registerAddLesson(server: McpServer): void {
             activeSyncPromise = null;
           });
         }
-        const { success, outcome, output } = await activeSyncPromise;
+        const { success, outcome, output, cli } = await activeSyncPromise;
 
         if (!isJoining) {
           try {
@@ -405,6 +413,8 @@ export function registerAddLesson(server: McpServer): void {
         let syncMessage = success
           ? `Sync completed successfully. ${output.trim()}`
           : `Sync failed: ${output.trim()}`;
+        // Name the CLI that ran, as verify_execution does (mmnto-ai/totem#3008).
+        if (cli !== undefined) syncMessage += ` CLI: ${cli}.`;
         if (storeFault) {
           // mmnto-ai/totem#3012: say what the sync's outcome means for the
           // rebuild — a timeout, a failed exit and an unstarted sync differ.

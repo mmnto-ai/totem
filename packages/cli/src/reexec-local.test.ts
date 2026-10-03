@@ -29,60 +29,9 @@ function writePinnedTier(root: string): string {
   return entry;
 }
 
-describe('resolveLocalEntry (mmnto-ai/totem#2018 L1 — ADR-072 cascade tiers 1+2)', () => {
-  let tmpRoot: string;
-
-  beforeEach(() => {
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-reexec-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpRoot, { recursive: true, force: true });
-  });
-
-  it('tier 1: resolves the workspace-HEAD build, identity-guarded on the package name', () => {
-    const entry = writeWorkspaceTier(tmpRoot);
-    expect(resolveLocalEntry(tmpRoot)?.entry).toBe(entry);
-  });
-
-  it('tier 1 guard: a packages/cli that is NOT @mmnto/cli does not match', () => {
-    writeWorkspaceTier(tmpRoot, 'someone-elses-cli');
-    expect(resolveLocalEntry(tmpRoot)).toBeUndefined();
-  });
-
-  it('tier 1 requires the built entry — package.json alone is not enough', () => {
-    writeWorkspaceTier(tmpRoot);
-    fs.rmSync(path.join(tmpRoot, 'packages', 'cli', 'dist', 'index.js'));
-    expect(resolveLocalEntry(tmpRoot)).toBeUndefined();
-  });
-
-  it('tier 2: resolves the pinned @mmnto/cli entry', () => {
-    const entry = writePinnedTier(tmpRoot);
-    expect(resolveLocalEntry(tmpRoot)?.entry).toBe(entry);
-  });
-
-  it('tier 1 beats tier 2 when both are present', () => {
-    const workspaceEntry = writeWorkspaceTier(tmpRoot);
-    writePinnedTier(tmpRoot);
-    expect(resolveLocalEntry(tmpRoot)?.entry).toBe(workspaceEntry);
-  });
-
-  it('walks up from a nested cwd', () => {
-    const entry = writePinnedTier(tmpRoot);
-    const nested = path.join(tmpRoot, 'src', 'deep');
-    fs.mkdirSync(nested, { recursive: true });
-    expect(resolveLocalEntry(nested)?.entry).toBe(entry);
-  });
-
-  it('no local install anywhere → undefined', () => {
-    expect(resolveLocalEntry(tmpRoot)).toBeUndefined();
-  });
-
-  it('reports the candidate version when readable', () => {
-    writePinnedTier(tmpRoot);
-    expect(resolveLocalEntry(tmpRoot)?.version).toBe('8.8.8');
-  });
-});
+// The resolveLocalEntry tier tests moved with the function to core
+// (packages/core/src/cli-resolve.test.ts, mmnto-ai/totem#3008); the
+// delegation tests below exercise it through this module's re-export.
 
 describe('maybeReexecLocal', () => {
   let tmpRoot: string;

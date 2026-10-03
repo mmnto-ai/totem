@@ -22,15 +22,17 @@ import * as path from 'node:path';
 
 import { sync as spawnSync } from 'cross-spawn';
 
-const VERSION_RE = /"version"\s*:\s*"([^"]+)"/;
-const NAME_IS_CLI_RE = /"name"\s*:\s*"@mmnto\/cli"/;
+import { type LocalEntry, resolveLocalEntry } from '@mmnto/totem/cli-resolve';
+
+// The cascade walk lives in core (mmnto-ai/totem#3008), shared with the MCP
+// server's spawners; re-exported here for this module's existing callers.
+export { type LocalEntry, resolveLocalEntry };
 
 const PACKAGES_DIR = 'packages';
 const SRC_DIR = 'src';
 const DIST_DIR = 'dist';
 const NODE_MODULES_DIR = 'node_modules';
 const ENTRY_FILE = 'index.js';
-const PACKAGE_JSON = 'package.json';
 const CLI_PACKAGE = 'cli';
 const CORE_PACKAGE = 'core';
 /** Directory names the freshness walk never descends into. */
@@ -51,19 +53,10 @@ export interface WorkspaceFreshness {
   stale?: { package: WorkspacePackage; sourceNewestAt: string; distBuiltAt: string };
 }
 
-export interface LocalEntry {
-  /** Absolute path to the local `dist/index.js` to delegate to. */
-  entry: string;
-  /** The local install's version, when its package.json is readable. */
-  version?: string;
-  /** Which cascade tier matched: workspace-HEAD or the pinned dependency. */
-  tier: 'workspace' | 'pinned';
-}
-
 /**
  * Every filesystem read the freshness probe makes (existence, mtime, directory
- * listing) — a seam for tests. The cascade walk in `resolveLocalEntry` does
- * not use it.
+ * listing) — a seam for tests. The cascade walk in `resolveLocalEntry` (core,
+ * `@mmnto/totem/cli-resolve`) does not use it.
  */
 export interface FreshnessFs {
   exists(p: string): boolean;
@@ -76,12 +69,6 @@ const NODE_FRESHNESS_FS: FreshnessFs = {
   stat: (p) => fs.statSync(p),
   readdir: (p) => fs.readdirSync(p, { withFileTypes: true }),
 };
-
-/** Probe-grade version read — no JSON.parse, no fail-open catch. */
-function readVersion(pkgJsonPath: string): string | undefined {
-  if (!fs.existsSync(pkgJsonPath)) return undefined;
-  return VERSION_RE.exec(fs.readFileSync(pkgJsonPath, 'utf-8'))?.[1];
-}
 
 /** Newest mtime (ms) of any file under `dir`, skipping `node_modules` and `dist`. */
 function newestSourceMtimeMs(dir: string, fsx: FreshnessFs): number | undefined {
@@ -147,49 +134,6 @@ function readWorkspaceFreshness(root: string, fsx: FreshnessFs): WorkspaceFreshn
 function workspaceRootOf(entry: string): string {
   // entry = <root>/packages/cli/dist/index.js
   return path.dirname(path.dirname(path.dirname(path.dirname(entry))));
-}
-
-/**
- * Resolve the project-local CLI entry by walking up from `cwd`, mirroring the
- * ADR-072 cascade's deterministic tiers:
- *
- * 1. **Workspace-HEAD** — `packages/cli/dist/index.js`, identity-guarded on
- *    `packages/cli/package.json` declaring `@mmnto/cli` (the dogfood monorepo;
- *    the build you just made wins over any installed copy).
- * 2. **Pinned dependency** — `node_modules/@mmnto/cli/dist/index.js`, the
- *    project's version-locked install via the package's own entry point.
- *
- * Both tiers require the BUILT entry to exist — an unbuilt checkout falls
- * through to running in place (where the mmnto-ai/totem#2018 L2 hint explains
- * the build step).
- */
-export function resolveLocalEntry(cwd: string): LocalEntry | undefined {
-  let dir = path.resolve(cwd);
-  for (;;) {
-    const workspacePkg = path.join(dir, PACKAGES_DIR, CLI_PACKAGE, PACKAGE_JSON);
-    const workspaceEntry = path.join(dir, PACKAGES_DIR, CLI_PACKAGE, DIST_DIR, ENTRY_FILE);
-    if (
-      fs.existsSync(workspaceEntry) &&
-      fs.existsSync(workspacePkg) &&
-      NAME_IS_CLI_RE.test(fs.readFileSync(workspacePkg, 'utf-8'))
-    ) {
-      return { entry: workspaceEntry, version: readVersion(workspacePkg), tier: 'workspace' };
-    }
-
-    const pinnedDir = path.join(dir, NODE_MODULES_DIR, '@mmnto', CLI_PACKAGE);
-    const pinnedEntry = path.join(pinnedDir, DIST_DIR, ENTRY_FILE);
-    if (fs.existsSync(pinnedEntry)) {
-      return {
-        entry: pinnedEntry,
-        version: readVersion(path.join(pinnedDir, PACKAGE_JSON)),
-        tier: 'pinned',
-      };
-    }
-
-    const parent = path.dirname(dir);
-    if (parent === dir) return undefined;
-    dir = parent;
-  }
 }
 
 /** Realpath when resolvable; the input when the path does not exist. */
