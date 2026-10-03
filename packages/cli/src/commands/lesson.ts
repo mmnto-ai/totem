@@ -51,13 +51,22 @@ export async function lessonListCommand(): Promise<void> {
   log.info(TAG, `${bold(String(lessons.length))} lesson(s) total`);
 }
 
-export async function lessonAddCommand(text: string): Promise<void> {
+/**
+ * Add a lesson and, by default, start a background `totem sync --incremental`
+ * by spawning this CLI itself (`node` plus `process.argv[1]`, no shell;
+ * mmnto-ai/totem#3008). The lite build passes `backgroundSync: false`: it has
+ * no `sync` command and is a compiled binary, so it prints one line instead.
+ */
+export async function lessonAddCommand(
+  text: string,
+  opts?: { backgroundSync?: boolean },
+): Promise<void> {
   const { spawn } = await import('node:child_process');
   const fs = await import('node:fs');
   const path = await import('node:path');
   const { generateLessonHeading, writeLessonFile } = await import('@mmnto/totem');
   const { log } = await import('../ui.js');
-  const { IS_WIN, loadConfig, resolveConfigPath, sanitize } = await import('../utils.js');
+  const { loadConfig, resolveConfigPath, sanitize } = await import('../utils.js');
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -77,30 +86,29 @@ export async function lessonAddCommand(text: string): Promise<void> {
   const fileName = path.basename(writtenPath);
   log.success(TAG, `Lesson saved to ${config.totemDir}/lessons/${fileName}`);
 
-  // Trigger incremental sync in background
-  function detectSyncCommand(dir: string): { cmd: string; args: string[] } {
-    if (fs.existsSync(path.join(dir, 'pnpm-lock.yaml'))) {
-      return {
-        cmd: IS_WIN ? 'pnpm.cmd' : 'pnpm',
-        args: ['exec', 'totem', 'sync', '--incremental'],
-      };
-    }
-    if (fs.existsSync(path.join(dir, 'yarn.lock'))) {
-      return { cmd: IS_WIN ? 'yarn.cmd' : 'yarn', args: ['totem', 'sync', '--incremental'] };
-    }
-    return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
+  if (opts?.backgroundSync === false) {
+    log.info(
+      TAG,
+      'Index not refreshed: the lite build has no sync. Run totem sync with the full CLI (@mmnto/cli) to index this lesson.',
+    );
+    return;
   }
 
+  // Trigger incremental sync in background: this CLI spawning itself
+  // (mmnto-ai/totem#3008), no lockfile, no package manager, no shell.
+  const selfEntry = process.argv[1];
+  if (selfEntry === undefined) {
+    log.warn(TAG, 'Background re-index skipped: the running CLI entry is unknown.');
+    return;
+  }
   const logPath = path.join(totemDir, 'mcp-sync.log');
   log.dim(TAG, 'Triggering background re-index...');
   try {
-    const { cmd, args } = detectSyncCommand(cwd);
     const logFd = fs.openSync(logPath, 'a');
-    const child = spawn(cmd, args, {
+    const child = spawn(process.execPath, [selfEntry, 'sync', '--incremental'], {
       cwd,
       detached: true,
       stdio: ['ignore', logFd, logFd],
-      shell: IS_WIN,
       windowsHide: true,
     });
     child.unref();

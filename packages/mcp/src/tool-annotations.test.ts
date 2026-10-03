@@ -21,7 +21,8 @@ const EXPECTED: Record<
   search_knowledge: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
   describe_project: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   add_lesson: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-  verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  // Closed-world since mmnto-ai/totem#3008: the spawn reaches no registry.
+  verify_execution: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 };
 
 const HINTS = ['readOnlyHint', 'destructiveHint', 'openWorldHint'] as const;
