@@ -1370,27 +1370,30 @@ const TOTEM_LOCAL_STATE_FILES = [
 /**
  * The `.gitignore` patterns for Totem's local state under `totemDir`, already
  * normalised the way `normalizeTotemDir` spells it (forward slashes, no leading
- * `./`, no trailing slash). `.` — the global profile's spelling for "this
- * directory" — anchors every pattern to the repository root with a leading `/`,
- * so the patterns reach exactly the root-level state files and directories and
- * nothing nested below them: the same reach `.totem/*.jsonl` has under `.totem`.
+ * `./`, no trailing slash) and already accepted by {@link isPlainIgnoreDir}, so
+ * every pattern is scoped by a directory of Totem's own.
  */
 export function totemLocalStateIgnores(totemDir = '.totem'): string[] {
-  const prefix = totemDir === '.' ? '/' : `${totemDir}/`;
-  return TOTEM_LOCAL_STATE_FILES.map((file) => `${prefix}${file}`);
+  return TOTEM_LOCAL_STATE_FILES.map((file) => `${totemDir}/${file}`);
 }
 
 /** The default-directory patterns, pinned by the tests and named in the README. */
 export const TOTEM_LOCAL_STATE_IGNORES = totemLocalStateIgnores('.totem');
 
 /**
- * A directory name that can be written into `.gitignore` as it is: plain path
- * segments, no `..`, none of gitignore's own pattern characters (`#` would make
- * the line a comment, `!` a re-inclusion, `*`, `?`, `[`, `]` and `\` a glob).
- * The config schema admits those characters; the ignore writer does not.
+ * A directory name that can be written into `.gitignore` as it is and scopes the
+ * patterns to Totem's own files: plain path segments, no `.` or `..` segment,
+ * none of gitignore's own pattern characters (`#` would make the line a comment,
+ * `!` a re-inclusion, `*`, `?`, `[`, `]` and `\` a glob). `.` is refused on
+ * purpose: with the repository root as the state directory, `cache/`, `temp/`
+ * and `*.jsonl` would name the project's own files, not Totem's. The config
+ * schema admits all of these; the ignore writer does not.
  */
 function isPlainIgnoreDir(dir: string): boolean {
-  return /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(dir) && !dir.split('/').includes('..');
+  return (
+    /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(dir) &&
+    dir.split('/').every((segment) => segment !== '.' && segment !== '..')
+  );
 }
 
 /**
@@ -1417,12 +1420,11 @@ export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSumm
     } else {
       summary.push({
         file: '.gitignore',
-        action: `Skipped the local-state lines for totemDir '${totemDir}' — not a plain relative path, it would read as a gitignore pattern; the default .totem/ lines were written`,
+        action: `Skipped the local-state lines for totemDir '${totemDir}' — not a plain relative directory of Totem's own (the repository root, a '..' segment or a gitignore pattern character); the default .totem/ lines were written`,
       });
     }
   }
-  const secretsEntryOf = (dir: string): string =>
-    dir === '.' ? '/secrets.json' : `${dir}/secrets.json`;
+  const secretsEntryOf = (dir: string): string => `${dir}/secrets.json`;
 
   if (!fs.existsSync(gitignorePath)) {
     // No .gitignore exists yet — create one with every Totem entry
@@ -1964,6 +1966,41 @@ export default {
       }
     }
 
+    // --- Every mode: .gitignore (mmnto-ai/totem#3004) ---
+    // Written here, before any installer or scan that can throw, so a partial
+    // init never leaves Totem's local state exposed to `git add`. A bare
+    // repository carries that state too (`totem lint` writes the metrics cache
+    // and the telemetry sink there), so this runs in every mode. The patterns
+    // follow the configured `totemDir` when a config already names one (the
+    // schema defaults and normalises it, so the loaded value is the spelling to
+    // write); a fresh install writes the default `.totem`.
+    let ignoreDir = '.totem';
+    if (existingConfig) {
+      // A config that will not load is the LOUD-default shape the hook installer
+      // takes for the same case (mmnto-ai/totem#2692 A8): the failure is printed
+      // with its cure and carried as a summary row, the default .totem/ lines are
+      // still written, and every verb that needs the config fails on it until it
+      // is fixed and `totem init` is re-run.
+      // totem-context: intentional cleanup — a disclosed fallback to the default directory (the warn and the summary row below), never a silent swallow.
+      try {
+        const { loadConfig } = await import('../utils.js');
+        ignoreDir = (await loadConfig(existingConfig)).totemDir;
+        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        const configName = path.basename(existingConfig);
+        log.warn(
+          'Totem',
+          `Could not read totemDir from ${configName} (${detail.split('\n')[0]}); the .gitignore lines name the default .totem/ paths — fix the config and re-run \`totem init\`.`,
+        );
+        summary.push({
+          file: '.gitignore',
+          action: `Could not read totemDir from ${configName} (${detail.split('\n')[0]}) — the default .totem/ lines were written; fix the config and re-run \`totem init\``,
+        });
+      }
+    }
+    summary.push(...ensureTotemGitignore(cwd, ignoreDir));
+
     if (options?.bare) {
       log.info('Totem', 'Skipping AI tool and hook installation for bare mode.');
     } else {
@@ -2310,39 +2347,6 @@ export default {
         }
       }
     } // end of bare mode else block
-
-    // --- Every mode: .gitignore (mmnto-ai/totem#3004) ---
-    // A bare repository carries Totem's local state too (`totem lint` writes the
-    // metrics cache and the telemetry sink there), so this runs outside the
-    // bare-mode branch. The patterns follow the configured `totemDir` when a
-    // config already names one (the schema defaults and normalises it, so the
-    // loaded value is the spelling to write); a fresh install writes the default
-    // `.totem`. A re-run loads the project's own config the way every verb does.
-    let ignoreDir = '.totem';
-    if (existingConfig) {
-      // The loaded config decides only which directory's lines are written; a
-      // config that cannot load is named here, in the summary, and fails every
-      // verb that needs it, so init still writes the default .totem/ lines rather
-      // than aborting after its earlier writes.
-      // totem-context: intentional cleanup — a disclosed fallback to the default directory (the warn and the summary row below), never a silent swallow.
-      try {
-        const { loadConfig } = await import('../utils.js');
-        ignoreDir = (await loadConfig(existingConfig)).totemDir;
-        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        const configName = path.basename(existingConfig);
-        log.warn(
-          'Totem',
-          `Could not read totemDir from ${configName} (${detail}); the .gitignore lines name the default .totem/ paths.`,
-        );
-        summary.push({
-          file: '.gitignore',
-          action: `Could not read totemDir from ${configName} (${detail}) — the default .totem/ lines were written`,
-        });
-      }
-    }
-    summary.push(...ensureTotemGitignore(cwd, ignoreDir));
 
     // --- Always run: action-gate install (--gates=, PR-C mmnto-ai/totem#2048) ---
     // Thin sugar that is INTENTIONALLY outside the bare-mode branch: gate

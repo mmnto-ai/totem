@@ -1700,6 +1700,22 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(lines).toContain('.totem/secrets.json');
   }, 60000);
 
+  it('writes the ignores before the cursor scan, so a scan that throws leaves the state ignored (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A FILE where the scan expects the `.cursor/rules` directory: readdirSync throws ENOTDIR
+    // on every platform, after the ignores are written and before init completes.
+    fs.mkdirSync(path.join(tmpDir, '.cursor'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.cursor', 'rules'), 'not a directory\n', 'utf-8');
+
+    await expect(initCommand({})).rejects.toThrow(/ENOTDIR|not a directory/i);
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    for (const entry of TOTEM_LOCAL_STATE_IGNORES) {
+      expect(lines, entry).toContain(entry);
+    }
+  }, 60000);
+
   it('writes the default ignores and says so when the config cannot load (mmnto-ai/totem#3004)', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
     const stderr: string[] = [];
@@ -5104,12 +5120,9 @@ describe('ensureTotemGitignore', () => {
     expect(summary).toEqual([]);
   });
 
-  it('derives the patterns from the configured totemDir and anchors a root dir with a slash', () => {
+  it('derives the patterns from the configured totemDir beside the default set', () => {
     expect(totemLocalStateIgnores('state/totem')).toEqual(
       LOCAL_STATE.map((entry) => entry.replace('.totem/', 'state/totem/')),
-    );
-    expect(totemLocalStateIgnores('.')).toEqual(
-      LOCAL_STATE.map((entry) => entry.replace('.totem/', '/')),
     );
 
     // The default directory rides beside a configured one: add-secret and the
@@ -5135,6 +5148,18 @@ describe('ensureTotemGitignore', () => {
       expect.stringMatching(/^Skipped the local-state lines for totemDir '#state'/),
       expect.stringMatching(/^Created with /),
     ]);
+  });
+
+  it('refuses the repository root as the state directory: no root-level cache/ or *.jsonl ignore', () => {
+    // `.` is the global profile's spelling and the schema admits it for a project;
+    // written as patterns it would ignore the project's own root files.
+    const summary = ensureTotemGitignore(tmpDir, '.');
+    const lines = readGitignore().split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines.some((line) => line.startsWith('/'))).toBe(false);
+    expect(lines).not.toContain('cache/');
+    expect(lines).not.toContain('*.jsonl');
+    expect(summary[0]!.action).toMatch(/^Skipped the local-state lines for totemDir '\.'/);
   });
 
   it('puts the secrets line under the header when only the vector store line is present', () => {
