@@ -42,6 +42,8 @@ const server = new McpServer({
   version,
 });
 
+// Tools register only through registerTools(): the annotations test reads the
+// same path, and a tool registered here directly would escape it (mmnto-ai/totem#3004).
 registerTools(server);
 
 const transport = new StdioServerTransport();

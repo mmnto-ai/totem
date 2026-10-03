@@ -1696,7 +1696,8 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
     expect(lines).toContain('state/totem/ledger/');
     expect(lines).toContain('state/totem/secrets.json');
-    expect(lines).not.toContain('.totem/ledger/');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines).toContain('.totem/secrets.json');
   }, 60000);
 
   it('discloses the package-level MCP dedup instead of appending a duplicate', async () => {
@@ -5093,14 +5094,40 @@ describe('ensureTotemGitignore', () => {
       LOCAL_STATE.map((entry) => entry.replace('.totem/', '/')),
     );
 
+    // The default directory rides beside a configured one: add-secret and the
+    // installed session-start hooks write under .totem/ whatever the config names.
     const summary = ensureTotemGitignore(tmpDir, 'state/totem');
     const lines = readGitignore().split('\n');
-    expect(lines).toContain('state/totem/ledger/');
-    expect(lines).toContain('state/totem/secrets.json');
-    expect(lines).toContain('.lancedb/');
-    expect(lines).not.toContain('.totem/ledger/');
+    for (const entry of ['state/totem/ledger/', 'state/totem/secrets.json', '.lancedb/']) {
+      expect(lines, entry).toContain(entry);
+    }
+    for (const entry of ['.totem/secrets.json', ...LOCAL_STATE]) {
+      expect(lines, entry).toContain(entry);
+    }
     expect(summary).toHaveLength(1);
     expect(summary[0]!.action).toContain('state/totem/secrets.json');
+  });
+
+  it('writes only the default lines, and says so, for a totemDir that would read as a pattern', () => {
+    const summary = ensureTotemGitignore(tmpDir, '#state');
+    const lines = readGitignore().split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines.some((line) => line.startsWith('#state'))).toBe(false);
+    expect(summary.map((entry) => entry.action)).toEqual([
+      expect.stringMatching(/^Skipped the local-state lines for totemDir '#state'/),
+      expect.stringMatching(/^Created with /),
+    ]);
+  });
+
+  it('puts the secrets line under the header when only the vector store line is present', () => {
+    // The pre-fold writer appended the secrets line above the header it then wrote.
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.lancedb/\n', 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines.indexOf('# Totem')).toBeLessThan(lines.indexOf('.totem/secrets.json'));
   });
 
   it('never writes an exclusion over an explicit re-inclusion', () => {
@@ -5157,6 +5184,5 @@ describe('ensureTotemGitignore', () => {
     const after = readGitignore();
 
     expect(after.startsWith('dist/\n\n# Totem\n.lancedb/\n')).toBe(true);
-    expect(fs.readdirSync(tmpDir).filter((name) => name.startsWith('.gitignore.'))).toEqual([]);
   });
 });

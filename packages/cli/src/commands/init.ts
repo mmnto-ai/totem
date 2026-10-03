@@ -1372,7 +1372,8 @@ const TOTEM_LOCAL_STATE_FILES = [
  * normalised the way `normalizeTotemDir` spells it (forward slashes, no leading
  * `./`, no trailing slash). `.` — the global profile's spelling for "this
  * directory" — anchors every pattern to the repository root with a leading `/`,
- * so a root-level `*.jsonl` never reaches the project's own files.
+ * so the patterns reach exactly the root-level state files and directories and
+ * nothing nested below them: the same reach `.totem/*.jsonl` has under `.totem`.
  */
 export function totemLocalStateIgnores(totemDir = '.totem'): string[] {
   const prefix = totemDir === '.' ? '/' : `${totemDir}/`;
@@ -1383,24 +1384,52 @@ export function totemLocalStateIgnores(totemDir = '.totem'): string[] {
 export const TOTEM_LOCAL_STATE_IGNORES = totemLocalStateIgnores('.totem');
 
 /**
- * Write Totem's `.gitignore` entries idempotently: `.lancedb/`, the secrets file
- * and the local-state patterns of {@link totemLocalStateIgnores} for `totemDir`.
- * One read and one atomic write (the Tenet 4 user-file contract: a torn write
- * would lose the project's own rules). An existing file gains only the lines it
- * lacks (exact trimmed-line match), appended at the end under one `# Totem`
- * header, and never an exclusion the project has re-included with a `!` line;
- * every other line is left untouched. No `.gitignore` → one is created with all
- * of them.
+ * A directory name that can be written into `.gitignore` as it is: plain path
+ * segments, no `..`, none of gitignore's own pattern characters (`#` would make
+ * the line a comment, `!` a re-inclusion, `*`, `?`, `[`, `]` and `\` a glob).
+ * The config schema admits those characters; the ignore writer does not.
+ */
+function isPlainIgnoreDir(dir: string): boolean {
+  return /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(dir) && !dir.split('/').includes('..');
+}
+
+/**
+ * Write Totem's `.gitignore` entries idempotently: `.lancedb/`, then the secrets
+ * file and the local-state patterns of {@link totemLocalStateIgnores} for the
+ * default `.totem` directory and, when the configured `totemDir` differs, for
+ * that directory beside it — `add-secret` and the installed session-start hooks
+ * write under `.totem/` whatever the config names (mmnto-ai/totem#3015), so the
+ * default lines always ride. One read and one atomic write (the Tenet 4 user-file contract: a torn
+ * write would lose the project's own rules). An existing file gains only the
+ * lines it lacks (exact trimmed-line match), appended at the end, under a
+ * `# Totem` header when the file has none; an entry whose exact `!` line is
+ * present is the project's choice and is not written over it; every other line
+ * is left untouched. No `.gitignore` → one is created with all of them.
  */
 export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSummaryEntry[] {
   const summary: InitSummaryEntry[] = [];
   const gitignorePath = path.join(cwd, '.gitignore');
-  const secretsEntry = totemDir === '.' ? '/secrets.json' : `${totemDir}/secrets.json`;
-  const localState = totemLocalStateIgnores(totemDir);
+
+  const dirs = ['.totem'];
+  if (totemDir !== '.totem') {
+    if (isPlainIgnoreDir(totemDir)) {
+      dirs.push(totemDir);
+    } else {
+      summary.push({
+        file: '.gitignore',
+        action: `Skipped the local-state lines for totemDir '${totemDir}' — not a plain relative path, it would read as a gitignore pattern; the default .totem/ lines were written`,
+      });
+    }
+  }
+  const secretsEntryOf = (dir: string): string =>
+    dir === '.' ? '/secrets.json' : `${dir}/secrets.json`;
 
   if (!fs.existsSync(gitignorePath)) {
     // No .gitignore exists yet — create one with every Totem entry
-    const entries = ['.lancedb/', secretsEntry, ...localState];
+    const entries = [
+      '.lancedb/',
+      ...dirs.flatMap((dir) => [secretsEntryOf(dir), ...totemLocalStateIgnores(dir)]),
+    ];
     writeFileAtomicSync(gitignorePath, `# Totem\n${entries.join('\n')}\n`);
     summary.push({
       file: '.gitignore',
@@ -1411,7 +1440,7 @@ export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSumm
 
   const current = fs.readFileSync(gitignorePath, 'utf-8');
   const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
-  // An explicit re-inclusion is the project's choice: the exclusion is not written over it.
+  // An exact re-inclusion line is the project's choice: the exclusion is not written over it.
   const wanted = (entry: string): boolean => !present.has(entry) && !present.has(`!${entry}`);
 
   const additions: string[] = [];
@@ -1420,12 +1449,17 @@ export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSumm
     additions.push('.lancedb/');
     summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
   }
-  // The secrets file (safety net — add-secret also does this)
-  if (wanted(secretsEntry)) {
-    additions.push(secretsEntry);
-    summary.push({ file: '.gitignore', action: `Added ${secretsEntry} exclusion` });
+  const missing: string[] = [];
+  for (const dir of dirs) {
+    // The secrets file: `add-secret` appends the `.totem/` line itself after every
+    // write; this is the same line ahead of time, plus the configured directory's.
+    const secretsEntry = secretsEntryOf(dir);
+    if (wanted(secretsEntry)) {
+      additions.push(secretsEntry);
+      summary.push({ file: '.gitignore', action: `Added ${secretsEntry} exclusion` });
+    }
+    missing.push(...totemLocalStateIgnores(dir).filter(wanted));
   }
-  const missing = localState.filter(wanted);
   if (missing.length > 0) {
     additions.push(...missing);
     summary.push({
@@ -2281,14 +2315,14 @@ export default {
     // A bare repository carries Totem's local state too (`totem lint` writes the
     // metrics cache and the telemetry sink there), so this runs outside the
     // bare-mode branch. The patterns follow the configured `totemDir` when a
-    // config already names one; a fresh install writes the default `.totem`.
+    // config already names one (the schema defaults and normalises it, so the
+    // loaded value is the spelling to write); a fresh install writes the default
+    // `.totem`. A re-run loads the project's own config the way every verb does.
     let ignoreDir = '.totem';
     if (existingConfig) {
       try {
         const { loadConfig } = await import('../utils.js');
-        const { normalizeTotemDir } = await import('@mmnto/totem');
-        const configured = (await loadConfig(existingConfig)).totemDir;
-        if (configured) ignoreDir = normalizeTotemDir(configured);
+        ignoreDir = (await loadConfig(existingConfig)).totemDir;
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         log.warn(
