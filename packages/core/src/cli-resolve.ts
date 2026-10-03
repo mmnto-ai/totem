@@ -100,7 +100,7 @@ export interface GlobalEntry {
 
 export interface GlobalProbe {
   hit?: GlobalEntry;
-  /** Paths of a `totem` executable found on PATH that is not an npm-layout install of @mmnto/cli. */
+  /** Paths of a `totem` file found on PATH that could not be verified as an install of @mmnto/cli (by its path or its manifest's name). */
   unverified: string[];
 }
 
