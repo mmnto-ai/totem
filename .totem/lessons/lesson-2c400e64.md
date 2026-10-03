@@ -1,4 +1,4 @@
-## Lesson — A gate's underivable read and a wrapper failure are two classes with two tier rules
+## Lesson — An underivable gate read is not a wrapper failure
 
 **Tags:** gates, docs, claude-code
 

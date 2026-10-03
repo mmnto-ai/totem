@@ -1,4 +1,4 @@
-## Lesson — A doc that says CI enforces the rules has to say when CI's lint step is advisory
+## Lesson — A doc must say when CI's lint step is advisory
 
 **Tags:** docs, ci, enforcement
 
