@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Resolution =
-  | { ok: true; entry: string; version?: string; tier: 'workspace' | 'pinned' | 'global' }
+  | {
+      ok: true;
+      entry: string;
+      version?: string;
+      tier: 'workspace' | 'pinned' | 'global';
+      unverified?: string[];
+    }
   | { ok: false; looked: string[]; unverified: string[] };
 
 const LOOKED = [
@@ -38,6 +44,20 @@ describe('resolveCliSpawn (mmnto-ai/totem#3008)', () => {
     mockResolve = () => ({ ok: true, entry: '/g/index.js', tier: 'global' });
     const target = resolveCliSpawn('/repo');
     expect(target.ok && target.label).toBe('@mmnto/cli, global');
+  });
+
+  it('says so in the label when an unverified totem earlier on PATH was skipped', () => {
+    mockResolve = () => ({
+      ok: true,
+      entry: '/g/index.js',
+      version: '9.9.9',
+      tier: 'global',
+      unverified: ['/shims/totem'],
+    });
+    const target = resolveCliSpawn('/repo');
+    expect(target.ok && target.label).toBe(
+      '@mmnto/cli@9.9.9, global (skipped an unverified totem earlier on PATH: /shims/totem)',
+    );
   });
 
   it('refuses with the three places looked and the cure when nothing resolves', () => {

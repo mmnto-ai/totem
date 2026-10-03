@@ -48,12 +48,15 @@ const BIN_VARIANTS: readonly string[] = [
 /** Every filesystem read the resolver makes — a seam for tests. */
 export interface CliResolveFs {
   exists(p: string): boolean;
+  /** True for a regular file (a link to one counts); may throw on an unreadable path. */
+  isFile(p: string): boolean;
   readText(p: string): string;
   realpath(p: string): string;
 }
 
 export const NODE_CLI_RESOLVE_FS: CliResolveFs = {
   exists: (p) => fs.existsSync(p),
+  isFile: (p) => fs.statSync(p).isFile(),
   readText: (p) => fs.readFileSync(p, 'utf-8'),
   realpath: (p) => fs.realpathSync(p),
 };
@@ -82,7 +85,18 @@ export interface GlobalProbe {
 }
 
 export type CliResolution =
-  | { ok: true; entry: string; version?: string; tier: 'workspace' | 'pinned' | 'global' }
+  | {
+      ok: true;
+      entry: string;
+      version?: string;
+      tier: 'workspace' | 'pinned' | 'global';
+      /**
+       * Present on a global hit only, and only when a `totem` earlier on PATH
+       * was skipped because it could not be verified: the CLI that runs is then
+       * not the one the user's shell would run, and the caller can say so.
+       */
+      unverified?: string[];
+    }
   | { ok: false; looked: string[]; unverified: string[] };
 
 /** Probe-grade version read — no JSON.parse, no fail-open catch. */
@@ -136,43 +150,53 @@ export function resolveLocalEntry(
   }
 }
 
-/** Realpath of `p`, or undefined when it cannot be resolved (a dangling or unreadable link). */
-function tryRealpath(p: string, fsx: CliResolveFs): string | undefined {
+/**
+ * Run one filesystem probe of the PATH scan; undefined when it throws. The
+ * global tier never throws: a PATH directory with a dangling link, an
+ * unreadable `package.json` or an unreadable entry is "not a hit" there, and
+ * the scan moves on to the next directory. The local walk does not use this:
+ * a read failure mid-walk throws, as it always has.
+ */
+function attempt<T>(probe: () => T): T | undefined {
   // totem-context: intentional probe — the catch below does not rethrow by
-  // design (mmnto-ai/totem#3008): a PATH directory whose `totem` link cannot
-  // be resolved is "not a hit", and the scan moves on to the next directory.
+  // design (mmnto-ai/totem#3008): one unreadable PATH directory must not stop
+  // the scan before a valid install later on PATH is tried.
   try {
-    return fsx.realpath(p);
+    return probe();
     // totem-context: intentional degradation — see directive above the try; placed on the line before the catch keyword, where the rule reads it.
   } catch {
     return undefined;
   }
 }
 
-/** A global hit in one PATH directory, by the two npm layouts, or undefined. */
+/** A global hit in one PATH directory, by the two npm layouts, or undefined. Never throws. */
 function probeGlobalDir(dir: string, fsx: CliResolveFs): GlobalEntry | undefined {
   // (a) The win32 npm layout: `<prefix>/node_modules/@mmnto/cli` beside the shim.
   const packagedDir = path.join(dir, NODE_MODULES_DIR, SCOPE_DIR, CLI_PACKAGE);
   const packagedEntry = path.join(packagedDir, DIST_DIR, ENTRY_FILE);
   const packagedPkg = path.join(packagedDir, PACKAGE_JSON);
-  if (fsx.exists(packagedEntry) && namesCli(packagedPkg, fsx)) {
-    return { entry: packagedEntry, version: readVersion(packagedPkg, fsx), tier: 'global' };
+  if (fsx.exists(packagedEntry) && attempt(() => namesCli(packagedPkg, fsx)) === true) {
+    return {
+      entry: packagedEntry,
+      version: attempt(() => readVersion(packagedPkg, fsx)),
+      tier: 'global',
+    };
   }
 
   // (b) The POSIX npm layout: `<bin>/totem` is a symlink to `<pkg>/dist/index.js`.
   const shim = path.join(dir, BIN_NAME);
   if (!fsx.exists(shim)) return undefined;
-  const real = tryRealpath(shim, fsx);
+  const real = attempt(() => fsx.realpath(shim));
   if (real === undefined || !real.endsWith('.js') || !fsx.exists(real)) return undefined;
   const realPkg = path.join(path.dirname(path.dirname(real)), PACKAGE_JSON);
-  if (!namesCli(realPkg, fsx)) return undefined;
-  return { entry: real, version: readVersion(realPkg, fsx), tier: 'global' };
+  if (attempt(() => namesCli(realPkg, fsx)) !== true) return undefined;
+  return { entry: real, version: attempt(() => readVersion(realPkg, fsx)), tier: 'global' };
 }
 
 /**
  * Find an npm-layout global install of `@mmnto/cli` on PATH, first hit wins.
- * A `totem` executable found in a directory that yields no hit is reported in
- * `unverified` and never run.
+ * A `totem` FILE (a directory of that name is not one) found in a directory
+ * that yields no hit is reported in `unverified` and never run. Never throws.
  */
 export function resolveGlobalEntry(
   pathEnv: string | undefined,
@@ -185,7 +209,7 @@ export function resolveGlobalEntry(
     if (hit !== undefined) return { hit, unverified };
     for (const name of BIN_VARIANTS) {
       const candidate = path.join(dir, name);
-      if (fsx.exists(candidate)) {
+      if (fsx.exists(candidate) && attempt(() => fsx.isFile(candidate)) === true) {
         unverified.push(candidate);
         break;
       }
@@ -209,7 +233,11 @@ export function resolveTotemCli(
   if (local !== undefined) return { ok: true, ...local };
 
   const globalProbe = resolveGlobalEntry(opts?.pathEnv ?? process.env.PATH, fsx);
-  if (globalProbe.hit !== undefined) return { ok: true, ...globalProbe.hit };
+  if (globalProbe.hit !== undefined) {
+    return globalProbe.unverified.length > 0
+      ? { ok: true, ...globalProbe.hit, unverified: globalProbe.unverified }
+      : { ok: true, ...globalProbe.hit };
+  }
 
   return {
     ok: false,

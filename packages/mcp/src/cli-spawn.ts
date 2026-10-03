@@ -36,11 +36,17 @@ export function resolveCliSpawn(projectRoot: string): CliSpawnTarget {
   }
   if (resolved.ok) {
     const name = resolved.version !== undefined ? `@mmnto/cli@${resolved.version}` : '@mmnto/cli';
+    // A `totem` earlier on PATH that could not be verified was skipped: the CLI
+    // that runs is not the one the user's shell would run, so the label says so.
+    const skipped =
+      resolved.unverified !== undefined && resolved.unverified.length > 0
+        ? ` (skipped an unverified totem earlier on PATH: ${resolved.unverified.join(', ')})`
+        : '';
     return {
       ok: true,
       cmd: process.execPath,
       entry: resolved.entry,
-      label: `${name}, ${resolved.tier}`,
+      label: `${name}, ${resolved.tier}${skipped}`,
     };
   }
 

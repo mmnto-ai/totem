@@ -29,12 +29,21 @@ function writePinnedTier(root: string): string {
 
 /**
  * An in-memory filesystem seam: `files` maps a path to its text, `links` maps
- * a link path to its realpath target. A link counts as existing.
+ * a link path to its realpath target. A link counts as existing. `dirs` exist
+ * and are not files; `unreadable` paths exist as files whose read throws.
  */
-function fakeFs(files: Record<string, string>, links: Record<string, string> = {}): CliResolveFs {
+function fakeFs(
+  files: Record<string, string>,
+  links: Record<string, string> = {},
+  extra: { dirs?: string[]; unreadable?: string[] } = {},
+): CliResolveFs {
+  const dirs = new Set(extra.dirs ?? []);
+  const unreadable = new Set(extra.unreadable ?? []);
   return {
-    exists: (p) => p in files || p in links,
+    exists: (p) => p in files || p in links || dirs.has(p) || unreadable.has(p),
+    isFile: (p) => p in files || p in links || unreadable.has(p),
     readText: (p) => {
+      if (unreadable.has(p)) throw new Error(`EACCES: permission denied, open ${p}`);
       const text = files[p];
       if (text === undefined) throw new Error(`ENOENT: ${p}`);
       return text;
@@ -193,6 +202,43 @@ describe('resolveGlobalEntry (mmnto-ai/totem#3008)', () => {
     });
   });
 
+  it('an unreadable package.json in one PATH directory is not a hit there, and a valid install later on PATH is still found', () => {
+    const badDir = path.join(binA, 'node_modules', '@mmnto', 'cli');
+    const badPkg = path.join(badDir, 'package.json');
+    const goodDir = path.join(binB, 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(goodDir, 'dist', 'index.js');
+    const fsx = fakeFs(
+      {
+        [path.join(badDir, 'dist', 'index.js')]: '',
+        [entry]: '',
+        [path.join(goodDir, 'package.json')]: CLI_PKG,
+      },
+      {},
+      { unreadable: [badPkg] },
+    );
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({
+      hit: { entry, version: '7.7.7', tier: 'global' },
+      unverified: [],
+    });
+  });
+
+  it('an unreadable package.json behind a POSIX link is not a hit, and nothing throws', () => {
+    const pkgDir = path.join(path.sep, 'lib', 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(pkgDir, 'dist', 'index.js');
+    const shim = path.join(binA, 'totem');
+    const fsx = fakeFs(
+      { [entry]: '' },
+      { [shim]: entry },
+      { unreadable: [path.join(pkgDir, 'package.json')] },
+    );
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({ unverified: [shim] });
+  });
+
+  it('a directory named totem is not reported as an executable', () => {
+    const fsx = fakeFs({}, {}, { dirs: [path.join(binA, 'totem')] });
+    expect(resolveGlobalEntry(pathEnv, fsx)).toEqual({ unverified: [] });
+  });
+
   it('an undefined or empty PATH finds nothing', () => {
     expect(resolveGlobalEntry(undefined, fakeFs({}))).toEqual({ unverified: [] });
     expect(resolveGlobalEntry('', fakeFs({}))).toEqual({ unverified: [] });
@@ -230,6 +276,27 @@ describe('resolveTotemCli (mmnto-ai/totem#3008)', () => {
       entry,
       version: '7.7.7',
       tier: 'global',
+    });
+  });
+
+  it('a global hit carries the unverified totem that was skipped before it on PATH', () => {
+    const shims = path.join(path.sep, 'shims');
+    const bin = path.join(path.sep, 'bin');
+    const cmd = path.join(shims, 'totem.cmd');
+    const globalDir = path.join(bin, 'node_modules', '@mmnto', 'cli');
+    const entry = path.join(globalDir, 'dist', 'index.js');
+    const fsx = fakeFs({
+      [cmd]: '',
+      [entry]: '',
+      [path.join(globalDir, 'package.json')]: CLI_PKG,
+    });
+    const pathEnv = [shims, bin].join(path.delimiter);
+    expect(resolveTotemCli(start, { pathEnv, fs: fsx })).toEqual({
+      ok: true,
+      entry,
+      version: '7.7.7',
+      tier: 'global',
+      unverified: [cmd],
     });
   });
 

@@ -117,7 +117,10 @@ export function registerVerifyExecution(server: McpServer): void {
       // .totem/temp/telemetry.jsonl and, on a suppression, a Trap Ledger event (all ignored). The
       // handler's `git diff --name-only` may refresh git's own index cache. Not open-world: the
       // tool spawns a resolved local or npm-global CLI entry with `node` and reaches no registry
-      // (mmnto-ai/totem#3008).
+      // (mmnto-ai/totem#3008). Disclosed, not counted: the lint's git reads are local commands, and
+      // in a partial clone git itself may fetch missing objects from the checkout's own remote
+      // while diffing; that is the repository's configuration, as with describe_project's status
+      // read.
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
