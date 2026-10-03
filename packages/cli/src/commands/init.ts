@@ -1350,72 +1350,96 @@ interface InitSummaryEntry {
 }
 
 /**
- * Totem's own local state under `.totem/` (mmnto-ai/totem#3004): regenerable,
- * never meant to be committed. The MCP tool hints are judged over tracked
- * content, so `totem init` ignores this state to make that designation
- * mechanical in a consumer's repository.
+ * Totem's own local state (mmnto-ai/totem#3004): regenerable, never meant to be
+ * committed, written under the configured `totemDir` (`.totem` by default). The
+ * MCP tool hints are judged over tracked content, so `totem init` ignores this
+ * state to make that designation mechanical in a consumer's repository.
  */
-export const TOTEM_LOCAL_STATE_IGNORES = [
-  '.totem/ledger/',
-  '.totem/cache/',
-  '.totem/temp/',
-  '.totem/*.jsonl',
-  '.totem/sync.lock',
-  '.totem/sync.lock.*',
-  '.totem/index-manifest.json',
-  '.totem/installed-packs.json',
-  '.totem/review-extensions.txt',
+const TOTEM_LOCAL_STATE_FILES = [
+  'ledger/',
+  'cache/',
+  'temp/',
+  '*.jsonl',
+  'sync.lock',
+  'sync.lock.*',
+  'index-manifest.json',
+  'installed-packs.json',
+  'review-extensions.txt',
 ] as const;
 
 /**
- * Write Totem's `.gitignore` entries idempotently: `.lancedb/`, the secrets
- * file and {@link TOTEM_LOCAL_STATE_IGNORES}. An existing file gains only the
- * lines it lacks (exact trimmed-line match), appended at the end; every other
- * line is left untouched. No `.gitignore` → one is created with all of them.
+ * The `.gitignore` patterns for Totem's local state under `totemDir`, already
+ * normalised the way `normalizeTotemDir` spells it (forward slashes, no leading
+ * `./`, no trailing slash). `.` — the global profile's spelling for "this
+ * directory" — anchors every pattern to the repository root with a leading `/`,
+ * so a root-level `*.jsonl` never reaches the project's own files.
  */
-export function ensureTotemGitignore(cwd: string): InitSummaryEntry[] {
+export function totemLocalStateIgnores(totemDir = '.totem'): string[] {
+  const prefix = totemDir === '.' ? '/' : `${totemDir}/`;
+  return TOTEM_LOCAL_STATE_FILES.map((file) => `${prefix}${file}`);
+}
+
+/** The default-directory patterns, pinned by the tests and named in the README. */
+export const TOTEM_LOCAL_STATE_IGNORES = totemLocalStateIgnores('.totem');
+
+/**
+ * Write Totem's `.gitignore` entries idempotently: `.lancedb/`, the secrets file
+ * and the local-state patterns of {@link totemLocalStateIgnores} for `totemDir`.
+ * One read and one atomic write (the Tenet 4 user-file contract: a torn write
+ * would lose the project's own rules). An existing file gains only the lines it
+ * lacks (exact trimmed-line match), appended at the end under one `# Totem`
+ * header, and never an exclusion the project has re-included with a `!` line;
+ * every other line is left untouched. No `.gitignore` → one is created with all
+ * of them.
+ */
+export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSummaryEntry[] {
   const summary: InitSummaryEntry[] = [];
   const gitignorePath = path.join(cwd, '.gitignore');
-  if (fs.existsSync(gitignorePath)) {
-    const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
-    if (!gitignore.includes('.lancedb')) {
-      fs.appendFileSync(gitignorePath, '\n# Totem\n.lancedb/\n');
-      summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
-    }
-    // Ensure secrets.json is gitignored (safety net — add-secret also does this)
-    const refreshed = fs.readFileSync(gitignorePath, 'utf-8');
-    const lines = refreshed.split(/\r?\n/);
-    if (!lines.some((line) => line.trim() === '.totem/secrets.json')) {
-      const separator = refreshed.endsWith('\n') ? '' : '\n';
-      fs.writeFileSync(gitignorePath, `${refreshed}${separator}.totem/secrets.json\n`, 'utf-8');
-      summary.push({ file: '.gitignore', action: 'Added .totem/secrets.json exclusion' });
-    }
-    // Totem's local state, line by line, the same way as the secrets line.
-    const current = fs.readFileSync(gitignorePath, 'utf-8');
-    const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
-    const missing = TOTEM_LOCAL_STATE_IGNORES.filter((entry) => !present.has(entry));
-    if (missing.length > 0) {
-      const separator = current.endsWith('\n') ? '' : '\n';
-      const marker = present.has('# Totem') ? '' : '# Totem\n';
-      fs.writeFileSync(
-        gitignorePath,
-        `${current}${separator}${marker}${missing.join('\n')}\n`,
-        'utf-8',
-      );
-      summary.push({
-        file: '.gitignore',
-        action: `Added Totem local-state exclusions: ${missing.join(', ')}`,
-      });
-    }
-  } else {
+  const secretsEntry = totemDir === '.' ? '/secrets.json' : `${totemDir}/secrets.json`;
+  const localState = totemLocalStateIgnores(totemDir);
+
+  if (!fs.existsSync(gitignorePath)) {
     // No .gitignore exists yet — create one with every Totem entry
-    const entries = ['.lancedb/', '.totem/secrets.json', ...TOTEM_LOCAL_STATE_IGNORES];
-    fs.writeFileSync(gitignorePath, `# Totem\n${entries.join('\n')}\n`, 'utf-8');
+    const entries = ['.lancedb/', secretsEntry, ...localState];
+    writeFileAtomicSync(gitignorePath, `# Totem\n${entries.join('\n')}\n`);
     summary.push({
       file: '.gitignore',
       action: `Created with ${entries.join(', ')} exclusions`,
     });
+    return summary;
   }
+
+  const current = fs.readFileSync(gitignorePath, 'utf-8');
+  const present = new Set(current.split(/\r?\n/).map((line) => line.trim()));
+  // An explicit re-inclusion is the project's choice: the exclusion is not written over it.
+  const wanted = (entry: string): boolean => !present.has(entry) && !present.has(`!${entry}`);
+
+  const additions: string[] = [];
+  // The vector store: any mention counts (the substring check predates this fold, kept as it was).
+  if (!current.includes('.lancedb')) {
+    additions.push('.lancedb/');
+    summary.push({ file: '.gitignore', action: 'Added .lancedb/ exclusion' });
+  }
+  // The secrets file (safety net — add-secret also does this)
+  if (wanted(secretsEntry)) {
+    additions.push(secretsEntry);
+    summary.push({ file: '.gitignore', action: `Added ${secretsEntry} exclusion` });
+  }
+  const missing = localState.filter(wanted);
+  if (missing.length > 0) {
+    additions.push(...missing);
+    summary.push({
+      file: '.gitignore',
+      action: `Added Totem local-state exclusions: ${missing.join(', ')}`,
+    });
+  }
+  if (additions.length === 0) return summary;
+
+  const separator = current.length === 0 || current.endsWith('\n') ? '' : '\n';
+  // One header for the block, only when the file has none; a blank line sets it
+  // off from the project's own rules.
+  const header = present.has('# Totem') ? '' : `${current.length === 0 ? '' : '\n'}# Totem\n`;
+  writeFileAtomicSync(gitignorePath, `${current}${separator}${header}${additions.join('\n')}\n`);
   return summary;
 }
 
@@ -2217,9 +2241,6 @@ export default {
       // --- Always run: post-merge git hook ---
       await installPostMergeHook(cwd, rl, { interactive });
 
-      // --- Always run: .gitignore ---
-      summary.push(...ensureTotemGitignore(cwd));
-
       // --- Auto-ingest cursor rules (ADR-048) ---
       const { scanCursorInstructions } = await import('@mmnto/totem');
       const cursorInstructions = scanCursorInstructions(cwd);
@@ -2255,6 +2276,28 @@ export default {
         }
       }
     } // end of bare mode else block
+
+    // --- Every mode: .gitignore (mmnto-ai/totem#3004) ---
+    // A bare repository carries Totem's local state too (`totem lint` writes the
+    // metrics cache and the telemetry sink there), so this runs outside the
+    // bare-mode branch. The patterns follow the configured `totemDir` when a
+    // config already names one; a fresh install writes the default `.totem`.
+    let ignoreDir = '.totem';
+    if (existingConfig) {
+      try {
+        const { loadConfig } = await import('../utils.js');
+        const { normalizeTotemDir } = await import('@mmnto/totem');
+        const configured = (await loadConfig(existingConfig)).totemDir;
+        if (configured) ignoreDir = normalizeTotemDir(configured);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        log.warn(
+          'Totem',
+          `Could not read totemDir from ${path.basename(existingConfig)} (${detail}); the .gitignore lines name the default .totem/ paths.`,
+        );
+      }
+    }
+    summary.push(...ensureTotemGitignore(cwd, ignoreDir));
 
     // --- Always run: action-gate install (--gates=, PR-C mmnto-ai/totem#2048) ---
     // Thin sugar that is INTENTIONALLY outside the bare-mode branch: gate

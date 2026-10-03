@@ -50,6 +50,7 @@ import {
   scaffoldFile,
   scaffoldMcpConfig,
   TOTEM_LOCAL_STATE_IGNORES,
+  totemLocalStateIgnores,
   upgradeReflexes,
 } from './init.js';
 import { detectProject, type HookInstallerResult } from './init-detect.js';
@@ -1659,6 +1660,43 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(output).toContain('(Lite tier)');
     const mcp = JSON.parse(fs.readFileSync(path.join(tmpDir, '.mcp.json'), 'utf-8'));
     expect(mcp.mcpServers.totem).toBeDefined();
+  }, 60000);
+
+  it('writes the local-state ignores in bare mode too (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await initCommand({ bare: true });
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'compiled-rules.json'))).toBe(true);
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    for (const entry of TOTEM_LOCAL_STATE_IGNORES) {
+      expect(lines, entry).toContain(entry);
+    }
+  }, 60000);
+
+  it('names the configured totemDir in the ignores on a re-run (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      [
+        'totemDir: ./state/totem/',
+        'targets:',
+        "  - glob: '**/*.md'",
+        '    type: spec',
+        '    strategy: markdown-heading',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    await initCommand({});
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    expect(lines).toContain('state/totem/ledger/');
+    expect(lines).toContain('state/totem/secrets.json');
+    expect(lines).not.toContain('.totem/ledger/');
   }, 60000);
 
   it('discloses the package-level MCP dedup instead of appending a duplicate', async () => {
@@ -5045,5 +5083,80 @@ describe('ensureTotemGitignore', () => {
     const summary = ensureTotemGitignore(tmpDir);
     expect(readGitignore()).toBe(first);
     expect(summary).toEqual([]);
+  });
+
+  it('derives the patterns from the configured totemDir and anchors a root dir with a slash', () => {
+    expect(totemLocalStateIgnores('state/totem')).toEqual(
+      LOCAL_STATE.map((entry) => entry.replace('.totem/', 'state/totem/')),
+    );
+    expect(totemLocalStateIgnores('.')).toEqual(
+      LOCAL_STATE.map((entry) => entry.replace('.totem/', '/')),
+    );
+
+    const summary = ensureTotemGitignore(tmpDir, 'state/totem');
+    const lines = readGitignore().split('\n');
+    expect(lines).toContain('state/totem/ledger/');
+    expect(lines).toContain('state/totem/secrets.json');
+    expect(lines).toContain('.lancedb/');
+    expect(lines).not.toContain('.totem/ledger/');
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toContain('state/totem/secrets.json');
+  });
+
+  it('never writes an exclusion over an explicit re-inclusion', () => {
+    const original = ['# Totem', '.lancedb/', '.totem/secrets.json', '!.totem/ledger/', ''].join(
+      '\n',
+    );
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith(original)).toBe(true);
+    expect(after.slice(original.length).split('\n')).not.toContain('.totem/ledger/');
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).not.toContain('.totem/ledger/');
+    expect(summary[0]!.action).toContain('.totem/cache/');
+  });
+
+  it('writes the whole block under one header when the file has rules but no Totem block', () => {
+    const original = 'node_modules/\n';
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+    const lines = after.split('\n');
+
+    expect(after.startsWith(original)).toBe(true);
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines).toContain('.lancedb/');
+    expect(lines).toContain('.totem/secrets.json');
+    expect(summary.map((entry) => entry.action)).toEqual([
+      'Added .lancedb/ exclusion',
+      'Added .totem/secrets.json exclusion',
+      expect.stringMatching(/^Added Totem local-state exclusions: /),
+    ]);
+  });
+
+  it('keeps one header when the Totem block exists without the vector store line', () => {
+    // The pre-3004 `.lancedb/` append wrote its own header without looking for one.
+    const original = ['# Totem', '.totem/secrets.json', ''].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines).toContain('.lancedb/');
+  });
+
+  it('separates the block from a file that ends without a newline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'dist/', 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith('dist/\n\n# Totem\n.lancedb/\n')).toBe(true);
+    expect(fs.readdirSync(tmpDir).filter((name) => name.startsWith('.gitignore.'))).toEqual([]);
   });
 });
