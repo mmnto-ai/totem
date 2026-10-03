@@ -224,7 +224,7 @@ Checks lessons for stale file references (a CI gate). Flags lessons whose scoped
 
 Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
 
-The sync is the one operation that rebuilds a store whose format or vector dimensions changed; every other command (search, stats, the MCP server, extract) leaves such a store untouched and reports it with the cure, `totem sync --full` (mmnto-ai/totem#3009).
+The sync is the one operation that rebuilds a store the engine can no longer open (a format change, corruption); every other command (search, stats, the MCP server, extract) leaves such a store untouched and reports it with the cure, `totem sync --full` (mmnto-ai/totem#3009). A changed embedding provider is noticed today only by `search_knowledge`'s own first-query check; the store's detector for it is tracked on mmnto-ai/totem#3011.
 
 - **Flags:**
   - `--incremental`: (Default) Only indexes files changed since the last sync.
