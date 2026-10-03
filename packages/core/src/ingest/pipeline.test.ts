@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TotemConfig } from '../config-schema.js';
 import { TotemConfigSchema } from '../config-schema.js';
 import type { Embedder } from '../embedders/embedder.js';
+import { TOTEM_TABLE_NAME } from '../store/lance-schema.js';
 import { VECTOR_DISTANCE_METRIC } from '../store/relevance.js';
 import { cleanTmpDir } from '../test-utils.js';
 import {
@@ -583,6 +584,40 @@ describe('full-sync crash recovery (#2562)', () => {
       expect(result.filesProcessed).toBe(3);
       expect(result.totalChunks).toBe(TOTAL_CHUNKS);
       expect(fs.existsSync(checkpointPath())).toBe(false);
+    },
+  );
+
+  it(
+    'mmnto-ai/totem#3009: the sync is the one rebuilder — it heals a store whose open fails and re-indexes it',
+    { timeout: HEAVY_TIMEOUT_MS },
+    async () => {
+      const first = await run(new ScriptedEmbedder(), false);
+      expect(first.totalChunks).toBe(TOTAL_CHUNKS);
+
+      // Corrupt the manifest: LanceDB's open now fails with "lance error",
+      // which a reader's connect() refuses with StoreNeedsRebuildError.
+      const versionsDir = path.join(
+        tmpDir,
+        config.lanceDir,
+        `${TOTEM_TABLE_NAME}.lance`,
+        '_versions',
+      );
+      const manifests = fs.readdirSync(versionsDir);
+      expect(manifests.length).toBeGreaterThan(0);
+      for (const f of manifests) fs.writeFileSync(path.join(versionsDir, f), 'garbage');
+
+      const messages: string[] = [];
+      const result = await runSync(config, {
+        projectRoot: tmpDir,
+        incremental: true,
+        embedder: new ScriptedEmbedder(),
+        onProgress: (msg) => messages.push(msg),
+      });
+
+      // The pipeline asked connect() for the heal: the store was deleted,
+      // found empty, and rebuilt in full.
+      expect(messages).toContain('Empty database detected. Forcing full sync...');
+      expect(result.totalChunks).toBe(TOTAL_CHUNKS);
     },
   );
 

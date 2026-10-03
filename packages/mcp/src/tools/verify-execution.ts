@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { getContext } from '../context.js';
+import { getProjectBasics } from '../context.js';
 import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
@@ -138,7 +138,9 @@ export function registerVerifyExecution(server: McpServer): void {
     },
     async ({ staged_only }) => {
       try {
-        const { projectRoot } = await getContext();
+        // Only the project root is needed; never open the vector store here,
+        // so a store fault cannot block lint verification (mmnto-ai/totem#3009).
+        const { projectRoot } = await getProjectBasics();
 
         // Check for unstaged changes if running staged-only
         let warning = '';

@@ -1,8 +1,8 @@
 // ─── Host-hook settings-merge primitive (namespace-neutral) ──────────
 //
 // The single source of truth for idempotently merging ONE hook entry into a
-// Claude settings JSON file (`settings.local.json` or committed
-// `settings.json`) under `hooks.<key>`. Extracted from init.ts (PR-C,
+// Claude settings JSON file (the committed `settings.json`; no installer
+// targets `settings.local.json` now) under `hooks.<key>`. Extracted from init.ts (PR-C,
 // mmnto-ai/totem#2048) so `gate install`, `init --gates=`, and later
 // Prop 257 / mmnto-ai/totem-strategy#448 share one merger — the
 // "namespace-neutral install primitive" strategy-claude's T0225Z asked for.
@@ -150,7 +150,7 @@ function readAndParseSettings(filePath: string): SettingsReadResult {
 
 /**
  * Shared merge logic for installing a single hook entry into a Claude
- * settings JSON file (`settings.local.json` or `settings.json`) under
+ * settings JSON file (every current installer passes `settings.json`) under
  * `hooks.<key>`. Both `PreToolUse` and `SessionStart` lifecycles share
  * the same read → safeparse → idempotency probe → append → write shape;
  * this is the single source of truth.
@@ -309,8 +309,8 @@ export function upsertClaudeHookCommand(
 
 /**
  * True iff `parsed.hooks.PreToolUse` contains an entry under `matcher`
- * whose hook list satisfies `probe`. The idempotency primitive both the
- * shield-gate and gate-install installers key on.
+ * whose hook list satisfies `probe`. The idempotency probe the write-shield
+ * installer (`scaffoldClaudeWriteShield`) keys on.
  */
 export function preToolUseHasMatcher(
   parsed: ParsedSettings,

@@ -5,16 +5,18 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import type { TotemConfig } from '@mmnto/totem';
 import {
   acquireLock,
   generateLessonHeading,
   hasFullSyncCheckpoint,
   LessonRoleSchema,
   sanitize,
+  StoreNeedsRebuildError,
   writeLessonFileAsync,
 } from '@mmnto/totem';
 
-import { getContext, reconnectStore } from '../context.js';
+import { getContext, getProjectBasics, reconnectStore } from '../context.js';
 import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
@@ -62,7 +64,20 @@ const SYNC_TIMEOUT_MS = 60_000;
 const MAX_OUTPUT_BYTES = 10_000;
 
 /** Debounce guard — concurrent callers share the same sync promise. */
-let activeSyncPromise: Promise<{ success: boolean; output: string }> | null = null;
+let activeSyncPromise: Promise<SyncRunResult> | null = null;
+
+/**
+ * How the convenience sync ended (mmnto-ai/totem#3012): `ok` (exit 0),
+ * `timed-out` (killed at SYNC_TIMEOUT_MS), `failed` (a non-zero exit), or
+ * `spawn-error` (the process never started).
+ */
+type SyncOutcome = 'ok' | 'timed-out' | 'failed' | 'spawn-error';
+
+interface SyncRunResult {
+  success: boolean;
+  outcome: SyncOutcome;
+  output: string;
+}
 
 /**
  * Kill a child process tree. With `detached: true`, child.kill() only kills the
@@ -87,7 +102,7 @@ function killTree(child: ReturnType<typeof spawn>): void {
  * Spawn `totem sync --incremental` and await its completion (up to SYNC_TIMEOUT_MS).
  * Returns { success, output } with captured stdout/stderr (capped at MAX_OUTPUT_BYTES).
  */
-function runSync(projectRoot: string): Promise<{ success: boolean; output: string }> {
+function runSync(projectRoot: string): Promise<SyncRunResult> {
   return new Promise((resolve) => {
     const { cmd, args } = detectSyncCommand(projectRoot);
     const chunks: string[] = [];
@@ -121,17 +136,21 @@ function runSync(projectRoot: string): Promise<{ success: boolean; output: strin
 
     const timer = setTimeout(() => {
       killTree(child);
-      resolve({ success: false, output: 'Sync timed out after 60s.' });
+      resolve({ success: false, outcome: 'timed-out', output: 'Sync timed out after 60s.' });
     }, SYNC_TIMEOUT_MS);
 
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ success: code === 0, output: chunks.join('') });
+      resolve({
+        success: code === 0,
+        outcome: code === 0 ? 'ok' : 'failed',
+        output: chunks.join(''),
+      });
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ success: false, output: `Spawn error: ${err.message}` });
+      resolve({ success: false, outcome: 'spawn-error', output: `Spawn error: ${err.message}` });
     });
   });
 }
@@ -194,7 +213,23 @@ export function registerAddLesson(server: McpServer): void {
       }
 
       try {
-        const { projectRoot, config } = await getContext();
+        // mmnto-ai/totem#3009: a primary store that only a rebuild can repair
+        // must not stop the lesson write — this tool's own sync is the
+        // rebuilder. Load the root and config without the store, and say in
+        // the result what the sync did about it.
+        let storeFault: StoreNeedsRebuildError | null = null;
+        let projectRoot: string;
+        let config: TotemConfig;
+        try {
+          ({ projectRoot, config } = await getContext());
+        } catch (err) {
+          if (!(err instanceof StoreNeedsRebuildError)) throw err;
+          storeFault = err;
+          ({ projectRoot, config } = await getProjectBasics());
+        }
+        const storeNote = storeFault
+          ? ` The vector store could not be opened (${storeFault.detail}); it is rebuilt by the next sync. ${storeFault.recoveryHint}`
+          : '';
 
         const totemDir = path.join(projectRoot, config.totemDir);
         await fs.promises.mkdir(totemDir, { recursive: true });
@@ -321,7 +356,7 @@ export function registerAddLesson(server: McpServer): void {
                 type: 'text' as const,
                 text: formatXmlResponse(
                   'lesson_added',
-                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.`,
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.${storeNote}`,
                 ),
               },
             ],
@@ -344,7 +379,7 @@ export function registerAddLesson(server: McpServer): void {
                 type: 'text' as const,
                 text: formatXmlResponse(
                   'lesson_added',
-                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: a full re-index is in progress — the lesson will be indexed when it completes (or on the next \`totem sync\`).`,
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: a full re-index is in progress — the lesson will be indexed when it completes (or on the next \`totem sync\`).${storeNote}`,
                 ),
               },
             ],
@@ -357,7 +392,7 @@ export function registerAddLesson(server: McpServer): void {
             activeSyncPromise = null;
           });
         }
-        const { success, output } = await activeSyncPromise;
+        const { success, outcome, output } = await activeSyncPromise;
 
         if (!isJoining) {
           try {
@@ -367,9 +402,21 @@ export function registerAddLesson(server: McpServer): void {
           }
         }
 
-        const syncMessage = success
+        let syncMessage = success
           ? `Sync completed successfully. ${output.trim()}`
           : `Sync failed: ${output.trim()}`;
+        if (storeFault) {
+          // mmnto-ai/totem#3012: say what the sync's outcome means for the
+          // rebuild — a timeout, a failed exit and an unstarted sync differ.
+          const opened = ` The vector store could not be opened (${storeFault.detail});`;
+          const rebuildNote: Record<SyncOutcome, string> = {
+            ok: `${opened} this sync rebuilt it.`,
+            'timed-out': `${opened} this sync started a rebuild that did not finish within 60 s; the next \`totem sync\` resumes it.`,
+            failed: `${opened} the sync exited with an error and may have begun a rebuild; run \`totem sync --full\` to finish it.`,
+            'spawn-error': `${opened} the sync could not start; run \`totem sync --full\`.`,
+          };
+          syncMessage += rebuildNote[outcome];
+        }
 
         return {
           content: [

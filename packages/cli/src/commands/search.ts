@@ -5,8 +5,13 @@ export async function searchCommand(
   options: { type?: string; maxResults?: string },
 ): Promise<void> {
   const path = await import('node:path');
-  const { ContentTypeSchema, createEmbedder, LanceStore, TotemConfigError } =
-    await import('@mmnto/totem');
+  const {
+    ContentTypeSchema,
+    createEmbedder,
+    LanceStore,
+    StoreNeedsRebuildError,
+    TotemConfigError,
+  } = await import('@mmnto/totem');
   const { loadConfig, loadEnv, requireEmbedding, resolveConfigPath, sanitize } =
     await import('../utils.js');
   const { log } = await import('../ui.js');
@@ -32,8 +37,9 @@ export async function searchCommand(
   const linkedStores: Array<{ store: InstanceType<typeof LanceStore>; linkName: string }> = [];
   if (config.linkedIndexes && config.linkedIndexes.length > 0) {
     for (const linkedPath of config.linkedIndexes) {
+      const resolvedPath = path.resolve(cwd, linkedPath);
+      const linkName = path.basename(resolvedPath).replace(/^\./, '');
       try {
-        const resolvedPath = path.resolve(cwd, linkedPath);
         const linkedConfigPath = resolveConfigPath(resolvedPath);
         const linkedConfig = await loadConfig(linkedConfigPath);
         const linkedEmbedding = linkedConfig.embedding;
@@ -49,7 +55,6 @@ export async function searchCommand(
           );
           continue;
         }
-        const linkName = path.basename(resolvedPath).replace(/^\./, '');
         const linkedStore = new LanceStore(
           path.join(resolvedPath, linkedConfig.lanceDir),
           linkedEmbedder,
@@ -58,7 +63,17 @@ export async function searchCommand(
         await linkedStore.connect();
         linkedStores.push({ store: linkedStore, linkName });
         log.dim(TAG, `Linked index: ${linkedPath}`);
+        // totem-context: intentional warn-and-skip — a linked index that cannot be opened is skipped with a warning naming it (and, for StoreNeedsRebuildError, its root and the cure), so the search runs over the stores that opened (mmnto-ai/totem#3009); the primary store's faults still throw.
       } catch (err) {
+        // mmnto-ai/totem#3009: a linked store that only a rebuild can repair is
+        // skipped by name and left untouched — the same as the MCP server.
+        if (err instanceof StoreNeedsRebuildError) {
+          log.warn(
+            TAG,
+            `Linked index "${linkName}" at ${resolvedPath} needs a rebuild and was skipped (left untouched): ${err.detail} ${err.recoveryHint}`,
+          );
+          continue;
+        }
         log.warn(
           TAG,
           `Could not connect to linked index at ${linkedPath} - skipping. ${err instanceof Error ? err.message : String(err)}`,
