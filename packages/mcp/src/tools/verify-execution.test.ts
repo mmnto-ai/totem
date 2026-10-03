@@ -31,6 +31,10 @@ vi.mock('../context.js', () => ({
     projectRoot: '/fake/project',
     config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
   })),
+  getProjectBasics: vi.fn(async () => ({
+    projectRoot: '/fake/project',
+    config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
+  })),
 }));
 
 vi.mock('../xml-format.js', () => ({
@@ -292,10 +296,41 @@ describe('verify_execution', () => {
     expect(result.content[0]!.text).toContain('Lint spawn error');
   });
 
-  it('handles context initialization failure', async () => {
-    // Override getContext to throw for this test
+  it('runs lint when the vector store cannot be opened (mmnto-ai/totem#3009)', async () => {
+    // A primary-store fault makes getContext() reject; verify_execution needs
+    // only the project root and must not route through the store at all.
+    // (The real class is not imported: this file mocks node:child_process and
+    // node:fs for the tool alone, and the core barrel is kept out of it. The
+    // real rejection and getProjectBasics() over a corrupted primary store are
+    // exercised in context-linked-rebuild.test.ts.)
     const contextMock = await import('../context.js');
-    vi.mocked(contextMock.getContext).mockRejectedValueOnce(new Error('Config missing'));
+    vi.mocked(contextMock.getContext).mockRejectedValue(
+      Object.assign(new Error('[Totem Error] The vector store cannot be opened.'), {
+        name: 'StoreNeedsRebuildError',
+        code: 'STORE_NEEDS_REBUILD',
+      }),
+    );
+    mockSpawnExitCode = 0;
+    mockSpawnStdout = 'All checks passed.';
+
+    try {
+      const result = (await handle({ staged_only: true })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]!.text).toContain('Verification: PASS');
+      expect(vi.mocked(contextMock.getContext)).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(contextMock.getContext).mockReset();
+    }
+  });
+
+  it('handles context initialization failure', async () => {
+    // Override the project-root loader to throw for this test
+    const contextMock = await import('../context.js');
+    vi.mocked(contextMock.getProjectBasics).mockRejectedValueOnce(new Error('Config missing'));
 
     const result = (await handle({ staged_only: true })) as {
       content: Array<{ type: string; text: string }>;

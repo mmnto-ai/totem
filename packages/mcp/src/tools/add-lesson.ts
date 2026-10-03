@@ -5,16 +5,18 @@ import * as path from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
+import type { TotemConfig } from '@mmnto/totem';
 import {
   acquireLock,
   generateLessonHeading,
   hasFullSyncCheckpoint,
   LessonRoleSchema,
   sanitize,
+  StoreNeedsRebuildError,
   writeLessonFileAsync,
 } from '@mmnto/totem';
 
-import { getContext, reconnectStore } from '../context.js';
+import { getContext, getProjectBasics, reconnectStore } from '../context.js';
 import { detectPackageManager } from '../utils.js';
 import { formatXmlResponse } from '../xml-format.js';
 
@@ -186,7 +188,23 @@ export function registerAddLesson(server: McpServer): void {
       }
 
       try {
-        const { projectRoot, config } = await getContext();
+        // mmnto-ai/totem#3009: a primary store that only a rebuild can repair
+        // must not stop the lesson write — this tool's own sync is the
+        // rebuilder. Load the root and config without the store, and say in
+        // the result what the sync did about it.
+        let storeFault: StoreNeedsRebuildError | null = null;
+        let projectRoot: string;
+        let config: TotemConfig;
+        try {
+          ({ projectRoot, config } = await getContext());
+        } catch (err) {
+          if (!(err instanceof StoreNeedsRebuildError)) throw err;
+          storeFault = err;
+          ({ projectRoot, config } = await getProjectBasics());
+        }
+        const storeNote = storeFault
+          ? ` The vector store could not be opened (${storeFault.detail}); it is rebuilt by the next sync. ${storeFault.recoveryHint}`
+          : '';
 
         const totemDir = path.join(projectRoot, config.totemDir);
         await fs.promises.mkdir(totemDir, { recursive: true });
@@ -313,7 +331,7 @@ export function registerAddLesson(server: McpServer): void {
                 type: 'text' as const,
                 text: formatXmlResponse(
                   'lesson_added',
-                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.`,
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: the sync lock could not be acquired within the bounded budget (usually another running sync) — the lesson will be indexed on the next \`totem sync\`.${storeNote}`,
                 ),
               },
             ],
@@ -336,7 +354,7 @@ export function registerAddLesson(server: McpServer): void {
                 type: 'text' as const,
                 text: formatXmlResponse(
                   'lesson_added',
-                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: a full re-index is in progress — the lesson will be indexed when it completes (or on the next \`totem sync\`).`,
+                  `Lesson saved to ${config.totemDir}/lessons/${fileName}. Sync deferred: a full re-index is in progress — the lesson will be indexed when it completes (or on the next \`totem sync\`).${storeNote}`,
                 ),
               },
             ],
@@ -359,9 +377,14 @@ export function registerAddLesson(server: McpServer): void {
           }
         }
 
-        const syncMessage = success
+        let syncMessage = success
           ? `Sync completed successfully. ${output.trim()}`
           : `Sync failed: ${output.trim()}`;
+        if (storeFault) {
+          syncMessage += success
+            ? ` The vector store could not be opened (${storeFault.detail}); this sync rebuilt it.`
+            : ` The vector store could not be opened (${storeFault.detail}) and this sync did not rebuild it. ${storeFault.recoveryHint}`;
+        }
 
         return {
           content: [

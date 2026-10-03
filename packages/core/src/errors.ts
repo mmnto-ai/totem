@@ -150,6 +150,11 @@ export class StoreNeedsRebuildError extends TotemError {
   readonly storedDimensions: number | undefined;
   readonly expectedDimensions: number | undefined;
   readonly underlyingMessage: string | undefined;
+  /**
+   * The reason alone, without the `[Totem Error]` prefix or the cure, for
+   * callers that compose their own line and print `recoveryHint` once.
+   */
+  readonly detail: string;
 
   constructor(details: StoreNeedsRebuildDetails, cause?: unknown) {
     const cure = 'Run `totem sync --full` in that repository.';
@@ -178,6 +183,7 @@ export class StoreNeedsRebuildError extends TotemError {
     this.storedDimensions = details.storedDimensions;
     this.expectedDimensions = details.expectedDimensions;
     this.underlyingMessage = details.underlyingMessage;
+    this.detail = what;
   }
 }
 

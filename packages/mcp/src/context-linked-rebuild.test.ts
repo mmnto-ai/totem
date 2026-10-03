@@ -149,5 +149,77 @@ describe('getContext with a linked store that needs a rebuild (mmnto-ai/totem#30
     expect(listFiles(linkedLance)).toEqual(before);
     // The primary context works.
     expect(await ctx.store.count()).toBe(1);
+    // The cure is printed once, and the line carries no mid-sentence prefix.
+    expect(warning.split('totem sync --full').length - 1).toBe(1);
+    expect(warning).not.toContain('[Totem Error]');
+    expect(warning).toContain('until it opens on a later reconnect or the server restarts');
+  });
+
+  it('a skipped linked store rejoins on reconnect once it has been rebuilt, with its warning cleared', async () => {
+    const { LanceStore, TOTEM_TABLE_NAME } = await import('@mmnto/totem');
+    const embedder = new fake.FakeEmbedder() as unknown as Embedder;
+
+    const primarySeed = new LanceStore(path.join(projectDir, '.lancedb'), embedder, {
+      absolutePathRoot: projectDir,
+    });
+    await primarySeed.connect();
+    await primarySeed.insert([chunk('primary alpha')]);
+
+    const linkedLance = path.join(linkedDir, '.lancedb');
+    const linkedSeed = new LanceStore(linkedLance, embedder, { absolutePathRoot: linkedDir });
+    await linkedSeed.connect();
+    await linkedSeed.insert([chunk('linked beta')]);
+    const versionsDir = path.join(linkedLance, `${TOTEM_TABLE_NAME}.lance`, '_versions');
+    for (const f of fs.readdirSync(versionsDir)) {
+      fs.writeFileSync(path.join(versionsDir, f), 'garbage');
+    }
+
+    const { getContext, reconnectStore } = await import('./context.js');
+    const ctx = await getContext();
+    expect(ctx.linkedStores.has('linked-repo')).toBe(false);
+    expect(ctx.pendingLinkedStores.has('linked-repo')).toBe(true);
+
+    // A reconnect while the store is still broken keeps it pending, warning intact.
+    const warningBefore = ctx.linkedStoreInitErrors.get('linked-repo');
+    await reconnectStore();
+    expect(ctx.linkedStores.has('linked-repo')).toBe(false);
+    expect(ctx.linkedStoreInitErrors.get('linked-repo')).toBe(warningBefore);
+
+    // Stand-in for `totem sync --full` in the linked repository: the sync's
+    // own heal (connect({ heal: true })) followed by a re-index.
+    const rebuilder = new LanceStore(linkedLance, embedder, { absolutePathRoot: linkedDir });
+    await rebuilder.connect({ heal: true });
+    await rebuilder.insert([chunk('linked beta rebuilt')]);
+
+    await reconnectStore();
+
+    expect(ctx.pendingLinkedStores.has('linked-repo')).toBe(false);
+    expect(ctx.linkedStores.has('linked-repo')).toBe(true);
+    expect(ctx.linkedStoreInitErrors.has('linked-repo')).toBe(false);
+    expect(await ctx.linkedStores.get('linked-repo')!.count()).toBe(1);
+  });
+
+  it('getProjectBasics() resolves over a primary store that getContext() refuses (verify_execution and add_lesson rely on it)', async () => {
+    const { LanceStore, StoreNeedsRebuildError, TOTEM_TABLE_NAME } = await import('@mmnto/totem');
+    const embedder = new fake.FakeEmbedder() as unknown as Embedder;
+    writeConfig(projectDir, null);
+
+    const primaryLance = path.join(projectDir, '.lancedb');
+    const primarySeed = new LanceStore(primaryLance, embedder, { absolutePathRoot: projectDir });
+    await primarySeed.connect();
+    await primarySeed.insert([chunk('primary alpha')]);
+    const versionsDir = path.join(primaryLance, `${TOTEM_TABLE_NAME}.lance`, '_versions');
+    for (const f of fs.readdirSync(versionsDir)) {
+      fs.writeFileSync(path.join(versionsDir, f), 'garbage');
+    }
+    const before = listFiles(primaryLance);
+
+    const { getContext, getProjectBasics } = await import('./context.js');
+    await expect(getContext()).rejects.toBeInstanceOf(StoreNeedsRebuildError);
+
+    const basics = await getProjectBasics();
+    expect(basics.projectRoot).toBe(projectDir);
+    expect(basics.config.lanceDir).toBe('.lancedb');
+    expect(listFiles(primaryLance)).toEqual(before);
   });
 });

@@ -19,6 +19,18 @@ vi.mock('@mmnto/totem', async () => {
     // (the #2562 deferral path has its own dedicated tests below).
     hasFullSyncCheckpoint: vi.fn(() => false),
     sanitize: vi.fn((t: string) => t),
+    // Stand-in with the fields add_lesson reads (mmnto-ai/totem#3009); the
+    // real class is covered in core and in context-linked-rebuild.test.ts.
+    StoreNeedsRebuildError: class StoreNeedsRebuildError extends Error {
+      readonly code = 'STORE_NEEDS_REBUILD';
+      constructor(
+        readonly detail: string,
+        readonly recoveryHint: string,
+      ) {
+        super(`[Totem Error] ${detail} A reader does not rebuild the store. ${recoveryHint}`);
+        this.name = 'StoreNeedsRebuildError';
+      }
+    },
     writeLessonFileAsync: vi.fn(async (_dir: string, entry: string) => {
       lastWrittenEntry = entry;
       return '/fake/lessons/lesson-001.md';
@@ -40,6 +52,10 @@ vi.mock('@mmnto/totem', async () => {
 
 vi.mock('../context.js', () => ({
   getContext: vi.fn(async () => ({
+    projectRoot: '/fake/project',
+    config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
+  })),
+  getProjectBasics: vi.fn(async () => ({
     projectRoot: '/fake/project',
     config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
   })),
@@ -277,6 +293,53 @@ describe('add_lesson auth model (#844)', () => {
     // for corpus-sized wall-clock — the write must NOT contend on it, or the
     // tool blocks for the full acquisition budget and the lesson is lost.
     expect(vi.mocked(acquireLock).mock.calls.length).toBe(lockCallsBefore);
+  });
+
+  it('writes the lesson and runs its sync when the vector store needs a rebuild, and says the sync rebuilt it (mmnto-ai/totem#3009)', async () => {
+    const { spawn } = await import('node:child_process');
+    const totem = await import('@mmnto/totem');
+    const contextMock = await import('../context.js');
+    // The mocked stand-in's constructor is (detail, recoveryHint).
+    const StandIn = totem.StoreNeedsRebuildError as unknown as new (
+      detail: string,
+      recoveryHint: string,
+    ) => Error;
+    const fault = new StandIn(
+      'The vector store at /fake/project/.lancedb cannot be opened (lance error: bad manifest).',
+      'Run `totem sync --full` in that repository.',
+    );
+    vi.mocked(contextMock.getContext).mockRejectedValueOnce(fault);
+    const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
+
+    const result = (await handle({
+      lesson: 'Written over a broken store',
+      context_tags: ['test'],
+    })) as { isError?: boolean; content: Array<{ text: string }> };
+
+    expect(result.isError).toBeUndefined();
+    expect(lastWrittenEntry).toContain('Written over a broken store');
+    // The convenience sync (the rebuilder) still ran.
+    expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore + 1);
+    const text = result.content[0]!.text;
+    expect(text).toContain('Sync completed successfully.');
+    expect(text).toContain(
+      'The vector store could not be opened (The vector store at /fake/project/.lancedb cannot be opened (lance error: bad manifest).); this sync rebuilt it.',
+    );
+  });
+
+  it('a getContext failure that is not a store fault still fails loud (mmnto-ai/totem#3009)', async () => {
+    const contextMock = await import('../context.js');
+    vi.mocked(contextMock.getContext).mockRejectedValueOnce(new Error('Config exploded'));
+    lastWrittenEntry = '';
+
+    const result = (await handle({ lesson: 'Never written', context_tags: ['test'] })) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Config exploded');
+    expect(lastWrittenEntry).toBe('');
   });
 
   it('takes the sync lock (bounded) on the normal path', async () => {

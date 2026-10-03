@@ -47,6 +47,22 @@ export interface ServerContext {
    * failures — that would destroy the agent's access to local tools.
    */
   linkedStoreInitErrors: Map<string, string>;
+  /**
+   * Linked stores skipped at init because they threw `StoreNeedsRebuildError`
+   * (mmnto-ai/totem#3009), keyed by link name. The server never rebuilds
+   * them; `_reconnectOnContext` retries each one, and a store that opens
+   * (after a `totem sync --full` in its repository) moves into
+   * `linkedStores` with its init warning cleared.
+   */
+  pendingLinkedStores: Map<string, PendingLinkedStore>;
+}
+
+/** A linked store skipped at init because only a rebuild can repair it. */
+export interface PendingLinkedStore {
+  /** The linked repository's resolved root. */
+  root: string;
+  /** The constructed store (its link name, lanceDir and embedder), not yet connected. */
+  store: LanceStore;
 }
 
 let cached: ServerContext | undefined;
@@ -111,6 +127,31 @@ export async function _reconnectOnContext(ctx: ServerContext): Promise<void> {
       // query will hit the broken store via `federatedSearch`, fail, and
       // surface a per-query runtime warning to the agent. We intentionally
       // do NOT mutate global state — see the comment block above.
+    }
+  }
+
+  // mmnto-ai/totem#3009: retry each linked store skipped at init because it
+  // needed a rebuild. This is the one exception to the rule above: a pending
+  // store's warning describes a fault a sync in that repository repairs, so
+  // once the store opens it joins `linkedStores` and its warning is cleared
+  // (an empty store gets the same empty warning as at init). A store that
+  // still fails stays pending with its recorded warning untouched.
+  for (const [name, pending] of [...ctx.pendingLinkedStores.entries()]) {
+    try {
+      await pending.store.connect();
+      // totem-context: intentional keep-pending — a store that still cannot be opened stays pending with its init warning, which search_knowledge already surfaces; nothing is deleted.
+    } catch {
+      continue;
+    }
+    ctx.pendingLinkedStores.delete(name);
+    ctx.linkedStores.set(name, pending.store);
+    ctx.linkedStoreInitErrors.delete(name);
+    const rowCount = await pending.store.count();
+    if (rowCount === 0) {
+      ctx.linkedStoreInitErrors.set(
+        name,
+        `Linked index at ${pending.root} is empty (0 rows). Federated queries will return no hits from this repo until you run 'totem sync' in that directory.`,
+      );
     }
   }
 }
@@ -246,6 +287,7 @@ async function initContext(): Promise<ServerContext> {
   // separate per-query warning path (see `search-knowledge.ts`).
   const linkedStores = new Map<string, LanceStore>();
   const linkedStoreInitErrors = new Map<string, string>();
+  const pendingLinkedStores = new Map<string, PendingLinkedStore>();
 
   // Auto-inject the strategy linkedIndex via the strategy-root resolver
   // (mmnto-ai/totem#1710). Stable link name `'strategy'` regardless of
@@ -342,6 +384,7 @@ async function initContext(): Promise<ServerContext> {
     }
 
     const resolvedPath = path.resolve(projectRoot, linkedPath);
+    let linkedStore: LanceStore | undefined;
     try {
       if (!fs.existsSync(resolvedPath)) {
         throw new TotemConfigError(
@@ -425,7 +468,7 @@ async function initContext(): Promise<ServerContext> {
       }
 
       const linkedLanceDir = path.join(resolvedPath, linkedConfig.lanceDir);
-      const linkedStore = new LanceStore(linkedLanceDir, linkedEmbedder, {
+      linkedStore = new LanceStore(linkedLanceDir, linkedEmbedder, {
         sourceRepo: name,
         absolutePathRoot: resolvedPath,
       });
@@ -452,11 +495,11 @@ async function initContext(): Promise<ServerContext> {
       // skipped, never deleted — a reader does not repair what it reads. The
       // warning names the linked repository and the cure; it surfaces once,
       // on the first `search_knowledge` call, like every init error here.
-      if (err instanceof StoreNeedsRebuildError) {
-        linkedStoreInitErrors.set(
-          name,
-          `Linked index "${name}" at ${resolvedPath} needs a rebuild and was skipped (left untouched): ${err.message} Cure: run \`totem sync --full\` in ${resolvedPath}.`,
-        );
+      // The constructed store is kept as pending so `_reconnectOnContext`
+      // can retry it once a sync in that repository has rebuilt it.
+      if (err instanceof StoreNeedsRebuildError && linkedStore) {
+        linkedStoreInitErrors.set(name, linkedRebuildWarning(name, resolvedPath, err));
+        pendingLinkedStores.set(name, { root: resolvedPath, store: linkedStore });
         continue;
       }
       const msg = err instanceof Error ? err.message : String(err);
@@ -471,8 +514,55 @@ async function initContext(): Promise<ServerContext> {
     embedder,
     linkedStores,
     linkedStoreInitErrors,
+    pendingLinkedStores,
   };
   return cached;
+}
+
+/**
+ * The one-line warning for a linked store skipped because it needs a rebuild
+ * (mmnto-ai/totem#3009): the link, its root, the reason, and the cure once.
+ */
+function linkedRebuildWarning(name: string, root: string, err: StoreNeedsRebuildError): string {
+  return `Linked index "${name}" at ${root} needs a rebuild and was skipped (left untouched) until it opens on a later reconnect or the server restarts: ${err.detail} ${err.recoveryHint}`;
+}
+
+/** The project root and its parsed config, without any store opened. */
+export interface ProjectBasics {
+  projectRoot: string;
+  config: TotemConfig;
+}
+
+let basicsPromise: Promise<ProjectBasics> | undefined;
+
+/**
+ * Return the project root and config WITHOUT opening the vector store
+ * (mmnto-ai/totem#3009). For tools that do not read the store — so a
+ * primary-store fault (`StoreNeedsRebuildError`) does not fail them. Reuses
+ * the full context when it is already cached; otherwise loads `.env` and the
+ * config the same way `getContext()` does, memoized like it.
+ */
+export async function getProjectBasics(): Promise<ProjectBasics> {
+  if (cached) return { projectRoot: cached.projectRoot, config: cached.config };
+  if (!basicsPromise) {
+    basicsPromise = (async () => {
+      const projectRoot = process.cwd();
+      const configPath = path.join(projectRoot, 'totem.config.ts');
+      if (!fs.existsSync(configPath)) {
+        throw new TotemConfigError(
+          'No totem.config.ts found in current directory.',
+          "Run 'totem init' first.",
+          'CONFIG_MISSING',
+        );
+      }
+      loadEnv(projectRoot);
+      return { projectRoot, config: await loadConfig(configPath) };
+    })().catch((err) => {
+      basicsPromise = undefined; // Allow retry on transient failures
+      throw err;
+    });
+  }
+  return basicsPromise;
 }
 
 /**

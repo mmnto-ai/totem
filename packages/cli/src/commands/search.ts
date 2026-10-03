@@ -70,7 +70,7 @@ export async function searchCommand(
         if (err instanceof StoreNeedsRebuildError) {
           log.warn(
             TAG,
-            `Linked index "${linkName}" at ${resolvedPath} needs a rebuild and was skipped (left untouched): ${err.message} Cure: run \`totem sync --full\` in ${resolvedPath}.`,
+            `Linked index "${linkName}" at ${resolvedPath} needs a rebuild and was skipped (left untouched): ${err.detail} ${err.recoveryHint}`,
           );
           continue;
         }
