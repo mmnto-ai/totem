@@ -250,7 +250,7 @@ describe('verify_execution', () => {
     expect(text.startsWith('Verification: NOT RUN\n\nTotem CLI not found.')).toBe(true);
     for (const place of LOOKED) expect(text).toContain(place);
     expect(text).toContain(
-      'A totem executable was found on PATH at /usr/local/bin/totem but is not an npm-layout install of @mmnto/cli, so it was not run.',
+      'A totem executable was found on PATH at /usr/local/bin/totem but could not be verified as an npm-layout install of @mmnto/cli, so it was not run.',
     );
   });
 

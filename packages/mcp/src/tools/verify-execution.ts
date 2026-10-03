@@ -119,8 +119,7 @@ export function registerVerifyExecution(server: McpServer): void {
       // tool spawns a resolved local or npm-global CLI entry with `node` and reaches no registry
       // (mmnto-ai/totem#3008). Disclosed, not counted: the lint's git reads are local commands, and
       // in a partial clone git itself may fetch missing objects from the checkout's own remote
-      // while diffing; that is the repository's configuration, as with describe_project's status
-      // read.
+      // while diffing; that is the repository's configuration, not a reach this tool makes.
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,

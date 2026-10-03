@@ -54,7 +54,7 @@ export function resolveCliSpawn(projectRoot: string): CliSpawnTarget {
   let message =
     `Totem CLI not found. Looked for: (1) ${workspace}; (2) ${pinned}; (3) ${onPath}. ` + CURE;
   if (resolved.unverified.length > 0) {
-    message += ` A totem executable was found on PATH at ${resolved.unverified.join(', ')} but is not an npm-layout install of @mmnto/cli, so it was not run.`;
+    message += ` A totem executable was found on PATH at ${resolved.unverified.join(', ')} but could not be verified as an npm-layout install of @mmnto/cli, so it was not run.`;
   }
   return { ok: false, message };
 }

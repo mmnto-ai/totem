@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "7e2d8c814a81353ef2ccdc0d6e03fdca1c3af167",
+  "readAt": "2026-10-03T20:14:43.780Z",
+  "findings": [
+    {
+      "id": "3008-A1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/cli-resolve.ts",
+      "line": 158,
+      "claim": "The build spec, section 1, resolveGlobalEntry: nothing throws; a realpath failure on one directory is 'not a hit'.",
+      "counterexample": "FOLDED at 93dc77f7: every probe of the global tier goes through one non-throwing helper, attempt(), and two tests pin it. As found: only realpath was guarded. namesCli and readVersion call fsx.readText after only an exists check, so a package.json that exists but cannot be read (EACCES, or EISDIR when it is a directory) threw out of resolveGlobalEntry at the win32 layout and at the POSIX layout. The whole PATH scan stopped, a valid npm global later on PATH was never tried, and cli-spawn.ts turned the throw into a refusal of a reachable CLI. The tests covered only a dangling link, and cli-spawn.test.ts mocked the throw."
+    },
+    {
+      "id": "3008-A2",
+      "severity": "MINOR",
+      "file": "packages/core/src/cli-resolve.ts",
+      "line": 188,
+      "claim": "unverified holds paths of a totem executable found on PATH, and the refusal says 'A totem executable was found on PATH at ...'.",
+      "counterexample": "FOLDED at 93dc77f7: the seam gained isFile and the unverified list reports files only, with a test. As found: fsx.exists is fs.existsSync, which is true for a directory, so a PATH directory containing a subdirectory named totem was reported as an executable."
+    },
+    {
+      "id": "3008-A3",
+      "severity": "MINOR",
+      "file": ".changeset/explicit-cli-resolver-3008.md",
+      "line": 9,
+      "claim": "add_lesson's reply names the CLI its sync ran 'the same way' as verify_execution's first-line label; the design says both tools prefix their result with one line.",
+      "counterexample": "FOLDED as prose at 93dc77f7: the changeset and the README say the label trails add_lesson's sync sentence, so the reply still leads with the saved lesson. As found: add-lesson.ts appends ' CLI: <label>.' to the end of the sync sentence; it is not a first line, and it is absent on a refusal."
+    },
+    {
+      "id": "3008-A4",
+      "severity": "MINOR",
+      "file": ".changeset/explicit-cli-resolver-3008.md",
+      "line": 9,
+      "claim": "'so add_lesson never reports a saved lesson as a failed write'.",
+      "counterexample": "FOLDED as prose at 93dc77f7: the sentence is scoped to the resolver read failure. As found: spawn runs inside the Promise executor of runSync; if spawn throws synchronously the promise rejects and the outer catch returns 'Failed to add lesson' after the file is written. That path predates the diff; the new sentence said 'never'."
+    },
+    {
+      "id": "3008-A5",
+      "severity": "MINOR",
+      "file": "packages/mcp/README.md",
+      "line": 46,
+      "claim": "'add_lesson reports that its sync did not run'.",
+      "counterexample": "FOLDED as prose at 93dc77f7: the README says add_lesson, which has already saved the lesson, reports its sync as failed. As found: the reply text is 'Sync failed: Totem CLI not found. Looked for: ...' (outcome spawn-error), and the test asserts that text."
+    },
+    {
+      "id": "3008-A6",
+      "severity": "QUESTION",
+      "file": "packages/mcp/src/tools/verify-execution.ts",
+      "line": 124,
+      "claim": "openWorldHint: false, because the lint is local and reaches no registry.",
+      "counterexample": "ANSWERED, not folded as a change; put to the operator before the pull request opens: the hint stays false and the annotation comment discloses the case as not counted. As found: every git call on the lint path is local (no git fetch, no ls-remote, no fetch()), but getDiffForReview falls back to the branch-vs-base diff when the staged or working-tree diff is empty, and in a blobless partial clone diffing against origin/<base> can trigger git's lazy promisor fetch. Inferred from git's behaviour, not measured."
+    },
+    {
+      "id": "3008-A7",
+      "severity": "QUESTION",
+      "file": "packages/core/src/cli-resolve.ts",
+      "line": 212,
+      "claim": "A totem found on PATH that cannot be verified is named and not run.",
+      "counterexample": "FOLDED at 93dc77f7: a global hit carries the unverified paths that were skipped before it, and the MCP label appends them. As found: when an unverified totem came earlier on PATH and a later directory held an npm-layout hit, resolveTotemCli returned ok and dropped the unverified list, so the server ran a different CLI from the one the user's shell would run and nothing said so."
+    }
+  ],
+  "folded": [
+    "3008-A1",
+    "3008-A2",
+    "3008-A3",
+    "3008-A4",
+    "3008-A5",
+    "3008-A7"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 4 MINOR, 2 QUESTION over 6c88c75d..7e2d8c81 (mmnto-ai/totem#3008): the resolver, spawners, self-spawn and subpath hold, and what remains is a violated no-throw clause in the global probe plus wording drift in the changeset and README."
+}

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "93dc77f72a67dfaf580270ce8bff06b2a75ce157",
+  "readAt": "2026-10-03T20:20:25.261Z",
+  "findings": [
+    {
+      "id": "3008-B1",
+      "severity": "MINOR",
+      "file": "packages/mcp/README.md",
+      "line": 51,
+      "claim": "The annotation comment in verify-execution.ts discloses that git may fetch missing objects in a partial clone, and that this is not counted against the hint.",
+      "counterexample": "FOLDED as prose in the next commit: the README bullet carries the same disclosure, and the comment no longer leans on describe_project's status read. As found: the README bullet that justifies the hint said only that the lint is local and reaches no registry, so the two surfaces that justify the same hint said different things, and the comment's analogy pointed at a README line with no such disclosure."
+    },
+    {
+      "id": "3008-B2",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/cli-spawn.ts",
+      "line": 56,
+      "claim": "A totem in the unverified list 'is not an npm-layout install of @mmnto/cli, so it was not run'.",
+      "counterexample": "FOLDED as a literal in the next commit: the refusal, the README and the changeset say 'could not be verified as an npm-layout install'. As found: after the fold a real npm-layout POSIX link whose package.json cannot be read lands in the unverified list, and the refusal then called a genuine npm-layout install 'not an npm-layout install'."
+    }
+  ],
+  "folded": [
+    "3008-B1",
+    "3008-B2"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 2 MINOR, 0 QUESTION over 7e2d8c81..93dc77f7, the scoped re-armed read of the fold (mmnto-ai/totem#3008): the fold closes A1, A2 and A7 in code and the two leftovers are wording only. The leg named convergence: no behavioural surface is left that another read would change."
+}

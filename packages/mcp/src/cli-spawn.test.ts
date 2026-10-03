@@ -74,7 +74,7 @@ describe('resolveCliSpawn (mmnto-ai/totem#3008)', () => {
     const target = resolveCliSpawn('/repo');
     const message = target.ok ? '' : target.message;
     expect(message).toContain(
-      'A totem executable was found on PATH at /shims/totem but is not an npm-layout install of @mmnto/cli, so it was not run.',
+      'A totem executable was found on PATH at /shims/totem but could not be verified as an npm-layout install of @mmnto/cli, so it was not run.',
     );
   });
 
