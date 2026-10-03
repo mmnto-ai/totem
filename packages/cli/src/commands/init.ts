@@ -1420,7 +1420,7 @@ export function ensureTotemGitignore(cwd: string, totemDir = '.totem'): InitSumm
     } else {
       summary.push({
         file: '.gitignore',
-        action: `Skipped the local-state lines for totemDir '${totemDir}' — not a plain relative directory of Totem's own (the repository root, a '..' segment or a gitignore pattern character); the default .totem/ lines were written`,
+        action: `Skipped the local-state lines for totemDir '${totemDir}' — not a plain directory name (segments of letters, digits, '.', '_' or '-', and neither the repository root nor a '.' or '..' segment); the default .totem/ lines were written`,
       });
     }
   }
@@ -1967,10 +1967,11 @@ export default {
     }
 
     // --- Every mode: .gitignore (mmnto-ai/totem#3004) ---
-    // Written here, before any installer or scan that can throw, so a partial
-    // init never leaves Totem's local state exposed to `git add`. A bare
-    // repository carries that state too (`totem lint` writes the metrics cache
-    // and the telemetry sink there), so this runs in every mode. The patterns
+    // Written here, before the AI-tool installers, the hook installers and the
+    // cursor scan (each of which can throw unhandled), so a failure in any of
+    // them finds Totem's local state already ignored. A bare repository carries
+    // that state too (`totem lint` writes the metrics cache and the telemetry
+    // sink there), so this runs in every mode. The patterns
     // follow the configured `totemDir` when a config already names one (the
     // schema defaults and normalises it, so the loaded value is the spelling to
     // write); a fresh install writes the default `.totem`.

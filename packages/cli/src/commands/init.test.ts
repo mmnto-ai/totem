@@ -1704,7 +1704,9 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
     vi.spyOn(console, 'error').mockImplementation(() => {});
     // A FILE where the scan expects the `.cursor/rules` directory: readdirSync throws ENOTDIR
-    // on every platform, after the ignores are written and before init completes.
+    // on every platform, after the ignores are written and before init completes. The scan is
+    // the LAST unhandled site before the write's old position, so this pins the order against
+    // the scan only; the installers between are covered by reading, not by this test.
     fs.mkdirSync(path.join(tmpDir, '.cursor'), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, '.cursor', 'rules'), 'not a directory\n', 'utf-8');
 
