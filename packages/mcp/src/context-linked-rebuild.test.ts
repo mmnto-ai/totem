@@ -45,6 +45,15 @@ const CONFIG_SOURCE = [
   '',
 ].join('\n');
 
+/** Write a config with one extra property line in place of the linked line. */
+function writeConfigWithLine(dir: string, line: string): void {
+  fs.writeFileSync(
+    path.join(dir, 'totem.config.ts'),
+    CONFIG_SOURCE.replace('LINKED', line),
+    'utf-8',
+  );
+}
+
 function writeConfig(dir: string, linked: string[] | null): void {
   const linkedLine = linked ? `linkedIndexes: ${JSON.stringify(linked)},` : '';
   fs.writeFileSync(
@@ -197,6 +206,15 @@ describe('getContext with a linked store that needs a rebuild (mmnto-ai/totem#30
     expect(ctx.linkedStores.has('linked-repo')).toBe(true);
     expect(ctx.linkedStoreInitErrors.has('linked-repo')).toBe(false);
     expect(await ctx.linkedStores.get('linked-repo')!.count()).toBe(1);
+  });
+
+  it('getProjectBasics() loads the config fresh on each call while no context is cached (mmnto-ai/totem#3012)', async () => {
+    writeConfigWithLine(projectDir, "totemDir: '.totem-first',");
+    const { getProjectBasics } = await import('./context.js');
+    expect((await getProjectBasics()).config.totemDir).toBe('.totem-first');
+
+    writeConfigWithLine(projectDir, "totemDir: '.totem-moved',");
+    expect((await getProjectBasics()).config.totemDir).toBe('.totem-moved');
   });
 
   it('getProjectBasics() resolves over a primary store that getContext() refuses (verify_execution and add_lesson rely on it)', async () => {

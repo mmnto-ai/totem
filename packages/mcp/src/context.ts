@@ -235,7 +235,10 @@ export function loadEnv(cwd: string): void {
  */
 async function loadConfig(configPath: string): Promise<TotemConfig> {
   const { createJiti } = await import('jiti');
-  const jiti = createJiti(import.meta.url);
+  // moduleCache off: jiti otherwise serves a config file from Node's module
+  // cache, so a re-read after an edit (getProjectBasics while no context is
+  // cached, or a getContext retry) would see the first load (mmnto-ai/totem#3012).
+  const jiti = createJiti(import.meta.url, { moduleCache: false });
   const mod = (await jiti.import(configPath)) as Record<string, unknown>;
   const raw = mod['default'] ?? mod;
   return TotemConfigSchema.parse(raw);
@@ -540,36 +543,28 @@ export interface ProjectBasics {
   config: TotemConfig;
 }
 
-let basicsPromise: Promise<ProjectBasics> | undefined;
-
 /**
  * Return the project root and config WITHOUT opening the vector store
  * (mmnto-ai/totem#3009). For tools that do not read the store — so a
- * primary-store fault (`StoreNeedsRebuildError`) does not fail them. Reuses
- * the full context when it is already cached; otherwise loads `.env` and the
- * config the same way `getContext()` does, memoized like it.
+ * primary-store fault (`StoreNeedsRebuildError`) does not fail them. Serves
+ * the cached context's root and config when a context exists; otherwise
+ * loads `.env` and the config fresh on every call, the same way a failed
+ * `getContext()` does on its next attempt — no memo of its own, so a config
+ * edited while the store is broken is seen (mmnto-ai/totem#3012).
  */
 export async function getProjectBasics(): Promise<ProjectBasics> {
   if (cached) return { projectRoot: cached.projectRoot, config: cached.config };
-  if (!basicsPromise) {
-    basicsPromise = (async () => {
-      const projectRoot = process.cwd();
-      const configPath = path.join(projectRoot, 'totem.config.ts');
-      if (!fs.existsSync(configPath)) {
-        throw new TotemConfigError(
-          'No totem.config.ts found in current directory.',
-          "Run 'totem init' first.",
-          'CONFIG_MISSING',
-        );
-      }
-      loadEnv(projectRoot);
-      return { projectRoot, config: await loadConfig(configPath) };
-    })().catch((err) => {
-      basicsPromise = undefined; // Allow retry on transient failures
-      throw err;
-    });
+  const projectRoot = process.cwd();
+  const configPath = path.join(projectRoot, 'totem.config.ts');
+  if (!fs.existsSync(configPath)) {
+    throw new TotemConfigError(
+      'No totem.config.ts found in current directory.',
+      "Run 'totem init' first.",
+      'CONFIG_MISSING',
+    );
   }
-  return basicsPromise;
+  loadEnv(projectRoot);
+  return { projectRoot, config: await loadConfig(configPath) };
 }
 
 /**
