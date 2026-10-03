@@ -224,7 +224,7 @@ Checks lessons for stale file references (a CI gate). Flags lessons whose scoped
 
 Parses your codebase, chunks the AST, and builds the local LanceDB vector index.
 
-The sync is the one operation that rebuilds a store the engine can no longer open (a format change, corruption); every other reader (`search`, `stats`, `lesson extract`, `review-learn`, the `review` gate, and the MCP server's `search_knowledge`) leaves such a store untouched and reports it with the cure, `totem sync --full` (mmnto-ai/totem#3009). A sync embedded in another command still rebuilds: the one `review --learn` runs after its dedup lookup, and the MCP `add_lesson` tool's own sync. A changed embedding provider is noticed today only by `search_knowledge`'s own first-query check; the store's detector for it is tracked on mmnto-ai/totem#3011.
+The sync is the one operation that rebuilds a store the engine can no longer open (a format change, corruption); every other reader (`search`, `stats`, `lesson extract`, `review-learn`, `review` including `review --learn` in standard mode, and the MCP server's `search_knowledge`) leaves such a store untouched and reports it with the cure, `totem sync --full` (mmnto-ai/totem#3009). A sync embedded in another command still starts the rebuild: the one `review --learn --mode structural` runs after its dedup lookup, and the MCP `add_lesson` tool's own sync. A changed embedding provider is noticed today only by `search_knowledge`'s own first-query check; the store's detector for it is tracked on mmnto-ai/totem#3011.
 
 - **Flags:**
   - `--incremental`: (Default) Only indexes files changed since the last sync.

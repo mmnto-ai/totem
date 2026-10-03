@@ -206,6 +206,7 @@ export class LanceStore {
         await this.nukeAndReset();
         return;
       }
+      this.releaseHandles(); // a failed open never leaves a half-open handle for a retry to overwrite
       throw err;
     }
   }

@@ -383,7 +383,7 @@ export function registerAddLesson(server: McpServer): void {
         if (storeFault) {
           syncMessage += success
             ? ` The vector store could not be opened (${storeFault.detail}); this sync rebuilt it.`
-            : ` The vector store could not be opened (${storeFault.detail}) and this sync did not rebuild it. ${storeFault.recoveryHint}`;
+            : ` The vector store could not be opened (${storeFault.detail}); this sync started a rebuild that did not finish within 60 s; the next \`totem sync\` resumes it.`;
         }
 
         return {

@@ -146,12 +146,19 @@ export async function _reconnectOnContext(ctx: ServerContext): Promise<void> {
     ctx.pendingLinkedStores.delete(name);
     ctx.linkedStores.set(name, pending.store);
     ctx.linkedStoreInitErrors.delete(name);
-    const rowCount = await pending.store.count();
-    if (rowCount === 0) {
-      ctx.linkedStoreInitErrors.set(
-        name,
-        `Linked index at ${pending.root} is empty (0 rows). Federated queries will return no hits from this repo until you run 'totem sync' in that directory.`,
-      );
+    // As at init, a count failure is recorded as this link's warning; it
+    // neither escapes nor stops the remaining pending stores.
+    try {
+      const rowCount = await pending.store.count();
+      if (rowCount === 0) {
+        ctx.linkedStoreInitErrors.set(
+          name,
+          `Linked index at ${pending.root} is empty (0 rows). Federated queries will return no hits from this repo until you run 'totem sync' in that directory.`,
+        );
+      }
+      // totem-context: intentional record-and-continue — the count failure is recorded in linkedStoreInitErrors, the same map init writes a count failure to.
+    } catch (err) {
+      ctx.linkedStoreInitErrors.set(name, err instanceof Error ? err.message : String(err));
     }
   }
 }
