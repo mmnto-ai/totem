@@ -2320,15 +2320,26 @@ export default {
     // `.totem`. A re-run loads the project's own config the way every verb does.
     let ignoreDir = '.totem';
     if (existingConfig) {
+      // The loaded config decides only which directory's lines are written; a
+      // config that cannot load is named here, in the summary, and fails every
+      // verb that needs it, so init still writes the default .totem/ lines rather
+      // than aborting after its earlier writes.
+      // totem-context: intentional cleanup — a disclosed fallback to the default directory (the warn and the summary row below), never a silent swallow.
       try {
         const { loadConfig } = await import('../utils.js');
         ignoreDir = (await loadConfig(existingConfig)).totemDir;
+        // totem-context: intentional cleanup — see directive above the try; dual placement so the rule fires on either the catch-keyword line or the catch-body line.
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
+        const configName = path.basename(existingConfig);
         log.warn(
           'Totem',
-          `Could not read totemDir from ${path.basename(existingConfig)} (${detail}); the .gitignore lines name the default .totem/ paths.`,
+          `Could not read totemDir from ${configName} (${detail}); the .gitignore lines name the default .totem/ paths.`,
         );
+        summary.push({
+          file: '.gitignore',
+          action: `Could not read totemDir from ${configName} (${detail}) — the default .totem/ lines were written`,
+        });
       }
     }
     summary.push(...ensureTotemGitignore(cwd, ignoreDir));

@@ -1700,6 +1700,24 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(lines).toContain('.totem/secrets.json');
   }, 60000);
 
+  it('writes the default ignores and says so when the config cannot load (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    // Unparseable YAML: loadConfig throws, init discloses it and still writes the lines.
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: [\n', 'utf-8');
+
+    await initCommand({ bare: true });
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    const output = stderr.join('\n');
+    expect(output).toContain('Could not read totemDir from totem.yaml');
+    expect(output).toContain('the default .totem/ lines were written');
+  }, 60000);
+
   it('discloses the package-level MCP dedup instead of appending a duplicate', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\n', 'utf-8');
