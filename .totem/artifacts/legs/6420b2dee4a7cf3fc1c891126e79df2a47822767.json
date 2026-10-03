@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "6420b2dee4a7cf3fc1c891126e79df2a47822767",
+  "readAt": "2026-10-02T21:47:27.662Z",
+  "folded": ["3004-F1", "3004-F2", "3004-F3", "3004-F4", "3004-F5", "3004-F6", "3004-F7", "3004-F8"],
+  "verdict": "1 BLOCKING, 3 MATERIAL, 3 MINOR, 1 QUESTION over f9a5192a..6420b2de (mmnto-ai/totem#3004): the values matched the design's table and the pinning test fails on the base tree, but the design had never defined what 'modifies its environment' means, and under the rule it used to flip verify_execution, search_knowledge (which writes a ledger event, a search log, a selection manifest and a correlation pointer on every call) was not read-only either. Confirmed, no finding: the SDK's defaults (destructiveHint and openWorldHint absent read as true), the changeset's default claim, no behaviour or description change, no other registerTool in the package, the lint path reaches no network. Every finding folded at 2ea1a1ae on the operator's three rulings (the tracked-content rule, destructiveHint true on verify_execution, the optional-lock flag) and the minor fixes; a scoped re-armed read covers the fold.",
+  "findings": [
+    {
+      "id": "3004-F1",
+      "severity": "BLOCKING",
+      "file": "packages/mcp/src/tools/search-knowledge.ts",
+      "line": 1266,
+      "claim": "search_knowledge writes local state on every call (logMcpCall appends an mcp_call ledger event through appendLedgerEvent; setLogDir/logSearch append to .totem/.search-log.jsonl; logSelectionManifest and logCorpusQuery write under the ledger) yet is pinned readOnlyHint true, contradicting the rule the diff used to flip verify_execution for writes of the same kind.",
+      "counterexample": "FOLDED by the operator's ruling: the hints are judged over the project's git-tracked content; writes to Totem's own local state under .totem/ are disclosed in the README and in the tool's description, not encoded; every search_knowledge write lands under an ignored path (.totem/ledger/, .totem/*.jsonl). search_knowledge stays read-only under the stated rule."
+    },
+    {
+      "id": "3004-F2",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/src/state-extractors.ts",
+      "line": 68,
+      "claim": "describe_project kept readOnlyHint true while its rich-state git status --porcelain ran without --no-optional-locks, which refreshes and writes .git/index and takes index.lock; core's estate scanner passes the flag for exactly that reason (estate-scan.ts:32-38, 505-510).",
+      "counterexample": "FOLDED: the call is now git --no-optional-locks status --porcelain (the git-level spelling; the subcommand spelling is refused with exit 129 and would have been caught silently as a clean tree), measured to leave the index untouched, and a test pins the argv."
+    },
+    {
+      "id": "3004-F3",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/first-lint-promote-runner.ts",
+      "line": 7,
+      "claim": "A fifth verify_execution write was missing from the comment, README and changeset: the first-lint promotion writes .totem/verification-outcomes.json (writeVerificationOutcomes when outcomes changed).",
+      "counterexample": "FOLDED: named in all three, with its class (committable)."
+    },
+    {
+      "id": "3004-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/lint.ts",
+      "line": 302,
+      "claim": "'the rule metrics file on every run' was over-broad: lint returns before runCompiledRules on an empty diff, and saveRuleMetrics overwrites the file in place rather than appending.",
+      "counterexample": "FOLDED: 'on every run that evaluates rules'; the promotion rewrite, which runs before the empty-diff return, is stated separately."
+    },
+    {
+      "id": "3004-F5",
+      "severity": "MATERIAL",
+      "file": "packages/mcp/README.md",
+      "line": 46,
+      "claim": "'add_lesson overwrites nothing' was false as written: the spawned incremental sync rewrites installed-packs.json, review-extensions.txt and index-manifest.json, deletes LanceDB rows and updates the global registry; the lesson write itself takes no exclusive flag under an 8-hex-digit name.",
+      "counterexample": "FOLDED: the bullet and the comment now say the sync rewrites ignored index artifacts, deletes index rows, writes ~/.totem/registry.json outside the project, and that a hash collision would overwrite a lesson in place."
+    },
+    {
+      "id": "3004-F6",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3004.md",
+      "line": 154,
+      "claim": "Is destructiveHint false right under the SDK's 'only additive updates' when verify_execution rewrites the tracked compiled-rules.json in place and add_lesson's sync rewrites manifests?",
+      "counterexample": "ANSWERED by the ruling: judged over tracked content, verify_execution's in-place rewrite of a tracked file is not additive, so its destructiveHint is true; add_lesson's tracked-file change is a new file, so false; the ignored-artifact rewrites do not count and are disclosed."
+    },
+    {
+      "id": "3004-F7",
+      "severity": "MINOR",
+      "file": "packages/mcp/README.md",
+      "line": 44,
+      "claim": "openWorldHint false is defensible by the SDK's memory-tool example, but add_lesson's bullet did not disclose that its sync embeds every changed file through the same possibly-cloud provider, and both spawners fall back to npx, which can reach the registry.",
+      "counterexample": "FOLDED, and then superseded by the strategy seat's hold taken by the operator: openWorldHint is true on search_knowledge and add_lesson, which send text to the configured provider; the npx arm is disclosed and its defect filed as mmnto-ai/totem#3008."
+    },
+    {
+      "id": "3004-F8",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tool-annotations.test.ts",
+      "line": 63,
+      "claim": "The drift-guard test reads index.ts as text with a regex over register*(server); lines and would miss a registration written another way; the pinning tests list a mirrored server, not the real one.",
+      "counterexample": "FOLDED as disclosure: a two-line comment on the test names the limit; the stronger stdio-launch form is noted, not built."
+    }
+  ]
+}

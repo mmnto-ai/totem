@@ -9,10 +9,7 @@ import { z } from 'zod';
 
 import { TotemConfigError, TotemError } from '@mmnto/totem';
 
-import { registerAddLesson } from './tools/add-lesson.js';
-import { registerDescribeProject } from './tools/describe-project.js';
-import { registerSearchKnowledge } from './tools/search-knowledge.js';
-import { registerVerifyExecution } from './tools/verify-execution.js';
+import { registerTools } from './register-tools.js';
 
 // Support --cwd flag to run against a different project root
 const cwdFlagIdx = process.argv.indexOf('--cwd');
@@ -45,10 +42,9 @@ const server = new McpServer({
   version,
 });
 
-registerSearchKnowledge(server);
-registerAddLesson(server);
-registerVerifyExecution(server);
-registerDescribeProject(server);
+// Tools register only through registerTools(): the annotations test reads the
+// same path, and a tool registered here directly would escape it (mmnto-ai/totem#3004).
+registerTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

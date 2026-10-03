@@ -3,9 +3,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadCompiledRules } from '@mmnto/totem';
+import { loadCompiledRules, safeExec } from '@mmnto/totem';
+
+// The exec seam, wrapped so every existing test still runs the real git while the
+// lock-flag test below can read the argv extractGitState hands it (mmnto-ai/totem#3004).
+vi.mock('@mmnto/totem', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@mmnto/totem')>();
+  return { ...actual, safeExec: vi.fn(actual.safeExec) };
+});
 
 // packages/mcp/src -> packages/mcp -> packages -> repo root
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -87,6 +94,24 @@ describe('extractGitState', () => {
       const state = extractGitState(tmp);
       expect(state.truncated).toBe(true);
       expect(state.uncommittedFiles.length).toBe(UNCOMMITTED_FILES_CAP);
+    } finally {
+      fs.rmSync(tmp, RM_OPTS);
+    }
+  });
+
+  it('runs git status without taking the optional index lock', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-mcp-git-lock-'));
+    try {
+      initFixtureRepo(tmp);
+      const exec = vi.mocked(safeExec);
+      exec.mockClear();
+
+      extractGitState(tmp);
+
+      const statusCalls = exec.mock.calls.filter(([, args]) => args?.includes('status'));
+      expect(statusCalls).toHaveLength(1);
+      expect(statusCalls[0]![0]).toBe('git');
+      expect(statusCalls[0]![1]).toEqual(['--no-optional-locks', 'status', '--porcelain']);
     } finally {
       fs.rmSync(tmp, RM_OPTS);
     }
