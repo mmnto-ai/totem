@@ -2,13 +2,32 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Embedder } from '../embedders/embedder.js';
 import { NO_EMBEDDER_AVAILABLE_MESSAGE } from '../embedders/embedder.js';
-import { TotemConfigError } from '../errors.js';
+import { StoreNeedsRebuildError, TotemConfigError } from '../errors.js';
+
+/**
+ * Pass-through mock of the LanceDB module with one seam: when
+ * `lanceSeam.connectError` is set, `lancedb.connect()` rejects with it. Used
+ * only to induce a deterministic NON-healable open error (mmnto-ai/totem#3009);
+ * every other test runs against the real engine.
+ */
+const lanceSeam = vi.hoisted(() => ({ connectError: null as Error | null }));
+vi.mock('@lancedb/lancedb', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@lancedb/lancedb')>();
+  return {
+    ...actual,
+    connect: (...args: Parameters<typeof actual.connect>) => {
+      if (lanceSeam.connectError) return Promise.reject(lanceSeam.connectError);
+      return actual.connect(...args);
+    },
+  };
+});
 import { cleanTmpDir } from '../test-utils.js';
 import type { Chunk } from '../types.js';
+import { TOTEM_TABLE_NAME } from './lance-schema.js';
 import { escapeSqlString, LanceStore } from './lance-store.js';
 
 /** Deterministic fake embedder — hashes text into a fixed-dimension vector. */
@@ -478,6 +497,94 @@ describe('LanceStore', () => {
       await store.reset();
       expect(await store.isEmpty()).toBe(true);
     });
+  });
+
+  describe('a reader never heals (mmnto-ai/totem#3009)', () => {
+    // The dimension-mismatch arm is not exercised here: its detector
+    // (`mismatchedStoredDimensions`) tests `Array.isArray` on a value LanceDB
+    // returns as an Arrow Vector, so it never fires today. It is tracked
+    // separately; this change covers the healable-open-error arm.
+
+    /** Every file under `dir`, recursively — the on-disk footprint of a store. */
+    function listFiles(dir: string): string[] {
+      if (!fs.existsSync(dir)) return [];
+      const out: string[] = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...listFiles(p));
+        else out.push(p);
+      }
+      return out.sort();
+    }
+
+    /**
+     * A store whose manifest is unreadable: the engine's open fails with a
+     * "lance error" (a healable substring), measured against LanceDB before
+     * this test was written.
+     */
+    async function seedCorruptStore(): Promise<string[]> {
+      await store.insert([makeChunk({ content: 'alpha' })]);
+      const versionsDir = path.join(tmpDir, `${TOTEM_TABLE_NAME}.lance`, '_versions');
+      const manifests = fs.readdirSync(versionsDir);
+      expect(manifests.length).toBeGreaterThan(0);
+      for (const f of manifests) fs.writeFileSync(path.join(versionsDir, f), 'garbage');
+      return listFiles(tmpDir);
+    }
+
+    afterEach(() => {
+      lanceSeam.connectError = null;
+    });
+
+    it('a reader connect() on a store whose open fails with a healable error throws StoreNeedsRebuildError and leaves the directory as it was', async () => {
+      const before = await seedCorruptStore();
+
+      const reader = new LanceStore(tmpDir, new FakeEmbedder(), { absolutePathRoot: tmpDir });
+      const thrown = await reader.connect().catch((err: unknown) => err);
+
+      expect(thrown).toBeInstanceOf(StoreNeedsRebuildError);
+      const err = thrown as StoreNeedsRebuildError;
+      expect(err.code).toBe('STORE_NEEDS_REBUILD');
+      expect(err.reason).toBe('healable-open-error');
+      expect(err.dbPath).toBe(tmpDir);
+      expect(err.underlyingMessage?.toLowerCase()).toContain('lance error');
+      expect(err.message).toMatch(/Run `totem sync --full` in that repository\.$/);
+      expect(listFiles(tmpDir)).toEqual(before);
+    });
+
+    it('connect({ heal: true }) on a store whose open fails with a healable error deletes it and opens an empty one', async () => {
+      await seedCorruptStore();
+      const warnings: string[] = [];
+      const healer = new LanceStore(
+        tmpDir,
+        new FakeEmbedder(),
+        { absolutePathRoot: tmpDir },
+        (msg) => warnings.push(msg),
+      );
+
+      await healer.connect({ heal: true });
+
+      expect(await healer.isEmpty()).toBe(true);
+      expect(listFiles(tmpDir)).toEqual([]);
+      expect(warnings.some((w) => w.includes('Index format incompatible'))).toBe(true);
+    });
+
+    it.each([{ heal: false }, { heal: true }])(
+      'a non-healable open error propagates as itself (heal: $heal) and the directory is untouched',
+      async ({ heal }) => {
+        await store.insert([makeChunk({ content: 'alpha' })]);
+        const before = listFiles(tmpDir);
+        const original = new Error('permission denied (os error 5)');
+        lanceSeam.connectError = original;
+
+        const subject = new LanceStore(tmpDir, new FakeEmbedder(), { absolutePathRoot: tmpDir });
+        const thrown = await subject.connect({ heal }).catch((err: unknown) => err);
+
+        expect(thrown).toBe(original);
+        expect(thrown).not.toBeInstanceOf(StoreNeedsRebuildError);
+        lanceSeam.connectError = null;
+        expect(listFiles(tmpDir)).toEqual(before);
+      },
+    );
   });
 
   describe('reconnect', () => {

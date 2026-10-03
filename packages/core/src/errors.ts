@@ -53,7 +53,9 @@ export type TotemErrorCode =
   /** A leg deposit already exists for this read sha and `--replace` was not passed (mmnto-ai/totem#2698). */
   | 'LEG_DEPOSIT_EXISTS'
   /** A mail reader verb's start resolves to no repository or to a linked worktree — refused before any read or write; exit 2 at the CLI (mmnto-ai/totem#2946, mmnto-ai/totem#2968). */
-  | 'REPO_ROOT_REFUSED';
+  | 'REPO_ROOT_REFUSED'
+  /** A reader opened a vector store that only a rebuild can repair; the sync is the one rebuilder (mmnto-ai/totem#3009). */
+  | 'STORE_NEEDS_REBUILD';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
@@ -116,6 +118,66 @@ export class TotemGitError extends TotemError {
   constructor(message: string, recoveryHint: string, cause?: unknown) {
     super('GIT_FAILED', message, recoveryHint, cause);
     this.name = 'TotemGitError';
+  }
+}
+
+/** Why a vector store needs a rebuild before a reader can use it (mmnto-ai/totem#3009). */
+export type StoreNeedsRebuildReason = 'dimension-mismatch' | 'healable-open-error';
+
+/** The fields a `StoreNeedsRebuildError` carries. */
+export interface StoreNeedsRebuildDetails {
+  /** The store directory (the `.lancedb/` path) that could not be used. */
+  dbPath: string;
+  reason: StoreNeedsRebuildReason;
+  /** The vector width found in the store, when the reason is a dimension mismatch. */
+  storedDimensions?: number;
+  /** The vector width the configured embedder produces, when known. */
+  expectedDimensions?: number;
+  /** The underlying open error's message, when there is one. */
+  underlyingMessage?: string;
+}
+
+/**
+ * A reader opened a vector store whose format or vector dimensions only a
+ * rebuild can repair (mmnto-ai/totem#3009). A reader never repairs what it
+ * reads: `LanceStore.connect()` throws this instead of deleting the store,
+ * and the sync pipeline, the one rebuilder, asks for the heal explicitly.
+ * The message ends with the cure.
+ */
+export class StoreNeedsRebuildError extends TotemError {
+  readonly dbPath: string;
+  readonly reason: StoreNeedsRebuildReason;
+  readonly storedDimensions: number | undefined;
+  readonly expectedDimensions: number | undefined;
+  readonly underlyingMessage: string | undefined;
+
+  constructor(details: StoreNeedsRebuildDetails, cause?: unknown) {
+    const cure = 'Run `totem sync --full` in that repository.';
+    let what: string;
+    if (details.reason === 'dimension-mismatch') {
+      const stored =
+        details.storedDimensions !== undefined ? `${details.storedDimensions}-dim` : 'different';
+      const expected =
+        details.expectedDimensions !== undefined
+          ? `${details.expectedDimensions}-dim vectors`
+          : 'a different width';
+      what = `The vector store at ${details.dbPath} holds ${stored} vectors but the configured embedder produces ${expected}.`;
+    } else {
+      const firstLine = details.underlyingMessage?.split('\n')[0]?.trim();
+      what = `The vector store at ${details.dbPath} cannot be opened${firstLine ? ` (${firstLine})` : ''}.`;
+    }
+    super(
+      'STORE_NEEDS_REBUILD',
+      `${what} A reader does not rebuild the store. ${cure}`,
+      cure,
+      cause,
+    );
+    this.name = 'StoreNeedsRebuildError';
+    this.dbPath = details.dbPath;
+    this.reason = details.reason;
+    this.storedDimensions = details.storedDimensions;
+    this.expectedDimensions = details.expectedDimensions;
+    this.underlyingMessage = details.underlyingMessage;
   }
 }
 

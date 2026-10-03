@@ -10,6 +10,7 @@ import {
   requireEmbedding,
   resolveStrategyRoot,
   sanitizeForTerminal,
+  StoreNeedsRebuildError,
   TotemConfigError,
   TotemConfigSchema,
 } from '@mmnto/totem';
@@ -340,8 +341,8 @@ async function initContext(): Promise<ServerContext> {
       continue;
     }
 
+    const resolvedPath = path.resolve(projectRoot, linkedPath);
     try {
-      const resolvedPath = path.resolve(projectRoot, linkedPath);
       if (!fs.existsSync(resolvedPath)) {
         throw new TotemConfigError(
           `Linked index path does not exist: ${resolvedPath}`,
@@ -445,7 +446,19 @@ async function initContext(): Promise<ServerContext> {
           `Linked index at ${resolvedPath} is empty (0 rows). Federated queries will return no hits from this repo until you run 'totem sync' in that directory.`,
         );
       }
+      // totem-context: intentional record-and-skip — every linked-index init failure is recorded in linkedStoreInitErrors and surfaced on the first search_knowledge call; a StoreNeedsRebuildError is skipped by name with the cure, never deleted (mmnto-ai/totem#3009). The primary store's faults still throw.
     } catch (err) {
+      // mmnto-ai/totem#3009: a linked store that only a rebuild can repair is
+      // skipped, never deleted — a reader does not repair what it reads. The
+      // warning names the linked repository and the cure; it surfaces once,
+      // on the first `search_knowledge` call, like every init error here.
+      if (err instanceof StoreNeedsRebuildError) {
+        linkedStoreInitErrors.set(
+          name,
+          `Linked index "${name}" at ${resolvedPath} needs a rebuild and was skipped (left untouched): ${err.message} Cure: run \`totem sync --full\` in ${resolvedPath}.`,
+        );
+        continue;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       linkedStoreInitErrors.set(name, msg);
     }
