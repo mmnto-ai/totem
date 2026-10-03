@@ -293,8 +293,14 @@ describe('add_lesson auth model (#844)', () => {
     const { spawn } = await import('node:child_process');
     const spawnCallsBefore = vi.mocked(spawn).mock.calls.length;
 
-    await handle({ lesson: 'Resolved sync', context_tags: ['test'] });
+    const result = (await handle({ lesson: 'Resolved sync', context_tags: ['test'] })) as {
+      content: Array<{ text: string }>;
+    };
 
+    // The reply names the CLI that ran, as verify_execution's does.
+    expect(result.content[0]!.text).toMatch(
+      / CLI: @mmnto\/cli(@\S+)?, (workspace|pinned|global)\./,
+    );
     expect(vi.mocked(spawn).mock.calls.length).toBe(spawnCallsBefore + 1);
     const [cmd, args, opts] = vi.mocked(spawn).mock.calls.at(-1)!;
     expect(cmd).toBe(process.execPath);

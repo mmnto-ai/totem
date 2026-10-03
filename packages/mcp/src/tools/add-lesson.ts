@@ -67,6 +67,8 @@ interface SyncRunResult {
   success: boolean;
   outcome: SyncOutcome;
   output: string;
+  /** Which CLI the sync ran (`@mmnto/cli@<version>, <tier>`); absent when none resolved. */
+  cli?: string;
 }
 
 /**
@@ -131,7 +133,12 @@ function runSync(projectRoot: string): Promise<SyncRunResult> {
 
     const timer = setTimeout(() => {
       killTree(child);
-      resolve({ success: false, outcome: 'timed-out', output: 'Sync timed out after 60s.' });
+      resolve({
+        success: false,
+        outcome: 'timed-out',
+        output: 'Sync timed out after 60s.',
+        cli: target.label,
+      });
     }, SYNC_TIMEOUT_MS);
 
     child.on('close', (code) => {
@@ -140,12 +147,18 @@ function runSync(projectRoot: string): Promise<SyncRunResult> {
         success: code === 0,
         outcome: code === 0 ? 'ok' : 'failed',
         output: chunks.join(''),
+        cli: target.label,
       });
     });
 
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ success: false, outcome: 'spawn-error', output: `Spawn error: ${err.message}` });
+      resolve({
+        success: false,
+        outcome: 'spawn-error',
+        output: `Spawn error: ${err.message}`,
+        cli: target.label,
+      });
     });
   });
 }
@@ -387,7 +400,7 @@ export function registerAddLesson(server: McpServer): void {
             activeSyncPromise = null;
           });
         }
-        const { success, outcome, output } = await activeSyncPromise;
+        const { success, outcome, output, cli } = await activeSyncPromise;
 
         if (!isJoining) {
           try {
@@ -400,6 +413,8 @@ export function registerAddLesson(server: McpServer): void {
         let syncMessage = success
           ? `Sync completed successfully. ${output.trim()}`
           : `Sync failed: ${output.trim()}`;
+        // Name the CLI that ran, as verify_execution does (mmnto-ai/totem#3008).
+        if (cli !== undefined) syncMessage += ` CLI: ${cli}.`;
         if (storeFault) {
           // mmnto-ai/totem#3012: say what the sync's outcome means for the
           // rebuild — a timeout, a failed exit and an unstarted sync differ.
