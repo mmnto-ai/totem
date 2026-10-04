@@ -1,0 +1,6 @@
+## Lesson — verify_execution is closed-world, partial clone disclosed
+
+**Tags:** mcp, annotations, git
+**Scope:** packages/mcp/src/tools/verify-execution.ts
+
+`verify_execution` declares `openWorldHint: false`. It declared `true` while its spawn could fall back to a package manager; with the explicit resolver it starts a resolved local or npm-global CLI entry with `node` and reaches no registry, so the hint moved with that change. Read before it moved: a plain `totem lint` and `totem lint --staged` make only local git calls, and the one network path, the pull-request comment, runs only behind `--pr-comment`, which the tool never passes. One case is disclosed and not counted: in a blobless partial clone git itself may fetch missing objects from the checkout's own remote while diffing. That is inferred from git's behaviour, not measured, and it is the repository's configuration, not a reach the tool makes. A falsification read and then a review bot asked whether the hint survives that case; the operator ruled on 2026-10-03 that it stays `false`, with the case written into the annotation comment and the MCP README (mmnto-ai/totem#3018). `readOnlyHint: false` and `destructiveHint: true` did not move.
