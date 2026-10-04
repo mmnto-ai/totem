@@ -40,8 +40,9 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * (retained as predicate proofs; they are decidable classes in their own right),
  * plus the Gate 5 class sets, one block per batch (batch 1: five ast-grep rows
  * delivered as data on 2026-09-24; batch 2: two ast-grep rows delivered on
- * 2026-09-27; batch 3: one ast-grep row delivered on 2026-09-29; each row comment
- * below names its set, its dispatch and its set id).
+ * 2026-09-27; batch 3: one ast-grep row delivered on 2026-09-29; batch 4: three
+ * ast-grep rows delivered on 2026-10-04, the last batch; each row comment below
+ * names its set, its dispatch and its set id).
  * The engine typing follows the 2026-06-28 ruling above: `is_finite` and
  * `procgen-entropy-clock-source` tokens can appear in prose/doc-comments ⇒
  * ast-grep only; `debug-assert-len-mismatch` matches a code-only construct ⇒
@@ -52,7 +53,9 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * prose or doc-comments is ast-grep-only, and a per-rule measured zero at one tree
  * carries no class-level guarantee — so batch 2 delivered no regex class either,
  * and batch 3 none: six of its rules are kept out on engine typing and one on
- * DECIDABILITY (rule 1), the first rule that gate keeps out.
+ * DECIDABILITY (rule 1), the first rule that gate keeps out. Batch 4 delivered no
+ * regex class either: its five kept-out rules all fall on engine typing, two of
+ * them prose-scoped pairs under rule 2's prose limb (P1 not applied in this batch).
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
@@ -125,6 +128,33 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // slice; pinned by authored-whitelist.test.ts; the batch-3 intake pin passes it as
   // `--judged-by`. ──
   Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-callee-literal-arg' }),
+  // ── The Gate 5 batch-4 class set (strategy-owned data; set `gate5-2263305c` batch 4, the
+  // last batch; strategy-claude's delivery dispatch of 2026-10-04T19:24:10Z under D1 (C): the
+  // scorer's class-review table on strategy main at 3db375bb (mmnto-ai/totem-strategy#1471)
+  // reviewed all ten pairs of the pin mail under the header's two rules, D7 = (a) MODAL and
+  // P1 not applied in this batch; the codex D3 (i) replay converged on all ten pairs with
+  // nothing withdrawn; under D12 RULED (b) the concurrence on the three delivered pairs is
+  // recorded as checked, not blind). Three ast-grep rows. Each name's breadth, corrected by
+  // the replayer's probes and travelling with its row: `forbidden-object-member-call` is a
+  // dot-member call (`console.info('x')` matches, a computed access does not);
+  // `named-callee-argument-shape` sees an object-literal second argument with a constant or
+  // a variable first argument, and misses a variable options argument;
+  // `try-block-expect-fail-with-catch` requires the call in the TRY block, after at least one
+  // statement and directly in the block, with a catch that binds a name — the name promises
+  // the shape, not a detection of tests that pass by accident. Five rules are intake-ineligible
+  // on engine typing and never rows: `61dcb058` and `b34d9515` (batch 1's withheld pairs,
+  // carried), `8213cd4e`, `7e3eefea` and `b3e3e2b3` (its C0–C7 and admission rows of record
+  // are the replayer's, D3 (ii)). In the envelope with no new row: the exemplar row's three
+  // (`884becd4`, `8435c024`, `4ae0a01d`, `regex/forbidden-literal-token` under the operator's (A),
+  // R6-flagged) and the three of batch 1's `ast-grep/forbidden-callee-call` (`427481b5`,
+  // `5c5fe9d9`, `63680bf3`). Set id `static-whitelist@gate5-b5bc711a`: the SAME rule as
+  // batches 1 to 3 — the first 8 hex of the sha256 over ONE compact JSON array of THESE THREE
+  // rows in this order (`JSON.stringify` of `{ engine, structuralClass }` objects, no
+  // whitespace, no trailing newline) — the batch's OWN slice; pinned by
+  // authored-whitelist.test.ts; the batch-4 intake pin passes it as `--judged-by`. ──
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'forbidden-object-member-call' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'named-callee-argument-shape' }),
+  Object.freeze({ engine: 'ast-grep', structuralClass: 'try-block-expect-fail-with-catch' }),
 ]);
 
 /**

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "922ec45ceba8de96ce4798a6b0d6bbe8fef81145",
+  "readAt": "2026-10-04T19:52:34.388Z",
+  "findings": [
+    {
+      "id": "b4-F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 146,
+      "claim": "The batch-4 comment says the five kept-out rules are 'never rows' and, of b3e3e2b3, that 'its rows of record are the replayer's' (D3 (ii)): two meanings of 'rows' in one sentence, whitelist rows and the scorer's C0-C7 and admission rows.",
+      "counterexample": "FOLDED in the next commit: 'its C0-C7 and admission rows of record are the replayer's'. As found: a reader could take b3e3e2b3 to have whitelist rows owned by the replayer; the fact is correct (the delivery mail's keep-out table and batch-4.json intakeIneligible[4].note say the entry's C0-C7 and admission rows of record are the replayer's)."
+    },
+    {
+      "id": "b4-F2",
+      "severity": "MINOR",
+      "file": ".changeset/gate5-b4-class-rows.md",
+      "line": 10,
+      "claim": "The changeset describes try-block-expect-fail-with-catch as 'the required call in the try block after at least one statement, with a catch that binds a name'.",
+      "counterexample": "FOLDED in the next commit: 'directly in the try block'. As found: the delivery mail's third description says the call must follow at least one statement AND sit directly in the block (a nested call does not match); the table comment keeps 'directly in the block' and the changeset dropped it, so the published CHANGELOG would read broader than the class."
+    }
+  ],
+  "folded": [
+    "b4-F1",
+    "b4-F2"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 2 MINOR, 0 QUESTION over 48edd419..922ec45c, the Gate 5 batch-4 class set (three ast-grep whitelist rows as data, set static-whitelist@gate5-b5bc711a): the rows, their order and engine match the delivery mail of 2026-10-04T19:24:10Z and the scorer's deliver[] at strategy 3db375bb; the set id recomputed over 217 bytes equals the scorer's, thirteen wrong-input variants all miss, and the rule reproduces the ids of batches 1 to 3 from the committed slices; seven mutant tables are each caught by at least two tests (run, not reasoned); the predicate on the built dist decides each of the three pairs and refuses their regex twins and the five kept-out regex classes; every claim of the comment block and the JSDoc holds against the mail and the table's JSON; the changeset's fixed group and sentences hold; the cut sensor's path heuristics do not flag the file; the table's only runtime consumer passes it whole and counts nothing. Two wording findings, both folded in the next commit. The leg named convergence: no re-armed read is owed."
+}

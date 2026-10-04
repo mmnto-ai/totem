@@ -69,6 +69,23 @@ const GATE5_BATCH_3_ROWS = [
 const GATE5_BATCH_3_SET_SHA256 = '21c0175af0f54906db87e0b95273632c9982f272f9a99d125386df4b1aecd205';
 const GATE5_BATCH_3_JUDGED_BY = 'static-whitelist@gate5-21c0175a';
 
+/**
+ * The Gate 5 batch-4 class set as DELIVERED (strategy-claude's dispatch of
+ * 2026-10-04T19:24:10Z, set `gate5-2263305c` batch 4, the last batch): three ast-grep
+ * rows, in this order, appended after batch 3's one. The set id follows the SAME rule
+ * over the batch's OWN slice. Each name's breadth travels with its row in the table
+ * comment (a dot-member call; an object-literal second argument; the required call in
+ * the TRY block). The ids of batches 1 to 3 do not move when batch 4 lands.
+ */
+const GATE5_BATCH_4_ROWS = [
+  { engine: 'ast-grep', structuralClass: 'forbidden-object-member-call' },
+  { engine: 'ast-grep', structuralClass: 'named-callee-argument-shape' },
+  { engine: 'ast-grep', structuralClass: 'try-block-expect-fail-with-catch' },
+] as const;
+
+const GATE5_BATCH_4_SET_SHA256 = 'b5bc711a6b940a19e9a0277ff5f37c3cab5444a99f9fc625b106bfc86d903372';
+const GATE5_BATCH_4_JUDGED_BY = 'static-whitelist@gate5-b5bc711a';
+
 /** The delivered batches in table order: each slice's start index and its pinned digest. */
 const DELIVERED_BATCHES = [
   {
@@ -89,6 +106,12 @@ const DELIVERED_BATCHES = [
     sha256: GATE5_BATCH_3_SET_SHA256,
     judgedBy: GATE5_BATCH_3_JUDGED_BY,
   },
+  {
+    name: 'batch 4',
+    rows: GATE5_BATCH_4_ROWS,
+    sha256: GATE5_BATCH_4_SET_SHA256,
+    judgedBy: GATE5_BATCH_4_JUDGED_BY,
+  },
 ] as const;
 
 /** The one set-id rule: sha256 over ONE compact JSON array of `{ engine, structuralClass }` rows. */
@@ -99,23 +122,28 @@ function setDigest(rows: readonly { engine: string; structuralClass: string }[])
   return createHash('sha256').update(bytes, 'utf8').digest('hex');
 }
 
-describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1, 2 and 3)', () => {
-  it('carries the five shipped rows first, then batches 1, 2 and 3 in their delivered orders', () => {
+describe('authoredWhitelist — the Gate 5 class sets (delivered data, batches 1 to 4)', () => {
+  it('carries the five shipped rows first, then batches 1 to 4 in their delivered orders', () => {
     const table = authoredWhitelist();
     const batch1Start = SHIPPED_ROWS.length;
     const batch2Start = batch1Start + GATE5_BATCH_1_ROWS.length;
     const batch3Start = batch2Start + GATE5_BATCH_2_ROWS.length;
-    expect(table).toHaveLength(batch3Start + GATE5_BATCH_3_ROWS.length);
+    const batch4Start = batch3Start + GATE5_BATCH_3_ROWS.length;
+    expect(table).toHaveLength(batch4Start + GATE5_BATCH_4_ROWS.length);
     expect(table.slice(0, batch1Start)).toEqual(SHIPPED_ROWS);
     expect(table.slice(batch1Start, batch2Start)).toEqual(GATE5_BATCH_1_ROWS);
     expect(table.slice(batch2Start, batch3Start)).toEqual(GATE5_BATCH_2_ROWS);
-    expect(table.slice(batch3Start)).toEqual(GATE5_BATCH_3_ROWS);
+    expect(table.slice(batch3Start, batch4Start)).toEqual(GATE5_BATCH_3_ROWS);
+    expect(table.slice(batch4Start)).toEqual(GATE5_BATCH_4_ROWS);
   });
 
-  it('types every delivered row ast-grep (batch 1: rule 2 measured; batches 2 and 3: rule 2 modal under D7 = (a); no regex class delivered)', () => {
+  it('types every delivered row ast-grep (batch 1: rule 2 measured; batches 2 to 4: rule 2 modal under D7 = (a); no regex class delivered)', () => {
     const delivered = authoredWhitelist().slice(SHIPPED_ROWS.length);
     expect(delivered).toHaveLength(
-      GATE5_BATCH_1_ROWS.length + GATE5_BATCH_2_ROWS.length + GATE5_BATCH_3_ROWS.length,
+      GATE5_BATCH_1_ROWS.length +
+        GATE5_BATCH_2_ROWS.length +
+        GATE5_BATCH_3_ROWS.length +
+        GATE5_BATCH_4_ROWS.length,
     );
     for (const row of delivered) {
       expect(row.engine).toBe('ast-grep');
