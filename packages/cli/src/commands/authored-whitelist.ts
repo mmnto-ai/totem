@@ -143,9 +143,9 @@ const AUTHORED_WHITELIST: readonly WhitelistEntry[] = Object.freeze([
   // statement and directly in the block, with a catch that binds a name — the name promises
   // the shape, not a detection of tests that pass by accident. Five rules are intake-ineligible
   // on engine typing and never rows: `61dcb058` and `b34d9515` (batch 1's withheld pairs,
-  // carried), `8213cd4e`, `7e3eefea` and `b3e3e2b3` (its rows of record are the replayer's,
-  // D3 (ii)). In the envelope with no new row: the exemplar row's three (`884becd4`,
-  // `8435c024`, `4ae0a01d`, `regex/forbidden-literal-token` under the operator's (A),
+  // carried), `8213cd4e`, `7e3eefea` and `b3e3e2b3` (its C0–C7 and admission rows of record
+  // are the replayer's, D3 (ii)). In the envelope with no new row: the exemplar row's three
+  // (`884becd4`, `8435c024`, `4ae0a01d`, `regex/forbidden-literal-token` under the operator's (A),
   // R6-flagged) and the three of batch 1's `ast-grep/forbidden-callee-call` (`427481b5`,
   // `5c5fe9d9`, `63680bf3`). Set id `static-whitelist@gate5-b5bc711a`: the SAME rule as
   // batches 1 to 3 — the first 8 hex of the sha256 over ONE compact JSON array of THESE THREE
