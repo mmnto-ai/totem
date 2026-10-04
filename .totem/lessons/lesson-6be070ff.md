@@ -1,0 +1,6 @@
+## Lesson — An install of the CLI is recognised by its path
+
+**Tags:** cli, resolution, forks
+**Scope:** packages/core/src/cli-resolve.ts, packages/mcp/src/cli-spawn.ts
+
+The CLI resolver treats an install that sits at node_modules/@mmnto/cli as Totem's CLI whatever its manifest is called. That path is written by the package manager that pinned the dependency, so a fork installed under the alias runs, on the pinned tier and on the PATH tier alike, as it already did in the CLI's re-exec and the git hooks. The manifest's own name rides along as `aliasOf`, and the MCP label names it, followed by "(installed as @mmnto/cli)". Where there is no such path the manifest's name decides: the workspace build, by a text match on the CLI package's manifest, and a global whose link resolves outside node_modules, by the parsed manifest's top-level name, so a nested `name` key does not pass there (a bot-round finding). A bare `totem` name is never the identity. The first version checked the manifest name on the PATH tier, which would have refused the aliased fork there while every other tier accepted it by path; the operator ruled identity by path on 2026-10-03 (mmnto-ai/totem#3018). "Verified" in the resolver means located by path or by manifest name, never a check of the bytes.
