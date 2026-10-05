@@ -1,0 +1,6 @@
+## Lesson — A data-table test counts only if a mutant table fails it
+
+**Tags:** testing, whitelist, mutation, gate5
+**Scope:** packages/cli/src/commands/authored-whitelist.test.ts
+
+The five tests over `AUTHORED_WHITELIST` are the only guard on a data-only change, so their strength is measured, not reasoned. For the batch-4 rows (mmnto-ai/totem#3020) the RED check ran after the commit with main's thirteen-row table swapped in: three of five failed (the exact-rows test, the delivered-row count and the set-id test) and the uniqueness and frozenness tests passed on both tables, as they should, since nothing they check changed. The falsification leg then ran the suite against seven mutant tables: the pre-diff table, a batch-4 row retyped to regex, the three rows reordered, a batch-4 row moved ahead of batch 3's, a regex twin of a delivered name appended, the same twin inside the batch-4 block, and a class name misspelled; every mutant was caught by at least two tests, and the class-name uniqueness test is the one that refuses the regex twin (a `regex` declaration of an ast-grep-only name must stay rejected under the 2026-06-28 engine-typing ruling). A new or restated test on a data table counts only if it would have failed on the pre-change table; a mutant no test catches is a hole in the registry's guard, not a passing suite.
