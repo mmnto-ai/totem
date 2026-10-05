@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "64cedf6101898e372d9822aab61a127addfa1d6f",
+  "readAt": "2026-10-05T20:05:17.071Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 201,
+      "claim": "Each hit is located at the n-th bare occurrence of its literal; a hit with no literal is named escaped (claim 1, changeset, PR body).",
+      "counterexample": "The text index (line 193) counts text-level matches that are not bare once decoded (an escaped-slash qualified reference; a number followed by an escaped word character). The leftover entry is taken by a later real hit: line 5 holds the qualified mmnto-ai/totem reference with a JSON-escaped slash, line 6 a bare hash-12, and the refusal reads line 5. With line 6 as the backslash-u0023 form, the escaped hit is named line 5 instead of escaped. Integer-like keys (Object.entries order) also break document order. Probes PROBE-stale, PROBE-stale-escaped, PROBE-lookahead-escape and PROBE-intkey fail on the fold. The refusal still fires; only the named line is wrong."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 303,
+      "claim": "Claim 1 (keys refused, n-th-occurrence locator) and claim 2 (rows sorted) are pinned.",
+      "counterexample": "Mutants (j) visit(key) removed, (l) shift() replaced by the first entry, and (m) sort removed all pass the fold's 60 tests. The behaviour is correct on the fold; PROBE-key and PROBE-twice kill (j) and (l)."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 237,
+      "claim": "The first ten lines then a count of the rest; an escaped reference is named as escaped (changeset).",
+      "counterexample": "The escaped row is pushed onto the same rows list that is sliced to ten (line 239). Ten offending lines plus one escaped hit print ten line rows and '+1 more line(s)': the escaped reference is never named and is counted as a line. Read from the code, not run."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".totem/temp/legs-deposit-bare-refs.record.md",
+      "line": 26,
+      "claim": "The record and the PR body say a malformed file that also carries a bare reference now fails the parse first (claim 4).",
+      "counterexample": "The record (lines 20, 26, 40) still describes a text scan before the parse and says such a file is refused for the reference first, the opposite of the fold; line 9 keeps 'the only caller of that writer'. PROBE-malformed shows the parse refusal wins. The PR body lists the new order but does not say it changed. The record is the strict-arm anchor."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 164,
+      "claim": "PR body: the three pattern sources are byte-identical.",
+      "counterexample": "The literal at legs.ts line 164 carries an escaped slash where PreWriteShield.cjs line 22 decodes to an unescaped slash. The bytes differ; the compiled RegExp sources are equal, and the shield equals the compiled rule byte for byte."
+    },
+    {
+      "id": "Q1",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 337,
+      "claim": "Refusal order: unreadable, unparseable, not an object, bare reference, diffSha, schemaVersion (claim 5).",
+      "counterexample": "The config load and the --sha resolution (line 337) refuse before the file is read, and the Zod validation and the occupied address refuse after schemaVersion. Is the claim scoped to the file's refusals? That part (lines 341 to 424) is correct."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "Q1"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 4 MINOR, 1 QUESTION over 5d660654..64cedf61; convergence named for the refusal semantics (15 mutants, 9 probes: no decoded bare reference reaches the store, no false refusal); a fold of F1 that changes how the locator decides a line re-arms a leg; every item folded at the next commit, F1 by the canonical-token locator, so a third leg follows"
+}

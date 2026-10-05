@@ -1081,11 +1081,15 @@ export type {
   SaveLegDepositResult,
 } from './artifacts/legs.js';
 export {
+  BARE_REF_REGEX_SOURCE,
   countLegFindings,
+  findBareRefsInLegDeposit,
   findLegDepositForHead,
   LEG_DEPOSIT_KNOWN_MAJOR,
   LEG_DEPOSIT_SCHEMA_VERSION,
   LEG_FINDING_SEVERITIES,
+  type LegDepositBareRef,
+  LegDepositBareRefError,
   LegDepositExistsError,
   legDepositPath,
   LegDepositSchema,

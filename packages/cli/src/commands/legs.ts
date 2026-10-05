@@ -40,6 +40,7 @@
 import type {
   LegCoverageQuery,
   LegDeposit,
+  LegDepositBareRef,
   LegDepositRank,
   LegFindingCounts,
   LegGitAdapter,
@@ -153,23 +154,14 @@ async function loadSanitizer(): Promise<void> {
   sanitizeForTerminalSync = sanitizeForTerminal;
 }
 
-/**
- * The compiled `xrepo-qualify-refs` rule's pattern, mirrored from the write
- * shield (`.claude/hooks/PreWriteShield.cjs`): a `#` followed by digits that is
- * not preceded by `<owner>/<repo>`, with no word character or hyphen after the
- * digits. A findings file is free text inside JSON and the rule binds committed
- * markdown only, so the deposit writer is where a bare reference is refused
- * (mmnto-ai/totem#3023).
- */
-const BARE_REF_RE = /(?<!\b[\w-]+\/[\w-]+)#(\d+)(?![-\w])/g;
-
-/** How many offending LINES the refusal names before collapsing the rest. */
+/** How many offending LINES (and how many escaped references) the refusal names before collapsing the rest. */
 const MAX_DISCLOSED_BARE_REF_LINES = 10;
 
 /**
- * One bare reference found in the parsed findings. `line` is where its literal
- * sits in the file's text (1-based), or undefined when it was authored as a
- * JSON escape and so has no literal to point at.
+ * One bare reference, located. `line` is the 1-based line of the JSON string
+ * token that carries it, or undefined when that token is not in the text in
+ * its canonical encoding — the reference, or something else in the same
+ * string, was authored as a JSON escape — and the refusal names it as escaped.
  */
 interface BareRefHit {
   line: number | undefined;
@@ -177,51 +169,46 @@ interface BareRefHit {
 }
 
 /**
- * Every bare reference in the DECODED strings of `parsed` — keys and values at
- * every depth, in document order — each located in `text` at the n-th bare
- * occurrence of the same literal. The decoded string is what the deposit will
- * carry, so it is the authority: a reference authored as a JSON escape is
- * caught as what it decodes to (and reported without a line), and a qualified
- * reference whose slash is JSON-escaped is read as qualified.
+ * Locate core's decoded hits (mmnto-ai/totem#3023) in the file's text. Each
+ * carrying string is found by its canonical JSON encoding, the first occurrence
+ * not already claimed by an earlier carrier, so a repeated string lands on its
+ * own line and the walk order does not matter; the text supplies only the
+ * line, the decoded string stays the authority. A JSON string token never
+ * spans lines, so the token's start is the hit's line.
  */
-function findBareRefs(parsed: unknown, text: string): BareRefHit[] {
-  const textHits = new Map<string, number[]>();
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    for (const match of lines[i]!.matchAll(BARE_REF_RE)) {
-      const at = textHits.get(match[0]) ?? [];
-      at.push(i + 1);
-      textHits.set(match[0], at);
-    }
-  }
-  const hits: BareRefHit[] = [];
-  const visit = (value: unknown): void => {
-    if (typeof value === 'string') {
-      for (const match of value.matchAll(BARE_REF_RE)) {
-        hits.push({ line: textHits.get(match[0])?.shift(), ref: match[0] });
-      }
-      return;
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    if (typeof value === 'object' && value !== null) {
-      for (const [key, item] of Object.entries(value)) {
-        visit(key);
-        visit(item);
-      }
-    }
+function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareRefHit[] {
+  const lineAt = (index: number): number => {
+    let line = 1;
+    for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
+    return line;
   };
-  visit(parsed);
-  return hits;
+  const claimed = new Set<number>();
+  const located = new Map<string, number | undefined>();
+  const locate = (path: string, carrier: string): number | undefined => {
+    if (located.has(path)) return located.get(path);
+    const token = JSON.stringify(carrier);
+    let line: number | undefined;
+    for (let from = 0; ; ) {
+      const at = text.indexOf(token, from);
+      if (at === -1) break;
+      if (!claimed.has(at)) {
+        claimed.add(at);
+        line = lineAt(at);
+        break;
+      }
+      from = at + 1;
+    }
+    located.set(path, line);
+    return line;
+  };
+  return hits.map((hit) => ({ line: locate(hit.path, hit.carrier), ref: hit.ref }));
 }
 
 /**
  * The refusal's rows: one per offending file line carrying every reference on
- * it, then one row for the escaped references, the first ten rows then a count
- * of the rest. Every echoed fragment is a match (`#` plus digits), never the
- * line's own text.
+ * it, sorted, the first ten lines then a count of the rest; then, outside that
+ * cap, one row naming the escaped references (the first ten, then a count).
+ * Every echoed fragment is a match (`#` plus digits), never the line's text.
  */
 function renderBareRefs(hits: BareRefHit[]): string[] {
   const byLine = new Map<number, string[]>();
@@ -230,15 +217,19 @@ function renderBareRefs(hits: BareRefHit[]): string[] {
     if (hit.line === undefined) escaped.push(hit.ref);
     else byLine.set(hit.line, [...(byLine.get(hit.line) ?? []), hit.ref]);
   }
-  const rows = [...byLine.entries()]
+  const lineRows = [...byLine.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([line, refs]) => `  line ${line}: ${refs.map(echoSafe).join(', ')}`);
+  const shown = lineRows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
+  const moreLines = lineRows.length - shown.length;
+  if (moreLines > 0) shown.push(`  +${moreLines} more line(s)`);
   if (escaped.length > 0) {
-    rows.push(`  escaped (no literal in the text): ${escaped.map(echoSafe).join(', ')}`);
+    const named = escaped.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
+    const moreEscaped = escaped.length - named.length;
+    shown.push(
+      `  escaped (no literal in the text): ${named.join(', ')}${moreEscaped > 0 ? `, +${moreEscaped} more` : ''}`,
+    );
   }
-  const shown = rows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
-  const more = rows.length - shown.length;
-  if (more > 0) shown.push(`  +${more} more line(s)`);
   return shown;
 }
 
@@ -321,6 +312,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     LEG_DEPOSIT_KNOWN_MAJOR,
     LEG_DEPOSIT_SCHEMA_VERSION,
     countLegFindings,
+    findBareRefsInLegDeposit,
     saveLegDeposit,
     TotemError,
   } = await import('@mmnto/totem');
@@ -366,10 +358,12 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
       'The file must be a deposit object: { findings, folded, verdict, ... }.',
     );
   }
-  // A bare reference is refused on the DECODED strings, before any write: a
+  // A bare reference is refused on the DECODED strings (core's walk, the same
+  // check the library writer makes as its backstop), before any write: a
   // deposit is a record and is not amended once written (mmnto-ai/totem#3023),
-  // so the cure is in the findings file, never the store.
-  const bareRefs = findBareRefs(raw, text);
+  // so the cure is in the findings file, never the store. The verb adds the
+  // file lines the backstop cannot know.
+  const bareRefs = locateBareRefs(findBareRefsInLegDeposit(raw), text);
   if (bareRefs.length > 0) {
     throw new TotemError(
       'PARSE_FAILED',
