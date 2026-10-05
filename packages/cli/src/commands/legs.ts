@@ -153,6 +153,31 @@ async function loadSanitizer(): Promise<void> {
   sanitizeForTerminalSync = sanitizeForTerminal;
 }
 
+/**
+ * The compiled `xrepo-qualify-refs` rule's pattern, mirrored from the write
+ * shield (`.claude/hooks/PreWriteShield.cjs`): a `#` followed by digits that is
+ * not preceded by `<owner>/<repo>`, with no word character or hyphen after the
+ * digits. A findings file is free text inside JSON and the rule binds committed
+ * markdown only, so the deposit writer is where a bare reference is refused
+ * (mmnto-ai/totem#3023).
+ */
+const BARE_REF_RE = /(?<!\b[\w-]+\/[\w-]+)#(\d+)(?![-\w])/g;
+
+/** How many offending lines the refusal names before collapsing the rest. */
+const MAX_DISCLOSED_BARE_REFS = 10;
+
+/** Every bare reference in `text`, with its 1-based line, in file order. */
+function findBareRefs(text: string): Array<{ line: number; ref: string }> {
+  const out: Array<{ line: number; ref: string }> = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    for (const match of lines[i]!.matchAll(BARE_REF_RE)) {
+      out.push({ line: i + 1, ref: match[0] });
+    }
+  }
+  return out;
+}
+
 // ─── `totem legs deposit` ───────────────────────────────────────────────────
 
 export interface LegsDepositOptions {
@@ -248,9 +273,36 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   const diffSha = await resolveCommitSha(cwd, options.sha ?? 'HEAD');
 
   const fromPath = path.resolve(cwd, options.from);
+  let text: string;
+  try {
+    text = fs.readFileSync(fromPath, 'utf-8');
+  } catch (err) {
+    throw new TotemError(
+      'PARSE_FAILED',
+      `Could not read the leg's findings at ${echoSafe(options.from)}.`,
+      'Pass --from <file> pointing at the leg deposit JSON the review leg returned.',
+      err,
+    );
+  }
+  // A bare reference is refused on the file's TEXT, before the parse and before
+  // any write: a deposit is a record and is never amended once written
+  // (mmnto-ai/totem#3023), so the cure is in the findings file, never the store.
+  const bareRefs = findBareRefs(text);
+  if (bareRefs.length > 0) {
+    const shown = bareRefs
+      .slice(0, MAX_DISCLOSED_BARE_REFS)
+      .map((r) => `  line ${r.line}: ${echoSafe(r.ref)}`);
+    const more = bareRefs.length - shown.length;
+    if (more > 0) shown.push(`  +${more} more`);
+    throw new TotemError(
+      'PARSE_FAILED',
+      `The findings file at ${echoSafe(options.from)} carries ${bareRefs.length} bare reference(s):\n${shown.join('\n')}`,
+      'Qualify each as <owner>/<repo>#NNN in the findings file and re-run; a deposit is a record and is never amended (mmnto-ai/totem#3023).',
+    );
+  }
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(fromPath, 'utf-8'));
+    raw = JSON.parse(text);
   } catch (err) {
     throw new TotemError(
       'PARSE_FAILED',

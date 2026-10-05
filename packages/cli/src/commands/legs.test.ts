@@ -296,6 +296,44 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
   });
 
+  // mmnto-ai/totem#3023: a bare PR or issue reference anywhere in the findings
+  // file's TEXT is refused at write time — each offending line named, nothing
+  // written. The pattern is the compiled xrepo-qualify-refs rule's; a deposit is
+  // a record and is never amended after the write, so the refusal sits here.
+  it('refuses a findings file that carries a bare hash-number, naming each line, and writes nothing', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const withBare = {
+      ...body,
+      findings: [
+        { ...body.findings[0], counterexample: 'the PR #2987 the leg listed first' },
+        { ...body.findings[1], claim: 'and #3020 last, both bare' },
+      ],
+    };
+    await expect(legsDepositCommand({ from: writeFindings(withBare) })).rejects.toThrow(
+      /carries 2 bare reference\(s\)[\s\S]*line \d+: #2987[\s\S]*line \d+: #3020/,
+    );
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('accepts a qualified reference and hashes that are not references', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const qualified = {
+      ...body,
+      findings: [
+        {
+          ...body.findings[0],
+          counterexample:
+            'mmnto-ai/totem#2987 merged; # Title is a heading; #fff is a colour; #123abc is an id',
+        },
+        body.findings[1],
+      ],
+    };
+    await legsDepositCommand({ from: writeFindings(qualified) });
+    expect(fs.existsSync(legDepositPath(path.join(tmpDir, '.totem'), headSha))).toBe(true);
+  });
+
   it('stamps readAt when neither the file nor --read-at carries one, and SAYS so', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const body = findingsBody();
