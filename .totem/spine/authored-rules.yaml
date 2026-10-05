@@ -4,72 +4,6 @@ heldOutNonInspectionAttestation: true
 rules:
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '391de7088c633579: 2026-03-03T01:52:20.000Z'
-    structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-391de708-hardcoded-main-head-range.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 0682ff7b55eee59937776a2ed134a6a051398afca22e323798fa1c154749965c
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '87e2437431c17ec5: Git diff headers wrap file paths containing spaces'
-    structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-87e24374-diff-header-plus-b-literal.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-87e24374-diff-header-plus-b-literal.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 089977464b9c6d158a1893e4098a51aa15b35518eaedd1166f0349898144c91d
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '55797450514d4c3b: Never use git add -A or git add .'
-    structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-55797450-git-add-all.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-55797450-git-add-all.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: c942c8c34ef080542c9570c072f220d3db62ce9ecb0fdbd39d3603f3914a83ce
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '56c801dfda484c75: The text-embedding-004 identifier is frequently unavailable'
-    structuralClass: forbidden-literal-token
-    record: .totem/rules/mig-56c801df-text-embedding-004-literal.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-56c801df-text-embedding-004-literal.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: a6d0931648f7570fe6e4a8b81cfc489198884619702ce360b87d0039f8d93b6f
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'fe1b4123aa1f679c: Always escape hyphens in regex utilities'
-    structuralClass: forbidden-callee-literal-arg
-    record: .totem/rules/mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 3359f62831c5da5313e234c0df3c729cc8145bdb03763ebbe77ec372c6906cad
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: '6f362fa28abcf94a: Validate JSON at system boundaries'
-    structuralClass: type-assertion-on-call
-    record: .totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml
-    positiveFixtures:
-      - pr: 2948
-        filePath: .totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 0318d2bc8358722a323dabf098cfa69710e0be3f03107e1d0c1078f59a50c622
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: "884becd45e6380bd: Using 'pnpm run version' instead of the bare 'pnpm version'"
     structuralClass: forbidden-literal-token
     record: .totem/rules/mig-884becd4-bare-pnpm-version.rule.yaml
@@ -114,17 +48,6 @@ rules:
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '61dcb058bd1df15d: Do not delete .totem/lessons.md (load-bearing for 41+ rules)'
-    structuralClass: forbidden-callee-literal-arg
-    record: .totem/rules/mig-61dcb058-delete-totem-lessons-md.rule.yaml
-    positiveFixtures:
-      - pr: 2950
-        filePath: .totem/rules/mig-61dcb058-delete-totem-lessons-md.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 3ced5cf937b3e253504e42ae07bb2615f68369a592ba7533230ae6eb13adca20
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: 'fb008f77a1f5a49a@javascript: Constructing shell commands with string interpolation'
     structuralClass: named-callee-argument-shape
     record: .totem/rules/mig-fb008f77-spawnsync-string-command-js.rule.yaml
@@ -158,39 +81,6 @@ rules:
         example: 0
   - author: totem-claude
     authoredAt: '2026-09-23'
-    targetDefect: '8213cd4e21b375ba: GitHub Closes keyword only applies to the first issue'
-    structuralClass: close-keyword-issue-list
-    record: .totem/rules/mig-8213cd4e-closes-keyword-issue-list.rule.yaml
-    positiveFixtures:
-      - pr: 2950
-        filePath: .totem/rules/mig-8213cd4e-closes-keyword-issue-list.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 595542625edcaca453c22c1b8c81d4b48527f8877551def4ce293732480fb145
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'b34d95158d37f5a9: Junie requires specific file locations for auto-detection,'
-    structuralClass: forbidden-path-literal
-    record: .totem/rules/mig-b34d9515-junie-file-location.rule.yaml
-    positiveFixtures:
-      - pr: 2950
-        filePath: .totem/rules/mig-b34d9515-junie-file-location.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 69da962707c21489cbb3c42da2a68ee727c9b0d323958ebd2e3eb9428c3ab00d
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: "7e3eefeaa85403d0: Manual lessons must use the '## Lesson <separator> <Heading>' structure"
-    structuralClass: heading-missing-required-separator
-    record: .totem/rules/mig-7e3eefea-lesson-heading-separator.rule.yaml
-    positiveFixtures:
-      - pr: 2950
-        filePath: .totem/rules/mig-7e3eefea-lesson-heading-separator.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: 8f69c71300be2deded60e82e9dc490cbeccc51bb51c98f84250ccc0d1e8aa6a2
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
     targetDefect: "d487264e210913a4: Prefer Vitest's expect().rejects.toHaveProperty()"
     structuralClass: try-block-expect-fail-with-catch
     record: .totem/rules/mig-d487264e-try-expect-fail-catch.rule.yaml
@@ -221,15 +111,4 @@ rules:
         filePath: .totem/rules/mig-63680bf3-process-exit-cli.rule.yaml
         matchedSpan: examples[0].bad
         contentHash: 0335548aa49004cdb56e7f1d62c945c664e2095b964f6cecb223f1b1627e3584
-        example: 0
-  - author: totem-claude
-    authoredAt: '2026-09-23'
-    targetDefect: 'b3e3e2b380a0b1be: Git output can vary by system locale, causing parsing logic'
-    structuralClass: command-missing-required-env-token
-    record: .totem/rules/mig-b3e3e2b3-git-lc-all.rule.yaml
-    positiveFixtures:
-      - pr: 2950
-        filePath: .totem/rules/mig-b3e3e2b3-git-lc-all.rule.yaml
-        matchedSpan: examples[0].bad
-        contentHash: c5768f3fc1750f2b9073cc385f079388c8fa26106906024f1130e9e491ff7d51
         example: 0
