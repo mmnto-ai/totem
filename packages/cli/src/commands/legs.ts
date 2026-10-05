@@ -159,9 +159,8 @@ const MAX_DISCLOSED_BARE_REF_LINES = 10;
 
 /**
  * One bare reference, located. `line` is the 1-based line of the JSON string
- * token that carries it, or undefined when that token is not in the text in
- * its canonical encoding — the reference, or something else in the same
- * string, was authored as a JSON escape — and the refusal names it as escaped.
+ * token that carries it, or undefined when the locator cannot decide — and the
+ * refusal then says "not located" rather than guess.
  */
 interface BareRefHit {
   line: number | undefined;
@@ -169,18 +168,32 @@ interface BareRefHit {
 }
 
 /**
- * Locate core's decoded hits (mmnto-ai/totem#3023) in the file's text. Each
- * carrying string is found by its canonical JSON encoding, the first occurrence
- * not already claimed by an earlier carrier, so a repeated string lands on its
- * own line and the walk order does not matter; the text supplies only the
- * line, the decoded string stays the authority. A JSON string token never
- * spans lines, so the token's start is the hit's line.
+ * Locate core's decoded hits (mmnto-ai/totem#3023) in the file's text — a
+ * best-effort locator; the decoded string stays the authority and the text
+ * supplies only a line. Each carrying string is found by its CANONICAL JSON
+ * encoding at a token boundary (a structural character before and after, so a
+ * token inside a longer string token is never taken), the first occurrence not
+ * already claimed by an earlier carrier, so a repeated string lands on its own
+ * line and the walk order does not matter. What it does not decide, it says so:
+ * a carrying string whose file encoding is not canonical (any JSON escape in
+ * it) has no token to find and is reported as not located; a key duplicated in
+ * the file keeps JSON.parse's last value but is located at the first key, the
+ * one limit disclosed rather than cured (a duplicated key is a malformed file).
  */
 function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareRefHit[] {
   const lineAt = (index: number): number => {
     let line = 1;
     for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
     return line;
+  };
+  const BEFORE = new Set([':', ',', '[', '{']);
+  const AFTER = new Set([':', ',', ']', '}']);
+  const atTokenBoundary = (at: number, length: number): boolean => {
+    let i = at - 1;
+    while (i >= 0 && /\s/.test(text[i]!)) i--;
+    let j = at + length;
+    while (j < text.length && /\s/.test(text[j]!)) j++;
+    return (i < 0 || BEFORE.has(text[i]!)) && (j >= text.length || AFTER.has(text[j]!));
   };
   const claimed = new Set<number>();
   const located = new Map<string, number | undefined>();
@@ -191,7 +204,7 @@ function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareR
     for (let from = 0; ; ) {
       const at = text.indexOf(token, from);
       if (at === -1) break;
-      if (!claimed.has(at)) {
+      if (!claimed.has(at) && atTokenBoundary(at, token.length)) {
         claimed.add(at);
         line = lineAt(at);
         break;
@@ -207,14 +220,15 @@ function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareR
 /**
  * The refusal's rows: one per offending file line carrying every reference on
  * it, sorted, the first ten lines then a count of the rest; then, outside that
- * cap, one row naming the escaped references (the first ten, then a count).
- * Every echoed fragment is a match (`#` plus digits), never the line's text.
+ * cap, one row naming the references the locator could not place (the first
+ * ten, then a count). Every echoed fragment is a match (`#` plus digits),
+ * never the line's text.
  */
 function renderBareRefs(hits: BareRefHit[]): string[] {
   const byLine = new Map<number, string[]>();
-  const escaped: string[] = [];
+  const unlocated: string[] = [];
   for (const hit of hits) {
-    if (hit.line === undefined) escaped.push(hit.ref);
+    if (hit.line === undefined) unlocated.push(hit.ref);
     else byLine.set(hit.line, [...(byLine.get(hit.line) ?? []), hit.ref]);
   }
   const lineRows = [...byLine.entries()]
@@ -223,11 +237,11 @@ function renderBareRefs(hits: BareRefHit[]): string[] {
   const shown = lineRows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
   const moreLines = lineRows.length - shown.length;
   if (moreLines > 0) shown.push(`  +${moreLines} more line(s)`);
-  if (escaped.length > 0) {
-    const named = escaped.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
-    const moreEscaped = escaped.length - named.length;
+  if (unlocated.length > 0) {
+    const named = unlocated.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
+    const more = unlocated.length - named.length;
     shown.push(
-      `  escaped (no literal in the text): ${named.join(', ')}${moreEscaped > 0 ? `, +${moreEscaped} more` : ''}`,
+      `  not located in the file's text (the carrying string holds a JSON escape): ${named.join(', ')}${more > 0 ? `, +${more} more` : ''}`,
     );
   }
   return shown;
@@ -366,7 +380,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   const bareRefs = locateBareRefs(findBareRefsInLegDeposit(raw), text);
   if (bareRefs.length > 0) {
     throw new TotemError(
-      'PARSE_FAILED',
+      'LEG_DEPOSIT_BARE_REF',
       `The findings file at ${echoSafe(options.from)} carries ${bareRefs.length} bare reference(s):\n${renderBareRefs(bareRefs).join('\n')}`,
       'Qualify each as <owner>/<repo>#NNN in the findings file and re-run; a deposit is a record and is not amended after the write (mmnto-ai/totem#3023).',
     );

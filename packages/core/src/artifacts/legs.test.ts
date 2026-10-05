@@ -333,13 +333,36 @@ describe('saveLegDeposit — create-exclusive, atomic, validate-first', () => {
     expect(fs.existsSync(legsDir(tmpDir))).toBe(false);
   });
 
+  it('refuses a bare reference in verdict before the occupied-address refusal, and caps the named entries at ten', () => {
+    saveLegDeposit(tmpDir, deposit());
+    let caught: unknown;
+    try {
+      saveLegDeposit(tmpDir, deposit({ verdict: 'see #7', readAt: '2026-09-04T00:00:00.000Z' }));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(LegDepositBareRefError);
+    expect((caught as LegDepositBareRefError).message).toContain('  $.verdict: #7');
+    const many = findBareRefsInLegDeposit({
+      v: Array.from({ length: 11 }, (_, i) => `#${100 + i}`),
+    });
+    const message = new LegDepositBareRefError(many).message;
+    expect(message.match(/^  \$\.v\[\d+\]: #1\d\d$/gm)).toHaveLength(10);
+    expect(message).toContain('  +1 more');
+  });
+
+  it('keeps a dotted key and a nested key apart in the path', () => {
+    const hits = findBareRefsInLegDeposit({ 'a.b': 'x #1', a: { b: 'y #2' } });
+    expect(hits.map((h) => `${h.path}=${h.ref}`)).toEqual(['$["a.b"]=#1', '$.a.b=#2']);
+  });
+
   it('walks keys as well as values and accepts qualified references', () => {
     const hits = findBareRefsInLegDeposit({
       'see #41': 'mmnto-ai/totem#2987 is qualified',
       nested: [{ deep: 'two here #1 and #2' }],
     });
     expect(hits.map((h) => `${h.path}=${h.ref}`)).toEqual([
-      '$.see #41 (key)=#41',
+      '$["see #41"] (key)=#41',
       '$.nested[0].deep=#1',
       '$.nested[0].deep=#2',
     ]);

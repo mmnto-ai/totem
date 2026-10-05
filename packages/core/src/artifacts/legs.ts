@@ -99,13 +99,20 @@ export function findBareRefsInLegDeposit(value: unknown): LegDepositBareRef[] {
     }
     if (typeof node === 'object' && node !== null) {
       for (const [key, item] of Object.entries(node)) {
-        visit(key, `${at}.${key} (key)`);
-        visit(item, `${at}.${key}`);
+        visit(key, `${at}${pathSegment(key)} (key)`);
+        visit(item, `${at}${pathSegment(key)}`);
       }
     }
   };
   visit(value, '$');
   return hits;
+}
+
+/** A key that reads as a plain identifier joins the path with a dot; any other is bracket-quoted, so two different keys never share a path. */
+const PLAIN_KEY = /^[A-Za-z_$][\w$]*$/;
+
+function pathSegment(key: string): string {
+  return PLAIN_KEY.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`;
 }
 
 /** How many offending entries {@link LegDepositBareRefError} names before collapsing the rest. */
