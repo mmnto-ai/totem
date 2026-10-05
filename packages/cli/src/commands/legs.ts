@@ -163,19 +163,83 @@ async function loadSanitizer(): Promise<void> {
  */
 const BARE_REF_RE = /(?<!\b[\w-]+\/[\w-]+)#(\d+)(?![-\w])/g;
 
-/** How many offending lines the refusal names before collapsing the rest. */
-const MAX_DISCLOSED_BARE_REFS = 10;
+/** How many offending LINES the refusal names before collapsing the rest. */
+const MAX_DISCLOSED_BARE_REF_LINES = 10;
 
-/** Every bare reference in `text`, with its 1-based line, in file order. */
-function findBareRefs(text: string): Array<{ line: number; ref: string }> {
-  const out: Array<{ line: number; ref: string }> = [];
+/**
+ * One bare reference found in the parsed findings. `line` is where its literal
+ * sits in the file's text (1-based), or undefined when it was authored as a
+ * JSON escape and so has no literal to point at.
+ */
+interface BareRefHit {
+  line: number | undefined;
+  ref: string;
+}
+
+/**
+ * Every bare reference in the DECODED strings of `parsed` — keys and values at
+ * every depth, in document order — each located in `text` at the n-th bare
+ * occurrence of the same literal. The decoded string is what the deposit will
+ * carry, so it is the authority: a reference authored as a JSON escape is
+ * caught as what it decodes to (and reported without a line), and a qualified
+ * reference whose slash is JSON-escaped is read as qualified.
+ */
+function findBareRefs(parsed: unknown, text: string): BareRefHit[] {
+  const textHits = new Map<string, number[]>();
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     for (const match of lines[i]!.matchAll(BARE_REF_RE)) {
-      out.push({ line: i + 1, ref: match[0] });
+      const at = textHits.get(match[0]) ?? [];
+      at.push(i + 1);
+      textHits.set(match[0], at);
     }
   }
-  return out;
+  const hits: BareRefHit[] = [];
+  const visit = (value: unknown): void => {
+    if (typeof value === 'string') {
+      for (const match of value.matchAll(BARE_REF_RE)) {
+        hits.push({ line: textHits.get(match[0])?.shift(), ref: match[0] });
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    if (typeof value === 'object' && value !== null) {
+      for (const [key, item] of Object.entries(value)) {
+        visit(key);
+        visit(item);
+      }
+    }
+  };
+  visit(parsed);
+  return hits;
+}
+
+/**
+ * The refusal's rows: one per offending file line carrying every reference on
+ * it, then one row for the escaped references, the first ten rows then a count
+ * of the rest. Every echoed fragment is a match (`#` plus digits), never the
+ * line's own text.
+ */
+function renderBareRefs(hits: BareRefHit[]): string[] {
+  const byLine = new Map<number, string[]>();
+  const escaped: string[] = [];
+  for (const hit of hits) {
+    if (hit.line === undefined) escaped.push(hit.ref);
+    else byLine.set(hit.line, [...(byLine.get(hit.line) ?? []), hit.ref]);
+  }
+  const rows = [...byLine.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([line, refs]) => `  line ${line}: ${refs.map(echoSafe).join(', ')}`);
+  if (escaped.length > 0) {
+    rows.push(`  escaped (no literal in the text): ${escaped.map(echoSafe).join(', ')}`);
+  }
+  const shown = rows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
+  const more = rows.length - shown.length;
+  if (more > 0) shown.push(`  +${more} more line(s)`);
+  return shown;
 }
 
 // ─── `totem legs deposit` ───────────────────────────────────────────────────
@@ -284,22 +348,6 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
       err,
     );
   }
-  // A bare reference is refused on the file's TEXT, before the parse and before
-  // any write: a deposit is a record and is never amended once written
-  // (mmnto-ai/totem#3023), so the cure is in the findings file, never the store.
-  const bareRefs = findBareRefs(text);
-  if (bareRefs.length > 0) {
-    const shown = bareRefs
-      .slice(0, MAX_DISCLOSED_BARE_REFS)
-      .map((r) => `  line ${r.line}: ${echoSafe(r.ref)}`);
-    const more = bareRefs.length - shown.length;
-    if (more > 0) shown.push(`  +${more} more`);
-    throw new TotemError(
-      'PARSE_FAILED',
-      `The findings file at ${echoSafe(options.from)} carries ${bareRefs.length} bare reference(s):\n${shown.join('\n')}`,
-      'Qualify each as <owner>/<repo>#NNN in the findings file and re-run; a deposit is a record and is never amended (mmnto-ai/totem#3023).',
-    );
-  }
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -316,6 +364,17 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
       'PARSE_FAILED',
       `The leg's findings at ${echoSafe(options.from)} are not a JSON object.`,
       'The file must be a deposit object: { findings, folded, verdict, ... }.',
+    );
+  }
+  // A bare reference is refused on the DECODED strings, before any write: a
+  // deposit is a record and is not amended once written (mmnto-ai/totem#3023),
+  // so the cure is in the findings file, never the store.
+  const bareRefs = findBareRefs(raw, text);
+  if (bareRefs.length > 0) {
+    throw new TotemError(
+      'PARSE_FAILED',
+      `The findings file at ${echoSafe(options.from)} carries ${bareRefs.length} bare reference(s):\n${renderBareRefs(bareRefs).join('\n')}`,
+      'Qualify each as <owner>/<repo>#NNN in the findings file and re-run; a deposit is a record and is not amended after the write (mmnto-ai/totem#3023).',
     );
   }
   const fields = raw as Record<string, unknown>;

@@ -300,7 +300,7 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
   // file's TEXT is refused at write time — each offending line named, nothing
   // written. The pattern is the compiled xrepo-qualify-refs rule's; a deposit is
   // a record and is never amended after the write, so the refusal sits here.
-  it('refuses a findings file that carries a bare hash-number, naming each line, and writes nothing', async () => {
+  it('refuses a findings file that carries a bare hash-number, naming each line exactly, and writes nothing', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const body = findingsBody() as { findings: Array<Record<string, unknown>> };
     const withBare = {
@@ -310,10 +310,72 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
         { ...body.findings[1], claim: 'and #3020 last, both bare' },
       ],
     };
-    await expect(legsDepositCommand({ from: writeFindings(withBare) })).rejects.toThrow(
-      /carries 2 bare reference\(s\)[\s\S]*line \d+: #2987[\s\S]*line \d+: #3020/,
+    const file = writeFindings(withBare);
+    // The exact 1-based line of each reference in the file as written.
+    const fileLines = fs.readFileSync(file, 'utf-8').split('\n');
+    const lineOf = (needle: string): number => fileLines.findIndex((l) => l.includes(needle)) + 1;
+    expect(lineOf('#2987')).toBeGreaterThan(0);
+    expect(lineOf('#3020')).toBeGreaterThan(lineOf('#2987'));
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err.message).toContain('carries 2 bare reference(s):');
+    expect(err.message).toContain(
+      `  line ${lineOf('#2987')}: #2987\n  line ${lineOf('#3020')}: #3020`,
     );
+    expect(err.message).not.toContain('more line');
     expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('groups references by line, names the first ten lines, then counts the rest', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const findings = Array.from({ length: 12 }, (_, i) => ({
+      id: `f${i}`,
+      severity: 'MINOR',
+      file: 'a.txt',
+      line: 1,
+      claim: `bare #${1000 + i} and again #${2000 + i} on one line`,
+      counterexample: '',
+    }));
+    const err = (await legsDepositCommand({
+      from: writeFindings(findingsBody({ findings, folded: [] })),
+    }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 24 bare reference(s):');
+    // Twelve offending lines, two references each: ten rows named, two counted.
+    expect(err.message.match(/^  line \d+: #1\d{3}, #2\d{3}$/gm)).toHaveLength(10);
+    expect(err.message).toContain('  +2 more line(s)');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('catches a reference authored as a JSON escape and names it as escaped', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const file = path.join(tmpDir, 'escaped.json');
+    // The hash sign authored as its JSON unicode escape: no literal in the text,
+    // but the decoded string the deposit would carry is a bare reference.
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":[{"id":"f1","severity":"MINOR","file":"a.txt","line":1,"claim":"see ' +
+        BS +
+        'u0023123 here","counterexample":""}],"folded":[],"verdict":"v"}',
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 1 bare reference(s):');
+    expect(err.message).toContain('  escaped (no literal in the text): #123');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('reads a qualified reference whose slash is JSON-escaped as qualified', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const file = path.join(tmpDir, 'escaped-slash.json');
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":[{"id":"f1","severity":"MINOR","file":"a.txt","line":1,"claim":"mmnto-ai' +
+        BS +
+        '/totem#12 is qualified","counterexample":""}],"folded":[],"verdict":"v"}',
+    );
+    await legsDepositCommand({ from: file });
+    expect(fs.existsSync(legDepositPath(path.join(tmpDir, '.totem'), headSha))).toBe(true);
   });
 
   it('accepts a qualified reference and hashes that are not references', async () => {
