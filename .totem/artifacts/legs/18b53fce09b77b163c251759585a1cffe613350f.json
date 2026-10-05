@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "18b53fce09b77b163c251759585a1cffe613350f",
+  "readAt": "2026-10-05T20:48:00.068Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 179,
+      "claim": "The duplicated-key limit is disclosed as: a duplicated key keeps JSON.parse's last value but is located at the first key (JSDoc, record, PR body).",
+      "counterexample": "P14: line 5 a holding see hash-6, line 6 a holding ok, line 7 b holding see hash-6; the verb prints line 5 for the path $.b, whose live string is on line 7, and the duplicated key a carries no hit. P15: a nested object discarded by a later duplicate a; $.b on line 7 is named line 5. When the duplicated values differ the duplicated key is located correctly, so the wording is both too narrow and too broad. The only wrong-line inputs found need a duplicated key."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 655,
+      "claim": "The verb refuses with LEG_DEPOSIT_BARE_REF like the library (the fold of leg 3's Q1).",
+      "counterexample": "Mutant M11 (the code at legs.ts line 383 back to PARSE_FAILED) passes all 68 verb tests; the only code assertion in the file is LEG_DEPOSIT_EXISTS at line 655."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 351,
+      "claim": "The row is relabelled not located.",
+      "counterexample": "Test titles at lines 351 and 453 and the JSDoc of MAX_DISCLOSED_BARE_REF_LINES at legs.ts line 157 still say escaped."
+    },
+    {
+      "id": "Q1",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 186,
+      "claim": "Lines are numbered by LF.",
+      "counterexample": "P6: a bare-CR file with the hit on its fifth line prints line 1; this is consistent with the LF convention, so the question is whether to disclose it."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "Q1"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 3 MINOR, 1 QUESTION over 1faf742e..18b53fce; 15 mutants (M7b equivalent, M10b a test tautology, M11 survives) and 15 probes; with no duplicated key the locator never names a wrong line; the only wrong line found needs a duplicated key (P14, P15) and is wider than the disclosed wording, so the disclosure is widened, not the logic; convergence named for the whole feature f6ae2568..18b53fce; every item folded at the last commit as prose, one assertion and two titles"
+}

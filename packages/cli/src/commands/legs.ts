@@ -154,7 +154,7 @@ async function loadSanitizer(): Promise<void> {
   sanitizeForTerminalSync = sanitizeForTerminal;
 }
 
-/** How many offending LINES (and how many escaped references) the refusal names before collapsing the rest. */
+/** How many offending LINES (and how many not-located references) the refusal names before collapsing the rest. */
 const MAX_DISCLOSED_BARE_REF_LINES = 10;
 
 /**
@@ -176,9 +176,11 @@ interface BareRefHit {
  * already claimed by an earlier carrier, so a repeated string lands on its own
  * line and the walk order does not matter. What it does not decide, it says so:
  * a carrying string whose file encoding is not canonical (any JSON escape in
- * it) has no token to find and is reported as not located; a key duplicated in
- * the file keeps JSON.parse's last value but is located at the first key, the
- * one limit disclosed rather than cured (a duplicated key is a malformed file).
+ * it) has no token to find and is reported as not located. Lines are counted
+ * by LF, so a bare-CR file reads as one line. The one limit disclosed rather
+ * than cured: in a file with a DUPLICATED key (a malformed file), a string the
+ * parse discarded can be named in place of a live string with the same content,
+ * for any path — the named line holds the text but not the value that landed.
  */
 function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareRefHit[] {
   const lineAt = (index: number): number => {

@@ -320,6 +320,8 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(lineOf('#3020')).toBeGreaterThan(lineOf('#2987'));
     const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
     expect(err).toBeInstanceOf(Error);
+    // The verb refuses under the library's code, so a caller keying on it sees both refusals alike.
+    expect((err as { code?: string }).code).toBe('LEG_DEPOSIT_BARE_REF');
     expect(err.message).toContain('carries 2 bare reference(s):');
     expect(err.message).toContain(
       `  line ${lineOf('#2987')}: #2987\n  line ${lineOf('#3020')}: #3020`,
@@ -348,7 +350,7 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
   });
 
-  it('catches a reference authored as a JSON escape and names it as escaped', async () => {
+  it('catches a reference authored as a JSON escape and names it as not located', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const BS = String.fromCharCode(92);
     const file = path.join(tmpDir, 'escaped.json');
@@ -450,7 +452,7 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(err.message).toContain('  line 3: #5\n  line 4: #9\n  line 5: #9\n  line 7: #7');
   });
 
-  it('names the escaped references outside the ten-line cap', async () => {
+  it('names the not-located references outside the ten-line cap', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const BS = String.fromCharCode(92);
     const findings = Array.from({ length: 11 }, (_, i) => ({
