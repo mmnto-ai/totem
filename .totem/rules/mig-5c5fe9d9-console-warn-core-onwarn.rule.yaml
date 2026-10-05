@@ -1,0 +1,23 @@
+schemaVersion: 1
+severity: warning
+message: Core library modules should not use hardcoded console.warn — use an optional onWarn callback instead to remain environment-agnostic
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: console.warn($$$ARGS)
+  scope:
+    fileGlobs:
+      - packages/core/**/*.ts
+      - src/**/*.ts
+      - lib/**/*.ts
+
+examples:
+  - bad: console.warn('index rebuild complete');
+    good: opts.onWarn?.('index rebuild complete');
+
+curation:
+  sourceLesson: lesson-5c5fe9d9060bcb6d
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

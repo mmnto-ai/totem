@@ -1,0 +1,28 @@
+schemaVersion: 1
+severity: warning
+message: Prefer setting process.exitCode instead of calling process.exit() to allow graceful shutdown (cleanup, log flushing, child process termination).
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: process.exit($CODE)
+  scope:
+    fileGlobs:
+      - packages/cli/src/**/*.ts
+    excludeGlobs:
+      - packages/cli/src/index.ts
+      - packages/cli/src/commands/**/*.ts
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
+      - '**/*.spec.tsx'
+
+examples:
+  - bad: process.exit(1);
+    good: process.exitCode = 1;
+
+curation:
+  sourceLesson: lesson-63680bf329d59167
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

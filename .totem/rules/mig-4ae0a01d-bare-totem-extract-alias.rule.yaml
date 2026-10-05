@@ -1,0 +1,20 @@
+schemaVersion: 1
+severity: warning
+message: Use canonical CLI command forms (e.g., `totem lesson extract`) instead of bare aliases like `totem extract`
+
+target:
+  type: regex
+  pattern: '`totem\s+extract\b'
+  scope:
+    fileGlobs:
+      - docs/wiki/**/*.md
+
+examples:
+  - bad: Run `totem extract <pr>` to pull lessons.
+    good: Run `totem lesson extract <pr>` to pull lessons.
+
+curation:
+  sourceLesson: lesson-4ae0a01d912f8742
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

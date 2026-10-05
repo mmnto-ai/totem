@@ -1,0 +1,24 @@
+schemaVersion: 1
+severity: warning
+message: Core packages should use an injectable logger interface instead of direct console calls, to allow consumers to control output routing.
+
+target:
+  type: ast-grep
+  language: typescript
+  pattern: console.$METHOD($$$ARGS)
+  scope:
+    fileGlobs:
+      - packages/core/**/*.ts
+    excludeGlobs:
+      - '**/*.test.ts'
+      - '**/*.spec.ts'
+
+examples:
+  - bad: console.warn('problem');
+    good: logger.warn('problem');
+
+curation:
+  sourceLesson: lesson-089b0c628b330c16
+  curatedBy: strategy-codex
+  curatedAt: '2026-08-22'
+  baseline5Phase: 3
