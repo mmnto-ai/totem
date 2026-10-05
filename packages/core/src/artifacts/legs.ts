@@ -85,10 +85,14 @@ export interface LegDepositBareRef {
  * qualified (mmnto-ai/totem#3023).
  */
 export function findBareRefsInLegDeposit(value: unknown): LegDepositBareRef[] {
+  // One RegExp per walk, not per string: `matchAll` clones the regex it is
+  // handed (lastIndex included), so sharing it across nodes is safe (Gemini on
+  // mmnto-ai/totem#3025).
+  const pattern = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
   const hits: LegDepositBareRef[] = [];
   const visit = (node: unknown, at: string): void => {
     if (typeof node === 'string') {
-      for (const match of node.matchAll(new RegExp(BARE_REF_REGEX_SOURCE, 'g'))) {
+      for (const match of node.matchAll(pattern)) {
         hits.push({ path: at, ref: match[0], carrier: node });
       }
       return;

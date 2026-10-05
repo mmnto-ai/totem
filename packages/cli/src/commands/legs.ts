@@ -183,10 +183,19 @@ interface BareRefHit {
  * for any path — the named line holds the text but not the value that landed.
  */
 function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareRefHit[] {
+  // The line breaks are indexed once; a line number is then a binary search
+  // (Greptile on mmnto-ai/totem#3025: no rescan from the start per string).
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) lineStarts.push(i + 1);
   const lineAt = (index: number): number => {
-    let line = 1;
-    for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
-    return line;
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid]! <= index) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
   };
   const BEFORE = new Set([':', ',', '[', '{']);
   const AFTER = new Set([':', ',', ']', '}']);
@@ -197,17 +206,20 @@ function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareR
     while (j < text.length && /\s/.test(text[j]!)) j++;
     return (i < 0 || BEFORE.has(text[i]!)) && (j >= text.length || AFTER.has(text[j]!));
   };
-  const claimed = new Set<number>();
+  // Each distinct token searches forward from where its last claim ended, which
+  // is the same "first unclaimed occurrence" as before (two different tokens can
+  // never start at one index) at one pass per token rather than one per claim.
+  const nextFrom = new Map<string, number>();
   const located = new Map<string, number | undefined>();
   const locate = (path: string, carrier: string): number | undefined => {
     if (located.has(path)) return located.get(path);
     const token = JSON.stringify(carrier);
     let line: number | undefined;
-    for (let from = 0; ; ) {
+    for (let from = nextFrom.get(token) ?? 0; ; ) {
       const at = text.indexOf(token, from);
       if (at === -1) break;
-      if (!claimed.has(at) && atTokenBoundary(at, token.length)) {
-        claimed.add(at);
+      if (atTokenBoundary(at, token.length)) {
+        nextFrom.set(token, at + 1);
         line = lineAt(at);
         break;
       }
@@ -220,11 +232,11 @@ function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareR
 }
 
 /**
- * The refusal's rows: one per offending file line carrying every reference on
- * it, sorted, the first ten lines then a count of the rest; then, outside that
- * cap, one row naming the references the locator could not place (the first
- * ten, then a count). Every echoed fragment is a match (`#` plus digits),
- * never the line's text.
+ * The refusal's rows: one per offending file line carrying the first ten
+ * references on it then a count of the rest, sorted, the first ten lines then a
+ * count of the rest; then, outside that cap, one row naming the references the
+ * locator could not place (the first ten, then a count). Every echoed fragment
+ * is a match (`#` plus digits), never the line's text, and no row can run long.
  */
 function renderBareRefs(hits: BareRefHit[]): string[] {
   const byLine = new Map<number, string[]>();
@@ -233,9 +245,14 @@ function renderBareRefs(hits: BareRefHit[]): string[] {
     if (hit.line === undefined) unlocated.push(hit.ref);
     else byLine.set(hit.line, [...(byLine.get(hit.line) ?? []), hit.ref]);
   }
+  const capped = (refs: string[]): string => {
+    const named = refs.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
+    const more = refs.length - named.length;
+    return `${named.join(', ')}${more > 0 ? `, +${more} more` : ''}`;
+  };
   const lineRows = [...byLine.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([line, refs]) => `  line ${line}: ${refs.map(echoSafe).join(', ')}`);
+    .map(([line, refs]) => `  line ${line}: ${capped(refs)}`);
   const shown = lineRows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
   const moreLines = lineRows.length - shown.length;
   if (moreLines > 0) shown.push(`  +${moreLines} more line(s)`);

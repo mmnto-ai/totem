@@ -596,6 +596,24 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
     expect(TEMPLATE_BARE_REF_REGEX_SOURCE).toBe(BARE_REF_REGEX_SOURCE);
   });
 
+  it('caps the references named on one line at ten and counts the rest', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const refs = Array.from({ length: 13 }, (_, i) => `#${500 + i}`).join(' ');
+    const file = writeFindings({
+      ...body,
+      findings: [{ ...body.findings[0], claim: `many on one line: ${refs}` }, body.findings[1]],
+    });
+    const fileLines = fs.readFileSync(file, 'utf-8').split('\n');
+    const line = fileLines.findIndex((l) => l.includes('many on one line')) + 1;
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 13 bare reference(s):');
+    expect(err.message).toContain(
+      `  line ${line}: #500, #501, #502, #503, #504, #505, #506, #507, #508, #509, +3 more`,
+    );
+    expect(err.message).not.toContain('#510');
+  });
+
   it('accepts a qualified reference and hashes that are not references', async () => {
     const { legsDepositCommand } = await import('./legs.js');
     const body = findingsBody() as { findings: Array<Record<string, unknown>> };
