@@ -1,0 +1,11 @@
+[RuleAuthor] 10 authored rule(s): 10 minted, 0 revised, 0 unchanged.
+  + 106680a4d371f82f  totem-claude :: 884becd45e6380bd: Using 'pnpm run version' instead of the bare 'pnpm version'
+  + 8105649922aa9f94  totem-claude :: 089b0c628b330c16: Core packages should use an injectable logger interface
+  + 855f6265161cedad  totem-claude :: 427481b534fe3392: Refrain from using console.warn within core library
+  + cef25cef740d5aed  totem-claude :: 5c5fe9d9060bcb6d: Core library modules should use optional callbacks
+  + 984df9c5d2c5df3d  totem-claude :: fb008f77a1f5a49a@javascript: Constructing shell commands with string interpolation
+  + 0c9df29370111b53  totem-claude :: fb008f77a1f5a49a@typescript: Constructing shell commands with string interpolation
+  + 50662ab6a745c6d5  totem-claude :: 8435c024569ffa51: The Gemini CLI and Gemini Code Assist (GCA) do not
+  + 669b403b4f828ae0  totem-claude :: d487264e210913a4: Prefer Vitest's expect().rejects.toHaveProperty()
+  + 312894688c167fb2  totem-claude :: 4ae0a01d912f8742: Use canonical CLI command forms
+  + 56ee97cba0818c90  totem-claude :: 63680bf329d59167: Use process.exitCode for CLI exits
