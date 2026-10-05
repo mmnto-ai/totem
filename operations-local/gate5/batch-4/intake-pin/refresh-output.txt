@@ -1,0 +1,2 @@
+[totem] Delegating to the project-local @mmnto/cli@2.12.2 (built 2026-09-30T00:57:56.533Z) at D:\Dev\worktrees\totem-totem-claude-gate5-b4\packages\cli\dist\index.js (this binary: 2.13.0) — set TOTEM_NO_REEXEC=1 to disable.
+[36m[Compile][39m Manifest already fresh — no changes.
