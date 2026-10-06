@@ -141,7 +141,11 @@ export const StructEligResultSchema = z
      * the check that judged to record who judged and why — an admitted entry carries the
      * conjunct's outcome, a refused one its cause. An optional field rather than a `basis` suffix
      * because `whitelist:.+` is not injective (a class literally named with the suffix would
-     * collide) and the ADR's basis form is `whitelist:<class>`.
+     * collide) and the ADR's basis form is `whitelist:<class>`. This schema does not tie
+     * `decidable` to the conjunct: a hand-written `decidable: true` beside an unsatisfied
+     * conjunct parses. The check never produces one (an unsatisfied conjunct is `decidable:
+     * false`, in `evaluateStructuralEligibility`), and the cert path re-derives each entry
+     * rather than trusting its recorded row.
      */
     scopeConjunct: ScopeConjunctSchema.optional(),
   })

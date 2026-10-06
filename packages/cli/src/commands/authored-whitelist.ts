@@ -37,7 +37,7 @@
 // a reviewer's vigilance. Classes whose tokens never appear in prose may be regex.
 // A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard.
 //
-// THE PROSE SCOPE TAG (mmnto-ai/totem#2988, confirmed by letter 2026-09-30; P1 is the
+// THE PROSE SCOPE TAG (mmnto-ai/totem#2988, confirmed by letter 2026-10-01T00:06Z; P1 is the
 // clause above, P2 is this block): the exemplar row `regex/forbidden-literal-token`
 // carries `scope: 'prose'`, the only tagged row. The prose conjunct is the PREDICATE's
 // — core's `evaluateStructuralEligibility` takes the record's declared `fileGlobs` for
@@ -85,7 +85,10 @@ import type { WhitelistEntry } from '@mmnto/totem';
  * (`PROSE_EXTENSIONS`, core: `md`, `mdx`, `rst`, `txt`), the verdict recorded in the
  * result's `scopeConjunct`; its set id is the owner form `static-whitelist@owner-4efdb174`
  * (the digest input — the tagged row and the extension constant — is in the header
- * above), pinned by authored-whitelist.test.ts.
+ * above), pinned by authored-whitelist.test.ts. The batch blocks below are records of
+ * each batch as delivered, written before the tag: a rule they name under this row is
+ * refused at this version when any of its globs is not a prose glob, and re-derives
+ * `revised` until a re-pin when all of them are.
  */
 // Each ROW is frozen too, not just the array (CR diff-review): `authoredWhitelist()` hands
 // these references out, so a shallow `Object.freeze([...])` would still let another module
