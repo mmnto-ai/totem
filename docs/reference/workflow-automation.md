@@ -44,7 +44,7 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 **What should happen:** Format, lint, review — cheapest checks first.
 **Commands:** `pnpm run format:check`, `totem lint`, `totem review`
 **Skill:** `/prepush`
-**Hook:** `PreToolUse` blocks agent `git push` if review hasn't passed (checks `.totem/cache/.reviewed-content-hash` against current source files). Human pushes are unaffected.
+**Hook:** the review gate runs in the pre-push Git hook on the strict tier (`totem review --gate`, the shield gate). No `PreToolUse` hook gates `git push`.
 
 ### Phase 6: After PR Merge
 
@@ -68,13 +68,11 @@ The agent optimizes for speed over process, skipping steps like `totem spec` and
 
 ## Hooks (Enforced by Harness)
 
-| Hook               | Event                     | Purpose                                                     | Status |
-| ------------------ | ------------------------- | ----------------------------------------------------------- | ------ |
-| `PostCompact`      | After context compression | Re-inject rules + capability manifest (ADR-063)             | Active |
-| `PreToolUse(Bash)` | Before `git commit`       | **Block** if `/preflight` hasn't been run on feature branch | Active |
-| `PreToolUse(Bash)` | Before `git push`         | **Block** if `/prepush` hasn't been run                     | Active |
+This table covers the session hooks. The `PreToolUse` hooks that ship on Claude Code (the write shield on `Write|Edit`; the gate-engine interlocks on `Write|Edit` and `Bash|PowerShell`) are listed in [enforcement-model.md](../wiki/enforcement-model.md) § What Ships on Claude Code; none of them gates `git commit` or `git push`.
 
-Exempt branches (commit gate only): `main`, `master`, `hotfix/*`, `docs/*`, detached HEAD.
+| Hook          | Event                     | Purpose                                         | Status |
+| ------------- | ------------------------- | ----------------------------------------------- | ------ |
+| `PostCompact` | After context compression | Re-inject rules + capability manifest (ADR-063) | Active |
 
 ## Skills (User-Invoked)
 

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c8ef859fef0c221358c9d324e728d62e5ef6f3ce",
+  "readAt": "2026-10-03T03:38:04.653Z",
+  "folded": [
+    "3004-B1",
+    "3004-B2",
+    "3004-B3",
+    "3004-B4",
+    "3004-B5",
+    "3004-B6",
+    "3004-B7",
+    "3004-B8"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 6 MINOR, 1 QUESTION over e43bff12..c8ef859f, the scoped re-armed read of the bot-round fold (mmnto-ai/totem#3004): registerTools, the bare-mode call site, the config read, the atomic write and the three named deltas hold and their tests fail on the pre-fold code; the material finding is the secrets line following totemDir while add-secret hard-codes .totem/secrets.json; the minor ones are hard-coded hook ledger paths, two undisclosed cosmetic deltas with a non-discriminating test and an unpinned atomicity claim, an inverted doc comment for '.', and two prose overclaims. The leg named convergence: a further scoped read over the fold of these findings would find nothing beyond prose or a literal.",
+  "findings": [
+    {
+      "id": "3004-B1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1398,
+      "claim": "The secrets ignore line follows the configured totemDir and the comment calls it a safety net that add-secret duplicates.",
+      "counterexample": "FOLDED: the default .totem/ set (secrets and the nine local-state patterns) always rides, and a configured totemDir adds its own set beside it rather than replacing it; the comment now says why (add-secret.ts:11-12 and 76-77 hard-code '.totem/secrets.json' and path.join(cwd, '.totem') while the readers use totemDir, core/src/secrets.ts:104). The writer's own path is filed separately with the hook templates. The configured-dir tests assert both sets."
+    },
+    {
+      "id": "3004-B2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1377,
+      "claim": "All nine local-state patterns resolve through the configured totemDir.",
+      "counterexample": "FOLDED with B1: the MCP, core and CLI writers do (ledger-writer.ts:50/62, search-knowledge.ts:1276, pipeline.ts:923, pack-discovery.ts:323, sync.ts:32), but the session-start templates init installs hard-code the ledger (init-templates.ts:323, 470, 1003, 1292 join process.cwd(), '.totem', 'ledger'); the default set beside the configured one covers them. The hard-coded writers are filed as their own issue."
+    },
+    {
+      "id": "3004-B3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 5122,
+      "claim": "The output matches the pre-fold output except for three deltas, pinned by tests including 'writes the whole block under one header'.",
+      "counterexample": "FOLDED: the two further deltas (an empty file no longer gets a leading blank line; with .lancedb present and no header the secrets line now sits under the header instead of above it) are disclosed in the PR and the second is pinned by a new test on the input '.lancedb/\\n' that fails on the pre-fold writer; the 'node_modules/' case stays as a regression guard and is named as non-discriminating. The vacuous leftover-temp assertion is removed; the atomic write is the helper's own contract (fs-atomic.ts), read at the call site, not pinned by a test here."
+    },
+    {
+      "id": "3004-B4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1375,
+      "claim": "For '.', a leading '/' means a root-level *.jsonl never reaches the project's own files.",
+      "counterexample": "FOLDED: the comment now says the slash keeps nested files out and the patterns reach exactly the root-level state files and directories (the probe: '/*.jsonl' matched a.jsonl and not sub/b.jsonl). A totemDir carrying a gitignore pattern character ('#', '!', '*', '?', '[', ']', '\\\\') or a '..' segment no longer reaches the writer: the default lines are written and a summary row says the configured directory was skipped (new test on '#state')."
+    },
+    {
+      "id": "3004-B5",
+      "severity": "MINOR",
+      "file": "packages/mcp/README.md",
+      "line": 37,
+      "claim": "A line the project has re-included with ! is never written over.",
+      "counterexample": "FOLDED as prose: the README and the changeset now say an EXACT '!' line for one of these entries keeps that entry out; variants and a re-included child under an excluded directory are git's own semantics (check-ignore '.gitignore:2:.totem/ledger/' in the probe) and are not claimed."
+    },
+    {
+      "id": "3004-B6",
+      "severity": "MINOR",
+      "file": ".changeset/mcp-tool-annotations-3004.md",
+      "line": 6,
+      "claim": "In one atomic write under one # Totem header.",
+      "counterexample": "FOLDED as prose: 'in one atomic write, under a # Totem header when the file has none'; additions after an existing header are appended at the end of the file, which the doc comment now says."
+    },
+    {
+      "id": "3004-B7",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tool-annotations.test.ts",
+      "line": 1,
+      "claim": "With one shared registerTools there is no second list to drift from.",
+      "counterexample": "DECLINED as carryover (the F8 class, accepted as disclosed): a tool registered directly in index.ts would bypass the test; index.ts now carries a comment naming registerTools as the only registration path, and the remaining two cases fail on an unannotated or drifted tool."
+    },
+    {
+      "id": "3004-B8",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 2286,
+      "claim": "The re-run reads totemDir through loadConfig.",
+      "counterexample": "ANSWERED: acceptable; the config is the project's own and every verb executes it the same way, non-bare init already did through installEnforcementHooks (install-hooks.ts:358), and a bare project's generated config is yaml. The redundant normalizeTotemDir call and the always-true guard are removed: the schema defaults and transforms totemDir (config-schema.ts:554-556), so the loaded value is written as is."
+    }
+  ]
+}

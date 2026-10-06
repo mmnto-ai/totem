@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c18ae6a0399d0b1025ffff4ab9f1ce35218d2767",
+  "readAt": "2026-10-01T19:16:24.983Z",
+  "findings": [
+    {
+      "id": "2934-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 119,
+      "claim": "The design and the changeset assumed that after any build, cached or not, dist is newer than every source file, so that pnpm build clears the stale line; that is false under turbo's cache-hit path, and the direct-run line reached every hook in this repository.",
+      "counterexample": "With dist already on disk, a touched source file, or an edit reverted with git checkout, has a newer mtime and identical content; turbo answers FULL TURBO and does not re-stamp dist, so the sensor reads stale and repeated builds leave it in place. Reproduced by the seat in the build leg's own worktree: the post-commit RED restore left cli src newer than its dist and two cached builds did not clear the line. The hooks here run the workspace dist directly, so the direct-run line would repeat on every gated shell call. The premise was the seat's design error. FOLDED at c01f6c0c on the operator's ruling: the sensor is delegation-only, the direct-run line and its source walk are removed, the line says what was measured and names the forced build, which the build leg verified re-stamps dist; a content-accurate stamp is routed to a follow-up issue."
+    },
+    {
+      "id": "2934-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 188,
+      "claim": "Under TOTEM_DEBUG=1 the freshness read rethrew, so a file vanishing between the directory read and the stat could crash a command that base would have run.",
+      "counterexample": "At base the probe reads two files and practically cannot throw in a healthy workspace; the new walk stats every source file, and an atomic-write temp file disappearing mid-walk raises a missing-file error that nothing catches in the entry point (inferred, not run). FOLDED at c01f6c0c: the freshness catch never throws; under debug it writes one probe-failed line and delegation proceeds."
+    },
+    {
+      "id": "2934-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.test.ts",
+      "line": 1,
+      "claim": "The pinned-tier test did not prove that no mtime is read there: its assertion held at base too and never checked that the freshness reads were skipped.",
+      "counterexample": "A version that probed the pinned tier and discarded the result would still pass. FOLDED at c01f6c0c: the pinned tier is run with a seam whose reads throw, under debug, asserting no throw and zero seam calls."
+    },
+    {
+      "id": "2934-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.test.ts",
+      "line": 1,
+      "claim": "Nothing tested that equal modification times are fresh, so a strict comparison turned non-strict would pass every test.",
+      "counterexample": "The fresh cases used only an older source time. FOLDED at c01f6c0c: one case with the source time equal to the dist time asserts no stale line."
+    },
+    {
+      "id": "2934-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 70,
+      "claim": "The seam was documented as the probe's two filesystem reads while the probe also called existsSync directly, outside the seam.",
+      "counterexample": "Two existence checks bypassed the seam, so a test could not simulate an absent source directory through it. FOLDED at c01f6c0c: the existence checks go through the seam, which now carries every read the freshness probe makes."
+    },
+    {
+      "id": "2934-F6",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 266,
+      "claim": "The direct-run line would reach more automated surfaces than the design's cost note named: the session-start hooks inject the child's stderr into the session prompt, the gate wrapper passes it through on every shell call, and the pre-push hook prints it per step.",
+      "counterexample": "In this repository the installed package path links to the workspace package, so those runs resolve to the workspace dist; nothing parses the line, but its volume was not what the operator had been told. ANSWERED by the operator's ruling and FOLDED at c01f6c0c: the direct-run line is withdrawn, so a direct run prints nothing and walks nothing."
+    },
+    {
+      "id": "2934-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/reexec-local.ts",
+      "line": 94,
+      "claim": "The mtime read misses three states the changeset did not disclose: a deleted source file, a rename that keeps its mtime, and symlinked sources.",
+      "counterexample": "The walk reads file mtimes only and counts regular files only (inferred from the code). FOLDED at c01f6c0c: the limits are stated in the helper's doc comment and in the changeset."
+    }
+  ],
+  "folded": [
+    "2934-F1",
+    "2934-F2",
+    "2934-F3",
+    "2934-F4",
+    "2934-F5",
+    "2934-F6",
+    "2934-F7"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 5 MINOR, 1 QUESTION over d27e5588..c18ae6a0 (cure (a) + (c) of mmnto-ai/totem#2934): the diff held only after a fold that narrows the sensor. Not falsified: the pinned tier is byte-identical with no freshness read; delegation's argv, env and exit code are unchanged; a junction cycle is skipped and an unreadable directory is caught; the opt-out variable silences the sensor; no caller in the repository parses or asserts the stderr line; patch is honest. The fold removes a branch and rewords the line, so a scoped re-armed read was run over it."
+}

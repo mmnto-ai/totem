@@ -1,0 +1,6 @@
+## Lesson — A global install needs its totem shim beside node_modules
+
+**Tags:** cli, path-resolution, npm
+**Scope:** packages/core/src/cli-resolve.ts
+
+The global tier of the CLI resolver scans PATH for npm's two layouts only. In the win32 layout the `totem` shim sits beside node_modules and the install is under that prefix. A directory that holds the package but no shim is not a global install, since it is nothing a shell would run; the first version accepted it and a bot round caught it. In the POSIX layout `totem` is a link, and its resolved target must be a .js file that sits at the CLI's install path or, for a linked development install, belongs to a package whose manifest names `@mmnto/cli`. A `totem` file in a PATH directory that yields no hit is reported as unverified and never run; a directory of that name is not a file and is not reported. The scan never throws: a dangling link or an unreadable manifest in one PATH directory is "not a hit" and the scan moves on, where the first version threw out of the probe and stopped the scan (the material finding of a falsification read). When an unverified `totem` sits earlier on PATH than the install that runs, the MCP label says what was skipped. A global outside those two layouts gets the refusal (mmnto-ai/totem#3018).

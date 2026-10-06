@@ -8,21 +8,8 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const readline = await import('node:readline/promises');
   const { generateLessonHeading, writeLessonFile } = await import('@mmnto/totem'); // totem-ignore
   const { log } = await import('../ui.js');
-  const { IS_WIN, isGlobalConfigPath, loadConfig, loadEnv, resolveConfigPath, sanitize } =
+  const { isGlobalConfigPath, loadConfig, loadEnv, resolveConfigPath, sanitize } =
     await import('../utils.js');
-
-  function detectSyncCommand(cwd: string): { cmd: string; args: string[] } {
-    if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
-      return {
-        cmd: IS_WIN ? 'pnpm.cmd' : 'pnpm',
-        args: ['exec', 'totem', 'sync', '--incremental'],
-      };
-    }
-    if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
-      return { cmd: IS_WIN ? 'yarn.cmd' : 'yarn', args: ['totem', 'sync', '--incremental'] };
-    }
-    return { cmd: IS_WIN ? 'npx.cmd' : 'npx', args: ['totem', 'sync', '--incremental'] };
-  }
 
   const { loadCustomSecrets, maskSecrets } = await import('@mmnto/totem'); // totem-ignore
 
@@ -109,16 +96,21 @@ export async function addLessonCommand(lessonArg?: string): Promise<void> {
   const fileName = path.basename(writtenPath);
   log.success('Totem', `Lesson saved to ${config.totemDir}/lessons/${fileName}`); // totem-ignore
 
+  // The background sync is this CLI spawning itself: `node` plus the running
+  // entry, no lockfile, no package manager, no shell (mmnto-ai/totem#3008).
+  const selfEntry = process.argv[1];
+  if (selfEntry === undefined) {
+    log.warn('Totem', 'Background re-index skipped: the running CLI entry is unknown.');
+    return;
+  }
   const logPath = path.join(totemDir, 'mcp-sync.log');
   log.dim('Totem', 'Triggering background re-index...');
   try {
-    const { cmd, args } = detectSyncCommand(cwd);
     const logFd = fs.openSync(logPath, 'a');
-    const child = spawn(cmd, args, {
+    const child = spawn(process.execPath, [selfEntry, 'sync', '--incremental'], {
       cwd,
       detached: true,
       stdio: ['ignore', logFd, logFd],
-      shell: IS_WIN,
       windowsHide: true,
     });
     child.unref();

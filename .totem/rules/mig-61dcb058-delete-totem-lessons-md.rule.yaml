@@ -1,0 +1,34 @@
+schemaVersion: 1
+severity: error
+message: Do not delete .totem/lessons.md (load-bearing for 41+ rules)
+
+target:
+  type: regex
+  pattern: \b(?:git\s+rm|rm)\s+[^\n]{0,40}\.totem/lessons\.md\b
+  scope:
+    fileGlobs:
+      - '**/*.sh'
+      - '**/*.bash'
+      - '**/*.zsh'
+      - '**/*.md'
+      - '**/*.ts'
+      - '**/*.js'
+      - '**/*.cjs'
+      - '**/*.mjs'
+      - .claude/**/*
+    excludeGlobs:
+      - '**/*.test.*'
+      - '**/*.spec.*'
+      - .totem/lessons/**
+      - .totem/lessons.md
+      - .totem/tests/**
+
+examples:
+  - bad: git rm .totem/lessons.md
+    good: rm .totem/lessons/lesson-cd27a5b0.md
+
+curation:
+  sourceLesson: lesson-61dcb058bd1df15d
+  curatedBy: strategy-kimi
+  curatedAt: '2026-08-23'
+  baseline5Phase: 3

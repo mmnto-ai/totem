@@ -65,7 +65,9 @@ export function extractGitState(cwd: string): GitState {
 
   let allFiles: string[] = [];
   try {
-    const porcelain = safeExec('git', ['status', '--porcelain'], { cwd });
+    // `--no-optional-locks` is a git-level option (before the subcommand): the
+    // read takes no optional index lock and does not refresh `.git/index`.
+    const porcelain = safeExec('git', ['--no-optional-locks', 'status', '--porcelain'], { cwd });
     if (porcelain.length > 0) {
       allFiles = porcelain
         .split(/\r?\n/)

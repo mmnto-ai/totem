@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "5d660654d24cf3f36df4313081061afeb9ca3f95",
+  "readAt": "2026-10-05T19:51:07.468Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 314,
+      "claim": "The refusal is claimed to name each offending line 1-based, first ten then +K more (the issue requires each offending line with its position), but the test pins line numbers only as a digit run and never exercises the cap or the +K more tail.",
+      "counterexample": "Measured in a scratch copy: mutant line i instead of i + 1 (legs.ts:175) passes all 55; mutant if (more < 0) (legs.ts:296) passes all 55; the cap is caught only at MAX = 1 because the fixture carries two references."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": ".changeset/legs-deposit-bare-refs.md",
+      "line": 10,
+      "claim": "The changeset says the byte-level scan means no free-text field can hide a bare reference.",
+      "counterexample": "A counterexample authored as the JSON escape backslash-u0023 then 123 passes the scan with zero matches, decodes to a hash-123, and lands bare in the written deposit (probe P1: the stored file contains it). Conversely a qualified ref with a JSON-escaped slash is refused (probe P2)."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 291,
+      "claim": "The changeset and PR body say the refusal names each offending line, first ten then +K more.",
+      "counterexample": "Probe P3: twelve references on one line print ten identical line 10 entries then +2 more. The list and the cap count matches, not lines; the mmnto-ai/totem-strategy#1477 incident shape (fourteen in one counterexample) yields one line repeated ten times."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": ".changeset/legs-deposit-bare-refs.md",
+      "line": 10,
+      "claim": "The changeset describes the pattern as having no word character after the number.",
+      "counterexample": "The lookahead at legs.ts:164 also excludes a hyphen (the code comment at legs.ts:159 and the PR body say so). A hash followed by 12-3 is accepted by the matcher but would be refused under the changeset's description."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/index.ts",
+      "line": 1098,
+      "claim": "PR body: the CLI verb is the only caller of saveLegDeposit, so the verb is the one place every deposit passes.",
+      "counterexample": "saveLegDeposit is a public export of @mmnto/totem, and hand-assembled deposits are an established practice that the legs gate reads without any bare-reference check. Only the in-repo one-caller fact (legs.ts:380) holds."
+    },
+    {
+      "id": "Q1",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 0,
+      "claim": "The PR body lists mmnto-ai/totem#3023 as part-of with no close line or totem-close marker, although every build bullet in the issue body is delivered by this diff. Is the issue meant to stay open after merge?",
+      "counterexample": ""
+    },
+    {
+      "id": "Q2",
+      "severity": "QUESTION",
+      "file": ".totem/compiled-rules.json",
+      "line": 0,
+      "claim": "The dispatch premise placed the xrepo-qualify-refs rule in this repo's compiled-rules.json, which has zero occurrences; the rule is in mmnto-ai/totem-strategy .totem/compiled-rules.json lines 417-419 and is identical to the diff's pattern. The diff's prose does not depend on this.",
+      "counterexample": ""
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "Q1",
+    "Q2"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 4 MINOR, 2 QUESTION over f6ae2568..5d660654; convergence not named; every finding folded at the next commit and the leg re-armed on the fold"
+}

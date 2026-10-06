@@ -426,7 +426,9 @@ async function runSyncInner(
   // 2. Connect to store
   const storePath = path.join(projectRoot, config.lanceDir);
   const store = new LanceStore(storePath, embedder, { absolutePathRoot: projectRoot });
-  await store.connect();
+  // The sync is the one rebuilder: it alone asks connect() to heal a store
+  // whose format or vector dimensions changed (mmnto-ai/totem#3009).
+  await store.connect({ heal: true });
 
   const totemDir = path.join(projectRoot, config.totemDir);
 

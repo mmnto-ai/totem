@@ -33,6 +33,7 @@ import {
   detectEmbeddingTier,
   detectReflexStatus,
   distributeClaudeSkills,
+  ensureTotemGitignore,
   findUnownedHookSibling,
   generateConfig,
   initCommand,
@@ -43,12 +44,13 @@ import {
   REFLEX_VERSION,
   resolveToolSelection,
   scaffoldAgentsFloor,
-  scaffoldClaudeHooks,
   scaffoldClaudeSessionStart,
   scaffoldClaudeSkill,
   scaffoldClaudeWriteShield,
   scaffoldFile,
   scaffoldMcpConfig,
+  TOTEM_LOCAL_STATE_IGNORES,
+  totemLocalStateIgnores,
   upgradeReflexes,
 } from './init.js';
 import { detectProject, type HookInstallerResult } from './init-detect.js';
@@ -556,174 +558,6 @@ describe('scaffoldFile', () => {
 
     const second = scaffoldFile(filePath, content);
     expect(second).toEqual({ action: 'exists' });
-  });
-});
-
-describe('scaffoldClaudeHooks', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-claude-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  it('creates settings.local.json when none exists', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result).toEqual({ action: 'created' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.hooks).toBeDefined();
-    expect(content.hooks.PreToolUse).toHaveLength(1);
-    expect(content.hooks.PreToolUse[0].matcher).toBe('Bash');
-    // Verify object format (not bare strings) — #153
-    expect(content.hooks.PreToolUse[0].hooks[0]).toEqual({
-      type: 'command',
-      command: expect.stringContaining('shield-gate'),
-    });
-  });
-
-  it('creates parent directories as needed', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
-    scaffoldClaudeHooks(filePath);
-    expect(fs.existsSync(filePath)).toBe(true);
-  });
-
-  it('merges into existing config without hooks', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    fs.writeFileSync(filePath, JSON.stringify({ theme: 'dark' }, null, 2) + '\n', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    expect(content.theme).toBe('dark');
-    expect(content.hooks.PreToolUse).toBeDefined();
-  });
-
-  it('deep merges when hooks exist but no totem entry', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    const existing = { hooks: { PreToolUse: [{ matcher: 'custom', hooks: ['echo hi'] }] } };
-    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result).toEqual({ action: 'merged' });
-    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    // Preserves existing entry
-    expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
-    // Appends totem entry
-    expect(content.hooks.PreToolUse[1].matcher).toBe('Bash');
-    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('shield-gate');
-  });
-
-  it('skips when totem shield hook exists (bare string format — legacy)', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    const existing = {
-      hooks: { PreToolUse: [{ matcher: 'Bash', hooks: ['totem shield'] }] },
-    };
-    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result).toEqual({ action: 'skipped' });
-  });
-
-  it('skips when totem shield hook exists (object format)', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    const existing = {
-      hooks: {
-        PreToolUse: [
-          {
-            matcher: 'Bash',
-            hooks: [{ type: 'command', command: 'node .totem/hooks/shield-gate.js' }],
-          },
-        ],
-      },
-    };
-    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result).toEqual({ action: 'skipped' });
-  });
-
-  it('returns error on malformed JSON', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    fs.writeFileSync(filePath, '{ broken!!!', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result.action).toBe('skipped');
-    expect(result.err).toContain('invalid JSON');
-  });
-
-  it('returns error when hooks has unexpected shape', () => {
-    const dir = path.join(tmpDir, '.claude');
-    fs.mkdirSync(dir, { recursive: true });
-    const filePath = path.join(dir, 'settings.local.json');
-    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
-
-    const result = scaffoldClaudeHooks(filePath);
-
-    expect(result.action).toBe('skipped');
-    expect(result.err).toContain('unexpected shape');
-  });
-
-  it('is idempotent — double invoke does not duplicate', () => {
-    const filePath = path.join(tmpDir, '.claude', 'settings.local.json');
-
-    const first = scaffoldClaudeHooks(filePath);
-    expect(first).toEqual({ action: 'created' });
-
-    const second = scaffoldClaudeHooks(filePath);
-    expect(second).toEqual({ action: 'skipped' });
-  });
-});
-
-describe('Claude shield-gate script scaffolding', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-shield-gate-'));
-  });
-
-  afterEach(() => {
-    cleanTmpDir(tmpDir);
-  });
-
-  it('creates shield-gate.cjs with correct content', () => {
-    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
-    const MARKER = '// [totem] auto-generated';
-    const CONTENT = `${MARKER} — Claude Code shield gate hook\nconst { execSync } = require('child_process');\n`;
-
-    const result = scaffoldFile(filePath, CONTENT, MARKER);
-
-    expect(result).toEqual({ action: 'created' });
-    const written = fs.readFileSync(filePath, 'utf-8');
-    expect(written).toContain('require');
-    expect(written).toContain(MARKER);
-  });
-
-  it('uses .cjs extension for ESM compatibility', () => {
-    const filePath = path.join(tmpDir, '.totem', 'hooks', 'shield-gate.cjs');
-    const result = scaffoldFile(filePath, '// [totem] auto-generated\ntest\n');
-
-    expect(result).toEqual({ action: 'created' });
-    expect(filePath).toMatch(/\.cjs$/);
   });
 });
 
@@ -1828,6 +1662,80 @@ describe('initCommand non-interactive mode (mmnto-ai/totem#2601)', () => {
     expect(mcp.mcpServers.totem).toBeDefined();
   }, 60000);
 
+  it('writes the local-state ignores in bare mode too (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await initCommand({ bare: true });
+
+    expect(fs.existsSync(path.join(tmpDir, '.totem', 'compiled-rules.json'))).toBe(true);
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    for (const entry of TOTEM_LOCAL_STATE_IGNORES) {
+      expect(lines, entry).toContain(entry);
+    }
+  }, 60000);
+
+  it('names the configured totemDir in the ignores on a re-run (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.yaml'),
+      [
+        'totemDir: ./state/totem/',
+        'targets:',
+        "  - glob: '**/*.md'",
+        '    type: spec',
+        '    strategy: markdown-heading',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+
+    await initCommand({});
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    expect(lines).toContain('state/totem/ledger/');
+    expect(lines).toContain('state/totem/secrets.json');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines).toContain('.totem/secrets.json');
+  }, 60000);
+
+  it('writes the ignores before the cursor scan, so a scan that throws leaves the state ignored (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    // A FILE where the scan expects the `.cursor/rules` directory: readdirSync throws ENOTDIR
+    // on every platform, after the ignores are written and before init completes. The scan is
+    // the LAST unhandled site before the write's old position, so this pins the order against
+    // the scan only; the installers between are covered by reading, not by this test.
+    fs.mkdirSync(path.join(tmpDir, '.cursor'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, '.cursor', 'rules'), 'not a directory\n', 'utf-8');
+
+    await expect(initCommand({})).rejects.toThrow(/ENOTDIR|not a directory/i);
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    for (const entry of TOTEM_LOCAL_STATE_IGNORES) {
+      expect(lines, entry).toContain(entry);
+    }
+  }, 60000);
+
+  it('writes the default ignores and says so when the config cannot load (mmnto-ai/totem#3004)', async () => {
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    const stderr: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+    // Unparseable YAML: loadConfig throws, init discloses it and still writes the lines.
+    fs.writeFileSync(path.join(tmpDir, 'totem.yaml'), 'targets: [\n', 'utf-8');
+
+    await initCommand({ bare: true });
+
+    const lines = fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8').split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    const output = stderr.join('\n');
+    expect(output).toContain('Could not read totemDir from totem.yaml');
+    expect(output).toContain('the default .totem/ lines were written');
+  }, 60000);
+
   it('discloses the package-level MCP dedup instead of appending a duplicate', async () => {
     Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
     fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '# Project\n', 'utf-8');
@@ -2111,6 +2019,66 @@ describe('scaffoldClaudeWriteShield', () => {
 
     expect(result.action).toBe('skipped');
     expect(result.err).toContain('invalid JSON');
+  });
+
+  it('returns error when hooks has unexpected shape', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, JSON.stringify({ hooks: 'not-an-object' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result.action).toBe('skipped');
+    expect(result.err).toContain('unexpected shape');
+  });
+
+  it('merges into existing config without hooks', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    fs.writeFileSync(filePath, JSON.stringify({ theme: 'dark' }, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(content.theme).toBe('dark');
+    expect(content.hooks.PreToolUse).toBeDefined();
+  });
+
+  it('deep merges when hooks exist but no totem entry (bare-string hook)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = { hooks: { PreToolUse: [{ matcher: 'custom', hooks: ['echo hi'] }] } };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'merged' });
+    const content = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    // Preserves existing entry
+    expect(content.hooks.PreToolUse[0].matcher).toBe('custom');
+    // Appends totem entry
+    expect(content.hooks.PreToolUse[1].matcher).toBe('Write|Edit');
+    expect(JSON.stringify(content.hooks.PreToolUse[1])).toContain('PreWriteShield');
+  });
+
+  it('skips when PreWriteShield hook exists (bare string format)', () => {
+    const dir = path.join(tmpDir, '.claude');
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, 'settings.json');
+    const existing = {
+      hooks: {
+        PreToolUse: [{ matcher: 'Write|Edit', hooks: ['node .claude/hooks/PreWriteShield.cjs'] }],
+      },
+    };
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+
+    const result = scaffoldClaudeWriteShield(filePath);
+
+    expect(result).toEqual({ action: 'skipped' });
   });
 });
 
@@ -5074,5 +5042,192 @@ describe('scaffoldAgentsFloor', () => {
     const result = scaffoldAgentsFloor(tmpDir, 'x');
     expect(result.action).toBe('refreshed');
     expect(result.err).toContain('a managed span by definition');
+  });
+});
+
+// ─── .gitignore: Totem's local state (mmnto-ai/totem#3004) ──────────────────
+
+describe('ensureTotemGitignore', () => {
+  const LOCAL_STATE = [
+    '.totem/ledger/',
+    '.totem/cache/',
+    '.totem/temp/',
+    '.totem/*.jsonl',
+    '.totem/sync.lock',
+    '.totem/sync.lock.*',
+    '.totem/index-manifest.json',
+    '.totem/installed-packs.json',
+    '.totem/review-extensions.txt',
+  ];
+  let tmpDir: string;
+
+  const readGitignore = () => fs.readFileSync(path.join(tmpDir, '.gitignore'), 'utf-8');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-gitignore-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('pins the local-state entry list', () => {
+    expect([...TOTEM_LOCAL_STATE_IGNORES]).toEqual(LOCAL_STATE);
+  });
+
+  it('creates .gitignore with every Totem entry in a fresh directory', () => {
+    const summary = ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+    for (const entry of ['.lancedb/', '.totem/secrets.json', ...LOCAL_STATE]) {
+      expect(lines, entry).toContain(entry);
+    }
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toMatch(/^Created with /);
+  });
+
+  it('adds only the missing lines to an existing .gitignore and leaves the rest untouched', () => {
+    const original = [
+      'node_modules/',
+      '# Totem',
+      '.lancedb/',
+      '.totem/secrets.json',
+      '.totem/ledger/',
+      '.totem/*.jsonl',
+      'dist/',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith(original)).toBe(true);
+    const added = after
+      .slice(original.length)
+      .split('\n')
+      .filter((line) => line.length > 0);
+    expect(added).toEqual(
+      LOCAL_STATE.filter((entry) => entry !== '.totem/ledger/' && entry !== '.totem/*.jsonl'),
+    );
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toContain('.totem/cache/');
+    expect(summary[0]!.action).not.toContain('.totem/ledger/');
+  });
+
+  it('adds nothing on a second run', () => {
+    ensureTotemGitignore(tmpDir);
+    const first = readGitignore();
+    const summary = ensureTotemGitignore(tmpDir);
+    expect(readGitignore()).toBe(first);
+    expect(summary).toEqual([]);
+  });
+
+  it('derives the patterns from the configured totemDir beside the default set', () => {
+    expect(totemLocalStateIgnores('state/totem')).toEqual(
+      LOCAL_STATE.map((entry) => entry.replace('.totem/', 'state/totem/')),
+    );
+
+    // The default directory rides beside a configured one: add-secret and the
+    // installed session-start hooks write under .totem/ whatever the config names.
+    const summary = ensureTotemGitignore(tmpDir, 'state/totem');
+    const lines = readGitignore().split('\n');
+    for (const entry of ['state/totem/ledger/', 'state/totem/secrets.json', '.lancedb/']) {
+      expect(lines, entry).toContain(entry);
+    }
+    for (const entry of ['.totem/secrets.json', ...LOCAL_STATE]) {
+      expect(lines, entry).toContain(entry);
+    }
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).toContain('state/totem/secrets.json');
+  });
+
+  it('writes only the default lines, and says so, for a totemDir that would read as a pattern', () => {
+    const summary = ensureTotemGitignore(tmpDir, '#state');
+    const lines = readGitignore().split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines.some((line) => line.startsWith('#state'))).toBe(false);
+    expect(summary.map((entry) => entry.action)).toEqual([
+      expect.stringMatching(/^Skipped the local-state lines for totemDir '#state'/),
+      expect.stringMatching(/^Created with /),
+    ]);
+  });
+
+  it('refuses the repository root as the state directory: no root-level cache/ or *.jsonl ignore', () => {
+    // `.` is the global profile's spelling and the schema admits it for a project;
+    // written as patterns it would ignore the project's own root files.
+    const summary = ensureTotemGitignore(tmpDir, '.');
+    const lines = readGitignore().split('\n');
+    expect(lines).toContain('.totem/ledger/');
+    expect(lines.some((line) => line.startsWith('/'))).toBe(false);
+    expect(lines).not.toContain('cache/');
+    expect(lines).not.toContain('*.jsonl');
+    expect(summary[0]!.action).toMatch(/^Skipped the local-state lines for totemDir '\.'/);
+  });
+
+  it('puts the secrets line under the header when only the vector store line is present', () => {
+    // The pre-fold writer appended the secrets line above the header it then wrote.
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.lancedb/\n', 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines.indexOf('# Totem')).toBeLessThan(lines.indexOf('.totem/secrets.json'));
+  });
+
+  it('never writes an exclusion over an explicit re-inclusion', () => {
+    const original = ['# Totem', '.lancedb/', '.totem/secrets.json', '!.totem/ledger/', ''].join(
+      '\n',
+    );
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith(original)).toBe(true);
+    expect(after.slice(original.length).split('\n')).not.toContain('.totem/ledger/');
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.action).not.toContain('.totem/ledger/');
+    expect(summary[0]!.action).toContain('.totem/cache/');
+  });
+
+  it('writes the whole block under one header when the file has rules but no Totem block', () => {
+    const original = 'node_modules/\n';
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    const summary = ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+    const lines = after.split('\n');
+
+    expect(after.startsWith(original)).toBe(true);
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines).toContain('.lancedb/');
+    expect(lines).toContain('.totem/secrets.json');
+    expect(summary.map((entry) => entry.action)).toEqual([
+      'Added .lancedb/ exclusion',
+      'Added .totem/secrets.json exclusion',
+      expect.stringMatching(/^Added Totem local-state exclusions: /),
+    ]);
+  });
+
+  it('keeps one header when the Totem block exists without the vector store line', () => {
+    // The pre-3004 `.lancedb/` append wrote its own header without looking for one.
+    const original = ['# Totem', '.totem/secrets.json', ''].join('\n');
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), original, 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const lines = readGitignore().split('\n');
+
+    expect(lines.filter((line) => line === '# Totem')).toHaveLength(1);
+    expect(lines).toContain('.lancedb/');
+  });
+
+  it('separates the block from a file that ends without a newline', () => {
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), 'dist/', 'utf-8');
+
+    ensureTotemGitignore(tmpDir);
+    const after = readGitignore();
+
+    expect(after.startsWith('dist/\n\n# Totem\n.lancedb/\n')).toBe(true);
   });
 });

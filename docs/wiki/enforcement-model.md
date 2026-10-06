@@ -8,11 +8,11 @@ Totem provides the **primitives**: the knowledge index, the compiler, the compil
 
 Totem does **not** force a specific workflow. It doesn't dictate when to block, inject, or enforce. You decide how to wire these primitives into your own Git hooks, CI config, or IDE plugins. Totem ships reference wiring, not a mandatory policy.
 
-| Layer             | What Totem Provides                     | Where You Wire It            |
-| ----------------- | --------------------------------------- | ---------------------------- |
-| **Deterministic** | `totem lint` (compiled rules, zero LLM) | Git pre-push hook            |
-| **Knowledge**     | `search_knowledge` (vector index)       | SessionStart hook, MCP tools |
-| **Review**        | `totem review` (LLM-powered analysis)   | PreToolUse hook (optional)   |
+| Layer             | What Totem Provides                     | Where You Wire It                                  |
+| ----------------- | --------------------------------------- | -------------------------------------------------- |
+| **Deterministic** | `totem lint` (compiled rules, zero LLM) | Git pre-push hook                                  |
+| **Knowledge**     | `search_knowledge` (vector index)       | SessionStart hook, MCP tools                       |
+| **Review**        | `totem review` (LLM-powered analysis)   | Strict pre-push block (the shield gate), on demand |
 
 ### The Git Hook (Product, All Users)
 
@@ -83,11 +83,13 @@ Two disclosures:
 - **Reach.** Exactly as with the pre-commit spec rule: until agent detection for Claude Code is restored (mmnto-ai/totem#2706), the strict arm fires only where `TOTEM_HOOK_TIER=strict` is set and on Cursor seats. Totem's own repo ships `tools/pre-push` at tier `standard` with the knob unset, so its local pushes print the advisory line and pass — its enforcement is the CI arm: `totem legs gate` is a hard step of its lint workflow, and `Totem Lint` is a required check on `main`. One diff shape is outside that arm: the Version Packages PR that `changesets/action` rebuilds on every push to main (`changeset-release/main`, same repository, exact name) deletes the consumed `.changeset/**` files and authors nothing, so a check step (`tools/release-train-shape.sh`) derives whether the diff is exactly the train's work and the gate is skipped, with a notice, only when every changed path is a deleted changeset, an added or modified `CHANGELOG.md` of a workspace package or a modified `package.json` of one, the deleted changesets are exactly the pending set at the merge base (never a subset, never the README) and a CHANGELOG was rendered whenever changesets were consumed (with nothing pending, only an empty diff is exempt); the content of the rendered files is not an owed path and stays the cut sensor's remit; anything else pushed onto that branch meets the gate, a diff that cannot be derived fails the step, and the `totem lint` step still runs either way (mmnto-ai/totem#2779).
 - **Scope.** The gate judges `HEAD`'s branch diff, not the ref list git hands the hook on stdin. Pushing a branch other than the checked-out one judges the wrong head — the pass line discloses which head it judged, so the mismatch is legible rather than silent.
 
-### The PreToolUse Hook (Reference Implementation, Opt-In)
+**The shield gate's own knob** (mmnto-ai/totem#2525). The same strict pre-push block runs `totem review --gate`, the shield gate, and `hooks.shield.enforce` decides what a failing run of it exits: `'advisory'` softens every failure raised after the config loads to exit `0`, `'advisory-when-legged'` softens one only when the legs gate above derives evidence for HEAD, and `'block'` or unset keep today's exits. The run prints the same error text either way and adds one `[Totem] shield: hooks.shield.enforce = …` line when the knob is set, plus — under `advisory-when-legged` only — the legs gate's own corrupt-deposit sensor rows, which the derivation prints rather than drops. It is read at run time, so the rendered hook is unchanged; it does not arm the shield on a standard-tier install, and the `doctor --strict` step of the same block is not affected. See [Configuration Reference](config-reference.md) § The Shield Exit Knob.
 
-For teams using AI agents, Totem provides a reference `PreToolUse` hook that uses **content hashing** to verify the agent reviewed the code before pushing. This is actor-aware. It only fires for the AI agent, never for the human developer.
+### What Ships on Claude Code
 
-This is a reference implementation. You can use it as-is, or use Totem's primitives to build your own.
+On Claude Code, Totem installs `PreToolUse` hooks into the project's committed `.claude/settings.json`: the write shield (`PreWriteShield`, on `Write|Edit`, installed by `totem init` when Claude Code is the selected tool) and the gate-engine interlocks installed by `totem gate install` or `totem init --gates=…` — `freeze-check` on `Write|Edit`, `transport-shield` and `merge-ready` on `Bash|PowerShell`. Each judges the one tool call in front of it and keeps no state of its own between calls: `merge-ready` reads the pull request off GitHub through `gh`, and `freeze-check` reads the freeze file. The write shield refuses a matching write. For a gate interlock, a `deny` verdict blocks the call at the strict tier, and at the pilot tier it is reported and the call proceeds; a `warn` verdict never blocks. A read the gate itself cannot derive (`merge-ready` unable to reach GitHub) is a `deny` at the strict tier and a `warn` at the pilot tier, except `freeze-check`, which fails closed at either tier; a failure of the wrapper itself (no resolvable CLI, the evaluation process failed, an unparseable verdict) blocks at either tier. They do not run the compiled rules — the pre-push Git hook enforces those, and CI reports them (its `totem lint` step is advisory while the rule-compilation freeze stands).
+
+These are project-settings hooks. By the Claude Code 2.1.287 declarations a mod (a plugin of function hooks) runs above them, and a managed-settings hook above every mod. Reproduced on 2.1.288 in a scratch repository: a mod loaded with `--plugin-dir` allowed a marked call that such a hook had refused, at `tool.check` and at `classic.PreToolUse` (mmnto-ai/totem#3002).
 
 ## Handling False Positives
 

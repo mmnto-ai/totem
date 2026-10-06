@@ -10,11 +10,11 @@ AI coding agents lose context between sessions and repeat architectural mistakes
 
 Totem provides the **sensors**. You wire the **actuators**.
 
-| What Totem Provides (Sensor)      | What You Wire (Actuator)     |
-| --------------------------------- | ---------------------------- |
-| `totem lint` — compiled rules     | Git pre-push hook            |
-| `search_knowledge` — vector index | SessionStart hook, MCP tools |
-| `totem review` — LLM analysis     | PreToolUse hook (optional)   |
+| What Totem Provides (Sensor)      | What You Wire (Actuator)                           |
+| --------------------------------- | -------------------------------------------------- |
+| `totem lint` — compiled rules     | Git pre-push hook                                  |
+| `search_knowledge` — vector index | SessionStart hook, MCP tools                       |
+| `totem review` — LLM analysis     | Strict pre-push block (the shield gate), on demand |
 
 Totem doesn't try to control the agent in real-time. It enforces a strict final output state — like a compiler, not a linter. The git hook runs `totem verify-manifest` and `totem lint` — stateless, deterministic, no LLM.
 

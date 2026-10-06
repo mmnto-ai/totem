@@ -17,6 +17,7 @@ import {
   wrapXml,
   writeOutput,
 } from '../utils.js';
+import type { ShieldKnobContext, ShieldLegsVerdict } from './shield-enforce.js';
 // totem-context: shield-templates is a pure constants + types + prompt-strings module with no runtime logic — static import is correct and the dynamic-imports-in-CLI lint rule is a false positive here
 import {
   describeDiffTruncation,
@@ -2033,7 +2034,55 @@ async function legCoverageForCovariate(
   });
 }
 
+/**
+ * The legs gate's verdict for HEAD, for `hooks.shield.enforce:
+ * 'advisory-when-legged'` (mmnto-ai/totem#2525). It runs the REAL gate — the
+ * same seam and derivation `totem legs gate` uses — over the config this run
+ * already loaded, with the `[Legs]` scope lines silenced inside the `[Review]`
+ * run. The gate's stderr rows (the corrupt-deposit sensor) are printed, never
+ * dropped; its stdout is the legs verb's to print, so the knob reads the
+ * structured verdict instead.
+ */
+async function deriveLegsVerdictForShield(ctx: ShieldKnobContext): Promise<ShieldLegsVerdict> {
+  const { buildLegsGateDeps, runLegsGate } = await import('./legs.js');
+  const { legsVerdictFromOutcome } = await import('./shield-enforce.js');
+  const deps = await buildLegsGateDeps({
+    cwd: ctx.cwd,
+    configRoot: ctx.configRoot,
+    config: ctx.config,
+    suppressScopeNarration: true,
+  });
+  const outcome = await runLegsGate({}, deps);
+  for (const line of outcome.stderr) console.error(line);
+  return legsVerdictFromOutcome(outcome);
+}
+
+/**
+ * `totem review` — the command body runs under `hooks.shield.enforce`
+ * (mmnto-ai/totem#2525), which a `--gate` run reads once the config is loaded
+ * and applies to the run's exit status at one point. Unset, and on every
+ * non-gate run, the body's outcome propagates exactly as before.
+ */
 export async function shieldCommand(options: ShieldOptions): Promise<void> {
+  const { runUnderShieldEnforce } = await import('./shield-enforce.js');
+  const { renderCliError } = await import('../error-render.js');
+  await runUnderShieldEnforce({
+    gate: options.gate === true,
+    run: (onConfig) => shieldCommandBody(options, onConfig),
+    deriveLegs: deriveLegsVerdictForShield,
+    renderError: renderCliError,
+    // `console.error`, the stream and writer the run's own lines and the
+    // rendered error use, so the knob line lands after them, in order.
+    print: (line) => {
+      console.error(line);
+    },
+  });
+}
+
+async function shieldCommandBody(
+  options: ShieldOptions,
+  onConfig: (ctx: ShieldKnobContext) => void,
+): Promise<void> {
   const path = await import('node:path');
   const { TotemConfigError, TotemError } = await import('@mmnto/totem');
   const { getDiffForReview } = await import('../git.js');
@@ -2133,6 +2182,7 @@ export async function shieldCommand(options: ShieldOptions): Promise<void> {
   const configRoot = path.dirname(configPath);
   loadEnv(cwd);
   const config = await loadConfig(configPath);
+  onConfig({ enforce: config.hooks?.shield?.enforce, cwd, configRoot, config });
 
   // ── Executable covariate transport (Prop 304 rev-5 item 4) — read-only, zero-LLM ──
   // Short-circuits BEFORE engine boot, fan activation, and every stamp-bearing

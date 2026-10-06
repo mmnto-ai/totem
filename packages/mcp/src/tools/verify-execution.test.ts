@@ -22,12 +22,38 @@ let mockExecFileSyncThrows = false;
  */
 let existingLockFiles: Set<string> = new Set();
 
+/** The absolute CLI entry the mocked resolver returns on a hit. */
+const FAKE_ENTRY = '/fake/project/node_modules/@mmnto/cli/dist/index.js';
+const RESOLVED_HIT = {
+  ok: true as const,
+  entry: FAKE_ENTRY,
+  version: '9.9.9',
+  tier: 'pinned' as const,
+};
+const LOOKED = [
+  'a workspace build at packages/cli/dist/index.js, walking up from /fake/project',
+  'a pinned install at node_modules/@mmnto/cli/dist/index.js, walking up from /fake/project',
+  'an npm-layout global install of @mmnto/cli on PATH',
+];
+/** What the mocked core resolver returns (mmnto-ai/totem#3008). */
+let mockResolution: unknown = RESOLVED_HIT;
+
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: class {},
 }));
 
+// The light core subpath the spawn resolves through; the barrel stays out of
+// this file, as for the context mock below.
+vi.mock('@mmnto/totem/cli-resolve', () => ({
+  resolveTotemCli: vi.fn(() => mockResolution),
+}));
+
 vi.mock('../context.js', () => ({
   getContext: vi.fn(async () => ({
+    projectRoot: '/fake/project',
+    config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
+  })),
+  getProjectBasics: vi.fn(async () => ({
     projectRoot: '/fake/project',
     config: { totemDir: '.totem', lanceDir: '.totem/.lance' },
   })),
@@ -123,6 +149,7 @@ describe('verify_execution', () => {
     mockUnstagedFiles = '';
     mockExecFileSyncThrows = false;
     existingLockFiles = new Set();
+    mockResolution = RESOLVED_HIT;
     vi.clearAllMocks();
     handle = setup();
   });
@@ -157,9 +184,10 @@ describe('verify_execution', () => {
     expect(result.content[0]!.text).toContain('Rule xyz violated');
   });
 
-  // --- Command detection ---
+  // --- The resolved CLI (mmnto-ai/totem#3008) ---
 
-  it('uses pnpm when pnpm-lock.yaml exists', async () => {
+  it('spawns node with the resolved entry, never a package manager, npx, a bare totem or a shell', async () => {
+    // A lockfile no longer picks the command: pnpm-lock.yaml present changes nothing.
     existingLockFiles = new Set(['pnpm-lock.yaml']);
     mockSpawnExitCode = 0;
     mockSpawnStdout = 'ok';
@@ -168,42 +196,17 @@ describe('verify_execution', () => {
 
     await handle({ staged_only: true });
 
-    // Find the last spawn call (earlier tests may have called spawn too)
-    const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
-    expect(lastCall[0]).toBe('pnpm');
-    expect(lastCall[1]).toEqual(expect.arrayContaining(['exec', 'totem', 'lint', '--staged']));
-  });
-
-  it('uses yarn when yarn.lock exists (no pnpm-lock.yaml)', async () => {
-    existingLockFiles = new Set(['yarn.lock']);
-    mockSpawnExitCode = 0;
-    mockSpawnStdout = 'ok';
-
-    const { spawn } = await import('node:child_process');
-
-    await handle({ staged_only: false });
-
-    const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
-    expect(lastCall[0]).toBe('yarn');
-    expect(lastCall[1]).toEqual(expect.arrayContaining(['totem', 'lint']));
-  });
-
-  it('uses npx when no lock file exists', async () => {
-    existingLockFiles = new Set();
-    mockSpawnExitCode = 0;
-    mockSpawnStdout = 'ok';
-
-    const { spawn } = await import('node:child_process');
-
-    await handle({ staged_only: true });
-
-    const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
-    expect(lastCall[0]).toBe('npx');
-    expect(lastCall[1]).toEqual(expect.arrayContaining(['totem', 'lint', '--staged']));
+    expect(vi.mocked(spawn)).toHaveBeenCalledTimes(1);
+    const [cmd, args, opts] = vi.mocked(spawn).mock.calls[0]!;
+    expect(cmd).toBe(process.execPath);
+    expect(args).toEqual([FAKE_ENTRY, 'lint', '--staged']);
+    for (const arg of args as string[]) {
+      expect(['npx', 'pnpm', 'yarn', 'totem']).not.toContain(arg);
+    }
+    expect((opts as { shell?: unknown }).shell).toBeFalsy();
   });
 
   it('does not include --staged flag when staged_only is false', async () => {
-    existingLockFiles = new Set(['pnpm-lock.yaml']);
     mockSpawnExitCode = 0;
     mockSpawnStdout = 'ok';
 
@@ -212,8 +215,43 @@ describe('verify_execution', () => {
     await handle({ staged_only: false });
 
     const lastCall = vi.mocked(spawn).mock.calls.at(-1)!;
-    expect(lastCall[0]).toBe('pnpm');
-    expect(lastCall[1]).toEqual(['exec', 'totem', 'lint']);
+    expect(lastCall[0]).toBe(process.execPath);
+    expect(lastCall[1]).toEqual([FAKE_ENTRY, 'lint']);
+  });
+
+  it('names the CLI that ran on the first line of the result', async () => {
+    mockSpawnExitCode = 0;
+    mockSpawnStdout = 'All checks passed.';
+
+    const result = (await handle({ staged_only: true })) as {
+      content: Array<{ type: string; text: string }>;
+    };
+
+    expect(result.content[0]!.text.split('\n')[0]).toBe('CLI: @mmnto/cli@9.9.9, pinned');
+  });
+
+  it('with nothing resolvable, spawns nothing and says NOT RUN with the three places looked', async () => {
+    mockResolution = {
+      ok: false,
+      looked: LOOKED,
+      unverified: ['/usr/local/bin/totem'],
+    };
+
+    const { spawn } = await import('node:child_process');
+
+    const result = (await handle({ staged_only: true })) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+    const text = result.content[0]!.text;
+    expect(text.startsWith('Verification: NOT RUN\n\nTotem CLI not found.')).toBe(true);
+    for (const place of LOOKED) expect(text).toContain(place);
+    expect(text).toContain(
+      'A totem executable was found on PATH at /usr/local/bin/totem but could not be verified as an npm-layout install of @mmnto/cli, so it was not run.',
+    );
   });
 
   // --- Output capture and truncation ---
@@ -243,8 +281,11 @@ describe('verify_execution', () => {
     // The output in the result should be truncated at or below 10,000 chars
     // (the source truncates captured chunks to MAX_OUTPUT_CHARS)
     const outputText = result.content[0]!.text;
-    // The full text includes "Verification: PASS\n\n" prefix plus the captured output
-    const capturedPart = outputText.replace('Verification: PASS\n\n', '');
+    // The full text includes the "CLI: ..." line and the "Verification: PASS\n\n"
+    // prefix plus the captured output
+    const capturedPart = outputText
+      .replace('CLI: @mmnto/cli@9.9.9, pinned\n', '')
+      .replace('Verification: PASS\n\n', '');
     expect(capturedPart.length).toBeLessThanOrEqual(10_000);
   });
 
@@ -292,10 +333,41 @@ describe('verify_execution', () => {
     expect(result.content[0]!.text).toContain('Lint spawn error');
   });
 
-  it('handles context initialization failure', async () => {
-    // Override getContext to throw for this test
+  it('runs lint when the vector store cannot be opened (mmnto-ai/totem#3009)', async () => {
+    // A primary-store fault makes getContext() reject; verify_execution needs
+    // only the project root and must not route through the store at all.
+    // (The real class is not imported: this file mocks node:child_process and
+    // node:fs for the tool alone, and the core barrel is kept out of it. The
+    // real rejection and getProjectBasics() over a corrupted primary store are
+    // exercised in context-linked-rebuild.test.ts.)
     const contextMock = await import('../context.js');
-    vi.mocked(contextMock.getContext).mockRejectedValueOnce(new Error('Config missing'));
+    vi.mocked(contextMock.getContext).mockRejectedValue(
+      Object.assign(new Error('[Totem Error] The vector store cannot be opened.'), {
+        name: 'StoreNeedsRebuildError',
+        code: 'STORE_NEEDS_REBUILD',
+      }),
+    );
+    mockSpawnExitCode = 0;
+    mockSpawnStdout = 'All checks passed.';
+
+    try {
+      const result = (await handle({ staged_only: true })) as {
+        content: Array<{ type: string; text: string }>;
+        isError?: boolean;
+      };
+
+      expect(result.isError).toBe(false);
+      expect(result.content[0]!.text).toContain('Verification: PASS');
+      expect(vi.mocked(contextMock.getContext)).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(contextMock.getContext).mockReset();
+    }
+  });
+
+  it('handles context initialization failure', async () => {
+    // Override the project-root loader to throw for this test
+    const contextMock = await import('../context.js');
+    vi.mocked(contextMock.getProjectBasics).mockRejectedValueOnce(new Error('Config missing'));
 
     const result = (await handle({ staged_only: true })) as {
       content: Array<{ type: string; text: string }>;
@@ -323,9 +395,9 @@ describe('verify_execution', () => {
     expect(result.content[0]!.text).not.toContain('WARNING');
   });
 
-  // --- Spawn options (#1023) ---
+  // --- Spawn options (#1023; no shell since mmnto-ai/totem#3008) ---
 
-  it('passes env and shell options to spawn for Windows compat (#1023)', async () => {
+  it('passes env to spawn and no shell (node runs the entry directly)', async () => {
     mockSpawnExitCode = 0;
     mockSpawnStdout = 'ok';
 
@@ -338,6 +410,6 @@ describe('verify_execution', () => {
     const env = opts.env as Record<string, unknown>;
     expect(env).toBeDefined();
     expect(Object.keys(env).some((k) => k.toLowerCase() === 'path')).toBe(true);
-    expect(typeof opts.shell).toBe('boolean');
+    expect(opts.shell).toBeFalsy();
   });
 });

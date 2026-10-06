@@ -1,0 +1,56 @@
+K4 header
+  @mmnto/totem   2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\staging-2.10.0\node_modules\@mmnto\totem\dist\index.js)
+  @mmnto/cli     2.10.0  (C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\7caeb8dd-7faf-464a-ba1b-28a37a7f73bb\scratchpad\staging-2.10.0\node_modules\@mmnto\cli)
+  checkout       2.11.0 declared by C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\4e85119e-ea36-4157-85e9-8be46b85c7f5\scratchpad\prepin-clone-b4\packages\core\package.json
+  node           v24.16.0
+  @ast-grep/napi 0.42.3
+  languages      javascript · tsx · typescript  (extensions .cjs .cts .js .jsx .mjs .mts .ts .tsx)
+  packs          none declared (packs.length 0, packsLoaded 0 — packsLoaded === packs.length holds)
+  records        C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\4e85119e-ea36-4157-85e9-8be46b85c7f5\scratchpad\prepin-clone-b4\.totem\rules
+
+set sha256: 2263305cfbbe8b792d8884d8091a311676ba8ddedf75e852fa9ab434de950ca5 (the freeze's splitRef suffix is its first 8 hex)
+set: operations-local/gate5/manifest-2263305c.json — 53 rule(s), manifest order
+--only: 14 entries selected
+note: 42 record file(s) outside the selected set are ignored: mig-0615c43e-dot-git-existence-test.rule.yaml, mig-06282905-execsync-call-js.rule.yaml, mig-06282905-execsync-call.rule.yaml, mig-1210f02d-raw-error-throw-in-cli.rule.yaml, mig-2266fc0d-static-named-import-totem-barrel.rule.yaml, mig-240f19ca-process-exit-call-js.rule.yaml, mig-240f19ca-process-exit-call.rule.yaml, mig-24f112fe-error-message-prefix.rule.yaml, mig-2d3ac4b9-gemini-md-lowercase-path.rule.yaml, mig-329479bf-zod-string-array-min1.rule.yaml, mig-391de708-hardcoded-main-head-range.rule.yaml, mig-3c777370-brace-expansion-glob.rule.yaml, mig-427c97fb-partial-matcher-secret-masking.rule.yaml, mig-434c51ff-split-on-markdown-heading.rule.yaml, mig-487a0a23-static-import-in-cli-commands.rule.yaml, mig-4ac94d6f-bare-start-anchor-regex.rule.yaml, mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml, mig-54140f59-bare-issue-number-refs.rule.yaml, mig-55797450-git-add-all.rule.yaml, mig-56c801df-text-embedding-004-literal.rule.yaml, mig-5afaf8d0-emoji-in-docs.rule.yaml, mig-5da43ea6-git-double-dash-separator.rule.yaml, mig-61bb8b8b-json-parse-as-cast.rule.yaml, mig-638d6fcc-execfilesync-git-shell-option.rule.yaml, mig-64bb807f-typeof-object-without-null-guard.rule.yaml, mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml, mig-6f362fa2-json-parse-as-cast-core.rule.yaml, mig-7056157a-hardcoded-git-hooks-path.rule.yaml, mig-71935fe9-string-cast-on-input-js.rule.yaml, mig-71935fe9-string-cast-on-input.rule.yaml, mig-7cdfa106-dynamic-import-outside-cli-entry.rule.yaml, mig-81f72c85-promise-allsettled.rule.yaml, mig-83b86cd7-mcp-fields-optional.rule.yaml, mig-87aff037-fail-open-catch-ban.rule.yaml, mig-87e24374-diff-header-plus-b-literal.rule.yaml, mig-a190836d-raw-git-exec.rule.yaml, mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml, mig-bc8b99e8-console-log-in-mcp.rule.yaml, mig-cf65e2b4-inline-json-parse-readfilesync.rule.yaml, mig-f202f65f-bare-rejects-tothrow.rule.yaml, mig-fb05f895-direct-child-process-import.rule.yaml, mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml
+
+40. 884becd45e6380bd (rank 176)  differential-satisfied
+    mig-884becd4-bare-pnpm-version.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+41. 089b0c628b330c16 (rank 179)  differential-satisfied
+    mig-089b0c62-console-any-method-core.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+42. 427481b534fe3392 (rank 180)  differential-satisfied
+    mig-427481b5-console-warn-core.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+43. 5c5fe9d9060bcb6d (rank 181)  differential-satisfied
+    mig-5c5fe9d9-console-warn-core-onwarn.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+44. 61dcb058bd1df15d (rank 182)  differential-satisfied
+    mig-61dcb058-delete-totem-lessons-md.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+45. fb008f77a1f5a49a (rank 187)  differential-satisfied  (2 records)
+    mig-fb008f77-spawnsync-string-command-js.rule.yaml [ast-grep@.js] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+    mig-fb008f77-spawnsync-string-command.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+46. 8435c024569ffa51 (rank 188)  differential-satisfied
+    mig-8435c024-gemini-md-lowercase.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+47. 8213cd4e21b375ba (rank 189)  differential-satisfied
+    mig-8213cd4e-closes-keyword-issue-list.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+48. b34d95158d37f5a9 (rank 191)  differential-satisfied
+    mig-b34d9515-junie-file-location.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent
+49. 7e3eefeaa85403d0 (rank 192)  differential-satisfied
+    mig-7e3eefea-lesson-heading-separator.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=silent
+50. d487264e210913a4 (rank 193)  differential-satisfied
+    mig-d487264e-try-expect-fail-catch.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+51. 4ae0a01d912f8742 (rank 196)  differential-satisfied
+    mig-4ae0a01d-bare-totem-extract-alias.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+52. 63680bf329d59167 (rank 197)  differential-satisfied
+    mig-63680bf3-process-exit-cli.rule.yaml [ast-grep@.ts] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: identical · legacy/pair0: bad=FIRES good=silent
+53. b3e3e2b380a0b1be (rank 198)  differential-satisfied
+    mig-b3e3e2b3-git-lc-all.rule.yaml [regex] validate=compiled · differential-satisfied: pair0: bad=FIRES good=silent · fidelity: payload (inventory ii) (expected) · legacy/pair0: bad=FIRES good=FIRES
+
+Validate: 15 record(s) — parsed 15, compiled 15, lowering-rejected 0, harness failures 0; expectation mismatches 0
+Fidelity (records): 12/15 identical, 3 expected divergence(s), 0 UNEXPECTED
+Fidelity (entries): 11/14 identical, 3 expected divergence(s), 0 UNEXPECTED
+Differential split (measured, per entry):
+  differential-satisfied   14  (entries 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53)
+  good-also-fires          0
+  bad-does-not-fire        0
+  not-evaluable            0
+Differential expectation mismatches: 0
+
+Verdict: PASS (exit 0) — validate mismatches 0, harness throws 0, unexpected fidelity 0, differential mismatches 0

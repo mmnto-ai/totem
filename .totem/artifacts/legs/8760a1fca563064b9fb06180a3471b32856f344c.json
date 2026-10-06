@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "8760a1fca563064b9fb06180a3471b32856f344c",
+  "readAt": "2026-10-03T01:15:15.111Z",
+  "folded": ["3009-R1", "3009-R2", "3009-R3", "3009-R4", "3009-R5", "3009-R6", "3009-R7"],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 4 MINOR, 1 QUESTION over 65a740ba..8760a1fc, the scoped re-armed read of the first fold (mmnto-ai/totem#3009): the code converged (the pending-retry, getProjectBasics() and the add_lesson fallback hold; a store cannot sit in both maps; reconnectStore is reachable only after add_lesson's sync or a failed search; getProjectBasics resolves .env and config exactly as getContext does and constructs no store or embedder; the lesson write and lock path are unchanged; describe_project already falls back), the release prose did not. The two material findings are factual errors in the changeset and doc (review --learn rebuilds only under --mode structural; the gate's exit depends on hooks.shield.enforce), folded with the minors (the capped sync's wording, the rejoin's unguarded count, handles released on every connect failure, the Lite-tier widening of verify_execution disclosed) in the second fold commit; the seat names convergence: both reads converged on the code and the remaining folds are prose and two guards.",
+  "findings": [
+    {
+      "id": "3009-R1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/shield.ts",
+      "line": 2558,
+      "claim": "The changeset and doc said totem review --learn still rebuilds through its embedded sync; in standard mode the body's store.connect() throws first, so only --mode structural reaches that sync.",
+      "counterexample": "FOLDED: both sentences name --mode structural; standard-mode review --learn is listed with the readers that stop with the cure."
+    },
+    {
+      "id": "3009-R2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/shield-enforce.ts",
+      "line": 197,
+      "claim": "The changeset said the review gate fails closed with exit 1 on a store fault; runUnderShieldEnforce softens any thrown error under advisory (and advisory-when-legged with a deposit) to exit 0 with the error rendered, so the claim holds only when the knob is unset or block.",
+      "counterexample": "FOLDED: the sentence is qualified by the knob's value."
+    },
+    {
+      "id": "3009-R3",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/tools/add-lesson.ts",
+      "line": 383,
+      "claim": "When the 60-second capped sync does not finish, the old store is already deleted and a checkpointed full rebuild is left to resume, yet the result said the sync did not rebuild the store.",
+      "counterexample": "FOLDED: the result says a rebuild was started and did not finish within 60 s and that the next totem sync resumes it; the changeset says the sync starts the rebuild."
+    },
+    {
+      "id": "3009-R4",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/context.ts",
+      "line": 146,
+      "claim": "After a successful rejoin the count() ran outside any try, so a count error escaped _reconnectOnContext and skipped the remaining pending stores, unlike init's guarded count.",
+      "counterexample": "FOLDED: the count is guarded as at init."
+    },
+    {
+      "id": "3009-R5",
+      "severity": "MINOR",
+      "file": "packages/core/src/store/lance-store.ts",
+      "line": 162,
+      "claim": "releaseHandles() ran only for StoreNeedsRebuildError, so a non-rebuild connect error left this.db set and a later retry overwrote it unclosed.",
+      "counterexample": "FOLDED: handles are released on every connect failure before the rethrow (or the case is named in a comment if the change was not one line)."
+    },
+    {
+      "id": "3009-R6",
+      "severity": "MINOR",
+      "file": "packages/mcp/src/context.test.ts",
+      "line": 110,
+      "claim": "The pending loop's empty-store rejoin, the count-throws case and add_lesson's failure-message branch had no test; the existing assertions are strong and fail on the pre-fold code; the stand-in error class in add-lesson.test.ts is matched by the real class identity shown in context-linked-rebuild.test.ts.",
+      "counterexample": "ACCEPTED as disclosed; no further test added in this PR."
+    },
+    {
+      "id": "3009-R7",
+      "severity": "QUESTION",
+      "file": "packages/mcp/src/context.ts",
+      "line": 545,
+      "claim": "getProjectBasics() skips requireEmbedding, so verify_execution now runs on a config with no embedding block where it used to fail; intended?",
+      "counterexample": "ANSWERED: intended, a lint needs no embedder; one changeset clause says so."
+    }
+  ]
+}

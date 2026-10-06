@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "7ed63dd6356bb6b0442fbcfb4f27ad2a195e867d",
+  "readAt": "2026-10-03T20:56:38.544Z",
+  "findings": [
+    {
+      "id": "3008-C1",
+      "severity": "MINOR",
+      "file": "packages/core/src/cli-resolve.ts",
+      "line": 103,
+      "claim": "GlobalProbe.unverified is documented as paths of a totem executable found on PATH that is not an npm-layout install of @mmnto/cli.",
+      "counterexample": "FOLDED as a comment in the next commit: it now says a totem file that could not be verified as an install of @mmnto/cli, by its path or its manifest's name. As found: at 7ed63dd6 an entry lands in the list because its directory gave no hit under the path-or-top-level-name rule (a POSIX link to a fork outside node_modules, for one); cli-spawn.ts and the changeset already said 'could not be verified as', and only this type comment kept the identity wording."
+    }
+  ],
+  "folded": [
+    "3008-C1"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 1 MINOR, 0 QUESTION over bb8540e0..7ed63dd6, the scoped re-armed read of the bot-round fold (mmnto-ai/totem#3008): the path-identity rule, the shim requirement and the top-level name read are correct, cannot throw, and match the prose; one type comment still carried the old identity wording. The leg named convergence: no further read is warranted."
+}

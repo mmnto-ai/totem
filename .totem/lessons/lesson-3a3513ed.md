@@ -1,0 +1,6 @@
+## Lesson — Totem's own CLI is resolved explicitly, never by bare npx
+
+**Tags:** security, npm, cli, mcp
+**Scope:** packages/core/src/cli-resolve.ts, packages/mcp/src/cli-spawn.ts
+
+Three places picked the Totem CLI command from the project's lockfile and ended in a bare `npx totem`: the MCP server's `verify_execution` and `add_lesson`, and the CLI's two lesson-adding commands. The bare name on the registry is an unrelated package (an avatar library, read on 2026-10-04), so with no local install that fallback names someone else's code. One resolver in core now serves the MCP spawners and the CLI's entry re-exec. Its tiers, first hit wins: the workspace build, guarded on the CLI package's manifest naming `@mmnto/cli`; the pinned install; then a global on PATH in one of npm's two layouts. Otherwise it returns a refusal that names the three places looked, and the MCP wrapper adds the cure. It never fetches. The tiers differ on purpose from the git hooks' cascade: a spawn inside a tool call runs unattended, with nobody at a terminal to see what was fetched, so it stops at a local entry or an npm-layout global (mmnto-ai/totem#3018). Not reproduced: on a machine with a global install, `npx --no -- totem --version` in an empty directory ran the global and fetched nothing, so the foreign-package case needs a machine with neither a global nor a local CLI.

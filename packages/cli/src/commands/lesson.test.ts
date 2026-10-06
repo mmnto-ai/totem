@@ -197,6 +197,83 @@ describe('lesson add', () => {
     expect(output).toContain('Lesson saved to');
     expect(output).toContain('.totem/lessons/');
   });
+
+  // ─── The background sync spawns this CLI itself (mmnto-ai/totem#3008) ───
+
+  it('the full entry spawns node with process.argv[1] sync --incremental, no shell', async () => {
+    scaffold(tmpDir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { spawn } = await import('node:child_process');
+    vi.mocked(spawn).mockClear();
+
+    const { lessonAddCommand } = await import('./lesson.js');
+    await lessonAddCommand('Self-spawned sync lesson.');
+
+    expect(vi.mocked(spawn)).toHaveBeenCalledTimes(1);
+    const [cmd, args, opts] = vi.mocked(spawn).mock.calls[0]!;
+    expect(cmd).toBe(process.execPath);
+    expect(args).toEqual([process.argv[1], 'sync', '--incremental']);
+    for (const arg of args as string[]) {
+      expect(['npx', 'pnpm', 'yarn', 'totem', 'exec']).not.toContain(arg);
+    }
+    expect((opts as { shell?: unknown }).shell).toBeFalsy();
+  });
+
+  it('backgroundSync: false (the lite entry) spawns nothing and prints the one line', async () => {
+    scaffold(tmpDir);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { spawn } = await import('node:child_process');
+    vi.mocked(spawn).mockClear();
+
+    const { lessonAddCommand } = await import('./lesson.js');
+    await lessonAddCommand('Lite lesson.', { backgroundSync: false });
+
+    expect(vi.mocked(spawn)).not.toHaveBeenCalled();
+    const lessonsDir = path.join(tmpDir, '.totem', 'lessons');
+    expect(fs.readdirSync(lessonsDir).filter((f) => f.endsWith('.md'))).toHaveLength(1);
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain(
+      'Index not refreshed: the lite build has no sync. Run totem sync with the full CLI (@mmnto/cli) to index this lesson.',
+    );
+    expect(output).not.toContain('Triggering background re-index');
+  });
+});
+
+describe('add-lesson (deprecated alias) background sync (mmnto-ai/totem#3008)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+  });
+
+  it('spawns node with process.argv[1] sync --incremental, no shell', async () => {
+    scaffold(tmpDir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const { spawn } = await import('node:child_process');
+    vi.mocked(spawn).mockClear();
+
+    const { addLessonCommand } = await import('./add-lesson.js');
+    await addLessonCommand('Self-spawned sync from the alias.');
+
+    expect(vi.mocked(spawn)).toHaveBeenCalledTimes(1);
+    const [cmd, args, opts] = vi.mocked(spawn).mock.calls[0]!;
+    expect(cmd).toBe(process.execPath);
+    expect(args).toEqual([process.argv[1], 'sync', '--incremental']);
+    for (const arg of args as string[]) {
+      expect(['npx', 'pnpm', 'yarn', 'totem', 'exec']).not.toContain(arg);
+    }
+    expect((opts as { shell?: unknown }).shell).toBeFalsy();
+  });
 });
 
 describe('deprecated aliases', () => {

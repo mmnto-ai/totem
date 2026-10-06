@@ -40,10 +40,15 @@ export {
 } from './badge-verifier.js';
 
 // Error hierarchy
-export type { TotemErrorCode } from './errors.js';
+export type {
+  StoreNeedsRebuildDetails,
+  StoreNeedsRebuildReason,
+  TotemErrorCode,
+} from './errors.js';
 export {
   getErrorMessage,
   rethrowAsParseError,
+  StoreNeedsRebuildError,
   TotemCompileError,
   TotemConfigError,
   TotemDatabaseError,
@@ -60,6 +65,23 @@ export { buildMissingSdkHint } from './missing-sdk.js';
 // pulling this barrel.
 export type { AtomicWriteOptions } from './fs-atomic.js';
 export { writeFileAtomicSync } from './fs-atomic.js';
+
+// Totem's own CLI, resolved explicitly for unattended spawns (mmnto-ai/totem#3008).
+// Also exported as the `@mmnto/totem/cli-resolve` subpath so callers that must
+// not load this barrel (the CLI's re-exec) can static-import it.
+export type {
+  CliResolution,
+  CliResolveFs,
+  GlobalEntry,
+  GlobalProbe,
+  LocalEntry,
+} from './cli-resolve.js';
+export {
+  NODE_CLI_RESOLVE_FS,
+  resolveGlobalEntry,
+  resolveLocalEntry,
+  resolveTotemCli,
+} from './cli-resolve.js';
 
 // Gate engine (WS3 — Proposal 288 §6.2)
 export type {
@@ -267,6 +289,7 @@ export { createEmbedder, isOllamaAvailable } from './embedders/embedder.js';
 
 // Store
 export { TOTEM_TABLE_NAME } from './store/lance-schema.js';
+export type { ConnectOptions } from './store/lance-store.js';
 export { LanceStore } from './store/lance-store.js';
 export type { DistanceMetric } from './store/relevance.js';
 export {
@@ -1058,11 +1081,15 @@ export type {
   SaveLegDepositResult,
 } from './artifacts/legs.js';
 export {
+  BARE_REF_REGEX_SOURCE,
   countLegFindings,
+  findBareRefsInLegDeposit,
   findLegDepositForHead,
   LEG_DEPOSIT_KNOWN_MAJOR,
   LEG_DEPOSIT_SCHEMA_VERSION,
   LEG_FINDING_SEVERITIES,
+  type LegDepositBareRef,
+  LegDepositBareRefError,
   LegDepositExistsError,
   legDepositPath,
   LegDepositSchema,

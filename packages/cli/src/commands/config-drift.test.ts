@@ -189,7 +189,34 @@ describe('agent instruction files match consumer AI_PROMPT_BLOCK', () => {
     expect(AI_PROMPT_BLOCK).toContain('`CURSOR_TRACE_ID`');
     expect(AI_PROMPT_BLOCK).toContain('totem hook install --strict');
     expect(AI_PROMPT_BLOCK).not.toContain('which AI agents get automatically');
-    expect(REFLEX_VERSION).toBe(16);
+    expect(REFLEX_VERSION).toBe(17);
+  });
+
+  // The degradation item (mmnto-ai/totem#2933 ask 3): when the Totem MCP tools
+  // are absent from a session, the two MUST-call reflexes name their CLI
+  // fallbacks instead of failing silently. Both verbs are locked by name inside
+  // the new item, so a later edit that drops either one is loud.
+  it('the reflex block names the CLI fallbacks for absent Totem tools', () => {
+    const start = AI_PROMPT_BLOCK.indexOf('**When the Totem tools are absent:**');
+    expect(start).toBeGreaterThan(-1);
+    const end = AI_PROMPT_BLOCK.indexOf('\n', start);
+    const item = AI_PROMPT_BLOCK.slice(start, end);
+    expect(item).toContain('totem search "<query>"');
+    expect(item).toContain('totem lesson add "<text>"');
+    expect(item).toContain('Tell the user');
+    // The item claims only what the agent can see: the tools, not the server.
+    expect(item).toContain('(hosts may prefix MCP tool names)');
+    expect(item).toContain('the Totem MCP tools are not available in this session');
+    expect(item).not.toContain('server is not connected');
+    // The item names no cause and no doctor row: in the one cause it once
+    // named (an untrusted Gemini CLI folder) Gemini CLI does not load the
+    // project GEMINI.md, so the item could not reach that seat.
+    expect(item).not.toContain('Gemini');
+    expect(item).not.toContain('totem doctor');
+    // Scoped to agents with a terminal: a cloud bot with no local CLI (the
+    // block's own Cloud / PR Review Bots section) stops at telling the user.
+    expect(item).toContain('Tell the user. If you have a terminal, use it instead:');
+    expect(item.endsWith('A cloud bot with no local CLI stops at telling the user.')).toBe(true);
   });
 });
 

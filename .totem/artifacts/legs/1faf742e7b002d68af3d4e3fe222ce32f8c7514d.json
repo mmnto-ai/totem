@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "1faf742e7b002d68af3d4e3fe222ce32f8c7514d",
+  "readAt": "2026-10-05T20:28:31.523Z",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/legs-deposit-bare-refs.md",
+      "line": 3,
+      "claim": "The changeset bumps the fixed group patch although the commit adds three public core exports, a TotemErrorCode member and a new refusal in the public saveLegDeposit.",
+      "counterexample": "The repo record .totem/specs/2564.md line 214 rules patch vs new public API as minor; commits 25f97835, f156c3c0, 57e9af5d and 22aca90e added core API with @mmnto/totem minor. Exports at packages/core/src/index.ts lines 1084-1092, code at errors.ts line 56."
+    },
+    {
+      "id": "F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 188,
+      "claim": "A look-alike line is never named and the walk order does not matter (legs.ts line 175, PR body, record, commit message).",
+      "counterexample": "Measured probes: INNER (line 5 is b holding q, an escaped quote and hash-1; line 6 is the integer key 0 holding hash-1) prints line 5 twice and never line 6, because the canonical token of hash-1 is found inside line 5's token. DOTKEY (a.b holding hash-1 on line 5, a then b holding hash-2 on line 6) prints both on line 5, because both paths are $.a.b and the locate cache is keyed by path (core legs.ts line 102 builds non-injective paths). KEYSUFFIX collides the same way. DUPKEY names the dead first duplicate. DOTKEY and INNER passed on the 64cedf61 verb. The refusal still fires."
+    },
+    {
+      "id": "F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 230,
+      "claim": "The row escaped (no literal in the text) names references with no literal in the file.",
+      "counterexample": "A string holding hash-12 and an em-dash written as its JSON unicode escape (Python json.dump default) on line 5 prints escaped (no literal in the text) for hash-12 although the literal sits on line 5; the 64cedf61 verb printed line 5."
+    },
+    {
+      "id": "F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/legs.test.ts",
+      "line": 383,
+      "claim": "The tests pin the canonical-token locator, the check before the exists check, the escaped row cap and the backstop over every string.",
+      "counterexample": "Surviving mutants: token as the decoded carrier instead of JSON.stringify (all 9 verb tests pass), CR counted as a line break, escaped list uncapped; in core, the check moved after the exists check, the error cap removed, and the backstop walking only findings (verdict unchecked) pass both core tests."
+    },
+    {
+      "id": "F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/artifacts/legs.ts",
+      "line": 62,
+      "claim": "The pattern is single-sourced for every writer (JSDoc; record Architectural Context).",
+      "counterexample": "packages/cli/src/commands/init-templates.ts line 136 exports a second BARE_REF_REGEX_SOURCE from which the write shield is rendered (lines 503 and 780); no test asserts equality with core's; the AUTO_CLOSE pattern is single-sourced from core into the same template (PreWriteShield.cjs line 23)."
+    },
+    {
+      "id": "Q1",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/legs.ts",
+      "line": 369,
+      "claim": "Is the verb's PARSE_FAILED code for the bare-reference refusal deliberate now that LEG_DEPOSIT_BARE_REF exists?",
+      "counterexample": "A caller of legsDepositCommand keying on code LEG_DEPOSIT_BARE_REF misses the verb's refusal; the library throws the new code for the same condition."
+    },
+    {
+      "id": "Q2",
+      "severity": "QUESTION",
+      "file": ".totem/artifacts/legs/5d660654d24cf3f36df4313081061afeb9ca3f95.json",
+      "line": 4,
+      "claim": "Leg 1's readAt follows the launch-plus-duration convention.",
+      "counterexample": "Transcript agent-a51900fe97ec3a9d3.jsonl birth 19:43:41.968Z plus the PR body's 445,574 ms is 19:51:07.542Z; the deposit says 19:51:07.468Z (74 ms apart). Leg 2's readAt matches its transcript exactly."
+    }
+  ],
+  "folded": [
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "Q1",
+    "Q2"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 4 MINOR, 2 QUESTION over 64cedf61..1faf742e; convergence named for the refusal semantics (14 core mutants, 22 verb mutants, 21 probes: no decoded bare reference reaches the store, no false refusal); every item folded at the next commit — F1 as the minor bump; F2 by a token-boundary check, injective paths from core and the duplicate-key limit disclosed; F3 by an honest row label; F4 by six verb tests and two core tests; F5 by an equality test and narrowed prose; Q1 by the verb throwing LEG_DEPOSIT_BARE_REF; Q2 answered: the deposit's instant came from the harness output file's mtime plus the duration, the transcript's birth time is 74 ms later, both launch-plus-duration; the locator change re-arms a fourth leg with the convergence question"
+}

@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 16;
+export const REFLEX_VERSION = 17;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -31,6 +31,7 @@ You have access to the Totem MCP for long-term project memory. You MUST operate 
    - **The Pivot Trigger:** If the user introduces a new architectural pattern or deprecates an old one. (Anchor the rule).
    - **The Handoff Trigger:** At the end of a session or when wrapping up a complex feature, extract the non-obvious lessons learned and anchor them.
 5. **Tool Preference (MCP over CLI):** Always prioritize using dedicated MCP tools (e.g., GitHub, Supabase, Vercel) over executing generic shell commands (like \`gh issue view\` or \`curl\`). MCP tools provide structured, un-truncated data optimized for your context window. Only fall back to bash execution if an MCP tool is unavailable or fails.
+6. **When the Totem tools are absent:** If no \`search_knowledge\` or \`add_lesson\` tool is in your tool list (hosts may prefix MCP tool names), the Totem MCP tools are not available in this session. Tell the user. If you have a terminal, use it instead: \`totem search "<query>"\` in place of \`search_knowledge\`, and \`totem lesson add "<text>"\` in place of \`add_lesson\`. A cloud bot with no local CLI stops at telling the user.
 
 Lessons are automatically re-indexed in the background after each \`add_lesson\` call — no manual sync needed.
 
@@ -729,30 +730,6 @@ This ensures you build on existing knowledge rather than repeating past mistakes
 
 // --- Claude Code hook templates ---
 
-export const CLAUDE_SHIELD_GATE = `// [totem] auto-generated — Claude Code review gate hook
-// Intercepts git push/commit to run \`totem review\` before proceeding.
-const { execSync } = require('child_process');
-
-const input = process.env.TOOL_INPUT || '';
-if (/\bgit\s+(push|commit)\b/.test(input)) {
-  try {
-    execSync('totem lint', { encoding: 'utf-8', timeout: 60000, stdio: 'inherit' });
-  } catch (err) {
-    process.exit(1);
-  }
-}
-`;
-
-export const CLAUDE_PRETOOLUSE_ENTRY = {
-  matcher: 'Bash',
-  hooks: [
-    {
-      type: 'command',
-      command: 'node .totem/hooks/shield-gate.cjs',
-    },
-  ],
-};
-
 // ─── PreWriteShield: write-time xrepo-qualify-refs enforcement ──────────
 //
 // Intercepts Write/Edit tool calls in substrate-participating paths
@@ -775,11 +752,9 @@ export const CLAUDE_PRETOOLUSE_ENTRY = {
 // Exit-code contract is load-bearing — see hook source for details.
 //
 // Per OQ 2 of mmnto-ai/totem#1846 design: this entry installs into
-// committed `.claude/settings.json` (team-level guarantee) — distinct
-// from CLAUDE_PRETOOLUSE_ENTRY which lives in `.claude/settings.local.json`
-// (per-developer environment safety). The asymmetry reflects the
-// architectural distinction between seal-anchored substrate enforcement
-// and per-developer command interception.
+// committed `.claude/settings.json` (team-level guarantee), not the
+// per-developer `.claude/settings.local.json`, because seal-anchored
+// substrate enforcement is a team-level guarantee.
 
 export const CLAUDE_PREWRITESHIELD = `// [totem] auto-generated — Claude Code PreWriteShield hook
 // Rule 1: xrepo-qualify-refs (bare cross-repo refs) —
