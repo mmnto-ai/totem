@@ -58,6 +58,93 @@ export const LEG_DEPOSIT_SCHEMA_VERSION = '1.1.0';
 /** The major this reader understands; another major needs a migration entry. */
 export const LEG_DEPOSIT_KNOWN_MAJOR = 1;
 
+/**
+ * The bare cross-repo reference pattern, single-sourced for every writer: the
+ * compiled `xrepo-qualify-refs` rule's and the write shield's pattern — a `#`
+ * followed by digits, not preceded by `<owner>/<repo>`, with no word character
+ * or hyphen after the digits. Build a fresh `RegExp` with the `g` flag per use;
+ * a shared global regex carries `lastIndex` between callers (mmnto-ai/totem#3023).
+ */
+export const BARE_REF_REGEX_SOURCE = '(?<!\\b[\\w-]+/[\\w-]+)#(\\d+)(?![-\\w])';
+
+/** One bare reference found in a deposit's strings. */
+export interface LegDepositBareRef {
+  /** Where the carrying string sits: a JSON path for a value, the path plus `(key)` for a key. */
+  path: string;
+  /** The match itself: `#` plus digits. */
+  ref: string;
+  /** The DECODED string that carries the match, whole. */
+  carrier: string;
+}
+
+/**
+ * Every bare reference in the DECODED strings of `value` — keys and values at
+ * every depth, in walk order. The decoded string is what a deposit carries, so
+ * it is the authority: a reference authored as a JSON escape is caught as what
+ * it decodes to, and a qualified reference whose slash was escaped is read as
+ * qualified (mmnto-ai/totem#3023).
+ */
+export function findBareRefsInLegDeposit(value: unknown): LegDepositBareRef[] {
+  // One RegExp per walk, not per string: `matchAll` clones the regex it is
+  // handed (lastIndex included), so sharing it across nodes is safe (Gemini on
+  // mmnto-ai/totem#3025).
+  const pattern = new RegExp(BARE_REF_REGEX_SOURCE, 'g');
+  const hits: LegDepositBareRef[] = [];
+  const visit = (node: unknown, at: string): void => {
+    if (typeof node === 'string') {
+      for (const match of node.matchAll(pattern)) {
+        hits.push({ path: at, ref: match[0], carrier: node });
+      }
+      return;
+    }
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, `${at}[${index}]`));
+      return;
+    }
+    if (typeof node === 'object' && node !== null) {
+      for (const [key, item] of Object.entries(node)) {
+        visit(key, `${at}${pathSegment(key)} (key)`);
+        visit(item, `${at}${pathSegment(key)}`);
+      }
+    }
+  };
+  visit(value, '$');
+  return hits;
+}
+
+/** A key that reads as a plain identifier joins the path with a dot; any other is bracket-quoted, so two different keys never share a path. */
+const PLAIN_KEY = /^[A-Za-z_$][\w$]*$/;
+
+function pathSegment(key: string): string {
+  return PLAIN_KEY.test(key) ? `.${key}` : `[${JSON.stringify(key)}]`;
+}
+
+/** How many offending entries {@link LegDepositBareRefError} names before collapsing the rest. */
+const MAX_NAMED_BARE_REFS = 10;
+
+/**
+ * The writer's refusal of a deposit that carries a bare reference: every path
+ * to the library's `saveLegDeposit` passes it, so a programmatic writer is held
+ * to the same rule as `totem legs deposit` (mmnto-ai/totem#3023). The CLI verb
+ * scans first and names file lines; this is the backstop, which names JSON
+ * paths. Strings have passed the schema by now, so no control byte is echoed.
+ */
+export class LegDepositBareRefError extends TotemError {
+  readonly hits: readonly LegDepositBareRef[];
+
+  constructor(hits: LegDepositBareRef[]) {
+    const shown = hits.slice(0, MAX_NAMED_BARE_REFS).map((hit) => `  ${hit.path}: ${hit.ref}`);
+    if (hits.length > shown.length) shown.push(`  +${hits.length - shown.length} more`);
+    super(
+      'LEG_DEPOSIT_BARE_REF',
+      `The leg deposit carries ${hits.length} bare reference(s):\n${shown.join('\n')}`,
+      'Qualify each as <owner>/<repo>#NNN in the findings before depositing; a deposit is a record and is not amended after the write (mmnto-ai/totem#3023).',
+    );
+    this.name = 'LegDepositBareRefError';
+    this.hits = hits;
+  }
+}
+
 /** Major-1 semver literal — keep in sync with {@link LEG_DEPOSIT_KNOWN_MAJOR}. */
 const LEG_SCHEMA_VERSION_RE = /^1\.\d+\.\d+$/;
 
@@ -333,6 +420,10 @@ export function saveLegDeposit(
   // Validate on the way OUT (the run/admission/verdict precedent): a writer bug
   // must never poison a store whose reader would then report it as corrupt.
   const validated = LegDepositSchema.parse(deposit);
+  // A bare reference is refused before the address is even looked at: a
+  // deposit is a record and is not amended once written (mmnto-ai/totem#3023).
+  const bareRefs = findBareRefsInLegDeposit(validated);
+  if (bareRefs.length > 0) throw new LegDepositBareRefError(bareRefs);
   const filePath = legDepositPath(totemDirAbs, validated.diffSha);
 
   let replaced: { readAt: string | undefined } | undefined;

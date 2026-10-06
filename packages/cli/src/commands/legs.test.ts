@@ -25,6 +25,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  BARE_REF_REGEX_SOURCE,
   type LegDeposit,
   legDepositPath,
   type LegGitAdapter,
@@ -35,6 +36,7 @@ import {
 } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
+import { BARE_REF_REGEX_SOURCE as TEMPLATE_BARE_REF_REGEX_SOURCE } from './init-templates.js';
 import { type LegsGateDeps, runLegsGate } from './legs.js';
 
 const TEST_CONFIG = { totemDir: '.totem', ignorePatterns: [] } as unknown as TotemConfig;
@@ -294,6 +296,340 @@ describe('totem legs deposit (mmnto-ai/totem#2698)', () => {
       legsDepositCommand({ from: writeFindings(findingsBody({ schemaVersion: 'two' })) }),
     ).rejects.toThrow('The findings file declares schemaVersion two;');
     expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  // mmnto-ai/totem#3023: a bare PR or issue reference anywhere in the findings
+  // file's TEXT is refused at write time — each offending line named, nothing
+  // written. The pattern is the compiled xrepo-qualify-refs rule's; a deposit is
+  // a record and is never amended after the write, so the refusal sits here.
+  it('refuses a findings file that carries a bare hash-number, naming each line exactly, and writes nothing', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const withBare = {
+      ...body,
+      findings: [
+        { ...body.findings[0], counterexample: 'the PR #2987 the leg listed first' },
+        { ...body.findings[1], claim: 'and #3020 last, both bare' },
+      ],
+    };
+    const file = writeFindings(withBare);
+    // The exact 1-based line of each reference in the file as written.
+    const fileLines = fs.readFileSync(file, 'utf-8').split('\n');
+    const lineOf = (needle: string): number => fileLines.findIndex((l) => l.includes(needle)) + 1;
+    expect(lineOf('#2987')).toBeGreaterThan(0);
+    expect(lineOf('#3020')).toBeGreaterThan(lineOf('#2987'));
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err).toBeInstanceOf(Error);
+    // The verb refuses under the library's code, so a caller keying on it sees both refusals alike.
+    expect((err as { code?: string }).code).toBe('LEG_DEPOSIT_BARE_REF');
+    expect(err.message).toContain('carries 2 bare reference(s):');
+    expect(err.message).toContain(
+      `  line ${lineOf('#2987')}: #2987\n  line ${lineOf('#3020')}: #3020`,
+    );
+    expect(err.message).not.toContain('more line');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('groups references by line, names the first ten lines, then counts the rest', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const findings = Array.from({ length: 12 }, (_, i) => ({
+      id: `f${i}`,
+      severity: 'MINOR',
+      file: 'a.txt',
+      line: 1,
+      claim: `bare #${1000 + i} and again #${2000 + i} on one line`,
+      counterexample: '',
+    }));
+    const err = (await legsDepositCommand({
+      from: writeFindings(findingsBody({ findings, folded: [] })),
+    }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 24 bare reference(s):');
+    // Twelve offending lines, two references each: ten rows named, two counted.
+    expect(err.message.match(/^  line \d+: #1\d{3}, #2\d{3}$/gm)).toHaveLength(10);
+    expect(err.message).toContain('  +2 more line(s)');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('catches a reference authored as a JSON escape and names it as not located', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const file = path.join(tmpDir, 'escaped.json');
+    // The hash sign authored as its JSON unicode escape: no literal in the text,
+    // but the decoded string the deposit would carry is a bare reference.
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":[{"id":"f1","severity":"MINOR","file":"a.txt","line":1,"claim":"see ' +
+        BS +
+        'u0023123 here","counterexample":""}],"folded":[],"verdict":"v"}',
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 1 bare reference(s):');
+    expect(err.message).toContain(
+      "  not located in the file's text (the carrying string holds a JSON escape): #123",
+    );
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('reads a qualified reference whose slash is JSON-escaped as qualified', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const file = path.join(tmpDir, 'escaped-slash.json');
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":[{"id":"f1","severity":"MINOR","file":"a.txt","line":1,"claim":"mmnto-ai' +
+        BS +
+        '/totem#12 is qualified","counterexample":""}],"folded":[],"verdict":"v"}',
+    );
+    await legsDepositCommand({ from: file });
+    expect(fs.existsSync(legDepositPath(path.join(tmpDir, '.totem'), headSha))).toBe(true);
+  });
+
+  // The locator names the line of the string that CARRIES the hit, found by its
+  // canonical JSON token — never a line whose text merely looks like a hit.
+  it('names the carrying line, not the line of a qualified reference with an escaped slash', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const LF = String.fromCharCode(10);
+    const file = path.join(tmpDir, 'stale.json');
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[],',
+        '"folded":[],',
+        '"verdict":"v",',
+        '"x1":"mmnto-ai' + BS + '/totem#12 ok",',
+        '"x2":"bare #12"}',
+      ].join(LF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 1 bare reference(s):');
+    expect(err.message).toContain('  line 6: #12');
+    expect(err.message).not.toContain('line 5');
+  });
+
+  it('refuses a bare reference carried by a KEY, naming its line', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const LF = String.fromCharCode(10);
+    const file = path.join(tmpDir, 'key.json');
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[],',
+        '"folded":[],',
+        '"see #41":"a value with no reference",',
+        '"verdict":"v"}',
+      ].join(LF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 1 bare reference(s):');
+    expect(err.message).toContain('  line 4: #41');
+    expect(fs.existsSync(legsDir(path.join(tmpDir, '.totem')))).toBe(false);
+  });
+
+  it('locates a repeated literal on each of its lines, sorted, with an integer-like key walked first', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const LF = String.fromCharCode(10);
+    const file = path.join(tmpDir, 'order.json');
+    // Object.entries visits the integer-like key "7" before every other key,
+    // so its hit (line 7) is found before the finding's (line 3): the rows
+    // must still read in line order, and the two "twice" strings on their own lines.
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[{"id":"f1","severity":"MINOR","file":"a.txt","line":1,',
+        '"claim":"bare #5","counterexample":""}],',
+        '"a":"twice #9",',
+        '"b":"twice #9",',
+        '"folded":[],"verdict":"v",',
+        '"7":"bare #7"}',
+      ].join(LF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 4 bare reference(s):');
+    expect(err.message).toContain('  line 3: #5\n  line 4: #9\n  line 5: #9\n  line 7: #7');
+  });
+
+  it('names the not-located references outside the ten-line cap', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const findings = Array.from({ length: 11 }, (_, i) => ({
+      id: `f${i}`,
+      severity: 'MINOR',
+      file: 'a.txt',
+      line: 1,
+      claim: `bare #${1000 + i}`,
+      counterexample: '',
+    }));
+    const file = path.join(tmpDir, 'cap-escaped.json');
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":' +
+        JSON.stringify(findings, null, 2) +
+        ',"folded":[],"verdict":"v ' +
+        BS +
+        'u002399"}',
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 12 bare reference(s):');
+    expect(err.message.match(/^  line \d+: #1\d{3}$/gm)).toHaveLength(10);
+    expect(err.message).toContain('  +1 more line(s)');
+    expect(err.message).toContain(
+      "  not located in the file's text (the carrying string holds a JSON escape): #99",
+    );
+  });
+
+  it('locates a carrier holding a quote and a backslash by its canonical token', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const file = writeFindings({
+      ...body,
+      findings: [
+        { ...body.findings[0], claim: 'say "hi" ' + BS + ' and #3 here' },
+        body.findings[1],
+      ],
+    });
+    const fileLines = fs.readFileSync(file, 'utf-8').split('\n');
+    const line = fileLines.findIndex((l) => l.includes('and #3 here')) + 1;
+    expect(line).toBeGreaterThan(0);
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain(`  line ${line}: #3`);
+    expect(err.message).not.toContain('not located');
+  });
+
+  it('numbers lines by LF on a CRLF file', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+    const file = path.join(tmpDir, 'crlf.json');
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[],',
+        '"folded":[],',
+        '"x":"bare #44",',
+        '"verdict":"v"}',
+      ].join(CRLF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('  line 4: #44');
+  });
+
+  it('counts the not-located references beyond ten', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const findings = Array.from({ length: 11 }, (_, i) => ({
+      id: `f${i}`,
+      severity: 'MINOR',
+      file: 'a.txt',
+      line: 1,
+      claim: `see ${BS}u0023${200 + i} here`,
+      counterexample: '',
+    }));
+    // The escapes must reach the file as escapes, so the array is serialised by hand.
+    const items = findings.map(
+      (f) =>
+        `{"id":"${f.id}","severity":"MINOR","file":"a.txt","line":1,"claim":"${f.claim}","counterexample":""}`,
+    );
+    const file = path.join(tmpDir, 'many-escaped.json');
+    fs.writeFileSync(
+      file,
+      '{"readAt":"2026-09-01T00:00:00.000Z","findings":[' +
+        items.join(',') +
+        '],"folded":[],"verdict":"v"}',
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 11 bare reference(s):');
+    expect(err.message).toMatch(
+      /not located in the file's text \(the carrying string holds a JSON escape\): (#2\d\d, ){9}#2\d\d, \+1 more/,
+    );
+  });
+
+  it('never takes a token found inside a longer string token', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const BS = String.fromCharCode(92);
+    const LF = String.fromCharCode(10);
+    const file = path.join(tmpDir, 'inner.json');
+    // Line 5's string holds an escaped quote followed by the reference, so the
+    // canonical token of line 6's string appears INSIDE line 5's token; the
+    // integer-like key "0" is walked first and must still land on line 6.
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[],',
+        '"folded":[],',
+        '"verdict":"v",',
+        '"b":"q' + BS + '"#1",',
+        '"0":"#1"}',
+      ].join(LF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 2 bare reference(s):');
+    expect(err.message).toContain('  line 5: #1\n  line 6: #1');
+  });
+
+  it('keeps a dotted key and a nested key on their own lines', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const LF = String.fromCharCode(10);
+    const file = path.join(tmpDir, 'dotkey.json');
+    fs.writeFileSync(
+      file,
+      [
+        '{"readAt":"2026-09-01T00:00:00.000Z",',
+        '"findings":[],',
+        '"folded":[],',
+        '"verdict":"v",',
+        '"a.b":"x #1",',
+        '"a":{"b":"y #2"}}',
+      ].join(LF),
+    );
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('  line 5: #1\n  line 6: #2');
+  });
+
+  it('mirrors the write-shield template pattern', () => {
+    // The template keeps its own literal (the rendered hook is standalone); this pins it to core's.
+    expect(TEMPLATE_BARE_REF_REGEX_SOURCE).toBe(BARE_REF_REGEX_SOURCE);
+  });
+
+  it('caps the references named on one line at ten and counts the rest', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const refs = Array.from({ length: 13 }, (_, i) => `#${500 + i}`).join(' ');
+    const file = writeFindings({
+      ...body,
+      findings: [{ ...body.findings[0], claim: `many on one line: ${refs}` }, body.findings[1]],
+    });
+    const fileLines = fs.readFileSync(file, 'utf-8').split('\n');
+    const line = fileLines.findIndex((l) => l.includes('many on one line')) + 1;
+    const err = (await legsDepositCommand({ from: file }).catch((e: unknown) => e)) as Error;
+    expect(err.message).toContain('carries 13 bare reference(s):');
+    expect(err.message).toContain(
+      `  line ${line}: #500, #501, #502, #503, #504, #505, #506, #507, #508, #509, +3 more`,
+    );
+    expect(err.message).not.toContain('#510');
+  });
+
+  it('accepts a qualified reference and hashes that are not references', async () => {
+    const { legsDepositCommand } = await import('./legs.js');
+    const body = findingsBody() as { findings: Array<Record<string, unknown>> };
+    const qualified = {
+      ...body,
+      findings: [
+        {
+          ...body.findings[0],
+          counterexample:
+            'mmnto-ai/totem#2987 merged; # Title is a heading; #fff is a colour; #123abc is an id',
+        },
+        body.findings[1],
+      ],
+    };
+    await legsDepositCommand({ from: writeFindings(qualified) });
+    expect(fs.existsSync(legDepositPath(path.join(tmpDir, '.totem'), headSha))).toBe(true);
   });
 
   it('stamps readAt when neither the file nor --read-at carries one, and SAYS so', async () => {

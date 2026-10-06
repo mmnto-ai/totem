@@ -24,11 +24,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   countLegFindings,
+  findBareRefsInLegDeposit,
   findLegDepositForHead,
   LEG_DEPOSIT_KNOWN_MAJOR,
   LEG_DEPOSIT_SCHEMA_VERSION,
   LEG_FINDING_SEVERITIES,
   type LegDeposit,
+  LegDepositBareRefError,
   LegDepositExistsError,
   legDepositPath,
   LegDepositSchema,
@@ -302,6 +304,70 @@ describe('saveLegDeposit — create-exclusive, atomic, validate-first', () => {
     expect(result.replaced).toBeUndefined();
     const onDisk = JSON.parse(fs.readFileSync(result.path, 'utf-8')) as LegDeposit;
     expect(onDisk.diffSha).toBe(path.basename(result.path, '.json'));
+  });
+
+  // mmnto-ai/totem#3023: the library writer is the backstop for every caller —
+  // a bare reference in any decoded string refuses the write, naming its path.
+  it('refuses a deposit carrying a bare hash-number in a nested string, naming the path, and writes nothing', () => {
+    let caught: unknown;
+    try {
+      saveLegDeposit(
+        tmpDir,
+        deposit({ findings: [finding({ counterexample: 'the PR #2987 the leg listed' })] }),
+      );
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(LegDepositBareRefError);
+    const refusal = caught as LegDepositBareRefError;
+    expect(refusal.code).toBe('LEG_DEPOSIT_BARE_REF');
+    expect(refusal.message).toContain('carries 1 bare reference(s):');
+    expect(refusal.message).toContain('  $.findings[0].counterexample: #2987');
+    expect(refusal.hits).toEqual([
+      {
+        path: '$.findings[0].counterexample',
+        ref: '#2987',
+        carrier: 'the PR #2987 the leg listed',
+      },
+    ]);
+    expect(fs.existsSync(legsDir(tmpDir))).toBe(false);
+  });
+
+  it('refuses a bare reference in verdict before the occupied-address refusal, and caps the named entries at ten', () => {
+    saveLegDeposit(tmpDir, deposit());
+    let caught: unknown;
+    try {
+      saveLegDeposit(tmpDir, deposit({ verdict: 'see #7', readAt: '2026-09-04T00:00:00.000Z' }));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(LegDepositBareRefError);
+    expect((caught as LegDepositBareRefError).message).toContain('  $.verdict: #7');
+    const many = findBareRefsInLegDeposit({
+      v: Array.from({ length: 11 }, (_, i) => `#${100 + i}`),
+    });
+    const message = new LegDepositBareRefError(many).message;
+    expect(message.match(/^  \$\.v\[\d+\]: #1\d\d$/gm)).toHaveLength(10);
+    expect(message).toContain('  +1 more');
+  });
+
+  it('keeps a dotted key and a nested key apart in the path', () => {
+    const hits = findBareRefsInLegDeposit({ 'a.b': 'x #1', a: { b: 'y #2' } });
+    expect(hits.map((h) => `${h.path}=${h.ref}`)).toEqual(['$["a.b"]=#1', '$.a.b=#2']);
+  });
+
+  it('walks keys as well as values and accepts qualified references', () => {
+    const hits = findBareRefsInLegDeposit({
+      'see #41': 'mmnto-ai/totem#2987 is qualified',
+      nested: [{ deep: 'two here #1 and #2' }],
+    });
+    expect(hits.map((h) => `${h.path}=${h.ref}`)).toEqual([
+      '$["see #41"] (key)=#41',
+      '$.nested[0].deep=#1',
+      '$.nested[0].deep=#2',
+    ]);
+    // A qualified reference, a heading marker, a hex colour and an alphanumeric tail are not references.
+    expect(findBareRefsInLegDeposit('mmnto-ai/totem#2987 # Title #fff #123abc')).toEqual([]);
   });
 
   it('refuses an existing sha without replace, naming the incumbent readAt', () => {

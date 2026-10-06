@@ -52,6 +52,8 @@ export type TotemErrorCode =
   | 'SELECTION_MANIFEST_CONTRACT'
   /** A leg deposit already exists for this read sha and `--replace` was not passed (mmnto-ai/totem#2698). */
   | 'LEG_DEPOSIT_EXISTS'
+  /** A leg deposit carries a bare `#NNN` reference in one of its strings — refused at the writer, nothing written (mmnto-ai/totem#3023). */
+  | 'LEG_DEPOSIT_BARE_REF'
   /** A mail reader verb's start resolves to no repository or to a linked worktree — refused before any read or write; exit 2 at the CLI (mmnto-ai/totem#2946, mmnto-ai/totem#2968). */
   | 'REPO_ROOT_REFUSED'
   /** A reader opened a vector store that only a rebuild can repair; the sync is the one rebuilder (mmnto-ai/totem#3009). */

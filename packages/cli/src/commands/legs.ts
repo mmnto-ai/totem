@@ -40,6 +40,7 @@
 import type {
   LegCoverageQuery,
   LegDeposit,
+  LegDepositBareRef,
   LegDepositRank,
   LegFindingCounts,
   LegGitAdapter,
@@ -153,6 +154,118 @@ async function loadSanitizer(): Promise<void> {
   sanitizeForTerminalSync = sanitizeForTerminal;
 }
 
+/** How many offending LINES (and how many not-located references) the refusal names before collapsing the rest. */
+const MAX_DISCLOSED_BARE_REF_LINES = 10;
+
+/**
+ * One bare reference, located. `line` is the 1-based line of the JSON string
+ * token that carries it, or undefined when the locator cannot decide — and the
+ * refusal then says "not located" rather than guess.
+ */
+interface BareRefHit {
+  line: number | undefined;
+  ref: string;
+}
+
+/**
+ * Locate core's decoded hits (mmnto-ai/totem#3023) in the file's text — a
+ * best-effort locator; the decoded string stays the authority and the text
+ * supplies only a line. Each carrying string is found by its CANONICAL JSON
+ * encoding at a token boundary (a structural character before and after, so a
+ * token inside a longer string token is never taken), the first occurrence not
+ * already claimed by an earlier carrier, so a repeated string lands on its own
+ * line and the walk order does not matter. What it does not decide, it says so:
+ * a carrying string whose file encoding is not canonical (any JSON escape in
+ * it) has no token to find and is reported as not located. Lines are counted
+ * by LF, so a bare-CR file reads as one line. The one limit disclosed rather
+ * than cured: in a file with a DUPLICATED key (a malformed file), a string the
+ * parse discarded can be named in place of a live string with the same content,
+ * for any path — the named line holds the text but not the value that landed.
+ */
+function locateBareRefs(hits: readonly LegDepositBareRef[], text: string): BareRefHit[] {
+  // The line breaks are indexed once; a line number is then a binary search
+  // (Greptile on mmnto-ai/totem#3025: no rescan from the start per string).
+  const lineStarts: number[] = [0];
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) lineStarts.push(i + 1);
+  const lineAt = (index: number): number => {
+    let lo = 0;
+    let hi = lineStarts.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (lineStarts[mid]! <= index) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo + 1;
+  };
+  const BEFORE = new Set([':', ',', '[', '{']);
+  const AFTER = new Set([':', ',', ']', '}']);
+  const atTokenBoundary = (at: number, length: number): boolean => {
+    let i = at - 1;
+    while (i >= 0 && /\s/.test(text[i]!)) i--;
+    let j = at + length;
+    while (j < text.length && /\s/.test(text[j]!)) j++;
+    return (i < 0 || BEFORE.has(text[i]!)) && (j >= text.length || AFTER.has(text[j]!));
+  };
+  // Each distinct token searches forward from where its last claim ended, which
+  // is the same "first unclaimed occurrence" as before (two different tokens can
+  // never start at one index) at one pass per token rather than one per claim.
+  const nextFrom = new Map<string, number>();
+  const located = new Map<string, number | undefined>();
+  const locate = (path: string, carrier: string): number | undefined => {
+    if (located.has(path)) return located.get(path);
+    const token = JSON.stringify(carrier);
+    let line: number | undefined;
+    for (let from = nextFrom.get(token) ?? 0; ; ) {
+      const at = text.indexOf(token, from);
+      if (at === -1) break;
+      if (atTokenBoundary(at, token.length)) {
+        nextFrom.set(token, at + 1);
+        line = lineAt(at);
+        break;
+      }
+      from = at + 1;
+    }
+    located.set(path, line);
+    return line;
+  };
+  return hits.map((hit) => ({ line: locate(hit.path, hit.carrier), ref: hit.ref }));
+}
+
+/**
+ * The refusal's rows: one per offending file line carrying the first ten
+ * references on it then a count of the rest, sorted, the first ten lines then a
+ * count of the rest; then, outside that cap, one row naming the references the
+ * locator could not place (the first ten, then a count). Every echoed fragment
+ * is a match (`#` plus digits), never the line's text, and no row can run long.
+ */
+function renderBareRefs(hits: BareRefHit[]): string[] {
+  const byLine = new Map<number, string[]>();
+  const unlocated: string[] = [];
+  for (const hit of hits) {
+    if (hit.line === undefined) unlocated.push(hit.ref);
+    else byLine.set(hit.line, [...(byLine.get(hit.line) ?? []), hit.ref]);
+  }
+  const capped = (refs: string[]): string => {
+    const named = refs.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
+    const more = refs.length - named.length;
+    return `${named.join(', ')}${more > 0 ? `, +${more} more` : ''}`;
+  };
+  const lineRows = [...byLine.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([line, refs]) => `  line ${line}: ${capped(refs)}`);
+  const shown = lineRows.slice(0, MAX_DISCLOSED_BARE_REF_LINES);
+  const moreLines = lineRows.length - shown.length;
+  if (moreLines > 0) shown.push(`  +${moreLines} more line(s)`);
+  if (unlocated.length > 0) {
+    const named = unlocated.slice(0, MAX_DISCLOSED_BARE_REF_LINES).map(echoSafe);
+    const more = unlocated.length - named.length;
+    shown.push(
+      `  not located in the file's text (the carrying string holds a JSON escape): ${named.join(', ')}${more > 0 ? `, +${more} more` : ''}`,
+    );
+  }
+  return shown;
+}
+
 // ─── `totem legs deposit` ───────────────────────────────────────────────────
 
 export interface LegsDepositOptions {
@@ -232,6 +345,7 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
     LEG_DEPOSIT_KNOWN_MAJOR,
     LEG_DEPOSIT_SCHEMA_VERSION,
     countLegFindings,
+    findBareRefsInLegDeposit,
     saveLegDeposit,
     TotemError,
   } = await import('@mmnto/totem');
@@ -248,9 +362,20 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
   const diffSha = await resolveCommitSha(cwd, options.sha ?? 'HEAD');
 
   const fromPath = path.resolve(cwd, options.from);
+  let text: string;
+  try {
+    text = fs.readFileSync(fromPath, 'utf-8');
+  } catch (err) {
+    throw new TotemError(
+      'PARSE_FAILED',
+      `Could not read the leg's findings at ${echoSafe(options.from)}.`,
+      'Pass --from <file> pointing at the leg deposit JSON the review leg returned.',
+      err,
+    );
+  }
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(fromPath, 'utf-8'));
+    raw = JSON.parse(text);
   } catch (err) {
     throw new TotemError(
       'PARSE_FAILED',
@@ -264,6 +389,19 @@ export async function legsDepositCommand(options: LegsDepositOptions): Promise<v
       'PARSE_FAILED',
       `The leg's findings at ${echoSafe(options.from)} are not a JSON object.`,
       'The file must be a deposit object: { findings, folded, verdict, ... }.',
+    );
+  }
+  // A bare reference is refused on the DECODED strings (core's walk, the same
+  // check the library writer makes as its backstop), before any write: a
+  // deposit is a record and is not amended once written (mmnto-ai/totem#3023),
+  // so the cure is in the findings file, never the store. The verb adds the
+  // file lines the backstop cannot know.
+  const bareRefs = locateBareRefs(findBareRefsInLegDeposit(raw), text);
+  if (bareRefs.length > 0) {
+    throw new TotemError(
+      'LEG_DEPOSIT_BARE_REF',
+      `The findings file at ${echoSafe(options.from)} carries ${bareRefs.length} bare reference(s):\n${renderBareRefs(bareRefs).join('\n')}`,
+      'Qualify each as <owner>/<repo>#NNN in the findings file and re-run; a deposit is a record and is not amended after the write (mmnto-ai/totem#3023).',
     );
   }
   const fields = raw as Record<string, unknown>;
