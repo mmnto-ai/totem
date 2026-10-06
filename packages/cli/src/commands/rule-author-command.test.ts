@@ -76,7 +76,9 @@ const decidable = (over: Record<string, unknown> = {}) => ({
   author: 'alice',
   authoredAt: '2026-06-27',
   targetDefect: 'forbidden console.log',
-  structuralClass: 'forbidden-literal-token',
+  // The untagged cert-1 regex row: the record is source-scoped (`src/**/*.ts`), which the
+  // prose-only exemplar row refuses since mmnto-ai/totem#2988.
+  structuralClass: 'debug-assert-len-mismatch',
   record: '.totem/rules/no-console-log.rule.yaml',
   positiveFixtures: [fixture(1)],
   ...over,

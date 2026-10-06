@@ -76,7 +76,9 @@ const writeYaml = (fixturePr: number) => {
           author: 'alice',
           authoredAt: '2026-07-04',
           targetDefect: 'forbidden console.log',
-          structuralClass: 'forbidden-literal-token',
+          // The untagged cert-1 regex row: this record is source-scoped (`src/**/*.rs`), which the
+          // prose-only exemplar row refuses since mmnto-ai/totem#2988.
+          structuralClass: 'debug-assert-len-mismatch',
           record: RECORD_REF,
           positiveFixtures: [fixture(fixturePr)],
         },

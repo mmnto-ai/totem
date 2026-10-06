@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "8d9f619b83255c6f36bcfacf786c7660e20f6ba3",
+  "readAt": "2026-10-01T19:22:04.428Z",
+  "findings": [
+    {
+      "id": "2988-F1",
+      "severity": "MATERIAL",
+      "file": ".changeset/c-prose-scope-2988.md",
+      "line": 6,
+      "claim": "The changeset and the commit body said every rule already recorded under the exemplar row re-derives revised and that verifyOnly refuses it until a re-pin; that is false for the source-scoped rules, which are refused by the intake, and it hid that a cert corpus over an envelope carrying one refuses as a whole.",
+      "counterexample": "On a scratch copy of the repository's totem directory, the built runRuleAuthor with judgedBy fromLedger and verifyOnly over the committed envelope returned unchanged 2, revised 0, rejected 4: the four source-scoped exemplar-row entries were each refused with the prose-scopes-only reason naming a ts or sh glob. They never read revised, verifyOnly gates only pending writes, and the cert corpus's rejected-entries precondition is what refuses. Only a prose-scoped recorded rule reads revised (shown on a historical envelope). The error originated in the seat's build spec. FOLDED at 6b1592fc as text: the changeset's loud line and its already-recorded bullet now state the three cases, and the fold commit's body says it supersedes the first commit's wording."
+    },
+    {
+      "id": "2988-F2",
+      "severity": "MINOR",
+      "file": ".changeset/c-prose-scope-2988.md",
+      "line": 9,
+      "claim": "The changeset said a record that declares no globs lands in the rejected list before minting, which cannot happen through the intake.",
+      "counterexample": "RuleScopeSchema requires at least one fileGlobs entry, so the record parse fails first and propagates as a typed throw; the no-globs cause is reachable only through the public predicate. FOLDED at 6b1592fc: the clause is removed and the changeset says a record with no globs fails the record parse, and that no-globs is the public predicate's fail-closed answer."
+    },
+    {
+      "id": "2988-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/authored-rule.ts",
+      "line": 460,
+      "claim": "The conjunct fails closed because the predicate is a public export, yet it never checked the glob dialect, so a caller outside the intake could get a wrong verdict or a result its own schema rejects.",
+      "counterexample": "Against the built dist: an empty-string glob returned cause non-prose-glob with an empty glob, which the result schema rejected (glob had a minimum length of one); a glob with a leading negation mark returned satisfied true although a leading mark is negation under the legacy matcher; a glob with a leading space returned satisfied true. None is reachable through the intake, where the dialect is checked at parse. FOLDED at 6b1592fc in code: isProseGlob returns false for any glob checkGlobDialect refuses, the conjunct schema's glob accepts any string so the refusal is recordable as passed, and tests cover the three inputs and one dialect-illegal glob per dialect rule. Mutation RED: removing the dialect check fails 2 of 59. A scoped re-armed read of this fold was dispatched."
+    },
+    {
+      "id": "2988-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/rule-author.test.ts",
+      "line": 1,
+      "claim": "Two stated consequences had no test: a pre-change three-key ledger row under the exemplar row re-deriving revised with verifyOnly throwing, and the header carrying P1's clause verbatim.",
+      "counterexample": "The exemplar-row tests at 8d9f619b only mint fresh and re-read unchanged; no test read the whitelist header's text. FOLDED at 6b1592fc: a test hand-builds the three-key row from exported pieces without calling the changed predicate and asserts the verifyOnly throw naming the rule as revised, the unchanged ledger bytes, and the revised append; a source-text pin requires exactly one line equal to the clause directly after the sentence it amends. RED on base sources: both fail."
+    },
+    {
+      "id": "2988-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/authoring-ledger.test.ts",
+      "line": 37,
+      "claim": "Three ledger-data fixtures named by the scorer's evidence read still carried a three-key decidable result for the exemplar class, a shape the predicate can no longer produce for that class, with no reason stated for leaving them.",
+      "counterexample": "The fixtures at lines 37, 149 and 159 pass because they never call the predicate. FOLDED at 6b1592fc: re-typed to the cert-1 regex class debug-assert-len-mismatch; fixture data only."
+    },
+    {
+      "id": "2988-F6",
+      "severity": "QUESTION",
+      "file": "packages/core/src/spine/authored-rule.ts",
+      "line": 109,
+      "claim": "ADR-112's authoring-surface bullet spells the ledger row's structuralEligibility as three keys, while the ruled lockstep amendment names only a revision header and an in-place section 3 clause; should the amendment also touch that bullet?",
+      "counterexample": "The ADR text is the strategy lane's. ANSWERED by routing, no code change: the question is put to strategy-claude with the draft-PR line, since a row written at this version under a tagged row carries a fourth key the ADR's bullet does not show."
+    },
+    {
+      "id": "2988-F7",
+      "severity": "QUESTION",
+      "file": "packages/core/src/spine/authored-rule.ts",
+      "line": 54,
+      "claim": "PROSE_EXTENSIONS is scorer-ruled policy data but lives in core, while the table's data lives in the CLI; and the literal prose had two homes, the WhitelistEntry scope type and the scope schema.",
+      "counterexample": "The ruling placed the conjunct in core and did not say where the constant lives; the approved design placed it beside the predicate, and a CLI-injected extension set would let a table widen what prose means for a row outside the digest's reach. ANSWERED and partly FOLDED at 6b1592fc: the constant stays in core by the approved design, disclosed in the PR and put to strategy-claude; the literal now has one home, WhitelistScope inferred from the schema."
+    }
+  ],
+  "folded": [
+    "2988-F1",
+    "2988-F2",
+    "2988-F3",
+    "2988-F4",
+    "2988-F5",
+    "2988-F6",
+    "2988-F7"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 4 MINOR, 2 QUESTION over d27e5588..8d9f619b (P1 + P2 of mmnto-ai/totem#2988): the diff holds for merge after the fold. Not falsified: an untagged row's result is byte-identical and all 18 untagged ledger rows keep their material; the prose-glob test errs only in the fail-closed direction for dialect-legal globs; the strict result schema refuses nothing on disk (24 rows, three keys each); the verdict is recorded on both outcomes and a refused entry mints nothing; the owner-form id recomputes to 4efdb174 over 132 bytes and moves with the tag or the constant while the three gate5 digests are unchanged; P1's clause is byte-identical to the held clause and sits where the ruling says; no test or workflow reads the real envelope. The fold changes the predicate for dialect-illegal globs only, so a scoped re-armed read was run over it."
+}

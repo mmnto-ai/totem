@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "36c3d07f21dc4956431c51d5d08c6fe04d44ca0e",
+  "readAt": "2026-10-06T04:24:04.534Z",
+  "findings": [
+    {
+      "id": "2988-M1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 40,
+      "claim": "The whitelist header, the changeset and the PR body date the confirming letter 2026-09-30, while the ADR text this PR merges in lockstep with dates it 2026-10-01T00:06Z UTC.",
+      "counterexample": "ADR-112 at strategy a710846f: the revision line says it is dated to the word, UTC, and that the rulings mail's Q7 wrote 2026-09-30, the session's day; the section 3 clause says CONFIRMED BY LETTER 2026-10-01T00:06Z UTC. Strategy commit b99eba3b, which the PR body cites for the letter, has committer date 2026-10-01T00:48:00Z. The 09-30 date is the session's local day, not false, but the two lockstep surfaces dated one event two ways. FOLDED at 4dfd8569 as text: the header comment and the changeset carry the ADR's instant; the PR body likewise."
+    },
+    {
+      "id": "2988-M2",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/authored-rule.ts",
+      "line": 116,
+      "claim": "ADR-112 section 3 says an unsatisfied conjunct makes the result decidable false, and section 8 says a ledger row carries the key always satisfied true; the strict StructEligResultSchema enforces neither across fields.",
+      "counterexample": "StructEligResultSchema.safeParse on the built core accepted a result with decidable true beside a scopeConjunct of satisfied false and cause no-globs, and accepted a conjunct on an untagged class basis; an extra key and a cause on satisfied true were refused, as claimed. The producer evaluateStructuralEligibility never emits either accepted shape, and no runtime path was found where this admits a rule: the cert path re-derives each entry and the compile feed reads decidable. The seat's disposition: the refine is DECLINED (a hand-written decidable true with no conjunct at all parses today, so a cross-field refine would not close hand-editing, and a hand-edited row re-derives revised or rejected on the cert path); the gap is DISCLOSED at 4dfd8569 in the scopeConjunct field's comment."
+    },
+    {
+      "id": "2988-M3",
+      "severity": "MINOR",
+      "file": ".changeset/c-prose-scope-2988.md",
+      "line": 15,
+      "claim": "The changeset's last bullet said 'Its owner-form set id' directly after rule 2's clause, which reads as if the id digests rule 2's header text.",
+      "counterexample": "The digest rebuilt from the live table and constant: the input is the 132 bytes of the compact JSON holding the one tagged row and the four prose extensions, sha256 first 8 hex 4efdb174; no header text is in the input. FOLDED at 4dfd8569: the sentence names the tagged row and says the id digests the row and the extension constant, not the text."
+    },
+    {
+      "id": "2988-M4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/authored-whitelist.ts",
+      "line": 178,
+      "claim": "The batch-3 and batch-4 row comments that came from main are dated records, none false, but beside the new prose-only paragraph nothing told a reader that most of the rules they list as in the envelope under the exemplar row are refused or revised at this version.",
+      "counterexample": "Per-entry re-derive at this head: of batch 4's three exemplar-row rules, 884becd4 and 8435c024 are rejected and 4ae0a01d is revised; batch 3's four (391de708, 87e24374, 55797450, 56c801df) are source-only and refused. The note 'P1 not applied in this batch' is accurate as a record of the batch review and does not contradict the header clause. FOLDED at 4dfd8569: one count-free sentence in the doc comment above the table says the batch blocks are records of each batch as delivered and what this version does to a rule they name under the row."
+    },
+    {
+      "id": "2988-M5",
+      "severity": "MINOR",
+      "file": ".totem/temp/pr-2988-body-v2.md",
+      "line": 22,
+      "claim": "The PR body sentence 'No test, workflow or tool reads that envelope' holds for automated readers but a reviewer could read 'tool' as covering the CLI verbs, which do read the committed envelope and now refuse it.",
+      "counterexample": "git grep over .github, tools, scripts, tests and every non-temp test found no reader of the committed authored-rules.yaml or authoring-ledger.ndjson. runRuleAuthor is reached by totem rule author, and buildAuthoredCertifyingCorpus by the cert-run path (spine-cert-run-corpus.ts lines 663 and 816); both read the committed envelope on invocation. FOLDED in the PR body: no test or workflow reads it; the verbs that do are the ones that refuse."
+    },
+    {
+      "id": "2988-M6",
+      "severity": "QUESTION",
+      "file": ".changeset/c-prose-scope-2988.md",
+      "line": 2,
+      "claim": "No public export is removed, so minor is honest under the repository's stated rule, but two changes narrow accepted input on public surfaces: StructEligResultSchema now throws on an unknown key where it stripped it, and totem rule author refuses records it admitted under the same row.",
+      "counterexample": "At main 054bcef9 the schema ends with no strict call; at this head strict is on the object and an extra key fails the parse. Core's index diff only adds WhitelistScope and PROSE_EXTENSIONS. The changeset config holds every package in one fixed group, so the level applies to all of them. The changeset discloses both narrowings in its loud line. ROUTED, not folded: the level is put to the operator before the merge word; the seat's reading is that minor stands (no removed export; the write-time refusal of mmnto-ai/totem#3025 carries its changeset at minor)."
+    }
+  ],
+  "folded": [
+    "2988-M1",
+    "2988-M2",
+    "2988-M3",
+    "2988-M4",
+    "2988-M5"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 5 MINOR, 1 QUESTION over the bring-forward of mmnto-ai/totem#2996 at merge head 36c3d07f (parents 8c1d77c4 and main 054bcef9), read against ADR-112 at strategy a710846f: the head holds for merge in lockstep and nothing must fold first. Not falsified: the field name, the three closed conjunct shapes and when the key is present; an unsatisfied conjunct is decidable false with the basis unchanged; an untagged row keeps three keys; the prose-glob rule against the ADR's wording on the leg's own probes; the frozen extension set and the owner-form id over 132 bytes; the four gate5 digests; main's 18 commits add no caller of the predicate or the schema and no reader of the committed envelope or ledger; 34 ledger rows all three-key and all passing the strict schema; nine exemplar-row rules typed three prose-only, four source-only, two mixed; the ten envelope entries re-derive unchanged 7, revised 1, rejected 2, the same figures from one run of the envelope minus the revised entry; the envelope as a whole throws on the revised entry. Four of the five minors are text; the fifth is a disclosed schema-strength gap."
+}

@@ -1340,6 +1340,7 @@ export type {
   RecordFixtureInput,
   StructEligResult,
   WhitelistEntry,
+  WhitelistScope,
 } from './spine/authored-rule.js';
 export {
   AUTHORED_RULE_ID_RE,
@@ -1350,6 +1351,7 @@ export {
   DeclaredEngineSchema,
   evaluateStructuralEligibility,
   mintAuthoredRuleId,
+  PROSE_EXTENSIONS,
   RecordFixtureInputSchema,
   StructEligResultSchema,
   toCompileFeed,
