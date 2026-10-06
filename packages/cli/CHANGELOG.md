@@ -1,5 +1,27 @@
 # @mmnto/cli
 
+## 2.14.0
+
+### Minor Changes
+
+- 9bb7545: **Added refusal: the whitelist row `regex/forbidden-literal-token` is now prose-only. `totem rule author` refuses a record under it whose `fileGlobs` include any non-prose glob. A prose-scoped rule already recorded under the row re-derives `revised` and needs a re-pin before a cert. A source-scoped or mixed-scope rule already recorded under it is refused, a re-pin cannot admit it, and a cert corpus over an envelope that still carries one refuses as a whole.** This is mmnto-ai/totem#2988, confirmed by letter at 2026-10-01T00:06Z (UTC, the instant ADR-112's § 3 clause carries).
+  - **API (`@mmnto/totem`).** `evaluateStructuralEligibility` takes an optional `fileGlobs` input, and `WhitelistEntry` an optional `scope` (`'prose'`, typed as the exported `WhitelistScope`). `StructEligResult` gains the optional `scopeConjunct`, the recorded verdict of the scope conjunct, present only when the pair matched exactly one row and that row carries a scope tag. It has three shapes: `{ scope: 'prose', satisfied: true }`, `{ scope: 'prose', satisfied: false, cause: 'non-prose-glob', glob }` and `{ scope: 'prose', satisfied: false, cause: 'no-globs' }`. A glob outside the V1 glob dialect is not a prose glob. The `no-globs` cause is the public predicate's fail-closed answer to absent or empty globs. `StructEligResultSchema` is now strict: an unknown key on the result fails the read instead of being stripped. `PROSE_EXTENSIONS` (`md`, `mdx`, `rst`, `txt`) is exported. An untagged row's result is unchanged: the same three keys, with or without globs.
+  - **Added refusal (`@mmnto/cli`).** `regex/forbidden-literal-token` is a prose-only row (`md`, `mdx`, `rst`, `txt`). A record declared under it whose `fileGlobs` include any glob outside those four extensions lands in `rejected[]` before minting, with a reason naming the first failing glob, and appends no ledger row. Through the intake, a record that declares no globs fails the record parse first, as before. Re-scope such a record to prose globs, or declare a class the table admits for its engine.
+  - **Rules already recorded under the row.**
+    - A prose-scoped rule re-derives `revised` at this version, because the recorded conjunct enters the ledger material, and `verifyOnly` refuses it until a re-pin.
+    - A source-scoped or mixed-scope rule is refused by the intake at this version (it lands in `rejected[]`), and a re-pin cannot admit it.
+    - A cert corpus over an envelope that still carries such a refused rule refuses as a whole until the envelope drops it.
+  - **Mixed versions.** A reader OLDER than this version silently strips `scopeConjunct` from a row written at this version, because its schema was not strict. A WRITER older than this version re-derives such a rule to the three-key result, reads `revised` and appends a three-key row, which this version then reads as `revised` again. Read and write a re-pinned ledger at this version or later.
+  - **Rule 2's text.** The whitelist header's rule 2 gains the scope clause: "A class whose rule's scope reaches no source file (prose extensions only) has no doc-comment seam for this sentence to guard." The tagged row's owner-form set id is `static-whitelist@owner-4efdb174`, pinned by test; it digests the row and the extension constant, not this text.
+
+- 384e477: A leg deposit that carries a bare `#NNN` reference in any of its strings is refused at write time, in the library and in the verb (mmnto-ai/totem#3023). Core gains three public exports, hence the minor: the pattern (`BARE_REF_REGEX_SOURCE`, the compiled `xrepo-qualify-refs` rule's and the write shield's: a `#` followed by digits that is not preceded by `<owner>/<repo>`, with no word character or hyphen after the digits), a walk over the DECODED strings of a value (`findBareRefsInLegDeposit`, keys and values at every depth, each hit with an injective JSON path), and a typed refusal (`LegDepositBareRefError`, the new error code `LEG_DEPOSIT_BARE_REF`); `saveLegDeposit` runs the walk on the validated deposit and refuses before the address is looked at, so every library caller is held to the rule. `totem legs deposit` runs the same walk on the parsed findings file, refuses with the same code, and adds what the library cannot know: each offending line of the file, found by the carrying string's canonical JSON token at a token boundary, the first ten lines then a count of the rest; a reference whose carrying string is not in the file in canonical form (any JSON escape in it) is named as not located rather than guessed at. The cure is in both messages: qualify each as `<owner>/<repo>#NNN` and re-run. A deposit is a record and is not amended after the write, so the refusal sits at the writer; deposits already on a branch are untouched, and the lint rule's scope (committed markdown) does not change.
+
+### Patch Changes
+
+- Updated dependencies [9bb7545]
+- Updated dependencies [384e477]
+  - @mmnto/totem@2.14.0
+
 ## 2.13.0
 
 ### Minor Changes
