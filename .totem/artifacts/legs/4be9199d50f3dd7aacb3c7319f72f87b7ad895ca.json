@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "4be9199d50f3dd7aacb3c7319f72f87b7ad895ca",
+  "readAt": "2026-10-09T18:41:30.134Z",
+  "findings": [
+    {
+      "id": "3035-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/explain.ts",
+      "line": 51,
+      "claim": "After the diff, totem explain still printed warning for a row with no stored severity while rule inspect printed error, so two detail views disagreed on one row; the cli-reference line and the changeset read as product-wide.",
+      "counterexample": "explain.ts:51 read rule.severity ?? 'warning'; compile.ts:316 prints the same default in the compile's log lines. The design's scope names only rule list and rule inspect, so the site is outside the ruled scope, but the disagreement is new with this diff. FOLDED at cd71b883: explain.ts reads effectiveSeverity, explain.test.ts (new) locks it and was run RED on the old line first (Severity: warning). compile.ts:316 left alone so this branch's files stay disjoint from the guard branch of mmnto-ai/totem#3036, which edits that file; disclosed in the changeset and the pull request body."
+    },
+    {
+      "id": "3035-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/pr-comment.ts",
+      "line": 229,
+      "claim": "Another lint pass/fail verdict ignores isBlockingRule: totem lint --pr-comment counts errors by finding severity (pr-comment.ts:229, default error at finding.ts:44) over every violation (lint.ts:318, 378-380), so an advisory regex rule at error posts FAIL while the run exits 0.",
+      "counterexample": "Outside this diff. doctor-claim-discipline.ts:136 with :407 is a separate gate by design; pack-merge.ts:104 decides immutability, not blocking; neither copies the tier logic. ROUTED, not folded: filed as mmnto-ai/totem#3037 with the line numbers and the assertion that would have failed before a fix."
+    },
+    {
+      "id": "3035-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 841,
+      "claim": "isHardEngine is the engine-fallback half of the tier written a second time, used at :855-856 to choose the frozen-lesson wording; if the fallback in rule-tier.ts changes the label could drift from the tier.",
+      "counterexample": "It never decides blocking (verified at :841-856). DECLINED: kept, with the disclosure already in the code comment at :838-839; a swap for ruleTier would re-arm the read for a wording-only gain."
+    },
+    {
+      "id": "3035-F4",
+      "severity": "MINOR",
+      "file": ".changeset/blocking-set-3035.md",
+      "line": 8,
+      "claim": "The changeset's clause 'a legacy row with no engine is advisory' describes a state that cannot occur: compiler-schema.ts:530 has engine as a required enum, and RuleTierInput requires it at the type level.",
+      "counterexample": "True of the function's code, unreachable from the loader or a typed caller; the core test builds such rows with a cast and says so. FOLDED at cd71b883: the clause is dropped from the public changeset."
+    },
+    {
+      "id": "3035-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/rule.test.ts",
+      "line": 346,
+      "claim": "Three assertion-strength points: (a) the 36-row truth table's expectations come from a parallel oracle, not literals; (b) the table cannot tell ?? from ||, since only error, warning and absent severities are used; (c) the JSON-row test checked tier only by presence, asserting its value only on blocking rows.",
+      "counterexample": "(a) The oracle does not use the function under test and matches the pre-change source by hand; the unedited linter tests cover a misunderstanding shared by both. DECLINED. (b) The schema rejects the values that would tell the two apart (compiler-schema.ts:573). DECLINED. (c) FOLDED at cd71b883: every fixture row carries a hand-derived literal tier and the JSON-row test asserts it."
+    },
+    {
+      "id": "3035-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/rule.test.ts",
+      "line": 324,
+      "claim": "Two parts of the RED evidence are thin: the archived-row check would also pass on the pre-change code (the loader dropped archived rows there too), and the core module's RED is a missing-module failure that never shows the table rejecting a wrong implementation.",
+      "counterexample": "The archived-row check's RED came from the a3 row (red-cli.log:64); the core RED is acceptable for a new pure module with no earlier behaviour. DECLINED, disclosed in the pull request body as regression guards rather than RED-bearing evidence."
+    },
+    {
+      "id": "3035-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index-lite.ts",
+      "line": 481,
+      "claim": "No test covers how --blocking is registered in either build; the only end-to-end evidence is the smoke run, which does not record which build it ran, so the Lite registration has no run evidence.",
+      "counterexample": "The Lite dist cannot run from pnpm build's output: index-lite.js reads a build-time define (__TOTEM_VERSION__) that only its bundling step supplies. The registration is the main one's by inspection (index-lite.ts:478-488 against index.ts:2316-2327); commander's option handling is standard. DECLINED with the reason in the pull request body."
+    }
+  ],
+  "folded": [
+    "3035-F1",
+    "3035-F4",
+    "3035-F5"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 6 MINOR, 0 QUESTION over the two-commit diff 74421391..4be9199d of mmnto-ai/totem#3035 (the blocking predicate in core, rule list --blocking, the display default): nothing blocks presenting it for merge. Held: the new predicate equals the pre-change inline expression for every input (run-compiled-rules.ts at 74421391 ~841-846 against rule-tier.ts:29-40); the linter's default has been error since mmnto-ai/totem#576 and no test or doc asserted the warning display; archived rows are dropped where the rules are loaded (compiler.ts:154, isActiveCompiledRule); the one external consumer of rule list --json (the playground's e2e test) checks only truthiness of four fields; severity and ruleClass are closed enums so the return types are exact; the new dynamic imports follow the files' existing lazy-load pattern; all seven CLI REDs failed on their assertions. The material finding was folded as the read's own named convergence change at cd71b883 (a display default on a third surface of the class already verified), so no further read was armed; convergence named by the seat."
+}
