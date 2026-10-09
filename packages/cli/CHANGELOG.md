@@ -1,5 +1,29 @@
 # @mmnto/cli
 
+## 2.15.0
+
+### Minor Changes
+
+- 3c155f2: **One blocking predicate, shared by `totem lint` and the new `totem rule list --blocking`.** This is mmnto-ai/totem#3035.
+  - **API (`@mmnto/totem`).** New pure exports `ruleTier(rule)` (`'hard' | 'advisory'`: the `ruleClass` stamp when present, else `ast` / `ast-grep` are hard and `regex` is advisory), `isBlockingRule(rule)` (hard tier AND an effective severity of `error`) and `effectiveSeverity(rule)` (the stored severity, or `error` when absent), with the types `RuleTier` and `RuleTierInput`. The linter's blocking classification now calls `isBlockingRule`; which rules block is unchanged.
+  - **`totem rule list --blocking` (`@mmnto/cli`).** Lists only the active rules that block lint. An archived rule is never listed. When none block, the command succeeds with an empty list and a line saying 0 of N active rules block; in JSON mode it returns `status: success` with `rules: []`.
+  - **`totem rule list --json` rows** gain `tier` and `blocking`. `severity` stays the stored value.
+  - **Display change.** `totem rule list`, `totem rule inspect` and `totem explain` now show `error` for a rule with no stored severity, the severity the linter has always acted on; they previously showed `warning`. The compile's own per-rule log line is unchanged here, so this pull request's files stay disjoint from the guard pull request of mmnto-ai/totem#3036, which edits `compile.ts`.
+
+- 730244c: **Added refusal: the legacy lesson compile refuses a record-managed serving file, and never drops a record-path row.** This is part B1 of mmnto-ai/totem#3036, the compile guard; the record writer it points to, `totem rule serve`, is part B2 and is not in this release.
+  - **Refusal (`@mmnto/cli`).** When `compiled-rules.json` holds any record-path row (a row carrying `examples`, the `isRecordPathRule` discriminator), `totem lesson compile` (and the deprecated `totem compile`) refuses before any write on every path (the rules file, the manifest, the exports), with the new error code `RECORD_MANAGED_SERVING_FILE` and a message naming the rows and `totem rule serve` as the right command. The guard reads the file once more per run, and a file that fails its schema is now reported by the guard before the option and config checks that used to come first; a readable file with no record-path row then compiles as before.
+  - **Unreadable file.** A `compiled-rules.json` that exists but cannot be read or parsed as JSON is refused too, before any write, with `PARSE_FAILED`: a conflict marker, a BOM, truncation, an empty file, a directory in the file's place, an unreadable file. The loader reads such a file as empty, so the compile used to overwrite it without its record rows. This refusal is not lifted by `--allow-record-rows`: an unreadable file could hold record rows. A lesson-only repository with such a file now refuses where it used to regenerate it. Two repair routes: resolve the merge conflict if there is one, otherwise restore the file from git; or, in a repository with no record-managed rows, delete the file and re-run `totem lesson compile`.
+  - **Override.** The new flag `--allow-record-rows` runs the compile anyway; the run keeps every record-path row. To refresh the manifest of a record-managed file (the one path that writes no row), run `totem lesson compile --refresh-manifest --allow-record-rows`; the deprecated `totem compile` alias has no `--refresh-manifest`. `--export` is export-only only when no orchestrator is configured; with one, it is a full compile that keeps every record-path row.
+  - **Prune.** Both prune paths in the compile (the no-op branch's `pruneStaleRules` and the compile branch's inline prune, which now calls the same helper) keep every row for which `isRecordPathRule` is true. A record-path row's id is a ledger rule id of 16 hex characters with an optional -<n> suffix, the same shape as a lesson hash; it matches no current lesson's hash, so it used to read as stale and be dropped.
+  - **Callers.** `totem doctor --pr`'s upgrade phase and `totem init`'s cursor ingest call the compile; each reports the refusal in its existing failure line and carries on with its other phases.
+  - **Hints (`@mmnto/totem`, `@mmnto/cli`).** The `verify-manifest` failure hint and the invalid-`compiled-rules.json` hint in the core loaders now say to use `totem rule serve` for a record-managed file. `TotemErrorCode` gains `RECORD_MANAGED_SERVING_FILE`. The installed pre-push hook's text is unchanged.
+
+### Patch Changes
+
+- Updated dependencies [3c155f2]
+- Updated dependencies [730244c]
+  - @mmnto/totem@2.15.0
+
 ## 2.14.0
 
 ### Minor Changes
