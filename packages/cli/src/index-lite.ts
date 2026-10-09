@@ -478,10 +478,11 @@ const ruleCmd = program.command('rule').description('Manage compiled rules');
 ruleCmd
   .command('list')
   .description('List all compiled rules')
-  .action(async () => {
+  .option('--blocking', 'Only the active rules that block lint (hard tier and error severity)')
+  .action(async (opts: { blocking?: boolean }) => {
     try {
       const { ruleListCommand } = await import('./commands/rule.js');
-      await ruleListCommand();
+      await ruleListCommand({ blocking: opts.blocking === true });
     } catch (err) {
       handleError(err);
     }

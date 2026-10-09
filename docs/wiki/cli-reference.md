@@ -107,7 +107,7 @@ For authoring patterns that pass the input-time gate, see [Regex Safety](regex-s
 
 Manage your deterministic rules (Pipeline 1). Subcommands: `list`, `inspect`, `test`, `scaffold`, `promote`, `author`.
 
-- `rule list` outputs active rules.
+- `rule list` outputs active rules. `--blocking` keeps only the rules that block lint (hard tier and an effective severity of `error`, the one predicate `totem lint` applies); `--json` rows carry `tier` and `blocking`. The displayed severity is the one the linter acts on: `error` when a rule stores none.
 - `rule inspect <id>` shows rule details by hash (supports prefix matching).
 - `rule test <id>` tests a rule against its inline Example Hit/Miss; for a Prop 310 record rule it instead runs every `examples[i]` pair through the smoke gate (the `bad` side must fire, the `good` side must stay silent) and reports one line per ordinal.
 - `rule scaffold <id>` generates a test fixture skeleton for a compiled rule.
