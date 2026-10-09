@@ -230,8 +230,12 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
     };
   }
 
-  /** hash -> whether the row blocks (archived rows are not listed at all). */
-  const FIXTURE: { row: Record<string, unknown>; blocks: boolean }[] = [
+  /**
+   * hash -> the row's tier and whether it blocks, both as LITERALS derived by hand
+   * from the design's truth table, never from the predicate under test (archived
+   * rows are not listed at all).
+   */
+  const FIXTURE: { row: Record<string, unknown>; tier: 'hard' | 'advisory'; blocks: boolean }[] = [
     // ast, error: hard tier by engine -> blocks
     {
       row: fixtureRow('a1000000000000a1', {
@@ -239,11 +243,13 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
         astQuery: '(identifier) @x',
         severity: 'error',
       }),
+      tier: 'hard',
       blocks: true,
     },
     // ast-grep, no severity: hard tier by engine, absent severity -> blocks
     {
       row: fixtureRow('a2000000000000a2', { engine: 'ast-grep', astGrepPattern: 'foo()' }),
+      tier: 'hard',
       blocks: true,
     },
     // ast-grep, warning: hard tier but warning -> does not block
@@ -253,10 +259,15 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
         astGrepPattern: 'foo()',
         severity: 'warning',
       }),
+      tier: 'hard',
       blocks: false,
     },
     // regex, error, un-stamped: advisory -> does not block
-    { row: fixtureRow('a4000000000000a4', { severity: 'error' }), blocks: false },
+    {
+      row: fixtureRow('a4000000000000a4', { severity: 'error' }),
+      tier: 'advisory',
+      blocks: false,
+    },
     // regex stamped hard, error: ruleClass wins upward -> blocks
     {
       row: fixtureRow('a5000000000000a5', {
@@ -264,6 +275,7 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
         legitimacy: PASSING_LEGITIMACY,
         ruleClass: 'hard',
       }),
+      tier: 'hard',
       blocks: true,
     },
     // ast-grep stamped advisory, error: ruleClass wins downward -> does not block
@@ -275,6 +287,7 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
         legitimacy: FAILING_LEGITIMACY,
         ruleClass: 'advisory',
       }),
+      tier: 'advisory',
       blocks: false,
     },
   ];
@@ -364,6 +377,8 @@ describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
       expect(r.blocking).toBe(isBlockingRule(source));
       const expected = FIXTURE.find((f) => f.row['lessonHash'] === r.hash)!;
       expect(r.blocking).toBe(expected.blocks);
+      // `tier` against a hand-derived literal, so a wrong tier cannot hide behind the predicate.
+      expect(r.tier).toBe(expected.tier);
     }
     // `severity` stays the STORED value: the no-severity row carries none.
     const noSev = parsed.data.rules.find((r) => r.hash === 'a2000000000000a2')!;

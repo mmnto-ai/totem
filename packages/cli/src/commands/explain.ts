@@ -5,7 +5,7 @@ export async function explainCommand(hash: string): Promise<void> {
   const path = await import('node:path');
   const { bold, dim, log } = await import('../ui.js');
   const { loadConfig, resolveConfigPath } = await import('../utils.js');
-  const { loadCompiledRules } = await import('@mmnto/totem');
+  const { effectiveSeverity, loadCompiledRules } = await import('@mmnto/totem');
 
   const cwd = process.cwd();
   const configPath = resolveConfigPath(cwd);
@@ -48,7 +48,8 @@ export async function explainCommand(hash: string): Promise<void> {
   log.info(TAG, `Heading: ${bold(rule.lessonHeading)}`);
   log.info(
     TAG,
-    `Engine: ${rule.engine} | Severity: ${rule.severity ?? 'warning'} | Category: ${rule.category ?? 'uncategorized'}`,
+    // mmnto-ai/totem#3035 — the severity the linter acts on (error when absent), as rule list / inspect show it.
+    `Engine: ${rule.engine} | Severity: ${effectiveSeverity(rule)} | Category: ${rule.category ?? 'uncategorized'}`,
   );
   log.info(TAG, `Pattern: ${dim(rule.pattern)}`);
   if (rule.astQuery) {
