@@ -831,14 +831,16 @@ export async function runCompiledRules(
   // reachable by legacy rules alone — demoted from a legitimacy signal to a
   // legacy tier-display fallback (#2181 engine-type proxy retired). ADR-110
   // pre-scoring: no Gate-1 legitimacy decision reads engine-type.
+  //
+  // mmnto-ai/totem#3035 — the tier + severity gate (hard tier AND error, a
+  // missing severity reading as error) now lives in ONE core predicate,
+  // `isBlockingRule`, shared with `totem rule list --blocking`, so the two can
+  // never disagree about which rules block. `isHardEngine` stays local for the
+  // frozen-lesson wording below.
+  const { isBlockingRule } = await import('@mmnto/totem');
   const isHardEngine = (v: Violation): boolean =>
     v.rule.engine === 'ast' || v.rule.engine === 'ast-grep';
-  const hardTier = (v: Violation): boolean =>
-    v.rule.ruleClass != null ? v.rule.ruleClass === 'hard' : isHardEngine(v);
-  // `hardTier` replaces the hard-tier discriminator ONLY — the severity gate is
-  // unchanged (error blocks, warning doesn't): blocking = hard tier AND error.
-  const isBlocking = (v: Violation): boolean =>
-    hardTier(v) && (v.rule.severity ?? 'error') === 'error';
+  const isBlocking = (v: Violation): boolean => isBlockingRule(v.rule);
   const errors = violations.filter(isBlocking);
   const warnings = violations.filter((v) => !isBlocking(v));
   // Whether any non-blocking finding is a frozen-lesson regex-class rule (regex, or a

@@ -67,9 +67,19 @@ function resolveRuleByPrefix(
 
 // ─── Subcommands ───────────────────────────────────────
 
-export async function ruleListCommand(): Promise<void> {
+export interface RuleListOptions {
+  /** mmnto-ai/totem#3035 — keep only the active rules that block (`isBlockingRule`). */
+  blocking?: boolean;
+}
+
+export async function ruleListCommand(opts: RuleListOptions = {}): Promise<void> {
   const { log, dim, bold } = await import('../ui.js');
+  const { effectiveSeverity, isBlockingRule, ruleTier } = await import('@mmnto/totem');
   const { rules } = await loadRulesOrExit();
+
+  // `rules` is already the ACTIVE set (loadCompiledRules drops archived rows),
+  // so `--blocking` filters over active rows only.
+  const listed = opts.blocking ? rules.filter((r) => isBlockingRule(r)) : rules;
 
   // JSON mode — output structured data and return
   const { isJsonMode, printJson } = await import('../json-output.js');
@@ -86,12 +96,15 @@ export async function ruleListCommand(): Promise<void> {
         status: 'success',
         command: 'rule list',
         data: {
-          rules: rules.map((r) => ({
+          rules: listed.map((r) => ({
             hash: r.lessonHash,
             heading: r.lessonHeading,
             engine: r.engine,
+            // The STORED value; `blocking` already folds in the effective default.
             severity: r.severity,
             fileGlobs: r.fileGlobs,
+            tier: ruleTier(r),
+            blocking: isBlockingRule(r),
           })),
         },
       });
@@ -118,10 +131,11 @@ export async function ruleListCommand(): Promise<void> {
   );
   console.error(dim('  ' + '\u2500'.repeat(hashW + engineW + sevW + globW + headingW)));
 
-  for (const rule of rules) {
+  for (const rule of listed) {
     const hash = rule.lessonHash.slice(0, 8).padEnd(hashW);
     const engine = (rule.engine ?? 'regex').padEnd(engineW);
-    const severity = (rule.severity ?? 'warning').padEnd(sevW);
+    // mmnto-ai/totem#3035 — the severity the linter acts on (error when absent).
+    const severity = effectiveSeverity(rule).padEnd(sevW);
     const globs = String(rule.fileGlobs?.length ?? 0).padEnd(globW);
     const heading = truncate(rule.lessonHeading, headingW);
 
@@ -129,11 +143,16 @@ export async function ruleListCommand(): Promise<void> {
   }
 
   console.error('');
-  log.info(TAG, `${bold(String(rules.length))} rule(s) total`);
+  if (opts.blocking) {
+    log.info(TAG, `${bold(String(listed.length))} of ${rules.length} active rule(s) block`);
+  } else {
+    log.info(TAG, `${bold(String(rules.length))} rule(s) total`);
+  }
 }
 
 export async function ruleInspectCommand(id: string): Promise<void> {
   const { log, bold, dim } = await import('../ui.js');
+  const { effectiveSeverity } = await import('@mmnto/totem');
   const { rules } = await loadRulesOrExit();
 
   if (rules.length === 0) {
@@ -148,7 +167,8 @@ export async function ruleInspectCommand(id: string): Promise<void> {
   log.info(TAG, `${bold('Hash:')}       ${rule.lessonHash}`);
   log.info(TAG, `${bold('Heading:')}    ${rule.lessonHeading}`);
   log.info(TAG, `${bold('Engine:')}     ${rule.engine}`);
-  log.info(TAG, `${bold('Severity:')}   ${rule.severity ?? 'warning'}`);
+  // mmnto-ai/totem#3035 — the severity the linter acts on (error when absent).
+  log.info(TAG, `${bold('Severity:')}   ${effectiveSeverity(rule)}`);
   log.info(TAG, `${bold('Message:')}    ${rule.message}`);
 
   if (rule.pattern) {
