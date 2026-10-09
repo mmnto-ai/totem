@@ -425,7 +425,7 @@ export function autoScaffoldFixture(
 export async function compileCommand(
   options: CompileOptions,
 ): Promise<UpgradeOutcome | UpgradeOutcome[] | void> {
-  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
+  const { TotemConfigError, TotemError, TotemParseError } = await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
   const fs = await import('node:fs');
@@ -592,8 +592,22 @@ export async function compileCommand(
   // (rules file, manifest, exports, telemetry), when the serving file holds one,
   // unless the caller passed the explicit override. With the override the run
   // proceeds and `pruneStaleRules` keeps every record-path row.
+  //
+  // The loader turns a read or JSON parse failure (a conflict marker, a BOM,
+  // truncation) into an `onWarn` call and an EMPTY rule set; every later read in
+  // this command would then see no rows and the save would overwrite the file
+  // without them. An unreadable file could hold record rows, so the guard
+  // refuses it on every run, `--allow-record-rows` or not: that flag answers
+  // "may the compile run beside record rows it can see", not "may it overwrite a
+  // file it cannot read". (A schema failure already throws from the loader.)
+  const guardRead = loadCompiledRulesFile(rulesPath, (detail) => {
+    throw new TotemParseError(
+      `Refusing to compile: ${path.relative(cwd, rulesPath)} exists but cannot be read as JSON (${detail}); nothing was written. It may hold record-managed rows, which a compile would drop, so --allow-record-rows does not lift this refusal.`,
+      'Repair the file first, for example restore it from git (`git checkout -- <path>` or resolve the merge conflict), then re-run.',
+    );
+  });
   if (!options.allowRecordRows) {
-    const recordRows = loadCompiledRulesFile(rulesPath).rules.filter(isRecordPathRule);
+    const recordRows = guardRead.rules.filter(isRecordPathRule);
     if (recordRows.length > 0) {
       const ids = recordRows.map((r) => r.lessonHash);
       const shown =
@@ -601,7 +615,7 @@ export async function compileCommand(
       throw new TotemError(
         'RECORD_MANAGED_SERVING_FILE',
         `Refusing to compile: ${path.relative(cwd, rulesPath)} holds ${ids.length} record-managed row${ids.length === 1 ? '' : 's'} (${shown}). Those rows are written by \`totem rule serve\`, not by the lesson compile; nothing was written.`,
-        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows.',
+        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows. For a manifest refresh or an export-only run on a record-managed file (neither writes a row), pass --allow-record-rows with --refresh-manifest or --export.',
       );
     }
   }
@@ -918,8 +932,11 @@ export async function compileCommand(
     // BEFORE refreshing the manifest. Without this, a corrupt rules file
     // gets its new byte-level hash written to the manifest and
     // verify-manifest stops surfacing the corruption — silent drift.
-    // loadCompiledRulesFile throws TotemParseError on malformed JSON or
-    // schema violations (CR finding on PR mmnto-ai/totem#1629).
+    // loadCompiledRulesFile throws TotemParseError on a schema violation
+    // (CR finding on PR mmnto-ai/totem#1629). On malformed JSON or a read
+    // failure it does NOT throw: it calls its optional onWarn and returns an
+    // empty rule set. That case never reaches here: the record-managed guard
+    // above reads the file with an onWarn that refuses (mmnto-ai/totem#3036).
     const compiledRulesFile = loadCompiledRulesFile(rulesPath);
     const compileManifest = readCompileManifest(manifestPath);
     const freshOutputHash = generateOutputHash(rulesPath);

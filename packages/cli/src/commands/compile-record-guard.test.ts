@@ -223,3 +223,71 @@ describe('compileCommand on a record-managed serving file (mmnto-ai/totem#3036 B
     expect(fs.existsSync(ws.manifestPath)).toBe(true);
   });
 });
+
+// ─── An unreadable serving file (fold round, mmnto-ai/totem#3036 B1) ────────
+//
+// The shared loader turns a JSON parse failure into an empty rule set. Read that
+// way, a record-managed file with a conflict marker shows no record rows, the
+// guard passes it, and the compile overwrites it without them. An unreadable
+// file could hold record rows, so the guard refuses it, and the record-rows
+// override does not lift that refusal.
+
+describe('compileCommand on a serving file that cannot be parsed (mmnto-ai/totem#3036 B1)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-record-guard-unparsable-'));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  function conflictedWorkspace(): { ws: Workspace; bytesBefore: Buffer; mtimeBefore: number } {
+    const lessonHash = hashLesson(HEADING, BODY);
+    const ws = setupWorkspace(tmpDir, [legacyRow(lessonHash, HEADING), recordRow()], {
+      'use-err.md': lessonMarkdown(HEADING, BODY),
+    });
+    const body = fs.readFileSync(ws.rulesPath, 'utf-8');
+    fs.writeFileSync(ws.rulesPath, '<<<<<<< HEAD\n' + body, 'utf-8');
+    const past = new Date('2026-01-01T00:00:00Z');
+    fs.utimesSync(ws.rulesPath, past, past);
+    return {
+      ws,
+      bytesBefore: fs.readFileSync(ws.rulesPath),
+      mtimeBefore: fs.statSync(ws.rulesPath).mtimeMs,
+    };
+  }
+
+  it('refuses before any write and leaves the file byte- and mtime-identical', async () => {
+    const { ws, bytesBefore, mtimeBefore } = conflictedWorkspace();
+
+    await expect(compileCommand({ export: true })).rejects.toMatchObject({
+      code: 'PARSE_FAILED',
+      message: expect.stringContaining('nothing was written'),
+    });
+
+    expect(fs.readFileSync(ws.rulesPath).equals(bytesBefore)).toBe(true);
+    expect(fs.statSync(ws.rulesPath).mtimeMs).toBe(mtimeBefore);
+    expect(fs.existsSync(ws.manifestPath)).toBe(false);
+    expect(fs.existsSync(ws.exportPath)).toBe(false);
+  });
+
+  it('still refuses with --allow-record-rows (the override does not cover an unreadable file)', async () => {
+    const { ws, bytesBefore, mtimeBefore } = conflictedWorkspace();
+
+    await expect(compileCommand({ allowRecordRows: true, export: true })).rejects.toMatchObject({
+      code: 'PARSE_FAILED',
+      message: expect.stringContaining('--allow-record-rows'),
+    });
+
+    expect(fs.readFileSync(ws.rulesPath).equals(bytesBefore)).toBe(true);
+    expect(fs.statSync(ws.rulesPath).mtimeMs).toBe(mtimeBefore);
+    expect(fs.existsSync(ws.manifestPath)).toBe(false);
+    expect(fs.existsSync(ws.exportPath)).toBe(false);
+  });
+});
