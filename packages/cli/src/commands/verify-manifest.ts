@@ -203,7 +203,7 @@ export async function verifyManifestCommand(opts?: VerifyManifestOptions): Promi
       throw new TotemError(
         'COMPILE_FAILED',
         'Compile manifest verification failed.',
-        'Run "totem compile" to regenerate the manifest.',
+        'Run "totem compile" to regenerate the manifest. If compiled-rules.json holds record-managed rows, run "totem rule serve" instead: the compile refuses a record-managed file (mmnto-ai/totem#3036).',
       );
     }
   }

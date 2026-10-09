@@ -7,6 +7,8 @@ import type {
   NonCompilableEntry,
   NonCompilableReasonCode,
 } from '@mmnto/totem';
+// totem-context: compile.ts is loaded ONLY via `await import('./commands/compile.js')` (index.ts, doctor.ts, init.ts — the lazy-load convention), so this @mmnto/totem barrel import never resolves at CLI `--help` startup; the static import is required because `pruneStaleRules` is a synchronous exported helper (mmnto-ai/totem#3036).
+import { isRecordPathRule } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -83,6 +85,14 @@ export interface CompileOptions {
    * `--force`.
    */
   refreshManifest?: boolean;
+  /**
+   * The explicit override of the record-managed refusal (B1 of
+   * mmnto-ai/totem#3036). Without it, a serving file holding any record-path
+   * row (`isRecordPathRule`) makes the compile refuse before any write, because
+   * those rows are written by `totem rule serve`, not by this command. With it,
+   * the compile runs and both prune paths still keep every record-path row.
+   */
+  allowRecordRows?: boolean;
 }
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
@@ -174,12 +184,18 @@ export function pruneStaleNonCompilable(
  * used by the no-op compile path (mmnto/totem#1281) so lesson removals drain
  * the compiled rule AND any stale non-compilable entry in the same run.
  * Pure function; does not mutate the input array.
+ *
+ * A record-path row (`isRecordPathRule`) is ALWAYS kept: it is managed by its
+ * rule record, written by `totem rule serve`, and its `lessonHash` is a ledger
+ * rule id that never appears among the lesson hashes, so "no lesson" is not
+ * "stale" for it (B1 of mmnto-ai/totem#3036). Both prune paths in
+ * `compileCommand` route through this one helper.
  */
 export function pruneStaleRules(
   rules: readonly CompiledRule[],
   currentHashes: Set<string>,
 ): { fresh: CompiledRule[]; pruned: number } {
-  const fresh = rules.filter((r) => currentHashes.has(r.lessonHash));
+  const fresh = rules.filter((r) => isRecordPathRule(r) || currentHashes.has(r.lessonHash));
   return { fresh, pruned: rules.length - fresh.length };
 }
 
@@ -569,6 +585,26 @@ export async function compileCommand(
 
   const totemDir = path.join(configRoot, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
+
+  // ─── Record-managed serving file guard (B1 of mmnto-ai/totem#3036) ───
+  // A record-path row is written by the record writer, `totem rule serve`, not
+  // by this lesson compile. Refuse LOUDLY, before any write on every path below
+  // (rules file, manifest, exports, telemetry), when the serving file holds one,
+  // unless the caller passed the explicit override. With the override the run
+  // proceeds and `pruneStaleRules` keeps every record-path row.
+  if (!options.allowRecordRows) {
+    const recordRows = loadCompiledRulesFile(rulesPath).rules.filter(isRecordPathRule);
+    if (recordRows.length > 0) {
+      const ids = recordRows.map((r) => r.lessonHash);
+      const shown =
+        ids.slice(0, 5).join(', ') + (ids.length > 5 ? `, … (${ids.length} total)` : '');
+      throw new TotemError(
+        'RECORD_MANAGED_SERVING_FILE',
+        `Refusing to compile: ${path.relative(cwd, rulesPath)} holds ${ids.length} record-managed row${ids.length === 1 ? '' : 's'} (${shown}). Those rows are written by \`totem rule serve\`, not by the lesson compile; nothing was written.`,
+        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows.',
+      );
+    }
+  }
 
   // mmnto-ai/totem#1656: shared helper for severity-override telemetry.
   // Closes over the per-invocation `totemDir` (configRoot-relative per
@@ -1345,8 +1381,9 @@ export async function compileCommand(
       const newRules: CompiledRule[] = [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-      const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));
-      const pruned = newRules.length - freshRules.length;
+      // The same helper as the no-op branch, so a record-path row survives this
+      // prune too (B1 of mmnto-ai/totem#3036).
+      const { fresh: freshRules, pruned } = pruneStaleRules(newRules, currentHashes);
       if (pruned > 0) {
         log.dim(TAG, `Pruned ${pruned} stale rules (lessons edited or removed)`); // totem-ignore
       }
