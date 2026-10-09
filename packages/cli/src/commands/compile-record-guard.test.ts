@@ -116,12 +116,12 @@ function rowIds(rulesPath: string): string[] {
 // ─── The first prune path: the exported helper ──────────────────────────────
 
 describe('pruneStaleRules keeps record-path rows (mmnto-ai/totem#3036 B1)', () => {
-  it('keeps a record-path row whose id is not a lesson hash, and still drops a stale legacy row', () => {
+  it('keeps a record-path row whose id is not a lesson hash, and still drops a stale legacy row', async () => {
     const rec = recordRow();
     const kept = legacyRow('abc', 'Kept');
     const stale = legacyRow('stale', 'Stale');
 
-    const result = pruneStaleRules([kept, rec, stale], new Set(['abc']));
+    const result = await pruneStaleRules([kept, rec, stale], new Set(['abc']));
 
     expect(result.fresh).toEqual([kept, rec]);
     expect(result.fresh[1]).toBe(rec);

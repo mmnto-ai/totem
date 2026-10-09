@@ -124,41 +124,43 @@ describe('pruneStaleNonCompilable', () => {
 });
 
 describe('pruneStaleRules', () => {
-  it('returns an empty result when the input rules array is empty', () => {
-    const result = pruneStaleRules([], new Set(['abc']));
+  // The helper is async since B1 of mmnto-ai/totem#3036: it reaches core's
+  // record-row discriminator through the CLI's lazy import boundary.
+  it('returns an empty result when the input rules array is empty', async () => {
+    const result = await pruneStaleRules([], new Set(['abc']));
     expect(result.fresh).toEqual([]);
     expect(result.pruned).toBe(0);
   });
 
-  it('keeps all rules when every lessonHash is still current', () => {
+  it('keeps all rules when every lessonHash is still current', async () => {
     const rules = [makeRule('abc'), makeRule('def')];
-    const result = pruneStaleRules(rules, new Set(['abc', 'def']));
+    const result = await pruneStaleRules(rules, new Set(['abc', 'def']));
 
     expect(result.fresh).toHaveLength(2);
     expect(result.fresh.map((r) => r.lessonHash)).toEqual(['abc', 'def']);
     expect(result.pruned).toBe(0);
   });
 
-  it('drops rules whose source lesson has been removed', () => {
+  it('drops rules whose source lesson has been removed', async () => {
     const rules = [makeRule('abc'), makeRule('removed-1'), makeRule('removed-2')];
-    const result = pruneStaleRules(rules, new Set(['abc']));
+    const result = await pruneStaleRules(rules, new Set(['abc']));
 
     expect(result.fresh.map((r) => r.lessonHash)).toEqual(['abc']);
     expect(result.pruned).toBe(2);
   });
 
-  it('drains everything when no lessonHash matches', () => {
+  it('drains everything when no lessonHash matches', async () => {
     const rules = [makeRule('stale-1'), makeRule('stale-2')];
-    const result = pruneStaleRules(rules, new Set<string>());
+    const result = await pruneStaleRules(rules, new Set<string>());
 
     expect(result.fresh).toEqual([]);
     expect(result.pruned).toBe(2);
   });
 
-  it('preserves rule identity and field order for kept rules', () => {
+  it('preserves rule identity and field order for kept rules', async () => {
     const ruleA = makeRule('abc', 'Heading A');
     const ruleB = makeRule('def', 'Heading B');
-    const result = pruneStaleRules([ruleA, ruleB], new Set(['abc', 'def']));
+    const result = await pruneStaleRules([ruleA, ruleB], new Set(['abc', 'def']));
 
     // Kept rules are the same object references, so metadata (compiledAt,
     // createdAt, etc.) is preserved verbatim — important for audit lineage.
@@ -166,9 +168,9 @@ describe('pruneStaleRules', () => {
     expect(result.fresh[1]).toBe(ruleB);
   });
 
-  it('does not mutate the input array', () => {
+  it('does not mutate the input array', async () => {
     const rules = [makeRule('abc'), makeRule('stale')];
-    pruneStaleRules(rules, new Set(['abc']));
+    await pruneStaleRules(rules, new Set(['abc']));
 
     expect(rules).toHaveLength(2);
     expect(rules[1]!.lessonHash).toBe('stale');

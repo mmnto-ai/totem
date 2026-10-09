@@ -7,8 +7,6 @@ import type {
   NonCompilableEntry,
   NonCompilableReasonCode,
 } from '@mmnto/totem';
-// totem-context: compile.ts is loaded ONLY via `await import('./commands/compile.js')` (index.ts, doctor.ts, init.ts — the lazy-load convention), so this @mmnto/totem barrel import never resolves at CLI `--help` startup; the static import is required because `pruneStaleRules` is a synchronous exported helper (mmnto-ai/totem#3036).
-import { isRecordPathRule } from '@mmnto/totem';
 
 // ─── Constants ──────────────────────────────────────
 
@@ -189,12 +187,15 @@ export function pruneStaleNonCompilable(
  * rule record, written by `totem rule serve`, and its `lessonHash` is a ledger
  * rule id that never appears among the lesson hashes, so "no lesson" is not
  * "stale" for it (B1 of mmnto-ai/totem#3036). Both prune paths in
- * `compileCommand` route through this one helper.
+ * `compileCommand` route through this one helper, which owns the record-row
+ * invariant itself: the discriminator stays core's, reached through the CLI's
+ * lazy `@mmnto/totem` boundary (hence async), never copied here.
  */
-export function pruneStaleRules(
+export async function pruneStaleRules(
   rules: readonly CompiledRule[],
   currentHashes: Set<string>,
-): { fresh: CompiledRule[]; pruned: number } {
+): Promise<{ fresh: CompiledRule[]; pruned: number }> {
+  const { isRecordPathRule } = await import('@mmnto/totem');
   const fresh = rules.filter((r) => isRecordPathRule(r) || currentHashes.has(r.lessonHash));
   return { fresh, pruned: rules.length - fresh.length };
 }
@@ -425,7 +426,8 @@ export function autoScaffoldFixture(
 export async function compileCommand(
   options: CompileOptions,
 ): Promise<UpgradeOutcome | UpgradeOutcome[] | void> {
-  const { TotemConfigError, TotemError, TotemParseError } = await import('@mmnto/totem');
+  const { TotemConfigError, TotemError, TotemParseError, isRecordPathRule } =
+    await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
   const fs = await import('node:fs');
@@ -1255,7 +1257,7 @@ export async function compileCommand(
       let reportedCompiled = existingRules.length;
       if (!options.raw) {
         const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-        const { fresh: freshRules, pruned: rulesPruned } = pruneStaleRules(
+        const { fresh: freshRules, pruned: rulesPruned } = await pruneStaleRules(
           existingRules,
           currentHashes,
         );
@@ -1404,7 +1406,7 @@ export async function compileCommand(
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
       // The same helper as the no-op branch, so a record-path row survives this
       // prune too (B1 of mmnto-ai/totem#3036).
-      const { fresh: freshRules, pruned } = pruneStaleRules(newRules, currentHashes);
+      const { fresh: freshRules, pruned } = await pruneStaleRules(newRules, currentHashes);
       if (pruned > 0) {
         log.dim(TAG, `Pruned ${pruned} stale rules (lessons edited or removed)`); // totem-ignore
       }

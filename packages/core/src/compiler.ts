@@ -120,7 +120,7 @@ export { validateRegex } from './regex-validation.js';
  * refuses such a file anyway (B1 of mmnto-ai/totem#3036).
  */
 const RULES_FILE_REPAIR_HINT =
-  "Delete the file and run 'totem compile' to regenerate it. If it holds record-managed rows (written by 'totem rule serve'), restore it from git and regenerate it with 'totem rule serve' instead.";
+  "Delete the file and run 'totem lesson compile' to regenerate it. If it holds record-managed rows (written by 'totem rule serve'), restore it from git and regenerate it with 'totem rule serve' instead.";
 
 /**
  * Load compiled rules from a JSON file. Returns empty array if file missing.
