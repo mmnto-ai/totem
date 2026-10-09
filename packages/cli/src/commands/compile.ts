@@ -594,16 +594,20 @@ export async function compileCommand(
   // proceeds and `pruneStaleRules` keeps every record-path row.
   //
   // The loader turns a read or JSON parse failure (a conflict marker, a BOM,
-  // truncation) into an `onWarn` call and an EMPTY rule set; every later read in
+  // truncation, an empty file, a directory or an unreadable file in the file's
+  // place) into an `onWarn` call and an EMPTY rule set; every later read in
   // this command would then see no rows and the save would overwrite the file
   // without them. An unreadable file could hold record rows, so the guard
   // refuses it on every run, `--allow-record-rows` or not: that flag answers
   // "may the compile run beside record rows it can see", not "may it overwrite a
   // file it cannot read". (A schema failure already throws from the loader.)
+  const rulesRel = path.relative(cwd, rulesPath);
   const guardRead = loadCompiledRulesFile(rulesPath, (detail) => {
+    // The loader's message carries its own prefix; keep only the cause.
+    const cause = detail.replace(/^Could not load compiled rules:\s*/, '');
     throw new TotemParseError(
-      `Refusing to compile: ${path.relative(cwd, rulesPath)} exists but cannot be read as JSON (${detail}); nothing was written. It may hold record-managed rows, which a compile would drop, so --allow-record-rows does not lift this refusal.`,
-      'Repair the file first, for example restore it from git (`git checkout -- <path>` or resolve the merge conflict), then re-run.',
+      `Refusing to compile: ${rulesRel} exists but cannot be read or parsed as JSON (${cause}); nothing was written. It may hold record-managed rows, which a compile would drop, so --allow-record-rows does not lift this refusal.`,
+      `Repair ${rulesRel} first, then re-run: resolve the merge conflict if there is one, otherwise restore the file from git (\`git checkout -- ${rulesRel}\`). In a repository with no record-managed rows you can instead delete the file and re-run \`totem lesson compile\` to regenerate it.`,
     );
   });
   if (!options.allowRecordRows) {
@@ -614,8 +618,8 @@ export async function compileCommand(
         ids.slice(0, 5).join(', ') + (ids.length > 5 ? `, … (${ids.length} total)` : '');
       throw new TotemError(
         'RECORD_MANAGED_SERVING_FILE',
-        `Refusing to compile: ${path.relative(cwd, rulesPath)} holds ${ids.length} record-managed row${ids.length === 1 ? '' : 's'} (${shown}). Those rows are written by \`totem rule serve\`, not by the lesson compile; nothing was written.`,
-        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows. For a manifest refresh or an export-only run on a record-managed file (neither writes a row), pass --allow-record-rows with --refresh-manifest or --export.',
+        `Refusing to compile: ${rulesRel} holds ${ids.length} record-managed row${ids.length === 1 ? '' : 's'} (${shown}). Those rows are written by \`totem rule serve\`, not by the lesson compile; nothing was written.`,
+        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows. To refresh the manifest of a record-managed file (the one path that writes no row), run `totem lesson compile --refresh-manifest --allow-record-rows` (the deprecated `totem compile` alias has no --refresh-manifest). --export is export-only only when no orchestrator is configured; with one, it is a full compile that keeps every record-path row.',
       );
     }
   }

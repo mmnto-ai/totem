@@ -13,7 +13,7 @@ The `totem lesson compile` command transforms your Markdown lessons into determi
 - `--from-cursor`: Ingests `.cursorrules`, `.windsurfrules`, and `.cursor/rules/*.mdc` files as lessons and compiles them into Totem rules.
 - `--upgrade <hash>`: Targets one rule by hash (full or short prefix), evicts only that rule from the cache (preserves `createdAt` metadata), recompiles through Sonnet with a telemetry-driven directive, and replaces the rule. Rejects `--cloud` (not supported) and `--force` (scoped eviction makes `--force` redundant and dangerous).
 - `--refresh-manifest`: No-LLM primitive that recomputes the manifest's `output_hash` after manual edits to `compiled-rules.json`. Backs the atomic `totem lesson archive` command.
-- `--allow-record-rows`: Run even though `compiled-rules.json` holds record-managed rows (written by `totem rule serve`); every record-path row is kept ([mmnto-ai/totem#3036](https://github.com/mmnto-ai/totem/issues/3036)).
+- `--allow-record-rows`: Run even though `compiled-rules.json` holds record-managed rows (to be written by `totem rule serve`, part B2 of [mmnto-ai/totem#3036](https://github.com/mmnto-ai/totem/issues/3036), not yet shipped); every record-path row is kept. A `compiled-rules.json` that cannot be read or parsed is refused on every run, and this override does not lift that.
 
 **Example Usage:**
 

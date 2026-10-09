@@ -224,6 +224,58 @@ describe('compileCommand on a record-managed serving file (mmnto-ai/totem#3036 B
   });
 });
 
+// ─── First compile: no serving file yet (fold round 2, mmnto-ai/totem#3036 B1) ──
+//
+// The guard reads the serving file on every run. A repository that has never
+// compiled has none, and the guard must let that run through: the loader's
+// missing-file case is an empty rule set, never a refusal.
+
+describe('compileCommand with no serving file yet (mmnto-ai/totem#3036 B1)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-compile-record-guard-first-'));
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('is not refused by the guard and writes a serving file', async () => {
+    // The cloud seam (fetch stubbed, no results) keeps the run hermetic.
+    vi.stubEnv('TOTEM_CLOUD_TOKEN', 'test-token');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ results: [], stats: { elapsed_seconds: 0, succeeded: 0, failed: 0 } }),
+      }),
+    );
+    const ws = setupWorkspace(tmpDir, [], { 'use-err.md': lessonMarkdown(HEADING, BODY) });
+    fs.rmSync(ws.rulesPath);
+    expect(fs.existsSync(ws.rulesPath)).toBe(false);
+
+    let thrown: unknown;
+    try {
+      await compileCommand({ cloud: 'http://127.0.0.1:9' });
+    } catch (err) {
+      thrown = err;
+    }
+
+    const code = (thrown as { code?: string } | undefined)?.code;
+    expect(code).not.toBe('PARSE_FAILED');
+    expect(code).not.toBe('RECORD_MANAGED_SERVING_FILE');
+    expect(thrown).toBeUndefined();
+    expect(fs.existsSync(ws.rulesPath)).toBe(true);
+  });
+});
+
 // ─── An unreadable serving file (fold round, mmnto-ai/totem#3036 B1) ────────
 //
 // The shared loader turns a JSON parse failure into an empty rule set. Read that
