@@ -83,6 +83,14 @@ export interface CompileOptions {
    * `--force`.
    */
   refreshManifest?: boolean;
+  /**
+   * The explicit override of the record-managed refusal (B1 of
+   * mmnto-ai/totem#3036). Without it, a serving file holding any record-path
+   * row (`isRecordPathRule`) makes the compile refuse before any write, because
+   * those rows are written by `totem rule serve`, not by this command. With it,
+   * the compile runs and both prune paths still keep every record-path row.
+   */
+  allowRecordRows?: boolean;
 }
 
 // ─── Telemetry directive (mmnto/totem#1131) ────────────────────
@@ -174,12 +182,21 @@ export function pruneStaleNonCompilable(
  * used by the no-op compile path (mmnto/totem#1281) so lesson removals drain
  * the compiled rule AND any stale non-compilable entry in the same run.
  * Pure function; does not mutate the input array.
+ *
+ * A record-path row (`isRecordPathRule`) is ALWAYS kept: it is managed by its
+ * rule record, written by `totem rule serve`, and its `lessonHash` is a ledger
+ * rule id that never appears among the lesson hashes, so "no lesson" is not
+ * "stale" for it (B1 of mmnto-ai/totem#3036). Both prune paths in
+ * `compileCommand` route through this one helper, which owns the record-row
+ * invariant itself: the discriminator stays core's, reached through the CLI's
+ * lazy `@mmnto/totem` boundary (hence async), never copied here.
  */
-export function pruneStaleRules(
+export async function pruneStaleRules(
   rules: readonly CompiledRule[],
   currentHashes: Set<string>,
-): { fresh: CompiledRule[]; pruned: number } {
-  const fresh = rules.filter((r) => currentHashes.has(r.lessonHash));
+): Promise<{ fresh: CompiledRule[]; pruned: number }> {
+  const { isRecordPathRule } = await import('@mmnto/totem');
+  const fresh = rules.filter((r) => isRecordPathRule(r) || currentHashes.has(r.lessonHash));
   return { fresh, pruned: rules.length - fresh.length };
 }
 
@@ -409,7 +426,8 @@ export function autoScaffoldFixture(
 export async function compileCommand(
   options: CompileOptions,
 ): Promise<UpgradeOutcome | UpgradeOutcome[] | void> {
-  const { TotemConfigError, TotemError } = await import('@mmnto/totem');
+  const { TotemConfigError, TotemError, TotemParseError, isRecordPathRule } =
+    await import('@mmnto/totem');
   const { COMPILER_SYSTEM_PROMPT, PIPELINE3_COMPILER_PROMPT } =
     await import('./compile-templates.js');
   const fs = await import('node:fs');
@@ -569,6 +587,44 @@ export async function compileCommand(
 
   const totemDir = path.join(configRoot, config.totemDir);
   const rulesPath = path.join(totemDir, COMPILED_RULES_FILE);
+
+  // ─── Record-managed serving file guard (B1 of mmnto-ai/totem#3036) ───
+  // A record-path row is written by the record writer, `totem rule serve`, not
+  // by this lesson compile. Refuse LOUDLY, before any write on every path below
+  // (rules file, manifest, exports, telemetry), when the serving file holds one,
+  // unless the caller passed the explicit override. With the override the run
+  // proceeds and `pruneStaleRules` keeps every record-path row.
+  //
+  // The loader turns a read or JSON parse failure (a conflict marker, a BOM,
+  // truncation, an empty file, a directory or an unreadable file in the file's
+  // place) into an `onWarn` call and an EMPTY rule set; every later read in
+  // this command would then see no rows and the save would overwrite the file
+  // without them. An unreadable file could hold record rows, so the guard
+  // refuses it on every run, `--allow-record-rows` or not: that flag answers
+  // "may the compile run beside record rows it can see", not "may it overwrite a
+  // file it cannot read". (A schema failure already throws from the loader.)
+  const rulesRel = path.relative(cwd, rulesPath);
+  const guardRead = loadCompiledRulesFile(rulesPath, (detail) => {
+    // The loader's message carries its own prefix; keep only the cause.
+    const cause = detail.replace(/^Could not load compiled rules:\s*/, '');
+    throw new TotemParseError(
+      `Refusing to compile: ${rulesRel} exists but cannot be read or parsed as JSON (${cause}); nothing was written. It may hold record-managed rows, which a compile would drop, so --allow-record-rows does not lift this refusal.`,
+      `Repair ${rulesRel} first, then re-run: resolve the merge conflict if there is one, otherwise restore the file from git (\`git checkout -- ${rulesRel}\`). In a repository with no record-managed rows you can instead delete the file and re-run \`totem lesson compile\` to regenerate it.`,
+    );
+  });
+  if (!options.allowRecordRows) {
+    const recordRows = guardRead.rules.filter(isRecordPathRule);
+    if (recordRows.length > 0) {
+      const ids = recordRows.map((r) => r.lessonHash);
+      const shown =
+        ids.slice(0, 5).join(', ') + (ids.length > 5 ? `, … (${ids.length} total)` : '');
+      throw new TotemError(
+        'RECORD_MANAGED_SERVING_FILE',
+        `Refusing to compile: ${rulesRel} holds ${ids.length} record-managed row${ids.length === 1 ? '' : 's'} (${shown}). Those rows are written by \`totem rule serve\`, not by the lesson compile; nothing was written.`,
+        'Use `totem rule serve` to regenerate a record-managed serving file. To run the lesson compile anyway (it keeps every record-path row), pass --allow-record-rows. To refresh the manifest of a record-managed file (the one path that writes no row), run `totem lesson compile --refresh-manifest --allow-record-rows` (the deprecated `totem compile` alias has no --refresh-manifest). --export is export-only only when no orchestrator is configured; with one, it is a full compile that keeps every record-path row.',
+      );
+    }
+  }
 
   // mmnto-ai/totem#1656: shared helper for severity-override telemetry.
   // Closes over the per-invocation `totemDir` (configRoot-relative per
@@ -882,8 +938,11 @@ export async function compileCommand(
     // BEFORE refreshing the manifest. Without this, a corrupt rules file
     // gets its new byte-level hash written to the manifest and
     // verify-manifest stops surfacing the corruption — silent drift.
-    // loadCompiledRulesFile throws TotemParseError on malformed JSON or
-    // schema violations (CR finding on PR mmnto-ai/totem#1629).
+    // loadCompiledRulesFile throws TotemParseError on a schema violation
+    // (CR finding on PR mmnto-ai/totem#1629). On malformed JSON or a read
+    // failure it does NOT throw: it calls its optional onWarn and returns an
+    // empty rule set. That case never reaches here: the record-managed guard
+    // above reads the file with an onWarn that refuses (mmnto-ai/totem#3036).
     const compiledRulesFile = loadCompiledRulesFile(rulesPath);
     const compileManifest = readCompileManifest(manifestPath);
     const freshOutputHash = generateOutputHash(rulesPath);
@@ -1198,7 +1257,7 @@ export async function compileCommand(
       let reportedCompiled = existingRules.length;
       if (!options.raw) {
         const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-        const { fresh: freshRules, pruned: rulesPruned } = pruneStaleRules(
+        const { fresh: freshRules, pruned: rulesPruned } = await pruneStaleRules(
           existingRules,
           currentHashes,
         );
@@ -1345,8 +1404,9 @@ export async function compileCommand(
       const newRules: CompiledRule[] = [...existingRules];
 
       const currentHashes = new Set(lessons.map((l) => hashLesson(l.heading, l.body)));
-      const freshRules = newRules.filter((r) => currentHashes.has(r.lessonHash));
-      const pruned = newRules.length - freshRules.length;
+      // The same helper as the no-op branch, so a record-path row survives this
+      // prune too (B1 of mmnto-ai/totem#3036).
+      const { fresh: freshRules, pruned } = await pruneStaleRules(newRules, currentHashes);
       if (pruned > 0) {
         log.dim(TAG, `Pruned ${pruned} stale rules (lessons edited or removed)`); // totem-ignore
       }

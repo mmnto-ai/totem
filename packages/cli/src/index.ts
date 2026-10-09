@@ -1510,6 +1510,10 @@ program
   .option('--concurrency <n>', 'Number of parallel LLM compilations (default: 5)', '5')
   .option('--cloud <url>', 'Use a cloud compilation endpoint for parallel fan-out')
   .option('--verbose', 'Show details for skipped (non-compilable) lessons')
+  .option(
+    '--allow-record-rows',
+    'Run even though compiled-rules.json holds record-managed rows (written by `totem rule serve`); every record-path row is kept (mmnto-ai/totem#3036)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -1523,6 +1527,7 @@ program
       cloud?: string;
       verbose?: boolean;
       upgrade?: string;
+      allowRecordRows?: boolean;
     }) => {
       try {
         console.error("\u26a0 'totem compile' is deprecated. Use 'totem lesson compile' instead.");
@@ -2197,6 +2202,10 @@ lessonCmd
     '--refresh-manifest',
     'Recompute compile-manifest.json output_hash from current compiled-rules.json (no LLM; mmnto-ai/totem#1587)',
   )
+  .option(
+    '--allow-record-rows',
+    'Run even though compiled-rules.json holds record-managed rows (written by `totem rule serve`); every record-path row is kept (mmnto-ai/totem#3036)',
+  )
   .action(
     async (opts: {
       raw?: boolean;
@@ -2211,6 +2220,7 @@ lessonCmd
       verbose?: boolean;
       upgrade?: string;
       refreshManifest?: boolean;
+      allowRecordRows?: boolean;
     }) => {
       try {
         const { compileCommand } = await import('./commands/compile.js');

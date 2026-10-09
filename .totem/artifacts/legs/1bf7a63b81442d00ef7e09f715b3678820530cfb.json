@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "1bf7a63b81442d00ef7e09f715b3678820530cfb",
+  "readAt": "2026-10-09T18:43:22.112Z",
+  "findings": [
+    {
+      "id": "3036-B1-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/compile.ts",
+      "line": 596,
+      "claim": "The guard read the serving file with loadCompiledRulesFile and no onWarn callback; that loader turns a JSON parse failure (conflict markers, a BOM, truncation) into a warning and an empty rule set (core compiler.ts:211-219), so a record-managed file that does not parse showed no record rows, the guard passed it, and the compile reloaded it as empty and overwrote it without the record rows (compile.ts:1173-1174, saves at 1319 and 1985); under --refresh-manifest the malformed bytes were hashed into the manifest.",
+      "counterexample": "Measured by the leg on the worktree's core build with a file holding a conflict marker before a valid body: WARN Could not load compiled rules ... is not valid JSON, RESULT { version: 1, rules: [] }. The loader behaviour predates B1; B1 inherited it and its changeset claimed a refusal on every path. FOLDED at 8a782608: the guard reads through the loader with an onWarn that throws TotemParseError (PARSE_FAILED) naming the file, before any write, on every path, and --allow-record-rows does not lift it; two tests written RED first (promise resolved on the pre-fold code); the stale comment at compile.ts ~921 that claimed the loader throws on malformed JSON corrected."
+    },
+    {
+      "id": "3036-B1-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/compile.ts",
+      "line": 901,
+      "claim": "The refusal also covers the two paths that never write a row (--refresh-manifest at 901-948, the export-only path at 2037-2077), and its hint sent them to totem rule serve, which by B2's design writes nothing for an unchanged input; documented workflows that run --refresh-manifest after a hand edit (.claude/skills/postmerge/SKILL.md:105-108, docs/wiki/cli-reference.md:320, docs/wiki/compile-options.md:15) would fail once record rows exist.",
+      "counterexample": "The design's failure-table row is the broader one (the compile meets a record-path row), so the placement stands as built and ruled. It fails loudly; nothing is lost. FOLDED at 8a782608 as wording: the hint names --allow-record-rows with --refresh-manifest for a manifest refresh (re-worded again at b4550003 after the scoped re-read found the --export half false)."
+    },
+    {
+      "id": "3036-B1-F3",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 313,
+      "claim": "--allow-record-rows was added to both compile commands (index.ts:1513-1516, 2205-2208) but the option lists in docs/wiki/cli-reference.md and docs/wiki/compile-options.md did not mention it; no test enforces docs/help parity.",
+      "counterexample": "The design forbids editing docs the regeneration will move; these option lists are not among them. FOLDED at 8a782608: one line in each list matching the flag's help text."
+    },
+    {
+      "id": "3036-B1-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/compile-record-guard.test.ts",
+      "line": 1,
+      "claim": "Assertion strength: the refusal test checks the rules file's bytes and mtime and that no manifest or export exists, but not the ledger, telemetry or cache, and there is no refusal test for the --refresh-manifest, --upgrade or --cloud paths (covered by structure, one guard before every branch); the doctor and init tests' nothing-written checks would also pass on the old code, only their totem rule serve message check tells old from new.",
+      "counterexample": "All seven REDs failed on the design's assertions (red.txt:82, 120, 141, 162, 183, 204, 240); the --force test distinguishes old from new (it resolved on the old code). DECLINED as adequate against the design's writes-nothing clause (rules file, manifest, exports); a whole-tree snapshot would make it exact and is not owed."
+    },
+    {
+      "id": "3036-B1-F5",
+      "severity": "MINOR",
+      "file": ".changeset/compile-record-guard-3036.md",
+      "line": 8,
+      "claim": "Three changeset clauses overstated: 'compiles exactly as before' (a schema failure is now reported by the guard ahead of CONFIG_MISSING, NO_LESSONS and the CONFIG_INVALID option checks, and the file is parsed once more per run); 'never a lesson hash' (a lowered row's id has the same 16-hex shape, record-lower.ts:488 and compiler-schema.ts:85-87; what makes it stale is matching no current lesson's hash); 'refuses on every path' (see F1).",
+      "counterexample": "FOLDED at 8a782608: each clause replaced with a true sentence; the unreadable-file refusal added. The id-shape clause was tightened again at b4550003 (16 hex characters with an optional -<n> suffix, compiler-schema.ts:239)."
+    },
+    {
+      "id": "3036-B1-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/compile-manifest.ts",
+      "line": 431,
+      "claim": "Four other runtime hints (compile-manifest.ts:431, 477, 484, 491) still say to run totem compile; the design named only the verify-manifest hint and the loader's for B1, and the diff re-words exactly those two; the new hints are conditional and do not mislead a user with no record rows, though they name a verb that does not exist yet.",
+      "counterexample": "In scope as ruled; the design accepts naming totem rule serve before it ships. DECLINED here and listed for B2 in the pull request body."
+    },
+    {
+      "id": "3036-B1-F7",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 2768,
+      "claim": "Both callers catch the error and carry on (doctor.ts:2768-2775 prints err.message; init.ts:2344-2347 prints err.message), so the message naming totem rule serve is printed but the recovery hint carrying --allow-record-rows never is; in doctor the refusal also sets upgradePhaseTouchedManifest and runs a harmless git checkout of the manifest. Should the caller line show the override too?",
+      "counterexample": "ANSWERED: naming the right verb is what the design asks (report the refusal and carry on) and it is met; the hint is reachable by running the compile directly. No change; recorded in the pull request body."
+    }
+  ],
+  "folded": [
+    "3036-B1-F1",
+    "3036-B1-F2",
+    "3036-B1-F3",
+    "3036-B1-F5"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 5 MINOR, 1 QUESTION over the one-commit diff 74421391..1bf7a63b of B1 (the compile guard) under mmnto-ai/totem#3036: nothing blocks presenting it for merge on the design as ruled, and the one material finding, an unreadable serving file passing the guard as empty and being overwritten, was folded at 8a782608 and re-read in a scoped second deposit. Held at source: nothing between the start of compileCommand and the guard writes (compile.ts:563-587), and every write site sits below it (the --refresh-manifest branch at 901, the rules saves at 1319 and 1985, the manifest writes at 945, 1345 and 2005, logCompileRun at 1356 and 2016, the exports at 2076); a missing file gives an empty set (compiler.ts:202) so a first compile is unaffected; exactly two prune sites existed at the base (compile.ts:1201 and 1348) and both now route through pruneStaleRules, with no third site that drops rows by lesson hash in cli, core, mcp or the packs; the lazy-import rule's escape is the totem-context note the engine recognises (ast-query.ts:20, ast-grep-query.ts:18), pr.ts:38-39 is the same shape, and compile.js is reached only through dynamic import (index.ts:1534 and 2226, doctor.ts:2720, init.ts:2338); the || in pruneStaleRules is a boolean OR where ?? would be wrong, a false positive left visible since a suppression needs a ticket; no exhaustive code list exists for TotemErrorCode and the refusal exits 1 (index.ts:59 maps only REPO_ROOT_REFUSED to 2); main's serving file holds 485 rows and 0 record-path rows; the pre-push hook text is unchanged (install-hooks.ts:1391) as ruled."
+}

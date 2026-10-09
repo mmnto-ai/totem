@@ -57,7 +57,9 @@ export type TotemErrorCode =
   /** A mail reader verb's start resolves to no repository or to a linked worktree — refused before any read or write; exit 2 at the CLI (mmnto-ai/totem#2946, mmnto-ai/totem#2968). */
   | 'REPO_ROOT_REFUSED'
   /** A reader opened a vector store that only a rebuild can repair; the sync is the one rebuilder (mmnto-ai/totem#3009). */
-  | 'STORE_NEEDS_REBUILD';
+  | 'STORE_NEEDS_REBUILD'
+  /** The legacy compile met a record-path row in the serving file and `--allow-record-rows` was not passed — refused before any write; the record writer is `totem rule serve` (mmnto-ai/totem#3036). */
+  | 'RECORD_MANAGED_SERVING_FILE';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

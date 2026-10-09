@@ -1,0 +1,80 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "8a7826087b84be01ae2942da2ba74066dfaede4e",
+  "readAt": "2026-10-09T18:56:48.696Z",
+  "findings": [
+    {
+      "id": "3036-B1-R2-F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/compile.ts",
+      "line": 618,
+      "claim": "The --export half of the new hint was false on a Full-tier config: compile.ts:1183 runs Phase 1 whenever an orchestrator is configured, --export or not, and --export is export-only only through :2054 (no orchestrator); the RED log shows a pre-fold export: true run compiling and rewriting the rules file and manifest before exporting.",
+      "counterexample": "Measured from red-fold.txt (Manifest ... 0 rules ... Exported 1 rules). FOLDED at b4550003: the hint and the changeset say --export is export-only only when no orchestrator is configured, otherwise a full compile that keeps every record-path row."
+    },
+    {
+      "id": "3036-B1-R2-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 1494,
+      "claim": "The deprecated totem compile alias (index.ts:1494-1516) registers --allow-record-rows but no --refresh-manifest; only lesson compile has it (:2201-2204), so a user who met the refusal through the alias was told to pass a flag commander rejects there.",
+      "counterexample": "Read at source. FOLDED at b4550003: the hint names the totem lesson compile --refresh-manifest --allow-record-rows form and says the alias has no --refresh-manifest."
+    },
+    {
+      "id": "3036-B1-R2-F3",
+      "severity": "MINOR",
+      "file": ".changeset/compile-record-guard-3036.md",
+      "line": 9,
+      "claim": "The unreadable-file refusal covers more than the changeset said (the probe shows EISDIR and a 0-byte file refused too; EACCES takes the same catch path), its message doubled the loader's prefix, and its hint omitted the lesson-managed repair route the loader's own RULES_FILE_REPAIR_HINT gives; a lesson-only repository with a corrupt file now refuses where it used to regenerate.",
+      "counterexample": "Wording and disclosure, not safety. FOLDED at b4550003: the message says read or parsed, the prefix is stripped, the hint gives both routes, the changeset lists the refused cases and the behaviour change for a lesson-only repository."
+    },
+    {
+      "id": "3036-B1-R2-F4",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/compile.ts",
+      "line": 606,
+      "claim": "The hint printed a literal <path> though the real relative path is computed one line above, and git checkout -- on an unmerged path errors, so for the conflict case only resolving the conflict works (the git point was not measured by the leg).",
+      "counterexample": "Cosmetic; no doctrine or AGENTS.md conflict found. FOLDED at b4550003: the real path is interpolated and the hint says resolve the conflict if there is one, otherwise restore from git."
+    },
+    {
+      "id": "3036-B1-R2-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/compile-record-guard.test.ts",
+      "line": 269,
+      "claim": "The RED for the material claim shows the overwrite only in captured log output, not in an assertion that ran: both tests failed at the first assertion (promise resolved) and the byte, mtime, manifest and export assertions never ran on the pre-fold code; an assertion that caught the rejection and then checked the file's rows and bytes would have failed on the overwrite itself.",
+      "counterexample": "The post-fold tests are adequate against the contract (PARSE_FAILED, unchanged bytes and mtime, no manifest, no export; the second test proves the override does not lift it; the first proves the refusal precedes Phase 1 and the export on a Full-tier workspace). DECLINED as a change; disclosed in the pull request body."
+    },
+    {
+      "id": "3036-B1-R2-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/bootstrap-wiring.test.ts",
+      "line": 101,
+      "claim": "No test pinned the first-compile path: every compileCommand test wrote compiled-rules.json first or mocked core, and bootstrap-wiring.test.ts swallows any rejection, so a guard that refused a missing file would have gone uncaught.",
+      "counterexample": "The source is correct (compiler.ts:202 returns empty without the callback; the probe confirms). FOLDED at b4550003: a first-compile test with no serving file and the stub orchestrator asserts no PARSE_FAILED or RECORD_MANAGED_SERVING_FILE and that a serving file exists afterwards; run RED against a one-line inversion that was never committed (the tree carries no trace), a regression guard on the committed code."
+    },
+    {
+      "id": "3036-B1-R2-F7",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 321,
+      "claim": "The two new doc lines said written by totem rule serve in the present tense though no serve command is registered (it is B2), and neither doc mentioned the unreadable-file refusal or that the override does not lift it; the changeset's 16-hex shape clause was loose against compiler-schema.ts:239 (16 hex chars plus an optional -<n> suffix).",
+      "counterexample": "FOLDED at b4550003: the docs say to be written by totem rule serve, part B2 of mmnto-ai/totem#3036, not yet shipped, and name the refusal; the changeset clause carries the suffix. One nit left and disclosed: the same shape as a lesson hash holds for an unsuffixed id."
+    },
+    {
+      "id": "3036-B1-R2-F8",
+      "severity": "QUESTION",
+      "file": ".totem/specs/3036.md",
+      "line": 133,
+      "claim": "The approved design gives B1 one failure-mode row (the compile meets a record-path row); the fold widens B1 into a refusal that lesson-only repositories also hit, in the safe direction under the design's No silent degradation clause. Should the widening be noted against the approval record or in the pull request body?",
+      "counterexample": "ANSWERED: both. A scope note is on the issue's approval thread (mmnto-ai/totem#3036 comment 6087462693) and the pull request body records it; the design note mmnto-ai/totem#3034 is unchanged."
+    }
+  ],
+  "folded": [
+    "3036-B1-R2-F1",
+    "3036-B1-R2-F2",
+    "3036-B1-R2-F3",
+    "3036-B1-R2-F4",
+    "3036-B1-R2-F6",
+    "3036-B1-R2-F7"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 7 MINOR, 1 QUESTION over the scoped re-read of the fold 1bf7a63b..8a782608 on B1 (the unreadable-file refusal): the fold closes the first read's material finding, and nothing in it blocks presenting the pull request for merge. Confirmed at source and by a probe against the worktree's built loader: the loader has one try whose catch returns empty for ENOENT, throws TotemParseError on a ZodError and otherwise calls onWarn and returns empty, with no outer catch, so a throw from onWarn escapes (compiler.ts:198-219); a directory, a BOM-prefixed file, a conflict marker, a truncated file and a 0-byte file are refused, a schema failure still throws from the loader, and a missing file still returns empty without the callback (compiler.ts:202); the guard read at compile.ts:603 is unconditional and precedes every branch (--refresh-manifest at 915, --from-cursor at 970, upgrade at 1022 and 1050, Phase 1 at 1183, --export at 2063), with or without the override; both refusals use the same relative path form; the corrected comment at :935-939 is true sentence by sentence; neither override hint can lose a record row. The six wording and test folds at b4550003 do not rewire semantics; no third read was armed; convergence named by the seat."
+}

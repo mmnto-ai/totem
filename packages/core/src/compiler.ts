@@ -113,6 +113,16 @@ export { validateRegex } from './regex-validation.js';
 // ─── File I/O ───────────────────────────────────────
 
 /**
+ * The recovery hint for a compiled-rules.json that fails its schema, shared by
+ * both loaders. Deleting the file and re-running the lesson compile is right
+ * only for a lesson-managed file: a record-managed one (rows written by
+ * `totem rule serve`) would lose its record rows that way, and the compile
+ * refuses such a file anyway (B1 of mmnto-ai/totem#3036).
+ */
+const RULES_FILE_REPAIR_HINT =
+  "Delete the file and run 'totem lesson compile' to regenerate it. If it holds record-managed rows (written by 'totem rule serve'), restore it from git and regenerate it with 'totem rule serve' instead.";
+
+/**
  * Load compiled rules from a JSON file. Returns empty array if file missing.
  *
  * Filters out rules with inert lifecycle status so the lint execution path,
@@ -157,7 +167,7 @@ export function loadCompiledRules(
     if (err instanceof z.ZodError) {
       throw new TotemParseError(
         `Invalid compiled-rules.json: ${err.issues.map((i) => i.message).join('; ')}`,
-        "Delete the file and run 'totem compile' to regenerate it.",
+        RULES_FILE_REPAIR_HINT,
       );
     }
     onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
@@ -202,7 +212,7 @@ export function loadCompiledRulesFile(
     if (err instanceof z.ZodError) {
       throw new TotemParseError(
         `Invalid compiled-rules.json: ${err.issues.map((i) => i.message).join('; ')}`,
-        "Delete the file and run 'totem compile' to regenerate it.",
+        RULES_FILE_REPAIR_HINT,
       );
     }
     onWarn?.(`Could not load compiled rules: ${err instanceof Error ? err.message : String(err)}`);
