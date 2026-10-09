@@ -414,6 +414,10 @@ export {
   validateRegex,
 } from './compiler.js';
 
+// The one blocking predicate, shared by lint and `rule list --blocking` (mmnto-ai/totem#3035)
+export type { RuleTier, RuleTierInput } from './rule-tier.js';
+export { effectiveSeverity, isBlockingRule, ruleTier } from './rule-tier.js';
+
 // Bounded regex evaluation (mmnto-ai/totem#1641)
 export {
   applyRulesToAdditionsBounded,

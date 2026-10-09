@@ -159,6 +159,265 @@ describe('rule list', () => {
     expect(output).toContain('No compiled rules found');
     expect(output).toContain('totem compile');
   });
+
+  it('displays the effective severity (error) for a row with no severity (mmnto-ai/totem#3035)', async () => {
+    scaffold(tmpDir, [
+      {
+        lessonHash: '5eee0000aaaa1111',
+        lessonHeading: 'Row with no stored severity',
+        pattern: 'foo',
+        message: 'foo',
+        engine: 'regex',
+        compiledAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand();
+
+    const lines = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n')).split('\n');
+    const row = lines.find((l) => l.includes('5eee0000'));
+    expect(row).toBeDefined();
+    expect(row).toMatch(/\berror\b/);
+    expect(row).not.toMatch(/\bwarning\b/);
+  });
+});
+
+// ─── rule list --blocking + JSON tier/blocking (mmnto-ai/totem#3035) ──
+
+describe('rule list --blocking (mmnto-ai/totem#3035)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let originalJson: string | undefined;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    originalJson = process.env['TOTEM_JSON_OUTPUT'];
+    delete process.env['TOTEM_JSON_OUTPUT'];
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    if (originalJson === undefined) delete process.env['TOTEM_JSON_OUTPUT'];
+    else process.env['TOTEM_JSON_OUTPUT'] = originalJson;
+    cleanTmpDir(tmpDir);
+    vi.restoreAllMocks();
+  });
+
+  const PASSING_LEGITIMACY = {
+    provenance: {
+      mergedPr: 3035,
+      reviewThread: 'synthetic fixture for mmnto-ai/totem#3035',
+      commitSha: '0000000000000000000000000000000000000000',
+    },
+    positiveControl: true,
+    negativeControl: true,
+  };
+  const FAILING_LEGITIMACY = { ...PASSING_LEGITIMACY, positiveControl: false };
+
+  function fixtureRow(hash: string, extra: Record<string, unknown>): Record<string, unknown> {
+    return {
+      lessonHash: hash,
+      lessonHeading: `Fixture ${hash}`,
+      pattern: 'foo',
+      message: 'foo',
+      engine: 'regex',
+      compiledAt: '2026-01-01T00:00:00.000Z',
+      ...extra,
+    };
+  }
+
+  /**
+   * hash -> the row's tier and whether it blocks, both as LITERALS derived by hand
+   * from the design's truth table, never from the predicate under test (archived
+   * rows are not listed at all).
+   */
+  const FIXTURE: { row: Record<string, unknown>; tier: 'hard' | 'advisory'; blocks: boolean }[] = [
+    // ast, error: hard tier by engine -> blocks
+    {
+      row: fixtureRow('a1000000000000a1', {
+        engine: 'ast',
+        astQuery: '(identifier) @x',
+        severity: 'error',
+      }),
+      tier: 'hard',
+      blocks: true,
+    },
+    // ast-grep, no severity: hard tier by engine, absent severity -> blocks
+    {
+      row: fixtureRow('a2000000000000a2', { engine: 'ast-grep', astGrepPattern: 'foo()' }),
+      tier: 'hard',
+      blocks: true,
+    },
+    // ast-grep, warning: hard tier but warning -> does not block
+    {
+      row: fixtureRow('a3000000000000a3', {
+        engine: 'ast-grep',
+        astGrepPattern: 'foo()',
+        severity: 'warning',
+      }),
+      tier: 'hard',
+      blocks: false,
+    },
+    // regex, error, un-stamped: advisory -> does not block
+    {
+      row: fixtureRow('a4000000000000a4', { severity: 'error' }),
+      tier: 'advisory',
+      blocks: false,
+    },
+    // regex stamped hard, error: ruleClass wins upward -> blocks
+    {
+      row: fixtureRow('a5000000000000a5', {
+        severity: 'error',
+        legitimacy: PASSING_LEGITIMACY,
+        ruleClass: 'hard',
+      }),
+      tier: 'hard',
+      blocks: true,
+    },
+    // ast-grep stamped advisory, error: ruleClass wins downward -> does not block
+    {
+      row: fixtureRow('a6000000000000a6', {
+        engine: 'ast-grep',
+        astGrepPattern: 'foo()',
+        severity: 'error',
+        legitimacy: FAILING_LEGITIMACY,
+        ruleClass: 'advisory',
+      }),
+      tier: 'advisory',
+      blocks: false,
+    },
+  ];
+
+  /** An archived row that WOULD block if it were active. */
+  const ARCHIVED_BLOCKER = fixtureRow('a7000000000000a7', {
+    engine: 'ast-grep',
+    astGrepPattern: 'foo()',
+    severity: 'error',
+    status: 'archived',
+    archivedReason: 'fixture',
+  });
+
+  const ALL_ROWS = [...FIXTURE.map((f) => f.row), ARCHIVED_BLOCKER];
+  const BLOCKING_HASHES = FIXTURE.filter((f) => f.blocks).map((f) => f.row['lessonHash'] as string);
+
+  function captureStdout(): { text: () => string } {
+    const chunks: string[] = [];
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+      chunks.push(String(chunk));
+      return true;
+    });
+    return { text: () => chunks.join('') };
+  }
+
+  interface JsonRow {
+    hash: string;
+    severity?: string;
+    tier: string;
+    blocking: boolean;
+    engine?: string;
+  }
+
+  it('lists exactly the blocking rows of the fixture; the archived would-be blocker is absent', async () => {
+    scaffold(tmpDir, ALL_ROWS);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand({ blocking: true });
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    for (const f of FIXTURE) {
+      const short = (f.row['lessonHash'] as string).slice(0, 8);
+      if (f.blocks) expect(output).toContain(short);
+      else expect(output).not.toContain(short);
+    }
+    expect(output).not.toContain('a7000000');
+    expect(output).toContain(`${BLOCKING_HASHES.length} of ${FIXTURE.length} active rule(s) block`);
+  });
+
+  it('JSON --blocking returns exactly the blocking rows, each with tier hard and blocking true', async () => {
+    scaffold(tmpDir, ALL_ROWS);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.env['TOTEM_JSON_OUTPUT'] = '1';
+    const out = captureStdout();
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand({ blocking: true });
+
+    const parsed = JSON.parse(out.text()) as { status: string; data: { rules: JsonRow[] } };
+    expect(parsed.status).toBe('success');
+    expect(parsed.data.rules.map((r) => r.hash).sort()).toEqual([...BLOCKING_HASHES].sort());
+    for (const r of parsed.data.rules) {
+      expect(r.tier).toBe('hard');
+      expect(r.blocking).toBe(true);
+    }
+  });
+
+  it('every JSON row carries tier and blocking, and blocking equals the shared predicate', async () => {
+    scaffold(tmpDir, ALL_ROWS);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.env['TOTEM_JSON_OUTPUT'] = '1';
+    const out = captureStdout();
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand();
+
+    const { isBlockingRule, loadCompiledRules } = await import('@mmnto/totem');
+    const active = loadCompiledRules(path.join(tmpDir, '.totem', 'compiled-rules.json'));
+    const parsed = JSON.parse(out.text()) as { status: string; data: { rules: JsonRow[] } };
+    expect(parsed.status).toBe('success');
+    expect(parsed.data.rules).toHaveLength(FIXTURE.length);
+    for (const r of parsed.data.rules) {
+      expect(r).toHaveProperty('tier');
+      expect(r).toHaveProperty('blocking');
+      const source = active.find((a) => a.lessonHash === r.hash)!;
+      expect(r.blocking).toBe(isBlockingRule(source));
+      const expected = FIXTURE.find((f) => f.row['lessonHash'] === r.hash)!;
+      expect(r.blocking).toBe(expected.blocks);
+      // `tier` against a hand-derived literal, so a wrong tier cannot hide behind the predicate.
+      expect(r.tier).toBe(expected.tier);
+    }
+    // `severity` stays the STORED value: the no-severity row carries none.
+    const noSev = parsed.data.rules.find((r) => r.hash === 'a2000000000000a2')!;
+    expect(noSev.severity).toBeUndefined();
+  });
+
+  it('when nothing blocks: success, an empty list and a 0 of N line', async () => {
+    const nonBlocking = FIXTURE.filter((f) => !f.blocks).map((f) => f.row);
+    scaffold(tmpDir, nonBlocking);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand({ blocking: true });
+
+    const output = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n'));
+    expect(output).toContain(`0 of ${nonBlocking.length} active rule(s) block`);
+    expect(output).not.toContain('No compiled rules found');
+    for (const row of nonBlocking) {
+      expect(output).not.toContain((row['lessonHash'] as string).slice(0, 8));
+    }
+    expect(process.exitCode ?? 0).toBe(0);
+  });
+
+  it('when nothing blocks in JSON mode: status success with rules: []', async () => {
+    scaffold(
+      tmpDir,
+      FIXTURE.filter((f) => !f.blocks).map((f) => f.row),
+    );
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    process.env['TOTEM_JSON_OUTPUT'] = '1';
+    const out = captureStdout();
+
+    const { ruleListCommand } = await import('./rule.js');
+    await ruleListCommand({ blocking: true });
+
+    const parsed = JSON.parse(out.text()) as { status: string; data: { rules: JsonRow[] } };
+    expect(parsed.status).toBe('success');
+    expect(parsed.data.rules).toEqual([]);
+  });
 });
 
 describe('rule inspect', () => {
@@ -227,6 +486,28 @@ describe('rule inspect', () => {
     expect(output).toContain('Ambiguous prefix');
     expect(output).toContain('abcd1234abcd1234');
     expect(output).toContain('abcd9999abcd9999');
+  });
+
+  it('displays the effective severity (error) for a row with no severity (mmnto-ai/totem#3035)', async () => {
+    scaffold(tmpDir, [
+      {
+        lessonHash: '5eee0000aaaa1111',
+        lessonHeading: 'Row with no stored severity',
+        pattern: 'foo',
+        message: 'foo',
+        engine: 'regex',
+        compiledAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { ruleInspectCommand } = await import('./rule.js');
+    await ruleInspectCommand('5eee0000');
+
+    const lines = stripAnsi(consoleSpy.mock.calls.map((c) => String(c[0])).join('\n')).split('\n');
+    const severityLine = lines.find((l) => l.includes('Severity:'));
+    expect(severityLine).toBeDefined();
+    expect(severityLine).toMatch(/Severity:\s+error\b/);
   });
 });
 
