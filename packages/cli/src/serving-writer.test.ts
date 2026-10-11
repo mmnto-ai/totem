@@ -1053,14 +1053,18 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
   });
 
   it('ledgerPathForBlame canonicalises both sides, so another spelling of the root never yields a `..` path', () => {
-    // A root as git returns it (the long, real path) and a ledger path under a
-    // short-name spelling of the same directory, as GitHub's Windows runner
-    // hands out its temp dir. The injected canonicaliser maps the short segment
-    // to the long one, as fs.realpathSync.native does on a real 8.3 name.
-    const base = path.join(os.tmpdir(), 'canon-probe');
+    // Purely synthetic and filesystem-free: absolute paths that never exist on
+    // disk (so a filesystem call would throw ENOENT), a root as git returns it
+    // (the long spelling) and a ledger path under a short-name spelling of the
+    // same directory, as GitHub's Windows runner hands out its temp dir. The
+    // injected canonicaliser maps the fake short segment to the long one and
+    // nothing else. With a canonicaliser injected, `ledgerPathForBlame` uses
+    // only `path`; these paths passing is the proof that it touches no file.
+    const base = path.resolve(process.platform === 'win32' ? 'C:\\probe' : '/probe');
     const root = path.join(base, 'runneradmin', 'ws');
     const ledger = path.join(base, 'RUNNER~1', 'ws', '.totem', 'spine', 'authoring-ledger.ndjson');
-    const canon = (p: string) => path.normalize(p.replace('RUNNER~1', 'runneradmin'));
+    expect(fs.existsSync(base)).toBe(false);
+    const canon = (p: string) => p.replace('RUNNER~1', 'runneradmin');
     // The control: a plain relative path across the two spellings climbs out.
     expect(path.relative(root, ledger).split(path.sep)).toContain('..');
     const { rel, canonicalRoot } = ledgerPathForBlame(root, ledger, canon);
@@ -1077,12 +1081,12 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
   it.skipIf(process.platform !== 'win32')(
     'runs from an 8.3 short-name spelling of the workspace without refusing GIT_FAILED (Windows)',
     async () => {
-      const short = safeExec('powershell', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${ws.root}').ShortPath`,
-      ]);
+      // The short name through cmd's `%~sI` (fast; the PowerShell COM lookup
+      // timed out on the runner). The set is unquoted: cross-spawn escapes an
+      // embedded quote, which cmd then reads literally. A scratch temp path
+      // carries no space, which the precondition pins.
+      expect(ws.root).not.toContain(' ');
+      const short = safeExec('cmd.exe', ['/d', '/c', `for %I in (${ws.root}) do @echo %~sI`]);
       // On a volume with 8.3 names the spelling differs; say so in the output
       // either way (an identical spelling makes this arm a plain pass).
       console.error(`[short-name arm] long=${ws.root} short=${short}`);
@@ -1095,6 +1099,7 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
       expect(result.dryRun).toBe(true);
       expect(result.report.totals.lowered).toBe(2);
     },
+    120_000,
   );
 
   it('refuses loudly when the workspace is not a git repository, naming the git error', async () => {
