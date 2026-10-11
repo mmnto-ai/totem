@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "fcb6a9f88cf5ee68b7156d4521aa6c3bd671e22e",
+  "readAt": "2026-10-11T22:51:14.400Z",
+  "findings": [],
+  "folded": [],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 0 MINOR, 0 QUESTION over the scoped tenth read 33c95e6e..fcb6a9f8 on B2 (the serving writer) under mmnto-ai/totem#3036, the operator's option-1 ruling (the stale-floor check binds by content; the git-instant path removed): the leg named the chain CONVERGED under the no-unmeasured-claim rule. Held at source by the leg: no removed symbol, import, helper, git refusal or instant, commit, blame, shallow, replace, graft, ignore-list or object-store clause remains in the serve path, changeset or doc; the file of record is refused off-schema with 28 issues; the with-hashes fixture validates, its 28 hashes equal the effective ledger rows and the on-disk LF hashes, and it strips back to the file of record exactly; on a fresh copy an edited, re-admitted record refuses SERVING_RECORD_MISMATCH dry and real with all four files byte-identical and no .tmp, the new-hash floor passes, a byte-identical re-admission passes as the same matcher, and a floor naming an earlier row's hash refuses (serving-plan.ts:481-489 against foldEffectiveLedgerEntries); ci.yml equals b1368bec; the changeset clauses match; the integrity refusal, --refresh, the no-op re-run, the lone-end refusal and the worktree smoke are unchanged (485 to 513, classes 24/28/125/336, active 385 to 264, archived 93 to 242, blocking 4 to 4); suites green (cli 194 files, core 164)."
+}
