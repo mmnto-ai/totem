@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "ac301ec7f8cc6bed57ab003de201018ab039b3a6",
+  "readAt": "2026-10-11T19:36:06.977Z",
+  "findings": [
+    {
+      "id": "3036-B2-R3-F1",
+      "severity": "MINOR",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 268,
+      "claim": "The SERVING_MANIFEST_STALE message says the serving file 'was modified outside totem', and the hint's first option is 'Restore it from git if the edit was not meant'. But totem's own writers rewrite compiled-rules.json without refreshing the manifest: doctor's stale-rule archive (doctor.ts:2691), the pack-rule merge in install (install.ts:599) and the Stage-4 first-lint promotion (first-lint-promote-runner.ts:163). After any of them a plain serve refuses, and following the first hint would throw away a pack install or a promotion. The refusal itself is right, since verify-manifest fails that state too (verify-manifest.ts:96). Only the message and the hint's first option are inaccurate; nothing a run writes or refuses changes. Judged from the code; the leg did not run those three writers.",
+      "counterexample": "Code reading: none of doctor.ts:2691, install.ts:599 or first-lint-promote-runner.ts:163 calls writeCompileManifest (grep over packages/cli/src, test files excluded). FOLDED at 35c5b50d (wording only, by the seat): the message says the file changed after the manifest was written, by a hand edit or by a totem verb that rewrites rules without refreshing the manifest; the hint leads with the two deliberate repairs and ends with the git restore for a change not meant; the comment, the changeset clause and the doc clause say the same; the two writer test files pass (40 tests)."
+    },
+    {
+      "id": "3036-B2-R3-F2",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 291,
+      "claim": "The integrity check covers output_hash only, and the records notice fires only on a no-change run. A CHANGING run writes records_hash = attestRecordsHash, so an out-of-band edit to a tracked record file the floor does not name (29 of the repo's 57 record files) is silently re-attested: verify-manifest's 'Records hash mismatch' FAIL becomes a PASS, and the report says nothing. This matches every sibling manifest writer (compile, lesson archive, rule promote, refresh-manifest), and floor records stay guarded by the ledger content-hash check. But it is the records-class twin of the laundering R2-F2 closed for output_hash. Should the integrity refusal also cover a stale records_hash on a changing run, or at least emit the same notice?",
+      "counterexample": "r3-b (fresh mkws copy). Appended a comment line to the non-floor record .totem/rules/mig-0615c43e-dot-git-existence-test.rule.yaml and committed. verify-manifest: 'Records hash mismatch' then FAIL. rule serve floor.json --dry-run: no notice. Real run: wrote the serving file, the manifest and the exports. verify-manifest: PASS. ANSWERED by the seat, no change: re-attesting the records hash on a changing run is what every sibling manifest writer does; records_hash attests tracked record files, which are reviewed in the tree, not the serving file's integrity; floor records are guarded by the ledger content-hash check; a refusal there would block the normal author-then-regenerate flow where a newly authored record precedes the regeneration. Recorded in the pull request body."
+    }
+  ],
+  "folded": [
+    "3036-B2-R3-F1"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 1 MINOR, 1 QUESTION over the scoped third read of the fold a5f4cbd6..ac301ec7 on B2 (the serving writer) under mmnto-ai/totem#3036: the second fold holds, every round-2 finding is fixed and nothing from rounds 1 or 2 regressed; the one minor is wording, folded at 35c5b50d without a change to what a run writes or refuses; the one question is ruled no change; the leg named the chain CONVERGED under the no-unmeasured-claim rule on that ruling. Held at source by the leg: a no-change run without --refresh returns before any write and --refresh writes the manifest and every export (serving-writer.ts:285-342); fresh-copy probes held (the prettier round trip writes nothing; tamper refused real and dry; --refresh dry lists and real rewrites with verify-manifest PASS then a plain no-op; the sentinel refused dry and real with nothing written; the smoke counts unchanged, 485 to 513, classes 24/28/125/336, active 385 to 264, blocking 4 to 4); the integrity check uses the same generateOutputHash as verify-manifest.ts:79 and compile.ts:2028 and passes on this repository's file with its compound rule; the resealed tests still assert their own codes; the calendar round-trip right for +14:00, -12:00, fractions, leap days, the file of record and the live ledger; the inactive refusal covers all three inactive schema statuses; changeset, doc and help text match clause by clause; every new test fails with its fold reverted; suites green (cli 194 files, core 163)."
+}
