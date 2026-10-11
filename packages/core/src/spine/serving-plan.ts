@@ -35,7 +35,6 @@ const nonEmpty = (field: string) => z.string().min(1, { message: `${field} must 
 export const STRICT_INSTANT_FORM = 'YYYY-MM-DDTHH:MM:SS(.fraction)?(Z|+HH:MM|-HH:MM)';
 const STRICT_INSTANT_RE =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
-const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /**
  * True when the instant `ms`, shifted by the written UTC offset, shows exactly
@@ -68,22 +67,6 @@ export function parseStrictInstant(s: string): number | undefined {
   const offset = m[8] === 'Z' ? 0 : (m[9] === '-' ? -1 : 1) * (Number(m[10]) * 60 + Number(m[11]));
   const digits = [m[1], m[2], m[3], m[4], m[5], m[6]].map(Number);
   return roundTrips(ms, offset, digits) ? ms : undefined;
-}
-
-/**
- * Epoch milliseconds of a ledger row's `authoredAt` for the stale-floor check:
- * a date-only `YYYY-MM-DD` (the measured live form; ECMAScript reads it as UTC
- * midnight) or a strict instant, every component a real calendar value. A
- * zone-less date-time, an impossible date, or anything else is `undefined`.
- */
-export function parseAuthoredAt(s: string): number | undefined {
-  const m = DATE_ONLY_RE.exec(s);
-  if (m !== null) {
-    const ms = Date.parse(s);
-    if (Number.isNaN(ms)) return undefined;
-    return roundTrips(ms, 0, [Number(m[1]), Number(m[2]), Number(m[3]), 0, 0, 0]) ? ms : undefined;
-  }
-  return parseStrictInstant(s);
 }
 
 /**
@@ -128,6 +111,17 @@ export const ServingInputSchema = z
                     message:
                       'floor[].records[].ruleId must be a minted rule id (16 hex, optional -<n>)',
                   }),
+                  /**
+                   * Optional binding by content: the record's sha256 (64 hex) the
+                   * floor was scored against. When present it must equal the
+                   * effective ledger row's `record.contentHash`.
+                   */
+                  contentHash: z
+                    .string()
+                    .regex(/^[0-9a-f]{64}$/, {
+                      message: 'floor[].records[].contentHash must be 64 lowercase hex characters',
+                    })
+                    .optional(),
                 })
                 .strict(),
             )
@@ -174,6 +168,16 @@ export interface ServingRecord {
   /** sha256 (64 hex) of the record file's LF image, as the intake computes it. */
   contentHash: string;
   parsed: ParsedRuleRecord;
+  /**
+   * The commit that introduced the effective ledger row's line in the ledger
+   * file (the caller blames it); the all-zero hash when the line is not committed.
+   */
+  admittedCommit: string;
+  /**
+   * That commit's committer instant (ISO-8601, UTC), the record's admission
+   * instant; `null` when the line is not committed.
+   */
+  admittedAt: string | null;
 }
 
 export interface PlanServingWriteArgs {
@@ -483,6 +487,15 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
           'Fix the path in the input file, or re-run the intake (`totem rule author`) if the record moved.',
         );
       }
+      // Optional binding by content: a floor that names the record's content
+      // hash was scored against exactly that revision.
+      if (ref.contentHash !== undefined && ref.contentHash !== row.record.contentHash) {
+        throw new TotemError(
+          'SERVING_RECORD_MISMATCH',
+          `Floor record ${ref.path} (ruleId ${ref.ruleId}) names content hash ${ref.contentHash}, but its effective ledger row admitted ${row.record.contentHash}: the floor was built against another revision of this record; nothing was written.`,
+          'Regenerate the floor file from the current ledger (and re-score the record), then re-run.',
+        );
+      }
       const rec = recordById.get(ref.ruleId);
       if (rec === undefined || rec.path !== ref.path) {
         throw new Error(
@@ -498,20 +511,26 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
       }
       // mmnto-ai/totem#3045 — the stale-floor refusal. A record edited and
       // RE-ADMITTED after the floor file was built carries a new ledger row the
-      // floor's scoring never saw. Measured limit: the live ledger writes
-      // `authoredAt` as a DATE (2026-09-23, no time), which parses as 00:00:00Z,
-      // so a same-day re-admission is NOT caught. The check is necessary, not
-      // sufficient; the other half is the strategy lane's rule of conduct (a
-      // re-admission is coupled to a re-scoring and a regenerated floor file).
-      // `authoredAt` is read as a date-only (UTC midnight) or a strict instant;
-      // a zone-less date-time is refused, since it would read as local time.
-      const authoredMs = parseAuthoredAt(row.authoredAt);
-      if (authoredMs === undefined || authoredMs > asOfMs) {
+      // floor's scoring never saw. The admission instant is the committer
+      // instant of the commit that introduced the effective row's line in the
+      // ledger file (the CLI writer blames it; this planner stays pure). The
+      // row's `authoredAt` is NOT used: it is the author's declared date, copied
+      // forward unchanged on a re-admission, so it cannot date one. Residuals: a
+      // row that is not committed refuses (it has no admission instant), and a
+      // rewrite of the ledger file re-dates every row to the rewrite's commit,
+      // which then owes a regenerated floor file.
+      if (rec.admittedAt === null) {
         throw new TotemError(
           'SERVING_FLOOR_STALE',
-          authoredMs === undefined
-            ? `Floor record ${ref.path} (ruleId ${ref.ruleId}): its effective ledger row's authoredAt '${row.authoredAt}' is neither a date (YYYY-MM-DD) nor a strict instant (${STRICT_INSTANT_FORM}) naming a real calendar value, so the floor's asOf ${asOf} cannot be shown to postdate it; nothing was written.`
-            : `Floor record ${ref.path} (ruleId ${ref.ruleId}) was admitted at ${row.authoredAt}, after the serving input's asOf ${asOf}: the floor predates the record it would lower; nothing was written.`,
+          `Floor record ${ref.path} (ruleId ${ref.ruleId}) is not committed: its effective ledger row has no commit, so it has no admission instant to compare with the serving input's asOf ${asOf}; nothing was written.`,
+          'Commit the authoring ledger (and the record), or regenerate the floor file from the committed ledger, then re-run.',
+        );
+      }
+      const admittedMs = Date.parse(rec.admittedAt);
+      if (Number.isNaN(admittedMs) || admittedMs > asOfMs) {
+        throw new TotemError(
+          'SERVING_FLOOR_STALE',
+          `Floor record ${ref.path} (ruleId ${ref.ruleId}) was admitted at ${rec.admittedAt} by commit ${rec.admittedCommit}, after the serving input's asOf ${asOf}: the floor predates the record it would lower; nothing was written.`,
           'Regenerate the floor file from the current ledger (and re-score the re-admitted record), then re-run.',
         );
       }

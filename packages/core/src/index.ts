@@ -1587,7 +1587,6 @@ export type {
 } from './spine/serving-plan.js';
 export {
   assertServingInputSupported,
-  parseAuthoredAt,
   parseStrictInstant,
   planServingWrite,
   ServingInputSchema,

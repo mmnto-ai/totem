@@ -16,7 +16,6 @@ import { compileRuleRecord } from './record-lower.js';
 import { parseRuleRecord } from './rule-record.js';
 import {
   assertServingInputSupported,
-  parseAuthoredAt,
   parseStrictInstant,
   planServingWrite,
   type ServingInput,
@@ -78,11 +77,16 @@ function record(
     path,
     contentHash: ruleId.slice(0, 1).repeat(64),
     parsed: parseRuleRecord(recordText(opts), path),
+    // The committer instant of the commit that introduced the effective ledger
+    // row's line (the CLI writer blames it); well before AS_OF by default.
+    admittedCommit: 'c'.repeat(40),
+    admittedAt: '2026-09-23T12:00:00.000Z',
   };
 }
 
 function ledgerRow(rec: ServingRecord, authoredAt = '2026-09-23'): AuthoringLedgerEntry {
-  // The planner reads ruleId, authoredAt and the record block only; the rest of
+  // The planner reads ruleId and the record block only (authoredAt is carried
+  // to show it is NOT read); the rest of
   // the §8 row is irrelevant to it and is cast past the type.
   return {
     ruleId: rec.ruleId,
@@ -429,46 +433,73 @@ describe('planServingWrite: refusals, before any write (mmnto-ai/totem#3036 B2)'
     );
   });
 
-  it('refuses a floor record whose effective ledger row was admitted the day after asOf (mmnto-ai/totem#3045)', () => {
+  it('refuses a floor record whose effective ledger row was committed after asOf, naming the instant, the commit and asOf (mmnto-ai/totem#3045)', () => {
     const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-11');
+    f.records[0] = {
+      ...f.records[0]!,
+      admittedCommit: 'd'.repeat(40),
+      admittedAt: '2026-10-10T02:18:14.000Z',
+    };
     expect(() => plan(f)).toThrow(
       expect.objectContaining({
         code: 'SERVING_FLOOR_STALE',
-        message: expect.stringMatching(/2026-10-11.*2026-10-10T02:18:13.000Z/),
+        message: expect.stringMatching(
+          /admitted at 2026-10-10T02:18:14\.000Z by commit d{40}.*asOf 2026-10-10T02:18:13\.000Z/,
+        ),
+        recoveryHint: expect.stringContaining('Regenerate the floor file'),
       }),
     );
   });
 
-  it('passes a same-day re-admission: authoredAt is a date, so the check is necessary, not sufficient (the stated limit)', () => {
+  it('passes a floor record committed exactly at asOf', () => {
     const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-10');
+    f.records[0] = { ...f.records[0]!, admittedAt: AS_OF };
     expect(() => plan(f)).not.toThrow();
   });
 
-  it('refuses an authoredAt that does not parse', () => {
+  it("does not read the author's authoredAt: a date after asOf passes when the row was committed before it", () => {
     const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, 'not a date');
-    expect(() => plan(f)).toThrow(expect.objectContaining({ code: 'SERVING_FLOOR_STALE' }));
+    f.ledger[0] = ledgerRow(f.records[0]!, '2026-12-31');
+    expect(() => plan(f)).not.toThrow();
   });
 
-  it('refuses a zone-less date-time authoredAt (it would read as local time)', () => {
+  it('refuses a floor record whose effective ledger row is not committed', () => {
     const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-09-23T01:00:00');
+    f.records[0] = { ...f.records[0]!, admittedCommit: '0'.repeat(40), admittedAt: null };
     expect(() => plan(f)).toThrow(
       expect.objectContaining({
         code: 'SERVING_FLOOR_STALE',
-        message: expect.stringContaining('neither a date'),
+        message: expect.stringContaining('is not committed'),
+        recoveryHint: expect.stringContaining('Commit'),
       }),
     );
   });
 
-  it('accepts a strict-instant authoredAt before asOf, and refuses one after it', () => {
+  it('binds a floor record by content when the input carries contentHash: a match passes, another revision refuses', () => {
     const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-10T02:18:12Z');
+    f.input.floor[0]!.records[0] = {
+      ...f.input.floor[0]!.records[0]!,
+      contentHash: f.records[0]!.contentHash,
+    };
     expect(() => plan(f)).not.toThrow();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-10T02:18:14.000+00:00');
-    expect(() => plan(f)).toThrow(expect.objectContaining({ code: 'SERVING_FLOOR_STALE' }));
+    f.input.floor[0]!.records[0] = {
+      ...f.input.floor[0]!.records[0]!,
+      contentHash: 'e'.repeat(64),
+    };
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_RECORD_MISMATCH',
+        message: expect.stringContaining(
+          'the floor was built against another revision of this record',
+        ),
+      }),
+    );
+    expect(
+      ServingInputSchema.safeParse({
+        ...f.input,
+        floor: [{ records: [{ path: 'p', ruleId: RULE_A, contentHash: 'not-hex' }] }],
+      }).success,
+    ).toBe(false);
   });
 
   it('refuses a record the lowering rejects, with the lowering reason', () => {
@@ -606,14 +637,10 @@ describe('ServingInputSchema (mmnto-ai/totem#3036 B2)', () => {
     expect(res.success ? '' : res.error.issues[0]!.message).toContain('YYYY-MM-DDTHH:MM:SS');
   });
 
-  it('parseStrictInstant and parseAuthoredAt read the accepted forms as UTC and refuse the rest', () => {
+  it('parseStrictInstant reads the accepted forms as UTC and refuses the rest', () => {
     expect(parseStrictInstant('2026-10-10T02:18:13.000Z')).toBe(Date.UTC(2026, 9, 10, 2, 18, 13));
     expect(parseStrictInstant('2026-10-10T02:18:13')).toBeUndefined();
     expect(parseStrictInstant('2026-10-10')).toBeUndefined();
-    expect(parseAuthoredAt('2026-09-23')).toBe(Date.UTC(2026, 8, 23));
-    expect(parseAuthoredAt('2026-09-23T00:00:00Z')).toBe(Date.UTC(2026, 8, 23));
-    expect(parseAuthoredAt('2026-09-23T01:00:00')).toBeUndefined();
-    expect(parseAuthoredAt('09/23/2026')).toBeUndefined();
   });
 });
 
@@ -771,21 +798,12 @@ describe('planServingWrite: falsification fold (mmnto-ai/totem#3036 B2)', () => 
     for (const bad of ['2026-02-30T00:00:00Z', '2026-10-10T24:00:00Z', '2026-02-29T00:00:00Z']) {
       expect(parseStrictInstant(bad)).toBeUndefined();
     }
-    expect(parseAuthoredAt('2026-02-30')).toBeUndefined();
     expect(parseStrictInstant('2028-02-29T00:00:00Z')).toBe(Date.UTC(2028, 1, 29));
-    expect(parseAuthoredAt('2028-02-29')).toBe(Date.UTC(2028, 1, 29));
     // An offset shifts the instant, not the written digits.
     expect(parseStrictInstant('2026-10-10T02:18:13+14:00')).toBe(Date.UTC(2026, 9, 9, 12, 18, 13));
     const f = fixture();
     const res = ServingInputSchema.safeParse({ ...f.input, asOf: '2026-02-30T00:00:00Z' });
     expect(res.success ? '' : res.error.issues[0]!.message).toContain("'2026-02-30T00:00:00Z'");
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-02-30');
-    expect(() => plan(f)).toThrow(
-      expect.objectContaining({
-        code: 'SERVING_FLOOR_STALE',
-        message: expect.stringContaining("'2026-02-30'"),
-      }),
-    );
   });
 
   it('R2-F5: a lowered row whose keys are only reordered is a replace with changedFields (key order)', () => {
