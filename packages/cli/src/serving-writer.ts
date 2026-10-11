@@ -261,15 +261,17 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
   }
 
   // ── 5. Integrity: the serving file must be the one its manifest attests ──
-  // A file whose hash is not the manifest's output_hash was modified outside
-  // totem. Planning over it would carry the edit into a fresh manifest and
-  // launder it past verify-manifest, so refuse unless the operator asks for
-  // the deliberate repair (`--refresh`).
+  // A file whose hash is not the manifest's output_hash changed after the
+  // manifest was written: by a hand edit, or by a totem verb that rewrites rules
+  // without refreshing the manifest (doctor's stale-rule archive, a pack
+  // install, the first-lint promotion). Planning over it would carry the change
+  // into a fresh manifest and launder it past verify-manifest, so refuse unless
+  // the operator asks for the deliberate repair (`--refresh`).
   if (!refresh && manifest.output_hash !== generateOutputHash(rulesPath)) {
     throw new TotemError(
       'SERVING_MANIFEST_STALE',
-      `The serving file ${rulesRel} does not match its manifest ${manifestRel} (its hash is not the manifest's output_hash): it was modified outside totem; nothing was written.`,
-      `Restore ${rulesRel} from git if the edit was not meant. To accept the file as it is, run one of the two deliberate repairs: \`totem rule serve ${opts.inputPath} --refresh\`, or \`totem lesson compile --refresh-manifest --allow-record-rows\`.`,
+      `The serving file ${rulesRel} does not match its manifest ${manifestRel} (its hash is not the manifest's output_hash): the file changed after the manifest was written, by a hand edit or by a totem verb that rewrites rules without refreshing the manifest; nothing was written.`,
+      `If the change is meant to stay, run one of the two deliberate repairs: \`totem rule serve ${opts.inputPath} --refresh\`, or \`totem lesson compile --refresh-manifest --allow-record-rows\`. If it is not meant, restore ${rulesRel} from git.`,
     );
   }
 
