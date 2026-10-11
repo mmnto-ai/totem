@@ -15,7 +15,6 @@ import {
   generateOutputHash,
   hashLesson,
   parseRuleRecord,
-  safeExec,
   ServingInputSchema,
 } from '@mmnto/totem';
 
@@ -23,8 +22,6 @@ import { verifyManifestCommand } from './commands/verify-manifest.js';
 import {
   assertUntouchedRowsUnchanged,
   formatServingReport,
-  ledgerPathForBlame,
-  readLedgerAdmissions,
   runServingWriter,
 } from './serving-writer.js';
 import { cleanTmpDir } from './test-utils.js';
@@ -151,46 +148,6 @@ function writeInput(ws: Workspace, input: unknown): void {
  * non-schema key order, one already archived), two records with their ledger
  * rows, a manifest that verifies, and one export target.
  */
-// ─── Scratch git repositories, isolated from the machine's git config ───────
-
-const BEFORE_AS_OF = '2026-09-23T12:00:00Z';
-const AFTER_AS_OF = '2026-10-11T09:30:00Z';
-
-/** An empty file every scratch git command reads as its global and system config. */
-const EMPTY_GITCONFIG = path.join(
-  fs.mkdtempSync(path.join(os.tmpdir(), 'totem-serving-gitcfg-')),
-  'empty.gitconfig',
-);
-fs.writeFileSync(EMPTY_GITCONFIG, '', 'utf-8');
-
-function gitEnv(date?: string): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG,
-    GIT_CONFIG_SYSTEM: EMPTY_GITCONFIG,
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_AUTHOR_NAME: 'test',
-    GIT_AUTHOR_EMAIL: 'test@example.invalid',
-    GIT_COMMITTER_NAME: 'test',
-    GIT_COMMITTER_EMAIL: 'test@example.invalid',
-    ...(date !== undefined ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}),
-  };
-}
-
-function git(root: string, args: string[], date?: string): string {
-  return safeExec('git', args, { cwd: root, env: gitEnv(date) });
-}
-
-function gitInit(root: string): void {
-  git(root, ['init', '-q', '-b', 'main']);
-}
-
-function commitAll(root: string, date: string, message = 'commit'): string {
-  git(root, ['add', '-A']);
-  git(root, ['commit', '-q', '--no-gpg-sign', '-m', message], date);
-  return git(root, ['rev-parse', 'HEAD']);
-}
-
 function setupWorkspace(
   root: string,
   legacyDisposition: 'archive' | 'remove' = 'archive',
@@ -263,9 +220,6 @@ function setupWorkspace(
       {
         compiled_at: '2026-01-01T00:00:00.000Z',
         model: 'test-model',
-        // Over every file (no repo cwd): the workspace is committed whole just
-        // below, so the tracked set the verifier reads is the same set, even
-        // when this root is nested inside another scratch repository.
         input_hash: generateInputHash(lessonsDir),
         output_hash: generateOutputHash(rulesPath),
         rule_count: rows.length,
@@ -282,9 +236,14 @@ function setupWorkspace(
     asOf: AS_OF,
     source: 'a test fixture',
     dispositions: { legacyRow: legacyDisposition, stamp: 'none' },
+    // Each floor record names the content hash it was scored against: the
+    // ledger's record.contentHash, the sha256 of the record's LF text.
     floor: [
-      { legacyHash: HASH_A, records: [{ path: REC_A_REF, ruleId: RULE_A }] },
-      { records: [{ path: REC_N_REF, ruleId: RULE_N }] },
+      {
+        legacyHash: HASH_A,
+        records: [{ path: REC_A_REF, ruleId: RULE_A, contentHash: sha256(textA) }],
+      },
+      { records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: sha256(textN) }] },
     ],
     archive: [
       { lessonHash: HASH_C, reason: 'no-intent', ref: 'curation row 7' },
@@ -303,11 +262,6 @@ function setupWorkspace(
     input,
   };
   writeInput(ws, input);
-  // The admission instant of a ledger row is the committer instant of the
-  // commit that introduced its line, so the workspace is a git repository with
-  // everything committed well before asOf.
-  gitInit(root);
-  commitAll(root, BEFORE_AS_OF);
   return ws;
 }
 
@@ -392,9 +346,6 @@ describe('runServingWriter (mmnto-ai/totem#3036 B2)', () => {
     // Config resolution must never reach the real home directory.
     vi.stubEnv('HOME', tmpDir);
     vi.stubEnv('USERPROFILE', tmpDir);
-    // The writer's own git calls must not read the machine's git config either.
-    vi.stubEnv('GIT_CONFIG_GLOBAL', EMPTY_GITCONFIG);
-    vi.stubEnv('GIT_CONFIG_SYSTEM', EMPTY_GITCONFIG);
   });
 
   afterEach(() => {
@@ -586,8 +537,6 @@ describe('runServingWriter (mmnto-ai/totem#3036 B2)', () => {
     const ws = setupWorkspace(tmpDir);
     await runServingWriter({ inputPath: ws.inputPath });
     fs.writeFileSync(path.join(ws.totemDir, 'rules', 'extra.rule.yaml'), recordN(), 'utf-8');
-    // The records attestation covers TRACKED records only.
-    commitAll(ws.root, BEFORE_AS_OF);
     backdate(ws);
     const before = snapshot(ws);
     const result = await runServingWriter({ inputPath: ws.inputPath });
@@ -620,9 +569,6 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     process.chdir(tmpDir);
     vi.stubEnv('HOME', tmpDir);
     vi.stubEnv('USERPROFILE', tmpDir);
-    // The writer's own git calls must not read the machine's git config either.
-    vi.stubEnv('GIT_CONFIG_GLOBAL', EMPTY_GITCONFIG);
-    vi.stubEnv('GIT_CONFIG_SYSTEM', EMPTY_GITCONFIG);
     ws = setupWorkspace(tmpDir);
   });
 
@@ -752,7 +698,7 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
     writeInput(ws, {
       ...ws.input,
-      floor: [{ records: [{ path: REC_N_REF, ruleId: RULE_N }] }],
+      floor: [{ records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: sha256(recordN()) }] }],
     });
     const result = await runServingWriter({ inputPath: ws.inputPath, refresh: true });
     expect(result.written).toBe(true);
@@ -802,8 +748,8 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     writeInput(rws, {
       ...rws.input,
       floor: [
-        { records: [{ path: REC_A_REF, ruleId: RULE_A }] },
-        { records: [{ path: REC_N_REF, ruleId: RULE_N }] },
+        { records: [{ path: REC_A_REF, ruleId: RULE_A, contentHash: sha256(recordA()) }] },
+        { records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: sha256(recordN()) }] },
       ],
     });
     const result = await runServingWriter({ inputPath: rws.inputPath, refresh: true });
@@ -901,19 +847,40 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     return text;
   }
 
-  it('the scratch git commands do not read the machine git config (probe)', () => {
-    expect(() => git(ws.root, ['config', '--get', 'init.defaultBranch'])).toThrow();
+  /** The workspace input with each floor record's contentHash set as given. */
+  function floorWith(hashA: string, hashN: string = sha256(recordN())): Record<string, unknown> {
+    return {
+      ...ws.input,
+      floor: [
+        {
+          legacyHash: HASH_A,
+          records: [{ path: REC_A_REF, ruleId: RULE_A, contentHash: hashA }],
+        },
+        { records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: hashN }] },
+      ],
+    };
+  }
+
+  it('binds a floor record by content: a contentHash that matches passes, one that differs refuses', async () => {
+    writeInput(ws, floorWith(sha256(recordA())));
+    expect((await runServingWriter({ inputPath: ws.inputPath, dryRun: true })).dryRun).toBe(true);
+    writeInput(ws, floorWith('e'.repeat(64)));
+    await expectRefusal(
+      'SERVING_RECORD_MISMATCH',
+      'the floor was built against another revision of this record',
+    );
   });
 
-  it('refuses a record re-admitted by a commit after asOf, naming the instant and the commit, dry and real (mmnto-ai/totem#3045)', async () => {
+  it('refuses a re-admitted record against a floor carrying the OLD content hash, dry and real, nothing written (mmnto-ai/totem#3045)', async () => {
+    const oldHash = sha256(recordA());
     readmitRecordA();
-    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
+    writeInput(ws, floorWith(oldHash));
     backdate(ws);
     const before = snapshot(ws);
     const expected = {
-      code: 'SERVING_FLOOR_STALE',
+      code: 'SERVING_RECORD_MISMATCH',
       message: expect.stringContaining(
-        `admitted at 2026-10-11T09:30:00.000Z by commit ${sha}, after the serving input's asOf ${AS_OF}`,
+        `names content hash ${oldHash}, but its effective ledger row admitted`,
       ),
     };
     await expect(runServingWriter({ inputPath: ws.inputPath, dryRun: true })).rejects.toMatchObject(
@@ -924,201 +891,26 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     expectUnchanged(ws, before);
   });
 
-  it('dates the re-admission by its own commit even when the git config names it in blame.ignoreRevsFile', async () => {
-    readmitRecordA();
-    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
-    // A git config the writer's own git calls read, ignoring the re-admission
-    // commit in blame: unneutralised, blame would hand the line to an earlier commit.
-    const revs = path.join(tmpDir, 'ignore-revs.txt');
-    fs.writeFileSync(revs, `${sha}\n`, 'utf-8');
-    const cfg = path.join(tmpDir, 'ignore-revs.gitconfig');
-    fs.writeFileSync(cfg, `[blame]\n\tignoreRevsFile = ${revs.replace(/\\/g, '/')}\n`, 'utf-8');
-    vi.stubEnv('GIT_CONFIG_GLOBAL', cfg);
-    // The config takes effect: an unneutralised blame attributes the line elsewhere.
-    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
-    const plain = safeExec(
-      'git',
-      [
-        'blame',
-        '--line-porcelain',
-        '-L',
-        `${ledgerLines},${ledgerLines}`,
-        '--',
-        '.totem/spine/authoring-ledger.ndjson',
-      ],
-      { cwd: ws.root },
-    );
-    expect(plain.startsWith(sha)).toBe(false);
-    backdate(ws);
-    await expectRefusal('SERVING_FLOOR_STALE', `by commit ${sha}, after the serving input's asOf`);
-  });
-
-  it('dates the re-admission by its own commit even when a replace ref points it at a backdated copy', async () => {
-    readmitRecordA();
-    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
-    // A backdated copy of the same commit (same tree, same parent), and a local
-    // replace ref pointing the re-admission at it.
-    const copy = git(
-      ws.root,
-      ['commit-tree', `${sha}^{tree}`, '-p', `${sha}^`, '-m', 'backdated copy'],
-      '2026-10-02T00:00:00Z',
-    );
-    git(ws.root, ['replace', sha, copy]);
-    // Precondition: a plain blame follows the replace ref, reporting the
-    // ORIGINAL sha with the copy's (backdated) committer-time.
-    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
-    const plain = git(ws.root, [
-      'blame',
-      '--line-porcelain',
-      '-L',
-      `${ledgerLines},${ledgerLines}`,
-      '--',
-      '.totem/spine/authoring-ledger.ndjson',
-    ]);
-    expect(plain.startsWith(sha)).toBe(true);
-    expect(/^committer-time (\d+)$/m.exec(plain)?.[1]).toBe(
-      String(Date.parse('2026-10-02T00:00:00Z') / 1000),
-    );
-    backdate(ws);
-    await expectRefusal(
-      'SERVING_FLOOR_STALE',
-      `admitted at 2026-10-11T09:30:00.000Z by commit ${sha}, after the serving input's asOf`,
-    );
-  });
-
-  it('dates the re-admission by its own commit even when a grafts file re-parents it onto a backdated copy', async () => {
-    readmitRecordA();
-    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
-    // A backdated copy with the same tree, and a legacy grafts file making the
-    // copy the re-admission's parent: blame then finds the line already in the
-    // (backdated) parent.
-    const copy = git(
-      ws.root,
-      ['commit-tree', `${sha}^{tree}`, '-p', `${sha}^`, '-m', 'backdated copy'],
-      '2026-10-02T00:00:00Z',
-    );
-    const grafts = path.resolve(ws.root, git(ws.root, ['rev-parse', '--git-path', 'info/grafts']));
-    fs.mkdirSync(path.dirname(grafts), { recursive: true });
-    fs.writeFileSync(grafts, `${sha} ${copy}\n`, 'utf-8');
-    // Precondition: a plain blame (replace refs off, as the writer runs it)
-    // reports the copy's backdated committer-time.
-    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
-    const plain = git(ws.root, [
-      '--no-replace-objects',
-      'blame',
-      '--line-porcelain',
-      '-L',
-      `${ledgerLines},${ledgerLines}`,
-      '--',
-      '.totem/spine/authoring-ledger.ndjson',
-    ]);
-    expect(/^committer-time (\d+)$/m.exec(plain)?.[1]).toBe(
-      String(Date.parse('2026-10-02T00:00:00Z') / 1000),
-    );
-    backdate(ws);
-    await expectRefusal(
-      'SERVING_FLOOR_STALE',
-      `admitted at 2026-10-11T09:30:00.000Z by commit ${sha}, after the serving input's asOf`,
-    );
-  });
-
-  it('passes the same re-admission when its commit is before asOf', async () => {
-    readmitRecordA();
-    commitAll(ws.root, '2026-10-10T02:18:12Z', 're-admit before asOf');
+  it('serves the re-admitted revision when the floor carries the NEW content hash', async () => {
+    const newText = readmitRecordA();
+    writeInput(ws, floorWith(sha256(newText)));
     const result = await runServingWriter({ inputPath: ws.inputPath });
     expect(result.written).toBe(true);
     expect(readRows(ws).find((r) => r['lessonHash'] === RULE_A)!['severity']).toBe('warning');
   });
 
-  it('refuses a re-admission whose ledger row is not committed', async () => {
-    readmitRecordA();
-    await expectRefusal('SERVING_FLOOR_STALE', `ruleId ${RULE_A}) is not committed`, 'Commit');
-  });
-
-  it('binds a floor record by content: a contentHash that matches passes, one that differs refuses', async () => {
-    const withHash = (contentHash: string) => ({
+  it('refuses a floor record without contentHash as off-schema, naming the field', async () => {
+    writeInput(ws, {
       ...ws.input,
       floor: [
-        { legacyHash: HASH_A, records: [{ path: REC_A_REF, ruleId: RULE_A, contentHash }] },
-        { records: [{ path: REC_N_REF, ruleId: RULE_N }] },
+        { legacyHash: HASH_A, records: [{ path: REC_A_REF, ruleId: RULE_A }] },
+        { records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: sha256(recordN()) }] },
       ],
     });
-    writeInput(ws, withHash(sha256(recordA())));
-    expect((await runServingWriter({ inputPath: ws.inputPath, dryRun: true })).dryRun).toBe(true);
-    writeInput(ws, withHash('e'.repeat(64)));
     await expectRefusal(
-      'SERVING_RECORD_MISMATCH',
-      'the floor was built against another revision of this record',
+      'SERVING_INPUT_INVALID',
+      'floor.0.records.0.contentHash: floor[].records[].contentHash is required',
     );
-  });
-
-  it('ledgerPathForBlame canonicalises both sides, so another spelling of the root never yields a `..` path', () => {
-    // Purely synthetic and filesystem-free: absolute paths that never exist on
-    // disk (so a filesystem call would throw ENOENT), a root as git returns it
-    // (the long spelling) and a ledger path under a short-name spelling of the
-    // same directory, as GitHub's Windows runner hands out its temp dir. The
-    // injected canonicaliser maps the fake short segment to the long one and
-    // nothing else. With a canonicaliser injected, `ledgerPathForBlame` uses
-    // only `path`; these paths passing is the proof that it touches no file.
-    const base = path.resolve(process.platform === 'win32' ? 'C:\\probe' : '/probe');
-    const root = path.join(base, 'runneradmin', 'ws');
-    const ledger = path.join(base, 'RUNNER~1', 'ws', '.totem', 'spine', 'authoring-ledger.ndjson');
-    expect(fs.existsSync(base)).toBe(false);
-    const canon = (p: string) => p.replace('RUNNER~1', 'runneradmin');
-    // The control: a plain relative path across the two spellings climbs out.
-    expect(path.relative(root, ledger).split(path.sep)).toContain('..');
-    const { rel, canonicalRoot } = ledgerPathForBlame(root, ledger, canon);
-    expect(rel).toBe('.totem/spine/authoring-ledger.ndjson');
-    expect(rel.split('/')).not.toContain('..');
-    expect(rel).not.toContain('\\');
-    expect(canonicalRoot).toBe(root);
-    // A ledger that really is outside the root is refused, not passed to git.
-    expect(() =>
-      ledgerPathForBlame(root, path.join(base, 'elsewhere', 'ledger.ndjson'), canon),
-    ).toThrow(/does not resolve inside/);
-  });
-
-  it.skipIf(process.platform !== 'win32')(
-    'runs from an 8.3 short-name spelling of the workspace without refusing GIT_FAILED (Windows)',
-    async () => {
-      // The short name through cmd's `%~sI` (fast; the PowerShell COM lookup
-      // timed out on the runner). The set is unquoted: cross-spawn escapes an
-      // embedded quote, which cmd then reads literally. A scratch temp path
-      // carries no space, which the precondition pins.
-      expect(ws.root).not.toContain(' ');
-      const short = safeExec('cmd.exe', ['/d', '/c', `for %I in (${ws.root}) do @echo %~sI`]);
-      // On a volume with 8.3 names the spelling differs; say so in the output
-      // either way (an identical spelling makes this arm a plain pass).
-      console.error(`[short-name arm] long=${ws.root} short=${short}`);
-      expect(fs.realpathSync.native(short)).toBe(fs.realpathSync.native(ws.root));
-      process.chdir(short);
-      const result = await runServingWriter({
-        inputPath: path.join(short, 'serve-input.json'),
-        dryRun: true,
-      });
-      expect(result.dryRun).toBe(true);
-      expect(result.report.totals.lowered).toBe(2);
-    },
-    120_000,
-  );
-
-  it('refuses loudly when the workspace is not a git repository, naming the git error', async () => {
-    fs.rmSync(path.join(ws.root, '.git'), { recursive: true, force: true });
-    await expectRefusal('GIT_FAILED', /cannot be dated.*not a git repository/i);
-  });
-
-  it('refuses a shallow clone, where blame would date lines to the shallow boundary', async () => {
-    fs.writeFileSync(path.join(ws.root, 'second.txt'), 'x\n', 'utf-8');
-    commitAll(ws.root, BEFORE_AS_OF, 'second');
-    const clone = path.join(tmpDir, 'shallow');
-    const fwd = ws.root.replace(/\\/g, '/');
-    const url = fwd.startsWith('/') ? `file://${fwd}` : `file:///${fwd}`;
-    git(tmpDir, ['clone', '-q', '--depth', '1', url, clone]);
-    expect(git(clone, ['rev-parse', '--is-shallow-repository'])).toBe('true');
-    process.chdir(clone);
-    await expect(
-      runServingWriter({ inputPath: path.join(clone, 'serve-input.json'), dryRun: true }),
-    ).rejects.toMatchObject({ code: 'GIT_FAILED', message: expect.stringContaining('shallow') });
   });
 
   it('refuses a legacyHash that is not in the serving file', async () => {
@@ -1134,9 +926,13 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     );
     writeInput(ws, {
       ...ws.input,
-      floor: [{ legacyHash: absent, records: [{ path: REC_N_REF, ruleId: RULE_N }] }],
+      floor: [
+        {
+          legacyHash: absent,
+          records: [{ path: REC_N_REF, ruleId: RULE_N, contentHash: sha256(text) }],
+        },
+      ],
     });
-    commitAll(ws.root, BEFORE_AS_OF);
     await expectRefusal(
       'SERVING_INPUT_INVALID',
       `floor names legacyHash ${absent}, which is not in the serving file`,
@@ -1146,7 +942,12 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
   it('refuses a legacyHash that disagrees with the record curation.sourceLesson', async () => {
     writeInput(ws, {
       ...ws.input,
-      floor: [{ legacyHash: HASH_E, records: [{ path: REC_A_REF, ruleId: RULE_A }] }],
+      floor: [
+        {
+          legacyHash: HASH_E,
+          records: [{ path: REC_A_REF, ruleId: RULE_A, contentHash: sha256(recordA()) }],
+        },
+      ],
     });
     await expectRefusal('SERVING_INPUT_INVALID', 'sourceLesson');
   });
@@ -1191,7 +992,7 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
       ledgerLine(RULE_A, REC_A_REF, text) + '\n' + ledgerLine(RULE_N, REC_N_REF, recordN()) + '\n',
       'utf-8',
     );
-    commitAll(ws.root, BEFORE_AS_OF);
+    writeInput(ws, floorWith(sha256(text)));
     await expectRefusal('COMPILE_FAILED', 'requires.scope');
   });
 });
@@ -1235,57 +1036,45 @@ describe('assertUntouchedRowsUnchanged: the writer invariant (mmnto-ai/totem#303
   });
 });
 
-describe('the file of record validates (mmnto-ai/totem#3036 B2)', () => {
-  it('the fixture copy is the file of record (sha256) and passes the input schema', () => {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const fixture = path.join(here, 'commands', 'fixtures', 'serving-input', 'floor-run16.json');
-    const bytes = fs.readFileSync(fixture);
+describe('the file of record and its with-hashes copy (mmnto-ai/totem#3036 B2)', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const dir = path.join(here, 'commands', 'fixtures', 'serving-input');
+
+  it('the fixture copy is the file of record (sha256), and is refused as off-schema, naming contentHash, until strategy regenerates it', () => {
+    const bytes = fs.readFileSync(path.join(dir, 'floor-run16.json'));
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(
       '24c3f953682880b30d9796785bca4b4d94bbbcf7ac6170f6125bcccdaeb4236d',
     );
     const parsed = ServingInputSchema.safeParse(JSON.parse(bytes.toString('utf-8')));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      // One issue per floor record (28), each at its contentHash.
+      expect(parsed.error.issues).toHaveLength(28);
+      for (const issue of parsed.error.issues) {
+        expect(issue.path[issue.path.length - 1]).toBe('contentHash');
+        expect(issue.message).toContain('record.contentHash');
+      }
+    }
+  });
+
+  it('the with-hashes copy is the file of record plus each record contentHash from the ledger, and validates', () => {
+    const plain = JSON.parse(fs.readFileSync(path.join(dir, 'floor-run16.json'), 'utf-8')) as {
+      floor: Array<{ records: Array<Record<string, unknown>> }>;
+    };
+    const parsed = ServingInputSchema.safeParse(
+      JSON.parse(fs.readFileSync(path.join(dir, 'floor-run16.with-hashes.json'), 'utf-8')),
+    );
     expect(parsed.success).toBe(true);
     if (parsed.success) {
       expect(parsed.data.floor).toHaveLength(24);
       expect(parsed.data.floor.flatMap((e) => e.records)).toHaveLength(28);
       expect(parsed.data.archive).toHaveLength(125);
-    }
-  });
-
-  it("dates every floor record of the file of record by blaming this repository's own ledger: all at or before asOf, the three re-pinned rows at the re-pin commit", () => {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const repoRoot = path.resolve(here, '..', '..', '..');
-    const input = ServingInputSchema.parse(
-      JSON.parse(
-        fs.readFileSync(
-          path.join(here, 'commands', 'fixtures', 'serving-input', 'floor-run16.json'),
-          'utf-8',
-        ),
-      ),
-    );
-    const ruleIds = input.floor.flatMap((e) => e.records.map((r) => r.ruleId));
-    const shallow =
-      safeExec('git', ['rev-parse', '--is-shallow-repository'], { cwd: repoRoot }) === 'true';
-    if (shallow) {
-      // A shallow checkout dates every line to its boundary commit, so the
-      // writer refuses rather than date a row wrongly.
-      expect(() => readLedgerAdmissions(path.join(repoRoot, '.totem'), ruleIds)).toThrow(
-        expect.objectContaining({
-          code: 'GIT_FAILED',
-          message: expect.stringContaining('shallow'),
-        }),
-      );
-      return;
-    }
-    const admissions = readLedgerAdmissions(path.join(repoRoot, '.totem'), ruleIds);
-    expect(admissions.size).toBe(28);
-    const asOfMs = Date.parse(input.asOf);
-    for (const a of admissions.values()) {
-      expect(a.admittedAt).not.toBeNull();
-      expect(Date.parse(a.admittedAt!)).toBeLessThanOrEqual(asOfMs);
-    }
-    for (const id of ['923841006dd9c024', '6e5b15c0ae7e2285', '312894688c167fb2']) {
-      expect(admissions.get(id)!.admittedAt).toBe('2026-10-06T16:23:14.000Z');
+      // Stripping the hashes gives back the file of record's content.
+      const stripped = parsed.data.floor.map((e) => ({
+        ...e,
+        records: e.records.map(({ path: p, ruleId }) => ({ path: p, ruleId })),
+      }));
+      expect(stripped).toEqual(plain.floor);
     }
   });
 });

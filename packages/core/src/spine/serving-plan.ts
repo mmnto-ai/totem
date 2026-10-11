@@ -112,16 +112,18 @@ export const ServingInputSchema = z
                       'floor[].records[].ruleId must be a minted rule id (16 hex, optional -<n>)',
                   }),
                   /**
-                   * Optional binding by content: the record's sha256 (64 hex) the
-                   * floor was scored against. When present it must equal the
-                   * effective ledger row's `record.contentHash`.
+                   * REQUIRED binding by content: the record's sha256 (64 hex) the
+                   * floor was scored against, which must equal the effective
+                   * ledger row's `record.contentHash` (mmnto-ai/totem#3045).
                    */
                   contentHash: z
-                    .string()
+                    .string({
+                      required_error:
+                        "floor[].records[].contentHash is required: the floor file must carry the ledger's record.contentHash for each record",
+                    })
                     .regex(/^[0-9a-f]{64}$/, {
                       message: 'floor[].records[].contentHash must be 64 lowercase hex characters',
-                    })
-                    .optional(),
+                    }),
                 })
                 .strict(),
             )
@@ -168,16 +170,6 @@ export interface ServingRecord {
   /** sha256 (64 hex) of the record file's LF image, as the intake computes it. */
   contentHash: string;
   parsed: ParsedRuleRecord;
-  /**
-   * The commit that introduced the effective ledger row's line in the ledger
-   * file (the caller blames it); the all-zero hash when the line is not committed.
-   */
-  admittedCommit: string;
-  /**
-   * That commit's committer instant (ISO-8601, UTC), the record's admission
-   * instant; `null` when the line is not committed.
-   */
-  admittedAt: string | null;
 }
 
 export interface PlanServingWriteArgs {
@@ -347,8 +339,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
   const { rows, input } = args;
   assertServingInputSupported(input);
   const asOf = input.asOf;
-  const asOfMs = parseStrictInstant(asOf);
-  if (asOfMs === undefined) {
+  if (parseStrictInstant(asOf) === undefined) {
     throw inputInvalid(
       `The serving input's asOf '${asOf}' is not a strict instant naming a real calendar date and time (expected ${STRICT_INSTANT_FORM})`,
     );
@@ -487,9 +478,15 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
           'Fix the path in the input file, or re-run the intake (`totem rule author`) if the record moved.',
         );
       }
-      // Optional binding by content: a floor that names the record's content
-      // hash was scored against exactly that revision.
-      if (ref.contentHash !== undefined && ref.contentHash !== row.record.contentHash) {
+      // mmnto-ai/totem#3045 — the stale-floor check, binding by content. Every
+      // floor record names the content hash it was scored against (the ledger's
+      // `record.contentHash`, the sha256 of the record's LF text). A record
+      // edited and re-admitted after the floor was built carries a new ledger
+      // row with a new hash, so the floor's hash no longer matches and the run
+      // refuses. A re-admission that leaves the record's bytes unchanged keeps
+      // the hash: it serves the same matcher the floor scored and is no hazard.
+      // This comparison is the whole check; no clock or commit history is read.
+      if (ref.contentHash !== row.record.contentHash) {
         throw new TotemError(
           'SERVING_RECORD_MISMATCH',
           `Floor record ${ref.path} (ruleId ${ref.ruleId}) names content hash ${ref.contentHash}, but its effective ledger row admitted ${row.record.contentHash}: the floor was built against another revision of this record; nothing was written.`,
@@ -507,31 +504,6 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
           'SERVING_RECORD_MISMATCH',
           `Record ${ref.path} (ruleId ${ref.ruleId}) has content hash ${rec.contentHash}, but its effective ledger row admitted ${row.record.contentHash}: the record was edited after admission; nothing was written.`,
           'Re-admit the record (`totem rule author`) and regenerate the floor file, or restore the admitted record bytes.',
-        );
-      }
-      // mmnto-ai/totem#3045 — the stale-floor refusal. A record edited and
-      // RE-ADMITTED after the floor file was built carries a new ledger row the
-      // floor's scoring never saw. The admission instant is the committer
-      // instant of the commit that introduced the effective row's line in the
-      // ledger file (the CLI writer blames it; this planner stays pure). The
-      // row's `authoredAt` is NOT used: it is the author's declared date, copied
-      // forward unchanged on a re-admission, so it cannot date one. Residuals: a
-      // row that is not committed refuses (it has no admission instant), and a
-      // rewrite of the ledger file re-dates every row to the rewrite's commit,
-      // which then owes a regenerated floor file.
-      if (rec.admittedAt === null) {
-        throw new TotemError(
-          'SERVING_FLOOR_STALE',
-          `Floor record ${ref.path} (ruleId ${ref.ruleId}) is not committed: its effective ledger row has no commit, so it has no admission instant to compare with the serving input's asOf ${asOf}; nothing was written.`,
-          'Commit the authoring ledger (and the record), or regenerate the floor file from the committed ledger, then re-run.',
-        );
-      }
-      const admittedMs = Date.parse(rec.admittedAt);
-      if (Number.isNaN(admittedMs) || admittedMs > asOfMs) {
-        throw new TotemError(
-          'SERVING_FLOOR_STALE',
-          `Floor record ${ref.path} (ruleId ${ref.ruleId}) was admitted at ${rec.admittedAt} by commit ${rec.admittedCommit}, after the serving input's asOf ${asOf}: the floor predates the record it would lower; nothing was written.`,
-          'Regenerate the floor file from the current ledger (and re-score the re-admitted record), then re-run.',
         );
       }
       if (entry.legacyHash !== undefined) {

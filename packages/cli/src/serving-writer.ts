@@ -17,6 +17,10 @@
 // nothing. The dry run reads everything, writes nothing and returns the same
 // report a real run would.
 //
+// The stale-floor check (mmnto-ai/totem#3045) is a binding by content: every
+// floor record names the content hash it was scored against, and the planner
+// compares it with the effective ledger row's. No clock or git history is read.
+//
 // `--refresh` is the deliberate repair: it skips the integrity refusal and
 // rewrites the manifest from the serving file as it is and every export, even
 // when no row changes.
@@ -25,16 +29,13 @@
 // manifest, then export targets) can leave a later step unwritten. `--refresh`
 // is its repair.
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import {
   assertServingInputSupported,
   attestRecordsHash,
-  AUTHORING_LEDGER_DIR,
-  AUTHORING_LEDGER_FILE,
   type CompiledRule,
   type CompileManifest,
   type ExportTargetResult,
@@ -47,8 +48,6 @@ import {
   readAuthoringLedger,
   readCompileManifest,
   renderLessonExportsForRules,
-  resolveGitRoot,
-  safeExec,
   type ServingInput,
   ServingInputSchema,
   type ServingPlan,
@@ -151,183 +150,6 @@ function readServingInput(
   return { input: parsed.data, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
-const UNCOMMITTED_SHA = '0'.repeat(40);
-
-/** The admission of one effective ledger row: its line, its commit, and that commit's instant. */
-export interface LedgerAdmission {
-  /** 1-based line of the effective row (the last line carrying its ruleId). */
-  line: number;
-  /** The commit that introduced the line; the all-zero hash when uncommitted. */
-  commit: string;
-  /** The commit's committer instant, ISO-8601 UTC; `null` when uncommitted. */
-  admittedAt: string | null;
-}
-
-/**
- * The ledger's path relative to the repository root, in forward slashes, for
- * `git blame -- <path>`, and the canonical root to run git from.
- *
- * Both sides go through the SAME canonicaliser first (`fs.realpathSync.native`
- * by default): git returns its top level as the real path, while the ledger
- * path comes from the working directory, which can carry another spelling of
- * the same directory (a Windows 8.3 short name such as `RUNNER~1`, a different
- * case, a symlink). `path.relative` across two spellings climbs out with `..`
- * segments and git refuses the path as outside the repository. A result that
- * still leaves the root is refused here. The canonicaliser is injectable for tests.
- */
-export function ledgerPathForBlame(
-  root: string,
-  ledgerPath: string,
-  canonicalise: (p: string) => string = (p) => fs.realpathSync.native(p),
-): { rel: string; canonicalRoot: string } {
-  const canonicalRoot = canonicalise(root);
-  const relative = path.relative(canonicalRoot, canonicalise(ledgerPath));
-  if (
-    relative === '' ||
-    path.isAbsolute(relative) ||
-    relative === '..' ||
-    relative.startsWith(`..${path.sep}`)
-  ) {
-    throw new Error(`${ledgerPath} does not resolve inside ${canonicalRoot}`);
-  }
-  return { rel: relative.split(path.sep).join('/'), canonicalRoot };
-}
-
-/**
- * Date each named rule's EFFECTIVE authoring-ledger row by the commit that
- * introduced its line: `git blame --line-porcelain -L <n>,<n>` from the
- * repository root, `committer-time` read as the admission instant
- * (`committer-tz` is the committer's offset and does not move the instant).
- *
- * The row's own `authoredAt` is not used: it is the author's declared date,
- * copied forward unchanged on a re-admission (mmnto-ai/totem#3045). A line git
- * attributes to the working tree (the all-zero hash) comes back with
- * `admittedAt: null`, which the planner refuses. Every git failure refuses
- * loudly with `GIT_FAILED`, never read as fresh: no repository, git absent, a
- * blame error, and a shallow clone (blame would date every line older than the
- * shallow boundary to the boundary commit). A rewrite of the ledger file
- * re-dates every row to the rewrite's commit; a regenerated floor is then owed.
- */
-export function readLedgerAdmissions(
-  totemDir: string,
-  ruleIds: readonly string[],
-): Map<string, LedgerAdmission> {
-  const out = new Map<string, LedgerAdmission>();
-  const ledgerPath = path.join(totemDir, AUTHORING_LEDGER_DIR, AUTHORING_LEDGER_FILE);
-  const wanted = new Set(ruleIds);
-  if (wanted.size === 0 || !fs.existsSync(ledgerPath)) return out;
-
-  // The effective row is the LAST line per ruleId (foldEffectiveLedgerEntries).
-  const lineOf = new Map<string, number>();
-  fs.readFileSync(ledgerPath, 'utf-8')
-    .split('\n')
-    .forEach((text, i) => {
-      if (text.trim().length === 0) return;
-      const id = (JSON.parse(text) as { ruleId?: unknown }).ruleId;
-      if (typeof id === 'string' && wanted.has(id)) lineOf.set(id, i + 1);
-    });
-  if (lineOf.size === 0) return out;
-
-  const fail = (what: string, err?: unknown): TotemError =>
-    new TotemError(
-      'GIT_FAILED',
-      `The floor records' admission instants cannot be dated: ${what}; nothing was written.`,
-      'Run `totem rule serve` from a full (not shallow) git checkout of this repository with git on PATH; the admission instant of a floor record is the committer instant of the commit that introduced its ledger row.',
-      err,
-    );
-  const message = (err: unknown): string =>
-    err instanceof Error ? err.message.replace(/^\[Totem Error\]\s*/, '') : String(err);
-
-  let root: string | null;
-  try {
-    root = resolveGitRoot(path.dirname(ledgerPath));
-  } catch (err) {
-    throw fail(`git could not resolve the repository (${message(err)})`, err);
-  }
-  if (root === null) {
-    throw fail(`${ledgerPath} is not inside a git repository (not a git repository)`);
-  }
-  // Both sides canonicalised before the relative path is taken (see
-  // `ledgerPathForBlame`); the canonical root is the cwd of every git call below.
-  let rel: string;
-  let canonicalRoot: string;
-  try {
-    ({ rel, canonicalRoot } = ledgerPathForBlame(root, ledgerPath));
-  } catch (err) {
-    throw fail(`the ledger path could not be placed inside the repository (${message(err)})`, err);
-  }
-  let shallow: string;
-  try {
-    shallow = safeExec('git', ['rev-parse', '--is-shallow-repository'], { cwd: canonicalRoot });
-  } catch (err) {
-    throw fail(`git rev-parse --is-shallow-repository failed (${message(err)})`, err);
-  }
-  if (shallow === 'true') {
-    throw fail(
-      'the repository is a shallow clone, so blame would date every line older than the shallow boundary to the boundary commit',
-    );
-  }
-
-  // A grafts path that cannot exist (random suffix, never created): with it,
-  // the blame below reads no grafts file at all.
-  const noGraftFile = path.join(os.tmpdir(), `totem-no-grafts-${randomUUID()}`);
-  for (const [id, line] of lineOf) {
-    let porcelain: string;
-    try {
-      // The admission instant must be the commit that actually introduced the
-      // line, whatever local state says otherwise. Two local states are
-      // neutralised, each of which would date a re-admission BEFORE the floor's
-      // asOf and so let the stale-floor refusal pass it:
-      // - Replace refs: `--no-replace-objects` (a global option, before the
-      //   subcommand). By default blame follows `refs/replace/*`, so a local
-      //   `git replace <commit> <backdated copy>` makes it report the ORIGINAL
-      //   sha with the REPLACEMENT's committer-time.
-      // - The blame ignore list: `--ignore-revs-file=` (an empty file name
-      //   clears the list read so far, `blame.ignoreRevsFile` from any config
-      //   included). An ignore list hands a re-admitted row's line to an
-      //   EARLIER commit. Measured on git 2.55: `-c blame.ignoreRevsFile=` does
-      //   NOT clear a list set in the global config; the command-line option does.
-      // - A legacy grafts file (`<GIT_DIR>/info/grafts`): `GIT_GRAFT_FILE` set,
-      //   in this call's environment only, to a path that does not exist. A
-      //   graft re-parenting the re-admission onto a backdated same-tree copy
-      //   makes blame find the line already in that copy, and
-      //   `--no-replace-objects` does not disable grafts (measured).
-      porcelain = safeExec(
-        'git',
-        [
-          '--no-replace-objects',
-          'blame',
-          '--ignore-revs-file=',
-          '--line-porcelain',
-          '-L',
-          `${line},${line}`,
-          '--',
-          rel,
-        ],
-        {
-          cwd: canonicalRoot,
-          env: { ...process.env, GIT_GRAFT_FILE: noGraftFile },
-        },
-      );
-    } catch (err) {
-      throw fail(`git blame of ${rel} line ${line} (ruleId ${id}) failed (${message(err)})`, err);
-    }
-    const sha = /^([0-9a-f]{40}) /.exec(porcelain)?.[1];
-    const time = /^committer-time (\d+)$/m.exec(porcelain)?.[1];
-    if (sha === undefined || time === undefined) {
-      throw fail(
-        `git blame of ${rel} line ${line} (ruleId ${id}) returned no commit and committer-time`,
-      );
-    }
-    out.set(id, {
-      line,
-      commit: sha,
-      admittedAt: sha === UNCOMMITTED_SHA ? null : new Date(Number(time) * 1000).toISOString(),
-    });
-  }
-  return out;
-}
-
 /**
  * The writer's own invariant: every row the plan does not touch is the SAME
  * object in the output and serializes exactly as it did before planning. A
@@ -397,12 +219,6 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
 
   // ── 3. The ledger and the floor records (the intake's own content hash) ──
   const ledger = readAuthoringLedger(totemDir);
-  // The admission instant of each floor record: the committer instant of the
-  // commit that introduced its effective ledger row (git blame; mmnto-ai/totem#3045).
-  const admissions = readLedgerAdmissions(
-    totemDir,
-    input.floor.flatMap((e) => e.records.map((r) => r.ruleId)),
-  );
   const records: ServingRecord[] = [];
   for (const entry of input.floor) {
     for (const ref of entry.records) {
@@ -428,10 +244,6 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
         ruleId: ref.ruleId,
         contentHash: ingested.contentHash,
         parsed: ingested.parsed,
-        // A record with no ledger row has no admission; the planner refuses
-        // it on the missing row first.
-        admittedCommit: admissions.get(ref.ruleId)?.commit ?? UNCOMMITTED_SHA,
-        admittedAt: admissions.get(ref.ruleId)?.admittedAt ?? null,
       });
     }
   }

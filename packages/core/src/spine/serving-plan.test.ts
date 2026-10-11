@@ -77,10 +77,6 @@ function record(
     path,
     contentHash: ruleId.slice(0, 1).repeat(64),
     parsed: parseRuleRecord(recordText(opts), path),
-    // The committer instant of the commit that introduced the effective ledger
-    // row's line (the CLI writer blames it); well before AS_OF by default.
-    admittedCommit: 'c'.repeat(40),
-    admittedAt: '2026-09-23T12:00:00.000Z',
   };
 }
 
@@ -162,16 +158,20 @@ function fixture(legacyRow_: 'archive' | 'remove' = 'archive'): Fixture {
     asOf: AS_OF,
     source: 'a test fixture',
     dispositions: { legacyRow: legacyRow_, stamp: 'none' },
+    // Each floor record names the content hash it was scored against.
     floor: [
-      { legacyHash: LEGACY_A, records: [{ path: recA.path, ruleId: RULE_A }] },
+      {
+        legacyHash: LEGACY_A,
+        records: [{ path: recA.path, ruleId: RULE_A, contentHash: recA.contentHash }],
+      },
       {
         legacyHash: LEGACY_B,
         records: [
-          { path: recB1.path, ruleId: RULE_B1 },
-          { path: recB2.path, ruleId: RULE_B2 },
+          { path: recB1.path, ruleId: RULE_B1, contentHash: recB1.contentHash },
+          { path: recB2.path, ruleId: RULE_B2, contentHash: recB2.contentHash },
         ],
       },
-      { records: [{ path: recN.path, ruleId: RULE_N }] },
+      { records: [{ path: recN.path, ruleId: RULE_N, contentHash: recN.contentHash }] },
     ],
     archive: [
       { lessonHash: ARCHIVE_C, reason: 'no-intent', ref: 'curation row 7' },
@@ -433,49 +433,22 @@ describe('planServingWrite: refusals, before any write (mmnto-ai/totem#3036 B2)'
     );
   });
 
-  it('refuses a floor record whose effective ledger row was committed after asOf, naming the instant, the commit and asOf (mmnto-ai/totem#3045)', () => {
+  it('requires contentHash on every floor record, naming the field and where its value comes from', () => {
     const f = fixture();
-    f.records[0] = {
-      ...f.records[0]!,
-      admittedCommit: 'd'.repeat(40),
-      admittedAt: '2026-10-10T02:18:14.000Z',
-    };
-    expect(() => plan(f)).toThrow(
-      expect.objectContaining({
-        code: 'SERVING_FLOOR_STALE',
-        message: expect.stringMatching(
-          /admitted at 2026-10-10T02:18:14\.000Z by commit d{40}.*asOf 2026-10-10T02:18:13\.000Z/,
-        ),
-        recoveryHint: expect.stringContaining('Regenerate the floor file'),
-      }),
-    );
+    const res = ServingInputSchema.safeParse({
+      ...f.input,
+      floor: [{ legacyHash: LEGACY_A, records: [{ path: 'p', ruleId: RULE_A }] }],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) {
+      expect(res.error.issues[0]!.path).toEqual(['floor', 0, 'records', 0, 'contentHash']);
+      expect(res.error.issues[0]!.message).toBe(
+        "floor[].records[].contentHash is required: the floor file must carry the ledger's record.contentHash for each record",
+      );
+    }
   });
 
-  it('passes a floor record committed exactly at asOf', () => {
-    const f = fixture();
-    f.records[0] = { ...f.records[0]!, admittedAt: AS_OF };
-    expect(() => plan(f)).not.toThrow();
-  });
-
-  it("does not read the author's authoredAt: a date after asOf passes when the row was committed before it", () => {
-    const f = fixture();
-    f.ledger[0] = ledgerRow(f.records[0]!, '2026-12-31');
-    expect(() => plan(f)).not.toThrow();
-  });
-
-  it('refuses a floor record whose effective ledger row is not committed', () => {
-    const f = fixture();
-    f.records[0] = { ...f.records[0]!, admittedCommit: '0'.repeat(40), admittedAt: null };
-    expect(() => plan(f)).toThrow(
-      expect.objectContaining({
-        code: 'SERVING_FLOOR_STALE',
-        message: expect.stringContaining('is not committed'),
-        recoveryHint: expect.stringContaining('Commit'),
-      }),
-    );
-  });
-
-  it('binds a floor record by content when the input carries contentHash: a match passes, another revision refuses', () => {
+  it('binds a floor record by content (the whole stale-floor check): a match passes, another revision refuses', () => {
     const f = fixture();
     f.input.floor[0]!.records[0] = {
       ...f.input.floor[0]!.records[0]!,
@@ -734,7 +707,15 @@ describe('planServingWrite: falsification fold (mmnto-ai/totem#3036 B2)', () => 
 
   it('F8: refuses a ruleId named twice in the floor', () => {
     const f = fixture();
-    f.input.floor[2] = { records: [{ path: '.totem/rules/a.rule.yaml', ruleId: RULE_A }] };
+    f.input.floor[2] = {
+      records: [
+        {
+          path: '.totem/rules/a.rule.yaml',
+          ruleId: RULE_A,
+          contentHash: f.records[0]!.contentHash,
+        },
+      ],
+    };
     expect(() => plan(f)).toThrow(
       expect.objectContaining({
         code: 'SERVING_INPUT_INVALID',

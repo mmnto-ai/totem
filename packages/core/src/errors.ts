@@ -64,8 +64,6 @@ export type TotemErrorCode =
   | 'SERVING_INPUT_INVALID'
   /** `totem rule serve`: a floor record does not match its effective authoring-ledger row (no row, no record block, another path, another content hash) — refused before any write (mmnto-ai/totem#3036). */
   | 'SERVING_RECORD_MISMATCH'
-  /** `totem rule serve`: a floor record's effective ledger row was admitted after the input's asOf, so the floor predates it — refused before any write (mmnto-ai/totem#3045). */
-  | 'SERVING_FLOOR_STALE'
   /** `totem rule serve`: a row the plan does not touch serialized differently after planning — the writer's own invariant; a bug, and nothing was written (mmnto-ai/totem#3036). */
   | 'SERVING_INVARIANT_BROKEN'
   /** `totem rule serve`: the serving file's hash is not the manifest's `output_hash` (the file was modified outside totem) — refused before planning, nothing written, unless `--refresh` is passed (mmnto-ai/totem#3036). `STALE_MANIFEST` is the pack-manifest nudge and does not fit. */
