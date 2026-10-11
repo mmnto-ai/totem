@@ -923,6 +923,35 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     expectUnchanged(ws, before);
   });
 
+  it('dates the re-admission by its own commit even when the git config names it in blame.ignoreRevsFile', async () => {
+    readmitRecordA();
+    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
+    // A git config the writer's own git calls read, ignoring the re-admission
+    // commit in blame: unneutralised, blame would hand the line to an earlier commit.
+    const revs = path.join(tmpDir, 'ignore-revs.txt');
+    fs.writeFileSync(revs, `${sha}\n`, 'utf-8');
+    const cfg = path.join(tmpDir, 'ignore-revs.gitconfig');
+    fs.writeFileSync(cfg, `[blame]\n\tignoreRevsFile = ${revs.replace(/\\/g, '/')}\n`, 'utf-8');
+    vi.stubEnv('GIT_CONFIG_GLOBAL', cfg);
+    // The config takes effect: an unneutralised blame attributes the line elsewhere.
+    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
+    const plain = safeExec(
+      'git',
+      [
+        'blame',
+        '--line-porcelain',
+        '-L',
+        `${ledgerLines},${ledgerLines}`,
+        '--',
+        '.totem/spine/authoring-ledger.ndjson',
+      ],
+      { cwd: ws.root },
+    );
+    expect(plain.startsWith(sha)).toBe(false);
+    backdate(ws);
+    await expectRefusal('SERVING_FLOOR_STALE', `by commit ${sha}, after the serving input's asOf`);
+  });
+
   it('passes the same re-admission when its commit is before asOf', async () => {
     readmitRecordA();
     commitAll(ws.root, '2026-10-10T02:18:12Z', 're-admit before asOf');

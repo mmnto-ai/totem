@@ -20,6 +20,11 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the serving writer's real-blame test dates floor
+          # records by the commits in this repository's ledger history
+          # (mmnto-ai/totem#3036); a shallow clone only exercises its refusal.
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
 

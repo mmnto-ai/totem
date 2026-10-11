@@ -232,9 +232,17 @@ export function readLedgerAdmissions(
   for (const [id, line] of lineOf) {
     let porcelain: string;
     try {
+      // `--ignore-revs-file=` (an empty file name clears the list read so far,
+      // `blame.ignoreRevsFile` from any config included): a user or repository
+      // config that ignores revisions in blame would hand a re-admitted row's
+      // line to an EARLIER commit and so date the admission before the floor's
+      // asOf. The admission instant must be the commit that actually introduced
+      // the line, whatever the local blame preferences. Measured on git 2.55:
+      // `-c blame.ignoreRevsFile=` does NOT clear a list set in the global
+      // config; the command-line option does.
       porcelain = safeExec(
         'git',
-        ['blame', '--line-porcelain', '-L', `${line},${line}`, '--', rel],
+        ['blame', '--ignore-revs-file=', '--line-porcelain', '-L', `${line},${line}`, '--', rel],
         {
           cwd: root,
         },
