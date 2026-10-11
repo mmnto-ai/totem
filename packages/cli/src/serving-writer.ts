@@ -164,6 +164,36 @@ export interface LedgerAdmission {
 }
 
 /**
+ * The ledger's path relative to the repository root, in forward slashes, for
+ * `git blame -- <path>`, and the canonical root to run git from.
+ *
+ * Both sides go through the SAME canonicaliser first (`fs.realpathSync.native`
+ * by default): git returns its top level as the real path, while the ledger
+ * path comes from the working directory, which can carry another spelling of
+ * the same directory (a Windows 8.3 short name such as `RUNNER~1`, a different
+ * case, a symlink). `path.relative` across two spellings climbs out with `..`
+ * segments and git refuses the path as outside the repository. A result that
+ * still leaves the root is refused here. The canonicaliser is injectable for tests.
+ */
+export function ledgerPathForBlame(
+  root: string,
+  ledgerPath: string,
+  canonicalise: (p: string) => string = (p) => fs.realpathSync.native(p),
+): { rel: string; canonicalRoot: string } {
+  const canonicalRoot = canonicalise(root);
+  const relative = path.relative(canonicalRoot, canonicalise(ledgerPath));
+  if (
+    relative === '' ||
+    path.isAbsolute(relative) ||
+    relative === '..' ||
+    relative.startsWith(`..${path.sep}`)
+  ) {
+    throw new Error(`${ledgerPath} does not resolve inside ${canonicalRoot}`);
+  }
+  return { rel: relative.split(path.sep).join('/'), canonicalRoot };
+}
+
+/**
  * Date each named rule's EFFECTIVE authoring-ledger row by the commit that
  * introduced its line: `git blame --line-porcelain -L <n>,<n>` from the
  * repository root, `committer-time` read as the admission instant
@@ -217,9 +247,18 @@ export function readLedgerAdmissions(
   if (root === null) {
     throw fail(`${ledgerPath} is not inside a git repository (not a git repository)`);
   }
+  // Both sides canonicalised before the relative path is taken (see
+  // `ledgerPathForBlame`); the canonical root is the cwd of every git call below.
+  let rel: string;
+  let canonicalRoot: string;
+  try {
+    ({ rel, canonicalRoot } = ledgerPathForBlame(root, ledgerPath));
+  } catch (err) {
+    throw fail(`the ledger path could not be placed inside the repository (${message(err)})`, err);
+  }
   let shallow: string;
   try {
-    shallow = safeExec('git', ['rev-parse', '--is-shallow-repository'], { cwd: root });
+    shallow = safeExec('git', ['rev-parse', '--is-shallow-repository'], { cwd: canonicalRoot });
   } catch (err) {
     throw fail(`git rev-parse --is-shallow-repository failed (${message(err)})`, err);
   }
@@ -229,7 +268,6 @@ export function readLedgerAdmissions(
     );
   }
 
-  const rel = path.relative(root, ledgerPath).split(path.sep).join('/');
   // A grafts path that cannot exist (random suffix, never created): with it,
   // the blame below reads no grafts file at all.
   const noGraftFile = path.join(os.tmpdir(), `totem-no-grafts-${randomUUID()}`);
@@ -267,7 +305,7 @@ export function readLedgerAdmissions(
           rel,
         ],
         {
-          cwd: root,
+          cwd: canonicalRoot,
           env: { ...process.env, GIT_GRAFT_FILE: noGraftFile },
         },
       );

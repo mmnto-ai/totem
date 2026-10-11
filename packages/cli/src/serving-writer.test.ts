@@ -23,6 +23,7 @@ import { verifyManifestCommand } from './commands/verify-manifest.js';
 import {
   assertUntouchedRowsUnchanged,
   formatServingReport,
+  ledgerPathForBlame,
   readLedgerAdmissions,
   runServingWriter,
 } from './serving-writer.js';
@@ -1050,6 +1051,51 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
       'the floor was built against another revision of this record',
     );
   });
+
+  it('ledgerPathForBlame canonicalises both sides, so another spelling of the root never yields a `..` path', () => {
+    // A root as git returns it (the long, real path) and a ledger path under a
+    // short-name spelling of the same directory, as GitHub's Windows runner
+    // hands out its temp dir. The injected canonicaliser maps the short segment
+    // to the long one, as fs.realpathSync.native does on a real 8.3 name.
+    const base = path.join(os.tmpdir(), 'canon-probe');
+    const root = path.join(base, 'runneradmin', 'ws');
+    const ledger = path.join(base, 'RUNNER~1', 'ws', '.totem', 'spine', 'authoring-ledger.ndjson');
+    const canon = (p: string) => path.normalize(p.replace('RUNNER~1', 'runneradmin'));
+    // The control: a plain relative path across the two spellings climbs out.
+    expect(path.relative(root, ledger).split(path.sep)).toContain('..');
+    const { rel, canonicalRoot } = ledgerPathForBlame(root, ledger, canon);
+    expect(rel).toBe('.totem/spine/authoring-ledger.ndjson');
+    expect(rel.split('/')).not.toContain('..');
+    expect(rel).not.toContain('\\');
+    expect(canonicalRoot).toBe(root);
+    // A ledger that really is outside the root is refused, not passed to git.
+    expect(() =>
+      ledgerPathForBlame(root, path.join(base, 'elsewhere', 'ledger.ndjson'), canon),
+    ).toThrow(/does not resolve inside/);
+  });
+
+  it.skipIf(process.platform !== 'win32')(
+    'runs from an 8.3 short-name spelling of the workspace without refusing GIT_FAILED (Windows)',
+    async () => {
+      const short = safeExec('powershell', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${ws.root}').ShortPath`,
+      ]);
+      // On a volume with 8.3 names the spelling differs; say so in the output
+      // either way (an identical spelling makes this arm a plain pass).
+      console.error(`[short-name arm] long=${ws.root} short=${short}`);
+      expect(fs.realpathSync.native(short)).toBe(fs.realpathSync.native(ws.root));
+      process.chdir(short);
+      const result = await runServingWriter({
+        inputPath: path.join(short, 'serve-input.json'),
+        dryRun: true,
+      });
+      expect(result.dryRun).toBe(true);
+      expect(result.report.totals.lowered).toBe(2);
+    },
+  );
 
   it('refuses loudly when the workspace is not a git repository, naming the git error', async () => {
     fs.rmSync(path.join(ws.root, '.git'), { recursive: true, force: true });
