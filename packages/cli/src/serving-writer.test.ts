@@ -62,13 +62,14 @@ function recordA(sourceLesson = `lesson-${HASH_A}`, severity = 'error'): string 
   });
 }
 
-function recordN(): string {
+function recordN(sourceLesson?: string): string {
   return yamlStringify({
     schemaVersion: 1,
     severity: 'warning',
     message: 'A new regex rule',
     target: { type: 'regex', pattern: 'forbiddenCall', scope: { fileGlobs: ['**/*.ts'] } },
     examples: [{ bad: 'forbiddenCall();', good: 'allowedCall();' }],
+    ...(sourceLesson !== undefined ? { curation: { sourceLesson } } : {}),
   });
 }
 
@@ -442,6 +443,73 @@ describe('runServingWriter (mmnto-ai/totem#3036 B2)', () => {
     expect(text).toContain(`_(archived: served by record ${RULE_A})_`);
     expect(text).toContain('_(archived: no-intent (curation row 7))_');
   });
+
+  it('a no-change run with a stale manifest refreshes only the manifest (falsification fold F1b)', async () => {
+    const ws = setupWorkspace(tmpDir);
+    await runServingWriter({ inputPath: ws.inputPath });
+    const manifest = JSON.parse(fs.readFileSync(ws.manifestPath, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    fs.writeFileSync(
+      ws.manifestPath,
+      JSON.stringify({ ...manifest, output_hash: 'stale' }, null, 2) + '\n',
+      'utf-8',
+    );
+    backdate(ws);
+    const before = snapshot(ws);
+    const result = await runServingWriter({ inputPath: ws.inputPath });
+    expect(result.report.changed).toBe(false);
+    expect(result.written).toBe(true);
+    expect(result.writes).toEqual({ servingFile: false, manifest: true, exports: [] });
+    const after = snapshot(ws);
+    expect(after.rules!.equals(before.rules!)).toBe(true);
+    expect(after.rulesMtime).toBe(before.rulesMtime);
+    expect(after.exports!.equals(before.exports!)).toBe(true);
+    expect(fs.statSync(ws.exportPath).mtimeMs).toBe(new Date('2026-01-01T00:00:00Z').getTime());
+    expect(after.manifest!.equals(before.manifest!)).toBe(false);
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+    // And the next run finds everything fresh.
+    expect((await runServingWriter({ inputPath: ws.inputPath })).written).toBe(false);
+  });
+
+  it('a no-change run with a stale export regenerates only that export (falsification fold F1b)', async () => {
+    const ws = setupWorkspace(tmpDir);
+    await runServingWriter({ inputPath: ws.inputPath });
+    const good = fs.readFileSync(ws.exportPath, 'utf-8');
+    fs.writeFileSync(ws.exportPath, 'stale export\n', 'utf-8');
+    backdate(ws);
+    const before = snapshot(ws);
+    const dry = await runServingWriter({ inputPath: ws.inputPath, dryRun: true });
+    expect(dry.writes).toEqual({ servingFile: false, manifest: false, exports: ['EXPORTED.md'] });
+    expectUnchanged(ws, before);
+    const result = await runServingWriter({ inputPath: ws.inputPath });
+    expect(result.writes).toEqual({
+      servingFile: false,
+      manifest: false,
+      exports: ['EXPORTED.md'],
+    });
+    const after = snapshot(ws);
+    expect(after.rules!.equals(before.rules!)).toBe(true);
+    expect(after.rulesMtime).toBe(before.rulesMtime);
+    expect(after.manifest!.equals(before.manifest!)).toBe(true);
+    expect(after.manifestMtime).toBe(before.manifestMtime);
+    // A target with no sentinels gets the block appended, as exportLessons does.
+    expect(fs.readFileSync(ws.exportPath, 'utf-8')).toBe(
+      'stale export\n\n' + good.replace(/\n$/, '') + '\n',
+    );
+    expect((await runServingWriter({ inputPath: ws.inputPath })).written).toBe(false);
+  });
+
+  it('names a CRLF copy of the input by the same sha256 as the LF original (falsification fold F11)', async () => {
+    const ws = setupWorkspace(tmpDir);
+    const lfText = fs.readFileSync(ws.inputPath, 'utf-8');
+    const lf = await runServingWriter({ inputPath: ws.inputPath, dryRun: true });
+    expect(lf.report.inputSha256).toBe(sha256(lfText));
+    fs.writeFileSync(ws.inputPath, lfText.replace(/\n/g, '\r\n'), 'utf-8');
+    const crlf = await runServingWriter({ inputPath: ws.inputPath, dryRun: true });
+    expect(crlf.report.inputSha256).toBe(lf.report.inputSha256);
+  });
 });
 
 describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem#3036 B2)', () => {
@@ -464,16 +532,42 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     vi.unstubAllEnvs();
   });
 
-  async function expectRefusal(code: string, text: string | RegExp): Promise<void> {
+  async function expectRefusal(code: string, text: string | RegExp, hint?: string): Promise<void> {
     backdate(ws);
     const before = snapshot(ws);
     await expect(runServingWriter({ inputPath: ws.inputPath })).rejects.toMatchObject({
       code,
       message:
         typeof text === 'string' ? expect.stringContaining(text) : expect.stringMatching(text),
+      ...(hint !== undefined ? { recoveryHint: expect.stringContaining(hint) } : {}),
     });
     expectUnchanged(ws, before);
   }
+
+  it('refuses a missing serving file', async () => {
+    fs.rmSync(ws.rulesPath);
+    await expectRefusal('PARSE_FAILED', 'does not exist');
+  });
+
+  it('refuses a missing manifest of a file with record rows, naming the git restore and not the lesson compile', async () => {
+    // A first real run makes the file record-managed.
+    await runServingWriter({ inputPath: ws.inputPath });
+    fs.rmSync(ws.manifestPath);
+    await expectRefusal(
+      'PARSE_FAILED',
+      'compile-manifest.json',
+      'holds record-managed rows, so a lesson compile is not the repair',
+    );
+  });
+
+  it('refuses an export target with an unmatched sentinel before ANY write (falsification fold F1a)', async () => {
+    fs.writeFileSync(
+      ws.exportPath,
+      '# Hand-written\n\n<!-- totem:generated:start -->\nstale block, no end marker\n',
+      'utf-8',
+    );
+    await expectRefusal('PARSE_FAILED', /Export target EXPORTED\.md \(agents\).*without matching/);
+  });
 
   it('refuses a missing input file', async () => {
     fs.rmSync(ws.inputPath);
@@ -523,7 +617,11 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
 
   it('refuses a missing manifest, naming the lesson compile for a lesson-only file', async () => {
     fs.rmSync(ws.manifestPath);
-    await expectRefusal('PARSE_FAILED', 'compile-manifest.json');
+    await expectRefusal(
+      'PARSE_FAILED',
+      'compile-manifest.json',
+      'holds no record-managed rows yet: run `totem lesson compile`',
+    );
   });
 
   it('refuses a corrupt manifest', async () => {
@@ -559,11 +657,24 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
   });
 
   it('refuses a legacyHash that is not in the serving file', async () => {
+    // Record N's curation names the absent legacy hash, so the sourceLesson
+    // check passes and the not-in-file refusal is the one that fires.
+    const absent = 'abababababababab';
+    const text = recordN(`lesson-${absent}`);
+    fs.writeFileSync(path.join(ws.totemDir, 'rules', 'n.rule.yaml'), text, 'utf-8');
+    fs.writeFileSync(
+      ws.ledgerPath,
+      ledgerLine(RULE_A, REC_A_REF, recordA()) + '\n' + ledgerLine(RULE_N, REC_N_REF, text) + '\n',
+      'utf-8',
+    );
     writeInput(ws, {
       ...ws.input,
-      floor: [{ legacyHash: 'abababababababab', records: [{ path: REC_N_REF, ruleId: RULE_N }] }],
+      floor: [{ legacyHash: absent, records: [{ path: REC_N_REF, ruleId: RULE_N }] }],
     });
-    await expectRefusal('SERVING_INPUT_INVALID', 'abababababababab');
+    await expectRefusal(
+      'SERVING_INPUT_INVALID',
+      `floor names legacyHash ${absent}, which is not in the serving file`,
+    );
   });
 
   it('refuses a legacyHash that disagrees with the record curation.sourceLesson', async () => {

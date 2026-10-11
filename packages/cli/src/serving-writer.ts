@@ -8,8 +8,16 @@
 // invariant, and writes in a fixed order. A LIBRARY module (not a command), so it
 // keeps static imports; the command wrapper `commands/rule-serve.ts` lazy-loads it.
 //
-// Every refusal fires before the first write. The dry run reads everything,
-// writes nothing and returns the same report a real run would.
+// Every refusal fires before the first write. That includes the preflight of
+// every write: the records attestation and each export target rendered in
+// memory with its sentinels checked. The dry run reads everything, writes
+// nothing and returns the same report a real run would. A run whose plan changes
+// no row is a freshness check: it refreshes a stale manifest or a stale export
+// target, and writes nothing when everything is fresh.
+//
+// Residual window: an IO error DURING the writes themselves (serving file, then
+// manifest, then export targets) can leave a later step unwritten. The next run's
+// freshness check then refreshes whatever is stale.
 
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -20,15 +28,16 @@ import {
   attestRecordsHash,
   type CompiledRule,
   type CompileManifest,
-  exportLessonsForRules,
   type ExportTargetResult,
   generateOutputHash,
   isRecordPathRule,
+  isRecordsAttestationFresh,
   loadCompiledRulesFile,
   planServingWrite,
   readAllLessons,
   readAuthoringLedger,
   readCompileManifest,
+  renderLessonExportsForRules,
   type ServingInput,
   ServingInputSchema,
   type ServingPlan,
@@ -38,6 +47,7 @@ import {
   TotemParseError,
   writeCompileManifest,
   writeFileAtomicSync,
+  writeRenderedExport,
 } from '@mmnto/totem';
 
 import { ingestRecord } from './authored-rule-intake.js';
@@ -52,10 +62,17 @@ export interface ServingWriterOptions {
 
 export interface ServingWriterResult {
   report: ServingReport;
-  /** True only when the serving file, the manifest and the exports were written. */
+  /** True when this run wrote anything (never on a dry run). */
   written: boolean;
   dryRun: boolean;
-  /** The export targets regenerated (empty when nothing was written or none is configured). */
+  /**
+   * What the run writes (on a dry run: would write). The serving file only when
+   * the plan changes a row; the manifest when the plan changes a row or the
+   * manifest is stale; each export target whose rendered text differs from its
+   * current text.
+   */
+  writes: { servingFile: boolean; manifest: boolean; exports: string[] };
+  /** The export targets written (on a dry run: that would be written). */
   exports: ExportTargetResult[];
   /** The serving file, relative to the working directory. */
   rulesFile: string;
@@ -74,7 +91,11 @@ function inputInvalid(message: string, cause?: unknown): TotemError {
   );
 }
 
-/** Read and validate the input file (strict); returns it with the sha256 of its bytes. */
+/**
+ * Read and validate the input file (strict); returns it with the sha256 of its
+ * text after CRLF to LF, so a CRLF checkout names the same run as an LF one (for
+ * an LF file this equals the raw-bytes sha256).
+ */
 function readServingInput(
   inputAbs: string,
   inputRel: string,
@@ -88,9 +109,10 @@ function readServingInput(
       err,
     );
   }
+  const text = bytes.toString('utf-8').replace(/\r\n/g, '\n');
   let json: unknown;
   try {
-    json = JSON.parse(bytes.toString('utf-8'));
+    json = JSON.parse(text);
   } catch (err) {
     throw inputInvalid(
       `The serving input ${inputRel} is not valid JSON (${(err as Error).message})`,
@@ -107,7 +129,7 @@ function readServingInput(
       parsed.error,
     );
   }
-  return { input: parsed.data, sha256: createHash('sha256').update(bytes).digest('hex') };
+  return { input: parsed.data, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
 /**
@@ -228,33 +250,57 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
   const plan = planServingWrite({ rows, ledger, records, input, inputSha256 });
   assertUntouchedRowsUnchanged(rows, beforeTexts, plan);
 
+  // ── 6. Preflight every write before the first one ──
+  // The records attestation reads every tracked record and can throw; every
+  // export target is rendered in memory, its sentinels checked against its
+  // current text. A failure here refuses with nothing written.
+  const recordsHash = attestRecordsHash(totemDir, cwd);
+  const rendered =
+    config.exports && Object.keys(config.exports).length > 0
+      ? renderLessonExportsForRules(readAllLessons(totemDir), plan.rows, config.exports, cwd)
+      : [];
+  const staleExports = rendered.filter((r) => r.current !== r.content);
+  // When the plan changes no row, the run is a freshness check: the manifest is
+  // stale when its output_hash is not the serving file's hash or its
+  // records_hash is not the current attestation.
+  const manifestStale =
+    plan.changed ||
+    manifest.output_hash !== generateOutputHash(rulesPath) ||
+    !isRecordsAttestationFresh(manifest.records_hash, totemDir, cwd);
+
   const result: ServingWriterResult = {
     report: plan.report,
     written: false,
     dryRun,
-    exports: [],
+    writes: {
+      servingFile: plan.changed,
+      manifest: manifestStale,
+      exports: staleExports.map((r) => r.filePath),
+    },
+    exports: staleExports.map(({ name, filePath, count }) => ({ name, filePath, count })),
     rulesFile: rulesRel,
   };
-  if (dryRun || !plan.changed) return result;
+  const anyWrite = plan.changed || manifestStale || staleExports.length > 0;
+  if (dryRun || !anyWrite) return result;
 
-  // ── 6. Write: the serving file, then the manifest, then the exports ──
-  writeFileAtomicSync(rulesPath, JSON.stringify({ ...file, rules: plan.rows }, null, 2) + '\n');
-  writeCompileManifest(manifestPath, {
-    ...manifest,
-    compiled_at: input.asOf,
-    output_hash: generateOutputHash(rulesPath),
-    records_hash: attestRecordsHash(totemDir, cwd),
-    // The full compile's rule: every row in the file, archived rows included.
-    rule_count: plan.rows.length,
-  });
-  if (config.exports && Object.keys(config.exports).length > 0) {
-    result.exports = exportLessonsForRules(
-      readAllLessons(totemDir),
-      plan.rows,
-      config.exports,
-      cwd,
-    );
+  // ── 7. Write: the serving file, then the manifest, then the stale exports ──
+  // Residual window: an IO error DURING these writes (a full disk, a rename
+  // refused over a locked target) can still leave a later step unwritten; the
+  // next run's freshness check then refreshes whatever is stale.
+  if (plan.changed) {
+    writeFileAtomicSync(rulesPath, JSON.stringify({ ...file, rules: plan.rows }, null, 2) + '\n');
   }
+  if (manifestStale) {
+    writeCompileManifest(manifestPath, {
+      ...manifest,
+      compiled_at: input.asOf,
+      output_hash: generateOutputHash(rulesPath),
+      records_hash: recordsHash,
+      // The full compile's rule: every row in the file, archived rows included.
+      rule_count: plan.rows.length,
+    });
+  }
+  for (const r of staleExports) writeRenderedExport(r);
   result.written = true;
   return result;
 }
@@ -265,7 +311,7 @@ export function formatServingReport(result: ServingWriterResult): string[] {
   const t = r.totals;
   const keptLegacy = t['floor-legacy'] - r.removed;
   const lines = [
-    `input sha256 ${r.inputSha256}, asOf ${r.asOf}, legacyRow ${r.legacyRow}`,
+    `input sha256 ${r.inputSha256} (of its text after CRLF to LF), asOf ${r.asOf}, legacyRow ${r.legacyRow}`,
     `serving file ${result.rulesFile}: ${r.rowsBefore} rows before, ${r.rowsAfter} after`,
     `classes: floor-legacy ${t['floor-legacy']}, lowered ${t.lowered}, archive ${t.archive}, already-archived ${t['already-archived']}, carried ${t.carried}`,
     `  before ${r.rowsBefore} = carried ${t.carried} + archive ${t.archive} + already-archived ${t['already-archived']} + floor-legacy ${t['floor-legacy']} + lowered already present ${r.loweredExisting}`,
@@ -283,26 +329,29 @@ export function formatServingReport(result: ServingWriterResult): string[] {
         : '',
       row.ruleId !== undefined && row.ruleId !== row.lessonHash ? `records ${row.ruleId}` : '',
       row.recordPath ?? '',
+      row.changedFields !== undefined ? `fields ${row.changedFields.join(', ')}` : '',
     ]
       .filter((s) => s !== '')
       .join(', ');
     lines.push(`  ${row.class} ${row.action} ${row.lessonHash}${ids ? ` (${ids})` : ''}`);
   }
-  if (result.dryRun) {
+  const w = result.writes;
+  const targets: string[] = [];
+  if (w.servingFile) targets.push(result.rulesFile);
+  if (w.manifest) targets.push(w.servingFile ? 'the manifest' : 'the manifest (stale)');
+  for (const e of result.exports) {
+    targets.push(`${e.filePath} (${e.name}, ${e.count} lessons${w.servingFile ? '' : ', stale'})`);
+  }
+  if (targets.length === 0) {
     lines.push(
-      r.changed
-        ? 'DRY RUN: nothing was written.'
-        : 'DRY RUN: no change to write; nothing was written.',
+      result.dryRun
+        ? 'DRY RUN: no change and everything is fresh; nothing would be written.'
+        : 'No change: the serving file, the manifest and the exports are fresh; nothing was written.',
     );
-  } else if (!result.written) {
-    lines.push('No change: the serving file already matches the input; nothing was written.');
+  } else if (result.dryRun) {
+    lines.push(`DRY RUN: would write ${targets.join(', ')}; nothing was written.`);
   } else {
-    const exported = result.exports
-      .map((e) => `${e.filePath} (${e.name}, ${e.count} lessons)`)
-      .join(', ');
-    lines.push(
-      `Wrote ${result.rulesFile}, refreshed the manifest${exported ? `, regenerated ${exported}` : ''}.`,
-    );
+    lines.push(`${w.servingFile ? 'Wrote' : 'No row changed; refreshed'} ${targets.join(', ')}.`);
   }
   return lines;
 }

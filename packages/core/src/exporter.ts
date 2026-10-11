@@ -115,16 +115,27 @@ export function exportLessons(
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  const { content } = renderLessonExport(lessons, targetPath, archivedReasonByHash);
+  fs.writeFileSync(targetPath, content, 'utf-8');
+}
 
+/**
+ * Render what {@link exportLessons} would write to `targetPath`, WITHOUT writing:
+ * the target's current text (`null` when absent) and its new content. Throws
+ * the sentinel `TotemParseError` (an unmatched or misordered marker) before any
+ * write, so a caller can preflight every target first (mmnto-ai/totem#3036).
+ */
+export function renderLessonExport(
+  lessons: ParsedLesson[],
+  targetPath: string,
+  archivedReasonByHash?: ReadonlyMap<string, string>,
+): { current: string | null; content: string } {
   const generatedBlock = formatLessonsAsMarkdown(lessons, archivedReasonByHash);
-
   if (fs.existsSync(targetPath)) {
-    const existing = fs.readFileSync(targetPath, 'utf-8');
-    const updated = injectSentinelBlock(existing, generatedBlock);
-    fs.writeFileSync(targetPath, updated, 'utf-8');
-  } else {
-    fs.writeFileSync(targetPath, generatedBlock + '\n', 'utf-8');
+    const current = fs.readFileSync(targetPath, 'utf-8');
+    return { current, content: injectSentinelBlock(current, generatedBlock) };
   }
+  return { current: null, content: generatedBlock + '\n' };
 }
 
 // ─── Export regeneration over a serving file (mmnto-ai/totem#3036) ───────
@@ -153,7 +164,8 @@ export interface ExportTargetResult {
  *
  * Exports are keyed by lesson hash, so a record-path row (keyed by its rule id)
  * contributes nothing here by design. Returns one entry per target, in config
- * order, for the caller to log.
+ * order, for the caller to log. Every target is rendered (and its sentinels
+ * checked) before the first one is written.
  */
 export function exportLessonsForRules(
   lessons: ParsedLesson[],
@@ -161,6 +173,33 @@ export function exportLessonsForRules(
   exports: Readonly<Record<string, string>>,
   cwd: string,
 ): ExportTargetResult[] {
+  const rendered = renderLessonExportsForRules(lessons, rules, exports, cwd);
+  for (const r of rendered) writeRenderedExport(r);
+  return rendered.map(({ name, filePath, count }) => ({ name, filePath, count }));
+}
+
+/** One export target rendered in memory by {@link renderLessonExportsForRules}. */
+export interface RenderedExport extends ExportTargetResult {
+  /** The absolute target path. */
+  absPath: string;
+  /** The target's current text, or `null` when it does not exist. */
+  current: string | null;
+  /** The text a regeneration writes. */
+  content: string;
+}
+
+/**
+ * Render every configured export target in memory, applying the same rules as
+ * {@link exportLessonsForRules}, and write nothing. Throws before returning if
+ * any target's sentinels are unmatched, so a caller can refuse before its first
+ * write. `current !== content` marks a stale target.
+ */
+export function renderLessonExportsForRules(
+  lessons: ParsedLesson[],
+  rules: readonly Pick<CompiledRule, 'lessonHash' | 'status' | 'archivedReason'>[],
+  exports: Readonly<Record<string, string>>,
+  cwd: string,
+): RenderedExport[] {
   const untestedHashes = new Set<string>();
   const archivedReasonByHash = new Map<string, string>();
   for (const r of rules) {
@@ -174,10 +213,31 @@ export function exportLessonsForRules(
     untestedHashes.size === 0
       ? lessons
       : lessons.filter((l) => !untestedHashes.has(hashLesson(l.heading, l.body)));
-  const results: ExportTargetResult[] = [];
-  for (const [name, filePath] of Object.entries(exports)) {
-    exportLessons(lessonsForExport, path.join(cwd, filePath), archivedReasonByHash);
-    results.push({ name, filePath, count: lessonsForExport.length });
+  return Object.entries(exports).map(([name, filePath]) => {
+    const absPath = path.join(cwd, filePath);
+    let rendered: { current: string | null; content: string };
+    try {
+      rendered = renderLessonExport(lessonsForExport, absPath, archivedReasonByHash);
+    } catch (err) {
+      // Name the target: the sentinel refusal itself does not say which file.
+      if (err instanceof TotemParseError) {
+        throw new TotemParseError(
+          `Export target ${filePath} (${name}): ${err.message.replace(/^\[Totem Error\]\s*/, '')}`,
+          err.recoveryHint,
+          err,
+        );
+      }
+      throw err;
+    }
+    return { name, filePath, count: lessonsForExport.length, absPath, ...rendered };
+  });
+}
+
+/** Write one rendered export target (creating its directory), as {@link exportLessons} does. */
+export function writeRenderedExport(r: Pick<RenderedExport, 'absPath' | 'content'>): void {
+  const dir = path.dirname(r.absPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-  return results;
+  fs.writeFileSync(r.absPath, r.content, 'utf-8');
 }

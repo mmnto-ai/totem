@@ -477,14 +477,17 @@ export {
 } from './ast-grep-query.js';
 
 // Exporter
-export type { ExportTargetResult } from './exporter.js';
+export type { ExportTargetResult, RenderedExport } from './exporter.js';
 export {
   exportLessons,
   exportLessonsForRules,
   formatLessonsAsMarkdown,
   injectSentinelBlock,
+  renderLessonExport,
+  renderLessonExportsForRules,
   SENTINEL_END,
   SENTINEL_START,
+  writeRenderedExport,
 } from './exporter.js';
 
 // SARIF output
@@ -1584,8 +1587,11 @@ export type {
 } from './spine/serving-plan.js';
 export {
   assertServingInputSupported,
+  parseAuthoredAt,
+  parseStrictInstant,
   planServingWrite,
   ServingInputSchema,
+  STRICT_INSTANT_FORM,
 } from './spine/serving-plan.js';
 // Spine: Prop 310 V1 record grammar — the `.totem/rules/*.rule.yaml` parser (slice 1)
 export type {

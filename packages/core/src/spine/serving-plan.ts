@@ -31,6 +31,35 @@ const lessonHash = (field: string) =>
 
 const nonEmpty = (field: string) => z.string().min(1, { message: `${field} must be non-empty` });
 
+/** The one instant form the writer accepts, as a refusal message names it. */
+export const STRICT_INSTANT_FORM = 'YYYY-MM-DDTHH:MM:SS(.fraction)?(Z|+HH:MM|-HH:MM)';
+const STRICT_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Epoch milliseconds of a STRICT instant (`STRICT_INSTANT_FORM`: a date-time
+ * with seconds and an explicit zone), or `undefined` for anything else.
+ */
+export function parseStrictInstant(s: string): number | undefined {
+  if (!STRICT_INSTANT_RE.test(s)) return undefined;
+  const ms = Date.parse(s);
+  return Number.isNaN(ms) ? undefined : ms;
+}
+
+/**
+ * Epoch milliseconds of a ledger row's `authoredAt` for the stale-floor check:
+ * a date-only `YYYY-MM-DD` (the measured live form; ECMAScript reads it as UTC
+ * midnight) or a strict instant. A zone-less date-time, or anything else, is
+ * `undefined` — it would read as local time.
+ */
+export function parseAuthoredAt(s: string): number | undefined {
+  if (DATE_ONLY_RE.test(s)) {
+    const ms = Date.parse(s);
+    return Number.isNaN(ms) ? undefined : ms;
+  }
+  return parseStrictInstant(s);
+}
+
 /**
  * The serving writer's input: one file, so one sha256 names a run. Strict at
  * every level: an unknown key anywhere is refused. Both dispositions are
@@ -39,9 +68,13 @@ const nonEmpty = (field: string) => z.string().min(1, { message: `${field} must 
 export const ServingInputSchema = z
   .object({
     schema: z.literal('serving-input/1'),
-    /** The `now` for every lowered row and for the manifest, so a re-run is byte-identical. */
-    asOf: z.string().refine((s) => !Number.isNaN(Date.parse(s)), {
-      message: 'asOf must be an instant Date.parse accepts (ISO-8601)',
+    /**
+     * The `now` for every lowered row and for the manifest, so a re-run is
+     * byte-identical. A STRICT instant: a zone-less date-time would read as the
+     * machine's local time and make the stale-floor verdict machine-dependent.
+     */
+    asOf: z.string().refine((s) => parseStrictInstant(s) !== undefined, {
+      message: `asOf must be a strict ISO-8601 instant, ${STRICT_INSTANT_FORM}`,
     }),
     /** Free text naming the runs of record and the ruling; not machine-read. */
     source: nonEmpty('source'),
@@ -120,16 +153,24 @@ export interface PlanServingWriteArgs {
   /** Every record the floor names, ingested. */
   records: readonly ServingRecord[];
   input: ServingInput;
-  /** sha256 of the input file's bytes, carried into the report. */
+  /** sha256 of the input file's text after CRLF to LF, carried into the report. */
   inputSha256: string;
 }
 
 export type ServingRowClass = 'floor-legacy' | 'lowered' | 'archive' | 'already-archived';
 /**
  * `replace` is a lowered row already in the file at that ruleId whose lowering
- * now differs (a new asOf, say); `none` is a touched row whose bytes stay.
+ * now differs (a new asOf, say; `changedFields` names the fields);
+ * `already-archived` is a floor legacy row a human archived before this run,
+ * left byte-untouched under `archive`; `none` is a touched row whose bytes stay.
  */
-export type ServingRowAction = 'archive' | 'remove' | 'insert' | 'replace' | 'none';
+export type ServingRowAction =
+  | 'archive'
+  | 'remove'
+  | 'insert'
+  | 'replace'
+  | 'already-archived'
+  | 'none';
 
 export interface ServingReportRow {
   class: ServingRowClass;
@@ -141,6 +182,8 @@ export interface ServingReportRow {
   ruleId?: string;
   /** For a lowered row: its record path. */
   recordPath?: string;
+  /** For a `replace`: the top-level fields whose values differ from the row in the file. */
+  changedFields?: string[];
 }
 
 export interface ServingReport {
@@ -201,6 +244,18 @@ function archived(row: CompiledRule, reason: string, at: string): CompiledRule {
   return next;
 }
 
+/**
+ * The top-level fields whose values differ between two rows (either side may
+ * lack the key). When only the key ORDER differs, the one entry is `(key order)`.
+ */
+function differingFields(a: CompiledRule, b: CompiledRule): string[] {
+  const ra = a as unknown as Record<string, unknown>;
+  const rb = b as unknown as Record<string, unknown>;
+  const keys = [...new Set([...Object.keys(ra), ...Object.keys(rb)])];
+  const diff = keys.filter((k) => JSON.stringify(ra[k]) !== JSON.stringify(rb[k])).sort();
+  return diff.length > 0 ? diff : ['(key order)'];
+}
+
 function blockingSet(rows: readonly CompiledRule[]): string[] {
   return rows
     .filter((r) => isActiveCompiledRule(r) && isBlockingRule(r))
@@ -220,12 +275,12 @@ interface FloorEntryPlan {
  * Plan one serving write. PURE: no IO, no clock (`input.asOf` is the `now`).
  *
  * Placement. Under `archive` a floor entry's legacy row stays at its index,
- * archived with a reason naming its record ids, and the lowered rows follow it
- * in the entry's record order; under `remove` the lowered rows replace it at its
- * index. An entry with no `legacyHash` appends its lowered rows at the end, in
- * floor order. An entry whose lowered rows are already in the file (a re-run)
- * keeps them where they are, so a second run with the same input is a fixpoint
- * that changes nothing.
+ * archived with a reason naming its record ids (or byte-untouched when it was
+ * already archived), and the lowered rows follow it in the entry's record order;
+ * under `remove` the lowered rows replace it at its index. An entry with no
+ * `legacyHash` appends its lowered rows at the end, in floor order. An entry
+ * whose lowered rows are already in the file (a re-run) keeps them where they
+ * are, so a second run with the same input is a fixpoint that changes nothing.
  *
  * Untouched rows are the same object references in the output.
  */
@@ -233,9 +288,11 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
   const { rows, input } = args;
   assertServingInputSupported(input);
   const asOf = input.asOf;
-  const asOfMs = Date.parse(asOf);
-  if (Number.isNaN(asOfMs)) {
-    throw inputInvalid(`The serving input's asOf '${asOf}' does not parse as an instant`);
+  const asOfMs = parseStrictInstant(asOf);
+  if (asOfMs === undefined) {
+    throw inputInvalid(
+      `The serving input's asOf '${asOf}' is not a strict instant (expected ${STRICT_INSTANT_FORM})`,
+    );
   }
 
   // ── The serving file: one row per lessonHash ──
@@ -285,6 +342,13 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         `The serving input names ${a.lessonHash} in both floor[] (as a legacyHash) and archive[]`,
       );
     }
+    // A floor ruleId is a lowered row this run writes; archiving it in the same
+    // input contradicts the floor, on a first run and on every re-run alike.
+    if (floorRuleIds.has(a.lessonHash)) {
+      throw inputInvalid(
+        `The serving input names ${a.lessonHash} in both floor[] (as a record ruleId) and archive[]`,
+      );
+    }
     archiveByHash.set(a.lessonHash, a);
   }
 
@@ -297,12 +361,20 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
       );
     }
   }
-  // A lowered ruleId must not collide with a row that is not a record-path row.
+  // A lowered ruleId must not collide with a row that is not a record-path row,
+  // and a named record row a human archived after serving is never re-lowered
+  // (a `replace` would silently re-activate it).
   for (const id of floorRuleIds) {
     const existing = rowByHash.get(id);
     if (existing !== undefined && !isRecordPathRule(existing)) {
       throw inputInvalid(
         `The serving input's floor ruleId ${id} collides with a non-record row of the same lessonHash in the serving file`,
+      );
+    }
+    if (existing !== undefined && existing.status === 'archived') {
+      throw inputInvalid(
+        `The serving file's record row ${id}, which the floor names, is archived (archivedReason: ${existing.archivedReason ?? 'absent'}); serving it again would re-activate it`,
+        'Remove the archived row from compiled-rules.json deliberately, or drop its record from floor[], then re-run.',
       );
     }
   }
@@ -369,12 +441,14 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
       // so a same-day re-admission is NOT caught. The check is necessary, not
       // sufficient; the other half is the strategy lane's rule of conduct (a
       // re-admission is coupled to a re-scoring and a regenerated floor file).
-      const authoredMs = Date.parse(row.authoredAt);
-      if (Number.isNaN(authoredMs) || authoredMs > asOfMs) {
+      // `authoredAt` is read as a date-only (UTC midnight) or a strict instant;
+      // a zone-less date-time is refused, since it would read as local time.
+      const authoredMs = parseAuthoredAt(row.authoredAt);
+      if (authoredMs === undefined || authoredMs > asOfMs) {
         throw new TotemError(
           'SERVING_FLOOR_STALE',
-          Number.isNaN(authoredMs)
-            ? `Floor record ${ref.path} (ruleId ${ref.ruleId}): its effective ledger row's authoredAt '${row.authoredAt}' does not parse, so the floor's asOf ${asOf} cannot be shown to postdate it; nothing was written.`
+          authoredMs === undefined
+            ? `Floor record ${ref.path} (ruleId ${ref.ruleId}): its effective ledger row's authoredAt '${row.authoredAt}' is neither a date (YYYY-MM-DD) nor a strict instant (${STRICT_INSTANT_FORM}), so the floor's asOf ${asOf} cannot be shown to postdate it; nothing was written.`
             : `Floor record ${ref.path} (ruleId ${ref.ruleId}) was admitted at ${row.authoredAt}, after the serving input's asOf ${asOf}: the floor predates the record it would lower; nothing was written.`,
           'Regenerate the floor file from the current ledger (and re-score the re-admitted record), then re-run.',
         );
@@ -397,11 +471,14 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
       }
       plan.lowered.push({ rule: outcome.rule, recordPath: ref.path });
     }
-    // The legacy row must be in the file, unless this entry was already served
-    // and its legacy row removed (a re-run under `remove`).
+    // The legacy row must be in the file. The one exception is a re-run under
+    // `remove`: the entry was already served and its legacy row removed, so
+    // every one of its ruleIds is present. Under `archive` the legacy row is
+    // kept by construction, so its absence always refuses.
     if (entry.legacyHash !== undefined && !rowByHash.has(entry.legacyHash)) {
-      const allPresent = plan.ruleIds.every((id) => rowByHash.has(id));
-      if (!allPresent) {
+      const servedUnderRemove =
+        input.dispositions.legacyRow === 'remove' && plan.ruleIds.every((id) => rowByHash.has(id));
+      if (!servedUnderRemove) {
         throw inputInvalid(
           `The serving input's floor names legacyHash ${entry.legacyHash}, which is not in the serving file`,
         );
@@ -432,6 +509,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
       const existing = rowByHash.get(rule.lessonHash);
       let action: ServingRowAction = 'insert';
       let row: CompiledRule = rule;
+      let changedFields: string[] | undefined;
       if (existing !== undefined) {
         loweredExisting++;
         if (serialize(existing) === serialize(rule)) {
@@ -439,6 +517,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
           row = existing;
         } else {
           action = 'replace';
+          changedFields = differingFields(existing, rule);
         }
       }
       out.push(row);
@@ -449,6 +528,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         ...(e.legacyHash !== undefined ? { legacyHash: e.legacyHash } : {}),
         ruleId: rule.lessonHash,
         recordPath,
+        ...(changedFields !== undefined ? { changedFields } : {}),
       });
     }
   };
@@ -458,11 +538,15 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
     if (legacyOf !== undefined) {
       const ids = legacyOf.ruleIds.join(', ');
       if (input.dispositions.legacyRow === 'archive') {
-        const next = archived(row, servedByReason(legacyOf.ruleIds), asOf);
+        // A legacy row already archived (by a human, or by an earlier run) stays
+        // byte-untouched: its reason and archivedAt stand. The record ids it
+        // serves appear in the report row, not in the serving row.
+        const already = row.status === 'archived';
+        const next = already ? row : archived(row, servedByReason(legacyOf.ruleIds), asOf);
         out.push(next);
         reportRows.push({
           class: 'floor-legacy',
-          action: next === row ? 'none' : 'archive',
+          action: already ? 'already-archived' : 'archive',
           lessonHash: row.lessonHash,
           legacyHash: row.lessonHash,
           ruleId: ids,

@@ -16,6 +16,8 @@ import { compileRuleRecord } from './record-lower.js';
 import { parseRuleRecord } from './rule-record.js';
 import {
   assertServingInputSupported,
+  parseAuthoredAt,
+  parseStrictInstant,
   planServingWrite,
   type ServingInput,
   ServingInputSchema,
@@ -214,14 +216,28 @@ describe('planServingWrite: lowering and placement (mmnto-ai/totem#3036 B2)', ()
     expect(f.rows[0]!.status).toBeUndefined();
   });
 
-  it('under archive keeps an existing archivedAt (first transition owns it)', () => {
+  it('under archive leaves a legacy row already archived with another reason byte-untouched, reported as already-archived with its record ids', () => {
     const f = fixture('archive');
-    f.rows[0] = legacyRow(LEGACY_A, { status: 'archived', archivedAt: '2026-03-03T00:00:00Z' });
-    const result = plan(f);
-    expect(result.rows[0]).toMatchObject({
-      archivedReason: `served by record ${RULE_A}`,
+    f.rows[0] = legacyRow(LEGACY_A, {
+      status: 'archived',
+      archivedReason: 'an earlier human reason',
       archivedAt: '2026-03-03T00:00:00Z',
     });
+    const result = plan(f);
+    expect(result.rows[0]).toBe(f.rows[0]);
+    expect(result.rows[0]).toMatchObject({
+      archivedReason: 'an earlier human reason',
+      archivedAt: '2026-03-03T00:00:00Z',
+    });
+    expect(result.rows[1]!.lessonHash).toBe(RULE_A);
+    expect(result.report.rows).toContainEqual(
+      expect.objectContaining({
+        class: 'floor-legacy',
+        action: 'already-archived',
+        lessonHash: LEGACY_A,
+        ruleId: RULE_A,
+      }),
+    );
   });
 
   it('under remove the legacy row is gone and the lowered rows sit at its index', () => {
@@ -436,6 +452,25 @@ describe('planServingWrite: refusals, before any write (mmnto-ai/totem#3036 B2)'
     expect(() => plan(f)).toThrow(expect.objectContaining({ code: 'SERVING_FLOOR_STALE' }));
   });
 
+  it('refuses a zone-less date-time authoredAt (it would read as local time)', () => {
+    const f = fixture();
+    f.ledger[0] = ledgerRow(f.records[0]!, '2026-09-23T01:00:00');
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_FLOOR_STALE',
+        message: expect.stringContaining('neither a date'),
+      }),
+    );
+  });
+
+  it('accepts a strict-instant authoredAt before asOf, and refuses one after it', () => {
+    const f = fixture();
+    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-10T02:18:12Z');
+    expect(() => plan(f)).not.toThrow();
+    f.ledger[0] = ledgerRow(f.records[0]!, '2026-10-10T02:18:14.000+00:00');
+    expect(() => plan(f)).toThrow(expect.objectContaining({ code: 'SERVING_FLOOR_STALE' }));
+  });
+
   it('refuses a record the lowering rejects, with the lowering reason', () => {
     const f = fixture();
     f.records[0] = {
@@ -545,5 +580,161 @@ describe('ServingInputSchema (mmnto-ai/totem#3036 B2)', () => {
         floor: [{ legacyHash: LEGACY_A, records: [{ path: 'p', ruleId: RULE_A, extra: true }] }],
       }).success,
     ).toBe(false);
+  });
+
+  it('asOf must be a strict instant: seconds and an explicit zone (falsification fold F6)', () => {
+    const f = fixture();
+    const ok = (asOf: string) => ServingInputSchema.safeParse({ ...f.input, asOf }).success;
+    // The file of record's form, and the other zone spellings.
+    expect(ok('2026-10-10T02:18:13.000Z')).toBe(true);
+    expect(ok('2026-10-10T02:18:13Z')).toBe(true);
+    expect(ok('2026-10-10T02:18:13+14:00')).toBe(true);
+    expect(ok('2026-10-10T02:18:13.5-05:30')).toBe(true);
+    // Zone-less (local time), date-only, and every non-ISO form Date.parse accepts.
+    for (const bad of [
+      '2026-10-10T02:18:13',
+      '2026-10-10',
+      '10/10/2026',
+      'October 10, 2026',
+      '2026',
+      'Sat Oct 10 2026',
+      '2026-10-10 02:18',
+    ]) {
+      expect(ok(bad)).toBe(false);
+    }
+    const res = ServingInputSchema.safeParse({ ...f.input, asOf: '2026-10-10T02:18:13' });
+    expect(res.success ? '' : res.error.issues[0]!.message).toContain('YYYY-MM-DDTHH:MM:SS');
+  });
+
+  it('parseStrictInstant and parseAuthoredAt read the accepted forms as UTC and refuse the rest', () => {
+    expect(parseStrictInstant('2026-10-10T02:18:13.000Z')).toBe(Date.UTC(2026, 9, 10, 2, 18, 13));
+    expect(parseStrictInstant('2026-10-10T02:18:13')).toBeUndefined();
+    expect(parseStrictInstant('2026-10-10')).toBeUndefined();
+    expect(parseAuthoredAt('2026-09-23')).toBe(Date.UTC(2026, 8, 23));
+    expect(parseAuthoredAt('2026-09-23T00:00:00Z')).toBe(Date.UTC(2026, 8, 23));
+    expect(parseAuthoredAt('2026-09-23T01:00:00')).toBeUndefined();
+    expect(parseAuthoredAt('09/23/2026')).toBeUndefined();
+  });
+});
+
+describe('planServingWrite: falsification fold (mmnto-ai/totem#3036 B2)', () => {
+  it('F2: under archive an absent legacy row refuses even when the lowered rows are present', () => {
+    const f = fixture('archive');
+    const first = plan(f);
+    f.rows = first.rows.filter((r) => r.lessonHash !== LEGACY_A);
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringContaining(
+          `legacyHash ${LEGACY_A}, which is not in the serving file`,
+        ),
+      }),
+    );
+  });
+
+  it('F2: under remove an absent legacy row passes when every ruleId of its entry is present (the re-run)', () => {
+    const f = fixture('remove');
+    f.rows = plan(f).rows;
+    expect(plan(f).changed).toBe(false);
+    // ...but not when one of the entry's lowered rows is missing.
+    f.rows = f.rows.filter((r) => r.lessonHash !== RULE_B2);
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({ message: expect.stringContaining(LEGACY_B) }),
+    );
+  });
+
+  it('F3: an archive[] entry naming a floor ruleId refuses as in both lists, on a first run and on a re-run', () => {
+    const f = fixture('archive');
+    const result = plan(f);
+    f.input.archive.push({ lessonHash: RULE_A, reason: 'no-intent', ref: 'probe' });
+    const expected = expect.objectContaining({
+      code: 'SERVING_INPUT_INVALID',
+      message: expect.stringContaining(
+        `${RULE_A} in both floor[] (as a record ruleId) and archive[]`,
+      ),
+    });
+    expect(() => plan(f)).toThrow(expected);
+    f.rows = result.rows;
+    expect(() => plan(f)).toThrow(expected);
+  });
+
+  it('F5: a named record row a human archived after serving refuses, naming the row and its reason', () => {
+    const f = fixture('archive');
+    const result = plan(f);
+    f.rows = result.rows.map((r) =>
+      r.lessonHash === RULE_A
+        ? { ...r, status: 'archived' as const, archivedReason: 'silenced by a human' }
+        : r,
+    );
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringMatching(new RegExp(`${RULE_A}.*silenced by a human`)),
+      }),
+    );
+  });
+
+  it('F5: a replace lists the fields that differ (a new asOf moves compiledAt and createdAt)', () => {
+    const f = fixture('archive');
+    f.rows = plan(f).rows;
+    f.input.asOf = '2026-10-11T00:00:00.000Z';
+    const result = plan(f);
+    expect(result.changed).toBe(true);
+    const row = result.report.rows.find((r) => r.lessonHash === RULE_A)!;
+    expect(row).toMatchObject({ class: 'lowered', action: 'replace' });
+    expect(row.changedFields).toEqual(['compiledAt', 'createdAt']);
+  });
+
+  it('F5: a replace on a hand-edited record row names the edited field', () => {
+    const f = fixture('archive');
+    f.rows = plan(f).rows.map((r) =>
+      r.lessonHash === RULE_A ? { ...r, severity: 'warning' as const } : r,
+    );
+    const row = plan(f).report.rows.find((r) => r.lessonHash === RULE_A)!;
+    expect(row).toMatchObject({ action: 'replace', changedFields: ['severity'] });
+  });
+
+  it('F8: refuses a legacyHash named in two floor entries', () => {
+    const f = fixture();
+    f.input.floor[2] = { legacyHash: LEGACY_A, records: f.input.floor[2]!.records };
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringContaining(`legacyHash ${LEGACY_A} in more than one floor entry`),
+      }),
+    );
+  });
+
+  it('F8: refuses a ruleId named twice in the floor', () => {
+    const f = fixture();
+    f.input.floor[2] = { records: [{ path: '.totem/rules/a.rule.yaml', ruleId: RULE_A }] };
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringContaining(`ruleId ${RULE_A} more than once`),
+      }),
+    );
+  });
+
+  it('F8: refuses an archive lessonHash named twice', () => {
+    const f = fixture();
+    f.input.archive.push({ lessonHash: ARCHIVE_C, reason: 'again', ref: 'x' });
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringContaining(`archive lessonHash ${ARCHIVE_C} more than once`),
+      }),
+    );
+  });
+
+  it('F8: refuses a floor ruleId that collides with a non-record row', () => {
+    const f = fixture();
+    f.rows.push(legacyRow(RULE_N));
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_INPUT_INVALID',
+        message: expect.stringContaining(`ruleId ${RULE_N} collides with a non-record row`),
+      }),
+    );
   });
 });

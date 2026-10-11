@@ -9,7 +9,10 @@ import {
   attestRecordsHash,
   EMPTY_RECORDS_HASH,
   generateOutputHash,
+  hashLesson,
+  readAllLessons,
   readCompileManifest,
+  renderLessonExportsForRules,
 } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
@@ -311,5 +314,83 @@ describe('lessonArchiveCommand (#1587)', () => {
     expect(rule.status).toBe('archived');
     expect(typeof rule.archivedReason).toBe('string');
     expect(rule.archivedReason.length).toBeGreaterThan(0);
+  });
+});
+
+// ── The export path through the shared helper (mmnto-ai/totem#3036 B2, fold F10) ──
+
+describe('lessonArchiveCommand regenerates the exports through exportLessonsForRules', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+    originalCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+  });
+
+  it('writes the archived rule with its reason, drops an untested rule, and matches the helper byte for byte', async () => {
+    const kept = { heading: 'Use err in catch', body: 'Name the catch binding err.' };
+    const untested = { heading: 'Untested lesson', body: 'Stage 4 could not tell.' };
+    const keptHash = hashLesson(kept.heading, kept.body);
+    const untestedHash = hashLesson(untested.heading, untested.body);
+    setupWorkspace(tmpDir, [
+      { lessonHash: keptHash, lessonHeading: kept.heading },
+      { lessonHash: untestedHash, lessonHeading: untested.heading },
+    ]);
+    const totemDir = path.join(tmpDir, '.totem');
+    const rulesPath = path.join(totemDir, 'compiled-rules.json');
+    // Mark the second rule untested, and configure one export target.
+    const file = JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as {
+      rules: Array<Record<string, unknown>>;
+    };
+    file.rules[1]!['status'] = 'untested-against-codebase';
+    fs.writeFileSync(rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    fs.writeFileSync(
+      path.join(tmpDir, 'totem.config.ts'),
+      [
+        'export default {',
+        '  targets: [{ glob: "**/*.ts", type: "code", strategy: "typescript-ast" }],',
+        '  totemDir: ".totem",',
+        '  exports: { agents: "EXPORTED.md" },',
+        '};',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+    const lessonsDir = path.join(totemDir, 'lessons');
+    fs.mkdirSync(lessonsDir, { recursive: true });
+    for (const [name, l] of [
+      ['kept.md', kept],
+      ['untested.md', untested],
+    ] as const) {
+      fs.writeFileSync(
+        path.join(lessonsDir, name),
+        `## Lesson — ${l.heading}\n\n**Tags:** test\n\n${l.body}\n`,
+        'utf-8',
+      );
+    }
+
+    await lessonArchiveCommand(keptHash, { reason: 'Over-broad in tests' });
+
+    const exported = fs.readFileSync(path.join(tmpDir, 'EXPORTED.md'), 'utf-8');
+    expect(exported).toContain('Use err in catch');
+    expect(exported).toContain('_(archived: Over-broad in tests)_');
+    expect(exported).not.toContain('Untested lesson');
+    const rulesAfter = (JSON.parse(fs.readFileSync(rulesPath, 'utf-8')) as { rules: never[] })
+      .rules;
+    // The bytes are what the shared helper renders for the rules on disk.
+    const [rendered] = renderLessonExportsForRules(
+      readAllLessons(totemDir),
+      rulesAfter,
+      { agents: 'EXPORTED.md' },
+      tmpDir,
+    );
+    expect(rendered!.content).toBe(exported);
   });
 });
