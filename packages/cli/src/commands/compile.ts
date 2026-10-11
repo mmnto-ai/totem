@@ -441,7 +441,7 @@ export async function compileCommand(
     buildManualRule,
     compileLesson: compileLessonCore,
     deriveVirtualFilePath,
-    exportLessons,
+    exportLessonsForRules,
     extractManualPattern,
     extractRuleExamples,
     formatExampleFailure,
@@ -2079,25 +2079,16 @@ export async function compileCommand(
     // so the prose stays available as agent context — Stage 4 archival
     // concerns pattern-matching false positives, not lesson-prose validity
     // (mmnto-ai/totem#1873).
+    // The shared helper (mmnto-ai/totem#3036): compile, archive and serve
+    // regenerate the exports through one home.
     const rawRulesFile = loadCompiledRulesFile(rulesPath);
-    const inertHashes = new Set<string>();
-    const archivedReasonByHash = new Map<string, string>();
-    for (const r of rawRulesFile.rules) {
-      if (r.status === 'untested-against-codebase') {
-        inertHashes.add(r.lessonHash);
-      } else if (r.status === 'archived' && r.archivedReason) {
-        archivedReasonByHash.set(r.lessonHash, r.archivedReason);
-      }
-    }
-    const lessonsForExport =
-      inertHashes.size === 0
-        ? lessons
-        : lessons.filter((l) => !inertHashes.has(hashLesson(l.heading, l.body)));
-
-    for (const [name, filePath] of Object.entries(config.exports)) {
-      const absPath = path.join(cwd, filePath);
-      exportLessons(lessonsForExport, absPath, archivedReasonByHash);
-      log.success(TAG, `Exported ${lessonsForExport.length} rules to ${filePath} (${name})`); // totem-ignore
+    for (const { name, filePath, count } of exportLessonsForRules(
+      lessons,
+      rawRulesFile.rules,
+      config.exports,
+      cwd,
+    )) {
+      log.success(TAG, `Exported ${count} rules to ${filePath} (${name})`); // totem-ignore
     }
   }
 

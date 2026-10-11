@@ -4,9 +4,11 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { hashLesson } from './compiler.js';
 import type { ParsedLesson } from './drift-detector.js';
 import {
   exportLessons,
+  exportLessonsForRules,
   formatLessonsAsMarkdown,
   injectSentinelBlock,
   SENTINEL_END,
@@ -191,5 +193,51 @@ describe('exportLessons', () => {
     // Should only have one set of sentinels
     const startCount = content.split(SENTINEL_START).length - 1;
     expect(startCount).toBe(1);
+  });
+});
+
+// ─── exportLessonsForRules (the shared helper, mmnto-ai/totem#3036 B2) ─────
+
+describe('exportLessonsForRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-export-rules-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('drops untested lessons, annotates archived ones, and writes every configured target', () => {
+    const lessons = makeLessons(3);
+    const h = lessons.map((l) => hashLesson(l.heading, l.body));
+    const rules = [
+      { lessonHash: h[0]!, status: 'untested-against-codebase' as const },
+      {
+        lessonHash: h[1]!,
+        status: 'archived' as const,
+        archivedReason: 'served by record 1111111111111111',
+      },
+      { lessonHash: h[2]! },
+    ];
+    const results = exportLessonsForRules(lessons, rules, { a: 'A.md', b: 'nested/B.md' }, tmpDir);
+
+    expect(results).toEqual([
+      { name: 'a', filePath: 'A.md', count: 2 },
+      { name: 'b', filePath: 'nested/B.md', count: 2 },
+    ]);
+    const a = fs.readFileSync(path.join(tmpDir, 'A.md'), 'utf-8');
+    expect(a).not.toContain('Lesson 1');
+    expect(a).toContain('_(archived: served by record 1111111111111111)_');
+    expect(a).toContain('Lesson 3');
+    // The helper is byte-identical to the direct call it replaces.
+    const direct = path.join(tmpDir, 'direct.md');
+    exportLessons(
+      [lessons[1]!, lessons[2]!],
+      direct,
+      new Map([[h[1]!, 'served by record 1111111111111111']]),
+    );
+    expect(a).toBe(fs.readFileSync(direct, 'utf-8'));
   });
 });

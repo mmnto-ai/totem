@@ -477,8 +477,10 @@ export {
 } from './ast-grep-query.js';
 
 // Exporter
+export type { ExportTargetResult } from './exporter.js';
 export {
   exportLessons,
+  exportLessonsForRules,
   formatLessonsAsMarkdown,
   injectSentinelBlock,
   SENTINEL_END,
@@ -1569,6 +1571,22 @@ export {
   ruleBadExampleLines,
   ruleGoodExampleLines,
 } from './spine/record-runtime.js';
+// Spine: the serving writer's pure planner (mmnto-ai/totem#3036, S6 step 2)
+export type {
+  PlanServingWriteArgs,
+  ServingInput,
+  ServingPlan,
+  ServingRecord,
+  ServingReport,
+  ServingReportRow,
+  ServingRowAction,
+  ServingRowClass,
+} from './spine/serving-plan.js';
+export {
+  assertServingInputSupported,
+  planServingWrite,
+  ServingInputSchema,
+} from './spine/serving-plan.js';
 // Spine: Prop 310 V1 record grammar — the `.totem/rules/*.rule.yaml` parser (slice 1)
 export type {
   GlobDialectRule,

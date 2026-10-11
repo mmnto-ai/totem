@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { hashLesson } from './compiler.js';
+import type { CompiledRule } from './compiler-schema.js';
 import type { ParsedLesson } from './drift-detector.js';
 import { TotemParseError } from './errors.js';
 
@@ -124,4 +125,59 @@ export function exportLessons(
   } else {
     fs.writeFileSync(targetPath, generatedBlock + '\n', 'utf-8');
   }
+}
+
+// ─── Export regeneration over a serving file (mmnto-ai/totem#3036) ───────
+
+/** One export target written by {@link exportLessonsForRules}. */
+export interface ExportTargetResult {
+  /** The key of the `exports` config entry. */
+  name: string;
+  /** The configured path, relative to `cwd`, as the config spells it. */
+  filePath: string;
+  /** How many lessons were exported to it. */
+  count: number;
+}
+
+/**
+ * Regenerate every configured agent export from the lessons and the serving
+ * file's rows. The ONE home of the block `totem lesson compile --export`,
+ * `totem lesson archive` and `totem rule serve` share:
+ *
+ *   - a lesson whose rule is `untested-against-codebase` is dropped, so agent
+ *     context never relies on a rule Stage 4 declared unknown
+ *     (mmnto-ai/totem#1757 R2);
+ *   - a lesson whose rule is archived WITH a reason renders with an
+ *     `_(archived: <reason>)_` suffix, so the prose stays available as agent
+ *     context (mmnto-ai/totem#1873).
+ *
+ * Exports are keyed by lesson hash, so a record-path row (keyed by its rule id)
+ * contributes nothing here by design. Returns one entry per target, in config
+ * order, for the caller to log.
+ */
+export function exportLessonsForRules(
+  lessons: ParsedLesson[],
+  rules: readonly Pick<CompiledRule, 'lessonHash' | 'status' | 'archivedReason'>[],
+  exports: Readonly<Record<string, string>>,
+  cwd: string,
+): ExportTargetResult[] {
+  const untestedHashes = new Set<string>();
+  const archivedReasonByHash = new Map<string, string>();
+  for (const r of rules) {
+    if (r.status === 'untested-against-codebase') {
+      untestedHashes.add(r.lessonHash);
+    } else if (r.status === 'archived' && r.archivedReason) {
+      archivedReasonByHash.set(r.lessonHash, r.archivedReason);
+    }
+  }
+  const lessonsForExport =
+    untestedHashes.size === 0
+      ? lessons
+      : lessons.filter((l) => !untestedHashes.has(hashLesson(l.heading, l.body)));
+  const results: ExportTargetResult[] = [];
+  for (const [name, filePath] of Object.entries(exports)) {
+    exportLessons(lessonsForExport, path.join(cwd, filePath), archivedReasonByHash);
+    results.push({ name, filePath, count: lessonsForExport.length });
+  }
+  return results;
 }

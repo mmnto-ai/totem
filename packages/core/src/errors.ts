@@ -59,7 +59,15 @@ export type TotemErrorCode =
   /** A reader opened a vector store that only a rebuild can repair; the sync is the one rebuilder (mmnto-ai/totem#3009). */
   | 'STORE_NEEDS_REBUILD'
   /** The legacy compile met a record-path row in the serving file and `--allow-record-rows` was not passed — refused before any write; the record writer is `totem rule serve` (mmnto-ai/totem#3036). */
-  | 'RECORD_MANAGED_SERVING_FILE';
+  | 'RECORD_MANAGED_SERVING_FILE'
+  /** `totem rule serve`: the input file is missing, unparsable or off-schema, names a mode that is not built, or disagrees with the serving file — refused before any write (mmnto-ai/totem#3036). */
+  | 'SERVING_INPUT_INVALID'
+  /** `totem rule serve`: a floor record does not match its effective authoring-ledger row (no row, no record block, another path, another content hash) — refused before any write (mmnto-ai/totem#3036). */
+  | 'SERVING_RECORD_MISMATCH'
+  /** `totem rule serve`: a floor record's effective ledger row was admitted after the input's asOf, so the floor predates it — refused before any write (mmnto-ai/totem#3045). */
+  | 'SERVING_FLOOR_STALE'
+  /** `totem rule serve`: a row the plan does not touch serialized differently after planning — the writer's own invariant; a bug, and nothing was written (mmnto-ai/totem#3036). */
+  | 'SERVING_INVARIANT_BROKEN';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;
