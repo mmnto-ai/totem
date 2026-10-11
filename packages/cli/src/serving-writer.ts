@@ -8,16 +8,22 @@
 // invariant, and writes in a fixed order. A LIBRARY module (not a command), so it
 // keeps static imports; the command wrapper `commands/rule-serve.ts` lazy-loads it.
 //
-// Every refusal fires before the first write. That includes the preflight of
-// every write: the records attestation and each export target rendered in
-// memory with its sentinels checked. The dry run reads everything, writes
-// nothing and returns the same report a real run would. A run whose plan changes
-// no row is a freshness check: it refreshes a stale manifest or a stale export
-// target, and writes nothing when everything is fresh.
+// Every refusal fires before the first write. That includes an integrity check
+// before planning (the serving file's hash must be the manifest's output_hash,
+// else it was modified outside totem) and the preflight of every write: the
+// records attestation and each export target rendered in memory with its
+// sentinels checked. A changing run then writes the serving file, the manifest
+// and every export target, in that order. A run whose plan changes no row writes
+// nothing. The dry run reads everything, writes nothing and returns the same
+// report a real run would.
+//
+// `--refresh` is the deliberate repair: it skips the integrity refusal and
+// rewrites the manifest from the serving file as it is and every export, even
+// when no row changes.
 //
 // Residual window: an IO error DURING the writes themselves (serving file, then
-// manifest, then export targets) can leave a later step unwritten. The next run's
-// freshness check then refreshes whatever is stale.
+// manifest, then export targets) can leave a later step unwritten. `--refresh`
+// is its repair.
 
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -58,6 +64,12 @@ export interface ServingWriterOptions {
   inputPath: string;
   /** Read everything, write nothing, return the row-level report. */
   dryRun?: boolean;
+  /**
+   * The deliberate repair: skip the integrity refusal and rewrite the manifest
+   * from the serving file as it is and regenerate every export, even when no
+   * row changes.
+   */
+  refresh?: boolean;
 }
 
 export interface ServingWriterResult {
@@ -65,15 +77,17 @@ export interface ServingWriterResult {
   /** True when this run wrote anything (never on a dry run). */
   written: boolean;
   dryRun: boolean;
+  refresh: boolean;
   /**
-   * What the run writes (on a dry run: would write). The serving file only when
-   * the plan changes a row; the manifest when the plan changes a row or the
-   * manifest is stale; each export target whose rendered text differs from its
-   * current text.
+   * What the run writes (on a dry run: would write). The serving file when the
+   * plan changes a row; the manifest and every export target when the plan
+   * changes a row or `--refresh` is passed; nothing otherwise.
    */
   writes: { servingFile: boolean; manifest: boolean; exports: string[] };
   /** The export targets written (on a dry run: that would be written). */
   exports: ExportTargetResult[];
+  /** Informational lines (a no-change run never writes; these say what `--refresh` would repair). */
+  notices: string[];
   /** The serving file, relative to the working directory. */
   rulesFile: string;
 }
@@ -169,6 +183,7 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
   const rulesRel = path.relative(cwd, rulesPath);
   const manifestRel = path.relative(cwd, manifestPath);
   const dryRun = opts.dryRun === true;
+  const refresh = opts.refresh === true;
 
   // ── 1. The input ──
   const inputAbs = path.resolve(cwd, opts.inputPath);
@@ -245,62 +260,83 @@ export async function runServingWriter(opts: ServingWriterOptions): Promise<Serv
     );
   }
 
-  // ── 5. Plan, then the writer's own invariant ──
+  // ── 5. Integrity: the serving file must be the one its manifest attests ──
+  // A file whose hash is not the manifest's output_hash was modified outside
+  // totem. Planning over it would carry the edit into a fresh manifest and
+  // launder it past verify-manifest, so refuse unless the operator asks for
+  // the deliberate repair (`--refresh`).
+  if (!refresh && manifest.output_hash !== generateOutputHash(rulesPath)) {
+    throw new TotemError(
+      'SERVING_MANIFEST_STALE',
+      `The serving file ${rulesRel} does not match its manifest ${manifestRel} (its hash is not the manifest's output_hash): it was modified outside totem; nothing was written.`,
+      `Restore ${rulesRel} from git if the edit was not meant. To accept the file as it is, run one of the two deliberate repairs: \`totem rule serve ${opts.inputPath} --refresh\`, or \`totem lesson compile --refresh-manifest --allow-record-rows\`.`,
+    );
+  }
+
+  // ── 6. Plan, then the writer's own invariant ──
   const beforeTexts = rows.map(serialize);
   const plan = planServingWrite({ rows, ledger, records, input, inputSha256 });
   assertUntouchedRowsUnchanged(rows, beforeTexts, plan);
 
-  // ── 6. Preflight every write before the first one ──
+  // A changing run writes the serving file, the manifest and EVERY export
+  // target (as `lesson compile --export` and `lesson archive` do). A no-change
+  // run writes nothing and compares no export; `--refresh` forces the manifest
+  // and every export even then.
+  const writeManifestAndExports = plan.changed || refresh;
+  const notices: string[] = [];
+  if (
+    !writeManifestAndExports &&
+    !isRecordsAttestationFresh(manifest.records_hash, totemDir, cwd)
+  ) {
+    notices.push(
+      `The manifest's records_hash is not the current records attestation; run \`totem rule serve ${opts.inputPath} --refresh\` to rewrite it (nothing was written).`,
+    );
+  }
+
+  // ── 7. Preflight every write before the first one ──
   // The records attestation reads every tracked record and can throw; every
   // export target is rendered in memory, its sentinels checked against its
   // current text. A failure here refuses with nothing written.
-  const recordsHash = attestRecordsHash(totemDir, cwd);
+  const recordsHash = writeManifestAndExports ? attestRecordsHash(totemDir, cwd) : undefined;
   const rendered =
-    config.exports && Object.keys(config.exports).length > 0
+    writeManifestAndExports && config.exports && Object.keys(config.exports).length > 0
       ? renderLessonExportsForRules(readAllLessons(totemDir), plan.rows, config.exports, cwd)
       : [];
-  const staleExports = rendered.filter((r) => r.current !== r.content);
-  // When the plan changes no row, the run is a freshness check: the manifest is
-  // stale when its output_hash is not the serving file's hash or its
-  // records_hash is not the current attestation.
-  const manifestStale =
-    plan.changed ||
-    manifest.output_hash !== generateOutputHash(rulesPath) ||
-    !isRecordsAttestationFresh(manifest.records_hash, totemDir, cwd);
 
   const result: ServingWriterResult = {
     report: plan.report,
     written: false,
     dryRun,
+    refresh,
     writes: {
       servingFile: plan.changed,
-      manifest: manifestStale,
-      exports: staleExports.map((r) => r.filePath),
+      manifest: writeManifestAndExports,
+      exports: rendered.map((r) => r.filePath),
     },
-    exports: staleExports.map(({ name, filePath, count }) => ({ name, filePath, count })),
+    exports: rendered.map(({ name, filePath, count }) => ({ name, filePath, count })),
+    notices,
     rulesFile: rulesRel,
   };
-  const anyWrite = plan.changed || manifestStale || staleExports.length > 0;
-  if (dryRun || !anyWrite) return result;
+  if (dryRun || !writeManifestAndExports) return result;
 
-  // ── 7. Write: the serving file, then the manifest, then the stale exports ──
+  // ── 8. Write: the serving file, then the manifest, then every export ──
   // Residual window: an IO error DURING these writes (a full disk, a rename
-  // refused over a locked target) can still leave a later step unwritten; the
-  // next run's freshness check then refreshes whatever is stale.
+  // refused over a locked target) can still leave a later step unwritten. The
+  // repair is the deliberate `--refresh`, which rewrites the manifest from the
+  // serving file as it is and regenerates every export.
   if (plan.changed) {
     writeFileAtomicSync(rulesPath, JSON.stringify({ ...file, rules: plan.rows }, null, 2) + '\n');
   }
-  if (manifestStale) {
-    writeCompileManifest(manifestPath, {
-      ...manifest,
-      compiled_at: input.asOf,
-      output_hash: generateOutputHash(rulesPath),
-      records_hash: recordsHash,
-      // The full compile's rule: every row in the file, archived rows included.
-      rule_count: plan.rows.length,
-    });
-  }
-  for (const r of staleExports) writeRenderedExport(r);
+  writeCompileManifest(manifestPath, {
+    ...manifest,
+    compiled_at: input.asOf,
+    output_hash: generateOutputHash(rulesPath),
+    // Computed in the preflight above whenever this write runs.
+    records_hash: recordsHash ?? attestRecordsHash(totemDir, cwd),
+    // The full compile's rule: every row in the file, archived rows included.
+    rule_count: plan.rows.length,
+  });
+  for (const r of rendered) writeRenderedExport(r);
   result.written = true;
   return result;
 }
@@ -338,20 +374,20 @@ export function formatServingReport(result: ServingWriterResult): string[] {
   const w = result.writes;
   const targets: string[] = [];
   if (w.servingFile) targets.push(result.rulesFile);
-  if (w.manifest) targets.push(w.servingFile ? 'the manifest' : 'the manifest (stale)');
-  for (const e of result.exports) {
-    targets.push(`${e.filePath} (${e.name}, ${e.count} lessons${w.servingFile ? '' : ', stale'})`);
-  }
+  if (w.manifest) targets.push('the manifest');
+  for (const e of result.exports) targets.push(`${e.filePath} (${e.name}, ${e.count} lessons)`);
+  const how = !w.servingFile && result.refresh ? ' (--refresh; no row changed)' : '';
+  for (const n of result.notices) lines.push(n);
   if (targets.length === 0) {
     lines.push(
       result.dryRun
-        ? 'DRY RUN: no change and everything is fresh; nothing would be written.'
-        : 'No change: the serving file, the manifest and the exports are fresh; nothing was written.',
+        ? 'DRY RUN: no row changes; nothing would be written.'
+        : 'No row changes; nothing was written.',
     );
   } else if (result.dryRun) {
-    lines.push(`DRY RUN: would write ${targets.join(', ')}; nothing was written.`);
+    lines.push(`DRY RUN: would write ${targets.join(', ')}${how}; nothing was written.`);
   } else {
-    lines.push(`${w.servingFile ? 'Wrote' : 'No row changed; refreshed'} ${targets.join(', ')}.`);
+    lines.push(`Wrote ${targets.join(', ')}${how}.`);
   }
   return lines;
 }

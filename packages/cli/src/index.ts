@@ -2423,7 +2423,11 @@ ruleCmd
     'Lower the records an input file names into compiled-rules.json, dispose of their legacy rows as the file says, refresh the manifest and regenerate the exports (mmnto-ai/totem#3036)',
   )
   .option('--dry-run', 'Read everything, write nothing, print the row-level report')
-  .action(async (input: string, opts: { dryRun?: boolean }) => {
+  .option(
+    '--refresh',
+    'Rewrite the manifest from the serving file as it is and regenerate every export, even when no row changes; the deliberate repair after an interrupted run or an out-of-band edit',
+  )
+  .action(async (input: string, opts: { dryRun?: boolean; refresh?: boolean }) => {
     try {
       const { ruleServeCommand } = await import('./commands/rule-serve.js');
       await ruleServeCommand(input, opts);

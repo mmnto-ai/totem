@@ -33,29 +33,55 @@ const nonEmpty = (field: string) => z.string().min(1, { message: `${field} must 
 
 /** The one instant form the writer accepts, as a refusal message names it. */
 export const STRICT_INSTANT_FORM = 'YYYY-MM-DDTHH:MM:SS(.fraction)?(Z|+HH:MM|-HH:MM)';
-const STRICT_INSTANT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
-const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const STRICT_INSTANT_RE =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/;
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/**
+ * True when the instant `ms`, shifted by the written UTC offset, shows exactly
+ * the written calendar digits. V8 rolls impossible values over
+ * (`2026-02-30` reads as March 2, `T24:00:00` as the next day); this refuses them.
+ */
+function roundTrips(ms: number, offsetMinutes: number, digits: readonly number[]): boolean {
+  const d = new Date(ms + offsetMinutes * 60_000);
+  const shown = [
+    d.getUTCFullYear(),
+    d.getUTCMonth() + 1,
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+    d.getUTCSeconds(),
+  ];
+  return digits.every((v, i) => shown[i] === v);
+}
 
 /**
  * Epoch milliseconds of a STRICT instant (`STRICT_INSTANT_FORM`: a date-time
- * with seconds and an explicit zone), or `undefined` for anything else.
+ * with seconds and an explicit zone, every component a real calendar value), or
+ * `undefined` for anything else.
  */
 export function parseStrictInstant(s: string): number | undefined {
-  if (!STRICT_INSTANT_RE.test(s)) return undefined;
+  const m = STRICT_INSTANT_RE.exec(s);
+  if (m === null) return undefined;
   const ms = Date.parse(s);
-  return Number.isNaN(ms) ? undefined : ms;
+  if (Number.isNaN(ms)) return undefined;
+  const offset = m[8] === 'Z' ? 0 : (m[9] === '-' ? -1 : 1) * (Number(m[10]) * 60 + Number(m[11]));
+  const digits = [m[1], m[2], m[3], m[4], m[5], m[6]].map(Number);
+  return roundTrips(ms, offset, digits) ? ms : undefined;
 }
 
 /**
  * Epoch milliseconds of a ledger row's `authoredAt` for the stale-floor check:
  * a date-only `YYYY-MM-DD` (the measured live form; ECMAScript reads it as UTC
- * midnight) or a strict instant. A zone-less date-time, or anything else, is
- * `undefined` — it would read as local time.
+ * midnight) or a strict instant, every component a real calendar value. A
+ * zone-less date-time, an impossible date, or anything else is `undefined`.
  */
 export function parseAuthoredAt(s: string): number | undefined {
-  if (DATE_ONLY_RE.test(s)) {
+  const m = DATE_ONLY_RE.exec(s);
+  if (m !== null) {
     const ms = Date.parse(s);
-    return Number.isNaN(ms) ? undefined : ms;
+    if (Number.isNaN(ms)) return undefined;
+    return roundTrips(ms, 0, [Number(m[1]), Number(m[2]), Number(m[3]), 0, 0, 0]) ? ms : undefined;
   }
   return parseStrictInstant(s);
 }
@@ -73,8 +99,13 @@ export const ServingInputSchema = z
      * byte-identical. A STRICT instant: a zone-less date-time would read as the
      * machine's local time and make the stale-floor verdict machine-dependent.
      */
-    asOf: z.string().refine((s) => parseStrictInstant(s) !== undefined, {
-      message: `asOf must be a strict ISO-8601 instant, ${STRICT_INSTANT_FORM}`,
+    asOf: z.string().superRefine((s, ctx) => {
+      if (parseStrictInstant(s) === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `asOf '${s}' must be a strict ISO-8601 instant, ${STRICT_INSTANT_FORM}, naming a real calendar date and time`,
+        });
+      }
     }),
     /** Free text naming the runs of record and the ruling; not machine-read. */
     source: nonEmpty('source'),
@@ -291,7 +322,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
   const asOfMs = parseStrictInstant(asOf);
   if (asOfMs === undefined) {
     throw inputInvalid(
-      `The serving input's asOf '${asOf}' is not a strict instant (expected ${STRICT_INSTANT_FORM})`,
+      `The serving input's asOf '${asOf}' is not a strict instant naming a real calendar date and time (expected ${STRICT_INSTANT_FORM})`,
     );
   }
 
@@ -371,10 +402,14 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         `The serving input's floor ruleId ${id} collides with a non-record row of the same lessonHash in the serving file`,
       );
     }
-    if (existing !== undefined && existing.status === 'archived') {
+    // Any inactive status (archived, untested-against-codebase,
+    // pending-verification): a replace would write an active row in its place.
+    if (existing !== undefined && !isActiveCompiledRule(existing)) {
+      const reason =
+        existing.archivedReason !== undefined ? `, archivedReason: ${existing.archivedReason}` : '';
       throw inputInvalid(
-        `The serving file's record row ${id}, which the floor names, is archived (archivedReason: ${existing.archivedReason ?? 'absent'}); serving it again would re-activate it`,
-        'Remove the archived row from compiled-rules.json deliberately, or drop its record from floor[], then re-run.',
+        `The serving file's record row ${id}, which the floor names, is inactive (status: ${existing.status}${reason}); serving it again would re-activate it`,
+        'Remove the inactive row from compiled-rules.json deliberately, or drop its record from floor[], then re-run.',
       );
     }
   }
@@ -448,7 +483,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         throw new TotemError(
           'SERVING_FLOOR_STALE',
           authoredMs === undefined
-            ? `Floor record ${ref.path} (ruleId ${ref.ruleId}): its effective ledger row's authoredAt '${row.authoredAt}' is neither a date (YYYY-MM-DD) nor a strict instant (${STRICT_INSTANT_FORM}), so the floor's asOf ${asOf} cannot be shown to postdate it; nothing was written.`
+            ? `Floor record ${ref.path} (ruleId ${ref.ruleId}): its effective ledger row's authoredAt '${row.authoredAt}' is neither a date (YYYY-MM-DD) nor a strict instant (${STRICT_INSTANT_FORM}) naming a real calendar value, so the floor's asOf ${asOf} cannot be shown to postdate it; nothing was written.`
             : `Floor record ${ref.path} (ruleId ${ref.ruleId}) was admitted at ${row.authoredAt}, after the serving input's asOf ${asOf}: the floor predates the record it would lower; nothing was written.`,
           'Regenerate the floor file from the current ledger (and re-score the re-admitted record), then re-run.',
         );

@@ -67,7 +67,9 @@ export type TotemErrorCode =
   /** `totem rule serve`: a floor record's effective ledger row was admitted after the input's asOf, so the floor predates it — refused before any write (mmnto-ai/totem#3045). */
   | 'SERVING_FLOOR_STALE'
   /** `totem rule serve`: a row the plan does not touch serialized differently after planning — the writer's own invariant; a bug, and nothing was written (mmnto-ai/totem#3036). */
-  | 'SERVING_INVARIANT_BROKEN';
+  | 'SERVING_INVARIANT_BROKEN'
+  /** `totem rule serve`: the serving file's hash is not the manifest's `output_hash` (the file was modified outside totem) — refused before planning, nothing written, unless `--refresh` is passed (mmnto-ai/totem#3036). `STALE_MANIFEST` is the pack-manifest nudge and does not fit. */
+  | 'SERVING_MANIFEST_STALE';
 
 export class TotemError extends Error {
   readonly code: TotemErrorCode;

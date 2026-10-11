@@ -4,6 +4,8 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { generateOutputHash } from '@mmnto/totem';
+
 import { cleanTmpDir } from '../test-utils.js';
 import { ruleServeCommand } from './rule-serve.js';
 
@@ -47,7 +49,8 @@ function setup(root: string, input: unknown): string {
       compiled_at: '2026-01-01T00:00:00.000Z',
       model: 'm',
       input_hash: 'i',
-      output_hash: 'o',
+      // The writer refuses a serving file its manifest does not attest.
+      output_hash: generateOutputHash(path.join(totemDir, 'compiled-rules.json')),
       rule_count: 1,
     }),
     'utf-8',

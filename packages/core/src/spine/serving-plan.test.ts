@@ -737,4 +737,66 @@ describe('planServingWrite: falsification fold (mmnto-ai/totem#3036 B2)', () => 
       }),
     );
   });
+
+  for (const status of ['untested-against-codebase', 'pending-verification'] as const) {
+    it(`R2-F3: a named record row with status ${status} refuses, naming the status`, () => {
+      const f = fixture('archive');
+      f.rows = plan(f).rows.map((r) => (r.lessonHash === RULE_A ? { ...r, status } : r));
+      expect(() => plan(f)).toThrow(
+        expect.objectContaining({
+          code: 'SERVING_INPUT_INVALID',
+          message: expect.stringContaining(
+            `${RULE_A}, which the floor names, is inactive (status: ${status})`,
+          ),
+        }),
+      );
+    });
+  }
+
+  it('R2-F3: an archived named record row names its status and archivedReason', () => {
+    const f = fixture('archive');
+    f.rows = plan(f).rows.map((r) =>
+      r.lessonHash === RULE_A
+        ? { ...r, status: 'archived' as const, archivedReason: 'silenced by a human' }
+        : r,
+    );
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        message: expect.stringContaining('(status: archived, archivedReason: silenced by a human)'),
+      }),
+    );
+  });
+
+  it('R2-F4: impossible calendar values refuse; a real leap day passes', () => {
+    for (const bad of ['2026-02-30T00:00:00Z', '2026-10-10T24:00:00Z', '2026-02-29T00:00:00Z']) {
+      expect(parseStrictInstant(bad)).toBeUndefined();
+    }
+    expect(parseAuthoredAt('2026-02-30')).toBeUndefined();
+    expect(parseStrictInstant('2028-02-29T00:00:00Z')).toBe(Date.UTC(2028, 1, 29));
+    expect(parseAuthoredAt('2028-02-29')).toBe(Date.UTC(2028, 1, 29));
+    // An offset shifts the instant, not the written digits.
+    expect(parseStrictInstant('2026-10-10T02:18:13+14:00')).toBe(Date.UTC(2026, 9, 9, 12, 18, 13));
+    const f = fixture();
+    const res = ServingInputSchema.safeParse({ ...f.input, asOf: '2026-02-30T00:00:00Z' });
+    expect(res.success ? '' : res.error.issues[0]!.message).toContain("'2026-02-30T00:00:00Z'");
+    f.ledger[0] = ledgerRow(f.records[0]!, '2026-02-30');
+    expect(() => plan(f)).toThrow(
+      expect.objectContaining({
+        code: 'SERVING_FLOOR_STALE',
+        message: expect.stringContaining("'2026-02-30'"),
+      }),
+    );
+  });
+
+  it('R2-F5: a lowered row whose keys are only reordered is a replace with changedFields (key order)', () => {
+    const f = fixture('archive');
+    f.rows = plan(f).rows.map((r) => {
+      if (r.lessonHash !== RULE_A) return r;
+      const reversed: Record<string, unknown> = {};
+      for (const k of Object.keys(r).reverse()) reversed[k] = (r as Record<string, unknown>)[k];
+      return reversed as typeof r;
+    });
+    const row = plan(f).report.rows.find((r) => r.lessonHash === RULE_A)!;
+    expect(row).toMatchObject({ action: 'replace', changedFields: ['(key order)'] });
+  });
 });

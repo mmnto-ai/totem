@@ -19,7 +19,11 @@ import {
 } from '@mmnto/totem';
 
 import { verifyManifestCommand } from './commands/verify-manifest.js';
-import { assertUntouchedRowsUnchanged, runServingWriter } from './serving-writer.js';
+import {
+  assertUntouchedRowsUnchanged,
+  formatServingReport,
+  runServingWriter,
+} from './serving-writer.js';
 import { cleanTmpDir } from './test-utils.js';
 
 // ─── The serving writer, end to end (B2 of mmnto-ai/totem#3036, S6 step 2) ───
@@ -300,6 +304,26 @@ function expectUnchanged(ws: Workspace, before: Snapshot): void {
   expect(fs.readdirSync(ws.totemDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
 }
 
+/**
+ * Re-attest the serving file in its manifest after a test edits it, so the
+ * refusal under test fires rather than the integrity refusal (R2-F2a).
+ */
+function resealManifest(ws: Workspace): void {
+  const manifest = JSON.parse(fs.readFileSync(ws.manifestPath, 'utf-8')) as Record<string, unknown>;
+  manifest['output_hash'] = generateOutputHash(ws.rulesPath);
+  fs.writeFileSync(ws.manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+}
+
+/** An out-of-band edit: the carried row's pattern changes, the manifest does not. */
+function tamperCarriedRow(ws: Workspace): void {
+  const file = JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as {
+    rules: Array<Record<string, unknown>>;
+  };
+  const row = file.rules.find((r) => r['lessonHash'] === HASH_E)!;
+  row['pattern'] = 'tampered-by-hand';
+  fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+}
+
 function readRows(ws: Workspace): Array<Record<string, unknown>> {
   return (
     JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as { rules: Array<Record<string, unknown>> }
@@ -444,61 +468,78 @@ describe('runServingWriter (mmnto-ai/totem#3036 B2)', () => {
     expect(text).toContain('_(archived: no-intent (curation row 7))_');
   });
 
-  it('a no-change run with a stale manifest refreshes only the manifest (falsification fold F1b)', async () => {
+  it('with --refresh, a tampered carried row is accepted: the manifest and every export are rewritten and reported (R2-F2b)', async () => {
     const ws = setupWorkspace(tmpDir);
     await runServingWriter({ inputPath: ws.inputPath });
-    const manifest = JSON.parse(fs.readFileSync(ws.manifestPath, 'utf-8')) as Record<
-      string,
-      unknown
-    >;
-    fs.writeFileSync(
-      ws.manifestPath,
-      JSON.stringify({ ...manifest, output_hash: 'stale' }, null, 2) + '\n',
-      'utf-8',
-    );
+    tamperCarriedRow(ws);
     backdate(ws);
     const before = snapshot(ws);
-    const result = await runServingWriter({ inputPath: ws.inputPath });
+    const dry = await runServingWriter({ inputPath: ws.inputPath, dryRun: true, refresh: true });
+    expect(dry.writes).toEqual({ servingFile: false, manifest: true, exports: ['EXPORTED.md'] });
+    expectUnchanged(ws, before);
+    const result = await runServingWriter({ inputPath: ws.inputPath, refresh: true });
     expect(result.report.changed).toBe(false);
     expect(result.written).toBe(true);
-    expect(result.writes).toEqual({ servingFile: false, manifest: true, exports: [] });
+    expect(result.writes).toEqual({ servingFile: false, manifest: true, exports: ['EXPORTED.md'] });
+    expect(formatServingReport(result).at(-1)).toBe(
+      'Wrote the manifest, EXPORTED.md (agents, 3 lessons) (--refresh; no row changed).',
+    );
     const after = snapshot(ws);
     expect(after.rules!.equals(before.rules!)).toBe(true);
     expect(after.rulesMtime).toBe(before.rulesMtime);
-    expect(after.exports!.equals(before.exports!)).toBe(true);
-    expect(fs.statSync(ws.exportPath).mtimeMs).toBe(new Date('2026-01-01T00:00:00Z').getTime());
-    expect(after.manifest!.equals(before.manifest!)).toBe(false);
+    expect(after.manifestMtime).not.toBe(before.manifestMtime);
+    expect(fs.statSync(ws.exportPath).mtimeMs).not.toBe(new Date('2026-01-01T00:00:00Z').getTime());
     await expect(verifyManifestCommand()).resolves.toBeUndefined();
-    // And the next run finds everything fresh.
+    // And the next plain run writes nothing.
     expect((await runServingWriter({ inputPath: ws.inputPath })).written).toBe(false);
   });
 
-  it('a no-change run with a stale export regenerates only that export (falsification fold F1b)', async () => {
+  it('a no-change run after an export was reformatted inside its sentinel block writes nothing (R2-F1)', async () => {
     const ws = setupWorkspace(tmpDir);
     await runServingWriter({ inputPath: ws.inputPath });
-    const good = fs.readFileSync(ws.exportPath, 'utf-8');
-    fs.writeFileSync(ws.exportPath, 'stale export\n', 'utf-8');
+    // The prettier shape: the block's text changes, the lesson set does not.
+    const text = fs.readFileSync(ws.exportPath, 'utf-8');
+    const reformatted = text.replace(/\n- /g, '\n\n- ');
+    expect(reformatted).not.toBe(text);
+    fs.writeFileSync(ws.exportPath, reformatted, 'utf-8');
     backdate(ws);
     const before = snapshot(ws);
-    const dry = await runServingWriter({ inputPath: ws.inputPath, dryRun: true });
-    expect(dry.writes).toEqual({ servingFile: false, manifest: false, exports: ['EXPORTED.md'] });
-    expectUnchanged(ws, before);
     const result = await runServingWriter({ inputPath: ws.inputPath });
-    expect(result.writes).toEqual({
-      servingFile: false,
-      manifest: false,
-      exports: ['EXPORTED.md'],
-    });
-    const after = snapshot(ws);
-    expect(after.rules!.equals(before.rules!)).toBe(true);
-    expect(after.rulesMtime).toBe(before.rulesMtime);
-    expect(after.manifest!.equals(before.manifest!)).toBe(true);
-    expect(after.manifestMtime).toBe(before.manifestMtime);
-    // A target with no sentinels gets the block appended, as exportLessons does.
-    expect(fs.readFileSync(ws.exportPath, 'utf-8')).toBe(
-      'stale export\n\n' + good.replace(/\n$/, '') + '\n',
-    );
-    expect((await runServingWriter({ inputPath: ws.inputPath })).written).toBe(false);
+    expect(result.written).toBe(false);
+    expect(result.writes).toEqual({ servingFile: false, manifest: false, exports: [] });
+    expect(formatServingReport(result).at(-1)).toBe('No row changes; nothing was written.');
+    expectUnchanged(ws, before);
+    expect(fs.readFileSync(ws.exportPath, 'utf-8')).toBe(reformatted);
+  });
+
+  it('a changing run writes every export target, including one whose text already equals the render (R2-F1)', async () => {
+    // Workspace A yields the rendered export; workspace B starts with exactly that text.
+    const a = setupWorkspace(fs.mkdtempSync(path.join(tmpDir, 'a-')));
+    process.chdir(a.root);
+    await runServingWriter({ inputPath: a.inputPath });
+    const rendered = fs.readFileSync(a.exportPath, 'utf-8');
+    const b = setupWorkspace(fs.mkdtempSync(path.join(tmpDir, 'b-')));
+    process.chdir(b.root);
+    fs.writeFileSync(b.exportPath, rendered, 'utf-8');
+    backdate(b);
+    const result = await runServingWriter({ inputPath: b.inputPath });
+    expect(result.writes).toEqual({ servingFile: true, manifest: true, exports: ['EXPORTED.md'] });
+    expect(fs.readFileSync(b.exportPath, 'utf-8')).toBe(rendered);
+    expect(fs.statSync(b.exportPath).mtimeMs).not.toBe(new Date('2026-01-01T00:00:00Z').getTime());
+  });
+
+  it('a no-change run with a stale records attestation writes nothing and names --refresh on one line (R2-F2c)', async () => {
+    const ws = setupWorkspace(tmpDir);
+    await runServingWriter({ inputPath: ws.inputPath });
+    fs.writeFileSync(path.join(ws.totemDir, 'rules', 'extra.rule.yaml'), recordN(), 'utf-8');
+    backdate(ws);
+    const before = snapshot(ws);
+    const result = await runServingWriter({ inputPath: ws.inputPath });
+    expect(result.written).toBe(false);
+    expect(result.notices).toHaveLength(1);
+    expect(result.notices[0]).toContain('--refresh');
+    expect(formatServingReport(result)).toContain(result.notices[0]);
+    expectUnchanged(ws, before);
   });
 
   it('names a CRLF copy of the input by the same sha256 as the LF original (falsification fold F11)', async () => {
@@ -544,6 +585,19 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     expectUnchanged(ws, before);
   }
 
+  it('refuses a serving file its manifest does not attest (a tampered carried row) before planning (R2-F2a)', async () => {
+    await runServingWriter({ inputPath: ws.inputPath });
+    tamperCarriedRow(ws);
+    await expectRefusal(
+      'SERVING_MANIFEST_STALE',
+      'does not match its manifest',
+      'totem lesson compile --refresh-manifest --allow-record-rows',
+    );
+    await expect(runServingWriter({ inputPath: ws.inputPath, dryRun: true })).rejects.toMatchObject(
+      { code: 'SERVING_MANIFEST_STALE', recoveryHint: expect.stringContaining('--refresh') },
+    );
+  });
+
   it('refuses a missing serving file', async () => {
     fs.rmSync(ws.rulesPath);
     await expectRefusal('PARSE_FAILED', 'does not exist');
@@ -567,6 +621,12 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
       'utf-8',
     );
     await expectRefusal('PARSE_FAILED', /Export target EXPORTED\.md \(agents\).*without matching/);
+    // The dry run refuses too: a real run would.
+    const before = snapshot(ws);
+    await expect(runServingWriter({ inputPath: ws.inputPath, dryRun: true })).rejects.toMatchObject(
+      { code: 'PARSE_FAILED' },
+    );
+    expectUnchanged(ws, before);
   });
 
   it('refuses a missing input file', async () => {
@@ -612,6 +672,7 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     const file = JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as { rules: unknown[] };
     file.rules.push(legacyRow(HASH_E, 'dup'));
     fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    resealManifest(ws);
     await expectRefusal('PARSE_FAILED', HASH_E);
   });
 
@@ -700,6 +761,7 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
       examples: [{ bad: 'x', good: 'y' }],
     });
     fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    resealManifest(ws);
     await expectRefusal('SERVING_INPUT_INVALID', '9999999999999999');
   });
 

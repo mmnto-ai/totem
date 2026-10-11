@@ -9,6 +9,8 @@
 export interface RuleServeOptions {
   /** Read everything, write nothing, print the row-level report. */
   dryRun?: boolean;
+  /** The deliberate repair: rewrite the manifest and every export even when no row changes. */
+  refresh?: boolean;
 }
 
 const COMMAND = 'rule serve';
@@ -21,7 +23,11 @@ export async function ruleServeCommand(
   const { formatServingReport, runServingWriter } = await import('../serving-writer.js');
 
   try {
-    const result = await runServingWriter({ inputPath, dryRun: opts.dryRun === true });
+    const result = await runServingWriter({
+      inputPath,
+      dryRun: opts.dryRun === true,
+      refresh: opts.refresh === true,
+    });
     if (isJsonMode()) {
       printJson({ status: 'success', command: COMMAND, data: result });
       return;
