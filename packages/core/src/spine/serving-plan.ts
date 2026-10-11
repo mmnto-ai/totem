@@ -267,13 +267,13 @@ function inactiveRowHint(
 ): string {
   const integrity = '(the integrity check refuses a hand-edited file otherwise)';
   if (disposition === 'remove' && legacyHash !== undefined) {
-    return `To serve it again, remove the inactive row from compiled-rules.json deliberately AND drop legacyHash ${legacyHash} from its floor[] entry (the legacy row is already gone, so the entry lowers where its remaining rows sit, or at the end of the file), then re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from floor[], then re-run with --refresh.`;
+    return `To serve it again, remove the inactive row from compiled-rules.json deliberately AND drop legacyHash ${legacyHash} from its floor[] entry (the legacy row is already gone, so the entry lowers where its remaining rows sit, or at the end of the file), then re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from its floor[] entry (the whole entry when that record is its only one), then re-run with --refresh.`;
   }
   const reReason =
     disposition === 'archive' && legacyHash !== undefined
-      ? `, then run \`totem lesson archive ${legacyHash} --reason <why>\` so the legacy row's "served by record" reason no longer names a row that is gone`
+      ? `, then run \`totem lesson archive ${legacyHash} --reason <why>\` so the legacy row's "served by record" reason no longer names a row that is gone (that verb rewrites the serving file through its schema and re-orders keys on untouched rows, which the serve path never does)`
       : '';
-  return `To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from floor[], re-run with --refresh${reReason}.`;
+  return `To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from its floor[] entry (the whole entry when that record is its only one), re-run with --refresh${reReason}.`;
 }
 
 function servedByReason(ruleIds: readonly string[]): string {
