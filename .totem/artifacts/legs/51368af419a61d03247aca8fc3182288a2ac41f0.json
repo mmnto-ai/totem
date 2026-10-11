@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "51368af419a61d03247aca8fc3182288a2ac41f0",
+  "readAt": "2026-10-11T21:16:07.938Z",
+  "findings": [
+    {
+      "id": "3036-B2-R8-F1",
+      "severity": "MINOR",
+      "file": ".changeset/rule-serve-3036.md",
+      "line": 10,
+      "claim": "The changeset says 'any configured blame.ignoreRevsFile neutralised (--ignore-revs-file=)'. That holds for a configured file that exists. A configured ignore file that does NOT exist (a repository config naming .git-blame-ignore-revs before the file is committed, or a global setting carried into a repository without it) makes git blame fatal before the command-line reset applies. So the run refuses with GIT_FAILED in an otherwise valid repository. Neither -c blame.ignoreRevsFile= nor a GIT_CONFIG_COUNT override clears it (measured). The refusal is loud and names git's error, and it never mis-dates. The disclosure overstates the neutralisation; the smallest fold is one clause naming this refusal.",
+      "counterexample": "r6-x, git config blame.ignoreRevsFile .git-blame-ignore-revs (the file does not exist). git blame --ignore-revs-file= ...: 'fatal: could not open object name list: .git-blame-ignore-revs'. The -c form and a GIT_CONFIG_COUNT override: the same fatal. rule serve floor.json --dry-run: 'The floor records' admission instants cannot be dated: git blame of .totem/spine/authoring-ledger.ndjson line 38 (ruleId 2570e3a8e586b038) failed ...'. This machine has no global blame.ignoreRevsFile. FOLDED at 103e02ea (wording only, by the seat): the changeset's git-failure sentence names the missing ignore-list file as a loud refusal with its cure, and a following sentence names the residual no local-state defence closes, a doctored object store or a rewritten or backdated history, as the same trust the file's asOf rests on."
+    }
+  ],
+  "folded": [
+    "3036-B2-R8-F1"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 1 MINOR, 0 QUESTION over the narrow eighth read 788a552b..51368af4 on B2 (the serving writer) under mmnto-ai/totem#3036: the grafts fold works, no remaining local configuration state re-dates a committed ledger line for this invocation (each measured: core.useReplaceRefs with a replace ref, a repository-config ignore list, a GIT_CONFIG_PARAMETERS ignore list, a case-variant path that fails loudly, a worktree .git file), the one residual is a rewrite of the object store itself (a doctored alternate measured through info/alternates and GIT_ALTERNATE_OBJECT_DIRECTORIES; a rewritten or backdated history), and the leg named the chain CONVERGED under the no-unmeasured-claim rule; the one minor is a disclosure clause, folded at 103e02ea by the seat. Held at source by the leg: GIT_GRAFT_FILE reaches the blame child alone with the rest of the environment inherited (serving-writer.ts:235, :271; exec.ts:56) and the r6-x graft probe refuses; the :988 test's precondition proves the graft re-dates a plain blame, so it fails without the env entry; cli suite green (194 files)."
+}
