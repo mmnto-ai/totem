@@ -519,6 +519,48 @@ describe('writeCompileManifest + readCompileManifest', () => {
     cleanTmpDir(tmpDir);
   });
 
+  it('writes over an existing manifest by rename (new file identity, no temp left) with the same bytes as before (mmnto-ai/totem#3036)', () => {
+    const manifestPath = path.join(tmpDir, 'compile-manifest.json');
+    fs.writeFileSync(manifestPath, '{"old": true}\n', 'utf-8');
+    const inoBefore = fs.statSync(manifestPath, { bigint: true }).ino;
+    const manifest: CompileManifest = {
+      compiled_at: '2026-10-10T02:18:13.000Z',
+      model: 'm',
+      input_hash: 'a'.repeat(64),
+      output_hash: 'b'.repeat(64),
+      rule_count: 1,
+    };
+    writeCompileManifest(manifestPath, manifest);
+    expect(fs.statSync(manifestPath, { bigint: true }).ino).not.toBe(inoBefore);
+    expect(fs.readdirSync(tmpDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+    // The bytes the plain writeFileSync writer produced.
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(JSON.stringify(manifest, null, 2) + '\n');
+  });
+
+  // Capability-gated: permission bits are not measurable on win32 (the atomic
+  // helper ignores mode there); the platform-independent arm is the options spy
+  // in compile-manifest-mode.test.ts.
+  it.skipIf(process.platform === 'win32')(
+    'keeps an existing manifest at its own mode and creates a new one at 0644 (POSIX)',
+    () => {
+      const manifest: CompileManifest = {
+        compiled_at: '2026-10-10T02:18:13.000Z',
+        model: 'm',
+        input_hash: 'a'.repeat(64),
+        output_hash: 'b'.repeat(64),
+        rule_count: 1,
+      };
+      const existingPath = path.join(tmpDir, 'existing.json');
+      fs.writeFileSync(existingPath, '{}\n', 'utf-8');
+      fs.chmodSync(existingPath, 0o600);
+      writeCompileManifest(existingPath, manifest);
+      expect(fs.statSync(existingPath).mode & 0o777).toBe(0o600);
+      const newPath = path.join(tmpDir, 'new.json');
+      writeCompileManifest(newPath, manifest);
+      expect(fs.statSync(newPath).mode & 0o777).toBe(0o644);
+    },
+  );
+
   it('roundtrips a valid manifest', () => {
     const manifestPath = path.join(tmpDir, 'compile-manifest.json');
     const manifest: CompileManifest = {

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "7fa29ec22854bfc914c086eb677709cc1a3f8915",
+  "readAt": "2026-10-11T21:01:01.014Z",
+  "findings": [
+    {
+      "id": "3036-B2-R6-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 245,
+      "claim": "git blame follows replace refs by default, and the writer does not turn that off. A local git replace <readmit-commit> <backdated-copy> makes blame report the ORIGINAL sha with the REPLACEMENT's committer-time, so a re-admission committed after asOf is dated before it and the stale-floor refusal (serving-plan.ts:529) is bypassed. This is the same class of local git state that ruling (4) neutralised for blame.ignoreRevsFile. The smallest fold is the global option on the blame call, git --no-replace-objects blame --ignore-revs-file= --line-porcelain ..., plus a test in the pattern of :926: a replace ref whose precondition shows a plain blame re-dated, then the refusal.",
+      "counterexample": "r6-x (base committed 2026-10-01T00:00:00Z). Appended a re-admission line for 2570e3a8e586b038 and committed it at GIT_COMMITTER_DATE 2026-10-11T09:30:00Z (2f8be022). The dry run refuses. Then git commit-tree made the same tree and parent at 2026-10-02T00:00:00Z (a4d2841a), followed by git replace 2f8be022 a4d2841a. Plain blame now reports 2f8be022 with committer-time 1790899200 (2026-10-02), and rule serve floor.json --dry-run passes. git --no-replace-objects blame reports committer-time 1791711000 (2026-10-11T09:30:00Z). FOLDED at 788a552b: the blame call carries --no-replace-objects before the subcommand (serving-writer.ts:251), the comment names both neutralised local states, a test builds the replace ref with a precondition on the plain blame and asserts the refusal names the re-admission commit and its real instant with nothing written (serving-writer.test.ts:955, RED on 7fa29ec2), the changeset gains the clause; the r6-x probe re-run against the built CLI refuses naming 2f8be022 at 2026-10-11T09:30:00.000Z."
+    }
+  ],
+  "folded": [
+    "3036-B2-R6-F1"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 0 MINOR, 0 QUESTION over the scoped sixth read of round two, b1368bec..7fa29ec2, on B2 (the serving writer) under mmnto-ai/totem#3036: the git-committed admission instant works as ruled and the one material finding, a local replace ref re-dating the blame, was folded at 788a552b. Held at source by the leg: last-line-per-ruleId equals foldEffectiveLedgerEntries over an append-only ledger (authoring-ledger.ts:272, :297) and readAuthoringLedger refuses malformed lines first; porcelain committer-time is read as UTC, measured exact at equality and across +09:00 and -05:00; shallow detected on a --depth 1 clone and cleared by --unshallow; the content-hash binding is lowercase-64-hex only and absent from the file of record; parseAuthoredAt and DATE_ONLY_RE fully removed with the barrel, doc and changeset updated; ci.yml fetch-depth 0 only on the 3-OS build job that runs pnpm test; the residuals disclosed and measured; the RED-bearing tests fail on revert; the worktree smoke dry run unchanged (485 to 513, classes 24/28/125/336, the blocking set as before, the serving file and manifest sha256 untouched)."
+}

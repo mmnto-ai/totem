@@ -1,0 +1,109 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "a697e4cf0bcce9f99df095b424f231cee4e83cf2",
+  "readAt": "2026-10-11T18:57:04.015Z",
+  "findings": [
+    {
+      "id": "3036-B2-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 238,
+      "claim": "A failure after the first write leaves a half-written state, nothing discloses it, and the verb cannot repair it. The order is serving file (:241), then manifest (:242-249; attestRecordsHash, which reads every tracked record and can throw TotemParseError, compile-manifest.ts:211-218, runs only AFTER the serving file is written), then exports (:250-257; injectSentinelBlock throws on unmatched sentinels, exporter.ts:72-77). On a re-run, the short-circuit 'if (dryRun || !plan.changed) return' (:238) compares rows only, never manifest or export freshness. So a re-run says 'No change ... nothing was written' and never refreshes the manifest or regenerates the exports. B1's verify-manifest hint (verify-manifest.ts:206, 'run totem rule serve instead') points at this verb, which makes that a dead end for any unchanged plan. Neither the changeset nor the doc line nor the header (:11) mentions the partial state or the recovery. The design's 'only after the whole plan validates' (spec 3036.md, State lifecycle) can be met by computing records_hash, reading the lessons and pre-checking the export targets before the first write.",
+      "counterexample": "ws-partial: deleted the end sentinel from .junie/skills/totem-rules/rules.md, then ran 'rule serve floor.json'. Exit 1 with 'Found <!-- totem:generated:start --> without matching <!-- totem:generated:end -->'. Measured state: compiled-rules.json written, compile-manifest.json written, copilot export regenerated, junie export not. The re-run printed 'No change: the serving file already matches the input; nothing was written.' and junie was still not regenerated. FOLDED at a5f4cbd6: the records hash is computed and every export target rendered in memory with its sentinel check before the first write (serving-writer.ts:257-261); the no-change path is a freshness check that rewrites a stale manifest (output_hash or records_hash) and each export whose text differs from its rendering, naming each, and writes nothing when all is fresh (:262-284); the residual window (an IO error during the writes themselves) is stated in the module header, at the write site and in the changeset; the partial probe re-run refuses with all four files identical, and a half-written export is refreshed alone on the next run."
+    },
+    {
+      "id": "3036-B2-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 402,
+      "claim": "The relaxation of the brief 1.6 refusal 'A legacyHash ... is not in the file' (legacyHash absent but every ruleId present means pass) is needed only for the fixpoint under 'remove'. It applies under 'archive' too, where the legacy row should always be present. A file whose legacy row was deleted (or served earlier under remove) passes an archive input silently: no report row, and floor-legacy totals drop to 23. The changeset and the doc line state the refusal without the exception.",
+      "counterexample": "planprobe (d): base = the served ws-real file with legacy row 427c97fb0063f0cb deleted, input unchanged (archive). Result: 'OK changed=false {floor-legacy:none:23, lowered:none:28, ...}'. No refusal. FOLDED at a5f4cbd6: the relaxation is gated on legacyRow 'remove' (serving-plan.ts:479); under 'archive' an absent legacy hash refuses; probe (d) re-run refuses; changeset and doc line state the remove exception."
+    },
+    {
+      "id": "3036-B2-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 483,
+      "claim": "An archive[] entry that names a floor ruleId is dropped silently on a re-run: the loop matches entryByRuleId (:483-489) before archiveByHash (:490). On a first run the same input refuses as 'not in the serving file' (:311-316). The 'hash in both lists' check (:283) covers only legacyHash, not floor ruleIds. The same input gets two different verdicts, and the re-run report has no row for that archive entry.",
+      "counterexample": "planprobe (a): archive[] gains {lessonHash: 2570e3a8e586b038 (a floor ruleId)} on the served file. Result: 'OK changed=false'. The row stays active and is reported only as 'lowered:none'. FOLDED at a5f4cbd6: an archive hash equal to a floor ruleId refuses as in both lists at the input-consistency step on every run (serving-plan.ts:349); probe (a) re-run refuses."
+    },
+    {
+      "id": "3036-B2-F4",
+      "severity": "QUESTION",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 198,
+      "claim": "When a floor legacy row is already archived with a different reason, archived() overwrites archivedReason with 'served by record ...' and keeps archivedAt. An archive[] row that is already archived is left untouched (:492-494). Brief 1.3 prescribes the reason literally and says nothing about an already-archived floor legacy row. Is losing a prior human archivedReason intended? None of the 24 floor legacy rows in the file of record is archived today, so the case is latent.",
+      "counterexample": "planprobe (b): legacy 427c97fb0063f0cb pre-set to archived, 'an earlier human reason'. Result: reason after = 'served by record 2570e3a8e586b038', archivedAt kept, action 'archive'. ANSWERED and FOLDED at a5f4cbd6: an already-archived floor legacy row stays byte-untouched and is reported as floor-legacy already-archived with its record ids in the report row (serving-plan.ts:544); probe (b) re-run keeps the human reason."
+    },
+    {
+      "id": "3036-B2-F5",
+      "severity": "QUESTION",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 437,
+      "claim": "'replace' re-lowers any named record row whose text differs, including a row a human archived or edited after serving. The re-run silently re-activates it, and the report says only 'lowered replace'. The design's 'name it or remove it deliberately' row covers record-path rows the floor does NOT name (serving-plan.ts:292-299), so replacing a named row is a reading, not the letter. Should a named row whose status or severity differs from its lowering be refused, or at least reported with the field that changed?",
+      "counterexample": "planprobe (c): lowered row 2570e3a8e586b038 set to status archived, 'silenced by a human'. Result: 'changed=true lowered:replace:1', status after = active. ANSWERED and FOLDED at a5f4cbd6: a named record row with status archived refuses with SERVING_INPUT_INVALID naming the row and its archivedReason (serving-plan.ts:376); replace stands otherwise and reports changedFields (:520); probe (c) re-run refuses."
+    },
+    {
+      "id": "3036-B2-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 43,
+      "claim": "asOf is checked only with Date.parse, which matches brief 1.2's letter. The message promises ISO-8601, but the schema accepts non-ISO and zone-less strings. Date.parse reads a zone-less date-time as LOCAL time, so the stale-floor verdict (:372-373) depends on the machine's timezone. The raw string is also written verbatim into every lowered row's compiledAt/createdAt and into manifest compiled_at.",
+      "counterexample": "dates.mjs on this machine (offset 300 minutes): '2026-10-10T02:18:13' parses as 2026-10-10T07:18:13Z. '10/10/2026', 'October 10, 2026' and '2026' are all accepted. planprobe (g): asOf '2026-09-23T01:00:00' against authoredAt '2026-09-23' passes here; on a UTC+2 machine it refuses. FOLDED at a5f4cbd6: asOf must match the strict instant form with an explicit zone (serving-plan.ts:36-63, :76, :291); authoredAt is a date-only (UTC midnight) or a strict instant, a zone-less date-time refuses (:446); the dates cases re-run through the schema refuse every non-strict form and accept the file of record's value."
+    },
+    {
+      "id": "3036-B2-F7",
+      "severity": "MINOR",
+      "file": "packages/cli/src/serving-writer.test.ts",
+      "line": 561,
+      "claim": "The writer test 'refuses a legacyHash that is not in the serving file' is actually tripped by the sourceLesson refusal. The floor entry uses record N, which has no curation block. The sourceLesson check (serving-plan.ts:382-388) runs before the not-in-file check (:402), and its message also contains the legacyHash, so the assertion passes either way. Deleting the not-in-file refusal would not fail this test.",
+      "counterexample": "Reading at source: recordN() (serving-writer.test.ts:65-73) has no curation, so line 385's message fires first. FOLDED at a5f4cbd6: record N carries a matching curation.sourceLesson and the test asserts the not-in-file refusal's own wording (serving-writer.test.ts:659)."
+    },
+    {
+      "id": "3036-B2-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 259,
+      "claim": "No test trips the refusals the leg added beyond the table: a legacyHash in two floor entries (:259-264), a ruleId twice in floor (:268-272), an archive hash twice (:278-282), a floor ruleId colliding with a non-record row (:301-308), a missing serving file (serving-writer.ts:157-162). The manifest-preflight test asserts only the code and 'compile-manifest.json', not the hint; the record-managed branch of the hint is never exercised.",
+      "counterexample": "grep for 'more than once|collides|does not exist' in the three test files: no hits. FOLDED at a5f4cbd6: one test per added refusal (serving-plan.test.ts:697-730, serving-writer.test.ts:547) and both manifest-hint branches asserted (:552, :618)."
+    },
+    {
+      "id": "3036-B2-F9",
+      "severity": "MINOR",
+      "file": "docs/wiki/compile-options.md",
+      "line": 16,
+      "claim": "B1's 'not yet shipped' clause for totem rule serve appears twice: docs/wiki/cli-reference.md:322 and docs/wiki/compile-options.md:16. This PR ships the verb, so both are stale.",
+      "counterexample": "grep 'rule serve' docs: both lines say '(to be written by totem rule serve, part B2 of mmnto-ai/totem#3036, not yet shipped)'. FOLDED at a5f4cbd6: both read '(written by totem rule serve, part B2 of ...)' with the rest of each line unchanged."
+    },
+    {
+      "id": "3036-B2-F10",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/lesson.ts",
+      "line": 266,
+      "claim": "Brief 1.8 test 12 and the changeset ('the first two now call it, with byte-identical output') rely on the existing compile and archive tests. lesson-archive.test.ts never configures exports, so the archive export path through the new helper has no test. Only compile-export-archive-filter.test.ts guards compile.",
+      "counterexample": "grep: lessonArchiveCommand is tested only in lesson-archive.test.ts, which has no 'exports' key. FOLDED at a5f4cbd6: a lesson-archive describe with an export target configured asserts the archived reason, the dropped untested lesson and byte equality with the render (lesson-archive.test.ts:322)."
+    },
+    {
+      "id": "3036-B2-F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 110,
+      "claim": "inputSha256 hashes the input file's raw bytes, while record hashes are taken after CRLF to LF (the intake's rule). A CRLF checkout of the same input therefore names a different run hash, against the design's 'one file so one hash names a run'. In the cohort this cannot happen today (strategy pins eol=lf; totem has text=auto eol=lf). It bites only outside those pins.",
+      "counterexample": "ws-partial is a git clone under core.autocrlf=true with no attributes. The --json dry run reported inputSha256 c002b417... against the file of record's 24c3f953...4236d. FOLDED at a5f4cbd6: the hash is taken over the text after CRLF to LF (serving-writer.ts:121-132), the report line and the doc say so, and a CRLF copy of the fixture reports the file of record's hash (serving-writer.test.ts:504)."
+    }
+  ],
+  "folded": [
+    "3036-B2-F1",
+    "3036-B2-F2",
+    "3036-B2-F3",
+    "3036-B2-F4",
+    "3036-B2-F5",
+    "3036-B2-F6",
+    "3036-B2-F7",
+    "3036-B2-F8",
+    "3036-B2-F9",
+    "3036-B2-F10",
+    "3036-B2-F11"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 8 MINOR, 2 QUESTION over the diff b0a5b335..a697e4cf of B2 (the serving writer) under mmnto-ai/totem#3036; every finding folded at a5f4cbd6 and re-read in a scoped second deposit. Held at source by the leg: untouched rows byte-identical after a real write on a scratch copy of the repo's .totem (149 deleted lines = 149 touched rows; plain JSON.parse at serving-writer.ts:174); rule_count = all rows as compile.ts:2010/2034 and :967; compiled_at = asOf, input_hash and model carried; verify-manifest PASS after the real run; the second real run is a no-op; smoke 485->513, classes 24/28/125/336, active 385->264, archived 93->242, the blocking set reproduced and cross-checked with rule list --blocking, c16cbd89 and 2095327f serving 2266fc0d and 87aff037 per floor-run16.json:51-64; the matching contract and the stale check at serving-plan.ts:320-388 with the same-day limit asserted at serving-plan.test.ts:427; the export helper identical to the removed blocks; the lazy-import rule, the Lite exclusion and the JSON envelopes (one success or error envelope, exit 1) hold; every brief 1.6 row has a tripping test; suites green (cli 194 files, core 163)."
+}

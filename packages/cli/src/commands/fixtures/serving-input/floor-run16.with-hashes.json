@@ -1,0 +1,898 @@
+{
+  "schema": "serving-input/1",
+  "asOf": "2026-10-10T02:18:13.000Z",
+  "source": "gate (5) runs of record 1-16, scoring.json at mmnto-ai/totem-strategy 9e87bb13 (the effective map's latest non-inert entry per rule; R6 30/53 — 24 unflagged · 6 conditional by record, the (d) pass's comparison CONVERGED on every count, mmnto-ai/totem-strategy#288 2026-10-10); the floor = the 24 READY-unflagged rules (the ruling of 2026-09-30, \"flagged = conditional at the lift\"); record paths and minted ruleIds from mmnto-ai/totem .totem/spine/authoring-ledger.ndjson at b0a5b335 (blob efcc059b); archive[] = the 125 serving discards of operations/310-curation/ledger.ndjson at 032e3874 (126 minus 1a7080eb, archived already in totem's serving file at b0a5b335); dispositions as RULED 2026-10-10 on mmnto-ai/totem-strategy#1486 (legacyRow archive = Q2b (a); stamp none = Q1 (a′), unstamped); asOf (an ISO instant, the now for every lowered row and for the manifest, so a re-run is byte-identical) is derived, never chosen — the latest committer instant of the three pinned commits this file is built from, in UTC (RULED (d) 2026-10-11 on mmnto-ai/totem-strategy#1486: 2026-10-10T02:18:13.000Z is mmnto-ai/totem b0a5b335's), so a change of any pinned input moves it by construction and this file's sha is the sha of record",
+  "dispositions": {
+    "legacyRow": "archive",
+    "stamp": "none"
+  },
+  "floor": [
+    {
+      "legacyHash": "427c97fb0063f0cb",
+      "records": [
+        {
+          "path": ".totem/rules/mig-427c97fb-partial-matcher-secret-masking.rule.yaml",
+          "ruleId": "2570e3a8e586b038",
+          "contentHash": "2e95dedfb371a44fad2620f24564c7152c1e4e677a478a60565f29d4db62648b"
+        }
+      ]
+    },
+    {
+      "legacyHash": "71935fe9a742137b",
+      "records": [
+        {
+          "path": ".totem/rules/mig-71935fe9-string-cast-on-input-js.rule.yaml",
+          "ruleId": "50607353e7df1a01",
+          "contentHash": "77d5b575d04844e89fc5499d489dd53c546aef635334965e5c9b32e65b466614"
+        },
+        {
+          "path": ".totem/rules/mig-71935fe9-string-cast-on-input.rule.yaml",
+          "ruleId": "0c8013d89fad7e27",
+          "contentHash": "7f2d3d7741f9f2487802430fd5c0696b39573a9799d098e9cfc573ea77cc334e"
+        }
+      ]
+    },
+    {
+      "legacyHash": "4f283f5495489a19",
+      "records": [
+        {
+          "path": ".totem/rules/mig-4f283f54-inline-fs-rmsync-in-tests.rule.yaml",
+          "ruleId": "d811d974ef7502eb",
+          "contentHash": "a54a4eded6c82aec3d9298965e173133f4dabf6ee3bf770065b01fffc18f6581"
+        }
+      ]
+    },
+    {
+      "legacyHash": "bc8b99e815c3943f",
+      "records": [
+        {
+          "path": ".totem/rules/mig-bc8b99e8-console-log-in-mcp.rule.yaml",
+          "ruleId": "c44ad4f8085381c7",
+          "contentHash": "253c55b21398763c4a9c2d13489d00eef3daa5d7bd7456251ce7482b3b10f4e1"
+        }
+      ]
+    },
+    {
+      "legacyHash": "2266fc0dfe824f24",
+      "records": [
+        {
+          "path": ".totem/rules/mig-2266fc0d-static-named-import-totem-barrel.rule.yaml",
+          "ruleId": "c16cbd890dc398ea",
+          "contentHash": "ca75db207fdda13d9c7f0a8ae9dda203ba9f3862d23002007668ebe1aebe99cf"
+        }
+      ]
+    },
+    {
+      "legacyHash": "87aff037d7de47a7",
+      "records": [
+        {
+          "path": ".totem/rules/mig-87aff037-fail-open-catch-ban.rule.yaml",
+          "ruleId": "2095327f92d4e486",
+          "contentHash": "3f02c7592f9ef172de7c96cbce9701c20071f358dc4e833c91bc224f7a1c678f"
+        }
+      ]
+    },
+    {
+      "legacyHash": "a1fd35ee696110b0",
+      "records": [
+        {
+          "path": ".totem/rules/mig-a1fd35ee-dynamic-import-in-utility-layers.rule.yaml",
+          "ruleId": "417585267efbff76",
+          "contentHash": "59afb3a8bc65f8d5769b7fc3de3d5f4ab47ef4c3aff80863eaa4d0eb3df220bc"
+        }
+      ]
+    },
+    {
+      "legacyHash": "61bb8b8b88d2ecab",
+      "records": [
+        {
+          "path": ".totem/rules/mig-61bb8b8b-json-parse-as-cast.rule.yaml",
+          "ruleId": "fe1af7a58d7469b8",
+          "contentHash": "e450387696366eaef6373a18b0c0e752051f18ea0548c60e2f2d6d9145106059"
+        }
+      ]
+    },
+    {
+      "legacyHash": "6ad0d4d5c760a5d6",
+      "records": [
+        {
+          "path": ".totem/rules/mig-6ad0d4d5-marketing-terms-in-docs.rule.yaml",
+          "ruleId": "923841006dd9c024",
+          "contentHash": "8d02df4a292f20ec80f6692834768c569cc21d2bdf7df9878582263e7f264f1e"
+        }
+      ]
+    },
+    {
+      "legacyHash": "1210f02da9f16e5b",
+      "records": [
+        {
+          "path": ".totem/rules/mig-1210f02d-raw-error-throw-in-cli.rule.yaml",
+          "ruleId": "c8442aeefa7b31f0",
+          "contentHash": "447de9d733bbc4443ff2af2b6b96397e3cc754164af776c79ab787aa05cc7c9a"
+        }
+      ]
+    },
+    {
+      "legacyHash": "5afaf8d03f059a41",
+      "records": [
+        {
+          "path": ".totem/rules/mig-5afaf8d0-emoji-in-docs.rule.yaml",
+          "ruleId": "6e5b15c0ae7e2285",
+          "contentHash": "630f454e83386358134c71ae8c08991d3df72dff1320922aa26b85a7cd38d0fe"
+        }
+      ]
+    },
+    {
+      "legacyHash": "329479bf34f8816f",
+      "records": [
+        {
+          "path": ".totem/rules/mig-329479bf-zod-string-array-min1.rule.yaml",
+          "ruleId": "c032b983b4d29fd5",
+          "contentHash": "d78453b7edf7b4445159fe4953854fceb460560838de698d83cb84d6db1a5c49"
+        }
+      ]
+    },
+    {
+      "legacyHash": "06282905d061ca34",
+      "records": [
+        {
+          "path": ".totem/rules/mig-06282905-execsync-call-js.rule.yaml",
+          "ruleId": "908731caddc8d971",
+          "contentHash": "c25a67dc422b44a887fb94f9a1d277c8d7ccc686b0bfb55ff57dd6e3976e3386"
+        },
+        {
+          "path": ".totem/rules/mig-06282905-execsync-call.rule.yaml",
+          "ruleId": "69318419666ecf84",
+          "contentHash": "6f36a91cdc24ac7d9bcd80d377973721d2558f8d4800c7193b28873ef0c852af"
+        }
+      ]
+    },
+    {
+      "legacyHash": "f202f65f8a198f18",
+      "records": [
+        {
+          "path": ".totem/rules/mig-f202f65f-bare-rejects-tothrow.rule.yaml",
+          "ruleId": "ddfb040050ecb87b",
+          "contentHash": "270c8c8e0f7c3396c9d1e6d5310f8712abef67fc6af0ec127f25f4b8959fbc7d"
+        }
+      ]
+    },
+    {
+      "legacyHash": "240f19cae3e56b10",
+      "records": [
+        {
+          "path": ".totem/rules/mig-240f19ca-process-exit-call-js.rule.yaml",
+          "ruleId": "cb8d7b8c83a6da34",
+          "contentHash": "9599a6ea509f2cf24abef377601a3bf228ebb403bd76cabd4741d45cafbfe0b3"
+        },
+        {
+          "path": ".totem/rules/mig-240f19ca-process-exit-call.rule.yaml",
+          "ruleId": "feae92d194761d35",
+          "contentHash": "75dbc0527008edb0dd14bd6d6633df08e885fa1298d731bd353933daa2fc4c74"
+        }
+      ]
+    },
+    {
+      "legacyHash": "fe1b4123aa1f679c",
+      "records": [
+        {
+          "path": ".totem/rules/mig-fe1b4123-regex-escape-missing-hyphen.rule.yaml",
+          "ruleId": "fdf4498c9a60c3ea",
+          "contentHash": "09492f5ebe374904210326a402a1caa3e491098f3433848f9711b4b6a73f9029"
+        }
+      ]
+    },
+    {
+      "legacyHash": "6f362fa28abcf94a",
+      "records": [
+        {
+          "path": ".totem/rules/mig-6f362fa2-json-parse-as-cast-core.rule.yaml",
+          "ruleId": "bbb8e021107952c2",
+          "contentHash": "ae7a706e61eaf287b9b1aa99bbf1760b2669ad326c12648ebcf07ec83d707ba5"
+        }
+      ]
+    },
+    {
+      "legacyHash": "089b0c628b330c16",
+      "records": [
+        {
+          "path": ".totem/rules/mig-089b0c62-console-any-method-core.rule.yaml",
+          "ruleId": "8105649922aa9f94",
+          "contentHash": "6df97e1f83dadcedfd652fa811f3776acbf9b5e34e29726b37e176677e46286d"
+        }
+      ]
+    },
+    {
+      "legacyHash": "427481b534fe3392",
+      "records": [
+        {
+          "path": ".totem/rules/mig-427481b5-console-warn-core.rule.yaml",
+          "ruleId": "855f6265161cedad",
+          "contentHash": "a8a393a4f48766f3d467e9b7e0434fb3fd9308b0bc7014236d5659c09b19d107"
+        }
+      ]
+    },
+    {
+      "legacyHash": "5c5fe9d9060bcb6d",
+      "records": [
+        {
+          "path": ".totem/rules/mig-5c5fe9d9-console-warn-core-onwarn.rule.yaml",
+          "ruleId": "cef25cef740d5aed",
+          "contentHash": "f6f9dee3efb1420010ebebdaac756b10b160ea4b079aa120e4240989b94f2cfc"
+        }
+      ]
+    },
+    {
+      "legacyHash": "fb008f77a1f5a49a",
+      "records": [
+        {
+          "path": ".totem/rules/mig-fb008f77-spawnsync-string-command-js.rule.yaml",
+          "ruleId": "984df9c5d2c5df3d",
+          "contentHash": "24b90962e8c7f261faf0083d2ace7ea32504811e0f95e00b8849d2b696b47aa7"
+        },
+        {
+          "path": ".totem/rules/mig-fb008f77-spawnsync-string-command.rule.yaml",
+          "ruleId": "0c9df29370111b53",
+          "contentHash": "d3c43a5b4d06dce41c66c960eb2ab9512b7b55844b1551fbc3e3a7c4f0385d30"
+        }
+      ]
+    },
+    {
+      "legacyHash": "d487264e210913a4",
+      "records": [
+        {
+          "path": ".totem/rules/mig-d487264e-try-expect-fail-catch.rule.yaml",
+          "ruleId": "669b403b4f828ae0",
+          "contentHash": "542b5ab3c4d5f5e34210981daf989a2d88c03df8527c0d8c17cc3596587dd27f"
+        }
+      ]
+    },
+    {
+      "legacyHash": "4ae0a01d912f8742",
+      "records": [
+        {
+          "path": ".totem/rules/mig-4ae0a01d-bare-totem-extract-alias.rule.yaml",
+          "ruleId": "312894688c167fb2",
+          "contentHash": "4db41f89184a0de54845eaf521a21ecc15685762b786e103a436cd3d79bcb6fe"
+        }
+      ]
+    },
+    {
+      "legacyHash": "63680bf329d59167",
+      "records": [
+        {
+          "path": ".totem/rules/mig-63680bf3-process-exit-cli.rule.yaml",
+          "ruleId": "56ee97cba0818c90",
+          "contentHash": "6ecfcfeb8acc922786aa415d5b36eda1c4c29e7e79bce9531e4d9b8f796fa337"
+        }
+      ]
+    }
+  ],
+  "archive": [
+    {
+      "lessonHash": "6b2b62eb1e8693fc",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 79 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22)"
+    },
+    {
+      "lessonHash": "b237bcf3b52381b1",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 408 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22)"
+    },
+    {
+      "lessonHash": "be74c55caa9fd60c",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 421 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22)"
+    },
+    {
+      "lessonHash": "d940b2c9ffe92e99",
+      "reason": "dead-matcher",
+      "ref": "operations/310-curation/ledger.ndjson rank 444 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22)"
+    },
+    {
+      "lessonHash": "048fab1fa662ff2b",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 54 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "064f35405ec02082",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 60 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "09381ca14ca4fefb",
+      "reason": "noise",
+      "ref": "operations/310-curation/ledger.ndjson rank 64 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "09e5e0cd5f6570a9",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 11 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "09ee37252a814a09",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 32 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "0e01112d5f18ffde",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 18 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "116cb61013507812",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 67 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "160c27838292f3b8",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 111 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "16104b4e57be1a86",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 195 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "16d10e42d757de78",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 4 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "173334b199f58fb2",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 121 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "1961a27872269f47",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 116 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "1bd32906a5067397",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 23 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "1d5fc28021149af7",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 26 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "1fabab6c62da10f3",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 62 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "22286088db9261b7",
+      "reason": "noise",
+      "ref": "operations/310-curation/ledger.ndjson rank 107 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "222bf3404fc312a5",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 38 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "24d9d2ae3496bd95",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 16 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "282e9e8692be3edb",
+      "reason": "noise",
+      "ref": "operations/310-curation/ledger.ndjson rank 110 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "2d364f952af19014",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 74 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "2f79cfc7e0e9be4d",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 131 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "32ec1dbb9c6dbd48",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 58 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "342da7b7572c73b6",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 94 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "358177469f11c272",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 65 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "367a1810d56305e2",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 104 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "39d1fe87f77ae756",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 122 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "3bb96274aa5aca93",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 36 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "3be97bd9147e7562",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 95 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "3c28f6dd8d7b5057",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 132 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "3fbc54c3aecebea4",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 71 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "4142b945b49cd292",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 144 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "416abe85c2dbb918",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 133 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22)"
+    },
+    {
+      "lessonHash": "49dd9e4fd02d692b",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 105 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "47bb1b64971e9b8e",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 63 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "483a8df7ee034ba1",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 85 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "4cd80a665e3600e3",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 112 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "4d63af6631a6ddf7",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 56 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "4eb175f98879dbb8",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 12 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "52ae1e9b8ef65385",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 96 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "552463b93f1de66a",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 135 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "55c903bd228e0b5c",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 57 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "58a6bb25a38e97f8",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 88 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "5d34d2d1c2262add",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 97 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "618b403fd53ed144",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 175 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "63c83c4071355e7f",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 142 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "64f919558d8ad756",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 17 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "668bc7d7f676f7e7",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 45 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "6a33b023bcc54ce5",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 34 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "71ed3149ac1eec94",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 108 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "72faae2c99fddc2c",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 21 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "727d38db984ede54",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 33 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "705c32d4820d1089",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 80 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "519f78bddf405bdc",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 118 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "73b64c966fa24c74",
+      "reason": "duplicate-of (duplicate-of 427481b534fe3392)",
+      "ref": "operations/310-curation/ledger.ndjson rank 183 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23)"
+    },
+    {
+      "lessonHash": "bb937a42753289f1",
+      "reason": "duplicate-of (duplicate-of 06282905d061ca34)",
+      "ref": "operations/310-curation/ledger.ndjson rank 101 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "c2d9e854231b78f1",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 162 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "c50c864f581bf664",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 52 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "c5192192d2ea5219",
+      "reason": "superseded-by (superseded-by 487a0a23bd24569d)",
+      "ref": "operations/310-curation/ledger.ndjson rank 37 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ca66f0cecc30bd82",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 27 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "cae08ccccd834eb3",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 166 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "cb854652a786c5d7",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 40 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "cccd9363ba696d53",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 30 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "cda917668c8a5a13",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 98 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d245b21395563e6f",
+      "reason": "superseded-by (superseded-by 0615c43eb5a9d0e8)",
+      "ref": "operations/310-curation/ledger.ndjson rank 19 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d2f88c8528441069",
+      "reason": "noise",
+      "ref": "operations/310-curation/ledger.ndjson rank 76 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d34c5054f0dd908a",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 8 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d44d72c6da1d1b63",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 28 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d5faa14cbb8b50fb",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 5 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d69a222f170d6d3d",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 29 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d6f2b8a2f3884537",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 143 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "d96a2530c4b89b18",
+      "reason": "duplicate-of (duplicate-of 089b0c628b330c16)",
+      "ref": "operations/310-curation/ledger.ndjson rank 186 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "db517157e7186b1b",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 22 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "dc1c9e7628b48abd",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 106 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "e40e3d7e3c5f415e",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 178 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "e9c1203c7cbfdaa4",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 139 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ebe45f00165fbe3f",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 9 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ef18015c7c3d78ae",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 194 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ef234a2995c76963",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 109 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "efdd9300f140a783",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 3 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f14881a4daf28160",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 163 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f30c7342898d4b9b",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 51 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f42b4b19c3f1550e",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 48 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f593e850e04fb06a",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 86 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f5a75d98a43e0721",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 169 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f63fb71078ad33f5",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 134 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f6739f9ad356067a",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 50 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f6f89826aab037c4",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 91 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "f89eb73710c99352",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 31 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "faeae7a9e495c145",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 72 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "fd5d891750fca994",
+      "reason": "superseded-by (superseded-by 4f283f5495489a19)",
+      "ref": "operations/310-curation/ledger.ndjson rank 39 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ff5e30cff913a43d",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 102 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "7d299a9fd0e81e3b",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 20 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "7d43877c48f594d2",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 13 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "80bd76a4c4651b81",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 172 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "840a9ee072046158",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 14 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "84ed6335dd7419b9",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 15 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "86fe2def3463b256",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 89 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "88e0983646beac29",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 145 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "89b94dbfedfae9ab",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 92 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "8d1dac1c425ef60d",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 24 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "9081a2fbc7e22475",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 90 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "94936169ab6f8d32",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 66 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "95853f31ce75d3ed",
+      "reason": "semantic-analysis-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 53 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "983059ed53d609cb",
+      "reason": "noise",
+      "ref": "operations/310-curation/ledger.ndjson rank 7 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "9921090ca5c814b4",
+      "reason": "superseded-by (superseded-by 089b0c628b330c16)",
+      "ref": "operations/310-curation/ledger.ndjson rank 184 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "9a07a44b866ae7fd",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 136 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "a5da42b79e964510",
+      "reason": "duplicate-of (duplicate-of 089b0c628b330c16)",
+      "ref": "operations/310-curation/ledger.ndjson rank 185 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "aa7a588d48e74503",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 1 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "aae3ebe04aaaa7af",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 99 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "acceb9eab34245a5",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 177 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "ad9d255418e9b886",
+      "reason": "superseded-by (superseded-by 089b0c628b330c16)",
+      "ref": "operations/310-curation/ledger.ndjson rank 124 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b09d772ba3876976",
+      "reason": "dead-matcher",
+      "ref": "operations/310-curation/ledger.ndjson rank 190 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b0cf9dc0da0f6fc1",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 42 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b0efed256c09e58a",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 165 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b2d2d79023432eb9",
+      "reason": "context-required",
+      "ref": "operations/310-curation/ledger.ndjson rank 61 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b38ceed379b48068",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 171 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b5fc107250c40193",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 93 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b63eb4992616cf41",
+      "reason": "superseded-by (superseded-by 089b0c628b330c16)",
+      "ref": "operations/310-curation/ledger.ndjson rank 120 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b7c10dc591a0ffd7",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 43 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b91f62c888f98d75",
+      "reason": "fires-on-remedy",
+      "ref": "operations/310-curation/ledger.ndjson rank 81 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    },
+    {
+      "lessonHash": "b973609688ec2888",
+      "reason": "no-intent",
+      "ref": "operations/310-curation/ledger.ndjson rank 6 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24)"
+    }
+  ]
+}

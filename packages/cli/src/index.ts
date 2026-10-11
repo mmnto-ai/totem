@@ -2417,6 +2417,28 @@ ruleCmd
     }
   });
 
+ruleCmd
+  .command('serve <input>')
+  .description(
+    'Lower the records an input file names into compiled-rules.json, dispose of their legacy rows as the file says, refresh the manifest and regenerate the exports (mmnto-ai/totem#3036)',
+  )
+  .option('--dry-run', 'Read everything, write nothing, print the row-level report')
+  .option(
+    '--refresh',
+    'Rewrite the manifest from the serving file as it is and regenerate every export, even when no row changes; the deliberate repair after an interrupted run or an out-of-band edit',
+  )
+  .action(async (input: string, opts: { dryRun?: boolean; refresh?: boolean }) => {
+    try {
+      const { ruleServeCommand } = await import('./commands/rule-serve.js');
+      await ruleServeCommand(input, opts);
+    } catch (err) {
+      handleError(err);
+      // handleError is `: never` (process.exit); the throw satisfies the Tenet-4
+      // catch-body fail-loud ast-grep rule (see `rule promote` above).
+      throw err;
+    }
+  });
+
 // ─── Proposal noun-verb subcommands ─────────────────────
 // mmnto/totem#1288: scaffold NNN-prefixed proposals in <strategy>/proposals/active/.
 const proposalCmd = program.command('proposal').description('Manage governance proposals');

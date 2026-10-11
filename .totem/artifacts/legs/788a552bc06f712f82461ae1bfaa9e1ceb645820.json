@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "788a552bc06f712f82461ae1bfaa9e1ceb645820",
+  "readAt": "2026-10-11T21:07:57.325Z",
+  "findings": [
+    {
+      "id": "3036-B2-R7-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 251,
+      "claim": "--no-replace-objects does not disable a grafts file. git 2.55 still honours <GIT_DIR>/info/grafts; it prints a deprecation hint but uses it. A graft that re-parents the re-admission commit onto a backdated copy with the same tree makes blame attribute the line to the copy, so a re-admission committed after asOf passes the stale-floor refusal (serving-plan.ts:529). It is the same class of local state as replace refs and blame.ignoreRevsFile. git rev-parse --is-shallow-repository does not detect a grafts file. Measured neutraliser: GIT_GRAFT_FILE set to a non-existent path in the blame call's env restores the real attribution.",
+      "counterexample": "r6-x, re-admission X 2f8be022 (committed 2026-10-11T09:30:00Z), backdated copy Y a4d2841a (2026-10-02, same tree, parent X^). Replace ref deleted. Wrote X Y to .git/info/grafts. Plain blame: committer-time 1790899200. git --no-replace-objects blame: also 1790899200. rule serve floor.json --dry-run passes. GIT_GRAFT_FILE=<non-existent> git --no-replace-objects blame: committer-time 1791711000 (the real instant). With the grafts file present, rev-parse --git-path info/grafts returns .git/info/grafts and --is-shallow-repository returns false. FOLDED at 51368af4: the blame call runs with GIT_GRAFT_FILE set to a never-created path under os.tmpdir() for that call's environment only (serving-writer.ts:235, :271), the comment names the three neutralised states, a test writes the graft with a precondition on the re-dated blame and asserts the refusal with the real instant and nothing written (serving-writer.test.ts:988, RED on 788a552b), the changeset gains the clause; the r6-x graft probe re-run against the built CLI refuses naming 2f8be022 at 2026-10-11T09:30:00.000Z."
+    }
+  ],
+  "folded": [
+    "3036-B2-R7-F1"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 0 MINOR, 0 QUESTION over the narrow seventh read 7fa29ec2..788a552b on B2 (the serving writer) under mmnto-ai/totem#3036: the replace-ref fold works and the one material finding, a legacy grafts file re-dating the blame, was folded at 51368af4. Held at source by the leg: the blame argument list puts --no-replace-objects before the subcommand (serving-writer.ts:251); the :955 test's precondition proves a plain blame re-dated, so it fails without the flag; the r6-x replace probe refuses with the real instant; GIT_REPLACE_REF_BASE and an env-injected blame.ignoreRevsFile both re-date a plain blame and the CLI refuses both; with GIT_NO_REPLACE_OBJECTS, alias.blame and core.hooksPath the CLI also refuses and no hook fired; cli suite green (194 files)."
+}

@@ -301,8 +301,13 @@ function resolveRecordPath(totemDir: string, reference: string): string {
   return resolved;
 }
 
-/** Read + parse one referenced record. A `RuleRecordParseError` propagates UNWRAPPED (§ Failure modes). */
-function ingestRecord(totemDir: string, reference: string): IngestedRecord {
+/**
+ * Read + parse one referenced record. A `RuleRecordParseError` propagates UNWRAPPED (§ Failure modes).
+ *
+ * Exported so the serving writer (`serving-writer.ts`, mmnto-ai/totem#3036) checks a
+ * record against its ledger row with THIS content hash, not a second implementation.
+ */
+export function ingestRecord(totemDir: string, reference: string): IngestedRecord {
   const file = resolveRecordPath(totemDir, reference);
   let raw: string;
   try {

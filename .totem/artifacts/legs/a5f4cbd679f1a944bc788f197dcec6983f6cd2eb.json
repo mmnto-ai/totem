@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "a5f4cbd679f1a944bc788f197dcec6983f6cd2eb",
+  "readAt": "2026-10-11T19:18:24.067Z",
+  "findings": [
+    {
+      "id": "3036-B2-R2-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 262,
+      "claim": "On this repository the export freshness check is never a fixpoint. A target counts as stale when its current text differs at all from the raw render. But both export targets are inside prettier's scope: .prettierignore lists neither .github/copilot-instructions.md nor .junie/**, format:check is prettier --check . (package.json:13), and the committed exports are prettier-formatted. So after the repo's own format pass, every rule serve with the same input rewrites both exports as 'stale', which then fails format:check, which the next pnpm format undoes again. The changeset's 'a second run with the same input on a complete result writes nothing' holds only where the exports are byte-equal to the render. Before the fold, a no-change run wrote nothing, so this is new.",
+      "counterexample": "r2-a (fresh mkws copy). Run 1 wrote all four files. Run 2: 'No change ... nothing was written'. Then ran the worktree's prettier on the two exports and committed: 148 lines changed per file. Run 3: 'No row changed; refreshed .github/copilot-instructions.md (copilot, 1974 lessons, stale), .junie/skills/totem-rules/rules.md (junie, 1974 lessons, stale).' FOLDED at ac301ec7 (the seat reversed its F1(b) ruling): the export comparison is removed; a changing run writes every export target after the serving file and the manifest (serving-writer.ts:285, :339); a no-change run compares no export and writes nothing (:320); the prettier probe re-run on a fresh copy: run 3 wrote nothing, all four files identical in hash and mtime."
+    },
+    {
+      "id": "3036-B2-R2-F2",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/serving-writer.ts",
+      "line": 266,
+      "claim": "The no-change manifest arm, which carries out ruling F1(b), accepts ANY output_hash drift: the plan treats carried rows as untouched, so an out-of-band edit to a carried row leaves plan.changed false, the manifest is marked stale, and it is rewritten with the edited file's hash. verify-manifest's integrity FAIL ('compiled-rules.json was modified outside totem compile') is turned into a PASS, and the report says only 'refreshed the manifest (stale)'. verify-manifest.ts:206's hint sends a user with a record-managed file straight to totem rule serve, so the recovery the verifier recommends launders the edit. The writer cannot tell an interrupted serve from a hand edit, because carried rows serialize the same either way.",
+      "counterexample": "r2-a, settled state. Changed the first pattern value in .totem/compiled-rules.json to a tampered string. verify-manifest: 'Output hash mismatch' then FAIL. rule serve floor.json: '[Serve] No row changed; refreshed the manifest (stale).' verify-manifest: PASS. The edit kept. FOLDED at ac301ec7: an integrity check before planning refuses a serving file whose hash is not the manifest's output_hash with the new code SERVING_MANIFEST_STALE (serving-writer.ts:268, errors.ts:72), nothing written, the hint naming the two deliberate repairs; the new flag --refresh (index.ts:2427) skips that refusal and forces the manifest and every export write; the no-change freshness arm is removed, a no-change run writes nothing with one notice when the records attestation is stale (:291, :320); the tamper probe re-run refuses real and dry with nothing written, --refresh rewrites the manifest and both exports with the serving file untouched, verify-manifest then passes and the next plain run writes nothing."
+    },
+    {
+      "id": "3036-B2-R2-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 374,
+      "claim": "The F5 refusal covers only status 'archived'. A named record row with status 'untested-against-codebase' or 'pending-verification', both inactive under isActiveCompiledRule (compiler.ts:189-194), is still replaced and re-activated. The lowering never sets status, so the replace drops it. It is visible as changedFields ['status'] but not refused.",
+      "counterexample": "planprobe (h) on the served ws-real rows. Lowered row 2570e3a8e586b038 set to each status in turn. Result: 'OK changed=true ... lowered:replace:1', status after = active. FOLDED at ac301ec7: any named record row isActiveCompiledRule treats as inactive refuses, the message naming the status and any archivedReason (serving-plan.ts:407); probe (h) re-run refuses both statuses; tests at serving-plan.test.ts:742 and :756."
+    },
+    {
+      "id": "3036-B2-R2-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 36,
+      "claim": "STRICT_INSTANT_RE checks digit shape only, and V8's Date.parse rolls impossible calendar values over instead of refusing them. A strict-form asOf or authoredAt with an impossible date or hour is accepted as a different instant and written verbatim into compiledAt/createdAt and compiled_at. The result is deterministic (UTC), so this is not the round-1 timezone hazard. It is low-reach, because the floor file is written by tooling.",
+      "counterexample": "strict.mjs against the core build: parseStrictInstant('2026-02-30T00:00:00Z') = 2026-03-02T00:00:00.000Z; '2026-10-10T24:00:00Z' = 2026-10-11T00:00:00.000Z; parseAuthoredAt('2026-02-30') = 2026-03-02T00:00:00.000Z. FOLDED at ac301ec7: a component round-trip check (serving-plan.ts:45, :63, :79) refuses an impossible value naming the written string; strict.mjs re-run refuses the three cases and the month-13 case and accepts a real leap day; test at serving-plan.test.ts:770."
+    },
+    {
+      "id": "3036-B2-R2-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 251,
+      "claim": "The added '(key order)' result of differingFields, reported when a replace differs only in key order, has no test: grep finds no '(key order)' in serving-plan.test.ts or serving-writer.test.ts. The behaviour itself is correct when probed.",
+      "counterexample": "planprobe (i): lowered row 2570e3a8e586b038 with its keys reversed. Result: action replace, changedFields ['(key order)']. No test asserts it. FOLDED at ac301ec7: the test at serving-plan.test.ts:791 asserts it."
+    }
+  ],
+  "folded": [
+    "3036-B2-R2-F1",
+    "3036-B2-R2-F2",
+    "3036-B2-R2-F3",
+    "3036-B2-R2-F4",
+    "3036-B2-R2-F5"
+  ],
+  "verdict": "0 BLOCKING, 2 MATERIAL, 3 MINOR, 0 QUESTION over the scoped re-read of the fold a697e4cf..a5f4cbd6 on B2 (the serving writer) under mmnto-ai/totem#3036: nine of the eleven first-read folds held and the write path is fixed; the two material findings were introduced by the seat's own no-change freshness ruling (an export comparison that never settles under prettier; a manifest refresh that launders out-of-band edits), and every finding of this read was folded at ac301ec7, where the ruling was reversed toward the design's letter with an explicit --refresh repair and an integrity refusal. Held at source by the leg: preflight before the first write (serving-writer.ts:257-261); the sentinel probe on a fresh copy refuses with nothing written, dry and real; the three freshness arms measured with real runs and pinned by tests that fail on the pre-fold code; compile and archive render-all-first disclosed; the F6 forms against the file of record and the live ledger; the F2 gate both arms; F3, F4, F5, F7, F8, F9, F10 and F11 verified by probe and assertion; suites green at a5f4cbd6 (cli 194 files, core 163)."
+}

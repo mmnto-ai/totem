@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "96c228ba9d0d438f8243e9ae121297f2a5bcb536",
+  "readAt": "2026-10-11T20:23:18.554Z",
+  "findings": [
+    {
+      "id": "3036-B2-R5-F1",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 264,
+      "claim": "Route two ('remove the row and drop its record from floor[]') gives an off-schema input when the entry has only one record. floor[].records has min(1) (ServingInputSchema), so the user has to drop the whole entry, not 'its record'. That is 24 of the 28 floor records in the file of record. The run is refused with a schema message rather than the intended outcome, and nothing is written. Wording only.",
+      "counterexample": "route5.mjs: 'archive entry0 route two literal: input off-schema (records min 1)', and the same under remove. For the two-record entry, dropping one record passes (changed=false). FOLDED at 30ee33d0 (wording only, by the seat): both hint arms say 'drop its record from its floor[] entry (the whole entry when that record is its only one)'; the changeset's refusals clause says the same; the planner and writer test files pass (48 and 44 tests)."
+    },
+    {
+      "id": "3036-B2-R5-F2",
+      "severity": "MINOR",
+      "file": ".changeset/rule-serve-3036.md",
+      "line": 10,
+      "claim": "The archive-disposition hint and the changeset now send the user to totem lesson archive <legacyHash>. That verb rewrites the whole serving file through CompiledRulesFileSchema (lesson.ts:173 loads through the loader; :236-238 write back JSON.stringify(rulesFile)), which re-orders keys on many untouched rows. This is pre-existing behaviour of lesson archive, and it breaks nothing: the record rows survive, verify-manifest passes, and the next serve writes nothing. But it is diff churn the serve path itself never produces (the brief 1.3 byte-identity guarantee), and neither the hint nor the changeset mentions it.",
+      "counterexample": "r5-a (fresh copy, served, committed): totem lesson archive 427c97fb0063f0cb --reason 'probe re-reason' gives 104 insertions and 104 deletions in compiled-rules.json. rowdiff.mjs: 513 rows before and after, 28 record rows before and after, 33 rows changed only in key order, 1 row changed in content (the target). The next rule serve: 'No row changes; nothing was written.' verify-manifest: PASS. FOLDED at 30ee33d0 (wording only, by the seat): the archive hint's lesson-archive clause and the changeset's refusals clause both say that the verb rewrites the serving file through its schema and re-orders keys on untouched rows, which the serve path never does."
+    }
+  ],
+  "folded": [
+    "3036-B2-R5-F1",
+    "3036-B2-R5-F2"
+  ],
+  "verdict": "0 BLOCKING, 0 MATERIAL, 2 MINOR, 0 QUESTION over the narrow fifth read of the final fold 18e1e313..96c228ba on B2 (the serving writer) under mmnto-ai/totem#3036: the fold is correct, following the new hint's route one works under both dispositions, the manifest is back to create-only mode, nothing changes what a run writes or refuses beyond that mode, and the leg named the chain CONVERGED under the no-unmeasured-claim rule; both minors are hint and changeset wording, folded at 30ee33d0 by the seat without a behaviour change. Held at source by the leg: inactiveRowHint (serving-plan.ts:264, :388, :439) followed literally works under archive and remove for one- and two-record entries (lowered at 198, 91, 488 of 489, 84); lesson archive re-reasons the legacy row with verify-manifest PASS and a no-op serve after; serving-writer.test.ts:711 fails on the old hint text; writeCompileManifest passes mode only on create (compile-manifest.ts:462), checked by the spy test on both arms, with no other change; changeset and doc clauses match the code; suites green (cli 194 files, core 4822 passed, 6 skipped)."
+}

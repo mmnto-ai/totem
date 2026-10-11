@@ -4,13 +4,16 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { hashLesson } from './compiler.js';
 import type { ParsedLesson } from './drift-detector.js';
 import {
   exportLessons,
+  exportLessonsForRules,
   formatLessonsAsMarkdown,
   injectSentinelBlock,
   SENTINEL_END,
   SENTINEL_START,
+  writeRenderedExport,
 } from './exporter.js';
 import { cleanTmpDir } from './test-utils.js';
 
@@ -119,6 +122,13 @@ describe('injectSentinelBlock', () => {
     expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
   });
 
+  it('throws on a lone end sentinel instead of appending after it (mmnto-ai/totem#3036)', () => {
+    const existing = `# Config\n\nold block\n${SENTINEL_END}\ntrailer\n`;
+    expect(() => injectSentinelBlock(existing, 'NEW')).toThrow(
+      `Found ${SENTINEL_END} without matching ${SENTINEL_START}.`,
+    );
+  });
+
   it('throws when end sentinel appears before start sentinel', () => {
     const existing = `${SENTINEL_END}\nstuff\n${SENTINEL_START}`;
     expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
@@ -191,5 +201,79 @@ describe('exportLessons', () => {
     // Should only have one set of sentinels
     const startCount = content.split(SENTINEL_START).length - 1;
     expect(startCount).toBe(1);
+  });
+});
+
+// ─── exportLessonsForRules (the shared helper, mmnto-ai/totem#3036 B2) ─────
+
+describe('exportLessonsForRules', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-export-rules-'));
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  it('writeRenderedExport writes over an existing target by rename (new identity, no temp left), bytes unchanged', () => {
+    const target = path.join(tmpDir, 'out.md');
+    fs.writeFileSync(target, 'old\n', 'utf-8');
+    const inoBefore = fs.statSync(target, { bigint: true }).ino;
+    const content = `# Hand-written\n\n${SENTINEL_START}\nblock\n${SENTINEL_END}\n`;
+    writeRenderedExport({ absPath: target, content });
+    expect(fs.statSync(target, { bigint: true }).ino).not.toBe(inoBefore);
+    expect(fs.readdirSync(tmpDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+    expect(fs.readFileSync(target, 'utf-8')).toBe(content);
+    // A nested target's directory is still created.
+    writeRenderedExport({ absPath: path.join(tmpDir, 'a', 'b', 'c.md'), content });
+    expect(fs.readFileSync(path.join(tmpDir, 'a', 'b', 'c.md'), 'utf-8')).toBe(content);
+  });
+
+  it('exportLessons (the compile and archive path) refuses a target holding only an end marker, and leaves it untouched', () => {
+    const target = path.join(tmpDir, 'lone-end.md');
+    const text = `# Rules\n\nold block\n${SENTINEL_END}\n`;
+    fs.writeFileSync(target, text, 'utf-8');
+    expect(() => exportLessons(makeLessons(1), target)).toThrow(
+      `Found ${SENTINEL_END} without matching ${SENTINEL_START}.`,
+    );
+    expect(fs.readFileSync(target, 'utf-8')).toBe(text);
+    expect(() => exportLessonsForRules(makeLessons(1), [], { t: 'lone-end.md' }, tmpDir)).toThrow(
+      /Export target lone-end\.md \(t\)/,
+    );
+    expect(fs.readFileSync(target, 'utf-8')).toBe(text);
+  });
+
+  it('drops untested lessons, annotates archived ones, and writes every configured target', () => {
+    const lessons = makeLessons(3);
+    const h = lessons.map((l) => hashLesson(l.heading, l.body));
+    const rules = [
+      { lessonHash: h[0]!, status: 'untested-against-codebase' as const },
+      {
+        lessonHash: h[1]!,
+        status: 'archived' as const,
+        archivedReason: 'served by record 1111111111111111',
+      },
+      { lessonHash: h[2]! },
+    ];
+    const results = exportLessonsForRules(lessons, rules, { a: 'A.md', b: 'nested/B.md' }, tmpDir);
+
+    expect(results).toEqual([
+      { name: 'a', filePath: 'A.md', count: 2 },
+      { name: 'b', filePath: 'nested/B.md', count: 2 },
+    ]);
+    const a = fs.readFileSync(path.join(tmpDir, 'A.md'), 'utf-8');
+    expect(a).not.toContain('Lesson 1');
+    expect(a).toContain('_(archived: served by record 1111111111111111)_');
+    expect(a).toContain('Lesson 3');
+    // The helper is byte-identical to the direct call it replaces.
+    const direct = path.join(tmpDir, 'direct.md');
+    exportLessons(
+      [lessons[1]!, lessons[2]!],
+      direct,
+      new Map([[h[1]!, 'served by record 1111111111111111']]),
+    );
+    expect(a).toBe(fs.readFileSync(direct, 'utf-8'));
   });
 });
