@@ -25,8 +25,9 @@
 // manifest, then export targets) can leave a later step unwritten. `--refresh`
 // is its repair.
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import {
@@ -229,6 +230,9 @@ export function readLedgerAdmissions(
   }
 
   const rel = path.relative(root, ledgerPath).split(path.sep).join('/');
+  // A grafts path that cannot exist (random suffix, never created): with it,
+  // the blame below reads no grafts file at all.
+  const noGraftFile = path.join(os.tmpdir(), `totem-no-grafts-${randomUUID()}`);
   for (const [id, line] of lineOf) {
     let porcelain: string;
     try {
@@ -245,6 +249,11 @@ export function readLedgerAdmissions(
       //   included). An ignore list hands a re-admitted row's line to an
       //   EARLIER commit. Measured on git 2.55: `-c blame.ignoreRevsFile=` does
       //   NOT clear a list set in the global config; the command-line option does.
+      // - A legacy grafts file (`<GIT_DIR>/info/grafts`): `GIT_GRAFT_FILE` set,
+      //   in this call's environment only, to a path that does not exist. A
+      //   graft re-parenting the re-admission onto a backdated same-tree copy
+      //   makes blame find the line already in that copy, and
+      //   `--no-replace-objects` does not disable grafts (measured).
       porcelain = safeExec(
         'git',
         [
@@ -259,6 +268,7 @@ export function readLedgerAdmissions(
         ],
         {
           cwd: root,
+          env: { ...process.env, GIT_GRAFT_FILE: noGraftFile },
         },
       );
     } catch (err) {

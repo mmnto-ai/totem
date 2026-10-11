@@ -985,6 +985,42 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     );
   });
 
+  it('dates the re-admission by its own commit even when a grafts file re-parents it onto a backdated copy', async () => {
+    readmitRecordA();
+    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
+    // A backdated copy with the same tree, and a legacy grafts file making the
+    // copy the re-admission's parent: blame then finds the line already in the
+    // (backdated) parent.
+    const copy = git(
+      ws.root,
+      ['commit-tree', `${sha}^{tree}`, '-p', `${sha}^`, '-m', 'backdated copy'],
+      '2026-10-02T00:00:00Z',
+    );
+    const grafts = path.resolve(ws.root, git(ws.root, ['rev-parse', '--git-path', 'info/grafts']));
+    fs.mkdirSync(path.dirname(grafts), { recursive: true });
+    fs.writeFileSync(grafts, `${sha} ${copy}\n`, 'utf-8');
+    // Precondition: a plain blame (replace refs off, as the writer runs it)
+    // reports the copy's backdated committer-time.
+    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
+    const plain = git(ws.root, [
+      '--no-replace-objects',
+      'blame',
+      '--line-porcelain',
+      '-L',
+      `${ledgerLines},${ledgerLines}`,
+      '--',
+      '.totem/spine/authoring-ledger.ndjson',
+    ]);
+    expect(/^committer-time (\d+)$/m.exec(plain)?.[1]).toBe(
+      String(Date.parse('2026-10-02T00:00:00Z') / 1000),
+    );
+    backdate(ws);
+    await expectRefusal(
+      'SERVING_FLOOR_STALE',
+      `admitted at 2026-10-11T09:30:00.000Z by commit ${sha}, after the serving input's asOf`,
+    );
+  });
+
   it('passes the same re-admission when its commit is before asOf', async () => {
     readmitRecordA();
     commitAll(ws.root, '2026-10-10T02:18:12Z', 're-admit before asOf');
