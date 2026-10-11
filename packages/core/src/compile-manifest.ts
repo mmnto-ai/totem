@@ -455,7 +455,11 @@ const FILE_MODE = 0o644;
 export function writeCompileManifest(manifestPath: string, manifest: CompileManifest): void {
   const json = JSON.stringify(manifest, null, 2) + '\n';
   try {
-    writeFileAtomicSync(manifestPath, json, { mode: FILE_MODE });
+    // Create-only mode, as the old in-place write had: an existing manifest
+    // keeps its own permission bits (the helper's default); a new one is
+    // created at FILE_MODE. Residual: the helper applies an explicit mode
+    // exactly, so a new manifest is 0644 rather than 0644 masked by the umask.
+    writeFileAtomicSync(manifestPath, json, fs.existsSync(manifestPath) ? {} : { mode: FILE_MODE });
   } catch (err) {
     throw new TotemParseError(
       `Cannot write compile manifest: ${getErrorMessage(err)}`,

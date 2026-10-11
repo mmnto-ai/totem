@@ -676,11 +676,19 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     await expect(verifyManifestCommand()).resolves.toBeUndefined();
   });
 
-  it('inactive record row, route two: remove the row and drop its record from floor[], the --refresh run passes with no row for that rule (bot round)', async () => {
+  it('inactive record row, route two under archive: the hint names totem lesson archive; the --refresh run passes with no row for that rule and the legacy row still names it (bot round, R4-F1/F3)', async () => {
     await runServingWriter({ inputPath: ws.inputPath });
     const file = JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as {
       rules: Array<Record<string, unknown>>;
     };
+    file.rules.find((r) => r['lessonHash'] === RULE_A)!['status'] = 'untested-against-codebase';
+    fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    resealManifest(ws);
+    await expectRefusal(
+      'SERVING_INPUT_INVALID',
+      'is inactive (status: untested-against-codebase)',
+      `re-run with --refresh, then run \`totem lesson archive ${HASH_A} --reason <why>\``,
+    );
     file.rules = file.rules.filter((r) => r['lessonHash'] !== RULE_A);
     fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
     writeInput(ws, {
@@ -691,6 +699,62 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     expect(result.written).toBe(true);
     expect(readRows(ws).map((r) => r['lessonHash'])).not.toContain(RULE_A);
     expect(readRows(ws).map((r) => r['lessonHash'])).toContain(RULE_N);
+    // The legacy row keeps its served-by reason, naming the removed record,
+    // until `totem lesson archive` re-reasons it.
+    expect(readRows(ws).find((r) => r['lessonHash'] === HASH_A)).toMatchObject({
+      status: 'archived',
+      archivedReason: `served by record ${RULE_A}`,
+    });
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('inactive record row, route one under remove: removing the row alone is refused on the absent legacy hash; dropping legacyHash too lowers the record at the end (R4-F1)', async () => {
+    const rws = setupWorkspace(fs.mkdtempSync(path.join(tmpDir, 'remove-')), 'remove');
+    process.chdir(rws.root);
+    await runServingWriter({ inputPath: rws.inputPath });
+    const file = JSON.parse(fs.readFileSync(rws.rulesPath, 'utf-8')) as {
+      rules: Array<Record<string, unknown>>;
+    };
+    expect(file.rules.map((r) => r['lessonHash'])).not.toContain(HASH_A);
+    const row = file.rules.find((r) => r['lessonHash'] === RULE_A)!;
+    row['status'] = 'archived';
+    row['archivedReason'] = 'silenced by a human';
+    fs.writeFileSync(rws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    resealManifest(rws);
+    await expect(runServingWriter({ inputPath: rws.inputPath })).rejects.toMatchObject({
+      code: 'SERVING_INPUT_INVALID',
+      recoveryHint: expect.stringContaining(
+        `remove the inactive row from compiled-rules.json deliberately AND drop legacyHash ${HASH_A} from its floor[] entry`,
+      ),
+    });
+    // Removing the row alone (the archive-route wording) is refused: the legacy
+    // row is gone under remove, so the absent-legacy gate fires.
+    file.rules = file.rules.filter((r) => r['lessonHash'] !== RULE_A);
+    fs.writeFileSync(rws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    await expect(
+      runServingWriter({ inputPath: rws.inputPath, refresh: true }),
+    ).rejects.toMatchObject({
+      code: 'SERVING_INPUT_INVALID',
+      message: expect.stringContaining(
+        `floor names legacyHash ${HASH_A}, which is not in the serving file`,
+      ),
+    });
+    // The hint followed: legacyHash dropped from the entry too.
+    writeInput(rws, {
+      ...rws.input,
+      floor: [
+        { records: [{ path: REC_A_REF, ruleId: RULE_A }] },
+        { records: [{ path: REC_N_REF, ruleId: RULE_N }] },
+      ],
+    });
+    const result = await runServingWriter({ inputPath: rws.inputPath, refresh: true });
+    expect(result.written).toBe(true);
+    expect(result.report.rows).toContainEqual(
+      expect.objectContaining({ class: 'lowered', action: 'insert', lessonHash: RULE_A }),
+    );
+    const ids = readRows(rws).map((r) => r['lessonHash']);
+    expect(ids[ids.length - 1]).toBe(RULE_A);
+    expect(readRows(rws).find((r) => r['lessonHash'] === RULE_A)!['status']).toBeUndefined();
     await expect(verifyManifestCommand()).resolves.toBeUndefined();
   });
 

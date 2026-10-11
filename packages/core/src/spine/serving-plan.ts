@@ -252,6 +252,30 @@ function inputInvalid(message: string, hint = 'Fix the input file, then re-run.'
   return new TotemError('SERVING_INPUT_INVALID', `${message}; nothing was written.`, hint);
 }
 
+/**
+ * The two routes out of an inactive named record row, for the input's
+ * disposition. Both pass through `--refresh`, because each edits the serving
+ * file by hand and the integrity check refuses a hand-edited file otherwise.
+ * Under `remove` the legacy row is already gone, so route one must also drop
+ * `legacyHash` from the entry, or the absent-legacy refusal fires. Under
+ * `archive` route two leaves the legacy row's `served by record` reason naming
+ * a row that is gone until `totem lesson archive` re-reasons it.
+ */
+function inactiveRowHint(
+  disposition: ServingInput['dispositions']['legacyRow'],
+  legacyHash: string | undefined,
+): string {
+  const integrity = '(the integrity check refuses a hand-edited file otherwise)';
+  if (disposition === 'remove' && legacyHash !== undefined) {
+    return `To serve it again, remove the inactive row from compiled-rules.json deliberately AND drop legacyHash ${legacyHash} from its floor[] entry (the legacy row is already gone, so the entry lowers where its remaining rows sit, or at the end of the file), then re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from floor[], then re-run with --refresh.`;
+  }
+  const reReason =
+    disposition === 'archive' && legacyHash !== undefined
+      ? `, then run \`totem lesson archive ${legacyHash} --reason <why>\` so the legacy row's "served by record" reason no longer names a row that is gone`
+      : '';
+  return `To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh ${integrity}. To keep it out, remove the row and drop its record from floor[], re-run with --refresh${reReason}.`;
+}
+
 function servedByReason(ruleIds: readonly string[]): string {
   return ruleIds.length === 1
     ? `served by record ${ruleIds[0]}`
@@ -343,6 +367,8 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
   // ── The input's own consistency ──
   const floorLegacy = new Set<string>();
   const floorRuleIds = new Set<string>();
+  /** The floor entry's legacy hash for each of its record ruleIds (entries with one). */
+  const legacyByRuleId = new Map<string, string>();
   for (const entry of input.floor) {
     if (entry.legacyHash !== undefined) {
       if (floorLegacy.has(entry.legacyHash)) {
@@ -359,6 +385,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         );
       }
       floorRuleIds.add(rec.ruleId);
+      if (entry.legacyHash !== undefined) legacyByRuleId.set(rec.ruleId, entry.legacyHash);
     }
   }
   const archiveByHash = new Map<string, ServingInput['archive'][number]>();
@@ -409,7 +436,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         existing.archivedReason !== undefined ? `, archivedReason: ${existing.archivedReason}` : '';
       throw inputInvalid(
         `The serving file's record row ${id}, which the floor names, is inactive (status: ${existing.status}${reason}); serving it again would re-activate it`,
-        'To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh (the integrity check refuses a hand-edited file otherwise). To keep it inactive, remove the row and drop its record from floor[], then re-run with --refresh.',
+        inactiveRowHint(input.dispositions.legacyRow, legacyByRuleId.get(id)),
       );
     }
   }
