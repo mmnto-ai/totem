@@ -629,6 +629,71 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     expectUnchanged(ws, before);
   });
 
+  it('refuses an export target holding only an end marker, dry and real, before any write (bot round, lone end sentinel)', async () => {
+    fs.writeFileSync(
+      ws.exportPath,
+      '# Hand-written\n\nold block\n<!-- totem:generated:end -->\n',
+      'utf-8',
+    );
+    backdate(ws);
+    const before = snapshot(ws);
+    const lone =
+      /Export target EXPORTED\.md \(agents\): Found <!-- totem:generated:end --> without matching <!-- totem:generated:start -->/;
+    await expect(runServingWriter({ inputPath: ws.inputPath, dryRun: true })).rejects.toMatchObject(
+      { code: 'PARSE_FAILED', message: expect.stringMatching(lone) },
+    );
+    expectUnchanged(ws, before);
+    await expectRefusal('PARSE_FAILED', lone);
+  });
+
+  it('inactive record row, route one: remove it by hand, the plain run refuses on integrity, --refresh lowers it afresh (bot round)', async () => {
+    await runServingWriter({ inputPath: ws.inputPath });
+    const file = JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as {
+      rules: Array<Record<string, unknown>>;
+    };
+    const row = file.rules.find((r) => r['lessonHash'] === RULE_A)!;
+    row['status'] = 'archived';
+    row['archivedReason'] = 'silenced by a human';
+    fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    resealManifest(ws);
+    await expectRefusal(
+      'SERVING_INPUT_INVALID',
+      `${RULE_A}, which the floor names, is inactive (status: archived, archivedReason: silenced by a human)`,
+      'To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh',
+    );
+    // Route one: the row removed by hand.
+    file.rules = file.rules.filter((r) => r['lessonHash'] !== RULE_A);
+    fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    await expectRefusal('SERVING_MANIFEST_STALE', 'does not match its manifest');
+    const result = await runServingWriter({ inputPath: ws.inputPath, refresh: true });
+    expect(result.written).toBe(true);
+    expect(result.report.rows).toContainEqual(
+      expect.objectContaining({ class: 'lowered', action: 'insert', lessonHash: RULE_A }),
+    );
+    const ids = readRows(ws).map((r) => r['lessonHash']);
+    expect(ids.indexOf(RULE_A)).toBe(ids.indexOf(HASH_A) + 1);
+    expect(readRows(ws).find((r) => r['lessonHash'] === RULE_A)!['status']).toBeUndefined();
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
+  it('inactive record row, route two: remove the row and drop its record from floor[], the --refresh run passes with no row for that rule (bot round)', async () => {
+    await runServingWriter({ inputPath: ws.inputPath });
+    const file = JSON.parse(fs.readFileSync(ws.rulesPath, 'utf-8')) as {
+      rules: Array<Record<string, unknown>>;
+    };
+    file.rules = file.rules.filter((r) => r['lessonHash'] !== RULE_A);
+    fs.writeFileSync(ws.rulesPath, JSON.stringify(file, null, 2) + '\n', 'utf-8');
+    writeInput(ws, {
+      ...ws.input,
+      floor: [{ records: [{ path: REC_N_REF, ruleId: RULE_N }] }],
+    });
+    const result = await runServingWriter({ inputPath: ws.inputPath, refresh: true });
+    expect(result.written).toBe(true);
+    expect(readRows(ws).map((r) => r['lessonHash'])).not.toContain(RULE_A);
+    expect(readRows(ws).map((r) => r['lessonHash'])).toContain(RULE_N);
+    await expect(verifyManifestCommand()).resolves.toBeUndefined();
+  });
+
   it('refuses a missing input file', async () => {
     fs.rmSync(ws.inputPath);
     await expectRefusal('SERVING_INPUT_INVALID', 'serve-input.json');

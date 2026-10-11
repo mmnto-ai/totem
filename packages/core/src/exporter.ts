@@ -5,6 +5,7 @@ import { hashLesson } from './compiler.js';
 import type { CompiledRule } from './compiler-schema.js';
 import type { ParsedLesson } from './drift-detector.js';
 import { TotemParseError } from './errors.js';
+import { writeFileAtomicSync } from './fs-atomic.js';
 
 // ─── Constants ─────────────────────────────────────────
 
@@ -63,7 +64,10 @@ export function formatLessonsAsMarkdown(
  * Inject a generated block between sentinel markers in file content.
  * - If sentinels exist: replaces content between them (inclusive)
  * - If no sentinels: appends block to end of file
- * - If mismatched sentinels (start without end): throws error
+ * - If mismatched sentinels throws `TotemParseError`: a start without an end,
+ *   an end without a start (appending there would leave the stray end marker
+ *   before the new block, a malformed file the next run refuses;
+ *   mmnto-ai/totem#3036), or an end before a start
  */
 export function injectSentinelBlock(existingContent: string, generatedBlock: string): string {
   const startIdx = existingContent.indexOf(SENTINEL_START);
@@ -73,6 +77,13 @@ export function injectSentinelBlock(existingContent: string, generatedBlock: str
     throw new TotemParseError(
       `Found ${SENTINEL_START} without matching ${SENTINEL_END}.`,
       'Fix the target file manually — ensure both sentinel markers are present and correctly ordered.',
+    );
+  }
+
+  if (startIdx === -1 && endIdx !== -1) {
+    throw new TotemParseError(
+      `Found ${SENTINEL_END} without matching ${SENTINEL_START}.`,
+      'Fix the target file manually — ensure both sentinel markers are present and correctly ordered, or remove the stray end marker.',
     );
   }
 
@@ -111,12 +122,10 @@ export function exportLessons(
   targetPath: string,
   archivedReasonByHash?: ReadonlyMap<string, string>,
 ): void {
-  const dir = path.dirname(targetPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  // Render (and check the sentinels) first, then write through the one
+  // atomic writer, which creates the directory.
   const { content } = renderLessonExport(lessons, targetPath, archivedReasonByHash);
-  fs.writeFileSync(targetPath, content, 'utf-8');
+  writeRenderedExport({ absPath: targetPath, content });
 }
 
 /**
@@ -233,11 +242,15 @@ export function renderLessonExportsForRules(
   });
 }
 
-/** Write one rendered export target (creating its directory), as {@link exportLessons} does. */
+/**
+ * Write one rendered export target (creating its directory). Atomic
+ * (same-volume temp plus rename, the Tenet 4 user-file corollary,
+ * mmnto-ai/totem#3036): a crash mid-write leaves the old target, never a torn one.
+ */
 export function writeRenderedExport(r: Pick<RenderedExport, 'absPath' | 'content'>): void {
   const dir = path.dirname(r.absPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(r.absPath, r.content, 'utf-8');
+  writeFileAtomicSync(r.absPath, r.content);
 }

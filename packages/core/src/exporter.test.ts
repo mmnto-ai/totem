@@ -13,6 +13,7 @@ import {
   injectSentinelBlock,
   SENTINEL_END,
   SENTINEL_START,
+  writeRenderedExport,
 } from './exporter.js';
 import { cleanTmpDir } from './test-utils.js';
 
@@ -121,6 +122,13 @@ describe('injectSentinelBlock', () => {
     expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
   });
 
+  it('throws on a lone end sentinel instead of appending after it (mmnto-ai/totem#3036)', () => {
+    const existing = `# Config\n\nold block\n${SENTINEL_END}\ntrailer\n`;
+    expect(() => injectSentinelBlock(existing, 'NEW')).toThrow(
+      `Found ${SENTINEL_END} without matching ${SENTINEL_START}.`,
+    );
+  });
+
   it('throws when end sentinel appears before start sentinel', () => {
     const existing = `${SENTINEL_END}\nstuff\n${SENTINEL_START}`;
     expect(() => injectSentinelBlock(existing, 'NEW')).toThrow('[Totem Error]');
@@ -207,6 +215,34 @@ describe('exportLessonsForRules', () => {
 
   afterEach(() => {
     cleanTmpDir(tmpDir);
+  });
+
+  it('writeRenderedExport writes over an existing target by rename (new identity, no temp left), bytes unchanged', () => {
+    const target = path.join(tmpDir, 'out.md');
+    fs.writeFileSync(target, 'old\n', 'utf-8');
+    const inoBefore = fs.statSync(target, { bigint: true }).ino;
+    const content = `# Hand-written\n\n${SENTINEL_START}\nblock\n${SENTINEL_END}\n`;
+    writeRenderedExport({ absPath: target, content });
+    expect(fs.statSync(target, { bigint: true }).ino).not.toBe(inoBefore);
+    expect(fs.readdirSync(tmpDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+    expect(fs.readFileSync(target, 'utf-8')).toBe(content);
+    // A nested target's directory is still created.
+    writeRenderedExport({ absPath: path.join(tmpDir, 'a', 'b', 'c.md'), content });
+    expect(fs.readFileSync(path.join(tmpDir, 'a', 'b', 'c.md'), 'utf-8')).toBe(content);
+  });
+
+  it('exportLessons (the compile and archive path) refuses a target holding only an end marker, and leaves it untouched', () => {
+    const target = path.join(tmpDir, 'lone-end.md');
+    const text = `# Rules\n\nold block\n${SENTINEL_END}\n`;
+    fs.writeFileSync(target, text, 'utf-8');
+    expect(() => exportLessons(makeLessons(1), target)).toThrow(
+      `Found ${SENTINEL_END} without matching ${SENTINEL_START}.`,
+    );
+    expect(fs.readFileSync(target, 'utf-8')).toBe(text);
+    expect(() => exportLessonsForRules(makeLessons(1), [], { t: 'lone-end.md' }, tmpDir)).toThrow(
+      /Export target lone-end\.md \(t\)/,
+    );
+    expect(fs.readFileSync(target, 'utf-8')).toBe(text);
   });
 
   it('drops untested lessons, annotates archived ones, and writes every configured target', () => {

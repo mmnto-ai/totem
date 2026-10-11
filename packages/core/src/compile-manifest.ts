@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { getErrorMessage, TotemParseError } from './errors.js';
+import { writeFileAtomicSync } from './fs-atomic.js';
 import { readJsonSafe } from './sys/fs.js';
 import { listTrackedFilesUnder } from './sys/git.js';
 
@@ -446,11 +447,15 @@ const FILE_MODE = 0o644;
 
 /**
  * Write a compile manifest to disk as pretty-printed JSON.
+ *
+ * Atomic (same-volume temp plus rename, the Tenet 4 user-file corollary,
+ * mmnto-ai/totem#3036): a crash or a full disk mid-write leaves the old
+ * manifest, never a torn one.
  */
 export function writeCompileManifest(manifestPath: string, manifest: CompileManifest): void {
   const json = JSON.stringify(manifest, null, 2) + '\n';
   try {
-    fs.writeFileSync(manifestPath, json, { encoding: 'utf-8', mode: FILE_MODE });
+    writeFileAtomicSync(manifestPath, json, { mode: FILE_MODE });
   } catch (err) {
     throw new TotemParseError(
       `Cannot write compile manifest: ${getErrorMessage(err)}`,

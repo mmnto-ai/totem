@@ -519,6 +519,24 @@ describe('writeCompileManifest + readCompileManifest', () => {
     cleanTmpDir(tmpDir);
   });
 
+  it('writes over an existing manifest by rename (new file identity, no temp left) with the same bytes as before (mmnto-ai/totem#3036)', () => {
+    const manifestPath = path.join(tmpDir, 'compile-manifest.json');
+    fs.writeFileSync(manifestPath, '{"old": true}\n', 'utf-8');
+    const inoBefore = fs.statSync(manifestPath, { bigint: true }).ino;
+    const manifest: CompileManifest = {
+      compiled_at: '2026-10-10T02:18:13.000Z',
+      model: 'm',
+      input_hash: 'a'.repeat(64),
+      output_hash: 'b'.repeat(64),
+      rule_count: 1,
+    };
+    writeCompileManifest(manifestPath, manifest);
+    expect(fs.statSync(manifestPath, { bigint: true }).ino).not.toBe(inoBefore);
+    expect(fs.readdirSync(tmpDir).filter((n) => n.endsWith('.tmp'))).toEqual([]);
+    // The bytes the plain writeFileSync writer produced.
+    expect(fs.readFileSync(manifestPath, 'utf-8')).toBe(JSON.stringify(manifest, null, 2) + '\n');
+  });
+
   it('roundtrips a valid manifest', () => {
     const manifestPath = path.join(tmpDir, 'compile-manifest.json');
     const manifest: CompileManifest = {

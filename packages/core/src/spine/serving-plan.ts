@@ -409,7 +409,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
         existing.archivedReason !== undefined ? `, archivedReason: ${existing.archivedReason}` : '';
       throw inputInvalid(
         `The serving file's record row ${id}, which the floor names, is inactive (status: ${existing.status}${reason}); serving it again would re-activate it`,
-        'Remove the inactive row from compiled-rules.json deliberately, or drop its record from floor[], then re-run.',
+        'To serve it again, remove the inactive row from compiled-rules.json deliberately and re-run with --refresh (the integrity check refuses a hand-edited file otherwise). To keep it inactive, remove the row and drop its record from floor[], then re-run with --refresh.',
       );
     }
   }
@@ -529,7 +529,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
     if (e.legacyHash !== undefined) entryByLegacy.set(e.legacyHash, e);
     for (const id of e.ruleIds) entryByRuleId.set(id, e);
   }
-  const anchoredAtExisting = new Set<FloorEntryPlan>(
+  const entriesWithExistingRows = new Set<FloorEntryPlan>(
     entries.filter((e) => e.ruleIds.some((id) => rowByHash.has(id))),
   );
   const emitted = new Set<FloorEntryPlan>();
@@ -596,7 +596,7 @@ export function planServingWrite(args: PlanServingWriteArgs): ServingPlan {
           ruleId: ids,
         });
       }
-      if (!anchoredAtExisting.has(legacyOf)) emitLowered(legacyOf);
+      if (!entriesWithExistingRows.has(legacyOf)) emitLowered(legacyOf);
       continue;
     }
     const loweredOf = entryByRuleId.get(row.lessonHash);
