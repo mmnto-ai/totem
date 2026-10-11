@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "18e1e313217331bfae3b53ec5efca424fd5d266d",
+  "readAt": "2026-10-11T20:12:52.922Z",
+  "findings": [
+    {
+      "id": "3036-B2-R4-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/spine/serving-plan.ts",
+      "line": 412,
+      "claim": "The inactive-row hint offers two 'complete routes', but route one ('remove the inactive row ... and re-run with --refresh') is refused again under dispositions.legacyRow 'remove'. A remove-served file no longer has the legacy row. With the record row removed by hand, not every ruleId of the entry is present, so the F2 gate (the servedUnderRemove check at the absent-legacy refusal, line ~479) throws 'floor names legacyHash X, which is not in the serving file'. The same happens for a two-record entry with one row removed. Brief 1.4 requires every refusal to carry a true recovery hint. The route-one test (serving-writer.test.ts:649) runs only the archive disposition, so the gap is untested.",
+      "counterexample": "route.mjs against the fold's core build, with the base rows from rules-before.json. Under remove: the archived row refuses with the hint; then 'remove route one (row removed, same input) THROW SERVING_INPUT_INVALID ... floor names legacyHash 427c97fb0063f0cb, which is not in the serving file'; and 'remove two-record route one THROW ... legacyHash 71935fe9a742137b'. Under archive, route one passes (lowered at 198, right after 427c97fb0063f0cb). FOLDED at 96c228ba: the hint is built per disposition (serving-plan.ts:264, called at :439); under remove route one also drops the entry's legacyHash and the entry lowers where its remaining rows sit or at the end; a route-one test under remove runs end to end (serving-writer.test.ts:711, RED on the old text); route-hint.mjs following the new text lowers at 488 of 489 and, for the two-record case, keeps the present row and re-lowers the removed one beside it."
+    },
+    {
+      "id": "3036-B2-R4-F2",
+      "severity": "MINOR",
+      "file": ".changeset/rule-serve-3036.md",
+      "line": 10,
+      "claim": "Two disclosure gaps in the changeset. (a) It says writeCompileManifest keeps 'the same bytes and mode and the same error on failure'. The bytes and the wrapper error are the same, but on POSIX the mode is not: FILE_MODE is now passed explicitly, and an explicit mode overrides an existing target's mode on every write (fs-atomic.ts:7-10, :103). The old writeFileSync applied its mode only when creating the file, so a 0600 or 0664 manifest is now reset to 0644. The atomic writer also adds failure conditions the old one did not have: a parent directory the process cannot write, and a target owned by another uid or gid (fs-atomic.ts:58-61). On POSIX it now also replaces a read-only export file, where an in-place write used to fail. (b) 'each file is whole, old or new, never torn' leaves out the declared leftover: after a hard kill, a <target>.<pid>-<uuid8>.tmp sibling can remain (fs-atomic.ts:62-64), neither reaped (reapOrphanedTempFiles only covers <totemDir>/temp, utils.ts:224) nor gitignored. Read from the code; mode handling cannot be measured on this win32 machine.",
+      "counterexample": "FOLDED at 96c228ba: writeCompileManifest passes mode FILE_MODE only when the manifest does not exist, else no mode, so an existing manifest keeps its bits (compile-manifest.ts:462; an options-spy test on both arms on every platform, and a POSIX-only bits test skipped on win32); the changeset carries the added failure conditions, the read-only replacement on POSIX, the residual that a new manifest is exactly 0644 rather than umask-masked, and the hard-kill .tmp sibling that nothing reaps or ignores; the two overstated sentences are gone."
+    },
+    {
+      "id": "3036-B2-R4-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/serving-writer.test.ts",
+      "line": 679,
+      "claim": "Route two ('keep it out: remove the row and drop its record from floor[]') under archive leaves the legacy lesson row archived with the now-false reason 'served by record <removed ruleId>'. That reason is carried untouched and rendered into the exports. For a two-record entry with one record dropped, the reason still names both. The route-two test does not assert the legacy row's state. Wording and provenance only; nothing a run writes or refuses changes.",
+      "counterexample": "route.mjs, archive route two (row removed, entry dropped): changed=false, legacy row 'archived / served by record 2570e3a8e586b038' with that row gone. FOLDED at 96c228ba: under archive the hint's route two ends with totem lesson archive <legacyHash> --reason <why>, which refreshes the reason and the manifest; the route-two test asserts the legacy row's state and that the hint names the verb; the changeset's refusals bullet says the reason keeps naming the removed record until that re-reasoning."
+    }
+  ],
+  "folded": [
+    "3036-B2-R4-F1",
+    "3036-B2-R4-F2",
+    "3036-B2-R4-F3"
+  ],
+  "verdict": "0 BLOCKING, 1 MATERIAL, 2 MINOR, 0 QUESTION over the scoped fourth read of the bot-round fold e49d36fc..18e1e313 on B2 (the serving writer) under mmnto-ai/totem#3036: the four bot-round folds hold (the rename; atomic manifest and export writes at their one home; the lone-end refusal; the inactive-row hint), nothing changes what a run writes or refuses, the material finding is a false recovery hint under the remove disposition, and all three findings were folded at 96c228ba. Held at source by the leg: writeCompileManifest keeps its error wrapping and writes through writeFileAtomicSync (compile-manifest.ts:455-466); writeRenderedExport is atomic, keeps the mkdir, preserves an existing target's mode and symlink identity (fs-atomic.ts:73-76); injectSentinelBlock's only caller is renderLessonExport and no repository file carries a lone end marker; exportLessons renders before writing with unchanged output for empty and missing targets; route one under archive lowers afresh right after the legacy row without the unnamed-row refusal; each RED-bearing test fails with its fold reverted; a fresh-copy run, a no-op re-run, verify-manifest PASS, the lone-end refusal with nothing written, no .tmp left; suites green (cli 194 files, core 163)."
+}
