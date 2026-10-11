@@ -232,17 +232,31 @@ export function readLedgerAdmissions(
   for (const [id, line] of lineOf) {
     let porcelain: string;
     try {
-      // `--ignore-revs-file=` (an empty file name clears the list read so far,
-      // `blame.ignoreRevsFile` from any config included): a user or repository
-      // config that ignores revisions in blame would hand a re-admitted row's
-      // line to an EARLIER commit and so date the admission before the floor's
-      // asOf. The admission instant must be the commit that actually introduced
-      // the line, whatever the local blame preferences. Measured on git 2.55:
-      // `-c blame.ignoreRevsFile=` does NOT clear a list set in the global
-      // config; the command-line option does.
+      // The admission instant must be the commit that actually introduced the
+      // line, whatever local state says otherwise. Two local states are
+      // neutralised, each of which would date a re-admission BEFORE the floor's
+      // asOf and so let the stale-floor refusal pass it:
+      // - Replace refs: `--no-replace-objects` (a global option, before the
+      //   subcommand). By default blame follows `refs/replace/*`, so a local
+      //   `git replace <commit> <backdated copy>` makes it report the ORIGINAL
+      //   sha with the REPLACEMENT's committer-time.
+      // - The blame ignore list: `--ignore-revs-file=` (an empty file name
+      //   clears the list read so far, `blame.ignoreRevsFile` from any config
+      //   included). An ignore list hands a re-admitted row's line to an
+      //   EARLIER commit. Measured on git 2.55: `-c blame.ignoreRevsFile=` does
+      //   NOT clear a list set in the global config; the command-line option does.
       porcelain = safeExec(
         'git',
-        ['blame', '--ignore-revs-file=', '--line-porcelain', '-L', `${line},${line}`, '--', rel],
+        [
+          '--no-replace-objects',
+          'blame',
+          '--ignore-revs-file=',
+          '--line-porcelain',
+          '-L',
+          `${line},${line}`,
+          '--',
+          rel,
+        ],
         {
           cwd: root,
         },

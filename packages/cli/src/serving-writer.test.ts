@@ -952,6 +952,39 @@ describe('runServingWriter refusals: each fires before any write (mmnto-ai/totem
     await expectRefusal('SERVING_FLOOR_STALE', `by commit ${sha}, after the serving input's asOf`);
   });
 
+  it('dates the re-admission by its own commit even when a replace ref points it at a backdated copy', async () => {
+    readmitRecordA();
+    const sha = commitAll(ws.root, AFTER_AS_OF, 're-admit after asOf');
+    // A backdated copy of the same commit (same tree, same parent), and a local
+    // replace ref pointing the re-admission at it.
+    const copy = git(
+      ws.root,
+      ['commit-tree', `${sha}^{tree}`, '-p', `${sha}^`, '-m', 'backdated copy'],
+      '2026-10-02T00:00:00Z',
+    );
+    git(ws.root, ['replace', sha, copy]);
+    // Precondition: a plain blame follows the replace ref, reporting the
+    // ORIGINAL sha with the copy's (backdated) committer-time.
+    const ledgerLines = fs.readFileSync(ws.ledgerPath, 'utf-8').trimEnd().split('\n').length;
+    const plain = git(ws.root, [
+      'blame',
+      '--line-porcelain',
+      '-L',
+      `${ledgerLines},${ledgerLines}`,
+      '--',
+      '.totem/spine/authoring-ledger.ndjson',
+    ]);
+    expect(plain.startsWith(sha)).toBe(true);
+    expect(/^committer-time (\d+)$/m.exec(plain)?.[1]).toBe(
+      String(Date.parse('2026-10-02T00:00:00Z') / 1000),
+    );
+    backdate(ws);
+    await expectRefusal(
+      'SERVING_FLOOR_STALE',
+      `admitted at 2026-10-11T09:30:00.000Z by commit ${sha}, after the serving input's asOf`,
+    );
+  });
+
   it('passes the same re-admission when its commit is before asOf', async () => {
     readmitRecordA();
     commitAll(ws.root, '2026-10-10T02:18:12Z', 're-admit before asOf');
