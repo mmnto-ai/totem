@@ -404,7 +404,7 @@ function renderRuleProvenanceRatio(rulesPath, onRecordPath = recordPathPredicate
   return `${legacy} of ${data.rules.length}`;
 }
 
-/** RULE_PROVENANCE_RATIO — e.g. `485 of 485`, from .totem/compiled-rules.json. */
+/** RULE_PROVENANCE_RATIO — legacy rows over all rows, e.g. `485 of 513`, from .totem/compiled-rules.json. */
 function RULE_PROVENANCE_RATIO() {
   return renderRuleProvenanceRatio(COMPILED_RULES);
 }
