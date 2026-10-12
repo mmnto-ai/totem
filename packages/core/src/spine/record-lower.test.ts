@@ -41,13 +41,21 @@ import {
 
 const FILE = '.totem/rules/fail-open-catch.rule.yaml';
 /**
- * The size of the shipped legacy corpus. A CONSTANT, not a floor, because the
+ * The size of the shipped corpus. A CONSTANT, not a floor, because the
  * `rule-compilation` freeze means nothing regenerates `.totem/compiled-rules.json`
- * — so this number cannot drift while the freeze stands. When the freeze lifts and
- * the corpus is regenerated or migrated, this updates ONCE, deliberately, and the
- * update is the signal that the corpus moved.
+ * by the legacy compile — so this number cannot drift while the freeze stands. It
+ * updates ONCE per deliberate regeneration, and the update is the signal that the
+ * corpus moved: 485 legacy rows until S6; 513 since the S6 regeneration of
+ * 2026-10-12 (mmnto-ai/totem#3034 step 7), when the gate (5) lift's 24 floor rules
+ * were archived in place and served by 28 record-built rows.
  */
-const SHIPPED_RULE_COUNT = 485;
+const SHIPPED_RULE_COUNT = 513;
+/**
+ * The record-built rows in the shipped corpus: the rows `totem rule serve` lowered
+ * from rule records (the only writer of record rows). Updates with
+ * SHIPPED_RULE_COUNT, deliberately, at every regeneration.
+ */
+const SHIPPED_RECORD_ROW_COUNT = 28;
 /** A well-formed ADR-112 §8 minted id (16 lowercase hex, no collision suffix). */
 const RULE_ID = '0123456789abcdef';
 const NOW = '2026-08-21T00:00:00.000Z';
@@ -128,9 +136,10 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     expect(rawManifest.rules.length).toBe(SHIPPED_RULE_COUNT);
   });
 
-  it('re-validates the shipped 485-rule manifest BYTE-IDENTICALLY under the extended schema', () => {
+  it('re-validates the shipped manifest BYTE-IDENTICALLY under the extended schema', () => {
     // The freeze-compatibility proof (Amendment R11 / § Data model deltas): the
-    // additions are optional, so the frozen corpus parses unchanged — and
+    // additions are optional, so the legacy rows parse unchanged and the record
+    // rows round-trip without a default being added — and
     // "unchanged" is checked on the MANIFEST-HASH basis (canonical, key-sorted),
     // which is the identity that actually matters to `verify-manifest`. A
     // required addition, or one that introduced a default, would move every hash.
@@ -139,18 +148,28 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     expect(canonicalStringify(parsed.rules)).toBe(canonicalStringify(rawManifest.rules));
   });
 
-  it('leaves every legacy rule OUTSIDE the record path — the discriminator cannot flip one', () => {
+  it('keeps every legacy rule OUTSIDE the record path and every record row INSIDE it — the discriminator cannot flip one', () => {
     // The runtime reads field PRESENCE as the record-path discriminator, so this
     // is what makes "legacy rules keep their matching behaviour byte-for-byte" a
-    // fact rather than an intention. If a future writer ever puts one of these
-    // fields on a mined rule, this fails before the matcher silently changes.
+    // fact rather than an intention. Since the S6 regeneration the corpus holds
+    // both kinds: the rows carrying a record field are exactly the ones the
+    // predicate puts on the record path, there are SHIPPED_RECORD_ROW_COUNT of
+    // them, and every other row is a mined rule with no record field. If a
+    // future writer ever puts one of these fields on a mined rule, or lowers a
+    // row the predicate does not recognise, this fails before the matcher
+    // silently changes.
     expect(rawManifest.rules.length).toBe(SHIPPED_RULE_COUNT);
     const carriers = rawManifest.rules.filter((rule) =>
       RECORD_COMPILED_HOME_KEYS.some((key) => rule[key] !== undefined),
     );
-    expect(carriers).toEqual([]);
+    expect(carriers).toHaveLength(SHIPPED_RECORD_ROW_COUNT);
     const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
-    expect(compiled.filter(isRecordPathRule)).toEqual([]);
+    const recordRows = compiled.filter(isRecordPathRule);
+    expect(recordRows).toHaveLength(SHIPPED_RECORD_ROW_COUNT);
+    expect(new Set(recordRows.map((rule) => rule.lessonHash))).toEqual(
+      new Set(carriers.map((rule) => rule.lessonHash as string)),
+    );
+    expect(compiled.length - recordRows.length).toBe(SHIPPED_RULE_COUNT - SHIPPED_RECORD_ROW_COUNT);
   });
 
   it('keys the record path on `examples` ALONE — a cosmetic field never flips a matcher', () => {
@@ -192,6 +211,12 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     // property of the whole shipped corpus, not a claim about one code path.
     const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
     expect(compiled.length).toBe(SHIPPED_RULE_COUNT);
+    // The sweep is the LEGACY rows': a record row carries `excludeGlobs`, which the
+    // shared predicate honours and the shipped `fileGlobs` alone cannot express, so
+    // "scopes identically to its fileGlobs" is not its contract (the record path's
+    // scope is pinned by its own tests below).
+    const legacy = compiled.filter((rule) => !isRecordPathRule(rule));
+    expect(legacy).toHaveLength(SHIPPED_RULE_COUNT - SHIPPED_RECORD_ROW_COUNT);
     const paths = [
       'a.ts',
       'src/a.ts',
@@ -205,7 +230,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
       'packages/cli/src/index.cjs',
     ];
     let compared = 0;
-    for (const rule of compiled) {
+    for (const rule of legacy) {
       for (const filePath of paths) {
         const shipped =
           rule.fileGlobs && rule.fileGlobs.length > 0
@@ -215,7 +240,7 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
         compared += 1;
       }
     }
-    expect(compared).toBe(compiled.length * paths.length);
+    expect(compared).toBe(legacy.length * paths.length);
   });
 
   it('accepts a rule carrying NONE of the additions (every one is optional)', () => {

@@ -287,8 +287,11 @@ test('RULE_PROVENANCE takes the active predicate as a parameter and derives the 
 // pass here while the artifact says otherwise.
 
 test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fails loud on a hash-less rule', () => {
+  // A record-built row's `lessonHash` is a minted id, not a lesson's hash, so
+  // the numerator is the legacy rows: the split is core's own predicate.
+  const onRecordPath = transforms._recordPathPredicate();
   const hashed = compiledRules.rules.filter(
-    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
+    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0 && !onRecordPath(r),
   ).length;
   assert.equal(transforms.RULE_PROVENANCE_RATIO(), `${hashed} of ${compiledRules.rules.length}`);
   assert.match(transforms.RULE_PROVENANCE_RATIO(), /^\d+ of \d+$/);
@@ -308,6 +311,42 @@ test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fa
     rules: [{ lessonHash: '' }],
   });
   assert.throws(() => transforms._renderRuleProvenanceRatio(emptyHash), /no lessonHash/);
+});
+
+test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a legacy row by the record-path predicate, never by a field of their own', () => {
+  // The predicate is a parameter here, so the fixture decides which row is on
+  // the record path and the transforms cannot mirror a field test of their own.
+  const onRecordPath = (r) => r.record === true;
+  const mixed = writeTmpJson('provenance-mixed.json', {
+    rules: [
+      { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
+      { lessonHash: 'b', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', record: true },
+      { lessonHash: 'c', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', record: true },
+    ],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(mixed, onRecordPath), '1 of 3');
+  const sentence = transforms._renderRuleProvenance(mixed, () => true, onRecordPath);
+  assert.ok(sentence.includes('**3 compiled rules**'), 'total is every row');
+  assert.ok(sentence.includes('1 carry the content hash of the lesson'), 'legacy count named');
+  assert.ok(sentence.includes('2 are lowered from rule records'), 'record count named');
+  assert.ok(sentence.includes('lessonHash'), 'the mechanism is still named');
+  assert.ok(sentence.includes('**1 distinct lessons**'), 'lessons counted over legacy rows only');
+  // With no record row the sentence keeps its one-kind form and the ratio is total-over-total.
+  const legacyOnly = writeTmpJson('provenance-legacy-only.json', {
+    rules: [{ lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' }],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(legacyOnly, onRecordPath), '1 of 1');
+  const oneKind = transforms._renderRuleProvenance(legacyOnly, () => true, onRecordPath);
+  assert.ok(oneKind.includes('every one carries the content hash of the lesson it came from'));
+  assert.ok(!oneKind.includes('lowered from rule records'));
+  // The committed corpus: the ratio's numerator is exactly the rows core puts off the record path.
+  const legacyCommitted = compiledRules.rules.filter(
+    (r) => !transforms._recordPathPredicate()(r),
+  ).length;
+  assert.equal(
+    transforms.RULE_PROVENANCE_RATIO(),
+    `${legacyCommitted} of ${compiledRules.rules.length}`,
+  );
 });
 
 test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical predicate, never a mirrored status test", () => {
@@ -341,7 +380,11 @@ test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical pred
 });
 
 test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {
-  const distinct = new Set(compiledRules.rules.map((r) => r.lessonHash)).size;
+  // Distinct LESSONS: a record-built row's minted id is not one (core's split).
+  const onRecordPath = transforms._recordPathPredicate();
+  const distinct = new Set(
+    compiledRules.rules.filter((r) => !onRecordPath(r)).map((r) => r.lessonHash),
+  ).size;
   const rest = Array.isArray(compiledRules.nonCompilable) ? compiledRules.nonCompilable.length : 0;
   const rounded = Math.round((distinct + rest) / 100) * 100;
   assert.equal(transforms.LESSON_RECORD_COUNT(), `about ${rounded.toLocaleString('en-US')}`);

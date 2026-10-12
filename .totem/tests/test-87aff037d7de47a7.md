@@ -1,5 +1,5 @@
 ---
-rule: 87aff037d7de47a7
+rule: 2095327f92d4e486
 file: packages/src/example.ts
 ---
 
