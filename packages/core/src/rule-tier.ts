@@ -6,9 +6,10 @@
  * no IO.
  *
  * Tier: `ruleClass` is the authoritative hard-tier discriminator when present
- * (spine-minted rules, mmnto-ai/totem#2183). For an un-stamped legacy rule the
- * engine is the fallback: `ast` / `ast-grep` are hard, a `regex` engine or a
- * legacy row with no engine is advisory (mmnto-ai/totem#2181).
+ * (spine-minted rules, mmnto-ai/totem#2183). For an un-stamped rule (every legacy
+ * rule and, since the S6 regeneration, the record-built rows, which carry no
+ * stamp under D3 (a)) the engine is the fallback: `ast` / `ast-grep` are hard, a
+ * `regex` engine or a legacy row with no engine is advisory (mmnto-ai/totem#2181).
  *
  * Blocking: hard tier AND an effective severity of `error`. A missing severity
  * is `error` — the default the linter has always acted on.

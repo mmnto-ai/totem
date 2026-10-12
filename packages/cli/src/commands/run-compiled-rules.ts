@@ -822,7 +822,7 @@ export async function runCompiledRules(
   //
   // mmnto-ai/totem#2183 — the durable provenance/ruleClass marker has now
   // landed, so `ruleClass` is the authoritative hard-tier discriminator when
-  // present (spine-minted rules). `isHardEngine` survives ONLY as the legacy
+  // present (spine-minted rules). `isHardEngine` survives ONLY as the tier
   // fallback for un-stamped rules: a regex engine OR a legacy rule with no
   // `engine` field falls to advisory — matching rule-engine.ts's `r.engine ===
   // 'regex' || !r.engine` convention, where a missing engine is treated AS
@@ -838,7 +838,7 @@ export async function runCompiledRules(
   // `isBlockingRule`, shared with `totem rule list --blocking`, so the two can
   // never disagree about which rules block. `isHardEngine` stays local for the
   // frozen-lesson wording below.
-  const { isBlockingRule } = await import('@mmnto/totem');
+  const { isBlockingRule, isRecordPathRule } = await import('@mmnto/totem');
   const isHardEngine = (v: Violation): boolean =>
     v.rule.engine === 'ast' || v.rule.engine === 'ast-grep';
   const isBlocking = (v: Violation): boolean => isBlockingRule(v.rule);
@@ -849,12 +849,15 @@ export async function runCompiledRules(
   // frozen-lesson wording in BOTH the text note and the SARIF summary, so an
   // ast-warning-only run is never mislabeled as frozen-lesson (gemini/greptile #2182).
   //
-  // mmnto-ai/totem#2183 — restrict to LEGACY (un-stamped) rules: a minted
-  // `ruleClass:'advisory'` rule is a real spine stamp, NOT a frozen-lesson
-  // demotion, so it must not be labeled frozen-lesson in user-facing output
-  // (codex fold 2). `ruleClass == null` is the legacy discriminator.
+  // mmnto-ai/totem#2183 — restrict to LEGACY rules: a minted `ruleClass:'advisory'`
+  // rule is a real spine stamp, NOT a frozen-lesson demotion, so it must not be
+  // labeled frozen-lesson in user-facing output (codex fold 2). Since the S6
+  // regeneration a record-built row is un-stamped too (D3 (a)) but is served by
+  // its record, not demoted under the freeze, so it is excluded by core's own
+  // record-path predicate: `ruleClass == null && !isRecordPathRule` is the legacy
+  // discriminator (falsification read 2 on the regeneration, F11).
   const hasFrozenLessonAdvisory = warnings.some(
-    (v) => v.rule.ruleClass == null && !isHardEngine(v),
+    (v) => v.rule.ruleClass == null && !isRecordPathRule(v.rule) && !isHardEngine(v),
   );
 
   // Convert to unified findings model once (ADR-071)

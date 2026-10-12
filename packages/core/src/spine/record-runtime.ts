@@ -13,12 +13,14 @@
 //                scope containing L.
 //
 // FREEZE / NON-REGRESSION BOUNDARY (binding): the legacy rows (485 of the 513
-// compiled rules in `.totem/compiled-rules.json` since the S6 regeneration of
-// 2026-10-12; the legacy compile stays frozen by `rule-compilation`) must keep
-// matching BYTE-FOR-BYTE. Every function here is therefore gated on
-// `isRecordPathRule`, and the mined-path guard in `record-lower.test.ts` proves
-// no legacy row can reach a record branch and that the rows on the record path
-// are exactly the 28 lowered by `totem rule serve`. Nothing in this module runs `sanitizeFileGlobs`, and it never imports
+// compiled rules in `.totem/compiled-rules.json` since the S6 regeneration, run
+// 2026-10-12 with every lowered row stamped with the input's asOf, 2026-10-10;
+// the legacy compile stays frozen by `rule-compilation`) must keep matching
+// BYTE-FOR-BYTE. Every function here is therefore gated on `isRecordPathRule`,
+// and the mined-path guard in `record-lower.test.ts` proves no legacy row can
+// reach a record branch and that the rows on the record path are exactly the 28
+// rows carrying a record field (the count and the identity; their provenance is
+// the serving writer's record, not the guard's claim). Nothing in this module runs `sanitizeFileGlobs`, and it never imports
 // the frozen actuator.
 //
 // Purity: no IO, no clock, no module state. The `requires` evaluator takes the

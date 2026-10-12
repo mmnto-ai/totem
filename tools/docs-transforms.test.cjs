@@ -360,6 +360,28 @@ test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a l
     require('node:path').join(__dirname, '..', 'packages', 'core', 'dist', 'index.js'),
   );
   assert.equal(transforms._recordPathPredicate(), core.isRecordPathRule);
+  // And the renderers' DEFAULTS behave as core does, not as a look-alike keyed
+  // on another record field (read 2, F12): a row core marks (it carries
+  // `examples`) counts as record-built, a row carrying only `curation` does not.
+  const defaultsFixture = writeTmpJson('provenance-defaults.json', {
+    rules: [
+      { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
+      { lessonHash: 'b', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', examples: [] },
+      {
+        lessonHash: 'c',
+        compiledAt: '2026-04-07T00:00:00.000Z',
+        engine: 'regex',
+        curation: { sourceLesson: 'lesson-a' },
+      },
+    ],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(defaultsFixture), '2 of 3');
+  assert.ok(
+    transforms
+      ._renderRuleProvenance(defaultsFixture, () => true)
+      .includes('2 carry the content hash of the lesson they were compiled from'),
+    'the sentence default splits by core, not by curation',
+  );
   // With no record row the sentence keeps its one-kind form and the ratio is total-over-total.
   const legacyOnly = writeTmpJson('provenance-legacy-only.json', {
     rules: [{ lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' }],
@@ -368,6 +390,14 @@ test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a l
   const oneKind = transforms._renderRuleProvenance(legacyOnly, () => true, onRecordPath);
   assert.ok(oneKind.includes('every one carries the content hash of the lesson it came from'));
   assert.ok(!oneKind.includes('lowered from rule records'));
+  // The legacy-only sentence keeps the same placement of the corpus figures on
+  // the total (read 2, F13).
+  assert.ok(
+    oneKind.includes(
+      '**1 compiled rules** (engines: 1 regex; compiled between 2026-04-06 and 2026-04-06) stand',
+    ),
+    'engine and date figures attach to the total in the one-kind form too',
+  );
   // The committed corpus: the ratio's numerator is exactly the rows core puts off the record path.
   const legacyCommitted = compiledRules.rules.filter(
     (r) => !transforms._recordPathPredicate()(r),
