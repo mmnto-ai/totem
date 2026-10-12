@@ -95,5 +95,5 @@
     "3034-s7-F8",
     "3034-s7-F10"
   ],
-  "verdict": "read 1 on 83760f3a: 0 blocking, 1 material, 6 minor, 3 question; not converged on F1; every finding folded or answered at d3122b77 except F9, disclosed; read 2 re-armed on the fold diff"
+  "verdict": "read 1 on 83760f3a: 0 blocking, 1 material, 7 minor, 2 question as typed here (the leg counted F6's embedded question separately); not converged on F1; every finding folded or answered at d3122b77 except F9, disclosed; read 2 re-armed on the fold diff"
 }
