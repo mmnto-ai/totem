@@ -361,21 +361,35 @@ test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a l
   );
   assert.equal(transforms._recordPathPredicate(), core.isRecordPathRule);
   // And the renderers' DEFAULTS behave as core does, not as a look-alike keyed
-  // on another record field (read 2, F12): a row core marks (it carries
-  // `examples`) counts as record-built, a row carrying only `curation` does not.
+  // on another record field (read 2, F12; the fixture made uneven by read 3,
+  // F17): two rows core marks (they carry `examples`) and one carrying only
+  // `curation` read "2 of 4" through core's key, where a curation-keyed default
+  // would say "3 of 4" and an any-record-field default "1 of 4".
+  const example = [{ bad: 'console.log("x")', good: 'log.info("x")' }];
   const defaultsFixture = writeTmpJson('provenance-defaults.json', {
     rules: [
       { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
-      { lessonHash: 'b', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', examples: [] },
+      {
+        lessonHash: 'b',
+        compiledAt: '2026-10-10T00:00:00.000Z',
+        engine: 'ast-grep',
+        examples: example,
+      },
       {
         lessonHash: 'c',
         compiledAt: '2026-04-07T00:00:00.000Z',
         engine: 'regex',
         curation: { sourceLesson: 'lesson-a' },
       },
+      {
+        lessonHash: 'd',
+        compiledAt: '2026-10-10T00:00:00.000Z',
+        engine: 'regex',
+        examples: example,
+      },
     ],
   });
-  assert.equal(transforms._renderRuleProvenanceRatio(defaultsFixture), '2 of 3');
+  assert.equal(transforms._renderRuleProvenanceRatio(defaultsFixture), '2 of 4');
   assert.ok(
     transforms
       ._renderRuleProvenance(defaultsFixture, () => true)
