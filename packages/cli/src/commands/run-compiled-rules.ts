@@ -827,9 +827,10 @@ export async function runCompiledRules(
   // `engine` field falls to advisory — matching rule-engine.ts's `r.engine ===
   // 'regex' || !r.engine` convention, where a missing engine is treated AS
   // regex (gemini / greptile #2182). The schema ⟺ invariant (compiler-schema.ts)
-  // guarantees a minted rule always carries `ruleClass`, so this proxy branch is
-  // reachable by legacy rules alone — demoted from a legitimacy signal to a
-  // legacy tier-display fallback (#2181 engine-type proxy retired). ADR-110
+  // guarantees a stamped rule always carries `ruleClass`, so this proxy branch is
+  // reachable by un-stamped rules alone: every legacy rule and, since the S6
+  // regeneration (D3 (a): a lowered row carries no stamp), the record-built rows
+  // — demoted from a legitimacy signal to a tier-display fallback (#2181 engine-type proxy retired). ADR-110
   // pre-scoring: no Gate-1 legitimacy decision reads engine-type.
   //
   // mmnto-ai/totem#3035 — the tier + severity gate (hard tier AND error, a

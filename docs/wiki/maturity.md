@@ -32,7 +32,7 @@ Three claims we would rather prove than assert.
 
 <!-- docs RULE_PROVENANCE -->
 
-**513 compiled rules** stand between a banked mistake and its recurrence, and every one names its source: 485 carry the content hash of the lesson they were compiled from (`lessonHash`), and 28 are lowered from rule records and carry the id minted from the record — the chain from incident to enforcement is mechanical, not editorial. The legacy rules compile from **485 distinct lessons** (engines: 293 ast-grep / 220 regex; compiled between 2026-04-06 and 2026-10-10). **264 are active** in `totem lint` today; the other 249 are inactive (242 archived, 7 untested against the codebase), and the receipt below counts the active set at its pinned head, not this one. 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
+**513 compiled rules** (engines: 293 ast-grep / 220 regex; compiled between 2026-04-06 and 2026-10-10) stand between a banked mistake and its recurrence, and every one names its source: 485 carry the content hash of the lesson they were compiled from (`lessonHash`), and 28 are lowered from rule records and carry the id minted from the record — the chain from incident to enforcement is mechanical, not editorial. The 485 legacy rules compile from **485 distinct lessons**. **264 are active** in `totem lint` today; the other 249 are inactive (242 archived, 7 untested against the codebase), and the receipt below counts the active set at its pinned head, not this one. 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
 
 <!-- /docs -->
 

@@ -211,10 +211,12 @@ describe('CompiledRuleSchema additions — the § Design 12 compiled homes', () 
     // property of the whole shipped corpus, not a claim about one code path.
     const compiled = CompiledRulesFileSchema.parse(rawManifest).rules;
     expect(compiled.length).toBe(SHIPPED_RULE_COUNT);
-    // The sweep is the LEGACY rows': a record row carries `excludeGlobs`, which the
-    // shared predicate honours and the shipped `fileGlobs` alone cannot express, so
-    // "scopes identically to its fileGlobs" is not its contract (the record path's
-    // scope is pinned by its own tests below).
+    // The sweep is the LEGACY rows': `ruleAppliesToFile` forks on `isRecordPathRule`
+    // and sends a record row through `recordScopeMatchesFile`, a different matching
+    // dialect (`excludeGlobs` as its own list, where a legacy row writes `!`-prefixed
+    // entries into `fileGlobs`), so "scopes identically to fileMatchesGlobs(fileGlobs)"
+    // is the legacy contract only; the record path's scope is pinned by its own
+    // tests below.
     const legacy = compiled.filter((rule) => !isRecordPathRule(rule));
     expect(legacy).toHaveLength(SHIPPED_RULE_COUNT - SHIPPED_RECORD_ROW_COUNT);
     const paths = [

@@ -265,9 +265,11 @@ function renderRuleProvenance(
         `they were compiled from (\`lessonHash\`), and ${recordRows.length} are lowered from rule ` +
         `records and carry the id minted from the record`
       : `every one carries the content hash of the lesson it came from (\`lessonHash\`)`;
+  // The engine and date figures below are the WHOLE corpus's, so they attach to
+  // the total, never to the legacy-rules clause (leg F1 on the S6 regeneration).
   const lessonsClause =
     recordRows.length > 0
-      ? `The legacy rules compile from **${lessons} distinct lessons**`
+      ? `The ${legacyRows.length} legacy rules compile from **${lessons} distinct lessons**`
       : `They compile from **${lessons} distinct lessons**`;
   const engines = {};
   for (const r of data.rules)
@@ -308,10 +310,10 @@ function renderRuleProvenance(
       ? `the other ${total - active} are inactive (${inactiveSummary})`
       : 'none are inactive';
   return (
-    `**${total} compiled rules** stand between a banked mistake and its recurrence, and ` +
+    `**${total} compiled rules** (engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}) ` +
+    `stand between a banked mistake and its recurrence, and ` +
     `${provenanceClause} — the chain from incident ` +
-    `to enforcement is mechanical, not editorial. ${lessonsClause} ` +
-    `(engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}). ` +
+    `to enforcement is mechanical, not editorial. ${lessonsClause}. ` +
     `**${active} are active** in \`totem lint\` today; ${inactiveClause}, and the receipt below ` +
     `counts the active set at its pinned head, not this one. ` +
     `${nonCompilable} lessons currently rest as non-compilable rather than being force-fitted into rules.`

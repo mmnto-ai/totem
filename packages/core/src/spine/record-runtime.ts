@@ -12,12 +12,13 @@
 //                FIRES iff `requires.pattern` does NOT match within the declared
 //                scope containing L.
 //
-// FREEZE / NON-REGRESSION BOUNDARY (binding): the legacy corpus (485 compiled
-// rules, `.totem/compiled-rules.json`, frozen by `rule-compilation`) must keep
+// FREEZE / NON-REGRESSION BOUNDARY (binding): the legacy rows (485 of the 513
+// compiled rules in `.totem/compiled-rules.json` since the S6 regeneration of
+// 2026-10-12; the legacy compile stays frozen by `rule-compilation`) must keep
 // matching BYTE-FOR-BYTE. Every function here is therefore gated on
-// `isRecordPathRule`, and the mined-path byte-identity guard in
-// `record-lower.test.ts` proves zero of the 485 legacy rules can reach a record
-// branch. Nothing in this module runs `sanitizeFileGlobs`, and it never imports
+// `isRecordPathRule`, and the mined-path guard in `record-lower.test.ts` proves
+// no legacy row can reach a record branch and that the rows on the record path
+// are exactly the 28 lowered by `totem rule serve`. Nothing in this module runs `sanitizeFileGlobs`, and it never imports
 // the frozen actuator.
 //
 // Purity: no IO, no clock, no module state. The `requires` evaluator takes the
@@ -77,8 +78,9 @@ export const RECORD_COMPILED_HOME_KEYS = [
  * between a diagnostic field and a matcher semantic.
  *
  * `RECORD_COMPILED_HOME_KEYS` remains the full home set for the corpus guard
- * (which asserts the legacy manifest carries NONE of them — a stronger claim
- * than this predicate needs, and the right one for a freeze check).
+ * (which asserts no legacy row carries ANY of them and that the rows carrying
+ * one are exactly the record rows — a stronger claim than this predicate needs,
+ * and the right one for a freeze check).
  */
 export function isRecordPathRule(rule: Pick<CompiledRule, 'examples'>): boolean {
   return rule.examples !== undefined;

@@ -331,6 +331,35 @@ test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a l
   assert.ok(sentence.includes('2 are lowered from rule records'), 'record count named');
   assert.ok(sentence.includes('lessonHash'), 'the mechanism is still named');
   assert.ok(sentence.includes('**1 distinct lessons**'), 'lessons counted over legacy rows only');
+  // The engine and date figures are the whole corpus's and sit on the total,
+  // never inside the legacy-rules clause (leg F1 on the S6 regeneration: the
+  // first re-word attributed 293 ast-grep / 220 regex and a 2026-10-10 date to
+  // "the legacy rules", whose own figures were 268 / 217 and 2026-06-07).
+  assert.ok(
+    sentence.includes(
+      '**3 compiled rules** (engines: 2 ast-grep / 1 regex; compiled between 2026-04-06 and 2026-10-10)',
+    ),
+    'engine and date figures attach to the total',
+  );
+  assert.ok(
+    sentence.includes('The 1 legacy rules compile from **1 distinct lessons**.'),
+    'the legacy clause carries only its own counts',
+  );
+  // LESSON_RECORD_COUNT counts distinct lessons over the legacy rows: 150 rows
+  // of which 50 are record-built read "about 100"; counting every row would
+  // say "about 200".
+  const mixedHundreds = writeTmpJson('lesson-count-mixed.json', {
+    rules: Array.from({ length: 150 }, (_, i) => ({
+      lessonHash: `h${i}`,
+      ...(i < 50 ? { record: true } : {}),
+    })),
+  });
+  assert.equal(transforms._renderLessonRecordCount(mixedHundreds, onRecordPath), 'about 100');
+  // The default predicate IS core's, not a look-alike of it.
+  const core = require(
+    require('node:path').join(__dirname, '..', 'packages', 'core', 'dist', 'index.js'),
+  );
+  assert.equal(transforms._recordPathPredicate(), core.isRecordPathRule);
   // With no record row the sentence keeps its one-kind form and the ratio is total-over-total.
   const legacyOnly = writeTmpJson('provenance-legacy-only.json', {
     rules: [{ lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' }],
