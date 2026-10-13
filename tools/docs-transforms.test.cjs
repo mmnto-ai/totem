@@ -468,22 +468,41 @@ test("BLOCKING_RULE_SET derives the rules that can fail a push through core's bl
   );
   // The predicates are parameters, so the fixture decides who is active, who
   // blocks and who is on the record path; the transform cannot mirror a tier
-  // or status test of its own. Discriminating: the archived error row and the
-  // warning row are out, the two error rows split one record, one legacy.
+  // or status test of its own. Discriminating on every predicate (leg F6 on
+  // S6 step 8): the archived error row is out (active applied first), the
+  // warning row is out, and the ACTIVE REGEX ERROR row `e` is in — a transform
+  // that ignored the injected blocking predicate for core's engine test, or
+  // mirrored an engine field test, would render 2 of 4 and fail here.
   const onActive = (r) => r.status !== 'archived';
   const onBlocking = (r) => r.severity === 'error';
   const onRecordPath = (r) => r.record === true;
+  const at = '2026-10-10T00:00:00.000Z';
   const mixed = writeTmpJson('blocking-mixed.json', {
     rules: [
-      { lessonHash: 'a', engine: 'ast-grep', severity: 'error', record: true },
-      { lessonHash: 'b', engine: 'ast-grep', severity: 'error' },
-      { lessonHash: 'c', engine: 'regex', severity: 'error', status: 'archived' },
-      { lessonHash: 'd', engine: 'regex', severity: 'warning' },
+      { lessonHash: 'a', engine: 'ast-grep', severity: 'error', record: true, compiledAt: at },
+      { lessonHash: 'b', engine: 'ast-grep', severity: 'error', compiledAt: at },
+      { lessonHash: 'c', engine: 'regex', severity: 'error', status: 'archived', compiledAt: at },
+      { lessonHash: 'd', engine: 'regex', severity: 'warning', compiledAt: at },
+      { lessonHash: 'e', engine: 'regex', severity: 'error', compiledAt: at },
     ],
   });
   assert.equal(
     transforms._renderBlockingRuleSet(mixed, onBlocking, onActive, onRecordPath),
-    '2 of 3 active rules block a push (2 ast-grep; 1 served from rule records, 1 legacy)',
+    '3 of 4 active rules block a push (2 ast-grep / 1 regex; 1 served from rule records, 2 legacy)',
+  );
+  // The provenance sentence's enforcement clause rides the same predicates
+  // (Q5 (b)): the blocking count there is the set's, over the active rows.
+  const sentence = transforms._renderRuleProvenance(mixed, onActive, onRecordPath, onBlocking);
+  assert.ok(sentence.includes('**4 are active**'), sentence);
+  assert.ok(
+    sentence.includes(
+      '3 of them block a push (hard tier at error severity) and the rest are advisory',
+    ),
+    sentence,
+  );
+  assert.ok(
+    transforms.RULE_PROVENANCE().includes(`${blocking.length} of them block a push`),
+    'the committed sentence names the committed blocking count',
   );
   const none = writeTmpJson('blocking-none.json', {
     rules: [{ lessonHash: 'd', engine: 'regex', severity: 'warning' }],

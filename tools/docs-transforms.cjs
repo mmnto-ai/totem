@@ -227,6 +227,7 @@ function renderRuleProvenance(
   rulesPath,
   predicate = activeRulePredicate(),
   onRecordPath = recordPathPredicate(),
+  onBlocking = blockingRulePredicate(),
 ) {
   const data = readJson(rulesPath, 'RULE_PROVENANCE');
   if (!Array.isArray(data.rules) || data.rules.length === 0) {
@@ -309,12 +310,21 @@ function renderRuleProvenance(
     total - active > 0
       ? `the other ${total - active} are inactive (${inactiveSummary})`
       : 'none are inactive';
+  // The enforcement clause names the blocking set through the same predicate
+  // `totem lint` and `rule list --blocking` apply, over the active rows (Q5 (b)
+  // of the gate (5) lift ruling): "active" is not "blocking", and the sentence
+  // must say which rules can fail a push, never imply that every active rule does.
+  const blocking = data.rules.filter(predicate).filter(onBlocking).length;
+  const blockingClause =
+    blocking > 0
+      ? `${blocking} of them block a push (hard tier at error severity) and the rest are advisory`
+      : 'none of them blocks a push';
   return (
     `**${total} compiled rules** (engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}) ` +
     `stand between a banked mistake and its recurrence, and ` +
     `${provenanceClause} — the chain from incident ` +
     `to enforcement is mechanical, not editorial. ${lessonsClause}. ` +
-    `**${active} are active** in \`totem lint\` today; ${inactiveClause}, and the receipt below ` +
+    `**${active} are active** in \`totem lint\` today, ${blockingClause}; ${inactiveClause}, and the receipt below ` +
     `counts the active set at its pinned head, not this one. ` +
     `${nonCompilable} lessons currently rest as non-compilable rather than being force-fitted into rules.`
   );
@@ -344,18 +354,20 @@ function renderDaysUnderFreeze(freezePath, maturityPath) {
     );
   }
   // The entry stays after the gate (5) lift, re-worded, because eight consumers
-  // key on its id (the lift ruling of 2026-10-10, mmnto-ai/totem-strategy#1486,
-  // Q7 (a)): the LEGACY compile path is what stays parked; the corpus itself is
-  // regenerated from rule records by the serving writer. The passage says both.
+  // read it (six by its id, two by its subsystem string; the lift ruling of
+  // 2026-10-10, mmnto-ai/totem-strategy#1486, Q7 (a)): the LEGACY compile path
+  // is what stays parked; the corpus itself is regenerated from rule records by
+  // the serving writer. The passage says both, and claims no held-out
+  // validation: the ruling of record says gate (5) produced no held-out
+  // evidence, and that stays a Goal row on the same page.
   return (
     `The legacy lesson→rule compiler has been parked under a standing freeze since **${since}** — ` +
     `**${days} days** as of this page's last data refresh (${asOf}). Rather than keep running a ` +
-    `compiler we no longer trust, we parked it and held the rule corpus read-only until a ` +
-    `replacement route passed held-out validation. That route is open: since the gate (5) lift the ` +
-    `serving file is regenerated from rule records by \`totem rule serve\`, the floor's rules serve ` +
-    `by their records, every other legacy rule is carried unchanged or archived on its curation row, ` +
-    `and the parked compiler refuses a record-managed file. We hold our own line the way we ask ` +
-    `your repo to hold its own.`
+    `compiler we no longer trust, we parked it and held the rule corpus read-only. Since the ` +
+    `gate (5) lift the serving file is regenerated from rule records by \`totem rule serve\`: the ` +
+    `migrated rules on the gate's floor serve by their records, every other legacy rule is carried ` +
+    `unchanged or archived on its curation row, and the parked compiler refuses a record-managed ` +
+    `file. We hold our own line the way we ask your repo to hold its own.`
   );
 }
 

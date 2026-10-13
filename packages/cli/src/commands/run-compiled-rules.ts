@@ -976,7 +976,7 @@ export async function runCompiledRules(
         // present, else a regex-free warning list is mislabeled (gemini #2182).
         if (hasFrozenLessonAdvisory) {
           lines.push(
-            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules — the legacy rows — are sensed-not-enforced while the legacy compile path stays parked (the `rule-compilation` freeze entry, mmnto-ai/totem#2181); PR review is the real sensor._',
+            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules — the legacy rows — are sensed-not-enforced: the linter demotes the regex class to advisory (mmnto-ai/totem#2181), and the legacy compile that produced them stays parked (the `rule-compilation` freeze entry); PR review is the real sensor._',
           );
         }
         for (const v of warnings) {
