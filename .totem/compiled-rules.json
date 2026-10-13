@@ -14,7 +14,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 23 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4683affcdc295f53",
@@ -46,7 +49,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 9 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "cda917668c8a5a13",
@@ -63,7 +69,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 98 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "90b042b866aefa9d",
@@ -140,7 +149,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 144 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4d63af6631a6ddf7",
@@ -156,7 +168,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 56 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "f33b0cba8caa726f",
@@ -190,7 +205,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 74 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "be74c55caa9fd60c",
@@ -204,7 +222,10 @@
         "**/*.yml",
         "**/*.yaml"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 421 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "f14881a4daf28160",
@@ -221,7 +242,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 163 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "faeae7a9e495c145",
@@ -240,7 +264,10 @@
         "**/*.test.js",
         "**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 72 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "aae3ebe04aaaa7af",
@@ -256,7 +283,10 @@
         "**/*.tsx",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 99 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "f7fc104cac7efdcf",
@@ -286,7 +316,10 @@
         "packages/cli/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 67 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "009679a6abb474e2",
@@ -318,7 +351,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "duplicate-of (duplicate-of 06282905d061ca34) (operations/310-curation/ledger.ndjson rank 101 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5f3a95295db82291",
@@ -368,7 +404,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 16 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "fdd2206acd4ea992",
@@ -421,7 +460,10 @@
         "**/*.spec.ts",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 58 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "d487264e210913a4",
@@ -438,7 +480,39 @@
         "**/*.spec.ts",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 669b403b4f828ae0",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "669b403b4f828ae0",
+      "lessonHeading": "Prop 310 rule record (669b403b4f828ae0)",
+      "pattern": "",
+      "message": "Prefer expect().rejects.toHaveProperty() over try/catch with expect.fail() — the latter can cause tests to accidentally pass if no error is thrown",
+      "engine": "ast-grep",
+      "astGrepPattern": "try { $$$PRE; expect.fail($$$ARGS); $$$POST } catch ($ERR) { $$$CATCH }",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "try { await doThing(); expect.fail('no throw'); } catch (e) { expect(e).toHaveProperty('code'); }",
+          "good": "await expect(doThing()).rejects.toHaveProperty('code', 'E_BAD');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-d487264e210913a4",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "64f919558d8ad756",
@@ -455,7 +529,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 17 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a6f2d3a89d9ebae8",
@@ -552,7 +629,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 92 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2b790d1938f8d223",
@@ -597,7 +677,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 4 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5a4b3fd8e71882e8",
@@ -628,7 +711,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 96 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "e1046c772a6bb6f9",
@@ -663,7 +749,10 @@
         "**/*.sh",
         "**/*.bash"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 0615c43eb5a9d0e8) (operations/310-curation/ledger.ndjson rank 19 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "064f35405ec02082",
@@ -680,7 +769,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 60 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a5697f86bb23901e",
@@ -731,7 +823,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 61 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "ca85d8aab7fc7312",
@@ -758,7 +853,10 @@
       "engine": "regex",
       "compiledAt": "2026-04-06T03:19:16.865Z",
       "createdAt": "2026-04-06T03:19:16.865Z",
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 89 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "fea10369daa04c98",
@@ -792,7 +890,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 106 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "e40e3d7e3c5f415e",
@@ -806,7 +907,10 @@
         "**/*.yml",
         "**/*.yaml"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 178 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "9081a2fbc7e22475",
@@ -821,7 +925,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 90 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "71ed3149ac1eec94",
@@ -838,7 +945,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 108 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2d3ac4b9516ed9b6",
@@ -871,7 +981,10 @@
       "fileGlobs": [
         "packages/cli/src/assets/**/*.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 408 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "21cb428b15711741",
@@ -902,7 +1015,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 21 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4f283f5495489a19",
@@ -919,7 +1035,39 @@
         "**/*.spec.ts",
         "**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record d811d974ef7502eb",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "d811d974ef7502eb",
+      "lessonHeading": "Prop 310 rule record (d811d974ef7502eb)",
+      "pattern": "",
+      "message": "Use the shared helper instead of inline fs.rmSync calls to ensure consistent retry logic and error-handling across the test suite.",
+      "engine": "ast-grep",
+      "astGrepPattern": "fs.rmSync($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "fs.rmSync(tmpDir, { recursive: true, force: true });",
+          "good": "await removeWithRetry(tmpDir);"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-4f283f5495489a19",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "7ad85aedb7fd6320",
@@ -952,7 +1100,10 @@
         "!**/*.spec.ts",
         "!**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 089b0c628b330c16) (operations/310-curation/ledger.ndjson rank 184 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "ad9d255418e9b886",
@@ -969,7 +1120,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 089b0c628b330c16) (operations/310-curation/ledger.ndjson rank 124 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6b1890e2dbda3331",
@@ -1033,7 +1187,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 26 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b0cf9dc0da0f6fc1",
@@ -1050,7 +1207,10 @@
         "**/*.spec.ts",
         "**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 42 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "048fab1fa662ff2b",
@@ -1067,7 +1227,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 54 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "73ed3dcdca4135eb",
@@ -1099,7 +1262,38 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record c032b983b4d29fd5",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "c032b983b4d29fd5",
+      "lessonHeading": "Prop 310 rule record (c032b983b4d29fd5)",
+      "pattern": "",
+      "message": "Use z.array(z.string().min(1)) to reject empty strings at parse time instead of filtering them at runtime",
+      "engine": "ast-grep",
+      "astGrepPattern": "z.array(z.string())",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const schema = z.array(z.string());",
+          "good": "const schema = z.array(z.string().min(1));"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-329479bf34f8816f",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "3845961d6de9c21c",
@@ -1134,7 +1328,42 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 855f6265161cedad",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "855f6265161cedad",
+      "lessonHeading": "Prop 310 rule record (855f6265161cedad)",
+      "pattern": "",
+      "message": "Do not use console.warn in core library packages — use the project-specific logger instead",
+      "engine": "ast-grep",
+      "astGrepPattern": "console.warn($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "examples": [
+        {
+          "bad": "console.warn('cache miss; rebuilding index');",
+          "good": "log.warn('cache miss; rebuilding index');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-427481b534fe3392",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "7a4037dd8ffc4c37",
@@ -1182,7 +1411,41 @@
         "packages/mcp/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record c44ad4f8085381c7",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "c44ad4f8085381c7",
+      "lessonHeading": "Prop 310 rule record (c44ad4f8085381c7)",
+      "pattern": "",
+      "message": "Do not use console.log in MCP tools — it corrupts the stdio transport protocol. Use a file-based logger or return a formatted system warning instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "console.log($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/mcp/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts"
+      ],
+      "examples": [
+        {
+          "bad": "console.log('mcp server listening on stdio');",
+          "good": "logger.info('mcp server listening on stdio');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-bc8b99e815c3943f",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "552463b93f1de66a",
@@ -1199,7 +1462,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 135 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6b2b62eb1e8693fc",
@@ -1215,7 +1481,10 @@
         "**/*.tsx",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 79 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "483a8df7ee034ba1",
@@ -1232,7 +1501,10 @@
         "**/*.spec.ts",
         "**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 85 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a1fd35ee696110b0",
@@ -1248,7 +1520,40 @@
         "packages/cli/src/adapters/**/*.ts",
         "packages/cli/src/lib/**/*.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 417585267efbff76",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "417585267efbff76",
+      "lessonHeading": "Prop 310 rule record (417585267efbff76)",
+      "pattern": "",
+      "message": "Dynamic imports should only be used at CLI command entry points, not in utility or adapter layers. Move lazy-loading to the command entry point to maintain a clean dependency graph and avoid security scanner flags.",
+      "engine": "ast-grep",
+      "astGrepPattern": "import($MODULE)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/cli/src/utils/**/*.ts",
+        "packages/cli/src/adapters/**/*.ts",
+        "packages/cli/src/lib/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const { parse } = await import('yaml');",
+          "good": "import { parse } from 'yaml';"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-a1fd35ee696110b0",
+        "curatedBy": "totem-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "89184bb5fd960848",
@@ -1281,7 +1586,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 142 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b586d48a5b8eeabc",
@@ -1362,7 +1670,66 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by records 50607353e7df1a01, 0c8013d89fad7e27",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "50607353e7df1a01",
+      "lessonHeading": "Prop 310 rule record (50607353e7df1a01)",
+      "pattern": "",
+      "message": "Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'. Explicitly validate the type and throw a descriptive error instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "String($INPUT)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.js"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const pattern = String(input.pattern);",
+          "good": "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+        }
+      ],
+      "language": "javascript",
+      "curation": {
+        "sourceLesson": "lesson-71935fe9a742137b",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
+    },
+    {
+      "lessonHash": "0c8013d89fad7e27",
+      "lessonHeading": "Prop 310 rule record (0c8013d89fad7e27)",
+      "pattern": "",
+      "message": "Avoid String() casting on input patterns — it silently converts unexpected objects to '[object Object]'. Explicitly validate the type and throw a descriptive error instead.",
+      "engine": "ast-grep",
+      "astGrepPattern": "String($INPUT)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const pattern = String(input.pattern);",
+          "good": "if (typeof input.pattern !== 'string') throw new Error('pattern must be a string'); const pattern = input.pattern;"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-71935fe9a742137b",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "09e5e0cd5f6570a9",
@@ -1379,7 +1746,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 11 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6f362fa28abcf94a",
@@ -1394,7 +1764,41 @@
         "packages/core/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record bbb8e021107952c2",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "bbb8e021107952c2",
+      "lessonHeading": "Prop 310 rule record (bbb8e021107952c2)",
+      "pattern": "",
+      "message": "Avoid type assertions on JSON.parse results — perform element-level validation instead to prevent crashes from corrupted or manually edited files.",
+      "engine": "ast-grep",
+      "astGrepPattern": "JSON.parse($INPUT) as $TYPE",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts"
+      ],
+      "examples": [
+        {
+          "bad": "const rows = JSON.parse(raw) as RetiredLesson[];",
+          "good": "const rows = RetiredLessonsSchema.parse(JSON.parse(raw));"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-6f362fa28abcf94a",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "332ebc819d1c6d1c",
@@ -1424,7 +1828,41 @@
         "packages/cli/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record c8442aeefa7b31f0",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "c8442aeefa7b31f0",
+      "lessonHeading": "Prop 310 rule record (c8442aeefa7b31f0)",
+      "pattern": "",
+      "message": "Throw a domain-specific error subclass instead of raw Error so CLI handlers can provide actionable recovery hints and suppress noisy stack traces for known failure modes.",
+      "engine": "ast-grep",
+      "astGrepPattern": "throw new Error($MSG)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/cli/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts"
+      ],
+      "examples": [
+        {
+          "bad": "throw new Error('bad config');",
+          "good": "throw new TotemConfigError('bad config');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-1210f02da9f16e5b",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "fb008f77a1f5a49a",
@@ -1441,7 +1879,66 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by records 984df9c5d2c5df3d, 0c9df29370111b53",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "984df9c5d2c5df3d",
+      "lessonHeading": "Prop 310 rule record (984df9c5d2c5df3d)",
+      "pattern": "",
+      "message": "spawnSync called without an argument array — use spawnSync(cmd, [arg1, arg2], opts) instead of string interpolation to avoid shell injection and path-with-spaces bugs",
+      "engine": "ast-grep",
+      "astGrepPattern": "spawnSync($CMD, { $$$OPTS })",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.js"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "spawnSync(`git commit -m \"${message}\"`, { shell: true, stdio: 'inherit' });",
+          "good": "spawnSync('git', ['commit', '-m', message], { stdio: 'inherit' });"
+        }
+      ],
+      "language": "javascript",
+      "curation": {
+        "sourceLesson": "lesson-fb008f77a1f5a49a",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
+    },
+    {
+      "lessonHash": "0c9df29370111b53",
+      "lessonHeading": "Prop 310 rule record (0c9df29370111b53)",
+      "pattern": "",
+      "message": "spawnSync called without an argument array — use spawnSync(cmd, [arg1, arg2], opts) instead of string interpolation to avoid shell injection and path-with-spaces bugs",
+      "engine": "ast-grep",
+      "astGrepPattern": "spawnSync($CMD, { $$$OPTS })",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "spawnSync(`git commit -m \"${message}\"`, { shell: true, stdio: 'inherit' });",
+          "good": "spawnSync('git', ['commit', '-m', message], { stdio: 'inherit' });"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-fb008f77a1f5a49a",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "4eb175f98879dbb8",
@@ -1457,7 +1954,10 @@
         "**/*.tsx",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 12 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6ad0d4d5c760a5d6",
@@ -1473,7 +1973,39 @@
         "**/*.rst",
         "**/*.txt"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 923841006dd9c024",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "923841006dd9c024",
+      "lessonHeading": "Prop 310 rule record (923841006dd9c024)",
+      "pattern": "\\b(guarantees?|comprehensive|best-in-class|industry-leading|world-class|cutting-edge|state-of-the-art|revolutionary|unparalleled|seamless|robust|powerful|enterprise-grade|next-generation|future-proof)\\b",
+      "message": "Technical documentation must avoid marketing-centric terms. Replace absolute claims with specific descriptions of tested environments and observed results.",
+      "engine": "regex",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx",
+        "**/*.rst",
+        "**/*.txt"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "Totem guarantees seamless, world-class performance.",
+          "good": "Totem enforced the rule set on the tested 485-rule corpus."
+        }
+      ],
+      "curation": {
+        "sourceLesson": "lesson-6ad0d4d5c760a5d6",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "25d23ec6f87ec844",
@@ -1525,7 +2057,10 @@
         "**/jest.setup.ts",
         "**/vitest.setup.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 43 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "9adee15e8b4795ce",
@@ -1560,7 +2095,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "dead-matcher (operations/310-curation/ledger.ndjson rank 444 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator operator-ruled 2026-08-22 (R14 round, mmnto-ai/totem-strategy#288), 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4cd80a665e3600e3",
@@ -1574,7 +2112,10 @@
       "fileGlobs": [
         "packages/cli/src/commands/init.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 112 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "d44d72c6da1d1b63",
@@ -1589,7 +2130,10 @@
         "packages/cli/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 28 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "3706efb77448d53d",
@@ -1706,7 +2250,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "duplicate-of (duplicate-of 427481b534fe3392) (operations/310-curation/ledger.ndjson rank 183 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5b9058bd289a1dbb",
@@ -1740,7 +2287,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 91 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "35d8c12deef09dea",
@@ -1774,7 +2324,10 @@
         "**/*.test.tsx",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 71 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "c9700d28abb6e96c",
@@ -1839,7 +2392,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 45 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "7bca4ac148aec25d",
@@ -1888,7 +2444,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 4f283f5495489a19) (operations/310-curation/ledger.ndjson rank 39 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "55c903bd228e0b5c",
@@ -1904,7 +2463,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 57 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "72be26d1c4b264a3",
@@ -2029,7 +2591,10 @@
         "**/*.md",
         "**/*.mdx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 116 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6467c35159c1504d",
@@ -2065,7 +2630,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 30 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "9cede77f72fe608b",
@@ -2097,7 +2665,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 80 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a5c181bb3715b4c8",
@@ -2129,7 +2700,10 @@
         "**/*.py",
         "**/*.rb"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 32 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5d34d2d1c2262add",
@@ -2146,7 +2720,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 97 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "3c7773706e5b3b2d",
@@ -2180,7 +2757,10 @@
         "**/*.spec.ts",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 177 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2ec0129125482904",
@@ -2247,7 +2827,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 36 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "358177469f11c272",
@@ -2264,7 +2847,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 65 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2266fc0dfe824f24",
@@ -2282,7 +2868,46 @@
       ],
       "severity": "error",
       "badExample": "import {\n  deriveCacheEligible,\n  deriveSettled,\n  renderCovariateLine,\n  TotemConfigError,\n  VERDICT_ARTIFACT_SCHEMA_VERSION,\n} from '@mmnto/totem';",
-      "goodExample": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan(): Promise<void> {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
+      "goodExample": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan(): Promise<void> {\n  const { deriveSettled } = await import('@mmnto/totem');\n}",
+      "status": "archived",
+      "archivedReason": "served by record c16cbd890dc398ea",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "c16cbd890dc398ea",
+      "lessonHeading": "Prop 310 rule record (c16cbd890dc398ea)",
+      "pattern": "",
+      "message": "Avoid static top-level value imports from '@mmnto/totem' in CLI commands — the core barrel pulls LanceDB and other heavy deps into every startup, including --help. Use dynamic `await import('@mmnto/totem')` inside the command function; `import type { ... }` stays static (erased at build). Named-import shape; default-import shape is covered by sibling rules 3bb96274/c5192192 (mmnto-ai/totem#2339).",
+      "engine": "ast-grep",
+      "astGrepPattern": "import { $$$NAMES } from '@mmnto/totem'",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/cli/src/commands/**/*.ts"
+      ],
+      "severity": "error",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "examples": [
+        {
+          "bad": "import { deriveSettled } from '@mmnto/totem';",
+          "good": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan() {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
+        },
+        {
+          "bad": "import {\n  deriveCacheEligible,\n  deriveSettled,\n  renderCovariateLine,\n  TotemConfigError,\n  VERDICT_ARTIFACT_SCHEMA_VERSION,\n} from '@mmnto/totem';",
+          "good": "import type { VerdictArtifact } from '@mmnto/totem';\nexport async function runFan(): Promise<void> {\n  const { deriveSettled } = await import('@mmnto/totem');\n}"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-2266fc0dfe824f24",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "94ad9eb3fe20bdb0",
@@ -2363,7 +2988,66 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by records 908731caddc8d971, 69318419666ecf84",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "908731caddc8d971",
+      "lessonHeading": "Prop 310 rule record (908731caddc8d971)",
+      "pattern": "",
+      "message": "Use execFileSync instead of execSync to avoid shell-parsing overhead and security risks",
+      "engine": "ast-grep",
+      "astGrepPattern": "execSync($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.js"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const out = execSync('git status');",
+          "good": "const out = execFileSync('git', ['status']);"
+        }
+      ],
+      "language": "javascript",
+      "curation": {
+        "sourceLesson": "lesson-06282905d061ca34",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
+    },
+    {
+      "lessonHash": "69318419666ecf84",
+      "lessonHeading": "Prop 310 rule record (69318419666ecf84)",
+      "pattern": "",
+      "message": "Use execFileSync instead of execSync to avoid shell-parsing overhead and security risks",
+      "engine": "ast-grep",
+      "astGrepPattern": "execSync($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "const out = execSync('git status');",
+          "good": "const out = execFileSync('git', ['status']);"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-06282905d061ca34",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "55797450514d4c3b",
@@ -2396,7 +3080,10 @@
         "**/*.mdx",
         "**/*.txt"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 172 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "6a33b023bcc54ce5",
@@ -2411,7 +3098,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 34 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4467edfb0c4a1a7d",
@@ -2441,7 +3131,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 3 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "0fb278f47705b4f1",
@@ -2490,7 +3183,10 @@
         "**/*.md",
         "**/*.mdx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 40 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "c7ef92f291a1d8a3",
@@ -2555,7 +3251,10 @@
         "**/*.mts",
         "**/*.mjs"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 8 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "7056157a6bf72fa8",
@@ -2590,7 +3289,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 15 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5c5fe9d9060bcb6d",
@@ -2609,7 +3311,40 @@
         "lib/**/*.ts",
         "lib/**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record cef25cef740d5aed",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "cef25cef740d5aed",
+      "lessonHeading": "Prop 310 rule record (cef25cef740d5aed)",
+      "pattern": "",
+      "message": "Core library modules should not use hardcoded console.warn — use an optional onWarn callback instead to remain environment-agnostic",
+      "engine": "ast-grep",
+      "astGrepPattern": "console.warn($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts",
+        "src/**/*.ts",
+        "lib/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "console.warn('index rebuild complete');",
+          "good": "opts.onWarn?.('index rebuild complete');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-5c5fe9d9060bcb6d",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "14f6c93e4d15e802",
@@ -2674,7 +3409,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 171 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "c802b8588ec9d911",
@@ -2736,7 +3474,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 86 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "94936169ab6f8d32",
@@ -2751,7 +3492,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 66 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "00dfbf2221b68df2",
@@ -2823,7 +3567,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 81 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "e9c1203c7cbfdaa4",
@@ -2838,7 +3585,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 139 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "7d43877c48f594d2",
@@ -2855,7 +3605,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 13 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "dfc0558a23dbd2f8",
@@ -2939,7 +3692,10 @@
         "**/*.rst",
         "**/*.txt"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 5 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "427c97fb0063f0cb",
@@ -2958,7 +3714,39 @@
         "**/*.test.js",
         "**/*.spec.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 2570e3a8e586b038",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "2570e3a8e586b038",
+      "lessonHeading": "Prop 310 rule record (2570e3a8e586b038)",
+      "pattern": "",
+      "message": "Avoid toContain for testing secret masking or data sanitization — use exact string assertions (e.g., toBe or toEqual) to ensure surrounding context is preserved and nothing is over-redacted.",
+      "engine": "ast-grep",
+      "astGrepPattern": "expect($VAL).toContain($EXPECTED)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "expect(masked).toContain('sk-');",
+          "good": "expect(masked).toBe('sk-…redacted');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-427c97fb0063f0cb",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "7f24313c1ae3dc50",
@@ -3041,7 +3829,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 14 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "63680bf329d59167",
@@ -3061,7 +3852,46 @@
         "!**/*.spec.ts",
         "!**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 56ee97cba0818c90",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "56ee97cba0818c90",
+      "lessonHeading": "Prop 310 rule record (56ee97cba0818c90)",
+      "pattern": "",
+      "message": "Prefer setting process.exitCode instead of calling process.exit() to allow graceful shutdown (cleanup, log flushing, child process termination).",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.exit($CODE)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/cli/src/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "packages/cli/src/index.ts",
+        "packages/cli/src/commands/**/*.ts",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx"
+      ],
+      "examples": [
+        {
+          "bad": "process.exit(1);",
+          "good": "process.exitCode = 1;"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-63680bf329d59167",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "160c27838292f3b8",
@@ -3076,7 +3906,10 @@
         "packages/cli/**/*.ts",
         "packages/cli/**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 111 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b3e3e2b380a0b1be",
@@ -3124,7 +3957,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 63 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b5fc107250c40193",
@@ -3141,7 +3977,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 93 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a16dd78c4e9655b8",
@@ -3171,7 +4010,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 169 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "f6739f9ad356067a",
@@ -3187,7 +4029,10 @@
         "packages/cli/src/lib/**/*.ts",
         "packages/cli/src/helpers/**/*.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 50 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "eb2a68f4d69bb95f",
@@ -3248,7 +4093,10 @@
         "**/*.ts",
         "**/*.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 145 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "ca66f0cecc30bd82",
@@ -3265,7 +4113,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 27 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "39d1fe87f77ae756",
@@ -3280,7 +4131,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 122 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5d5e14b8ea612c2f",
@@ -3312,7 +4166,10 @@
         "**/*.ts",
         "**/*.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 31 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5e7cc2a0121c0ab4",
@@ -3363,7 +4220,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "noise (operations/310-curation/ledger.ndjson rank 7 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "0167a783f75b5ecd",
@@ -3433,7 +4293,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 487a0a23bd24569d) (operations/310-curation/ledger.ndjson rank 37 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "22286088db9261b7",
@@ -3450,7 +4313,10 @@
         "**/*.jsx",
         "**/*.py"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "noise (operations/310-curation/ledger.ndjson rank 107 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a52d2f939d4ea182",
@@ -3500,7 +4366,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 94 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "9a07a44b866ae7fd",
@@ -3517,7 +4386,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 136 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "3be97bd9147e7562",
@@ -3534,7 +4406,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 95 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "243b32bd5f8d1a74",
@@ -3570,7 +4445,10 @@
         "**/*.test.tsx",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 51 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "791b9a6cfb2f38af",
@@ -3616,7 +4494,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "duplicate-of (duplicate-of 089b0c628b330c16) (operations/310-curation/ledger.ndjson rank 186 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "d2f88c8528441069",
@@ -3634,7 +4515,10 @@
         "**/*.mjs",
         "**/*.cjs"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "noise (operations/310-curation/ledger.ndjson rank 76 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "222bf3404fc312a5",
@@ -3651,7 +4535,10 @@
         "**/*.tsx",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 38 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "491df4448463dd87",
@@ -3683,7 +4570,10 @@
         "packages/cli/**/*.ts",
         "!**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 29 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "18722912049af6f2",
@@ -3732,7 +4622,10 @@
       "fileGlobs": [
         "packages/cli/**/*.test.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 6 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "a5da42b79e964510",
@@ -3748,7 +4641,10 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "duplicate-of (duplicate-of 089b0c628b330c16) (operations/310-curation/ledger.ndjson rank 185 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "7e678a388ffceae8",
@@ -3798,7 +4694,42 @@
         "!**/*.test.ts",
         "!**/*.spec.ts"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 8105649922aa9f94",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "8105649922aa9f94",
+      "lessonHeading": "Prop 310 rule record (8105649922aa9f94)",
+      "pattern": "",
+      "message": "Core packages should use an injectable logger interface instead of direct console calls, to allow consumers to control output routing.",
+      "engine": "ast-grep",
+      "astGrepPattern": "console.$METHOD($$$ARGS)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/core/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "examples": [
+        {
+          "bad": "console.warn('problem');",
+          "good": "logger.warn('problem');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-089b0c628b330c16",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "56c801dfda484c75",
@@ -3835,7 +4766,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 22 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "c9a66cfae2d3bfd4",
@@ -3869,7 +4803,39 @@
         "**/*.spec.ts",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record ddfb040050ecb87b",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "ddfb040050ecb87b",
+      "lessonHeading": "Prop 310 rule record (ddfb040050ecb87b)",
+      "pattern": "",
+      "message": "Assert the specific error message or type in rejects.toThrow() — bare toThrow() allows unrelated errors to pass the test",
+      "engine": "ast-grep",
+      "astGrepPattern": "await expect($PROMISE).rejects.toThrow()",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "await expect(loadConfig('/missing')).rejects.toThrow();",
+          "good": "await expect(loadConfig('/missing')).rejects.toThrow('[Totem Error] config not found');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-f202f65f8a198f18",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "ac705e7d033cd1d5",
@@ -3902,7 +4868,10 @@
         "**/*.spec.ts",
         "**/*.spec.tsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 1 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "1dec0dfe3676f445",
@@ -3936,7 +4905,74 @@
         "!**/*.test.ts",
         "!**/*.test.js"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by records cb8d7b8c83a6da34, feae92d194761d35",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "cb8d7b8c83a6da34",
+      "lessonHeading": "Prop 310 rule record (cb8d7b8c83a6da34)",
+      "pattern": "",
+      "message": "Avoid calling process.exit() directly. Throw a specific error class (e.g., TotemParseError) instead to ensure consistent error handling and exit behavior across the CLI.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.exit($CODE)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.js"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js"
+      ],
+      "examples": [
+        {
+          "bad": "process.exit(2);",
+          "good": "throw new TotemParseError('bad input');"
+        }
+      ],
+      "language": "javascript",
+      "curation": {
+        "sourceLesson": "lesson-240f19cae3e56b10",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
+    },
+    {
+      "lessonHash": "feae92d194761d35",
+      "lessonHeading": "Prop 310 rule record (feae92d194761d35)",
+      "pattern": "",
+      "message": "Avoid calling process.exit() directly. Throw a specific error class (e.g., TotemParseError) instead to ensure consistent error handling and exit behavior across the CLI.",
+      "engine": "ast-grep",
+      "astGrepPattern": "process.exit($CODE)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.test.js"
+      ],
+      "examples": [
+        {
+          "bad": "process.exit(2);",
+          "good": "throw new TotemParseError('bad input');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-240f19cae3e56b10",
+        "curatedBy": "strategy-codex",
+        "curatedAt": "2026-08-22",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "82dcda4cbce649bd",
@@ -4065,7 +5101,37 @@
         "**/*.md",
         "**/*.mdx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 6e5b15c0ae7e2285",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "6e5b15c0ae7e2285",
+      "lessonHeading": "Prop 310 rule record (6e5b15c0ae7e2285)",
+      "pattern": "[☀-➿\ud83c-􏰀-\udfff⌀-⏿⭐-⭕⌚-⌛▪-◾☔-☕♈-♓⚪-⚫✅✔✖❌❎❓-❕❗➡⤴-⤵©®‼⁉⃣〰〽㊗㊙]",
+      "message": "Emojis are not allowed in documentation files — project standards require professional formatting without emoji characters",
+      "engine": "regex",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.md",
+        "**/*.mdx"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "## Results ✅",
+          "good": "## Results"
+        }
+      ],
+      "curation": {
+        "sourceLesson": "lesson-5afaf8d03f059a41",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "a3781912cf607817",
@@ -4099,7 +5165,10 @@
         "**/commit-msg",
         "**/post-merge"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 102 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5da43ea60b66e96e",
@@ -4236,7 +5305,10 @@
         "**/*.js",
         "**/*.jsx"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 20 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5c78f52c51152810",
@@ -4440,7 +5512,36 @@
       "fileGlobs": [
         "docs/wiki/**/*.md"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record 312894688c167fb2",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "312894688c167fb2",
+      "lessonHeading": "Prop 310 rule record (312894688c167fb2)",
+      "pattern": "`totem\\s+extract\\b",
+      "message": "Use canonical CLI command forms (e.g., `totem lesson extract`) instead of bare aliases like `totem extract`",
+      "engine": "regex",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "docs/wiki/**/*.md"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "examples": [
+        {
+          "bad": "Run `totem extract <pr>` to pull lessons.",
+          "good": "Run `totem lesson extract <pr>` to pull lessons."
+        }
+      ],
+      "curation": {
+        "sourceLesson": "lesson-4ae0a01d912f8742",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "f5e7acde7d976dec",
@@ -4707,7 +5808,53 @@
         "!**/*.spec.ts"
       ],
       "severity": "error",
-      "manual": true
+      "manual": true,
+      "status": "archived",
+      "archivedReason": "served by record 2095327f92d4e486",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "2095327f92d4e486",
+      "lessonHeading": "Prop 310 rule record (2095327f92d4e486)",
+      "pattern": "",
+      "message": "Catch clause swallows the error without re-throwing. Tenet 4 (Fail Loud, Never Drift) forbids silent degradation. Either rethrow with `throw err` / `throw new Error(..., { cause: err })`, or if the catch is genuinely a best-effort cleanup (temp file unlink, socket close, etc.) add `// totem-context: intentional cleanup` above the try/catch to document the exception.\n\nTenet 4 (Fail Loud, Never Drift) forbids catching an error and continuing silently. A `catch` clause that contains no `throw_statement` anywhere in its body quietly swallows the failure, corrupting the upstream signal that the sensor-based architecture depends on. The `not.has.throw_statement` combinator with `stopBy: end` walks the entire catch body subtree so that rethrows nested inside `if` / `switch` / helper-call paths still pass.",
+      "engine": "ast-grep",
+      "astGrepYamlRule": {
+        "rule": {
+          "kind": "catch_clause",
+          "not": {
+            "has": {
+              "kind": "throw_statement",
+              "stopBy": "end"
+            }
+          }
+        },
+        "language": "TypeScript"
+      },
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/**/*.ts"
+      ],
+      "severity": "error",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.ts",
+        "**/*.spec.ts"
+      ],
+      "examples": [
+        {
+          "bad": "try { fs.unlinkSync(p); } catch (err) { console.warn(err); }",
+          "good": "try { fs.unlinkSync(p); } catch (err) { throw new Error('unlink failed', { cause: err }); }"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-87aff037d7de47a7",
+        "curatedBy": "totem-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "92c5de19ec77d768",
@@ -4915,7 +6062,42 @@
         "!**/*.test.*",
         "!**/*.spec.*"
       ],
-      "severity": "warning"
+      "severity": "warning",
+      "status": "archived",
+      "archivedReason": "served by record fdf4498c9a60c3ea",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "fdf4498c9a60c3ea",
+      "lessonHeading": "Prop 310 rule record (fdf4498c9a60c3ea)",
+      "pattern": "",
+      "message": "Regex escape utility is missing the hyphen (-). Add it to prevent unintended range behavior when the escaped string is used inside a character class [...].",
+      "engine": "ast-grep",
+      "astGrepPattern": "$STR.replace(/[.*+?^${}()|[\\]\\\\]/g, $REPLACEMENT)",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "packages/core/src/**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/*.test.*",
+        "**/*.spec.*"
+      ],
+      "examples": [
+        {
+          "bad": "const escaped = raw.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');",
+          "good": "const escaped = raw.replace(/[.*+?^${}()|[\\]\\\\-]/g, '\\\\$&');"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-fe1b4123aa1f679c",
+        "curatedBy": "status-claude",
+        "curatedAt": "2026-08-24",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "600edf2e1c782b77",
@@ -6230,7 +7412,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 132 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "8944562b6cb4a869",
@@ -6318,7 +7503,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 175 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "4e8ea61ef00a549a",
@@ -6523,7 +7711,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 104 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "d4d16d3f84cb5546",
@@ -6577,7 +7768,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 52 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "09b9ade20584279f",
@@ -6813,7 +8007,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 133 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "74d568ba0307dd43",
@@ -6870,7 +8067,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 165 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "0615c43eb5a9d0e8",
@@ -6996,7 +8196,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 53 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "1e9417ca76e7a183",
@@ -7031,7 +8234,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 18 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "e91d1a223ce3e3a5",
@@ -7206,7 +8412,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 118 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "7cdfa1069477b69a",
@@ -7329,7 +8538,41 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "served by record fe1af7a58d7469b8",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
+    },
+    {
+      "lessonHash": "fe1af7a58d7469b8",
+      "lessonHeading": "Prop 310 rule record (fe1af7a58d7469b8)",
+      "pattern": "",
+      "message": "Perform explicit null and type checks on the results",
+      "engine": "ast-grep",
+      "astGrepPattern": "JSON.parse($A) as $B",
+      "compiledAt": "2026-10-10T02:18:13.000Z",
+      "createdAt": "2026-10-10T02:18:13.000Z",
+      "fileGlobs": [
+        "**/*.ts"
+      ],
+      "severity": "warning",
+      "unverified": true,
+      "excludeGlobs": [
+        "**/registry.ts"
+      ],
+      "examples": [
+        {
+          "bad": "const data = JSON.parse(raw) as LockData;",
+          "good": "const data = LockDataSchema.parse(JSON.parse(raw));"
+        }
+      ],
+      "language": "typescript",
+      "curation": {
+        "sourceLesson": "lesson-61bb8b8b88d2ecab",
+        "curatedBy": "strategy-kimi",
+        "curatedAt": "2026-08-23",
+        "baseline5Phase": 3
+      }
     },
     {
       "lessonHash": "80192e6ac2a1dd3c",
@@ -7368,7 +8611,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 105 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "3d09188d0fa85674",
@@ -7478,7 +8724,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 48 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "638d6fcc8a601da0",
@@ -7514,7 +8763,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 166 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "425a7833b925c873",
@@ -7547,7 +8799,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 134 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "e118e1e349e8439e",
@@ -7651,7 +8906,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "noise (operations/310-curation/ledger.ndjson rank 64 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "58a6bb25a38e97f8",
@@ -7669,7 +8927,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 88 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "47f1e19c5ae54a8c",
@@ -7775,7 +9036,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 62 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2537673df67677f1",
@@ -7813,7 +9077,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "fires-on-remedy (operations/310-curation/ledger.ndjson rank 24 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "54140f59be3e6e44",
@@ -7886,7 +9153,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 143 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b09d772ba3876976",
@@ -7903,7 +9173,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "dead-matcher (operations/310-curation/ledger.ndjson rank 190 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "b63eb4992616cf41",
@@ -7920,7 +9193,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "superseded-by (superseded-by 089b0c628b330c16) (operations/310-curation/ledger.ndjson rank 120 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator totem-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "08370e4b0855bc4f",
@@ -7989,7 +9265,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 195 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "44c3aad7ac60e8ba",
@@ -8020,7 +9299,10 @@
       ],
       "severity": "error",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "context-required (operations/310-curation/ledger.ndjson rank 33 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-kimi, 2026-08-23))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "bcc20bfdf6a476c2",
@@ -8063,7 +9345,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 109 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "637955cc0245d63a",
@@ -8136,7 +9421,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "noise (operations/310-curation/ledger.ndjson rank 110 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "2f79cfc7e0e9be4d",
@@ -8154,7 +9442,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "no-intent (operations/310-curation/ledger.ndjson rank 131 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "d4f3025035100a27",
@@ -8226,7 +9517,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 121 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator strategy-codex, 2026-08-22))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "5bc302726128eceb",
@@ -8525,7 +9819,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 194 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "42559b2f75734104",
@@ -8564,7 +9861,10 @@
       ],
       "severity": "warning",
       "manual": true,
-      "unverified": true
+      "unverified": true,
+      "status": "archived",
+      "archivedReason": "semantic-analysis-required (operations/310-curation/ledger.ndjson rank 162 (mmnto-ai/totem-strategy 032e3874, the ledger's last-change commit; blob f8306f7d; curator status-claude, 2026-08-24))",
+      "archivedAt": "2026-10-10T02:18:13.000Z"
     },
     {
       "lessonHash": "839aceddfb699160",

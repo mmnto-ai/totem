@@ -1781,6 +1781,36 @@ describe('--ast-parse-mode lenient', () => {
     expect(result.violations).toHaveLength(1);
     expect(result.output).not.toContain('Frozen-lesson');
   });
+
+  it('does not mislabel a record-built (un-stamped, examples-carrying) regex rule as frozen-lesson (S6 regeneration, falsification read 2 F11)', async () => {
+    // A row `totem rule serve` lowered from a rule record carries no stamp (D3 (a))
+    // and `ruleClass == null` alone would read it as a legacy frozen lesson; it is
+    // served by its record, not demoted under the freeze, so the wording must
+    // not claim it. On the pre-fix discriminator this run printed the note.
+    const rules = [
+      makeRule('console\\.log', 'No console.log', 'No console.log', {
+        severity: 'warning',
+        // A record row's scope is its own list through `recordScopeMatchesFile`,
+        // never the legacy "no globs means every file" default.
+        fileGlobs: ['**/*.ts'],
+        examples: [{ bad: 'console.log("x")', good: 'log.info("x")' }],
+      }),
+    ];
+    writeRules(tmpDir, rules);
+
+    const diff = makeDiff('src/app.ts', '  console.log("x");');
+
+    const result = await runCompiledRules({
+      diff,
+      cwd: tmpDir,
+      totemDir: TOTEM_DIR,
+      format: 'text',
+      tag: 'Test',
+    });
+
+    expect(result.violations).toHaveLength(1);
+    expect(result.output).not.toContain('Frozen-lesson');
+  });
 });
 
 // ─── Corpus-bearing zero-rules hard-error (mmnto-ai/totem-strategy#971, Prop 309) ──

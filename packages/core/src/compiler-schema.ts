@@ -898,7 +898,9 @@ export function deriveRuleClass(rule: {
  *   - both absent (a legacy rule) → valid; the reader uses the engine proxy.
  * Because this fires inside `CompiledRuleSchema` (which `loadCompiledRules`
  * parses), `run-compiled-rules.ts` can never observe a forged stamped state —
- * the engine-type proxy is reachable only by un-stamped legacy rules.
+ * the engine-type proxy is reachable only by un-stamped rules: every legacy rule
+ * and, since the S6 regeneration, the record-built rows (a lowered row carries no
+ * stamp under D3 (a)).
  */
 function refineLegitimacyRuleClassConsistency(
   data: { legitimacy?: Legitimacy; ruleClass?: 'hard' | 'advisory'; unverified?: boolean },

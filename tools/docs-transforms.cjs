@@ -223,7 +223,11 @@ function MATURITY_TABLE() {
   return renderMaturityTable(MATURITY_DATA);
 }
 
-function renderRuleProvenance(rulesPath, predicate = activeRulePredicate()) {
+function renderRuleProvenance(
+  rulesPath,
+  predicate = activeRulePredicate(),
+  onRecordPath = recordPathPredicate(),
+) {
   const data = readJson(rulesPath, 'RULE_PROVENANCE');
   if (!Array.isArray(data.rules) || data.rules.length === 0) {
     throw new Error(
@@ -245,7 +249,28 @@ function renderRuleProvenance(rulesPath, predicate = activeRulePredicate()) {
     }
   });
   const total = data.rules.length;
-  const lessons = new Set(data.rules.map((r) => r.lessonHash)).size;
+  // Since the gate (5) lift's regeneration (S6, 2026-10-12) the corpus holds two
+  // kinds of row, told apart by core's own record-path predicate and never by a
+  // field test of this file's own: a legacy row's `lessonHash` IS the content
+  // hash of the lesson it was compiled from; a record-built row's is the id
+  // minted from its rule record, so it is neither a lesson hash nor a distinct
+  // lesson. The sentence names both kinds when both are present, and counts
+  // lessons over the legacy rows only.
+  const recordRows = data.rules.filter((r) => onRecordPath(r));
+  const legacyRows = data.rules.filter((r) => !onRecordPath(r));
+  const lessons = new Set(legacyRows.map((r) => r.lessonHash)).size;
+  const provenanceClause =
+    recordRows.length > 0
+      ? `every one names its source: ${legacyRows.length} carry the content hash of the lesson ` +
+        `they were compiled from (\`lessonHash\`), and ${recordRows.length} are lowered from rule ` +
+        `records and carry the id minted from the record`
+      : `every one carries the content hash of the lesson it came from (\`lessonHash\`)`;
+  // The engine and date figures below are the WHOLE corpus's, so they attach to
+  // the total, never to the legacy-rules clause (leg F1 on the S6 regeneration).
+  const lessonsClause =
+    recordRows.length > 0
+      ? `The ${legacyRows.length} legacy rules compile from **${lessons} distinct lessons**`
+      : `They compile from **${lessons} distinct lessons**`;
   const engines = {};
   for (const r of data.rules)
     engines[r.engine ?? 'unknown'] = (engines[r.engine ?? 'unknown'] ?? 0) + 1;
@@ -285,10 +310,10 @@ function renderRuleProvenance(rulesPath, predicate = activeRulePredicate()) {
       ? `the other ${total - active} are inactive (${inactiveSummary})`
       : 'none are inactive';
   return (
-    `**${total} compiled rules** stand between a banked mistake and its recurrence, and every one ` +
-    `carries the content hash of the lesson it came from (\`lessonHash\`) — the chain from incident ` +
-    `to enforcement is mechanical, not editorial. They compile from **${lessons} distinct lessons** ` +
-    `(engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}). ` +
+    `**${total} compiled rules** (engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}) ` +
+    `stand between a banked mistake and its recurrence, and ` +
+    `${provenanceClause} — the chain from incident ` +
+    `to enforcement is mechanical, not editorial. ${lessonsClause}. ` +
     `**${active} are active** in \`totem lint\` today; ${inactiveClause}, and the receipt below ` +
     `counts the active set at its pinned head, not this one. ` +
     `${nonCompilable} lessons currently rest as non-compilable rather than being force-fitted into rules.`
@@ -365,17 +390,21 @@ function loadRules(rulesPath, label) {
 }
 
 /**
- * `<hashed> of <total>` — rules carrying a lessonHash over all compiled rules.
- * The loader has already refused any rule without one, so the figure can
- * never publish a ratio that contradicts the sentence it sits in (a "0 of
- * 485" would have rendered before that guard); what it states is the count.
+ * `<legacy> of <total>` — rules whose `lessonHash` is a lesson's content hash,
+ * over all compiled rules. The loader has already refused any rule without a
+ * `lessonHash`, so the figure can never publish a ratio that contradicts the
+ * sentence it sits in (a "0 of 485" would have rendered before that guard);
+ * what it states is the count of LEGACY rows, because a record-built row's
+ * `lessonHash` is the id minted from its rule record, not a lesson's hash. The
+ * split is core's `isRecordPathRule`, never a mirrored field test.
  */
-function renderRuleProvenanceRatio(rulesPath) {
+function renderRuleProvenanceRatio(rulesPath, onRecordPath = recordPathPredicate()) {
   const data = loadRules(rulesPath, 'RULE_PROVENANCE_RATIO');
-  return `${data.rules.length} of ${data.rules.length}`;
+  const legacy = data.rules.filter((r) => !onRecordPath(r)).length;
+  return `${legacy} of ${data.rules.length}`;
 }
 
-/** RULE_PROVENANCE_RATIO — e.g. `485 of 485`, from .totem/compiled-rules.json. */
+/** RULE_PROVENANCE_RATIO — legacy rows over all rows, e.g. `485 of 513`, from .totem/compiled-rules.json. */
 function RULE_PROVENANCE_RATIO() {
   return renderRuleProvenanceRatio(COMPILED_RULES);
 }
@@ -404,6 +433,30 @@ function activeRulePredicate() {
   return core.isActiveCompiledRule;
 }
 
+/**
+ * Core's own record-path discriminator (`isRecordPathRule`), from the built
+ * dist for the same reason as `activeRulePredicate`: a row lowered from a rule
+ * record carries a minted id in `lessonHash`, not a lesson's content hash, and
+ * the provenance sentence, the ratio and the lesson count must tell the two
+ * kinds apart by the predicate the runtime applies, never by a mirrored field
+ * test of their own.
+ */
+function recordPathPredicate() {
+  const distPath = path.join(ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `[Totem Error] RULE_PROVENANCE transform failed: ${distPath} not found — run pnpm build first (the provenance split derives from core's isRecordPathRule).`,
+    );
+  }
+  const core = require(distPath);
+  if (typeof core.isRecordPathRule !== 'function') {
+    throw new Error(
+      '[Totem Error] RULE_PROVENANCE transform failed: @mmnto/totem exports no isRecordPathRule.',
+    );
+  }
+  return core.isRecordPathRule;
+}
+
 /** Rules the linter runs — the canonical active predicate over the artifact. */
 function renderActiveRuleCount(rulesPath, predicate = activeRulePredicate()) {
   const data = loadRules(rulesPath, 'ACTIVE_RULE_COUNT');
@@ -420,9 +473,12 @@ function ACTIVE_RULE_COUNT() {
  * counts (distinct compiled lessons + the non-compilable rest), rounded to the
  * nearest hundred so prose does not churn on every banked lesson.
  */
-function renderLessonRecordCount(rulesPath) {
+function renderLessonRecordCount(rulesPath, onRecordPath = recordPathPredicate()) {
   const data = loadRules(rulesPath, 'LESSON_RECORD_COUNT');
-  const distinct = new Set(data.rules.map((r) => r.lessonHash)).size;
+  // A record-built row's `lessonHash` is a minted id, not a lesson, so the
+  // distinct-lesson count is over the legacy rows (core's own split).
+  const distinct = new Set(data.rules.filter((r) => !onRecordPath(r)).map((r) => r.lessonHash))
+    .size;
   const nonCompilable = Array.isArray(data.nonCompilable) ? data.nonCompilable.length : 0;
   const total = distinct + nonCompilable;
   // "about N hundred" is only honest for a corpus of hundreds: below one
@@ -578,6 +634,7 @@ module.exports = {
   _renderLintReceipt: renderLintReceipt,
   _loadMaturityData: loadMaturityData,
   _renderRuleProvenanceRatio: renderRuleProvenanceRatio,
+  _recordPathPredicate: recordPathPredicate,
   _renderActiveRuleCount: renderActiveRuleCount,
   _renderLessonRecordCount: renderLessonRecordCount,
   _renderFreezeSinceMonth: renderFreezeSinceMonth,

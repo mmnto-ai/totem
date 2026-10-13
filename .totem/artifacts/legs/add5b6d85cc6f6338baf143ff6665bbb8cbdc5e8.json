@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "add5b6d85cc6f6338baf143ff6665bbb8cbdc5e8",
+  "readAt": "2026-10-12T21:15:25.441Z",
+  "findings": [
+    {
+      "id": "3034-s7-F17",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 0,
+      "claim": "The F12 fold's three-row fixture did not catch the curation-keyed look-alike it said it pins: with core's key rows a and c are legacy (2 of 3) and with a curation key rows a and b are legacy, also 2 of 3; only an any-record-field look-alike failed it. Row b also used an empty examples array, which the schema's minimum of one rejects.",
+      "counterexample": "Measured by the leg's probe: identical ratio and sentence under core's key and a curation key. FOLDED in the commit after add5b6d8 (fold 3): an uneven four-row fixture, two rows with a non-empty examples list and one with only curation, reads 2 of 4 by core's key where a curation key says 3 of 4 and an any-record-field key 1 of 4."
+    },
+    {
+      "id": "3034-s7-F18",
+      "severity": "MINOR",
+      "file": ".changeset/s6-frozen-lesson-wording-record-rows.md",
+      "line": 0,
+      "claim": "The changeset text said comments in rule-tier.ts and record-runtime.ts that read un-stamped means legacy were re-worded; the record-runtime.ts comment never said that (its change was F15 and F16), and the comment that did say it, on the discriminator in run-compiled-rules.ts, was not named. The text ships to the CHANGELOG.",
+      "counterexample": "git show b454e835:packages/core/src/spine/record-runtime.ts carries no stamp wording. FOLDED in fold 3: the text names run-compiled-rules.ts and rule-tier.ts. Patch confirmed as the honest level; the fixed group bumps every @mmnto/* package regardless."
+    },
+    {
+      "id": "3034-s7-F19",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.test.ts",
+      "line": 1785,
+      "claim": "The twin test asserts the behaviour (one violation, no frozen-lesson wording) but not the use of core's predicate: a fix written as a field test on examples would also pass.",
+      "counterexample": "The two differ only on an explicit undefined examples value, so no gap is measurable; the test fails on the pre-fold code (the old discriminator set the flag for the same shape) and its length assertion makes the pass non-vacuous. DISCLOSED, not folded, on the leg's own verdict (adequate)."
+    },
+    {
+      "id": "3034-s7-F20",
+      "severity": "QUESTION",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 841,
+      "claim": "Do the F11 semantics hold: does the predicate see the real CompiledRule with examples present, is it exported from the barrel through a compliant dynamic import, and is any other run's wording unchanged?",
+      "counterexample": "ANSWERED by the leg as a non-finding: Violation.rule is the schema-loaded CompiledRule the engine pushes, the barrel exports the predicate, the dynamic import complies with the barrel-import rule the regeneration serves, legacy rows carry no examples so their output is unchanged, ast-grep and minted rows are excluded as before, and the text note and the SARIF line read the one flag. No other reader treats un-stamped as legacy (the tier fallback treats un-stamped regex as advisory, intended for record rows too)."
+    },
+    {
+      "id": "3034-s7-F23",
+      "severity": "QUESTION",
+      "file": ".build.log",
+      "line": 0,
+      "claim": "Two untracked files in the worktree (.build.log, .install.log) from the seat's rebuild; confirm they will not be added.",
+      "counterexample": "ANSWERED: the seat's own install and build logs, never staged; deleted before the push."
+    }
+  ],
+  "folded": [
+    "3034-s7-F17",
+    "3034-s7-F18",
+    "3034-s7-F20",
+    "3034-s7-F23"
+  ],
+  "verdict": "read 3 on fold 2 c6d4fe99 (head add5b6d8): 0 blocking, 0 material, 3 minor, 2 question as typed here (the leg's F20 to F22 were non-findings, recorded as one answered question); CONVERGES; F17 and F18 folded in fold 3 (test and text only, no semantic change), F19 disclosed; the seat names convergence"
+}

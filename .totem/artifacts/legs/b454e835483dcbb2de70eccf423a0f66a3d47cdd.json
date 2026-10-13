@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "b454e835483dcbb2de70eccf423a0f66a3d47cdd",
+  "readAt": "2026-10-12T21:04:15.302Z",
+  "findings": [
+    {
+      "id": "3034-s7-F11",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 851,
+      "claim": "The F5 fold missed comments that still say un-stamped means legacy, and one of them describes the flag that picks user-facing wording: hasFrozenLessonAdvisory keyed on ruleClass == null, so a warning from a record regex row sets it and the lint output labels a record-served rule a frozen lesson.",
+      "counterexample": "Measured: 28 of 28 record rows carry no ruleClass; three record regex rows are active at warning severity. FOLDED in the commit after d3122b77 (fold 2): the discriminator excludes record rows through core's isRecordPathRule from the file's dynamic barrel import, the comments in run-compiled-rules.ts and rule-tier.ts re-worded, a twin of the minted-advisory test asserts a record-built regex warning prints no frozen-lesson note (it printed one on the pre-fix code), a patch changeset for @mmnto/cli."
+    },
+    {
+      "id": "3034-s7-F12",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 0,
+      "claim": "The commit message's claim that a look-alike field test cannot pass overstated the identity check: it pins the exported helper, not the renderers' defaults, so a default changed to a curation-keyed test would still pass.",
+      "counterexample": "FOLDED in fold 2: a three-row fixture where one row carries examples and another carries only curation renders 2 of 3 through the ratio's default and the sentence's default, pinning the defaults to core's key."
+    },
+    {
+      "id": "3034-s7-F13",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 312,
+      "claim": "The fold moved the engine and date parenthesis onto the total in the one-kind (legacy-only) sentence as well, and no test pinned that placement.",
+      "counterexample": "Harmless, since with no record rows all-rows equals legacy-rows. FOLDED in fold 2: the one-kind assertion in the discriminating test pins the placement."
+    },
+    {
+      "id": "3034-s7-F14",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/legs/83760f3a7a7b68bcf9ffa3a06075c9cc0eafb29f.json",
+      "line": 0,
+      "claim": "The fold commit's message says the read-1 deposit lands with that commit; it landed two commits later and was replaced one commit after that.",
+      "counterexample": "git diff 83760f3a d3122b77 --stat shows no legs file. DISCLOSED, not folded: the branch is not rewritten before the push; the pull request body states where each deposit landed."
+    },
+    {
+      "id": "3034-s7-F15",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/record-runtime.ts",
+      "line": 20,
+      "claim": "The rewritten boundary comment said the guard proves the record-path rows are exactly the 28 lowered by totem rule serve, while the test proves the count and the identity with the field-carrying rows, not the provenance.",
+      "counterexample": "FOLDED in fold 2: the comment claims the count and the identity and names the serving writer's record as the provenance's home."
+    },
+    {
+      "id": "3034-s7-F16",
+      "severity": "QUESTION",
+      "file": "packages/core/src/spine/record-runtime.ts",
+      "line": 16,
+      "claim": "The comment dates the regeneration 2026-10-12 while every record row's compiledAt is 2026-10-10, so the maturity sentence lists the lowered rows as compiled up to 2026-10-10; should the comment use the as-of date, and does compiled knowingly include the lowered rows?",
+      "counterexample": "ANSWERED: the run date and the stamp differ by design (F7): the comment now names both (run 2026-10-12, rows stamped with the input's asOf 2026-10-10), and the sentence's compiled-between range knowingly spans the lowered rows, whose compiledAt is their lowering instant."
+    }
+  ],
+  "folded": [
+    "3034-s7-F11",
+    "3034-s7-F12",
+    "3034-s7-F13",
+    "3034-s7-F15",
+    "3034-s7-F16"
+  ],
+  "verdict": "read 2 on the fold d3122b77 (head b454e835): 0 blocking, 0 material, 5 minor, 1 question as typed here (the leg's own summary said four and two while listing five and one); CONVERGES on the fold; F11 folded with a semantic change at c6d4fe99, so read 3 is re-armed on fold 2"
+}

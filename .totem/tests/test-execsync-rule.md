@@ -1,5 +1,5 @@
 ---
-rule: bb937a42753289f1
+rule: 69318419666ecf84
 file: packages/cli/src/git.ts
 ---
 

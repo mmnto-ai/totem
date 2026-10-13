@@ -287,8 +287,11 @@ test('RULE_PROVENANCE takes the active predicate as a parameter and derives the 
 // pass here while the artifact says otherwise.
 
 test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fails loud on a hash-less rule', () => {
+  // A record-built row's `lessonHash` is a minted id, not a lesson's hash, so
+  // the numerator is the legacy rows: the split is core's own predicate.
+  const onRecordPath = transforms._recordPathPredicate();
   const hashed = compiledRules.rules.filter(
-    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0,
+    (r) => typeof r.lessonHash === 'string' && r.lessonHash.length > 0 && !onRecordPath(r),
   ).length;
   assert.equal(transforms.RULE_PROVENANCE_RATIO(), `${hashed} of ${compiledRules.rules.length}`);
   assert.match(transforms.RULE_PROVENANCE_RATIO(), /^\d+ of \d+$/);
@@ -308,6 +311,115 @@ test('RULE_PROVENANCE_RATIO renders hashed-over-total from committed data and fa
     rules: [{ lessonHash: '' }],
   });
   assert.throws(() => transforms._renderRuleProvenanceRatio(emptyHash), /no lessonHash/);
+});
+
+test('RULE_PROVENANCE and RULE_PROVENANCE_RATIO tell a record-built row from a legacy row by the record-path predicate, never by a field of their own', () => {
+  // The predicate is a parameter here, so the fixture decides which row is on
+  // the record path and the transforms cannot mirror a field test of their own.
+  const onRecordPath = (r) => r.record === true;
+  const mixed = writeTmpJson('provenance-mixed.json', {
+    rules: [
+      { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
+      { lessonHash: 'b', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', record: true },
+      { lessonHash: 'c', compiledAt: '2026-10-10T00:00:00.000Z', engine: 'ast-grep', record: true },
+    ],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(mixed, onRecordPath), '1 of 3');
+  const sentence = transforms._renderRuleProvenance(mixed, () => true, onRecordPath);
+  assert.ok(sentence.includes('**3 compiled rules**'), 'total is every row');
+  assert.ok(sentence.includes('1 carry the content hash of the lesson'), 'legacy count named');
+  assert.ok(sentence.includes('2 are lowered from rule records'), 'record count named');
+  assert.ok(sentence.includes('lessonHash'), 'the mechanism is still named');
+  assert.ok(sentence.includes('**1 distinct lessons**'), 'lessons counted over legacy rows only');
+  // The engine and date figures are the whole corpus's and sit on the total,
+  // never inside the legacy-rules clause (leg F1 on the S6 regeneration: the
+  // first re-word attributed 293 ast-grep / 220 regex and a 2026-10-10 date to
+  // "the legacy rules", whose own figures were 268 / 217 and 2026-06-07).
+  assert.ok(
+    sentence.includes(
+      '**3 compiled rules** (engines: 2 ast-grep / 1 regex; compiled between 2026-04-06 and 2026-10-10)',
+    ),
+    'engine and date figures attach to the total',
+  );
+  assert.ok(
+    sentence.includes('The 1 legacy rules compile from **1 distinct lessons**.'),
+    'the legacy clause carries only its own counts',
+  );
+  // LESSON_RECORD_COUNT counts distinct lessons over the legacy rows: 150 rows
+  // of which 50 are record-built read "about 100"; counting every row would
+  // say "about 200".
+  const mixedHundreds = writeTmpJson('lesson-count-mixed.json', {
+    rules: Array.from({ length: 150 }, (_, i) => ({
+      lessonHash: `h${i}`,
+      ...(i < 50 ? { record: true } : {}),
+    })),
+  });
+  assert.equal(transforms._renderLessonRecordCount(mixedHundreds, onRecordPath), 'about 100');
+  // The default predicate IS core's, not a look-alike of it.
+  const core = require(
+    require('node:path').join(__dirname, '..', 'packages', 'core', 'dist', 'index.js'),
+  );
+  assert.equal(transforms._recordPathPredicate(), core.isRecordPathRule);
+  // And the renderers' DEFAULTS behave as core does, not as a look-alike keyed
+  // on another record field (read 2, F12; the fixture made uneven by read 3,
+  // F17): two rows core marks (they carry `examples`) and one carrying only
+  // `curation` read "2 of 4" through core's key, where a curation-keyed default
+  // would say "3 of 4" and an any-record-field default "1 of 4".
+  const example = [{ bad: 'console.log("x")', good: 'log.info("x")' }];
+  const defaultsFixture = writeTmpJson('provenance-defaults.json', {
+    rules: [
+      { lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' },
+      {
+        lessonHash: 'b',
+        compiledAt: '2026-10-10T00:00:00.000Z',
+        engine: 'ast-grep',
+        examples: example,
+      },
+      {
+        lessonHash: 'c',
+        compiledAt: '2026-04-07T00:00:00.000Z',
+        engine: 'regex',
+        curation: { sourceLesson: 'lesson-a' },
+      },
+      {
+        lessonHash: 'd',
+        compiledAt: '2026-10-10T00:00:00.000Z',
+        engine: 'regex',
+        examples: example,
+      },
+    ],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(defaultsFixture), '2 of 4');
+  assert.ok(
+    transforms
+      ._renderRuleProvenance(defaultsFixture, () => true)
+      .includes('2 carry the content hash of the lesson they were compiled from'),
+    'the sentence default splits by core, not by curation',
+  );
+  // With no record row the sentence keeps its one-kind form and the ratio is total-over-total.
+  const legacyOnly = writeTmpJson('provenance-legacy-only.json', {
+    rules: [{ lessonHash: 'a', compiledAt: '2026-04-06T00:00:00.000Z', engine: 'regex' }],
+  });
+  assert.equal(transforms._renderRuleProvenanceRatio(legacyOnly, onRecordPath), '1 of 1');
+  const oneKind = transforms._renderRuleProvenance(legacyOnly, () => true, onRecordPath);
+  assert.ok(oneKind.includes('every one carries the content hash of the lesson it came from'));
+  assert.ok(!oneKind.includes('lowered from rule records'));
+  // The legacy-only sentence keeps the same placement of the corpus figures on
+  // the total (read 2, F13).
+  assert.ok(
+    oneKind.includes(
+      '**1 compiled rules** (engines: 1 regex; compiled between 2026-04-06 and 2026-04-06) stand',
+    ),
+    'engine and date figures attach to the total in the one-kind form too',
+  );
+  // The committed corpus: the ratio's numerator is exactly the rows core puts off the record path.
+  const legacyCommitted = compiledRules.rules.filter(
+    (r) => !transforms._recordPathPredicate()(r),
+  ).length;
+  assert.equal(
+    transforms.RULE_PROVENANCE_RATIO(),
+    `${legacyCommitted} of ${compiledRules.rules.length}`,
+  );
 });
 
 test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical predicate, never a mirrored status test", () => {
@@ -341,7 +453,11 @@ test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical pred
 });
 
 test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {
-  const distinct = new Set(compiledRules.rules.map((r) => r.lessonHash)).size;
+  // Distinct LESSONS: a record-built row's minted id is not one (core's split).
+  const onRecordPath = transforms._recordPathPredicate();
+  const distinct = new Set(
+    compiledRules.rules.filter((r) => !onRecordPath(r)).map((r) => r.lessonHash),
+  ).size;
   const rest = Array.isArray(compiledRules.nonCompilable) ? compiledRules.nonCompilable.length : 0;
   const rounded = Math.round((distinct + rest) / 100) * 100;
   assert.equal(transforms.LESSON_RECORD_COUNT(), `about ${rounded.toLocaleString('en-US')}`);

@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "83760f3a7a7b68bcf9ffa3a06075c9cc0eafb29f",
+  "readAt": "2026-10-12T20:50:54.699Z",
+  "findings": [
+    {
+      "id": "3034-s7-F1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/maturity.md",
+      "line": 35,
+      "claim": "The re-worded provenance sentence attributes the whole corpus's engine counts and compile dates to the legacy rules: the parenthesis sat inside the clause 'The legacy rules compile from 485 distinct lessons' while being computed over every row.",
+      "counterexample": "Measured on the committed file: all 513 rows 293 ast-grep / 220 regex, compiled 2026-04-06 to 2026-10-10; the 485 legacy rows 268 / 217, to 2026-06-07; the 28 record rows 25 / 3. No test pinned the clause. FOLDED at d3122b77: the parenthesis attaches to the total, the legacy clause carries only its own counts, and the mixed-fixture test pins both placements."
+    },
+    {
+      "id": "3034-s7-F2",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 0,
+      "claim": "The LESSON_RECORD_COUNT split was untested with a predicate parameter and value-invariant on the committed corpus (485 plus 1120 and 513 plus 1120 both round to about 1,600), so removing it would pass every test and the docs gate.",
+      "counterexample": "FOLDED at d3122b77: a 150-row fixture with 50 record-built rows renders 'about 100' under the split where counting every row says 'about 200'."
+    },
+    {
+      "id": "3034-s7-F3",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 0,
+      "claim": "The committed-corpus checks compared the transforms against their own _recordPathPredicate(), so a predicate that returned a mirrored field test would still pass.",
+      "counterexample": "FOLDED at d3122b77: the default predicate is asserted identical (assert.equal) to isRecordPathRule from packages/core/dist/index.js."
+    },
+    {
+      "id": "3034-s7-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/record-lower.test.ts",
+      "line": 0,
+      "claim": "The corpus sweep's comment gave the wrong reason for restricting the sweep to legacy rows: it said excludeGlobs cannot be expressed by fileGlobs alone, but 141 legacy rows express exclusions as exclamation-prefixed fileGlobs entries.",
+      "counterexample": "The real reason is the dialect fork: ruleAppliesToFile sends a record row through recordScopeMatchesFile (record-runtime.ts). The restriction itself is the correct form and the sweep still covers 485 by 10 legacy comparisons. FOLDED at d3122b77: the comment states the fork."
+    },
+    {
+      "id": "3034-s7-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/spine/record-runtime.ts",
+      "line": 0,
+      "claim": "Four comments said the engine-type proxy branch and the record compiled homes were reachable by legacy rules alone; since the regeneration the two blocking record rows reach the proxy with no stamp (D3 (a)), and the corpus guard's claim is a two-kinds one.",
+      "counterexample": "Sites: run-compiled-rules.ts (the proxy branch), compiler-schema.ts (the legitimacy refinement), record-runtime.ts (the boundary header and the predicate's doc). The S6 note names this as a cost of D3 (a). FOLDED at d3122b77: all four re-worded; comments only, no behaviour change."
+    },
+    {
+      "id": "3034-s7-F6",
+      "severity": "MINOR",
+      "file": "docs/wiki/how-totem-gets-built.md",
+      "line": 38,
+      "claim": "The bullet still said the rules that exist were compiled from lessons and that new ones are not being compiled, while 28 rows were just lowered from records.",
+      "counterexample": "FOLDED at d3122b77 for the first sentence (compiled from lessons or, since the gate (5) lift, lowered from rule records that curate them). The freeze-stating remainder of the bullet is step 8's re-word by the S6 note's sequence table."
+    },
+    {
+      "id": "3034-s7-F7",
+      "severity": "QUESTION",
+      "file": ".totem/compiled-rules.json",
+      "line": 0,
+      "claim": "All 149 archived rows carry archivedAt 2026-10-10T02:18:13.000Z, the input's asOf, two days before the run; lesson archive stamps the current time. Is the input instant ruled for archivedAt as well as compiled_at?",
+      "counterexample": "ANSWERED: by the planner's design, which the B2 build and its reads settled: every instant a run writes is the input's asOf so a re-run is byte-identical (serving-plan.ts: the now for every lowered row and the manifest; archivedAt set from the same instant on the first transition), under the operator's ruling of 2026-10-11 that asOf is derived from the pins. Disclosed in the pull request."
+    },
+    {
+      "id": "3034-s7-F8",
+      "severity": "MINOR",
+      "file": ".github/copilot-instructions.md",
+      "line": 0,
+      "claim": "The regenerated exports gained 388 lesson entries (1590 to 1978) banked since the last export of 2026-08-08, which the commit message did not mention.",
+      "counterexample": "Archived annotations 95 to 242. FOLDED: disclosed in the pull request body and the step-6 report's addendum."
+    },
+    {
+      "id": "3034-s7-F9",
+      "severity": "MINOR",
+      "file": ".totem/tests/test-87aff037d7de47a7.md",
+      "line": 2,
+      "claim": "The fixture's filename names the legacy hash while its rule line names 2095327f92d4e486, so rule scaffold 2095327f would write a second fixture (rule.ts checks for an existing fixture by the test-<hash>.md filename).",
+      "counterexample": "NOT FOLDED, disclosed: the spine-adopt spike pins the path in specimens.mts and record-sets.mts under a path-filtered workflow, so a rename reaches into the spike; a minted-id filename rides the spike's own re-point."
+    },
+    {
+      "id": "3034-s7-F10",
+      "severity": "QUESTION",
+      "file": "docs/wiki/maturity.md",
+      "line": 0,
+      "claim": "The diff touches docs/wiki/**, an owed glob, and the commit carried no deposit; the deposit must land before the push.",
+      "counterexample": "ANSWERED: this deposit, against the head the leg read, plus the read-2 deposit against the fold, both committed before the push."
+    }
+  ],
+  "folded": [
+    "3034-s7-F1",
+    "3034-s7-F2",
+    "3034-s7-F3",
+    "3034-s7-F4",
+    "3034-s7-F5",
+    "3034-s7-F6",
+    "3034-s7-F7",
+    "3034-s7-F8",
+    "3034-s7-F10"
+  ],
+  "verdict": "read 1 on 83760f3a: 0 blocking, 1 material, 7 minor, 2 question as typed here (the leg counted F6's embedded question separately); not converged on F1; every finding folded or answered at d3122b77 except F9, disclosed; read 2 re-armed on the fold diff"
+}
