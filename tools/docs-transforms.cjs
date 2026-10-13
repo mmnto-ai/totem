@@ -343,11 +343,19 @@ function renderDaysUnderFreeze(freezePath, maturityPath) {
       `[Totem Error] DAYS_UNDER_FREEZE transform failed: asOf ${asOf} predates freeze since ${since}.`,
     );
   }
+  // The entry stays after the gate (5) lift, re-worded, because eight consumers
+  // key on its id (the lift ruling of 2026-10-10, mmnto-ai/totem-strategy#1486,
+  // Q7 (a)): the LEGACY compile path is what stays parked; the corpus itself is
+  // regenerated from rule records by the serving writer. The passage says both.
   return (
     `The legacy lesson→rule compiler has been parked under a standing freeze since **${since}** — ` +
     `**${days} days** as of this page's last data refresh (${asOf}). Rather than keep running a ` +
-    `compiler we no longer trust, the rule corpus is enforced read-only until its replacement passes ` +
-    `held-out validation. We hold our own line the way we ask your repo to hold its own.`
+    `compiler we no longer trust, we parked it and held the rule corpus read-only until a ` +
+    `replacement route passed held-out validation. That route is open: since the gate (5) lift the ` +
+    `serving file is regenerated from rule records by \`totem rule serve\`, the floor's rules serve ` +
+    `by their records, every other legacy rule is carried unchanged or archived on its curation row, ` +
+    `and the parked compiler refuses a record-managed file. We hold our own line the way we ask ` +
+    `your repo to hold its own.`
   );
 }
 
@@ -466,6 +474,65 @@ function renderActiveRuleCount(rulesPath, predicate = activeRulePredicate()) {
 /** ACTIVE_RULE_COUNT — e.g. `385`, from .totem/compiled-rules.json through core's predicate. */
 function ACTIVE_RULE_COUNT() {
   return renderActiveRuleCount(COMPILED_RULES);
+}
+
+/**
+ * Core's own blocking predicate (`isBlockingRule`: hard tier AND error
+ * severity), from the built dist, so the README's sentence about which rules
+ * can fail a push derives from the one predicate `totem lint` and
+ * `totem rule list --blocking` share (mmnto-ai/totem#3035), never from a
+ * mirrored tier test of its own.
+ */
+function blockingRulePredicate() {
+  const distPath = path.join(ROOT, 'packages', 'core', 'dist', 'index.js');
+  if (!fs.existsSync(distPath)) {
+    throw new Error(
+      `[Totem Error] BLOCKING_RULE_SET transform failed: ${distPath} not found — run pnpm build first (the blocking set derives from core's isBlockingRule).`,
+    );
+  }
+  const core = require(distPath);
+  if (typeof core.isBlockingRule !== 'function') {
+    throw new Error(
+      '[Totem Error] BLOCKING_RULE_SET transform failed: @mmnto/totem exports no isBlockingRule.',
+    );
+  }
+  return core.isBlockingRule;
+}
+
+/**
+ * The rules that can fail a push: the active rows core's blocking predicate
+ * admits, split by engine and by provenance (served from a rule record, or a
+ * legacy row). The README's enforcement sentence rides this fragment so the
+ * figure is re-derived from the serving file on every docs run instead of
+ * typed in (Q5 (b) of the gate (5) lift ruling, re-derived at S6 step 8).
+ */
+function renderBlockingRuleSet(
+  rulesPath,
+  onBlocking = blockingRulePredicate(),
+  onActive = activeRulePredicate(),
+  onRecordPath = recordPathPredicate(),
+) {
+  const data = loadRules(rulesPath, 'BLOCKING_RULE_SET');
+  const active = data.rules.filter(onActive);
+  const blocking = active.filter(onBlocking);
+  if (blocking.length === 0) return `none of the ${active.length} active rules blocks a push`;
+  const engines = {};
+  for (const r of blocking)
+    engines[r.engine ?? 'unknown'] = (engines[r.engine ?? 'unknown'] ?? 0) + 1;
+  const engineSummary = Object.keys(engines)
+    .sort()
+    .map((e) => `${engines[e]} ${e}`)
+    .join(' / ');
+  const record = blocking.filter(onRecordPath).length;
+  return (
+    `${blocking.length} of ${active.length} active rules block a push (${engineSummary}; ` +
+    `${record} served from rule records, ${blocking.length - record} legacy)`
+  );
+}
+
+/** BLOCKING_RULE_SET — e.g. `4 of 264 active rules block a push (4 ast-grep; 2 served from rule records, 2 legacy)`, from .totem/compiled-rules.json through core's predicates. */
+function BLOCKING_RULE_SET() {
+  return renderBlockingRuleSet(COMPILED_RULES);
 }
 
 /**
@@ -625,9 +692,12 @@ module.exports = {
   LINT_RECEIPT,
   RULE_PROVENANCE_RATIO,
   ACTIVE_RULE_COUNT,
+  BLOCKING_RULE_SET,
   LESSON_RECORD_COUNT,
   FREEZE_SINCE_MONTH,
   // internals exported for tests (render with an explicit source path)
+  _renderBlockingRuleSet: renderBlockingRuleSet,
+  _blockingRulePredicate: blockingRulePredicate,
   _renderMaturityTable: renderMaturityTable,
   _renderRuleProvenance: renderRuleProvenance,
   _renderDaysUnderFreeze: renderDaysUnderFreeze,

@@ -452,6 +452,54 @@ test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical pred
   assert.throws(() => transforms._renderLessonRecordCount(lessonHashless), /no lessonHash/);
 });
 
+test("BLOCKING_RULE_SET derives the rules that can fail a push through core's blocking predicate over the active rows, and tells record-served from legacy rows by the record-path predicate", () => {
+  const core = require('../packages/core/dist/index.js');
+  const active = compiledRules.rules.filter(core.isActiveCompiledRule);
+  const blocking = active.filter(core.isBlockingRule);
+  const record = blocking.filter(core.isRecordPathRule).length;
+  const rendered = transforms.BLOCKING_RULE_SET();
+  assert.ok(
+    rendered.startsWith(`${blocking.length} of ${active.length} active rules block a push`),
+    rendered,
+  );
+  assert.ok(
+    rendered.includes(`${record} served from rule records, ${blocking.length - record} legacy`),
+    rendered,
+  );
+  // The predicates are parameters, so the fixture decides who is active, who
+  // blocks and who is on the record path; the transform cannot mirror a tier
+  // or status test of its own. Discriminating: the archived error row and the
+  // warning row are out, the two error rows split one record, one legacy.
+  const onActive = (r) => r.status !== 'archived';
+  const onBlocking = (r) => r.severity === 'error';
+  const onRecordPath = (r) => r.record === true;
+  const mixed = writeTmpJson('blocking-mixed.json', {
+    rules: [
+      { lessonHash: 'a', engine: 'ast-grep', severity: 'error', record: true },
+      { lessonHash: 'b', engine: 'ast-grep', severity: 'error' },
+      { lessonHash: 'c', engine: 'regex', severity: 'error', status: 'archived' },
+      { lessonHash: 'd', engine: 'regex', severity: 'warning' },
+    ],
+  });
+  assert.equal(
+    transforms._renderBlockingRuleSet(mixed, onBlocking, onActive, onRecordPath),
+    '2 of 3 active rules block a push (2 ast-grep; 1 served from rule records, 1 legacy)',
+  );
+  const none = writeTmpJson('blocking-none.json', {
+    rules: [{ lessonHash: 'd', engine: 'regex', severity: 'warning' }],
+  });
+  assert.equal(
+    transforms._renderBlockingRuleSet(none, onBlocking, onActive, onRecordPath),
+    'none of the 1 active rules blocks a push',
+  );
+  // The README's enforcement figure rides the marker, never a literal.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf-8');
+  assert.ok(
+    readme.includes('<!-- docs BLOCKING_RULE_SET -->'),
+    'README must carry the BLOCKING_RULE_SET marker',
+  );
+});
+
 test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {
   // Distinct LESSONS: a record-built row's minted id is not one (core's split).
   const onRecordPath = transforms._recordPathPredicate();

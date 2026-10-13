@@ -87,15 +87,15 @@ Want to watch the whole loop run on a committed fixture? [`examples/proof-kit/`]
 
 The loop above is the design. Here is where it stands today.
 
-**Enforcement is stable.** Compiled rules run on every diff: deterministic, offline, zero LLM.
+**Enforcement is stable.** Compiled rules run on every diff: deterministic, offline, zero LLM. The rules that can fail a push are few and named: <!-- docs BLOCKING_RULE_SET -->4 of 264 active rules block a push (4 ast-grep; 2 served from rule records, 2 legacy)<!-- /docs -->. Every other active rule is advisory, printed and kept out of the exit code; `totem rule list --blocking` prints the set.
 
-**Lessons are live.** They bank, index, and surface to agents today. They advise; they do not yet compile.
+**Lessons are live.** They bank, index, and surface to agents today. They advise; they do not compile.
 
-**The compiler is frozen on purpose, since 2026-05-17.** We hit a soundness problem in the lesson-to-rule path and froze it fail-closed: a corrupt [freeze file](.totem/freeze.json) throws rather than bypassing itself. Fewer rules we trust beat more rules we do not.
+**The legacy compiler is frozen on purpose, since 2026-05-17.** We hit a soundness problem in the lesson-to-rule path and froze it fail-closed: a corrupt [freeze file](.totem/freeze.json) throws rather than bypassing itself. Fewer rules we trust beat more rules we do not.
 
-**The path back is gated, not dated.** The replacement compiler ships only after it passes held-out validation on real work; status lives on the [maturity page](docs/wiki/maturity.md).
+**The replacement route is open, and gated by evidence.** Since the gate (5) lift, the serving file is regenerated from rule records by `totem rule serve`: the rules on the gate's floor serve by their records, every other legacy rule is carried unchanged or archived on its curation row, and the parked compiler refuses a record-managed file. A rule reaches the floor only through a scored run; status lives on the [maturity page](docs/wiki/maturity.md).
 
-What this means today: existing rules keep enforcing, new lessons bank and advise, and new-rule compilation waits for the gate. If that trade is wrong for you, we would rather you know now.
+What this means today: existing rules keep enforcing, new lessons bank and advise, and a new rule reaches the serving file only as a record that has passed a gate. If that trade is wrong for you, we would rather you know now.
 
 ## The Queryable Knowledge Index
 

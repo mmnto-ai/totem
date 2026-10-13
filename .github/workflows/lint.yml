@@ -132,16 +132,20 @@ jobs:
           git fetch origin "$BASE_REF"
           node packages/cli/dist/index.js legs gate
 
-      # ADVISORY until the rule-compilation freeze lifts (the convergent spine).
-      # The compiled lesson-rules carry frozen #2055-class false-positives that
-      # cannot be recompiled away under the freeze (safe-regex2 ReDoS gate). A
+      # ADVISORY by ruling, kept at the gate (5) lift (mmnto-ai/totem-strategy#1486,
+      # Q8 (a), 2026-10-10). The legacy regex-class lesson-rules still carry
+      # mmnto-ai/totem#2055-class false-positives that the parked legacy compiler
+      # cannot recompile away (safe-regex2 ReDoS gate), and the linter demotes that
+      # whole class to advisory by its own predicate (mmnto-ai/totem#2181). A
       # perma-red check trains bypass-blindness and masks a future REAL regression
       # (red->red is invisible) — so the job keeps RUNNING (findings still print)
-      # but is non-failing. The clean deterministic gates stay hard in the pre-push
-      # hook + the PR bot review is the real gate. Drop continue-on-error when the
-      # spine makes these rules legitimate again.
-      # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors strategy#656
-      - name: Run totem lint (ADVISORY — frozen lesson-rules pending spine)
+      # but is non-failing. The blocking set (hard engine at error severity) is
+      # enforced by the pre-push hook on every machine that runs it, and the PR
+      # bot review is the other real gate. Dropping continue-on-error is a ruling
+      # on the blocking set's measured firings on the regenerated corpus (the S6
+      # note's D5), not a date.
+      # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors mmnto-ai/totem-strategy#656
+      - name: Run totem lint (ADVISORY — by ruling; the pre-push hook is the hard arm)
         id: totem_lint
         continue-on-error: true
         env:
@@ -159,7 +163,7 @@ jobs:
       - name: Advisory annotation (when totem lint flagged findings)
         if: steps.totem_lint.outcome == 'failure'
         run: |
-          echo "::warning title=Totem lint ADVISORY::Totem lint flagged findings but the job is advisory — these may be #2055-class false-positives from frozen lesson-rules (safe-regex2 freeze). Drop continue-on-error when the spine recompiles. Refs: mmnto-ai/totem#2055, mmnto-ai/totem-strategy#430."
+          echo "::warning title=Totem lint ADVISORY::Totem lint flagged findings but the job is advisory (Q8 (a) of the gate (5) lift ruling, mmnto-ai/totem-strategy#1486) — these may be mmnto-ai/totem#2055-class false-positives from legacy lesson-rules the linter demotes to advisory; the pre-push hook is the hard arm for the blocking set. Refs: mmnto-ai/totem#2055, mmnto-ai/totem-strategy#430."
 
       # NOTE (advisory posture): the SARIF steps below still run while the lint job
       # is advisory, so frozen #2055-class false-positives surface as Code Scanning

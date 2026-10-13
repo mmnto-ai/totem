@@ -54,7 +54,7 @@
         { "kind": "command", "ref": "lesson" },
         { "kind": "data", "ref": ".totem/freeze.json" }
       ],
-      "note": "Parked under a standing freeze since 2026-05-17 (receipt below) pending a replacement derivation pipeline. The compiled corpus remains fully enforced."
+      "note": "The legacy compile path stays parked under a standing freeze since 2026-05-17 (receipt below). Since the gate (5) lift the serving file is regenerated from rule records by `totem rule serve`; the compiled corpus remains fully enforced."
     },
     {
       "id": "review-lanes",

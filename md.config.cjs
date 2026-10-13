@@ -25,6 +25,7 @@ module.exports = {
     // Inline figures for prose (a fragment between markers inside a sentence).
     RULE_PROVENANCE_RATIO: transforms.RULE_PROVENANCE_RATIO,
     ACTIVE_RULE_COUNT: transforms.ACTIVE_RULE_COUNT,
+    BLOCKING_RULE_SET: transforms.BLOCKING_RULE_SET,
     LESSON_RECORD_COUNT: transforms.LESSON_RECORD_COUNT,
     FREEZE_SINCE_MONTH: transforms.FREEZE_SINCE_MONTH,
   },
