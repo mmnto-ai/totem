@@ -21,6 +21,18 @@ updates:
     labels:
       - 'type: chore'
       - 'scope: ci'
+    # One pull request per weekly run for every patch and minor Actions bump
+    # (five arrived separately on 2026-10-12, mmnto-ai/totem#3057 through
+    # mmnto-ai/totem#3061, each
+    # verified and merged by hand). Majors stay separate: the only Dependabot
+    # pull request this repository ever closed unmerged was a major.
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
     ignore:
       # changesets/action v2 hard-fails against @changesets/cli v2 (this repo
       # pins ^2.x) — the major re-lands with the CLI v3 upgrade, mmnto-ai/totem#2653.
