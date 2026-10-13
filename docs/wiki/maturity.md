@@ -32,7 +32,7 @@ Three claims we would rather prove than assert.
 
 <!-- docs RULE_PROVENANCE -->
 
-**513 compiled rules** (engines: 293 ast-grep / 220 regex; compiled between 2026-04-06 and 2026-10-10) stand between a banked mistake and its recurrence, and every one names its source: 485 carry the content hash of the lesson they were compiled from (`lessonHash`), and 28 are lowered from rule records and carry the id minted from the record — the chain from incident to enforcement is mechanical, not editorial. The 485 legacy rules compile from **485 distinct lessons**. **264 are active** in `totem lint` today, 4 of them block a push (hard tier at error severity) and the rest are advisory; the other 249 are inactive (242 archived, 7 untested against the codebase), and the receipt below counts the active set at its pinned head, not this one. 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
+**513 compiled rules** (engines: 293 ast-grep / 220 regex; compiled between 2026-04-06 and 2026-10-10) stand between a banked mistake and its recurrence, and every one names its source: 485 carry the content hash of the lesson they were compiled from (`lessonHash`), and 28 are lowered from rule records and carry the id minted from the record — the chain from incident to enforcement is mechanical, not editorial. The 485 legacy rules compile from **485 distinct lessons**. **264 are active** in `totem lint` today, 4 of them block a push (hard tier at error severity) and the rest are non-blocking: they print and never fail it; the other 249 are inactive (242 archived, 7 untested against the codebase), and the receipt below counts the active set at its pinned head, not this one. 1120 lessons currently rest as non-compilable rather than being force-fitted into rules.
 
 <!-- /docs -->
 
@@ -40,7 +40,7 @@ Three claims we would rather prove than assert.
 
 <!-- docs DAYS_UNDER_FREEZE -->
 
-The legacy lesson→rule compiler has been parked under a standing freeze since **2026-05-17** — **81 days** as of this page's last data refresh (2026-08-06). Rather than keep running a compiler we no longer trust, we parked it and held the rule corpus read-only. Since the gate (5) lift the serving file is regenerated from rule records by `totem rule serve`: the migrated rules on the gate's floor serve by their records, every other legacy rule is carried unchanged or archived on its curation row, and the parked compiler refuses a record-managed file. We hold our own line the way we ask your repo to hold its own.
+The legacy lesson→rule compiler has been parked under a standing freeze since **2026-05-17** — **149 days** as of this page's last data refresh (2026-10-13). Rather than keep running a compiler we no longer trust, we parked it and held the rule corpus read-only. Since the gate (5) lift the serving file is regenerated from rule records by `totem rule serve`: the migrated rules on the gate's floor serve by their records, every other legacy rule is carried unchanged or archived on its curation row, and the parked compiler refuses a record-managed file. We hold our own line the way we ask your repo to hold its own.
 
 <!-- /docs -->
 

@@ -133,19 +133,21 @@ jobs:
           node packages/cli/dist/index.js legs gate
 
       # ADVISORY by ruling, kept at the gate (5) lift (mmnto-ai/totem-strategy#1486,
-      # Q8 (a), 2026-10-10). Only a blocking-set finding can fail this step: the
-      # linter demotes the whole regex class to advisory by its own predicate
-      # (mmnto-ai/totem#2181), so the legacy mmnto-ai/totem#2055-class false
-      # positives print and never fail it. The blocking set is hard TIER (ruleClass,
-      # else the engine; no row is stamped today, so ast/ast-grep) at error
-      # severity; it is enforced by the pre-push hook on every machine that runs
-      # it, and the PR bot review is the other real gate. The flag stays because an
-      # unsuppressed blocking finding (the fail-open catch ban fires often) would
-      # turn pull requests red, and a perma-red check trains bypass-blindness and
-      # masks a future REAL regression (red->red is invisible) — so the job keeps
-      # RUNNING (findings still print) but is non-failing (the S6 note's D5 cost).
-      # Dropping continue-on-error is a ruling on the blocking set's measured
-      # firings on the regenerated corpus, not a date.
+      # Q8 (a), 2026-10-10). No advisory finding can fail this step; only a
+      # blocking-set finding, or a failure to run, can: the linter demotes the
+      # whole regex class to advisory by its own predicate (mmnto-ai/totem#2181),
+      # so the legacy mmnto-ai/totem#2055-class false positives print and never
+      # fail it. The blocking set is hard TIER (ruleClass, else the engine; no row
+      # is stamped today, so ast/ast-grep) at error severity; it is enforced by the
+      # pre-push hook on every machine that runs it, and the PR bot review is the
+      # other real gate. The flag stays by Q8 (a): it was left in place at the lift
+      # to be re-read on step 6's measurement of the blocking set's firings, and no
+      # decision to drop it is recorded. The S6 note's D5 names the cost of
+      # dropping it: an unsuppressed blocking finding would turn a pull request
+      # red, and a perma-red check trains bypass-blindness and masks a future REAL
+      # regression (red->red is invisible) — so the job keeps RUNNING (findings
+      # still print) but is non-failing. Dropping continue-on-error is a ruling on
+      # the blocking set's measured firings on the regenerated corpus, not a date.
       # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors mmnto-ai/totem-strategy#656
       - name: Run totem lint (ADVISORY — by ruling; the pre-push hook is the hard arm)
         id: totem_lint

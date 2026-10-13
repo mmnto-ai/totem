@@ -87,7 +87,7 @@ Want to watch the whole loop run on a committed fixture? [`examples/proof-kit/`]
 
 The loop above is the design. Here is where it stands today.
 
-**Enforcement is stable.** Compiled rules run on every diff: deterministic, offline, zero LLM. The rules that can fail a push are few and named: <!-- docs BLOCKING_RULE_SET -->4 of 264 active rules block a push (4 ast-grep; 2 served from rule records, 2 legacy)<!-- /docs -->. Every other active rule is advisory, printed and kept out of the exit code; `totem rule list --blocking` prints the set.
+**Enforcement is stable.** Compiled rules run on every diff: deterministic, offline, zero LLM. The rules that can fail a push are few and named: <!-- docs BLOCKING_RULE_SET -->4 of 264 active rules block a push (4 ast-grep; 2 served from rule records, 2 legacy)<!-- /docs -->. Every other active rule is non-blocking: printed, and kept out of the exit code; `totem rule list --blocking` prints the set.
 
 **Lessons are live.** They bank, index, and surface to agents today. They advise; they do not yet compile.
 

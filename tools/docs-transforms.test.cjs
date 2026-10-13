@@ -496,7 +496,7 @@ test("BLOCKING_RULE_SET derives the rules that can fail a push through core's bl
   assert.ok(sentence.includes('**4 are active**'), sentence);
   assert.ok(
     sentence.includes(
-      '3 of them block a push (hard tier at error severity) and the rest are advisory',
+      '3 of them block a push (hard tier at error severity) and the rest are non-blocking: they print and never fail it',
     ),
     sentence,
   );

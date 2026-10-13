@@ -317,7 +317,7 @@ function renderRuleProvenance(
   const blocking = data.rules.filter(predicate).filter(onBlocking).length;
   const blockingClause =
     blocking > 0
-      ? `${blocking} of them block a push (hard tier at error severity) and the rest are advisory`
+      ? `${blocking} of them block a push (hard tier at error severity) and the rest are non-blocking: they print and never fail it`
       : 'none of them blocks a push';
   return (
     `**${total} compiled rules** (engines: ${engineSummary}; compiled between ${compiledDates[0]} and ${compiledDates[compiledDates.length - 1]}) ` +
