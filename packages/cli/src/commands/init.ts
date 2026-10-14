@@ -1868,31 +1868,53 @@ export default {
       const { readPilotState } = await import('../utils/pilot.js');
       const pilotStatePath = path.join(totemDir, 'pilot-state.json');
       const stateExisted = fs.existsSync(pilotStatePath);
-      const stateBefore = stateExisted ? fs.readFileSync(pilotStatePath, 'utf-8') : null;
-      readPilotState(totemDir); // initializes pilot-state.json if missing or invalid
+      // An existing file this process cannot read (permissions, a lock) is one of the
+      // cases readPilotState recovers from, so the before-read is guarded: an unguarded
+      // read here would stop the run before the helper reached its recovery path (the
+      // bot round of the register PR). The outcome is then reported as what it is.
+      let stateBefore: string | null = null;
+      let stateUnreadable = false;
+      if (stateExisted) {
+        try {
+          stateBefore = fs.readFileSync(pilotStatePath, 'utf-8');
+        } catch {
+          stateUnreadable = true;
+        }
+      }
+      readPilotState(totemDir); // initializes pilot-state.json if missing, unreadable or invalid
       const stateAfter = fs.readFileSync(pilotStatePath, 'utf-8');
+      const stateOutcome = !stateExisted
+        ? 'initialised'
+        : stateUnreadable
+          ? 'reinitialised-unreadable'
+          : stateBefore === stateAfter
+            ? 'present'
+            : 'reinitialised-invalid';
+      const STATE_CLAUSE: Record<typeof stateOutcome, string> = {
+        initialised: '.totem/pilot-state.json initialised',
+        present: '.totem/pilot-state.json already present',
+        'reinitialised-invalid':
+          '.totem/pilot-state.json re-initialised (the existing file was invalid)',
+        'reinitialised-unreadable':
+          '.totem/pilot-state.json re-initialised (the existing file could not be read)',
+      };
+      const STATE_ACTION: Record<typeof stateOutcome, string> = {
+        initialised: 'Initialized pilot state',
+        present: 'Pilot state already present',
+        'reinitialised-invalid': 'Pilot state re-initialized (the existing file was invalid)',
+        'reinitialised-unreadable':
+          'Pilot state re-initialized (the existing file could not be read)',
+      };
       const configClause = configExists
         ? 'the existing config is left as it is (pilot: true is written only into a config this command generates)'
         : pilotKeyWritten
           ? 'pilot: true written into the generated config (a key nothing reads yet)'
           : 'the generated totem.config.ts did not take pilot: true (the injection does not match the generated file, mmnto-ai/totem#3083; the key is read by nothing anyway)';
-      const stateClause = !stateExisted
-        ? '.totem/pilot-state.json initialised'
-        : stateBefore === stateAfter
-          ? '.totem/pilot-state.json already present'
-          : '.totem/pilot-state.json re-initialised (the existing file was invalid)';
       log.info(
         'Totem',
-        `Pilot flag recorded: ${configClause}; ${stateClause}. Today the flag sets the pilot tier of the action gates installed with --gates in this run (a deny prints and exits 0; a gate that cannot be evaluated still blocks). The git hooks are NOT affected (mmnto-ai/totem#2815).`,
+        `Pilot flag recorded: ${configClause}; ${STATE_CLAUSE[stateOutcome]}. Today the flag sets the pilot tier of the action gates installed with --gates in this run (a deny prints and exits 0; a gate that cannot be evaluated still blocks). The git hooks are NOT affected (mmnto-ai/totem#2815).`,
       );
-      summary.push({
-        file: '.totem/pilot-state.json',
-        action: !stateExisted
-          ? 'Initialized pilot state'
-          : stateBefore === stateAfter
-            ? 'Pilot state already present'
-            : 'Pilot state re-initialized (the existing file was invalid)',
-      });
+      summary.push({ file: '.totem/pilot-state.json', action: STATE_ACTION[stateOutcome] });
     }
 
     const lessonsDir = path.join(totemDir, 'lessons');

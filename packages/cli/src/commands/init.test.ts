@@ -19,6 +19,32 @@ vi.mock('@mmnto/totem/fs-atomic', async (importOriginal) => {
   }) as typeof actual.writeFileAtomicSync;
   return { ...actual, writeFileAtomicSync };
 });
+// The same seam for node:fs, the shape ecl-gc.test.ts carries: `vi.spyOn` cannot rebind
+// a frozen ESM module-namespace export, so a hoisted control makes the mocked
+// `readFileSync` refuse one named file for as long as its bytes are a given sentinel (an
+// existing file the process cannot read, until an atomic rewrite replaces it) and pass
+// through to the real implementation for everything else. All other fs calls stay real.
+const fsControl = vi.hoisted(() => ({
+  unreadable: null as { suffix: string; whileBytes: string } | null,
+}));
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const readFileSync = ((target: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
+    const armed = fsControl.unreadable;
+    if (
+      armed &&
+      String(target).endsWith(armed.suffix) &&
+      actual.readFileSync(target, 'utf-8') === armed.whileBytes
+    ) {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    }
+    return (actual.readFileSync as (t: fs.PathOrFileDescriptor, ...r: unknown[]) => unknown)(
+      target,
+      ...rest,
+    );
+  }) as typeof actual.readFileSync;
+  return { ...actual, default: actual, readFileSync };
+});
 import { AUTO_CLOSE_REGEX_SOURCE, LedgerEventSchema, resolveSelfAgents } from '@mmnto/totem';
 
 import {
@@ -4622,6 +4648,9 @@ describe('initCommand --pilot register (mmnto-ai/totem#2815)', () => {
       '{"name":"pilot-fixture","version":"0.0.0","private":true}\n',
       'utf-8',
     );
+    // The non-bare path probes the Ollama floor, a real fetch to localhost:11434 with
+    // a 3 s timeout; refuse it so the test depends on no local service.
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
     await initCommand({ pilot: true, yes: true });
     const configPath = path.join(tmpDir, 'totem.config.ts');
     expect(fs.existsSync(configPath)).toBe(true);
@@ -4661,6 +4690,27 @@ describe('initCommand --pilot register (mmnto-ai/totem#2815)', () => {
     await initCommand({ bare: true, pilot: true, yes: true });
     expect(output()).toContain(
       '.totem/pilot-state.json re-initialised (the existing file was invalid)',
+    );
+    const state = JSON.parse(fs.readFileSync(statePath(), 'utf-8'));
+    expect(typeof state.startedAt).toBe('string');
+    expect(state.pushCount).toBe(0);
+  }, 60000);
+
+  it('an unreadable state file: the run does not stop, and the file is re-initialised', async () => {
+    await initCommand({ bare: true, pilot: true, yes: true });
+    // An existing file the process cannot read (permissions, a lock) cannot be staged
+    // portably: the node:fs seam above refuses the read while the file carries the
+    // sentinel and passes through once readPilotState's atomic rewrite has replaced it.
+    fs.writeFileSync(statePath(), 'LOCKED', 'utf-8');
+    fsControl.unreadable = { suffix: 'pilot-state.json', whileBytes: 'LOCKED' };
+    onTestFinished(() => {
+      fsControl.unreadable = null;
+    });
+    expect(() => fs.readFileSync(statePath(), 'utf-8')).toThrow('EACCES');
+    stderr.length = 0;
+    await initCommand({ bare: true, pilot: true, yes: true });
+    expect(output()).toContain(
+      '.totem/pilot-state.json re-initialised (the existing file could not be read)',
     );
     const state = JSON.parse(fs.readFileSync(statePath(), 'utf-8'));
     expect(typeof state.startedAt).toBe('string');
