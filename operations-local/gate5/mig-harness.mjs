@@ -203,11 +203,13 @@ const SCHEMA = 'gate5-harness-record/1';
 
 /**
  * The rules the lift ruling names under ADR-103's R4 clause (mmnto-ai/totem-strategy#1486,
- * Q1 (a′), ruled 2026-10-10; the operator's checkpoint for the re-pin is 2026-11-16 — a
- * CITATION, not a mechanism: nothing here keys on the clock, and the list changes by a
- * commit on a further ruling). A NAMED export whose value is one array literal of plain
- * string hashes, so the scorer's parity control can read it from this file's source
- * blob at `pin.harness.commit` by a deterministic parse (mmnto-ai/totem#3044).
+ * Q1 (a′), ruled 2026-10-10; the DATE for (a′) is 2026-11-16, set by the operator on
+ * 2026-10-10 and movable by re-ruling — a CITATION, not a mechanism: nothing here keys
+ * on the clock, and the list changes by a commit on a further ruling). A NAMED export
+ * whose value is one array literal of plain single-quoted lowercase 16-hex hashes, so
+ * the scorer's parity control can read it from this file's source blob at
+ * `pin.harness.commit` by a deterministic parse (mmnto-ai/totem#3044; the grammar the
+ * control refuses outside is in operations-local/gate5/r4/README.md).
  */
 export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];
 /** The closed severity pair (`RuleSeveritySchema`); anything else is unranked and stays unexpected. */
@@ -556,6 +558,8 @@ for (const e of entries) {
       legacyOverPair0: null,
       firingSet: null,
     };
+    /** The (iv) inert-declaration note for this record, printed after its own line. */
+    let inertNote = null;
     let parsed;
     try {
       parsed = parseRuleRecord(raw, relPath);
@@ -630,10 +634,10 @@ for (const e of entries) {
         SEVERITY_RANK[rec.severity] < SEVERITY_RANK[legacy.severity];
       const severityExplained =
         !f.severity && declaresLowering && severityLowered ? R4_SEVERITY_LOWERING_STRING : null;
+      // Printed AFTER this record's own line (below), naming the record file, so an
+      // N-record entry attributes each note to its record (leg read 1, F6).
       if (declaresLowering && f.severity)
-        lines.push(
-          `      note: ${e.lessonHash} declares inventory iv (severity lowered under R4) but the record severity equals the legacy row's (${rec.severity}); the declaration is inert on this record.`,
-        );
+        inertNote = `      note: ${name} declares inventory iv (severity lowered under R4) but the record severity equals the legacy row's (${rec.severity}); the declaration is inert on this record.`;
       // The engine and the SCOPE DECLARATIONS are checked by mechanism too (leg
       // finding F10): `target.type` must equal the legacy engine; `excludeGlobs`
       // must equal the legacy `!`-entries (inventory (i), declared); every record
@@ -866,6 +870,7 @@ for (const e of entries) {
     lines.push(
       `    ${name} [${grammar}] validate=${measuredValidate}${measuredValidate === decl.expect.validate ? '' : ` (EXPECTED ${decl.expect.validate})`} · ${recordVerdict}: ${legs} · ${fid}${lop}${fs}`,
     );
+    if (inertNote !== null) lines.push(inertNote);
     if (row.validate.reason && measuredValidate !== 'compiled')
       lines.push(`      reason (verbatim): ${row.validate.reason}`);
     entryRows.push(row);
