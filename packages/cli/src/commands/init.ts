@@ -1877,6 +1877,7 @@ export default {
       if (stateExisted) {
         try {
           stateBefore = fs.readFileSync(pilotStatePath, 'utf-8');
+          // totem-context: intentional — the read failure IS the measured outcome: the catch records it, the message and the summary row report it as the "could not be read" arm, and readPilotState's own recovery (the atomic rewrite) runs next; nothing is swallowed.
         } catch {
           stateUnreadable = true;
         }

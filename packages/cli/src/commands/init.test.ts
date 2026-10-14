@@ -33,7 +33,8 @@ vi.mock('node:fs', async (importOriginal) => {
     const armed = fsControl.unreadable;
     if (
       armed &&
-      String(target).endsWith(armed.suffix) &&
+      typeof target === 'string' &&
+      target.endsWith(armed.suffix) &&
       actual.readFileSync(target, 'utf-8') === armed.whileBytes
     ) {
       throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
