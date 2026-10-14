@@ -458,14 +458,21 @@ test("BLOCKING_RULE_SET derives the rules that can fail a push through core's bl
   const blocking = active.filter(core.isBlockingRule);
   const record = blocking.filter(core.isRecordPathRule).length;
   const rendered = transforms.BLOCKING_RULE_SET();
-  assert.ok(
-    rendered.startsWith(`${blocking.length} of ${active.length} active rules block a push`),
-    rendered,
-  );
-  assert.ok(
-    rendered.includes(`${record} served from rule records, ${blocking.length - record} legacy`),
-    rendered,
-  );
+  // An all-advisory corpus is a valid corpus the transform supports with its
+  // "none" form, so the committed-corpus assertions branch on the count rather
+  // than rejecting it (CodeRabbit on S6 step 8).
+  if (blocking.length === 0) {
+    assert.equal(rendered, `none of the ${active.length} active rules blocks a push`);
+  } else {
+    assert.ok(
+      rendered.startsWith(`${blocking.length} of ${active.length} active rules block a push`),
+      rendered,
+    );
+    assert.ok(
+      rendered.includes(`${record} served from rule records, ${blocking.length - record} legacy`),
+      rendered,
+    );
+  }
   // The predicates are parameters, so the fixture decides who is active, who
   // blocks and who is on the record path; the transform cannot mirror a tier
   // or status test of its own. Discriminating on every predicate (leg F6 on
@@ -501,16 +508,26 @@ test("BLOCKING_RULE_SET derives the rules that can fail a push through core's bl
     sentence,
   );
   assert.ok(
-    transforms.RULE_PROVENANCE().includes(`${blocking.length} of them block a push`),
+    transforms
+      .RULE_PROVENANCE()
+      .includes(
+        blocking.length === 0
+          ? 'none of them blocks a push'
+          : `${blocking.length} of them block a push`,
+      ),
     'the committed sentence names the committed blocking count',
   );
   const none = writeTmpJson('blocking-none.json', {
-    rules: [{ lessonHash: 'd', engine: 'regex', severity: 'warning' }],
+    rules: [{ lessonHash: 'd', engine: 'regex', severity: 'warning', compiledAt: at }],
   });
   assert.equal(
     transforms._renderBlockingRuleSet(none, onBlocking, onActive, onRecordPath),
     'none of the 1 active rules blocks a push',
   );
+  // The provenance sentence's zero branch, covered by fixture like the set's.
+  const noneSentence = transforms._renderRuleProvenance(none, onActive, onRecordPath, onBlocking);
+  assert.ok(noneSentence.includes('**1 are active**'), noneSentence);
+  assert.ok(noneSentence.includes('none of them blocks a push'), noneSentence);
   // The README's enforcement figure rides the marker, never a literal.
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf-8');
   assert.ok(
