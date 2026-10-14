@@ -4572,6 +4572,117 @@ describe('Distributed skill constants match source-of-truth (mmnto-ai/totem#1890
   });
 });
 
+// ─── --pilot's register says what the run did (mmnto-ai/totem#2815) ──────────
+// Each test asserts the message arm AND the state on disk it describes, so a message
+// that drifts from the mechanism fails. The pre-fix code printed one banner
+// unconditionally ("Pilot mode enabled (14 days / 50 pushes). Hooks will warn instead
+// of block."), so every arm assertion below fails on it. `log.*` writes to stderr.
+describe('initCommand --pilot register (mmnto-ai/totem#2815)', () => {
+  let tmpDir: string;
+  let originalCwd: string;
+  let stderr: string[];
+  const savedIsTTY = process.stdin.isTTY;
+  const savedEnv = {
+    OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+    GEMINI_API_KEY: process.env['GEMINI_API_KEY'],
+    GOOGLE_API_KEY: process.env['GOOGLE_API_KEY'],
+  };
+  const OLD_PROMISE = ['Hooks will warn instead of block', '14 days / 50 pushes'];
+  const output = () => stderr.join('\n');
+  const statePath = () => path.join(tmpDir, '.totem', 'pilot-state.json');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-init-pilot-'));
+    originalCwd = process.cwd();
+    delete process.env['OPENAI_API_KEY'];
+    delete process.env['GEMINI_API_KEY'];
+    delete process.env['GOOGLE_API_KEY'];
+    process.chdir(tmpDir);
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    stderr = [];
+    vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      stderr.push(args.map(String).join(' '));
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+    cleanTmpDir(tmpDir);
+    Object.defineProperty(process.stdin, 'isTTY', { value: savedIsTTY, configurable: true });
+    for (const [key, val] of Object.entries(savedEnv)) {
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  });
+
+  it('a TypeScript fixture: the did-not-take arm, and the generated totem.config.ts carries no pilot key (mmnto-ai/totem#3083)', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"pilot-fixture","version":"0.0.0","private":true}\n',
+      'utf-8',
+    );
+    await initCommand({ pilot: true, yes: true });
+    const configPath = path.join(tmpDir, 'totem.config.ts');
+    expect(fs.existsSync(configPath)).toBe(true);
+    // The injection is a silent no-op on this format today (mmnto-ai/totem#3083): the
+    // message must say so, and the file must agree.
+    expect(fs.readFileSync(configPath, 'utf-8')).not.toContain('pilot');
+    expect(output()).toContain('the generated totem.config.ts did not take pilot: true');
+    expect(output()).toContain('mmnto-ai/totem#3083');
+    expect(output()).toContain('.totem/pilot-state.json initialised');
+    expect(fs.existsSync(statePath())).toBe(true);
+    for (const old of OLD_PROMISE) expect(output()).not.toContain(old);
+  }, 60000);
+
+  it('a bare (yaml) init: the written arm, and totem.yaml carries pilot: true', async () => {
+    await initCommand({ bare: true, pilot: true, yes: true });
+    expect(fs.readFileSync(path.join(tmpDir, 'totem.yaml'), 'utf-8')).toContain('pilot: true');
+    expect(output()).toContain('pilot: true written into the generated config');
+    expect(output()).toContain('.totem/pilot-state.json initialised');
+    expect(output()).toContain('The git hooks are NOT affected');
+    for (const old of OLD_PROMISE) expect(output()).not.toContain(old);
+  }, 60000);
+
+  it('a re-run over an existing config and a valid state file: left as it is, already present, bytes unchanged', async () => {
+    await initCommand({ bare: true, pilot: true, yes: true });
+    const before = fs.readFileSync(statePath(), 'utf-8');
+    stderr.length = 0;
+    await initCommand({ bare: true, pilot: true, yes: true });
+    expect(output()).toContain('the existing config is left as it is');
+    expect(output()).toContain('.totem/pilot-state.json already present');
+    expect(fs.readFileSync(statePath(), 'utf-8')).toBe(before);
+  }, 60000);
+
+  it('a garbage state file: re-initialised, and the file is rewritten to a valid state', async () => {
+    await initCommand({ bare: true, pilot: true, yes: true });
+    fs.writeFileSync(statePath(), 'garbage', 'utf-8');
+    stderr.length = 0;
+    await initCommand({ bare: true, pilot: true, yes: true });
+    expect(output()).toContain(
+      '.totem/pilot-state.json re-initialised (the existing file was invalid)',
+    );
+    const state = JSON.parse(fs.readFileSync(statePath(), 'utf-8'));
+    expect(typeof state.startedAt).toBe('string');
+    expect(state.pushCount).toBe(0);
+  }, 60000);
+
+  it('--global --pilot says the flag is ignored there and writes no pilot state', async () => {
+    const fakeHome = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-pilot-home-'));
+    onTestFinished(() => cleanTmpDir(fakeHome));
+    await initCommand({ global: true, pilot: true, _homeDir: fakeHome });
+    expect(output()).toContain('--pilot is ignored with --global');
+    expect(fs.existsSync(path.join(fakeHome, '.totem', 'pilot-state.json'))).toBe(false);
+  }, 60000);
+
+  it('without --pilot nothing about the pilot register is printed', async () => {
+    await initCommand({ bare: true, yes: true });
+    expect(output()).not.toContain('Pilot flag recorded');
+    expect(fs.existsSync(statePath())).toBe(false);
+    for (const old of OLD_PROMISE) expect(output()).not.toContain(old);
+  }, 60000);
+});
+
 // ─── The public AGENTS.md floor (mmnto-ai/totem-strategy#619) ─────────
 
 describe('deriveProjectName', () => {
