@@ -40,7 +40,7 @@
         "severity": { "type": "boolean" },
         "payload": { "type": "boolean" },
         "requires": { "type": "boolean" },
-        "declaredInventory": { "type": "array", "items": { "enum": ["i", "ii", "iii"] } },
+        "declaredInventory": { "type": "array", "items": { "enum": ["i", "ii", "iii", "iv"] } },
         "unexpected": { "type": "array", "items": { "type": "string" } },
         "engine": {
           "type": "boolean",
@@ -72,7 +72,7 @@
         },
         "expectedDivergence": {
           "type": ["string", "null"],
-          "description": "additive: the declared explanation of a payload delta (inventory (ii); under --r14 only, a ruled prior cure)"
+          "description": "additive: the declared explanation of a payload delta (inventory (ii); under --r14 only, a ruled prior cure), or of a severity lowering under ADR-103 R4 (inventory (iv), the string 'severity (inventory iv: lowered under R4)'; mmnto-ai/totem#3044)"
         }
       }
     },

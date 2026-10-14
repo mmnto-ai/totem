@@ -1,0 +1,122 @@
+controls-r4 — 2026-10-14T18:28:12.258Z
+  repo root D:\Dev\worktrees\totem-totem-claude-r4-harness
+  harness   operations-local\gate5\mig-harness.mjs (sha256 5a261fccabb48082091515a5d0d7758b7427d901a3583878c0d5c9cac4abb1e9)
+  schema    operations-local\gate5\harness-record.schema.json (sha256 65f1556548e299e7396db641b12118f5ef4089225a7d54c3823e11f68c056cfa)
+  core      D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core
+  scratch   C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls
+  r14 pin   78e7f196 · base b1792d5a
+  allow-list (parsed from the harness source): 2266fc0dfe824f24, 87aff037d7de47a7
+
+── A0 the allow-list is the ruling’s pair ──
+  ok   two hashes — measured: 2
+  ok   2266fc0dfe824f24 listed
+  ok   87aff037d7de47a7 listed
+  A0 the allow-list is the ruling’s pair: PASS
+  derived rules-lowered\mig-2266fc0d-static-named-import-totem-barrel.rule.yaml — line 2 'severity: error' → 'severity: warning' (sha256 38e6fc4b6d112ab1474c68d65a5e056249fdc40d82dcf39445419369f568114f)
+  derived rules-lowered\mig-87aff037-fail-open-catch-ban.rule.yaml — line 2 'severity: error' → 'severity: warning' (sha256 bc7c6b24182f0218786776d8f29b2b01706b13b4a3e85c630314b5c0b2a1b621)
+
+── A1 the admitted lowering (iv declared, listed rules, warning against error) ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 2266fc0d,87aff037 --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a1.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\rules-lowered --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core --out C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\out\a1.jsonl
+  exit: 0
+  ok   exit 0 — measured: 0
+  ok   two rows — measured: 2
+  ok   2266fc0dfe824f24: fidelity.severity false (measured, not masked) — measured: false
+  ok   2266fc0dfe824f24: expectedDivergence is the string — measured: "severity (inventory iv: lowered under R4)"
+  ok   2266fc0dfe824f24: unexpected empty — measured: []
+  ok   2266fc0dfe824f24: declaredInventory carries iv — measured: ["i","iv"]
+  ok   87aff037d7de47a7: fidelity.severity false (measured, not masked) — measured: false
+  ok   87aff037d7de47a7: expectedDivergence is the string — measured: "severity (inventory iv: lowered under R4)"
+  ok   87aff037d7de47a7: unexpected empty — measured: []
+  ok   87aff037d7de47a7: declaredInventory carries iv — measured: ["i","iv"]
+  ok   records line — measured: Fidelity (records): 0/2 identical, 2 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 0/2 identical, 2 expected divergence(s), 0 UNEXPECTED
+  A1 the admitted lowering (iv declared, listed rules, warning against error): PASS
+
+── A2 the lowering undeclared (iv absent) ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 2266fc0d,87aff037 --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a2.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\rules-lowered --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core --out C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\out\a2.jsonl
+  exit: 1
+  ok   exit 1 — measured: 1
+  ok   two rows — measured: 2
+  ok   2266fc0dfe824f24: unexpected = ['severity'] — measured: ["severity"]
+  ok   2266fc0dfe824f24: expectedDivergence null — measured: null
+  ok   87aff037d7de47a7: unexpected = ['severity'] — measured: ["severity"]
+  ok   87aff037d7de47a7: expectedDivergence null — measured: null
+  ok   records line — measured: Fidelity (records): 0/2 identical, 0 expected divergence(s), 2 UNEXPECTED | Fidelity (entries): 0/2 identical, 0 expected divergence(s), 2 UNEXPECTED
+  A2 the lowering undeclared (iv absent): PASS
+
+── A3 iv declared on a hash outside the allow-list ──
+  non-listed rule: 54140f59be3e6e44 (mig-54140f59-bare-issue-number-refs.rule.yaml)
+  derived rules-a3\mig-54140f59-bare-issue-number-refs.rule.yaml — line 2 lowered
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 54140f59 --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a3.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\rules-a3 --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core --out C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\out\a3.jsonl
+  exit: 2
+  ok   exit 2 — measured: 2
+  ok   stderr names the allow-list — measured: [Totem Error] mig-harness: inventory entry 54140f59be3e6e44 declares iv (severity lowered under R4), but the hash is not in R4_SEVERITY_LOWERING_RULES (the lift ruling's Q1 (a′) names 2266fc0dfe824f24, 87aff037d7de47a7); a declaration cannot excuse a severity delta on a rule the ruling did not name (§ 3.1 C5).
+  ok   refused before any record was read (no Validate line)
+  ok   no rows written — measured: 0
+  A3 iv declared on a hash outside the allow-list: PASS
+
+── A4 a raise under a declaration (synthetic legacy warning, the pin record at error) ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\manifest\a4-manifest.json --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a4.json --rules D:\Dev\worktrees\totem-totem-claude-r4-harness\.totem\rules --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core --out C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\out\a4.jsonl
+  exit: 1
+  ok   exit 1 — measured: 1
+  ok   one row — measured: 1
+  ok   unexpected = ['severity'] — measured: ["severity"]
+  ok   expectedDivergence null — measured: null
+  A4 a raise under a declaration (synthetic legacy warning, the pin record at error): PASS
+
+── A5 the pin records unmodified with iv declared (inert declaration) ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 2266fc0d,87aff037 --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a5.json --rules D:\Dev\worktrees\totem-totem-claude-r4-harness\.totem\rules --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core --out C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\out\a5.jsonl
+  exit: 0
+  ok   exit 0 — measured: 0
+  ok   two rows — measured: 2
+  ok   2266fc0dfe824f24: fidelity.severity true — measured: true
+  ok   2266fc0dfe824f24: expectedDivergence null — measured: null
+  ok   2266fc0dfe824f24: unexpected empty — measured: []
+  ok   87aff037d7de47a7: fidelity.severity true — measured: true
+  ok   87aff037d7de47a7: expectedDivergence null — measured: null
+  ok   87aff037d7de47a7: unexpected empty — measured: []
+  ok   the inert-declaration note printed once per record — measured: 2
+  ok   records line — measured: Fidelity (records): 2/2 identical, 0 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 2/2 identical, 0 expected divergence(s), 0 UNEXPECTED
+  A5 the pin records unmodified with iv declared (inert declaration): PASS
+
+  R14 records at 78e7f196: 22 file(s) materialised under r14-rules
+
+── A6 iv under --r14 (the K3 regression mode) ──
+  invocation: node operations-local/gate5/mig-harness.mjs --seed D:\Dev\totem-strategy\operations\310-r14-audit\seed-20.json --corpus D:\Dev\totem-strategy\operations\310-r14-audit\inputs\compiled-rules.json --r14 --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a6.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\r14-rules --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core
+  exit: 2
+  ok   exit 2 — measured: 2
+  ok   stderr names the mode — measured: [Totem Error] mig-harness: inventory entry 87aff037d7de47a7 declares iv (severity lowered under R4), which is admissible only in the migration run (--set); the K3 regression has no R4 rule.
+  A6 iv under --r14 (the K3 regression mode): PASS
+
+── A7 iv beside ii ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 2266fc0d --inventory C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\inv\a7.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\rules-lowered --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core
+  exit: 2
+  ok   exit 2 — measured: 2
+  ok   stderr names the pair — measured: [Totem Error] mig-harness: inventory entry 2266fc0dfe824f24 declares iv beside ii; the row carries one expectedDivergence string, and the two rules the ruling names declare ['i'] only — a record needing both is a new entry on both sides, never a loosening of this one.
+  A7 iv beside ii: PASS
+
+── A8a the K3 regression reproduces its recorded fidelity lines ──
+  invocation: node operations-local/gate5/mig-harness.mjs --seed D:\Dev\totem-strategy\operations\310-r14-audit\seed-20.json --corpus D:\Dev\totem-strategy\operations\310-r14-audit\inputs\compiled-rules.json --r14 --inventory D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\k3\k3-r14-inventory.json --rules C:\Users\jmatt\AppData\Local\Temp\claude\D--Dev-totem\945c16bb-1ac2-4d8a-8bd5-6d6e49ab766d\scratchpad\r4-controls\r14-rules --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core
+  exit: 0
+  ok   exit 0 — measured: 0
+  ok   fidelity lines equal the recorded ones — measured: Fidelity (records): 20/22 identical, 2 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 18/20 identical, 2 expected divergence(s), 0 UNEXPECTED vs recorded Fidelity (records): 20/22 identical, 2 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 18/20 identical, 2 expected divergence(s), 0 UNEXPECTED
+  ok   K3 reproduced
+  A8a the K3 regression reproduces its recorded fidelity lines: PASS
+
+── A8b batch 1’s --set run reproduces its recorded fidelity lines ──
+  invocation: node operations-local/gate5/mig-harness.mjs --set D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\manifest-2263305c.json --only 427c97fb,71935fe9,54140f59,4f283f54,bc8b99e8,2266fc0d,a190836d,87aff037,a1fd35ee,61bb8b8b,6ad0d4d5,1210f02d,7056157a --inventory D:\Dev\worktrees\totem-totem-claude-r4-harness\operations-local\gate5\batch-1\mig-inventory.json --rules D:\Dev\worktrees\totem-totem-claude-r4-harness\.totem\rules --core D:\Dev\worktrees\totem-totem-claude-r4-harness\packages\core
+  exit: 0
+  ok   exit 0 — measured: 0
+  ok   fidelity lines equal the recorded ones — measured: Fidelity (records): 14/14 identical, 0 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 13/13 identical, 0 expected divergence(s), 0 UNEXPECTED vs recorded Fidelity (records): 14/14 identical, 0 expected divergence(s), 0 UNEXPECTED | Fidelity (entries): 13/13 identical, 0 expected divergence(s), 0 UNEXPECTED
+  A8b batch 1’s --set run reproduces its recorded fidelity lines: PASS
+
+── A9 the schema enum admits iv now and refused it at the base commit ──
+  ok   updated enum carries iv — measured: ["i","ii","iii","iv"]
+  ok   enum at b1792d5a lacks iv — measured: ["i","ii","iii"]
+  ok   A1/A5 rows exist — measured: 4
+  ok   every A1/A5 declaredInventory item is in the updated enum
+  ok   every A1/A5 row carries an item outside the base enum
+  ok   the string is the contract literal
+  A9 the schema enum admits iv now and refused it at the base commit: PASS
+
+Arms: 11 run, 11 PASS, 0 FAIL
+Verdict: PASS (exit 0)
