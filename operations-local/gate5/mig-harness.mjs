@@ -26,6 +26,13 @@
 //       engine) and the scope declarations — `excludeGlobs` equal to the legacy
 //       `!`-entries under a declared (i), record positives a subset of the legacy
 //       positives, a dropped positive only under a declared (iii).
+//       Since mmnto-ai/totem#3044 the inventory admits one more item: (iv) "severity
+//       lowered under R4" — record `warning` against legacy `error`, only on a hash in
+//       `R4_SEVERITY_LOWERING_RULES` (the lift ruling's Q1 (a′)), only in --set mode,
+//       never beside (ii); the row reads `expectedDivergence: severity (inventory iv:
+//       lowered under R4)`; a raise, an undeclared lowering or a severity outside the
+//       pair stays UNEXPECTED, and a declaration the rule set does not admit is refused
+//       at inventory read (exit 2), before any record is read.
 //   (2) legacy-row-over-pair-0: the frozen compiled row run over `examples[0]` under
 //       the record's engine dispatch (the `defective-source` discriminator, § 3.2) —
 //       for every record that PARSED, lowered or not.
@@ -39,10 +46,15 @@
 // pair beside the R14-method `fires`; a `reason`, or a verdict that disagrees with
 // `fires`, is recorded on the pair as `reason` and the record reads `not-evaluable`.
 //
-// Modes:
-//   --set <manifest.json>                     the migration run (rules[] carries the legacy row + curated pair)
+// Modes (three are admitted; the parser is the authority, leg read 4):
+//   --set <manifest.json>                     the migration run (rules[] carries the legacy row + curated pair);
+//                                             a --seed/--corpus passed beside it is ignored
 //   --seed <seed-20.json> --corpus <compiled-rules.json> --r14
 //                                             the K3 regression over the R14 22 (R14's EXPECTED_COUNTS + dead-matcher probe)
+//   --seed <seed-20.json> --corpus <compiled-rules.json>
+//                                             a plain seed run: the K3 legs without the EXPECTED_COUNTS check; it admits
+//                                             neither expectedPayloadDivergence (K3 only) nor inventory (iv) (--set only)
+//   --set with --r14 is refused (the two modes are exclusive)
 // Common:
 //   --rules <dir>        records directory (default <repo>/.totem/rules)
 //   --core <dir|file>    the @mmnto/totem package dir (or its dist/index.js) whose matchers run (default <repo>/packages/core)
@@ -194,6 +206,27 @@ const SYNTHETIC_RULE_ID = '0123456789abcdef';
 const FIXED_NOW = '2026-08-22T00:00:00.000Z';
 const SCHEMA = 'gate5-harness-record/1';
 
+/**
+ * The rules the lift ruling names under ADR-103's R4 clause (mmnto-ai/totem-strategy#1486,
+ * Q1 (a′), ruled 2026-10-10; the DATE for (a′) is 2026-11-16, set by the operator on
+ * 2026-10-10 and movable by re-ruling — a CITATION, not a mechanism: nothing here keys
+ * on the clock, and the list changes by a commit on a further ruling). A NAMED export
+ * whose value is one array literal of plain single-quoted lowercase 16-hex hashes, so
+ * the scorer's parity control can read it from this file's source blob at
+ * `pin.harness.commit` by a deterministic parse (mmnto-ai/totem#3044; the grammar the
+ * control refuses outside is in operations-local/gate5/r4/README.md).
+ */
+export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];
+// Frozen: under ESM strict mode any runtime mutation of the list (a push, a splice, an
+// assigned member, a length write, a Reflect or Object.assign write, through any alias)
+// throws instead of widening it. The parity control's grammar sees the literal above;
+// the freeze closes the object the literal creates (leg read 2, F1).
+Object.freeze(R4_SEVERITY_LOWERING_RULES);
+/** The closed severity pair (`RuleSeveritySchema`); anything else is unranked and stays unexpected. */
+const SEVERITY_RANK = { warning: 0, error: 1 };
+/** The row's `expectedDivergence` for an admitted lowering — the string the scorer's `typeC5Fidelity` mirrors. */
+const R4_SEVERITY_LOWERING_STRING = 'severity (inventory iv: lowered under R4)';
+
 const SATISFIED = 'differential-satisfied';
 const GOOD_FIRES = 'good-also-fires';
 const BAD_SILENT = 'bad-does-not-fire';
@@ -246,17 +279,49 @@ if (ONLY) {
 }
 
 const inventory = INVENTORY_PATH ? readJson(INVENTORY_PATH) : {};
+// (iv) "severity lowered under R4" is validated EAGERLY, over every declaring entry,
+// before any record is read (mmnto-ai/totem#3044): a declaration is admissible only in
+// the migration run (--set), only on a hash in R4_SEVERITY_LOWERING_RULES, and never
+// beside (ii) — the row carries one expectedDivergence string, and the two rules the
+// ruling names declare ['i'] only. The refusal lives where the row is written, so a
+// bare `iv` can never be the translator-writable key that excuses a delta (the F2
+// class the expectedPayloadDivergence refusal below guards).
+// Every key is checked, whatever its spelling: the file's header keys (`_schema`,
+// `_batch`, `_inventory`, …) carry no `inventory` array and fall through; a key that
+// does carry one is an entry declaration and is validated even when it starts with an
+// underscore, because `declared()` below reads that key for its entry too (leg read 4,
+// F1: an underscore-keyed entry slipped past this loop and reached the fidelity leg).
+for (const [lessonHash, row] of Object.entries(inventory)) {
+  const items = Array.isArray(row?.inventory) ? row.inventory : [];
+  if (!items.includes('iv')) continue;
+  // Keyed on the MODE the run is in (no --set), not on the --r14 flag: a --seed/--corpus
+  // run without --r14 is a seed run too, and it has no R4 rule either (Greptile on
+  // mmnto-ai/totem#3080).
+  if (SET === undefined)
+    die(
+      `inventory entry ${lessonHash} declares iv (severity lowered under R4), which is admissible only in the migration run (--set); a seed run, the K3 regression included, has no R4 rule.`,
+    );
+  if (!R4_SEVERITY_LOWERING_RULES.includes(lessonHash))
+    die(
+      `inventory entry ${lessonHash} declares iv (severity lowered under R4), but the hash is not in the harness's R4 allow-list (${R4_SEVERITY_LOWERING_RULES.join(', ')}, the rules the lift ruling's Q1 (a′) names); a declaration cannot excuse a severity delta on a rule the ruling did not name (§ 3.1 C5).`,
+    );
+  if (items.includes('ii'))
+    die(
+      `inventory entry ${lessonHash} declares iv beside ii; the row carries one expectedDivergence string, and the two rules the ruling names declare ['i'] only — a record needing both is a new entry on both sides, never a loosening of this one.`,
+    );
+}
 const declared = (lessonHash) => {
   const row = inventory[lessonHash] ?? {};
   // A payload divergence declared OUTSIDE the closed inventory (i)–(iii) is
   // admissible ONLY in the K3 regression (--r14): the ruled E26 cure on
-  // `0e01112d` at 78e7f196 is the one case. In the migration run (--set) every
-  // payload delta is (ii) or UNEXPECTED, so the key is REFUSED there rather than
-  // honoured — the translator writes the inventory file, and a key the translator
-  // could use to excuse a delta would be a bypass of § 3.1 C5 (leg finding F2).
+  // `0e01112d` at 78e7f196 is the one case. In every other run — the migration run
+  // (--set) and a seed run without --r14 alike — every payload delta is (ii) or
+  // UNEXPECTED, so the key is REFUSED there rather than honoured — the translator
+  // writes the inventory file, and a key the translator could use to excuse a delta
+  // would be a bypass of § 3.1 C5 (leg finding F2).
   if (row.expectedPayloadDivergence !== undefined && !R14_MODE) {
     die(
-      `inventory entry ${lessonHash} carries expectedPayloadDivergence, which is admissible only under --r14 (the K3 regression's ruled E26 cure); in the migration run every payload delta is inventory (ii) or unexpected (§ 3.1 C5).`,
+      `inventory entry ${lessonHash} carries expectedPayloadDivergence, which is admissible only under --r14 (the K3 regression's ruled E26 cure); in every other run (the migration run, or a seed run without --r14) every payload delta is inventory (ii) or unexpected (§ 3.1 C5).`,
     );
   }
   return {
@@ -511,6 +576,8 @@ for (const e of entries) {
       legacyOverPair0: null,
       firingSet: null,
     };
+    /** The (iv) inert-declaration note for this record, printed after its own line. */
+    let inertNote = null;
     let parsed;
     try {
       parsed = parseRuleRecord(raw, relPath);
@@ -572,6 +639,23 @@ for (const e of entries) {
         : decl.expectedPayloadDivergence !== null
           ? `payload (declared: ${decl.expectedPayloadDivergence})`
           : null;
+      // (iv) severity lowered under R4 (mmnto-ai/totem#3044): admitted only when the
+      // declaration is present (validated at inventory read: --set mode, an allow-listed
+      // hash, not beside ii) AND the measured delta is the closed pair's lowering —
+      // record `warning` against legacy `error`. A raise, an undeclared lowering or a
+      // severity outside the pair stays unexpected. Equal severity under the declaration
+      // is identical, with a note that the declaration is inert on this record.
+      const declaresLowering = decl.inventory.includes('iv');
+      const severityLowered =
+        SEVERITY_RANK[rec.severity] !== undefined &&
+        SEVERITY_RANK[legacy.severity] !== undefined &&
+        SEVERITY_RANK[rec.severity] < SEVERITY_RANK[legacy.severity];
+      const severityExplained =
+        !f.severity && declaresLowering && severityLowered ? R4_SEVERITY_LOWERING_STRING : null;
+      // Printed AFTER this record's own line (below), naming the record file, so an
+      // N-record entry attributes each note to its record (leg read 1, F6).
+      if (declaresLowering && f.severity)
+        inertNote = `      note: ${name} declares inventory iv (severity lowered under R4) but the record severity equals the legacy row's (${rec.severity}); the declaration is inert on this record.`;
       // The engine and the SCOPE DECLARATIONS are checked by mechanism too (leg
       // finding F10): `target.type` must equal the legacy engine; `excludeGlobs`
       // must equal the legacy `!`-entries (inventory (i), declared); every record
@@ -612,7 +696,7 @@ for (const e of entries) {
         declaredIII: decl.inventory.includes('iii'),
       };
       if (!f.message) f.unexpected.push('message');
-      if (!f.severity) f.unexpected.push('severity');
+      if (!f.severity && severityExplained === null) f.unexpected.push('severity');
       if (!f.payload && payloadExplained === null) f.unexpected.push('payload');
       if (!f.requires) f.unexpected.push('requires');
       if (!f.engine) f.unexpected.push('engine');
@@ -626,7 +710,12 @@ for (const e of entries) {
         );
       if (legacyExcludes.length > 0 && !f.scope.declaredI)
         f.unexpected.push('scope.excludeGlobs (inventory i undeclared)');
-      f.expectedDivergence = !f.payload && payloadExplained !== null ? payloadExplained : null;
+      // One string per row. The two explanations cannot both hold: (iv) is refused
+      // beside (ii) and in every run without --set, and expectedPayloadDivergence is
+      // admitted only under --r14 — so a payload explanation and a severity
+      // explanation never co-occur.
+      f.expectedDivergence =
+        !f.payload && payloadExplained !== null ? payloadExplained : severityExplained;
       row.fidelity = f;
       fidelity.records += 1;
       if (f.unexpected.length > 0) {
@@ -800,6 +889,7 @@ for (const e of entries) {
     lines.push(
       `    ${name} [${grammar}] validate=${measuredValidate}${measuredValidate === decl.expect.validate ? '' : ` (EXPECTED ${decl.expect.validate})`} · ${recordVerdict}: ${legs} · ${fid}${lop}${fs}`,
     );
+    if (inertNote !== null) lines.push(inertNote);
     if (row.validate.reason && measuredValidate !== 'compiled')
       lines.push(`      reason (verbatim): ${row.validate.reason}`);
     entryRows.push(row);

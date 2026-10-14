@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "7564d08beea0baca78f6fd78cc33e0b81aa824a5",
+  "readAt": "2026-10-14T18:36:36.000Z",
+  "findings": [
+    {
+      "id": "3044-r1-F1",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 135,
+      "claim": "A0 and its comment (lines 128-132) present allowListFromSource as 'the same deterministic parse the scorer's parity control makes' that enforces 'one array literal of plain string hashes', but the regex only collects the single-quoted 16-hex members it finds and ignores everything else in the brackets. A spread, a bare identifier, a double-quoted hash, an upper-case hash or a later .push() on the unfrozen const (mig-harness.mjs:212) all still parse to exactly the ruling's pair, so A0 passes while the runtime allow-list is wider. The scorer-side parse it claims to match does not exist yet (the section 7 entry is due 2026-10-24).",
+      "counterexample": "Measured in scratch (parse.mjs, the regexes taken verbatim from controls-r4.mjs:135 and :138): [pair, ...EXTRA] -> the pair; [pair, OTHER_HASH] -> the pair; [pair, a double-quoted 0123456789abcdef] -> the pair; [pair, '0123456789ABCDEF'] -> the pair; the literal followed by R4_SEVERITY_LOWERING_RULES.push('0123456789abcdef') -> the pair. Contract clause, strategy outbox 2026-10-14T1816Z section (b): 'a named export whose value is one array literal of plain string hashes (no computed members, no spread)' and Tenet 4's parity test. The A0 control is the only sensor on this side, and it would pass on the wrong source. Fix shape: require the bracket body to be fully consumed by quoted-hash-plus-comma tokens (refuse any residue), require the identifier to occur only at its declaration and in read positions, and tell strategy which grammar its parity control must refuse."
+    },
+    {
+      "id": "3044-r1-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 575,
+      "claim": "The README, the commit and the spec say the change is 'inert for every existing run', but A8a and A8b compare only the two Fidelity summary lines (fidelityLines, line 125) for 2 of the 5 recorded runs (K3 and batch 1). Batches 2-4 and the per-record JSONL are never compared, even though recorded harness-per-record.jsonl files are committed beside each run. The claim is true, but this control measures less than it states.",
+      "counterexample": "Leg differential (diffrun.mjs: the base harness blob b1792d5a against the 7564d08b blob, same args, same core and records): K3, batch-1, batch-2, batch-3, batch-4 and the full 53-entry set each gave stdoutEqual=true, jsonlEqual=true, stderrEqual=true and equal exits (22, 14, 15, 13, 15 and 57 rows). Batches 2-4 match their recorded Fidelity lines too. So the claim holds byte-for-byte, but A8 asserts only a summary-line subset of two runs."
+    },
+    {
+      "id": "3044-r1-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 412,
+      "claim": "A3's labels claim 'refused before any record was read (no Validate line)' and 'no rows written', but neither assertion can tell eager refusal from lazy: the Validate summary is printed only after the loop (mig-harness.mjs:916) and --out is written only at the end (:992), so any exit-2 path passes both. With a single selected entry, a refusal moved into declared() would also pass. The design's 'stderr names the hash' is weakened to a match on 'not in R4_SEVERITY_LOWERING_RULES'.",
+      "counterexample": "By code, the property itself holds: the eager loop is at mig-harness.mjs:277-293 and the first record read is at :547. Leg probe: iv on 0000000000000000, a hash that is in neither the manifest nor the --only selection (54140f59), exits 2 with the allow-list refusal. That eager-over-the-whole-inventory case is the discriminating input, and no arm runs it. Spec 3044.md Invariants: 'exit 2 before any record is read, stderr names the hash'."
+    },
+    {
+      "id": "3044-r1-F4",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 646,
+      "claim": "A9 tests only declaredInventory enum membership on the four A1/A5 rows. The design requires that 'Every emitted row still validates against the updated schema, and a row carrying iv fails the OLD schema'. The check 'the string is the contract literal' (lines 654-657) compares the control's own constant to a literal copy of itself and is vacuous; A1 is what actually measures the harness string.",
+      "counterexample": "Leg measurement with ajv 8.18 (draft 2020-12) over full rows: all 57 rows of the 53-entry run and all 22 K3 rows validate against both schemas; the admitted-lowering row, the inert row and the legacy-undefined row validate against the new schema and fail the b1792d5a schema. So claim 5 (the schema move is load-bearing) holds, but only by this leg's measurement, not by A9 as written."
+    },
+    {
+      "id": "3044-r1-F5",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/README.md",
+      "line": 9,
+      "claim": "The README contract says 'a severity outside the pair stays unexpected carrying severity (exit 1)', and the spec's failure table names 'severity outside {warning, error} on either side', but no arm exercises that case. Only the raise (A4) and the undeclared lowering (A2) are controlled.",
+      "counterexample": "Leg probes with iv declared, the record at warning and a synthetic legacy row: severity deleted (undefined), 'info', 'ERROR' and 'constructor' (a prototype key on SEVERITY_RANK) each gave exit 1, fidelity.severity false, expectedDivergence null and unexpected ['severity']. The behaviour is right. The control is missing."
+    },
+    {
+      "id": "3044-r1-F6",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 634,
+      "claim": "The inert-declaration note is pushed onto 'lines' during the fidelity leg, before the record's own summary line is pushed (:866). It therefore prints between the entry header and the record line it describes, not after it as 'reason (verbatim)' does (:870). It names only the lessonHash, so in an N-record entry each note is not attributable to its record.",
+      "counterexample": "Leg probe, iv declared on the unmodified 2266fc0d record: stdout reads ' 6. 2266fc0dfe824f24 (rank 44) ...' / '      note: 2266fc0dfe824f24 declares inventory iv ...' / '    mig-2266fc0d-static-named-import-totem-barrel.rule.yaml [ast-grep@.ts] ...'. A5 counts notes by regex and cannot see placement."
+    },
+    {
+      "id": "3044-r1-F7",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 233,
+      "claim": "The run of record, which strategy will cite by path and hash as artifact-linked evidence, does not say which @mmnto/totem version ran. invoke() logs the invocation and the exit but drops the harness's K4 header, and the log's 'core' line is only a path.",
+      "counterexample": "r4-controls-run.log lines 1-8 record 'core D:/Dev/worktrees/totem-totem-claude-r4-harness/packages/core' with no version. The recorded batch runs' K4 headers (batch-1/harness-run.log:2) attest '@mmnto/totem 2.10.0' from a staging install. Pre-registration section 5.1 (line 115) says controls are 'run and committed at every package version that scores'."
+    },
+    {
+      "id": "3044-r1-F8",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 77,
+      "claim": "The default --out is the committed run log (HERE/r4-controls-run.log), so a bare re-run overwrites the run of record. --scratch is neither required to be empty nor cleared, and rowsOf() reads whatever JSONL is already there, so A3's 'no rows written' and A9's reads of a1.jsonl and a5.jsonl can be contaminated by an earlier run's files.",
+      "counterexample": "controls-r4.mjs:77 (the OUT default), :90 (mkdirSync recursive with no emptiness check), :118-124 (rowsOf reads an existing file) and :641-644 (A9 reads out/a1.jsonl and out/a5.jsonl from scratch). The README's 'Nothing is written outside --scratch and --out' is literally true but hides that --out defaults to a tracked file."
+    },
+    {
+      "id": "3044-r1-F9",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 206,
+      "claim": "Both texts label the date loosely. The comment calls 2026-11-16 'the operator's checkpoint for the re-pin', and README line 7 calls it 'The ruling's date'. In the primary source 2026-11-16 is the DATE for (a′) (the exemption's term), the ruling is dated 2026-10-10, the 'checkpoints' are 2026-10-24 and 2026-10-31, and the date can move by re-ruling, so a date fixed in code can go stale without anyone noticing. No behaviour keys on the clock: the only clock read in the diff is the log header in controls-r4.mjs:239.",
+      "counterexample": "strategy-1486.md:1104 'The DATE for (a′), RULED ... 2026-11-16.'; :1106 'The checkpoints the date rests on: the § 7 entry ... by 2026-10-24 ...; the harness change mmnto-ai/totem#3044 by 2026-10-31' and 'If the regeneration slips past 2026-11-09, the date moves with it by the operator's word'."
+    },
+    {
+      "id": "3044-r1-F10",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/r4/README.md",
+      "line": 15,
+      "claim": "The mailed contract and the spec both promised committed fixtures. Point 4 of the dispatch strategy confirmed reads 'A committed script, fixtures (a lowered copy of each named record in a fixture rules directory ...) and a run log under operations-local/gate5/r4/', and strategy replied 'eight arms as you list them'. The build instead derives fixtures under --scratch and commits only the script, the README and the log. Was this change told to strategy-claude, and does the section 7 entry's controlsBinding/apparatusBlobs expect fixture blobs at pin.harness.commit?",
+      "counterexample": "D:/Dev/totem/.totem/orchestration/totem-claude/outbox/2026-10-14T1749Z-strategy-claude-3044-contract-confirm-or-object.md line 24; strategy outbox 2026-10-14T1816Z section (c); spec 3044.md 'Invariants to lock in via tests' ('with its fixtures ... committed beside the batch directories'); README.md:15 'Nothing is committed but this script, this file and the run log'."
+    },
+    {
+      "id": "3044-r1-F11",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 677,
+      "claim": "Between this merge and strategy's section 7 entry, the harness exits 0 on a declared-iv lowering that the pre-registration in force still counts as unexpected. The scorer refuses such a row meanwhile (refusal 4). Does any consumer of the harness's exit 0 alone (the translator's pre-pin gate, a batch notes clause) act before the entry is frozen, or is strategy's 'your build lands first' the complete answer?",
+      "counterexample": "310-migration-preregistration.md:107 '(1) the fidelity leg made mandatory ... counting every other delta as unexpected, with unexpected divergences part of the exit'. At strategy a7c3b0f6 there is no R4 entry yet. conjuncts.mjs:176-177 refuses any expectedDivergence other than 'payload (inventory ii)' (refusal 4). The strategy outbox of 2026-10-14T1816Z, section Order, says 'Your build lands first, unheld as of this mail'."
+    }
+  ],
+  "folded": [
+    "3044-r1-F1",
+    "3044-r1-F2",
+    "3044-r1-F3",
+    "3044-r1-F4",
+    "3044-r1-F5",
+    "3044-r1-F6",
+    "3044-r1-F7",
+    "3044-r1-F8",
+    "3044-r1-F9"
+  ],
+  "verdict": "read 1 on 7564d08b: as typed, 0 BLOCKING, 1 MATERIAL, 8 MINOR, 2 QUESTION; F1 to F9 folded in 80490e7b (the allow-list grammar check with five refused variants; A8 over all four batches and a base-versus-new byte differential; the eager-refusal arm on a stray hash; full schema validation of every produced row; the outside-pair arm; the inert note after its record line naming the record; the core version in the log; a scratch-emptiness refusal; the (a′) date worded as the source does); F10 answered: the fixtures are derived under scratch at run time (the K5b pattern) and strategy's confirmation cites the run log's path and hash, not fixture files, so their binding is unaffected, and the deviation from the mailed wording is disclosed in the pull request body and in the merge-sha mail; F11 answered: no consumer acts on the harness's exit alone before strategy's entry — the only inventory that can declare iv is a re-pin's, which the ruling sequences after (i), and the scorer refuses the row meanwhile (refusal 4). The leg's own measurements held every claim (byte-identical old-versus-new output over K3, batches 1 to 4 and the full set; ajv validation of full rows; adversarial severity and inventory probes). Mergeable on the harness behaviour; read 2 is armed on the fold."
+}
