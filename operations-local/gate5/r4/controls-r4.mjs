@@ -37,12 +37,18 @@
 //       without it pass both
 //
 // The allow-list grammar (A0; what strategy's parity control is asked to refuse
-// outside): exactly one line of the form
+// outside) is a POSITIVE list: exactly one line of the form
 //   export const R4_SEVERITY_LOWERING_RULES = ['<16 lowercase hex>', ...];
 // whose bracket body is fully consumed by single-quoted lowercase 16-hex tokens and
-// commas (no spread, no identifier, no double quote, no upper case, no residue), and
-// the identifier appearing elsewhere in the file only in READ positions (`.includes(`,
-// `.join(` and the like) — never assigned, indexed or mutated.
+// commas (no spread, no identifier, no double quote, no upper case, no residue, no
+// repeat), and every other occurrence of the identifier in one of exactly four forms:
+// the line `Object.freeze(R4_SEVERITY_LOWERING_RULES);` (the runtime freeze, required
+// once), the token immediately followed by `.includes(`, the token immediately followed
+// by `.join(`, or a mention on a comment line. Anything else is a violation (leg read 2,
+// F1 named eleven widening shapes the earlier negative list let through). The limit: a
+// source grammar sees occurrences of the identifier and nothing else; a mutation that
+// never names it is invisible to it, which is why the harness also freezes the array —
+// under ESM strict mode every write to it throws, whatever the route.
 //
 // Usage:
 //   node operations-local/gate5/r4/controls-r4.mjs --scratch <new or empty dir> \
@@ -180,13 +186,22 @@ const comparable = (text) =>
 function allowListFromSource() {
   return parseAllowListSource(readFileSync(HARNESS, 'utf8'));
 }
-/** The grammar over any source string: the hashes it declares and every violation found. */
+/**
+ * The grammar over any source string: the hashes it declares and every violation found.
+ * A POSITIVE list — the declaration line, the freeze line, `.includes(`, `.join(` and
+ * comment lines are the only places the identifier may occur; everything else is a
+ * violation. Line-based on purpose: a member access split by whitespace, a newline or
+ * an inline comment is not "immediately followed by" and is refused.
+ */
 function parseAllowListSource(src) {
   const violations = [];
-  const decls = [...src.matchAll(/^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];$/gm)];
-  if (decls.length !== 1)
-    violations.push(`expected exactly one declaration line, found ${decls.length}`);
-  const body = decls[0]?.[1] ?? '';
+  const ID = 'R4_SEVERITY_LOWERING_RULES';
+  const lines = src.split('\n');
+  const declRe = /^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];\r?$/;
+  const declLines = lines.map((l, i) => (declRe.test(l) ? i : -1)).filter((i) => i >= 0);
+  if (declLines.length !== 1)
+    violations.push(`expected exactly one declaration line, found ${declLines.length}`);
+  const body = declLines.length > 0 ? declRe.exec(lines[declLines[0]])[1] : '';
   // The body is fully consumed by single-quoted lowercase 16-hex tokens and commas.
   const tokens = [...body.matchAll(/'([0-9a-f]{16})'/g)].map((x) => x[1]);
   const residue = body.replace(/'[0-9a-f]{16}'/g, '').replace(/[,\s]/g, '');
@@ -194,40 +209,33 @@ function parseAllowListSource(src) {
     violations.push(`residue in the array literal: ${JSON.stringify(residue)}`);
   if (tokens.length === 0) violations.push('the array literal holds no 16-hex hash');
   if (new Set(tokens).size !== tokens.length) violations.push('a hash repeats');
-  // Every other occurrence of the identifier is a READ: a member call from the closed
-  // set, or no member access at all; an assignment, an index or a mutating member is
-  // a violation. Occurrences inside comments and strings are scanned too — the control
-  // is strict in the safe direction.
-  const READ_MEMBERS = new Set([
-    'includes',
-    'join',
-    'indexOf',
-    'some',
-    'every',
-    'map',
-    'filter',
-    'slice',
-    'length',
-    'forEach',
-    'find',
-    'entries',
-    'at',
-  ]);
-  for (const m of src.matchAll(/R4_SEVERITY_LOWERING_RULES/g)) {
-    const before = src.slice(Math.max(0, m.index - 13), m.index);
-    const after = src.slice(m.index + m[0].length, m.index + m[0].length + 40);
-    const isDeclaration = before.endsWith('export const ') && /^ = \[/.test(after);
-    if (isDeclaration) continue;
-    const member = /^\.([A-Za-z_$][\w$]*)/.exec(after);
-    if (member !== null) {
-      if (!READ_MEMBERS.has(member[1]))
-        violations.push(`member access .${member[1]} is not a read`);
-      continue;
+  const FREEZE_LINE = `Object.freeze(${ID});`;
+  let freezeLines = 0;
+  lines.forEach((rawLine, i) => {
+    if (i === declLines[0]) return;
+    const line = rawLine.replace(/\r$/, '');
+    if (!line.includes(ID)) return;
+    const trimmed = line.trimStart();
+    // A comment line: `//`, `/*`, `/**` or a block comment's interior `*`.
+    if (/^(\/\/|\/\*|\*)/.test(trimmed)) return;
+    if (trimmed === FREEZE_LINE) {
+      freezeLines += 1;
+      return;
     }
-    if (/^\s*=[^=]/.test(after))
-      violations.push('the identifier is assigned outside its declaration');
-    if (/^\s*\[/.test(after)) violations.push('the identifier is indexed');
-  }
+    // A code line: every occurrence must be the token immediately followed by
+    // `.includes(` or `.join(` — no whitespace, no optional chaining, no other member,
+    // no assignment, no argument position, no alias, no shadowing binding.
+    let idx = line.indexOf(ID);
+    while (idx !== -1) {
+      const after = line.slice(idx + ID.length);
+      if (!/^\.(includes|join)\(/.test(after))
+        violations.push(
+          `line ${i + 1}: an occurrence outside the allowed forms: ${JSON.stringify(line.trim().slice(0, 80))}`,
+        );
+      idx = line.indexOf(ID, idx + ID.length);
+    }
+  });
+  if (freezeLines !== 1) violations.push(`expected exactly one freeze line, found ${freezeLines}`);
   return { hashes: tokens, violations };
 }
 
@@ -445,27 +453,70 @@ arm(
     expect('two hashes', parsed.hashes.length === 2, String(parsed.hashes.length));
     expect('2266fc0dfe824f24 listed', parsed.hashes.includes('2266fc0dfe824f24'));
     expect('87aff037d7de47a7 listed', parsed.hashes.includes('87aff037d7de47a7'));
-    // The grammar itself is exercised on five wrong sources the leg named (read 1, F1):
-    // each must produce at least one violation under the same parse.
+    // The grammar is exercised on a VALID base (the declaration and the freeze line),
+    // on the four allowed occurrence forms (each accepted), and on twenty wrong sources
+    // — the five read 1 named and the eleven widening shapes read 2 named, plus a
+    // missing freeze, a double declaration, an indexed write and a shadowing binding —
+    // each built on the valid base so the ONE violation reported is the defect's own.
+    const DECL =
+      "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];";
+    const FREEZE = 'Object.freeze(R4_SEVERITY_LOWERING_RULES);';
+    const base = `${DECL}\n${FREEZE}\n`;
+    const x = "'0123456789abcdef'";
+    const probe = (source) => parseAllowListSource(source);
+    expect(
+      'the valid base passes',
+      probe(base).violations.length === 0,
+      probe(base).violations.join('; ') || 'none',
+    );
+    const allowed = {
+      includes: `${base}if (!R4_SEVERITY_LOWERING_RULES.includes(h)) die('x');\n`,
+      join: `${base}die(\`not in the list (\${R4_SEVERITY_LOWERING_RULES.join(', ')})\`);\n`,
+      lineComment: `${base}// R4_SEVERITY_LOWERING_RULES is the ruling's pair\n`,
+      blockComment: `${base}/**\n * R4_SEVERITY_LOWERING_RULES is read here.\n */\n`,
+    };
+    for (const [label, source] of Object.entries(allowed))
+      expect(
+        `the grammar accepts the ${label} form`,
+        probe(source).violations.length === 0,
+        probe(source).violations.join('; ') || 'none',
+      );
     const wrong = {
-      spread:
-        "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7', ...EXTRA];",
-      identifier:
-        "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7', OTHER];",
-      doubleQuoted:
-        "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7', \"0123456789abcdef\"];",
-      upperCase:
-        "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7', '0123456789ABCDEF'];",
-      push: "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];\nR4_SEVERITY_LOWERING_RULES.push('0123456789abcdef');",
+      spread: `${DECL.replace("'];", `', ...EXTRA];`)}\n${FREEZE}\n`,
+      identifier: `${DECL.replace("'];", `', OTHER];`)}\n${FREEZE}\n`,
+      doubleQuoted: `${DECL.replace("'];", `', "0123456789abcdef"];`)}\n${FREEZE}\n`,
+      upperCase: `${DECL.replace("'];", `', '0123456789ABCDEF'];`)}\n${FREEZE}\n`,
+      repeat: `${DECL.replace("'];", `', '2266fc0dfe824f24'];`)}\n${FREEZE}\n`,
+      push: `${base}R4_SEVERITY_LOWERING_RULES.push(${x});\n`,
+      pushSpace: `${base}R4_SEVERITY_LOWERING_RULES .push(${x});\n`,
+      pushNewline: `${base}R4_SEVERITY_LOWERING_RULES\n  .push(${x});\n`,
+      optionalChain: `${base}R4_SEVERITY_LOWERING_RULES?.push(${x});\n`,
+      commentSplit: `${base}R4_SEVERITY_LOWERING_RULES/**/.push(${x});\n`,
+      includesAssigned: `${base}R4_SEVERITY_LOWERING_RULES.includes = () => true;\n`,
+      alias: `${base}const L = R4_SEVERITY_LOWERING_RULES;\nL.push(${x});\n`,
+      prototypeCall: `${base}Array.prototype.push.call(R4_SEVERITY_LOWERING_RULES, ${x});\n`,
+      objectAssign: `${base}Object.assign(R4_SEVERITY_LOWERING_RULES, { 2: ${x} });\n`,
+      reflectSet: `${base}Reflect.set(R4_SEVERITY_LOWERING_RULES, 2, ${x});\n`,
+      callbackMutation: `${base}R4_SEVERITY_LOWERING_RULES.forEach((h, i, a) => a.push(${x}));\n`,
+      lengthWrite: `${base}R4_SEVERITY_LOWERING_RULES.length = 3;\n`,
+      indexedWrite: `${base}R4_SEVERITY_LOWERING_RULES [2] = ${x};\n`,
+      shadowing: `${base}{\n  let R4_SEVERITY_LOWERING_RULES = [${x}];\n}\n`,
+      noFreeze: `${DECL}\n`,
+      doubleDeclaration: `${base}${DECL}\n`,
     };
     for (const [label, source] of Object.entries(wrong)) {
-      const probe = parseAllowListSource(source);
+      const v = probe(source).violations;
       expect(
-        `the grammar refuses a ${label} variant`,
-        probe.violations.length > 0,
-        probe.violations.join('; ') || 'no violation',
+        `the grammar refuses the ${label} variant`,
+        v.length > 0,
+        v.join('; ') || 'no violation',
       );
     }
+    expect(
+      'twenty-one wrong sources probed',
+      Object.keys(wrong).length === 21,
+      String(Object.keys(wrong).length),
+    );
   },
 );
 if (parsed.violations.length > 0 || parsed.hashes.length !== 2)
@@ -606,7 +657,7 @@ arm('A3 iv declared on a hash outside the allow-list (refused at inventory read)
   expect(
     '(a) stderr names the hash and the allow-list',
     new RegExp(
-      `inventory entry ${other.lessonHash} declares iv .*not in R4_SEVERITY_LOWERING_RULES`,
+      `inventory entry ${other.lessonHash} declares iv .*not in the harness's R4 allow-list \\(2266fc0dfe824f24, 87aff037d7de47a7,`,
     ).test(ra.stderr),
     ra.stderr.trim().split('\n')[0],
   );

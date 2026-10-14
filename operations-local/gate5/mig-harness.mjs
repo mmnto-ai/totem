@@ -212,6 +212,11 @@ const SCHEMA = 'gate5-harness-record/1';
  * control refuses outside is in operations-local/gate5/r4/README.md).
  */
 export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];
+// Frozen: under ESM strict mode any runtime mutation of the list (a push, a splice, an
+// assigned member, a length write, a Reflect or Object.assign write, through any alias)
+// throws instead of widening it. The parity control's grammar sees the literal above;
+// the freeze closes the object the literal creates (leg read 2, F1).
+Object.freeze(R4_SEVERITY_LOWERING_RULES);
 /** The closed severity pair (`RuleSeveritySchema`); anything else is unranked and stays unexpected. */
 const SEVERITY_RANK = { warning: 0, error: 1 };
 /** The row's `expectedDivergence` for an admitted lowering — the string the scorer's `typeC5Fidelity` mirrors. */
@@ -286,7 +291,7 @@ for (const [lessonHash, row] of Object.entries(inventory)) {
     );
   if (!R4_SEVERITY_LOWERING_RULES.includes(lessonHash))
     die(
-      `inventory entry ${lessonHash} declares iv (severity lowered under R4), but the hash is not in R4_SEVERITY_LOWERING_RULES (the lift ruling's Q1 (a′) names ${R4_SEVERITY_LOWERING_RULES.join(', ')}); a declaration cannot excuse a severity delta on a rule the ruling did not name (§ 3.1 C5).`,
+      `inventory entry ${lessonHash} declares iv (severity lowered under R4), but the hash is not in the harness's R4 allow-list (${R4_SEVERITY_LOWERING_RULES.join(', ')}, the rules the lift ruling's Q1 (a′) names); a declaration cannot excuse a severity delta on a rule the ruling did not name (§ 3.1 C5).`,
     );
   if (items.includes('ii'))
     die(
