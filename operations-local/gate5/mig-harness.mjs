@@ -46,10 +46,15 @@
 // pair beside the R14-method `fires`; a `reason`, or a verdict that disagrees with
 // `fires`, is recorded on the pair as `reason` and the record reads `not-evaluable`.
 //
-// Modes:
-//   --set <manifest.json>                     the migration run (rules[] carries the legacy row + curated pair)
+// Modes (three are admitted; the parser is the authority, leg read 4):
+//   --set <manifest.json>                     the migration run (rules[] carries the legacy row + curated pair);
+//                                             a --seed/--corpus passed beside it is ignored
 //   --seed <seed-20.json> --corpus <compiled-rules.json> --r14
 //                                             the K3 regression over the R14 22 (R14's EXPECTED_COUNTS + dead-matcher probe)
+//   --seed <seed-20.json> --corpus <compiled-rules.json>
+//                                             a plain seed run: the K3 legs without the EXPECTED_COUNTS check; it admits
+//                                             neither expectedPayloadDivergence (K3 only) nor inventory (iv) (--set only)
+//   --set with --r14 is refused (the two modes are exclusive)
 // Common:
 //   --rules <dir>        records directory (default <repo>/.totem/rules)
 //   --core <dir|file>    the @mmnto/totem package dir (or its dist/index.js) whose matchers run (default <repo>/packages/core)
@@ -281,8 +286,12 @@ const inventory = INVENTORY_PATH ? readJson(INVENTORY_PATH) : {};
 // ruling names declare ['i'] only. The refusal lives where the row is written, so a
 // bare `iv` can never be the translator-writable key that excuses a delta (the F2
 // class the expectedPayloadDivergence refusal below guards).
+// Every key is checked, whatever its spelling: the file's header keys (`_schema`,
+// `_batch`, `_inventory`, …) carry no `inventory` array and fall through; a key that
+// does carry one is an entry declaration and is validated even when it starts with an
+// underscore, because `declared()` below reads that key for its entry too (leg read 4,
+// F1: an underscore-keyed entry slipped past this loop and reached the fidelity leg).
 for (const [lessonHash, row] of Object.entries(inventory)) {
-  if (lessonHash.startsWith('_')) continue;
   const items = Array.isArray(row?.inventory) ? row.inventory : [];
   if (!items.includes('iv')) continue;
   // Keyed on the MODE the run is in (no --set), not on the --r14 flag: a --seed/--corpus
@@ -305,13 +314,14 @@ const declared = (lessonHash) => {
   const row = inventory[lessonHash] ?? {};
   // A payload divergence declared OUTSIDE the closed inventory (i)–(iii) is
   // admissible ONLY in the K3 regression (--r14): the ruled E26 cure on
-  // `0e01112d` at 78e7f196 is the one case. In the migration run (--set) every
-  // payload delta is (ii) or UNEXPECTED, so the key is REFUSED there rather than
-  // honoured — the translator writes the inventory file, and a key the translator
-  // could use to excuse a delta would be a bypass of § 3.1 C5 (leg finding F2).
+  // `0e01112d` at 78e7f196 is the one case. In every other run — the migration run
+  // (--set) and a seed run without --r14 alike — every payload delta is (ii) or
+  // UNEXPECTED, so the key is REFUSED there rather than honoured — the translator
+  // writes the inventory file, and a key the translator could use to excuse a delta
+  // would be a bypass of § 3.1 C5 (leg finding F2).
   if (row.expectedPayloadDivergence !== undefined && !R14_MODE) {
     die(
-      `inventory entry ${lessonHash} carries expectedPayloadDivergence, which is admissible only under --r14 (the K3 regression's ruled E26 cure); in the migration run every payload delta is inventory (ii) or unexpected (§ 3.1 C5).`,
+      `inventory entry ${lessonHash} carries expectedPayloadDivergence, which is admissible only under --r14 (the K3 regression's ruled E26 cure); in every other run (the migration run, or a seed run without --r14) every payload delta is inventory (ii) or unexpected (§ 3.1 C5).`,
     );
   }
   return {
@@ -701,8 +711,9 @@ for (const e of entries) {
       if (legacyExcludes.length > 0 && !f.scope.declaredI)
         f.unexpected.push('scope.excludeGlobs (inventory i undeclared)');
       // One string per row. The two explanations cannot both hold: (iv) is refused
-      // beside (ii) and in --r14, and expectedPayloadDivergence is admitted only in
-      // --r14 — so a payload explanation and a severity explanation never co-occur.
+      // beside (ii) and in every run without --set, and expectedPayloadDivergence is
+      // admitted only under --r14 — so a payload explanation and a severity
+      // explanation never co-occur.
       f.expectedDivergence =
         !f.payload && payloadExplained !== null ? payloadExplained : severityExplained;
       row.fidelity = f;

@@ -18,7 +18,8 @@
 //   A2  the same records, `iv` NOT declared → exit 1, `unexpected` = ['severity']
 //   A3  `iv` declared on a hash the ruling did not name → exit 2 before any record is
 //       read, shown on a hash OUTSIDE the manifest and the --only selection (the
-//       refusal reads the whole inventory, not the selected entries)
+//       refusal reads the whole inventory, not the selected entries) and on an
+//       underscore-prefixed key (every key carrying an inventory array is checked)
 //   A4  a raise under a declaration (synthetic manifest row at legacy `warning`, the
 //       pin's record at `error`) → exit 1, `unexpected` = ['severity']
 //   A4b a severity OUTSIDE the closed pair on the legacy side (synthetic `info`) with the
@@ -729,6 +730,21 @@ arm('A3 iv declared on a hash outside the allow-list (refused at inventory read)
     '(b) no entry line printed (refused before the entry loop)',
     !/^ *\d+\. [0-9a-f]{16}/m.test(rb.stdout),
   );
+  // (c) an iv on an UNDERSCORE-PREFIXED key: the refusal loop checks every key that
+  // carries an inventory array, whatever its spelling, because declared() reads such a
+  // key for its entry too (leg read 4, F1: the first build skipped underscore keys).
+  const odd = '_0000000000000000';
+  const invC = path.join(sub('inv'), 'a3c.json');
+  writeJson(invC, inventoryFor({ [odd]: ['iv'], [other.lessonHash]: base }, 'A3c'));
+  const outC = path.join(sub('out'), 'a3c.jsonl');
+  const rc = invoke(setArgs(MANIFEST, other.lessonHash.slice(0, 8), invC, RULES_DIR, outC));
+  expect('(c) exit 2 on an underscore-prefixed key', rc.status === 2, String(rc.status));
+  expect(
+    '(c) stderr names the odd key',
+    new RegExp(`inventory entry ${odd} declares iv`).test(rc.stderr),
+    rc.stderr.trim().split('\n')[0],
+  );
+  expect('(c) no rows written', rowsOf(outC).length === 0, String(rowsOf(outC).length));
 });
 
 // A4 — a raise under a declaration; A4b — a legacy severity outside the pair.
@@ -892,13 +908,26 @@ arm(
     const k3 = readJson(K3_INVENTORY);
     const inv = path.join(sub('inv'), 'a6b.json');
     const target = '87aff037d7de47a7';
+    // The K3 inventory's expectedPayloadDivergence row is itself refused in a run
+    // without --r14, so it is stripped here: the exit 2 this arm measures must come
+    // from the iv refusal alone (leg read 4, F6).
+    const stripped = Object.fromEntries(
+      Object.entries(k3).map(([k, v]) => [
+        k,
+        v !== null && typeof v === 'object' && !Array.isArray(v)
+          ? Object.fromEntries(
+              Object.entries(v).filter(([kk]) => kk !== 'expectedPayloadDivergence'),
+            )
+          : v,
+      ]),
+    );
     writeJson(inv, {
-      ...k3,
+      ...stripped,
       _control:
-        'R4 control A6b — the K3 inventory plus iv, run without --r14; never a run inventory',
+        'R4 control A6b — the K3 inventory (expectedPayloadDivergence stripped) plus iv, run without --r14; never a run inventory',
       [target]: {
-        ...(k3[target] ?? {}),
-        inventory: [...((k3[target] ?? {}).inventory ?? []), 'iv'],
+        ...(stripped[target] ?? {}),
+        inventory: [...((stripped[target] ?? {}).inventory ?? []), 'iv'],
       },
     });
     const r = invoke(
