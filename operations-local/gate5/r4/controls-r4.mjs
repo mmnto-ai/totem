@@ -41,14 +41,17 @@
 //   export const R4_SEVERITY_LOWERING_RULES = ['<16 lowercase hex>', ...];
 // whose bracket body is fully consumed by single-quoted lowercase 16-hex tokens and
 // commas (no spread, no identifier, no double quote, no upper case, no residue, no
-// repeat), and every other occurrence of the identifier in one of exactly four forms:
-// the line `Object.freeze(R4_SEVERITY_LOWERING_RULES);` (the runtime freeze, required
-// once), the token immediately followed by `.includes(`, the token immediately followed
-// by `.join(`, or a mention on a comment line. Anything else is a violation (leg read 2,
-// F1 named eleven widening shapes the earlier negative list let through). The limit: a
-// source grammar sees occurrences of the identifier and nothing else; a mutation that
+// repeat); the line `Object.freeze(R4_SEVERITY_LOWERING_RULES);` as the first non-`//`
+// line after it (the runtime freeze, PLACED so nothing can run between the literal and
+// the freeze); and every other occurrence of the identifier in one of exactly three
+// forms: the token immediately followed by `.includes(`, the token immediately followed
+// by `.join(`, or a mention on a `//` comment line. Anything else is a violation —
+// block-comment lines included, since a line's first characters cannot tell a comment
+// from code that follows one (leg read 2, F1 named eleven widening shapes; leg read 3,
+// F1 named seven more that ran before the freeze or hid a decoy declaration). The limit:
+// a source grammar sees occurrences of the identifier and nothing else; a mutation that
 // never names it is invisible to it, which is why the harness also freezes the array —
-// under ESM strict mode every write to it throws, whatever the route.
+// under ESM strict mode every write to it after the freeze throws, whatever the route.
 //
 // Usage:
 //   node operations-local/gate5/r4/controls-r4.mjs --scratch <new or empty dir> \
@@ -188,20 +191,26 @@ function allowListFromSource() {
 }
 /**
  * The grammar over any source string: the hashes it declares and every violation found.
- * A POSITIVE list — the declaration line, the freeze line, `.includes(`, `.join(` and
- * comment lines are the only places the identifier may occur; everything else is a
- * violation. Line-based on purpose: a member access split by whitespace, a newline or
- * an inline comment is not "immediately followed by" and is refused.
+ * A POSITIVE list — the declaration line; the freeze line, which must be the first
+ * non-`//` line after it (so nothing can run between the literal and the freeze);
+ * `.includes(`; `.join(`; and `//` comment lines are the only places the identifier
+ * may occur; everything else is a violation. Line-based on purpose: a member access
+ * split by whitespace, a newline or an inline comment is not "immediately followed by"
+ * and is refused. Block-comment lines are NOT exempt (leg read 3, F1): a line's first
+ * characters cannot tell a comment from code that follows one, and a declaration or a
+ * freeze line inside a block comment or a template literal is a decoy, so any
+ * column-0 declaration anywhere counts as a declaration and a second one is refused.
  */
 function parseAllowListSource(src) {
   const violations = [];
   const ID = 'R4_SEVERITY_LOWERING_RULES';
-  const lines = src.split('\n');
-  const declRe = /^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];\r?$/;
+  const lines = src.split('\n').map((l) => l.replace(/\r$/, ''));
+  const declRe = /^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];$/;
   const declLines = lines.map((l, i) => (declRe.test(l) ? i : -1)).filter((i) => i >= 0);
   if (declLines.length !== 1)
     violations.push(`expected exactly one declaration line, found ${declLines.length}`);
-  const body = declLines.length > 0 ? declRe.exec(lines[declLines[0]])[1] : '';
+  const declIdx = declLines[0];
+  const body = declIdx === undefined ? '' : declRe.exec(lines[declIdx])[1];
   // The body is fully consumed by single-quoted lowercase 16-hex tokens and commas.
   const tokens = [...body.matchAll(/'([0-9a-f]{16})'/g)].map((x) => x[1]);
   const residue = body.replace(/'[0-9a-f]{16}'/g, '').replace(/[,\s]/g, '');
@@ -209,22 +218,29 @@ function parseAllowListSource(src) {
     violations.push(`residue in the array literal: ${JSON.stringify(residue)}`);
   if (tokens.length === 0) violations.push('the array literal holds no 16-hex hash');
   if (new Set(tokens).size !== tokens.length) violations.push('a hash repeats');
+  // The freeze line is PLACED, not counted: the first line after the declaration that
+  // is not a `//` comment line must be exactly it. Any other freeze line in the file
+  // falls under the code-line rule below and is refused there.
   const FREEZE_LINE = `Object.freeze(${ID});`;
-  let freezeLines = 0;
-  lines.forEach((rawLine, i) => {
-    if (i === declLines[0]) return;
-    const line = rawLine.replace(/\r$/, '');
+  let freezeIdx = -1;
+  if (declIdx !== undefined) {
+    let j = declIdx + 1;
+    while (j < lines.length && /^\s*\/\//.test(lines[j])) j += 1;
+    if (j < lines.length && lines[j].trim() === FREEZE_LINE) freezeIdx = j;
+    else
+      violations.push(
+        `the freeze line must be the first non-// line after the declaration; found ${JSON.stringify((lines[j] ?? '<end of file>').trim().slice(0, 80))}`,
+      );
+  }
+  lines.forEach((line, i) => {
+    if (i === declIdx || i === freezeIdx) return;
     if (!line.includes(ID)) return;
-    const trimmed = line.trimStart();
-    // A comment line: `//`, `/*`, `/**` or a block comment's interior `*`.
-    if (/^(\/\/|\/\*|\*)/.test(trimmed)) return;
-    if (trimmed === FREEZE_LINE) {
-      freezeLines += 1;
-      return;
-    }
+    // Only a `//` comment line is exempt.
+    if (/^\s*\/\//.test(line)) return;
     // A code line: every occurrence must be the token immediately followed by
     // `.includes(` or `.join(` — no whitespace, no optional chaining, no other member,
-    // no assignment, no argument position, no alias, no shadowing binding.
+    // no assignment, no argument position, no alias, no shadowing binding, no
+    // block-comment or template-literal mention, no second declaration or freeze.
     let idx = line.indexOf(ID);
     while (idx !== -1) {
       const after = line.slice(idx + ID.length);
@@ -235,7 +251,6 @@ function parseAllowListSource(src) {
       idx = line.indexOf(ID, idx + ID.length);
     }
   });
-  if (freezeLines !== 1) violations.push(`expected exactly one freeze line, found ${freezeLines}`);
   return { hashes: tokens, violations };
 }
 
@@ -453,15 +468,20 @@ arm(
     expect('two hashes', parsed.hashes.length === 2, String(parsed.hashes.length));
     expect('2266fc0dfe824f24 listed', parsed.hashes.includes('2266fc0dfe824f24'));
     expect('87aff037d7de47a7 listed', parsed.hashes.includes('87aff037d7de47a7'));
-    // The grammar is exercised on a VALID base (the declaration and the freeze line),
-    // on the four allowed occurrence forms (each accepted), and on twenty wrong sources
-    // — the five read 1 named and the eleven widening shapes read 2 named, plus a
-    // missing freeze, a double declaration, an indexed write and a shadowing binding —
-    // each built on the valid base so the ONE violation reported is the defect's own.
+    // The grammar is exercised on a VALID base (the declaration, two `//` lines, the
+    // freeze line), on the three allowed occurrence forms (each accepted), and on thirty
+    // wrong sources, each built on the valid base so the violation reported is the
+    // defect's own: the five read 1 named; the eleven widening shapes read 2 named and
+    // its non-widening length write; the seven shapes read 3 named (code after a
+    // block-comment opener, a `*` continuation line, a template-literal interior, a decoy
+    // declaration inside a block comment and inside a template literal, a freeze under
+    // `if (0)`, a freeze inside a block comment); and a repeated hash, an indexed write,
+    // a shadowing binding, a missing freeze, a double declaration and a block-comment
+    // mention (no longer exempt).
     const DECL =
       "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];";
     const FREEZE = 'Object.freeze(R4_SEVERITY_LOWERING_RULES);';
-    const base = `${DECL}\n${FREEZE}\n`;
+    const base = `${DECL}\n// frozen below\n// so that a write throws\n${FREEZE}\n`;
     const x = "'0123456789abcdef'";
     const probe = (source) => parseAllowListSource(source);
     expect(
@@ -473,7 +493,6 @@ arm(
       includes: `${base}if (!R4_SEVERITY_LOWERING_RULES.includes(h)) die('x');\n`,
       join: `${base}die(\`not in the list (\${R4_SEVERITY_LOWERING_RULES.join(', ')})\`);\n`,
       lineComment: `${base}// R4_SEVERITY_LOWERING_RULES is the ruling's pair\n`,
-      blockComment: `${base}/**\n * R4_SEVERITY_LOWERING_RULES is read here.\n */\n`,
     };
     for (const [label, source] of Object.entries(allowed))
       expect(
@@ -498,11 +517,21 @@ arm(
       objectAssign: `${base}Object.assign(R4_SEVERITY_LOWERING_RULES, { 2: ${x} });\n`,
       reflectSet: `${base}Reflect.set(R4_SEVERITY_LOWERING_RULES, 2, ${x});\n`,
       callbackMutation: `${base}R4_SEVERITY_LOWERING_RULES.forEach((h, i, a) => a.push(${x}));\n`,
+      someSplice: `${base}R4_SEVERITY_LOWERING_RULES.some((h, i, a) => a.splice(0, 0, ${x}));\n`,
       lengthWrite: `${base}R4_SEVERITY_LOWERING_RULES.length = 3;\n`,
       indexedWrite: `${base}R4_SEVERITY_LOWERING_RULES [2] = ${x};\n`,
       shadowing: `${base}{\n  let R4_SEVERITY_LOWERING_RULES = [${x}];\n}\n`,
       noFreeze: `${DECL}\n`,
       doubleDeclaration: `${base}${DECL}\n`,
+      blockCommentMention: `${base}/**\n * R4_SEVERITY_LOWERING_RULES is read here.\n */\n`,
+      // Read 3's seven: each widens BEFORE the freeze runs, or the freeze never runs.
+      commentPrefixPush: `${DECL}\n/* c */ R4_SEVERITY_LOWERING_RULES.push(${x});\n${FREEZE}\n`,
+      starContinuation: `${DECL}\nconst y = 1\n* R4_SEVERITY_LOWERING_RULES.push(${x});\n${FREEZE}\n`,
+      templateInterior: `${DECL}\nconst t = \`\n* \${R4_SEVERITY_LOWERING_RULES.push(${x})}\n\`;\n${FREEZE}\n`,
+      decoyBlockComment: `/*\n${DECL}\n*/\n/* */ ${DECL.replace("'];", `', ${x}];`)}\n${FREEZE}\n`,
+      decoyTemplate: `const t = \`\n${DECL}\n\`;\n/* */ ${DECL.replace("'];", `', ${x}];`)}\n${FREEZE}\n`,
+      if0Freeze: `${DECL}\nif (0)\n${FREEZE}\n/* */ R4_SEVERITY_LOWERING_RULES.push(${x});\n`,
+      freezeInComment: `${DECL}\n/*\n${FREEZE}\n*/\n/* */ R4_SEVERITY_LOWERING_RULES.push(${x});\n`,
     };
     for (const [label, source] of Object.entries(wrong)) {
       const v = probe(source).violations;
@@ -513,8 +542,8 @@ arm(
       );
     }
     expect(
-      'twenty-one wrong sources probed',
-      Object.keys(wrong).length === 21,
+      'thirty wrong sources probed',
+      Object.keys(wrong).length === 30,
       String(Object.keys(wrong).length),
     );
   },
