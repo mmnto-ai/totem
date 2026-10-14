@@ -1684,6 +1684,8 @@ export default {
   const summary: InitSummaryEntry[] = [];
   /** Whether this run's `--pilot` injection changed the generated config (measured, not assumed). */
   let pilotKeyWritten = false;
+  /** The exact line the injection appends, so the message quotes the format it wrote. */
+  let pilotLineWritten = 'pilot: true';
 
   try {
     printBanner();
@@ -1812,6 +1814,7 @@ export default {
           finalConfigContent = finalConfigContent.trimEnd() + '\npilot: true\n';
         } else if (configFilename.endsWith('.toml')) {
           finalConfigContent = finalConfigContent.trimEnd() + '\npilot = true\n';
+          pilotLineWritten = 'pilot = true';
         }
         // Measured: the `.ts` replacement above is anchored on `\n};` at the END of the
         // file, and the generated totem.config.ts ends with `export default config;`, so
@@ -1909,7 +1912,7 @@ export default {
       const configClause = configExists
         ? 'the existing config is left as it is (pilot: true is written only into a config this command generates)'
         : pilotKeyWritten
-          ? 'pilot: true written into the generated config (a key nothing reads yet)'
+          ? `${pilotLineWritten} written into the generated config (a key nothing reads yet)`
           : 'the generated totem.config.ts did not take pilot: true (the injection does not match the generated file, mmnto-ai/totem#3083; the key is read by nothing anyway)';
       log.info(
         'Totem',

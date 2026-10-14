@@ -4674,6 +4674,20 @@ describe('initCommand --pilot register (mmnto-ai/totem#2815)', () => {
     for (const old of OLD_PROMISE) expect(output()).not.toContain(old);
   }, 60000);
 
+  it('a Rust fixture (toml): the written arm quotes the line the toml format takes, and totem.toml carries it', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'Cargo.toml'),
+      '[package]\nname = "pilot-fixture"\nversion = "0.0.0"\n',
+      'utf-8',
+    );
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+    await initCommand({ pilot: true, yes: true });
+    expect(fs.readFileSync(path.join(tmpDir, 'totem.toml'), 'utf-8')).toContain('\npilot = true\n');
+    expect(output()).toContain('pilot = true written into the generated config');
+    expect(output()).not.toContain('pilot: true written');
+    expect(output()).toContain('.totem/pilot-state.json initialised');
+  }, 60000);
+
   it('a re-run over an existing config and a valid state file: left as it is, already present, bytes unchanged', async () => {
     await initCommand({ bare: true, pilot: true, yes: true });
     const before = fs.readFileSync(statePath(), 'utf-8');
