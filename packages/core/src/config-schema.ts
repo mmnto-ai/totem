@@ -715,8 +715,11 @@ export const TotemConfigSchema = z.object({
   /** Optional: doctor stale-rule advisory thresholds (mmnto-ai/totem#1483) */
   doctor: DoctorConfigSchema.optional(),
 
-  /** Optional: pilot mode — warn-only hooks during initial adoption.
-   *  `true` uses defaults (14 days / 50 pushes). Object form overrides thresholds. */
+  /** Optional: pilot mode. Today the flag reaches only the action gates installed with
+   *  `totem init --gates`, which run advisory (a deny prints and exits 0); the git hooks
+   *  do not read it (mmnto-ai/totem#2815). `true`, or an object with `maxDays` /
+   *  `maxPushes`: the window is recorded in `.totem/pilot-state.json` and consumed by
+   *  nothing yet. */
   pilot: z
     .union([
       z.boolean(),

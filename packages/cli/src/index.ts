@@ -96,7 +96,10 @@ program
     '--bare',
     'Initialize without package manager checks or Git hooks (ideal for notes/docs repos)',
   )
-  .option('--pilot', 'Enable pilot mode — hooks warn instead of block during initial adoption')
+  .option(
+    '--pilot',
+    'Pilot mode: records pilot: true in the config; today it reaches only the action gates installed with --gates, which run advisory (a deny prints and exits 0). The git hooks are NOT affected (mmnto-ai/totem#2815)',
+  )
   .option('--strict', 'Use strict enforcement tier (spec-required + review gate for agents)')
   .option('--global', 'Create a personal profile in ~/.totem/ for use across all projects')
   .option(

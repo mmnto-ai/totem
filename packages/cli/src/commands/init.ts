@@ -1841,12 +1841,15 @@ export default {
     }
 
     // --- Pilot mode initialization ---
+    // The register says what ships (mmnto-ai/totem#2815): the flag is read by the
+    // action-gate installer (`--gates`, the advisory tier) and by nothing in the git
+    // hooks; the state file's window is recorded and consumed by nothing yet.
     if (options?.pilot) {
       const { readPilotState } = await import('../utils/pilot.js');
       readPilotState(totemDir); // initializes pilot-state.json if missing
       log.info(
         'Totem',
-        'Pilot mode enabled (14 days / 50 pushes). Hooks will warn instead of block.',
+        'Pilot mode recorded (pilot: true in the config; .totem/pilot-state.json initialised). Today it reaches only the action gates installed with --gates, which run advisory (a deny prints and exits 0). The git hooks are NOT affected (mmnto-ai/totem#2815).',
       );
       summary.push({ file: '.totem/pilot-state.json', action: 'Initialized pilot state' });
     }
