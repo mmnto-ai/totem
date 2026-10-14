@@ -811,8 +811,10 @@ export async function runCompiledRules(
   // Computed once, reused across all output formats.
   //
   // mmnto-ai/totem#2181 — engine-type advisory split. `totem lint` runs only
-  // .totem/compiled-rules.json, and every rule there is a frozen compiled lesson
-  // (un-recompilable under the standing rule-compilation freeze). The regex engine
+  // .totem/compiled-rules.json; every LEGACY rule there is a frozen compiled lesson
+  // (un-recompilable while the legacy compile path stays parked under the
+  // `rule-compilation` freeze entry), and since the S6 regeneration the floor's
+  // rows are lowered from rule records (mmnto-ai/totem#3062). The regex engine
   // is the false-positive flood that forced `--no-verify` on every #2179 push; the
   // ast/ast-grep family is the structural/precision class that earns hard
   // enforcement. Demote the whole regex class to advisory — printed, excluded from
@@ -974,7 +976,7 @@ export async function runCompiledRules(
         // present, else a regex-free warning list is mislabeled (gemini #2182).
         if (hasFrozenLessonAdvisory) {
           lines.push(
-            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules are sensed-not-enforced under the rule-compilation freeze (mmnto-ai/totem#2181); PR review is the real sensor._',
+            '_Advisory — printed for awareness, excluded from the exit code. Frozen-lesson (regex) rules — the legacy rows — are sensed-not-enforced: the linter demotes the regex class to advisory (mmnto-ai/totem#2181), and the legacy compile that produced them stays parked (the `rule-compilation` freeze entry); PR review is the real sensor._',
           );
         }
         for (const v of warnings) {

@@ -1,17 +1,18 @@
 {
-  "_note": "Local mirror of the cohort rule-compilation hold so gate consumers that cannot resolve the @mmnto/strategy-doctrine snapshot still see the freeze — CI's Compile Manifest Attestation runs without registry read auth, the optional doctrine pin never materializes there, and the verify-manifest WARN-downgrade was unreachable (mmnto-ai/totem#2289). The consult honors local provenance identically to the cohort hold (mmnto-ai/totem#2167 Q3 ruling). Mirrors the entry at @mmnto/strategy-doctrine freeze.json; lift this when the cohort hold lifts (change-authority: the cohort registry, not this file).",
+  "_note": "Local mirror of the cohort rule-compilation hold so gate consumers that cannot resolve the @mmnto/strategy-doctrine snapshot still see the freeze — CI's Compile Manifest Attestation runs without registry read auth, the optional doctrine pin never materializes there, and the verify-manifest WARN-downgrade was unreachable (mmnto-ai/totem#2289). The consult honors local provenance identically to the cohort hold (mmnto-ai/totem#2167 Q3 ruling). Mirrors the entry at @mmnto/strategy-doctrine freeze.json (0.1.50 carries the entry re-worded for the gate (5) lift, mmnto-ai/totem-strategy#1500). Re-word this mirror whenever the cohort entry is re-worded, in the same pull request as the pin bump, because `totem orient` reports drift when the two differ on `subsystem`, `since` or `do-not`; remove it only when every consumer keyed on its id is rebuilt (change-authority: the cohort registry, not this file).",
   "frozen": [
     {
       "subsystem": "rule-compilation (legacy lesson-compile path)",
       "id": "rule-compilation",
       "since": "2026-05-17",
       "scope": "local",
-      "reason": "CI-visible mirror of the cohort hold (see _note): parked pending the Convergent Spine replacement. The legacy `totem lesson compile` path cannot recompile (safe-regex2 ReDoS gate vs the xrepo-qualify-refs lookbehind; upstream fix declined, mmnto-ai/totem#1855 NOT_PLANNED).",
-      "tracking": "Rule-compilation freeze (2026-05-17) — multi-gate lift status (GH Project board, orgs/mmnto-ai/projects/1)",
+      "reason": "CI-visible mirror of the cohort hold (see _note). Parked for this corpus under the lift ruling of 2026-10-10 (mmnto-ai/totem-strategy#1486, Q7 (a)): the legacy `totem lesson compile` path stays parked and guarded — it cannot recompile (safe-regex2's ReDoS gate rejects the lookbehind in the xrepo-qualify-refs lesson; the upstream fix was declined, mmnto-ai/totem#1855 NOT_PLANNED, orphaned-by-ADR-103), and since @mmnto/cli 2.15.0 it refuses a record-managed serving file (mmnto-ai/totem#3039). The serving corpus is regenerated from rule records by the serving writer, `totem rule serve` (mmnto-ai/totem#3036): the gate (5) floor serves by record, every other legacy row is carried unchanged or archived on its typed curation row. The lift is of the corpus, not of this path; the id and subsystem are kept so every consumer keyed on them keeps working.",
+      "tracking": "Rule-compilation freeze (2026-05-17) — multi-gate lift status (GH Project board, orgs/mmnto-ai/projects/1); the lift RULED 2026-10-10 on mmnto-ai/totem-strategy#1486 (the S5-b block and its Q1 addendum; the record copy audits/internal/2026-10-10-gate5-lift-block.md); the serving writer mmnto-ai/totem#3036; the record grammar (ADR-103 Amendment 2026-08-19 + Proposal 310)",
       "do-not": [
-        "edit COMPILE-INPUT lessons under .totem/lessons/** (scope ruled 2026-07-17, operator: the freeze governs the compile path only — index-only lessons added via add_lesson feed retrieval, never the frozen compiler, and are EXEMPT)",
+        "edit COMPILE-INPUT lessons under .totem/lessons/** (scope ruled 2026-07-17, operator: the freeze governs the compile path only — index-only lessons added via add_lesson feed retrieval, never the frozen compiler, and are EXEMPT) — after the lift a migrated rule serves by its record, not by its lesson; the lesson stays a retrieval surface",
         "run `totem lesson compile`",
-        "hand-edit .totem/compiled-rules.json (Tenet 20 — it's a regenerable cache)"
+        "hand-edit .totem/compiled-rules.json (Tenet 20 — it's a regenerable cache)",
+        "write the serving file `.totem/compiled-rules.json` by any route but the serving writer `totem rule serve` (Q7 (a) of the lift ruling; the legacy compile refuses a record-managed file, mmnto-ai/totem#3039)"
       ]
     }
   ]

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "7ed5f479c089bd369d3c0268cf8a7d9e10c5a3a4",
+  "readAt": "2026-10-13T20:41:42Z",
+  "findings": [
+    {
+      "id": "3034-s8-r2-F1",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 142,
+      "claim": "The fold's lint.yml comment gave as the reason the flag stays the one basis the ruling declined: 'an unsuppressed blocking finding (the fail-open catch ban fires often) would turn pull requests red (the S6 note's D5 cost)'; Q8 (a) keeps the flag to be re-read on step 6's measurement, its recommendation says 'not on one machine's metrics', and step 6 measured 0 errors on the regenerated tree with zero hits for both blocking rules in the comparison.",
+      "counterexample": "lift block Q8 (line 100); S6 note D5 (b) (line 210, one machine's metrics, leg-read); step 6 report lines 29 and 50. FOLDED in the fold-2 commit: the comment gives Q8 (a)'s own basis and attributes the perma-red rationale to the note's D5 as the cost of dropping, with no firing-rate claim."
+    },
+    {
+      "id": "3034-s8-r2-F2",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "'Only a blocking-set finding can fail the step' (enforcement-model.md:90 and lint.yml:137) was contradicted by the fold's own annotation comment, which also names lint failing to run; the step's run block also fetches the base ref. 'The step does not fail the check' holds because continue-on-error covers any non-zero exit.",
+      "counterexample": "lint.yml:137 vs :164-165 and :156; run-compiled-rules.ts:847 and :997-1005. FOLDED: both places now say no advisory finding can fail the step; only a blocking-set finding or a failure to run can."
+    },
+    {
+      "id": "3034-s8-r2-F3",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 320,
+      "claim": "Disclosure on vocabulary: 'the rest are advisory' used the tier word for the non-blocking set, where 109 of the 260 non-blocking active rows are hard tier at warning severity and rule list prints them as tier hard; the fourth-parameter default breaks no caller (every existing call passes 1 to 3 arguments; 28 of 28 docs tests pass).",
+      "counterexample": "The leg's count over .totem/compiled-rules.json: active 264, blocking 4, non-blocking 260, hard-tier warning 109, stamped 0. FOLDED: the clause reads 'the rest are non-blocking: they print and never fail it', the README's derived paragraph reads 'non-blocking: printed, and kept out of the exit code', and the test string follows."
+    },
+    {
+      "id": "3034-s8-r2-F4",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 96,
+      "claim": "Disclosure: the README is byte-identical to 564ae6eb except line 90 and the how-built page is byte-identical; the restored sentence 'The replacement compiler ships only after it passes held-out validation on real work' is true under the maturity page's Goal-row reading (the replacement is derivation, not yet shipped) and can be misread as being about the record route, which shipped with no held-out evidence; 'existing rules keep enforcing' holds for the blocking set (4 to 4) while the active count fell from 385 to 264 at step 7.",
+      "counterexample": "git show 564ae6eb:README.md vs the worktree (only line 90 differs); maturity.md:21; lift block line 56; step 6 report line 14. DISCLOSED, not folded: merged text inside the ruled scope; no fix proposed by the leg."
+    },
+    {
+      "id": "3034-s8-r2-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.test.ts",
+      "line": 1759,
+      "claim": "Disclosure on assertion strength: the advisory note is exact against the discriminator and all 77 tests in the file pass, but the five pinning tests assert only the substrings 'sensed-not-enforced' and 'Frozen-lesson', so the fold's new causal clause is not pinned and reverting it would pass.",
+      "counterexample": "run-compiled-rules.ts:861-863 and :979; run-compiled-rules.test.ts:402, 433, 524, 559, 1759. DISCLOSED, not folded: no fix proposed by the leg."
+    }
+  ],
+  "folded": [
+    "3034-s8-r2-F1",
+    "3034-s8-r2-F2",
+    "3034-s8-r2-F3"
+  ],
+  "verdict": "read 2 on the fold 7ed5f479 (scoped to the fold): as typed, 0 BLOCKING, 1 MATERIAL, 4 MINOR, 0 QUESTION; F1 to F3 folded in the fold-2 commit, F4 and F5 disclosed; held: the restoration (README byte-identical except line 90; the how-built page identical), the passage, the predicates, seven mutants killed, the pinning tests. The leg's convergence: with F1's sentence re-worded the branch is mergeable as it stands, and a further read would need only that comment. Fold 2 rewires no semantics (a comment, one doc sentence, a clause's vocabulary, the maturity data's as-of date refreshed on a second side agent's note), so the seat names convergence here."
+}

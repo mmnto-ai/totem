@@ -132,16 +132,24 @@ jobs:
           git fetch origin "$BASE_REF"
           node packages/cli/dist/index.js legs gate
 
-      # ADVISORY until the rule-compilation freeze lifts (the convergent spine).
-      # The compiled lesson-rules carry frozen #2055-class false-positives that
-      # cannot be recompiled away under the freeze (safe-regex2 ReDoS gate). A
-      # perma-red check trains bypass-blindness and masks a future REAL regression
-      # (red->red is invisible) — so the job keeps RUNNING (findings still print)
-      # but is non-failing. The clean deterministic gates stay hard in the pre-push
-      # hook + the PR bot review is the real gate. Drop continue-on-error when the
-      # spine makes these rules legitimate again.
-      # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors strategy#656
-      - name: Run totem lint (ADVISORY — frozen lesson-rules pending spine)
+      # ADVISORY by ruling, kept at the gate (5) lift (mmnto-ai/totem-strategy#1486,
+      # Q8 (a), 2026-10-10). No advisory finding can fail this step; only a
+      # blocking-set finding, or a failure to run, can: the linter demotes the
+      # whole regex class to advisory by its own predicate (mmnto-ai/totem#2181),
+      # so the legacy mmnto-ai/totem#2055-class false positives print and never
+      # fail it. The blocking set is hard TIER (ruleClass, else the engine; no row
+      # is stamped today, so ast/ast-grep) at error severity; it is enforced by the
+      # pre-push hook on every machine that runs it, and the PR bot review is the
+      # other real gate. The flag stays by Q8 (a): it was left in place at the lift
+      # to be re-read on step 6's measurement of the blocking set's firings, and no
+      # decision to drop it is recorded. The S6 note's D5 names the cost of
+      # dropping it: an unsuppressed blocking finding would turn a pull request
+      # red, and a perma-red check trains bypass-blindness and masks a future REAL
+      # regression (red->red is invisible) — so the job keeps RUNNING (findings
+      # still print) but is non-failing. Dropping continue-on-error is a ruling on
+      # the blocking set's measured firings on the regenerated corpus, not a date.
+      # mmnto-ai/totem-strategy#430 · mmnto-ai/totem#2055 · mirrors mmnto-ai/totem-strategy#656
+      - name: Run totem lint (ADVISORY — by ruling; the pre-push hook is the hard arm)
         id: totem_lint
         continue-on-error: true
         env:
@@ -154,12 +162,13 @@ jobs:
 
       # Surface the advisory state as a REAL GitHub annotation (PR checks pane +
       # annotations rail), not just the step name — so a green job never reads as
-      # "lint clean" when the frozen rules actually flagged something
-      # (never-skip-silently). Fires only when the advisory lint had findings.
-      - name: Advisory annotation (when totem lint flagged findings)
+      # "lint clean" when a blocking-set rule actually fired (never-skip-silently).
+      # Fires only when the advisory lint step failed: a blocking-set finding, or
+      # lint itself failing to run. Advisory findings alone never fail the step.
+      - name: Advisory annotation (when totem lint failed)
         if: steps.totem_lint.outcome == 'failure'
         run: |
-          echo "::warning title=Totem lint ADVISORY::Totem lint flagged findings but the job is advisory — these may be #2055-class false-positives from frozen lesson-rules (safe-regex2 freeze). Drop continue-on-error when the spine recompiles. Refs: mmnto-ai/totem#2055, mmnto-ai/totem-strategy#430."
+          echo "::warning title=Totem lint ADVISORY::Totem lint found a blocking-set finding (hard tier at error severity) or failed to run, but the job is advisory by ruling (Q8 (a) of the gate (5) lift, mmnto-ai/totem-strategy#1486); the pre-push hook blocks the finding where it is installed. Advisory (demoted regex-class) findings alone never fail this step. Refs: mmnto-ai/totem#2055, mmnto-ai/totem-strategy#430."
 
       # NOTE (advisory posture): the SARIF steps below still run while the lint job
       # is advisory, so frozen #2055-class false-positives surface as Code Scanning

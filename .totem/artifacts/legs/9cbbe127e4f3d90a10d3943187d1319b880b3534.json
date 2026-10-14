@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "9cbbe127e4f3d90a10d3943187d1319b880b3534",
+  "readAt": "2026-10-13T20:28:08Z",
+  "findings": [
+    {
+      "id": "3034-s8-F1",
+      "severity": "MATERIAL",
+      "file": "tools/docs-transforms.cjs",
+      "line": 354,
+      "claim": "The re-worded DAYS_UNDER_FREEZE passage says the corpus was held read-only until a replacement route passed held-out validation and that the route is open; the lift block of record (1.4) says gate (5) produced no held-out evidence, and the same maturity page keeps held-out validation as an unmet Goal row (docs/wiki/maturity.md:21).",
+      "counterexample": "strategy origin/main audits/internal/2026-10-10-gate5-lift-block.md:56 ('produced no held-out evidence'); docs/wiki/maturity.md:21 Goal row. FOLDED in the fold commit: the passage claims no held-out validation and names the migrated floor rules as what serves by record."
+    },
+    {
+      "id": "3034-s8-F2",
+      "severity": "MATERIAL",
+      "file": ".github/workflows/lint.yml",
+      "line": 166,
+      "claim": "The rewritten CI annotation blamed a failing lint step on demoted legacy lesson-rules, which cannot fail the step: errors = violations.filter(isBlocking) and SHIELD_FAILED throws only when errors.length > 0, so the step fails only on a blocking-set finding or a lint crash.",
+      "counterexample": "packages/cli/src/commands/run-compiled-rules.ts:847 and :997-1002. FOLDED: the annotation and the step comment at lint.yml:159-163 now say the step fails only on a blocking-set finding or a failure to run, and that advisory findings alone never fail it."
+    },
+    {
+      "id": "3034-s8-F3",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "A step 8 item was missing: the sentence 'its totem lint step is advisory while the rule-compilation freeze stands' still tied CI's flag to the freeze, and the S6 note section 5 lists that sentence by name.",
+      "counterexample": "S6 note section 5 (the 'other text states the freeze' list) and the step 8 row. FOLDED: the sentence now says the step is advisory by ruling (Q8 (a)), that only a blocking-set finding can fail it, and that it does not fail the check."
+    },
+    {
+      "id": "3034-s8-F4",
+      "severity": "MATERIAL",
+      "file": "README.md",
+      "line": 96,
+      "claim": "The README said the replacement route is open and that a new rule reaches the serving file only as a record that has passed a gate: a decided admission policy for never-migrated records, which the S6 note's D6 (the lift block's Q9) leaves unruled, with the recorded default that nothing new is admitted.",
+      "counterexample": "S6 note section 7 ('the lift leaves the backlog where it is ... nothing new would be allowed onto it'; D6 'No proposal'). FOLDED: the 'Where the Loop Stands' section is restored to the merged text except the one derived sentence Q5 (b) names; the how-totem-gets-built bullet, also re-worded beyond the list, is restored too. A side agent's note raised the same finding independently."
+    },
+    {
+      "id": "3034-s8-F5",
+      "severity": "MATERIAL",
+      "file": "docs/data/maturity.json",
+      "line": 57,
+      "claim": "The re-worded maturity row kept 'the compiled corpus remains fully enforced' while the same diff's README says 4 of 264 active rules block and the rest are advisory, and 249 rows are inactive.",
+      "counterexample": "README.md:90 (rendered), run-compiled-rules.ts:979 ('sensed-not-enforced'), docs/wiki/maturity.md:35. FOLDED: the row says the active rules run on every diff and the blocking set fails a push. README:98 'existing rules keep enforcing' is merged text and is left as it was."
+    },
+    {
+      "id": "3034-s8-F6",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.test.cjs",
+      "line": 476,
+      "claim": "The BLOCKING_RULE_SET test did not discriminate on the blocking predicate: a transform that ignored the injected onBlocking for core's engine test, or mirrored an engine field test, passed every assertion, because the fixture's only active error rows were ast-grep and its regex error row was archived.",
+      "counterexample": "The leg's mutant harness (scratch leg1/mutants.cjs): fieldMirror and coreIgnoreParam survived; ignoreActive and blockingBeforeActive were killed. FOLDED: an active regex error row is added and the expected rendering is '3 of 4 active rules block a push (2 ast-grep / 1 regex; 1 served from rule records, 2 legacy)'; the provenance sentence's blocking clause is pinned on the same fixture."
+    },
+    {
+      "id": "3034-s8-F7",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 135,
+      "claim": "The lint.yml comment explained the advisory flag with regex false-positives that since mmnto-ai/totem#2181 cannot turn the check red, and defined the blocking set as 'hard engine' where the predicate is hard TIER (ruleClass, else the engine).",
+      "counterexample": "packages/core/src/rule-tier.ts:30-41; S6 note section 6 D5 (b). FOLDED: the comment gives D5's cost (an unsuppressed blocking finding would turn pull requests red) as the reason and says hard tier, with the engine as today's fallback."
+    },
+    {
+      "id": "3034-s8-F8",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/run-compiled-rules.ts",
+      "line": 979,
+      "claim": "The advisory note gave the wrong cause: 'sensed-not-enforced while the legacy compile path stays parked' attributes the demotion to the park, where the demotion is the mmnto-ai/totem#2181 engine predicate and does not depend on it.",
+      "counterexample": "run-compiled-rules.ts:861-863 (the discriminator) and rule-tier.ts:30-41. FOLDED: the note names both causes (the linter demotes the regex class; the legacy compile that produced them stays parked); the five pinning tests pass; the changeset is re-worded to match."
+    },
+    {
+      "id": "3034-s8-F9",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/verify-manifest.ts",
+      "line": 194,
+      "claim": "Two messages the S6 note section 5 quotes still point at the compile: verify-manifest's WARN ('blocks again at unfreeze; a real compile settles it then') and the hook template's 'Run totem lesson compile', while the entry is kept and the compile refuses a record-managed file.",
+      "counterexample": "verify-manifest.ts:194; install-hooks.ts:1391; compile.ts:615-624. DECLINED for this pull request, disclosed: the note assigns those two messages to step 2b, not to step 8's section 5 list; the hook template is a product-wide message other repositories rely on, so a repo-aware re-wording is a design item. Recorded as owed on the totem lane."
+    },
+    {
+      "id": "3034-s8-F10",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 317,
+      "claim": "Strategy's dispatch named Q5 (b) as the generated-docs provenance sentence (section 2's table, the two passages) re-derived from the blocking set; the commit re-derived the README sentence and left RULE_PROVENANCE's enforcement clause ('513 compiled rules stand between a banked mistake and its recurrence') untouched.",
+      "counterexample": "lift block Q5 (line 94); strategy outbox 2026-10-13T1705Z. FOLDED: renderRuleProvenance takes the blocking predicate as a fourth parameter and the sentence now says how many active rules block a push (hard tier at error severity) and that the rest are advisory; pinned on the committed corpus and on the mixed fixture."
+    },
+    {
+      "id": "3034-s8-F11",
+      "severity": "MINOR",
+      "file": "tools/docs-transforms.cjs",
+      "line": 346,
+      "claim": "The generator comment said eight consumers key on the entry's id; the S6 note counts eight consumers, six by id and two by the subsystem string.",
+      "counterexample": "S6 note section 5. FOLDED: 'eight consumers read it (six by its id, two by its subsystem string)'."
+    },
+    {
+      "id": "3034-s8-F12",
+      "severity": "QUESTION",
+      "file": ".github/workflows/lint.yml",
+      "line": 135,
+      "claim": "Q8 (a) as ruled is to leave continue-on-error at the lift and re-read it at step 6; the step 6 report records the blocking set's measurement (four to four, identical firings on crafted inputs) but no decision on the flag. Is the step 6 re-read recorded elsewhere?",
+      "counterexample": "lift block Q8 (line 100); the step 6 report has no line about the flag. ANSWERED in the pull request body: no decision on the flag is recorded anywhere; the flag stays under Q8 (a) and its drop remains a ruling for the operator, on the measurement step 6 did record. The leg typed this INFO; the deposit vocabulary has no INFO, so it is deposited as the QUESTION its text asks."
+    },
+    {
+      "id": "3034-s8-F13",
+      "severity": "MINOR",
+      "file": "README.md",
+      "line": 90,
+      "claim": "The stated gates check out (docs tests 28 passed; orient reads the 0.1.50 cohort pin with no drift tag; verify-manifest PASS under the 0.1.50 cohort freeze; the lockfile diff is the pin only). Two wording points: the commit message says three pinning tests where five pin the wording; the README's rendered fragment names no rule and the passage omits the --allow-record-rows escape.",
+      "counterexample": "run-compiled-rules.test.ts:388, 405, 1745, 1762, 1785; compile.ts:615-624. DISCLOSED, not folded: the commit message is history; the pull request body says 'the tests that pin' without a count; the README text that mentioned the refusal is restored to merged text under F4. The leg typed this INFO; the deposit vocabulary has no INFO, so it is deposited as MINOR, the disclosure bucket."
+    }
+  ],
+  "folded": [
+    "3034-s8-F1",
+    "3034-s8-F2",
+    "3034-s8-F3",
+    "3034-s8-F4",
+    "3034-s8-F5",
+    "3034-s8-F6",
+    "3034-s8-F7",
+    "3034-s8-F8",
+    "3034-s8-F10",
+    "3034-s8-F11"
+  ],
+  "verdict": "read 1 on S6 step 8 (head 9cbbe127): as typed by the leg, 5 MATERIAL, 6 MINOR, 2 INFO (the leg's own summary said 5 minor and 3 info while listing six and two); the deposit vocabulary has no INFO, so F12 is deposited as QUESTION and F13 as MINOR — deposited counts 5 MATERIAL, 7 MINOR, 1 QUESTION, 10 folded, F9 declined and disclosed, F12 answered, F13 disclosed. The leg's convergence: mergeable after F1 to F5 and F6 are folded; a re-armed leg reads only the re-worded sentences. Read 2 is armed on the fold commit."
+}

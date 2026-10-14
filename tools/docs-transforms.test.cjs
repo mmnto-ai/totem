@@ -452,6 +452,90 @@ test("ACTIVE_RULE_COUNT derives the runnable count through core's canonical pred
   assert.throws(() => transforms._renderLessonRecordCount(lessonHashless), /no lessonHash/);
 });
 
+test("BLOCKING_RULE_SET derives the rules that can fail a push through core's blocking predicate over the active rows, and tells record-served from legacy rows by the record-path predicate", () => {
+  const core = require('../packages/core/dist/index.js');
+  const active = compiledRules.rules.filter(core.isActiveCompiledRule);
+  const blocking = active.filter(core.isBlockingRule);
+  const record = blocking.filter(core.isRecordPathRule).length;
+  const rendered = transforms.BLOCKING_RULE_SET();
+  // An all-advisory corpus is a valid corpus the transform supports with its
+  // "none" form, so the committed-corpus assertions branch on the count rather
+  // than rejecting it (CodeRabbit on S6 step 8).
+  if (blocking.length === 0) {
+    assert.equal(rendered, `none of the ${active.length} active rules blocks a push`);
+  } else {
+    assert.ok(
+      rendered.startsWith(`${blocking.length} of ${active.length} active rules block a push`),
+      rendered,
+    );
+    assert.ok(
+      rendered.includes(`${record} served from rule records, ${blocking.length - record} legacy`),
+      rendered,
+    );
+  }
+  // The predicates are parameters, so the fixture decides who is active, who
+  // blocks and who is on the record path; the transform cannot mirror a tier
+  // or status test of its own. Discriminating on every predicate (leg F6 on
+  // S6 step 8): the archived error row is out (active applied first), the
+  // warning row is out, and the ACTIVE REGEX ERROR row `e` is in — a transform
+  // that ignored the injected blocking predicate for core's engine test, or
+  // mirrored an engine field test, would render 2 of 4 and fail here.
+  const onActive = (r) => r.status !== 'archived';
+  const onBlocking = (r) => r.severity === 'error';
+  const onRecordPath = (r) => r.record === true;
+  const at = '2026-10-10T00:00:00.000Z';
+  const mixed = writeTmpJson('blocking-mixed.json', {
+    rules: [
+      { lessonHash: 'a', engine: 'ast-grep', severity: 'error', record: true, compiledAt: at },
+      { lessonHash: 'b', engine: 'ast-grep', severity: 'error', compiledAt: at },
+      { lessonHash: 'c', engine: 'regex', severity: 'error', status: 'archived', compiledAt: at },
+      { lessonHash: 'd', engine: 'regex', severity: 'warning', compiledAt: at },
+      { lessonHash: 'e', engine: 'regex', severity: 'error', compiledAt: at },
+    ],
+  });
+  assert.equal(
+    transforms._renderBlockingRuleSet(mixed, onBlocking, onActive, onRecordPath),
+    '3 of 4 active rules block a push (2 ast-grep / 1 regex; 1 served from rule records, 2 legacy)',
+  );
+  // The provenance sentence's enforcement clause rides the same predicates
+  // (Q5 (b)): the blocking count there is the set's, over the active rows.
+  const sentence = transforms._renderRuleProvenance(mixed, onActive, onRecordPath, onBlocking);
+  assert.ok(sentence.includes('**4 are active**'), sentence);
+  assert.ok(
+    sentence.includes(
+      '3 of them block a push (hard tier at error severity) and the rest are non-blocking: they print and never fail it',
+    ),
+    sentence,
+  );
+  assert.ok(
+    transforms
+      .RULE_PROVENANCE()
+      .includes(
+        blocking.length === 0
+          ? 'none of them blocks a push'
+          : `${blocking.length} of them block a push`,
+      ),
+    'the committed sentence names the committed blocking count',
+  );
+  const none = writeTmpJson('blocking-none.json', {
+    rules: [{ lessonHash: 'd', engine: 'regex', severity: 'warning', compiledAt: at }],
+  });
+  assert.equal(
+    transforms._renderBlockingRuleSet(none, onBlocking, onActive, onRecordPath),
+    'none of the 1 active rules blocks a push',
+  );
+  // The provenance sentence's zero branch, covered by fixture like the set's.
+  const noneSentence = transforms._renderRuleProvenance(none, onActive, onRecordPath, onBlocking);
+  assert.ok(noneSentence.includes('**1 are active**'), noneSentence);
+  assert.ok(noneSentence.includes('none of them blocks a push'), noneSentence);
+  // The README's enforcement figure rides the marker, never a literal.
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf-8');
+  assert.ok(
+    readme.includes('<!-- docs BLOCKING_RULE_SET -->'),
+    'README must carry the BLOCKING_RULE_SET marker',
+  );
+});
+
 test('LESSON_RECORD_COUNT rounds distinct-plus-non-compilable to the nearest hundred', () => {
   // Distinct LESSONS: a record-built row's minted id is not one (core's split).
   const onRecordPath = transforms._recordPathPredicate();
