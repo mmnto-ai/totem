@@ -1682,6 +1682,8 @@ export default {
   // guarded site logs the default it took.
   const interactive = process.stdin.isTTY === true && options?.yes !== true;
   const summary: InitSummaryEntry[] = [];
+  /** Whether this run's `--pilot` injection changed the generated config (measured, not assumed). */
+  let pilotKeyWritten = false;
 
   try {
     printBanner();
@@ -1811,6 +1813,11 @@ export default {
         } else if (configFilename.endsWith('.toml')) {
           finalConfigContent = finalConfigContent.trimEnd() + '\npilot = true\n';
         }
+        // Measured: the `.ts` replacement above is anchored on `\n};` at the END of the
+        // file, and the generated totem.config.ts ends with `export default config;`, so
+        // on that format the injection is a no-op today. The message below says which
+        // happened instead of asserting the write (mmnto-ai/totem#2815).
+        pilotKeyWritten = finalConfigContent !== configContent;
       }
 
       // Inject hooks.tier into the generated config when --strict is set
@@ -1857,21 +1864,32 @@ export default {
     // this run actually did, not what the flag is meant to do one day.
     if (options?.pilot) {
       const { readPilotState } = await import('../utils/pilot.js');
-      const stateExisted = fs.existsSync(path.join(totemDir, 'pilot-state.json'));
-      readPilotState(totemDir); // initializes pilot-state.json if missing
+      const pilotStatePath = path.join(totemDir, 'pilot-state.json');
+      const stateExisted = fs.existsSync(pilotStatePath);
+      const stateBefore = stateExisted ? fs.readFileSync(pilotStatePath, 'utf-8') : null;
+      readPilotState(totemDir); // initializes pilot-state.json if missing or invalid
+      const stateAfter = fs.readFileSync(pilotStatePath, 'utf-8');
       const configClause = configExists
         ? 'the existing config is left as it is (pilot: true is written only into a config this command generates)'
-        : 'pilot: true written into the generated config (a key nothing reads yet)';
-      const stateClause = stateExisted
-        ? '.totem/pilot-state.json already present'
-        : '.totem/pilot-state.json initialised';
+        : pilotKeyWritten
+          ? 'pilot: true written into the generated config (a key nothing reads yet)'
+          : 'the generated totem.config.ts did not take pilot: true (the injection does not match the generated file, mmnto-ai/totem#3083; the key is read by nothing anyway)';
+      const stateClause = !stateExisted
+        ? '.totem/pilot-state.json initialised'
+        : stateBefore === stateAfter
+          ? '.totem/pilot-state.json already present'
+          : '.totem/pilot-state.json re-initialised (the existing file was invalid)';
       log.info(
         'Totem',
         `Pilot flag recorded: ${configClause}; ${stateClause}. Today the flag sets the pilot tier of the action gates installed with --gates in this run (a deny prints and exits 0; a gate that cannot be evaluated still blocks). The git hooks are NOT affected (mmnto-ai/totem#2815).`,
       );
       summary.push({
         file: '.totem/pilot-state.json',
-        action: stateExisted ? 'Pilot state already present' : 'Initialized pilot state',
+        action: !stateExisted
+          ? 'Initialized pilot state'
+          : stateBefore === stateAfter
+            ? 'Pilot state already present'
+            : 'Pilot state re-initialized (the existing file was invalid)',
       });
     }
 
