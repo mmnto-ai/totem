@@ -285,9 +285,12 @@ for (const [lessonHash, row] of Object.entries(inventory)) {
   if (lessonHash.startsWith('_')) continue;
   const items = Array.isArray(row?.inventory) ? row.inventory : [];
   if (!items.includes('iv')) continue;
-  if (R14_MODE)
+  // Keyed on the MODE the run is in (no --set), not on the --r14 flag: a --seed/--corpus
+  // run without --r14 is a seed run too, and it has no R4 rule either (Greptile on
+  // mmnto-ai/totem#3080).
+  if (SET === undefined)
     die(
-      `inventory entry ${lessonHash} declares iv (severity lowered under R4), which is admissible only in the migration run (--set); the K3 regression has no R4 rule.`,
+      `inventory entry ${lessonHash} declares iv (severity lowered under R4), which is admissible only in the migration run (--set); a seed run, the K3 regression included, has no R4 rule.`,
     );
   if (!R4_SEVERITY_LOWERING_RULES.includes(lessonHash))
     die(

@@ -26,6 +26,8 @@
 //   A5  the pin's records unmodified with `iv` declared → exit 0, identical, and the
 //       inert-declaration note printed once per record, AFTER the record's own line
 //   A6  `iv` under `--r14` (the K3 regression) → exit 2
+//   A6b `iv` in a `--seed`/`--corpus` run without `--r14` → exit 2 (the refusal keys on
+//       the absence of `--set`, so every seed run is refused, not only the K3 one)
 //   A7  `iv` beside `ii` → exit 2
 //   A8  every recorded run reproduces its recorded fidelity lines unchanged (K3 and
 //       batches 1 to 4), and the harness at `--base` and the harness here emit the
@@ -204,7 +206,15 @@ function allowListFromSource() {
 function parseAllowListSource(src) {
   const violations = [];
   const ID = 'R4_SEVERITY_LOWERING_RULES';
-  const lines = src.split('\n').map((l) => l.replace(/\r$/, ''));
+  // JavaScript admits backslash-u hex escapes INSIDE an identifier, and the escaped
+  // spelling binds the same name; decode them before the scan so an escaped
+  // declaration or occurrence cannot hide from a text search (CodeRabbit on
+  // mmnto-ai/totem#3080). The two forms: four hex digits, or braces around any count.
+  const decodeIdentifierEscapes = (l) =>
+    l
+      .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  const lines = src.split('\n').map((l) => decodeIdentifierEscapes(l.replace(/\r$/, '')));
   const declRe = /^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];$/;
   const declLines = lines.map((l, i) => (declRe.test(l) ? i : -1)).filter((i) => i >= 0);
   if (declLines.length !== 1)
@@ -532,6 +542,11 @@ arm(
       decoyTemplate: `const t = \`\n${DECL}\n\`;\n/* */ ${DECL.replace("'];", `', ${x}];`)}\n${FREEZE}\n`,
       if0Freeze: `${DECL}\nif (0)\n${FREEZE}\n/* */ R4_SEVERITY_LOWERING_RULES.push(${x});\n`,
       freezeInComment: `${DECL}\n/*\n${FREEZE}\n*/\n/* */ R4_SEVERITY_LOWERING_RULES.push(${x});\n`,
+      // CodeRabbit's shape: the pair declared and frozen inside a block comment (the
+      // decoy), then the REAL declaration spelled with a backslash-u hex escape inside
+      // the identifier, which binds the same name and widens the list unfrozen. The
+      // escape is assembled at run time so this source file never carries the sequence.
+      escapedIdentifier: `/*\n${DECL}\n${FREEZE}\n*/\n${DECL.replace('RULES', `RUL${'\\'}u0045S`).replace("'];", `', ${x}];`)}\n`,
     };
     for (const [label, source] of Object.entries(wrong)) {
       const v = probe(source).violations;
@@ -542,8 +557,8 @@ arm(
       );
     }
     expect(
-      'thirty wrong sources probed',
-      Object.keys(wrong).length === 30,
+      'thirty-one wrong sources probed',
+      Object.keys(wrong).length === 31,
       String(Object.keys(wrong).length),
     );
   },
@@ -867,6 +882,40 @@ arm('A6 iv under --r14 (the K3 regression mode)', (expect) => {
     r.stderr.trim().split('\n')[0],
   );
 });
+
+// A6b — iv in a seed run WITHOUT --r14: neither the migration run nor the K3 regression,
+// still no R4 rule; the refusal keys on the mode (no --set), not on the --r14 flag
+// (Greptile on mmnto-ai/totem#3080).
+arm(
+  'A6b iv in a --seed/--corpus run without --r14 (a seed run is not the migration run)',
+  (expect) => {
+    const k3 = readJson(K3_INVENTORY);
+    const inv = path.join(sub('inv'), 'a6b.json');
+    const target = '87aff037d7de47a7';
+    writeJson(inv, {
+      ...k3,
+      _control:
+        'R4 control A6b — the K3 inventory plus iv, run without --r14; never a run inventory',
+      [target]: {
+        ...(k3[target] ?? {}),
+        inventory: [...((k3[target] ?? {}).inventory ?? []), 'iv'],
+      },
+    });
+    const r = invoke(
+      commonArgs(['--seed', SEED, '--corpus', CORPUS, '--inventory', inv, '--rules', r14.dir]),
+    );
+    expect('exit 2', r.status === 2, String(r.status));
+    expect(
+      'stderr names the mode',
+      /admissible only in the migration run/.test(r.stderr),
+      r.stderr.trim().split('\n')[0],
+    );
+    expect(
+      'no entry line printed (refused before the entry loop)',
+      !/^ *\d+\. [0-9a-f]{16}/m.test(r.stdout),
+    );
+  },
+);
 
 // A7 — iv beside ii.
 arm('A7 iv beside ii', (expect) => {
