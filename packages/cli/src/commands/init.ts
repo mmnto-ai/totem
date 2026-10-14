@@ -1868,32 +1868,14 @@ export default {
     // nothing consumes yet. The message names what this run actually did, measured,
     // not what the flag is meant to do one day.
     if (options?.pilot) {
-      const { readPilotState } = await import('../utils/pilot.js');
-      const pilotStatePath = path.join(totemDir, 'pilot-state.json');
-      const stateExisted = fs.existsSync(pilotStatePath);
-      // An existing file this process cannot read (permissions, a lock) is one of the
-      // cases readPilotState recovers from, so the before-read is guarded: an unguarded
-      // read here would stop the run before the helper reached its recovery path (the
-      // bot round of the register PR). The outcome is then reported as what it is.
-      let stateBefore: string | null = null;
-      let stateUnreadable = false;
-      if (stateExisted) {
-        try {
-          stateBefore = fs.readFileSync(pilotStatePath, 'utf-8');
-          // totem-context: intentional — the read failure IS the measured outcome: the catch records it, the message and the summary row report it as the "could not be read" arm, and readPilotState's own recovery (the atomic rewrite) runs next; nothing is swallowed.
-        } catch {
-          stateUnreadable = true;
-        }
-      }
-      readPilotState(totemDir); // initializes pilot-state.json if missing, unreadable or invalid
-      const stateAfter = fs.readFileSync(pilotStatePath, 'utf-8');
-      const stateOutcome = !stateExisted
-        ? 'initialised'
-        : stateUnreadable
-          ? 'reinitialised-unreadable'
-          : stateBefore === stateAfter
-            ? 'present'
-            : 'reinitialised-invalid';
+      const { readPilotStateWithOutcome } = await import('../utils/pilot.js');
+      // The helper reports what its own read did (present, initialised, or re-initialised
+      // because the file was invalid or could not be read), so the message measures the
+      // outcome at the one place it happens instead of reading the file beside it: a
+      // read beside the helper stopped the run when the file was unreadable, and once
+      // guarded it mislabelled a transient failure as a reset (the bot round of the
+      // register PR).
+      const { outcome: stateOutcome } = readPilotStateWithOutcome(totemDir);
       const STATE_CLAUSE: Record<typeof stateOutcome, string> = {
         initialised: '.totem/pilot-state.json initialised',
         present: '.totem/pilot-state.json already present',
