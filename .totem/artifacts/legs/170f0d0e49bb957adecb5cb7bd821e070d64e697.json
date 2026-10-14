@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "170f0d0e49bb957adecb5cb7bd821e070d64e697",
+  "readAt": "2026-10-14T20:55:21Z",
+  "findings": [
+    {
+      "id": "3044-r4-F1",
+      "severity": "MATERIAL",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 285,
+      "claim": "The eager iv refusal loop skips every inventory key that starts with an underscore (line 285: if (lessonHash.startsWith('_')) continue;). But declared() (lines 304-305) reads inventory[lessonHash] for every entry with no such skip. An entry whose lessonHash starts with an underscore therefore gets its iv declaration past all three read-time refusals (the no --set guard at 291, the allow-list at 295, beside-ii at 299) in EVERY mode, and the fidelity leg (638-644) admits the lowering. For that key class, the README 'Its semantics' bullet (refused at inventory read, over the WHOLE inventory, before any record is read, exit 2) and the header (iv) paragraph (lines 29-35) do not hold. The run still exits 1: rowShapeErrors (line 494) requires a 16-hex lessonHash and counts a harness throw, so no admitted row reaches an exit-0 run. But the row IS written to --out (line 904 pushes it after the shape error), carrying expectedDivergence 'severity (inventory iv: lowered under R4)' from a run without --set and on a hash outside the allow-list. The skip is pre-existing at 5d447fd1 (same line 285): the fold did not introduce it, but it is in the class this read is scoped to. Reaching it needs a seed/corpus or manifest lessonHash with a leading underscore; the frozen R14 corpus has none.",
+      "counterexample": "Measured at 170f0d0e (fixtures in leg-3044-scratch-4/prefix/, built by build.cjs). Corpus: the 87aff037d7de47a7 legacy row (severity error) re-keyed '_87aff037d7de47a'. Seed: [that key]. Inventory: {'_87aff037d7de47a': {inventory: ['i','iv']}}. One record, 'mig-_87aff03-x.rule.yaml', which is the A1 lowered record (severity warning). Invocation: --seed --corpus --inventory --rules --core, with no --set and no --r14. Output: 'fidelity: severity (inventory iv: lowered under R4) (expected)'; 'Fidelity (records): 0/1 identical, 1 expected divergence(s), 0 UNEXPECTED'; '[SHAPE] ... fails the pre-registered field set - lessonHash'; 'Verdict: FAIL (exit 1) - ... harness throws 1'. The README contract expects exit 2 at inventory read and no record line. Possible folds: check the iv items for every key (drop the underscore skip for keys that are also entry hashes), or have declared() refuse or ignore underscore keys the same way the loop does. Assertion strength (the leg's own words): Measured counterexample. The exit gate (the shape check) bounds it to exit 1, so it is not BLOCKING. Typed MATERIAL under the brief's rule (an iv declaration admitted outside the migration run); the seat may rule it MINOR on reachability."
+    },
+    {
+      "id": "3044-r4-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 703,
+      "claim": "The comment at lines 703-705 says '(iv) is refused beside (ii) and in --r14', which describes a two-mode world. Since the fold, iv is refused in every run without --set (line 291). The comment's conclusion (a payload explanation and a severity explanation never co-occur) still holds, and holds more strongly. Prose correction only.",
+      "counterexample": "Mode M3 (--seed/--corpus without --r14) also refuses iv (measured: new-noepd.err, exit 2, the line-293 message). The comment does not name it. Assertion strength (the leg's own words): Prose against parser; no behavioural consequence."
+    },
+    {
+      "id": "3044-r4-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 306,
+      "claim": "The predicate shape of the expectedPayloadDivergence refusal is correct: admission is positive on R14_MODE (312, 320), so the third mode is refused rather than slipping through. But the comment (306-311) and the die message (314) describe two modes only. In a seed run without --r14 the message says 'in the migration run every payload delta is inventory (ii) or unexpected', and that run is not the migration run.",
+      "counterexample": "Measured on the 5d447fd1 harness (the same lines at 170f0d0e). In a run with neither --set nor --r14, the A6b invocation dies with 'inventory entry 0e01112d5f18ffde carries expectedPayloadDivergence, which is admissible only under --r14 ...; in the migration run every payload delta is ...' (old-a6b.err). Assertion strength (the leg's own words): Prose against parser; the refusal fires correctly in M1 and M3."
+    },
+    {
+      "id": "3044-r4-F4",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 49,
+      "claim": "The header 'Modes:' block (lines 49-52) lists two modes: --set, and --seed/--corpus WITH --r14. The parser admits a third, --seed/--corpus without --r14: the guard at line 106 requires only seed plus corpus, and the line-108 message names it ('add --r14 for the K3 regression'). The fold's new comment (288-290) and message (293) name the seed run, but the Modes block does not. The parser also admits --set together with --seed/--corpus and silently ignores the latter two (the branch at 235 takes --set). No predicate keys on SEED or CORPUS after line 106, so that combination is the migration run. Neither omission changes behaviour.",
+      "counterexample": "node mig-harness.mjs --seed seed-20.json --corpus compiled-rules.json --only zzzzzzzz --rules DIR --core DIR runs, prints 'seed: ... joined to ...', and exits 0 (only-empty.out). That mode is not in the Modes block. Assertion strength (the leg's own words): Prose against parser."
+    },
+    {
+      "id": "3044-r4-F5",
+      "severity": "MINOR",
+      "file": ".totem/specs/3044.md",
+      "line": 144,
+      "claim": "The UNTRACKED design keeps the two-mode wording. Line 126 ('a declaration under --r14 ... remain or become refusals'), the failure-table row at 144 ('iv declared under --r14 | ... | the K3 regression has no R4 rule') and the test plan at 163 ('iv under --r14 ... exit 2') name the refusal by the flag, not by the absence of --set. Line 131 ('admissible only in --set mode') is correct. The file is not in the diff, so this matters only if the spec is cited or committed later.",
+      "counterexample": "At 170f0d0e, line 291 refuses the parser's M3 (no --set, no --r14), and none of the spec's three sentences covers it. Assertion strength (the leg's own words): Prose against parser; untracked file."
+    },
+    {
+      "id": "3044-r4-F6",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 907,
+      "claim": "A6b DOES discriminate the old guard from the new one, but only through two of its three assertions. Its 'exit 2' assertion also passes on 5d447fd1. The A6b fixture inherits the K3 inventory's expectedPayloadDivergence row on 0e01112d5f18ffde (seed entry 4), and in a run without --r14 declared() refuses that row with exit 2 after entries 1-3 are printed. Those entries include the iv entry 87aff037, where the old code read the iv as inert because the R14 record's severity equals the legacy row's. The discriminators are the stderr regex /admissible only in the migration run/ (unique to line 293) and the no-entry-line check; both fail on the old harness. The arm never exercises an actual lowering. It proves the refusal, which is eager and comes before the fidelity leg, so that is sufficient.",
+      "counterexample": "The A6b invocation against git show 5d447fd1:operations-local/gate5/mig-harness.mjs (materialised in leg-3044-scratch-4/old/) exits 2. Its stderr is the expectedPayloadDivergence message, not the iv one, and stdout lines 12-16 carry entries '1. d5faa14c', '2. aa7a588d' and '3. 87aff037' with the inert-iv note. So A6b fails 2 of 3 assertions on the old harness. With the expectedPayloadDivergence row stripped (a6b-noepd.json), the old harness exits 1 with the iv inert, and the new one exits 2 with the line-293 message. Assertion strength (the leg's own words): Measured. A6b would have failed on 5d447fd1 (on the stderr and entry-line assertions). The exit-code assertion alone does not discriminate."
+    },
+    {
+      "id": "3044-r4-F7",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 271,
+      "claim": "Outside the iv class, and pre-existing: an --only that selects zero entries gives a vacuous PASS (exit 0) in every mode, because nothing refuses an empty selection. Is that intended for a batch run?",
+      "counterexample": "only-empty.out: '--only: 0 entries selected' ... 'Verdict: PASS (exit 0)'. Assertion strength (the leg's own words): Measured; not mode-keyed, raised as a question only."
+    }
+  ],
+  "folded": [
+    "3044-r4-F1",
+    "3044-r4-F2",
+    "3044-r4-F3",
+    "3044-r4-F4",
+    "3044-r4-F5",
+    "3044-r4-F6"
+  ],
+  "verdict": "read 4 on 170f0d0e (scoped to the run-mode space): as typed, 0 BLOCKING, 1 MATERIAL, 5 MINOR, 1 QUESTION. The leg enumerated the admitted modes from the parser (the migration run; the K3 regression; a seed run without --r14; --set with --r14 refused) and found no mode in which iv is admitted outside the migration run and no other mode-keyed predicate with the inverted shape: the mode axis is closed by measurement. F1 to F6 folded in d6eae6c5: the eager iv refusal loop no longer skips underscore-prefixed keys (every key carrying an inventory array is checked, as declared() reads such a key for its entry too; arm A3c measures an underscore-keyed iv refused with exit 2); the two-mode wording corrected in the harness header's Modes block, the co-occurrence comment and the expectedPayloadDivergence comment and message, and in the untracked design file; A6b's inventory stripped of the expectedPayloadDivergence row so its exit 2 is the iv refusal alone. F7 (an --only selecting zero entries exits 0 in every mode, pre-existing, outside the iv class) is filed as mmnto-ai/totem#3082, not folded here. Convergence: the mode-space class and the key-axis gap it surfaced are closed by the committed controls run; a fold of anything further would be prose. Mergeable."
+}
