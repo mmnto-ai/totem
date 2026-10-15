@@ -116,7 +116,7 @@ Hardened the release pipeline and improved rule hygiene prior to major feature a
 
 Reduced adoption friction for solo developers and new repository environments.
 
-- **Developer Experience:** Added time-bounded pilot modes, local extraction options, and global profile support.
+- **Developer Experience:** Added a `--pilot` init flag (today the flag sets the pilot tier of the action gates installed with `--gates` in the same run; the config key it writes is read by nothing and the git hooks are unaffected, mmnto-ai/totem#2815), local extraction options, and global profile support.
 - **Enforcement Validation:** Introduced strict tiers with agent auto-detection and formalized format checks in pre-push hooks.
 - **Pipeline Refactoring:** Hardened environment variable parsing and refactored the extraction pipeline into distinct per-mode modules.
 

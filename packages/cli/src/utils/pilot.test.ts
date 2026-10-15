@@ -9,6 +9,7 @@ import type { TotemConfig } from '@mmnto/totem';
 import {
   isPilotExpired,
   readPilotState,
+  readPilotStateWithOutcome,
   resolvePilotConfig,
   withPilotMode,
   writePilotState,
@@ -106,6 +107,56 @@ describe('readPilotState', () => {
     );
     const state = readPilotState(tmpDir);
     expect(state.pushCount).toBe(0);
+  });
+});
+
+describe('readPilotStateWithOutcome (mmnto-ai/totem#2815)', () => {
+  let tmpDir: string;
+  const fp = () => path.join(tmpDir, 'pilot-state.json');
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-pilot-outcome-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, RM_OPTS);
+  });
+
+  it('a missing file: initialised, and the fresh state is on disk', () => {
+    const { state, outcome } = readPilotStateWithOutcome(tmpDir);
+    expect(outcome).toBe('initialised');
+    expect(state.pushCount).toBe(0);
+    expect(JSON.parse(fs.readFileSync(fp(), 'utf-8'))).toEqual(state);
+  });
+
+  it('a valid file: present, returned as stored, and the bytes are untouched', () => {
+    const stored = { startedAt: '2026-01-01T00:00:00.000Z', pushCount: 7, violations: [] };
+    const bytes = JSON.stringify(stored);
+    fs.writeFileSync(fp(), bytes, 'utf-8');
+    const { state, outcome } = readPilotStateWithOutcome(tmpDir);
+    expect(outcome).toBe('present');
+    expect(state).toEqual(stored);
+    expect(fs.readFileSync(fp(), 'utf-8')).toBe(bytes);
+  });
+
+  it('a file that is not JSON: reinitialised-invalid, and the file is replaced', () => {
+    fs.writeFileSync(fp(), 'garbage', 'utf-8');
+    const { state, outcome } = readPilotStateWithOutcome(tmpDir);
+    expect(outcome).toBe('reinitialised-invalid');
+    expect(state.pushCount).toBe(0);
+    expect(JSON.parse(fs.readFileSync(fp(), 'utf-8'))).toEqual(state);
+  });
+
+  it('a JSON file of the wrong shape: reinitialised-invalid', () => {
+    fs.writeFileSync(fp(), JSON.stringify({ startedAt: 1, pushCount: 'x' }), 'utf-8');
+    expect(readPilotStateWithOutcome(tmpDir).outcome).toBe('reinitialised-invalid');
+  });
+
+  it('readPilotState is the same read without the outcome', () => {
+    fs.writeFileSync(fp(), 'garbage', 'utf-8');
+    const state = readPilotState(tmpDir);
+    expect(state.pushCount).toBe(0);
+    expect(readPilotStateWithOutcome(tmpDir)).toEqual({ state, outcome: 'present' });
   });
 });
 

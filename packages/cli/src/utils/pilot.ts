@@ -69,21 +69,38 @@ function isValidState(obj: unknown): obj is PilotState {
   return true;
 }
 
+/** What a pilot-state read did, measured by the read itself (mmnto-ai/totem#2815). */
+export type PilotStateOutcome =
+  | 'present' // a valid file, returned untouched
+  | 'initialised' // no file; a fresh state written
+  | 'reinitialised-invalid' // a file that was not valid JSON or not a pilot state; replaced
+  | 'reinitialised-unreadable'; // a file this process could not read; replaced
+
 /**
- * Read the pilot state from disk. If the file is missing or invalid,
- * initializes a fresh state and persists it.
+ * Read the pilot state from disk and say what the read did. A missing, unreadable or
+ * invalid file is replaced by a fresh state (an atomic write), and the outcome names
+ * which of those happened, so a caller reporting the result never has to read the file
+ * beside this function and guess from the bytes (a preliminary read that fails while
+ * this one succeeds would otherwise be reported as a reset that never happened).
  */
-export function readPilotState(totemDir: string): PilotState {
+export function readPilotStateWithOutcome(totemDir: string): {
+  state: PilotState;
+  outcome: PilotStateOutcome;
+} {
   const fp = statePath(totemDir);
+  let outcome: PilotStateOutcome = 'initialised';
 
   if (fs.existsSync(fp)) {
+    let raw: string | undefined;
     try {
-      const raw = fs.readFileSync(fp, 'utf-8');
+      raw = fs.readFileSync(fp, 'utf-8');
       const parsed: unknown = JSON.parse(raw);
-      if (isValidState(parsed)) return parsed;
+      if (isValidState(parsed)) return { state: parsed, outcome: 'present' };
+      // totem-context: intentional — a file that cannot be read or parsed is one of the two re-initialise outcomes this function reports to its caller; the fresh state is written below, and `raw` says which failure it was.
     } catch {
-      // Fall through — re-initialize
+      // Fall through to the rewrite; `raw` stays undefined only when the read itself threw.
     }
+    outcome = raw === undefined ? 'reinitialised-unreadable' : 'reinitialised-invalid';
   }
 
   const fresh: PilotState = {
@@ -92,7 +109,15 @@ export function readPilotState(totemDir: string): PilotState {
     violations: [],
   };
   writePilotState(totemDir, fresh);
-  return fresh;
+  return { state: fresh, outcome };
+}
+
+/**
+ * Read the pilot state from disk. If the file is missing, unreadable or invalid,
+ * initializes a fresh state and persists it.
+ */
+export function readPilotState(totemDir: string): PilotState {
+  return readPilotStateWithOutcome(totemDir).state;
 }
 
 /**

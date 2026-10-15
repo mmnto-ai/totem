@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "42f683c65ee629087fd150040609a1590bc4105f",
+  "readAt": "2026-10-14T21:08:26Z",
+  "findings": [
+    {
+      "id": "2815-r1-F1",
+      "severity": "MATERIAL",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1852,
+      "claim": "The init message says 'Pilot mode recorded (pilot: true in the config; ...)' and both help strings say '--pilot records pilot: true in the config'.",
+      "counterexample": "The pilot: true injection (init.ts:1795-1806) sits inside the fresh-install branch 'if (!configExists)' (init.ts:1680); the else at init.ts:1833 handles an existing config and writes nothing. The pilot block that prints the message (init.ts:1847) runs unconditionally after it. Reproduced in scratch: 'init --bare --yes', then 'init --bare --pilot --yes'; run 2 printed 'Pilot mode recorded (pilot: true in the config; ...)' and totem.yaml contained no pilot key. gate-install.test.ts:1193-1205 already exercises this re-init path ('default then --pilot re-init'), so the path is real. The help strings (index.ts:101, index-lite.ts:117) make the same unconditional claim. This is the same class of register overclaim mmnto-ai/totem#2815 corrects. Fix the wording: 'records pilot: true in a newly generated config', or print the message's config clause only when the injection ran."
+    },
+    {
+      "id": "2815-r1-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 718,
+      "claim": "The comment on the pilot CONFIG field says 'Today the flag reaches only the action gates installed with totem init --gates, which run advisory'.",
+      "counterexample": "The config field is read by nothing at runtime. The only reader of config.pilot is resolvePilotConfig (utils/pilot.ts:35), and it has no caller outside pilot.test.ts. The gate tier comes only from the CLI option: init.ts:2413 'options?.pilot' and gate.ts:57 'opts.pilot'. Reproduced in scratch: appended 'pilot: true' to totem.yaml and ran 'init --bare --gates=freeze-check --yes'; .claude/settings.json got 'gate-wrapper.cjs --event freeze-check --strict'. A reader of the schema (the surface for someone hand-editing the config) is told the key reaches the gates; it reaches nothing. The comment should say the key is inert: the CLI flag --pilot at 'init --gates' or 'gate install' time sets the gate tier, and the config key does not."
+    },
+    {
+      "id": "2815-r1-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/index.ts",
+      "line": 101,
+      "claim": "'reaches only the action gates installed with --gates, which run advisory (a deny prints and exits 0)' (also in index-lite.ts:117, init.ts:1852, config-schema.ts:719).",
+      "counterexample": "The parenthetical holds: CLAUDE_GATE_WRAPPER sends a verdict deny under pilot to stderr and continues, then exits 0 (init-templates.ts:3110-3116, 3126). 'Run advisory' is broader than that. Under pilot the wrapper still exits 2 on every not-evaluable arm: no CLI resolvable (2941-2958), a non-zero gate check (3067-3077), an unparseable verdict (3080-3089), an unknown disposition (3121-3124), and both budget arms (2765-2775, 3031-3039). The wrapper's own contract says this at init-templates.ts:1389-1390 ('fail-closed at EVERY tier, --pilot included'). A pilot wrapper also needs a CLI at 2.3.0 or newer, or every applicable call fails closed (gate-install.ts:88-93). Repo precedent uses the same register (gate.ts:46, index.ts:2120 'advisory pilot tier'), so this is MINOR. If the seat wants it exact: 'a deny prints and exits 0; a gate that cannot be evaluated still blocks'."
+    },
+    {
+      "id": "2815-r1-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/config-schema.ts",
+      "line": 720,
+      "claim": "'true, or an object with maxDays / maxPushes: the window is recorded in .totem/pilot-state.json'.",
+      "counterexample": "pilot-state.json holds {startedAt, pushCount, violations} (utils/pilot.ts:8-16, 89-93). maxDays and maxPushes are never written to it; they live only in the config and are resolved by the uncalled resolvePilotConfig. Only the window's start (startedAt) is recorded. Also, init never writes the object form (init.ts:1800-1804 inject true only). Suggested wording: 'the start is recorded in .totem/pilot-state.json; the limits are read by nothing yet'."
+    },
+    {
+      "id": "2815-r1-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1581,
+      "claim": "The help text's 'records pilot: true in the config' applies to every 'init --pilot'.",
+      "counterexample": "'init --global --pilot' takes the early return at init.ts:1581-1651 ('return; // Skip the rest of interactive init'). It writes no pilot key, no state file and no message, and nothing tells the user the flag was ignored. This is narrower than F1 and could be folded into the same rewording."
+    },
+    {
+      "id": "2815-r1-F6",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.ts",
+      "line": 1849,
+      "claim": "'.totem/pilot-state.json initialised' (the message) and the summary row 'Initialized pilot state' (init.ts:1854).",
+      "counterexample": "readPilotState (utils/pilot.ts:76-96) returns an existing valid state file untouched and rewrites it only when it is missing or invalid. On a re-run with --pilot the file is not initialised, and the message and summary row still say it was. The summary row predates this diff; the message's 'initialised' is new text. Cosmetic."
+    }
+  ],
+  "folded": [
+    "2815-r1-F1",
+    "2815-r1-F2",
+    "2815-r1-F3",
+    "2815-r1-F4",
+    "2815-r1-F5",
+    "2815-r1-F6"
+  ],
+  "verdict": "read 1 on 42f683c6: as typed, 0 BLOCKING, 2 MATERIAL, 4 MINOR, 0 QUESTION; claims 1, 2, 4, 5, 6 and 7 held at source (no git hook or install-hooks.ts reads the pilot config, state or withPilotMode; withPilotMode, isPilotExpired, resolvePilotConfig and the limits have no caller outside utils/pilot.ts and its test since the original commit; no MCP, doctor or describe consumer; the two help strings identical; the roadmap diff one line; the changeset valid; no test pins the old strings). F1 to F6 folded in 2329b6f0: the init message says what the run did (pilot: true written only into a config the run generates, the existing-config path left as it is; the state file initialised or already present), the help text and the schema comment say the config key is read by nothing at runtime and the CLI flag alone sets the action-gate tier, \"a gate that cannot be evaluated still blocks\" beside \"a deny prints and exits 0\", the state file described as the window's start and a push count, and init --global --pilot warns that the flag is ignored there instead of ignoring it silently. Both MATERIALs were overclaims of the class this fix exists to remove, reproduced by the leg in a scratch repository. Read 2 is armed on the fold."
+}
