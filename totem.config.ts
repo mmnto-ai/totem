@@ -35,14 +35,19 @@ const config: TotemConfig = {
     // near-Opus review quality). Watch-item: if spec/docs prose quality
     // regresses on Flash, revert those two roles to gemini-3.1-pro-preview.
     // Re-evaluate when Gemini 3.5 Pro actually ships.
+    // Re-pinned 2026-10-15: gemini roles → gemini-3.8-flash (GA 2026-09-02, no
+    // shutdown date). The gemini-3.5-flash endpoint auto-routes to 3.6-flash on
+    // the API and the Gemini CLI rewrites it to 3.8-flash, so the old id named a
+    // model neither path served as written; the 2026-07-14 posture (the GA flash
+    // for every gemini role) is unchanged (mmnto-ai/totem-strategy#1554).
     overrides: {
       compile: 'anthropic:claude-sonnet-5', // totem-context: valid model ID — Sonnet 5 GA June 2026; shield's known-model lesson predates it
-      docs: 'gemini-3.5-flash',
-      spec: 'gemini-3.5-flash',
-      shield: 'gemini-3.5-flash',
-      triage: 'gemini-3.5-flash',
-      extract: 'gemini-3.5-flash',
-      reviewlearn: 'gemini-3.5-flash',
+      docs: 'gemini-3.8-flash',
+      spec: 'gemini-3.8-flash',
+      shield: 'gemini-3.8-flash',
+      triage: 'gemini-3.8-flash',
+      extract: 'gemini-3.8-flash',
+      reviewlearn: 'gemini-3.8-flash',
     },
     // mmnto/totem#1291 Phase 3: dogfood prompt caching against our own
     // compile path. Sonnet 5 caches the static compiler template (~50KB
@@ -64,7 +69,7 @@ const config: TotemConfig = {
   // `totem review --model ...` stays a one-lane invocation; omit `lanes` to
   // fall back to the legacy single-lane path.
   review: {
-    lanes: ['anthropic:claude-sonnet-5', 'gemini:gemini-3.5-flash'],
+    lanes: ['anthropic:claude-sonnet-5', 'gemini:gemini-3.8-flash'],
   },
 
   // mmnto-ai/totem#2698: the judgment-dense path floor `totem legs gate` judges
