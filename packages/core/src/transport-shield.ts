@@ -25,7 +25,12 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * row — `diff -b`, `curl -b`, `grep gh -b`, a Windows path as a sed operand,
  * `<<` inside a quoted argument, a here-string). A deny on a benign command in
  * the field is a corpus row plus a fix, never a hand-carved exemption; the
- * `--pilot` tier exists for a measurement week.
+ * `--pilot` tier exists for a measurement week. The second measurement, for a
+ * CHANGE to this module: `operations-local/transport-shield/replay-transcripts.mjs`
+ * replays every Bash command in the session transcripts on the machine it runs
+ * on through two builds and prints each verdict that changes — thousands of
+ * real commands against the few dozen here; a change ships with its replay
+ * read (mmnto-ai/totem#3098: three changes over 4,936 commands, each explained).
  *
  * Out of scope by design, disclosed: a bare backslash outside the four named
  * contexts (a heredoc body, a sed -i expression, an inline node/python body, a
@@ -190,14 +195,6 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  */
 export interface ScanOptions {
   powershell?: boolean;
-  /**
-   * The Bash tool on win32 halves each backslash pair before bash runs the
-   * command (measured: four as typed reach the hook as four and bash as two), so
-   * a backtick behind a typed run of n backslashes is escaped when ceil(n/2) is
-   * odd — n mod 4 of 1 or 2 — where bash's own rule is an odd run. Set by the
-   * rows from the payload; the MSYS rows are that transport by construction.
-   */
-  halvesBackslashPairs?: boolean;
 }
 
 /**
@@ -508,7 +505,6 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  */
 export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
   const ps = opts.powershell === true;
-  const halving = opts.halvesBackslashPairs === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
@@ -619,35 +615,14 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
-    if (ch === '`' && !ps) {
-      // Keep a backtick substitution whole inside the word, as `$( … )` is below: a
-      // `;` or `&&` inside it belongs to the body, not to the outer statement
-      // (`u=\`gh … --body /x; echo done\`` is one statement whose body runs gh).
-      // An unterminated backtick is a character. A closing backtick behind a run of
-      // n backslashes is escaped by the TRANSPORT's rule, not by a fail-closed one:
-      // a close read too early re-pairs every later backtick and hides the
-      // statements after the span, and a close read too late swallows them, so
-      // only the measured rule is right (reads 4 and 5). On the Bash tool on win32
-      // each typed pair is halved before bash runs the command, so n of 1, 2, 5, 6,
-      // … is escaped (a body ending in three as typed closes there); elsewhere
-      // bash's own odd-run rule holds.
-      let close = i + 1;
-      while (close < command.length) {
-        if (command[close] === '`') {
-          let n = 0;
-          for (let k = close - 1; k > i && command[k] === '\\'; k -= 1) n += 1;
-          const escapedClose = halving ? n % 4 === 1 || n % 4 === 2 : n % 2 === 1;
-          if (!escapedClose) break;
-        }
-        close += 1;
-      }
-      if (close < command.length) {
-        word += command.slice(i, close + 1);
-        inWord = true;
-        i = close + 1;
-        continue;
-      }
-    }
+    // A backtick is a character here, as it always was: a backtick substitution is
+    // NOT kept whole as a word. Three scoped reads on mmnto-ai/totem#3098 each found
+    // the next edge of pairing a run of backslashes with a backtick under the Bash
+    // tool's transport, which halves typed pairs in some contexts and not others, so
+    // the shared tokenizer models none of it and keeps splitting at `;`, `&&` and
+    // `|` inside a span, which is fail-closed for every row: a command after an
+    // operator is always its own segment. The one row that must read a backtick
+    // BODY (msys-body-slash) locates spans on the whole command text itself.
     if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
       // Keep a command or process substitution whole inside the word, its
       // parentheses balanced OUTSIDE quotes (a `)` inside `"…"` is text): it is
@@ -904,7 +879,6 @@ const msysApplies = (p: TransportShieldPayload): boolean =>
 /** The scanners read PowerShell's grammar for the PowerShell tool, bash's otherwise. */
 const scanOpts = (p: TransportShieldPayload): ScanOptions => ({
   powershell: p.tool === 'PowerShell',
-  halvesBackslashPairs: p.tool === 'Bash' && p.platform === 'win32',
 });
 
 /** The variable MSYS reads for its opt-out — its PRESENCE, any value (`=1`, `=0`, empty all switch conversion off). */
@@ -958,9 +932,7 @@ function msysSegments(
   // `export MSYS_NO_PATHCONV` with no value marks the NAME: a later assignment
   // then lands in the environment, and a substitution in that statement sees it.
   let exportAttr = false;
-  // The MSYS rows are the Bash tool on win32 by construction (msysApplies), the
-  // transport that halves backslash pairs.
-  for (const seg of tokenizeShell(text, { halvesBackslashPairs: true })) {
+  for (const seg of tokenizeShell(text)) {
     const t = seg.tokens;
     if (t[0] === 'set' && (t[1] === '-a' || t[1] === '+a')) {
       allExport = t[1] === '-a';
@@ -1120,11 +1092,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // The gh call can sit inside a command substitution: the munged trigger of
       // 2026-10-16 was posted from `u1=$(gh pr comment … --body '/gemini review')`,
       // which no token scan of the outer segment reaches. So each segment's `$( … )`
-      // and backtick bodies are scanned the same way, located on the single-quote-
-      // and comment-blanked text (a `$(` inside single quotes or a comment is text the
-      // shell never runs, and so is an opener escaped with a backslash in a
-      // double-quoted body) and sliced from the segment's own text, at most four
-      // levels deep. A segment the opt-out prefix covers still has its substitution
+      // bodies, and the level's backtick bodies on its whole text, are scanned the
+      // same way, located on the single-quote- and comment-blanked text (a `$(`
+      // inside single quotes or a comment is text the shell never runs, and so is an
+      // opener escaped with a backslash in a double-quoted body) and sliced from the
+      // text itself, at most four levels deep. A segment the opt-out prefix covers still has its substitution
       // bodies scanned, because the shell runs them BEFORE the prefix applies and an
       // assignment-only statement exports nothing (read 2 F1, measured: a
       // `MSYS_NO_PATHCONV=1 u=$(gh …)` posted the Git install path). Disclosed
@@ -1234,25 +1206,33 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             if (hit !== null) return hit;
             cursor = end;
           }
-          let tick = located.indexOf('`');
-          while (tick !== -1) {
-            if (escaped(located, tick)) {
-              tick = located.indexOf('`', tick + 1);
-              continue;
-            }
-            let close = located.indexOf('`', tick + 1);
-            while (close !== -1 && escapedClose(located, close)) {
-              close = located.indexOf('`', close + 1);
-            }
-            if (close === -1) break;
-            // Inside backticks bash drops the backslash of `\$`, a backslash-backtick
-            // and `\\` before running the body, so a `\$(` there is a substitution
-            // that runs: unescaped first, then scanned.
-            const body = seg.raw.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
-            const hit = scan(body, depth + 1);
-            if (hit !== null) return hit;
-            tick = located.indexOf('`', close + 1);
+        }
+        if (depth >= 4) return null;
+        // Backtick bodies are located on the WHOLE text of this level, not per
+        // segment: the tokenizer reads a backtick as a character and splits at `;`
+        // inside a span, so a span's two backticks can sit in different segments
+        // (`u=\`gh … --body /x; echo done\``, the chained form from the 3098 bot
+        // round). A gh after an operator inside a span is also its own segment
+        // above, so a mispaired span can only lose a gh that sits at the body's
+        // start — and the opener rule over-opens rather than under-opens there.
+        // Inside backticks bash drops the backslash of `\$`, a backslash-backtick and
+        // `\\` before running the body, so the body is unescaped, then scanned.
+        const whole = blankComments(blankSingleQuoted(text));
+        let tick = whole.indexOf('`');
+        while (tick !== -1) {
+          if (escaped(whole, tick)) {
+            tick = whole.indexOf('`', tick + 1);
+            continue;
           }
+          let close = whole.indexOf('`', tick + 1);
+          while (close !== -1 && escapedClose(whole, close)) {
+            close = whole.indexOf('`', close + 1);
+          }
+          if (close === -1) break;
+          const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
+          const hit = scan(body, depth + 1);
+          if (hit !== null) return hit;
+          tick = whole.indexOf('`', close + 1);
         }
         return null;
       };
@@ -1312,7 +1292,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       if (p.tool !== 'Bash') return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of tokenizeShell(blanked, scanOpts(p))) {
+      for (const seg of tokenizeShell(blanked)) {
         for (const { program, flags } of INLINE_BODIES) {
           const at = programIndex(seg.tokens, program);
           if (at === -1) continue;
@@ -1381,7 +1361,15 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // (read 5 F2: an uncapped recursion threw at about five thousand, which the
       // wrapper would have read as a refusal).
       const scan = (text: string, depth: number): TransportMatch | null => {
-        if (depth > 256) return null;
+        if (depth > 256) {
+          // Beyond the cap the row cannot say, and a warn row that cannot say warns
+          // (main warned at any depth; read 6 F3).
+          return {
+            fragment: '$( … ) nested beyond 256 levels',
+            detail:
+              'a $( … ) nest deeper than this row reads; a <rev>:<path> inside it would be path-converted by MSYS on win32',
+          };
+        }
         for (const seg of msysSegments(text, true)) {
           for (const [from, to] of spans(seg.raw)) {
             const inner = seg.raw.slice(from, to);
