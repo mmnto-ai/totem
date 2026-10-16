@@ -37,6 +37,15 @@ name: Spine Spike (Linux)
 
 on:
   push:
+    # `branches` is named so this runs for BRANCH pushes only: GitHub does not
+    # evaluate `paths` filters for tag pushes, so without it every release cut's
+    # tag pushes (the four package tags and the floating `v0`) ran this harness
+    # on every cut, against whatever the live corpus happened to be
+    # (spikes/spine-adopt/seed/CORPUS-PIN.md). With only `branches` named here,
+    # a tag push does not run the workflow; the `paths` filter governs branch
+    # pushes as before.
+    branches:
+      - '**'
     paths:
       - spikes/spine-adopt/**
       - .github/workflows/spine-spike-linux.yml

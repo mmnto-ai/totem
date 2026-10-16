@@ -33,7 +33,16 @@ import {
 } from './lib/record-sets.mts';
 import { type CompiledSpecimen, intakeRecordSet, loadCore } from './lib/records.mts';
 import { PINNED_NOW, recordRelPath } from './lib/specimens.mts';
-import { Checks, CORPORA, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
+import {
+  Checks,
+  CORPORA,
+  CORPUS_PIN,
+  PINNED_COPIES,
+  parseCorpus,
+  REPO_ROOT,
+  sha256,
+  writeArtifact,
+} from './lib/spike-env.mts';
 
 const EXEMPLAR_DIST = path.join(
   REPO_ROOT,
@@ -59,8 +68,10 @@ const EXEMPLAR_REFERENT = EXEMPLAR_DIST.slice(REPO_ROOT.length + 1)
 
 function legacyCorpusIndex(): Map<string, any> {
   const index = new Map<string, any>();
-  for (const { file } of CORPORA) {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as { rules?: any[] };
+  for (const corpus of CORPORA) {
+    // The legacy rows AT `CORPUS_PIN` (seed/CORPUS-PIN.md): the records are verified
+    // against the corpus the spike was scoped to, never the live file.
+    const parsed = parseCorpus<{ rules?: any[] }>(corpus);
     for (const r of parsed.rules ?? []) index.set(r.lessonHash, r);
   }
   return index;
@@ -488,6 +499,63 @@ async function main(): Promise<void> {
           [],
         );
       }
+    }
+  }
+
+  // ── CORPUS PIN — the committed copies under seed/corpus/ against CORPUS_PIN ──
+  //
+  // The census and the legacy-row index read the four shipped corpora, and the facts
+  // step reads the one corpus fixture a pinned rule references, from COMMITTED byte
+  // copies (seed/CORPUS-PIN.md), never through git at run time: a CI checkout is depth 1
+  // and does not hold the pin commit. The same three-way split as the SEED PIN block
+  // above: git could not run is a FAILURE; the pin not in this clone is a SKIP with its
+  // reason named; the pin present means every copy is compared, bytes against blob.
+  {
+    const pinProbe = spawnSync('git', ['cat-file', '-e', `${CORPUS_PIN}^{commit}`], {
+      cwd: REPO_ROOT,
+      encoding: 'utf-8',
+    });
+    const gitDidNotRun = pinProbe.error !== undefined || pinProbe.status === null;
+    if (gitDidNotRun) {
+      checks.check(
+        `CORPUS PIN — \`git\` COULD NOT BE EXECUTED, so the corpus copies were not compared against the pin (this is a FAILURE, not the \`pin-commit-not-present-locally\` skip)`,
+        false,
+        `spawnSync git cat-file -e ${CORPUS_PIN}^{commit} in ${REPO_ROOT}: ` +
+          `error=${pinProbe.error ? (pinProbe.error as Error).message : 'none'}, ` +
+          `status=${JSON.stringify(pinProbe.status)}, signal=${JSON.stringify(pinProbe.signal)}`,
+      );
+    } else if (pinProbe.status !== 0) {
+      checks.check(
+        `CORPUS PIN — SKIPPED with the named reason \`pin-commit-not-present-locally\`: ${CORPUS_PIN} is not in this clone (a depth-1 checkout), so the ${PINNED_COPIES.size} copies under seed/corpus/ cannot be compared against it here`,
+        true,
+        'run in a full clone of mmnto-ai/totem; the copies are what the harness reads either way',
+      );
+    } else {
+      const drift: string[] = [];
+      for (const [rel, copy] of PINNED_COPIES) {
+        if (!fs.existsSync(copy)) {
+          drift.push(
+            `${rel}: copy absent locally (${path.relative(REPO_ROOT, copy).split(path.sep).join('/')})`,
+          );
+          continue;
+        }
+        const pinned = spawnSync('git', ['cat-file', 'blob', `${CORPUS_PIN}:${rel}`], {
+          cwd: REPO_ROOT,
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        if (pinned.status !== 0) {
+          drift.push(`${rel}: absent at the pin`);
+          continue;
+        }
+        const mine = fs.readFileSync(copy);
+        if (sha256(pinned.stdout as Buffer) !== sha256(mine))
+          drift.push(`${rel}: BYTES DIFFER from the pin`);
+      }
+      checks.eq(
+        `CORPUS PIN — the ${PINNED_COPIES.size} committed copies under seed/corpus/ are byte-identical to their blobs at \`${CORPUS_PIN}\``,
+        drift,
+        [],
+      );
     }
   }
 

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "bc5bb7cac710ddcd8e9f40aa1c4a3383a0470c1d",
+  "readAt": "2026-10-16T03:44:11Z",
+  "findings": [
+    {
+      "id": "2704-r1-F1",
+      "severity": "BLOCKING",
+      "file": ".github/workflows/spine-spike-linux.yml",
+      "line": 72,
+      "claim": "The CI checkout is depth 1 and never contains the pin commit 694acffb, so readCorpus throws in census and both matrix legs fail at npm run all. That includes this branch's own push run, because the commit touches spikes/spine-adopt/**.",
+      "counterexample": "actions/checkout action.yml at 3d3c42e5 (fetched with gh api): fetch-depth default 1. The workflow sets no with: at line 72. npm run all (lines 177 and 280) runs census right after manifest (package.json scripts.all). Reproduced with git clone --depth 1 --single-branch --branch fix/spine-spike-tag-pushes-corpus-pin into scratch: git cat-file -e 694acffb...^{commit} gave exit 128 (Not a valid object name); git show 694acffb...:.totem/compiled-rules.json gave exit 128; the root blob 589f3f16 is also absent. spawnSync returns status 128 with error undefined, so spike-env.mts:146-155 throws. The fail-loud path is reached, but on every CI run. The harness already knows CI is shallow: verify-records.mts:410-413 says a CI shallow checkout has no r14/seed-20-translation history and SKIPs the SEED_RECORD_PIN probe for that reason (manifest.mts:344-347 too). readCorpus has no skip; it throws. Possible fixes: fetch-depth 0; a targeted git fetch --depth=1 origin 694acffbf8f91c6b06c5bdba3d3519707f2448d0 before npm run all in both legs; or committing byte-identical corpus copies under seed/ (the convention seed/PIN.md uses for records)."
+    },
+    {
+      "id": "2704-r1-F2",
+      "severity": "MATERIAL",
+      "file": "spikes/spine-adopt/src/facts.mts",
+      "line": 279,
+      "claim": "The pin covers the four corpora but not the corpus fixture paired with pinned rule 87aff037. 934296aa rewrote that fixture's frontmatter. The facts step reads it from the live tree and records a different rule hash, and no check catches it. So 'the committed artifacts are therefore the pinned corpus's artifacts' holds only for census and records-verification.",
+      "counterexample": "git diff 694acffb bc5bb7ca -- .totem/tests/test-87aff037d7de47a7.md: -rule: 87aff037d7de47a7 / +rule: 2095327f92d4e486, changed by 934296aa. The fixture is referenced at record-sets.mts:161 and read by specimens.mts:137 (path.join(REPO_ROOT, ref.file)) from the live tree. Measured: census, verify-records, facts and shipped-verdicts with SPIKE_RECORD_SET=seed20 report facts 161/161 and shipped-verdicts 102/102, but artifacts/facts/87aff037d7de47a7-87aff037-fail-open-catch-ban-corpus-{fail,pass}.json now carry fixtureRuleHash 2095327f92d4e486 (committed: 87aff037d7de47a7), and facts-index.json / shipped-verdicts.json bundlesSha256 moves ee76a351... to eb938839.... The verdict rows are unchanged; only the digest lines differ. On CI it has been unmeasured since 934296aa, because census failed first in the && chain (log of run 38843561461)."
+    },
+    {
+      "id": "2704-r1-F3",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/egg-probe/src/main.rs",
+      "line": 1000,
+      "claim": "egg-probe dereferences the census's corpora[].file labels against the LIVE tree, so it now compares pinned census rows with the live corpus. That contradicts CORPUS-PIN.md's framing that file is only a label. There is no divergence today, but it is latent.",
+      "counterexample": "main.rs:990-1003 corpora_integrity reads census[corpora][].file and runs fs::read_to_string(repo_root().join(rel)). A missing file is silently skipped. Measured: of the 217 pinned root pattern rows, 0 are absent from the live root corpus and 0 differ in pattern; the three pack blobs are identical at pin and HEAD, so today all 226 would still match. The first live edit or removal of a pinned row would surface as a mismatched row in egg-report.json. Not run in CI (no egg-probe step in the workflow)."
+    },
+    {
+      "id": "2704-r1-F4",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/src/lib/spike-env.mts",
+      "line": 146,
+      "claim": "When the pin commit is absent, the error message relays git's stderr, which wrongly says the PATH is missing. The 'pin not in this clone' class is not named the way verify-records.mts names it.",
+      "counterexample": "In the depth-1 clone, git show 694acffb...:.totem/compiled-rules.json stderr is: fatal: path '.totem/compiled-rules.json' does not exist in '694acffb...'. The commit object is what is absent. verify-records.mts:420-440 probes git cat-file -e <pin>^{commit} first and separates git-did-not-run, pin-absent and other failures. readCorpus's own trailing text (fetch the pin into this checkout) is right; the embedded git reason contradicts it."
+    },
+    {
+      "id": "2704-r1-F5",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/seed/PIN.md",
+      "line": 1,
+      "claim": "The link between the two pin docs runs one way only: CORPUS-PIN.md names seed/PIN.md, but seed/PIN.md (untouched) never mentions CORPUS-PIN.md. Its corpus-fixture note at line 79 is exactly where F2's drift lives.",
+      "counterexample": "git show bc5bb7ca:spikes/spine-adopt/seed/PIN.md | grep -i corpus-pin returns no hits. CORPUS-PIN.md:5 says Sibling pin: seed/PIN.md. PIN.md:79-80 says 87aff037 is the only seed record with a corpus fixture (.totem/tests/test-87aff037d7de47a7.md). CORPUS-PIN.md follows PIN.md's structure well (title form, Charter line, Pin sha, blob-oid verification, re-verification block)."
+    },
+    {
+      "id": "2704-r1-F6",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/artifacts/records-verification.json",
+      "line": 1,
+      "claim": "The commit message says the seed20 verify-records artifact delta is 'two detail strings'. Measured one line with one absolute-path occurrence.",
+      "counterexample": "After SPIKE_RECORD_SET=seed20 npm run verify-records (115/115), git diff --stat showed 1 insertion and 1 deletion. The committed file has 1 occurrence of totem-claude-ror, and the regenerated diff line has 1 occurrence of totem-claude-spike-pin. A narration accuracy issue only."
+    },
+    {
+      "id": "2704-r1-F7",
+      "severity": "QUESTION",
+      "file": "spikes/spine-adopt/artifacts/expressibility-census.json",
+      "line": 8,
+      "claim": "The commit and CORPUS-PIN.md call corpora[].file 'repo-relative'. The committed artifact records Windows separators, and a Linux run would record forward slashes. Is that platform-dependent label intended? It predates this change.",
+      "counterexample": "artifacts/expressibility-census.json:8,14,20,26 carry backslash paths. census.mts:606 is c.file.slice(REPO_ROOT.length + 1) over path.join. That is unchanged in behaviour, because spike-env.mts builds file with path.join(REPO_ROOT, ...rel.split('/')), identical to the old path.join(REPO_ROOT, '.totem', 'compiled-rules.json')."
+    }
+  ],
+  "folded": [
+    "2704-r1-F1",
+    "2704-r1-F2",
+    "2704-r1-F3",
+    "2704-r1-F4",
+    "2704-r1-F5",
+    "2704-r1-F6",
+    "2704-r1-F7"
+  ],
+  "verdict": "read 1 on bc5bb7ca (the whole commit, parent a66af48a): as typed, 1 BLOCKING, 1 MATERIAL, 4 MINOR, 1 QUESTION. Held at source: the workflow-syntax reference's two sentences (path filters not evaluated for tag pushes; a workflow with only branches named does not run for tags; both branches and paths must match for a branch push; '**' matches slashed names); the run history (fifteen tag-push failures, the last success 2026-10-12 on main); the corpus counts at the pin (500 / 226 by census.mts's own predicate) and at 934296aa (528 / 229); the four blob oids equal through 934296aa^; the pin is the spike's last apparatus commit; CORPORA[].file byte-identical in construction; the committed census artifact byte-identical under the pin; the fail-loud path reached; no source names a commit for the census corpus. Folded by the seat in the fold commit: F1 (BLOCKING — the CI checkout is depth 1 and never holds the pin: the harness no longer reads the pin through git at run time; the four corpora and the one pinned fixture are COMMITTED byte copies under seed/corpus/, the convention seed/PIN.md uses, read through pinnedOrLivePath, with verify-records comparing every copy against the pin blob-for-blob when the pin commit is present and naming the skip when it is not), F2 (MATERIAL — the one corpus fixture 87aff037 references, re-keyed at 934296aa, is pinned the same way and read from its copy by the facts step; the regenerated facts record fixtureRuleHash 87aff037d7de47a7 again), F4 (the misleading git stderr is gone with the run-time git read; the three-way git-did-not-run / pin-absent / compare split names each class), F5 (seed/PIN.md now links the sibling pin), F6 (the narration reads one detail line). Answered, no change: F3 (egg-probe's corpora_integrity dereferences the census labels against the live tree — latent, every pinned row still matches today, not in CI; recorded in CORPUS-PIN.md as the known reader outside the harness), F7 (the corpora[].file labels carry the host's separators, as before this change; recorded in CORPUS-PIN.md and the code comment as the label's documented form)."
+}

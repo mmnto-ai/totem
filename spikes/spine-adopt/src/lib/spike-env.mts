@@ -107,22 +107,118 @@ export const OPA_BIN = resolveTool(
 
 export const CORE_DIST_BARREL = path.join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
 
-/** The four shipped rule corpora, in census order. */
+/**
+ * The commit the census corpus is pinned to (`seed/CORPUS-PIN.md`).
+ *
+ * The spike's own last apparatus commit (2026-09-01). The census numbers this spike
+ * records — 500 rules across the four corpora, 226 carrying a non-empty regex
+ * `pattern`, the 226 ADR-103 cites as the compilation-target census — are the
+ * corpora at this commit, and `DECISION.md` scopes the adoption consequence to
+ * "this V1 corpus and ruleset". The live tree moved past it at `934296aa` (the S6
+ * serving-file regeneration: 528 / 229, and the one corpus fixture a pinned rule
+ * references re-keyed to its record hash), which failed the intake assertions on
+ * every run from the 2.16.1 cut onward.
+ *
+ * The harness never reads the pin through git at run time: a CI checkout is depth 1
+ * and does not hold this commit, so the pinned files are COMMITTED byte copies under
+ * `seed/corpus/` (`PINNED_COPIES`), the convention `seed/PIN.md` uses for the seed-20
+ * records. `verify-records.mts` compares each copy's blob oid against the pin when the
+ * pin commit is present in the clone, and names the skip when it is not. A deliberate
+ * move to a newer corpus moves this pin, the copies and the numbers in `census.mts`
+ * together, in one commit, with the ADR citation re-read. Sibling pin:
+ * `SEED_RECORD_PIN` in `record-sets.mts`.
+ */
+export const CORPUS_PIN = '694acffbf8f91c6b06c5bdba3d3519707f2448d0';
+
+/** `spikes/spine-adopt/seed/corpus/` — the committed byte copies at `CORPUS_PIN`. */
+export const CORPUS_COPY_ROOT = path.join(SPIKE_ROOT, 'seed', 'corpus');
+
+/**
+ * Every repo-relative path the harness reads AT `CORPUS_PIN`, mapped to its committed
+ * copy: the four shipped corpora, and the one corpus fixture a pinned rule references
+ * (`87aff037`'s `.totem/tests/test-87aff037d7de47a7.md`, re-keyed in the live tree at
+ * `934296aa`). A path not in this map is read from the live tree, as before.
+ */
+export const PINNED_COPIES: ReadonlyMap<string, string> = new Map([
+  ['.totem/compiled-rules.json', path.join(CORPUS_COPY_ROOT, 'root', 'compiled-rules.json')],
+  [
+    'packages/pack-agent-security/compiled-rules.json',
+    path.join(CORPUS_COPY_ROOT, 'pack-agent-security', 'compiled-rules.json'),
+  ],
+  [
+    'packages/pack-agent-workflow/compiled-rules.json',
+    path.join(CORPUS_COPY_ROOT, 'pack-agent-workflow', 'compiled-rules.json'),
+  ],
+  [
+    'packages/pack-rust-architecture/compiled-rules.json',
+    path.join(CORPUS_COPY_ROOT, 'pack-rust-architecture', 'compiled-rules.json'),
+  ],
+  [
+    '.totem/tests/test-87aff037d7de47a7.md',
+    path.join(CORPUS_COPY_ROOT, 'tests', 'test-87aff037d7de47a7.md'),
+  ],
+]);
+
+/**
+ * The four shipped rule corpora, in census order. `file` is the live-tree path and
+ * stays the LABEL the committed artifacts record (`corpora[].file`, repo-relative with
+ * the host's separators, as before); the CONTENT comes from `readCorpus`, the committed
+ * copy at `CORPUS_PIN`.
+ */
 export const CORPORA = [
-  { id: 'root', file: path.join(REPO_ROOT, '.totem', 'compiled-rules.json') },
-  {
-    id: 'pack-agent-security',
-    file: path.join(REPO_ROOT, 'packages', 'pack-agent-security', 'compiled-rules.json'),
-  },
-  {
-    id: 'pack-agent-workflow',
-    file: path.join(REPO_ROOT, 'packages', 'pack-agent-workflow', 'compiled-rules.json'),
-  },
-  {
-    id: 'pack-rust-architecture',
-    file: path.join(REPO_ROOT, 'packages', 'pack-rust-architecture', 'compiled-rules.json'),
-  },
-] as const;
+  { id: 'root', rel: '.totem/compiled-rules.json' },
+  { id: 'pack-agent-security', rel: 'packages/pack-agent-security/compiled-rules.json' },
+  { id: 'pack-agent-workflow', rel: 'packages/pack-agent-workflow/compiled-rules.json' },
+  { id: 'pack-rust-architecture', rel: 'packages/pack-rust-architecture/compiled-rules.json' },
+].map((c) => ({ ...c, file: path.join(REPO_ROOT, ...c.rel.split('/')) }));
+
+/**
+ * The absolute path the harness reads for a repo-relative path: the committed copy
+ * when the path is pinned, the live tree otherwise. Fails LOUD (Tenet 4) when a pinned
+ * copy is missing — a fall-through to the live tree for a PINNED path would re-open
+ * the drift the pin exists to close.
+ */
+export function pinnedOrLivePath(relAsGiven: string): string {
+  // The map is keyed on the POSIX, root-relative spelling; a caller's backslashes or
+  // a leading `./` are normalised first, so a pinned path in any spelling reaches its
+  // copy and never falls through to the live tree by a spelling accident (read 2's F3).
+  const rel = relAsGiven.replace(/\\/g, '/').replace(/^\.\//, '');
+  const copy = PINNED_COPIES.get(rel);
+  if (copy === undefined) return path.join(REPO_ROOT, ...rel.split('/'));
+  if (!fs.existsSync(copy)) {
+    throw new Error(
+      `pinned copy missing: ${rel} is read at CORPUS_PIN ${CORPUS_PIN.slice(0, 8)} from ${copy} (seed/CORPUS-PIN.md), which is absent — restore the committed copy; never fall back to the live tree for a pinned path`,
+    );
+  }
+  return copy;
+}
+
+/** The text of one corpus at `CORPUS_PIN`: its committed copy. */
+export function readCorpus(corpus: { id: string; rel: string }): string {
+  return fs.readFileSync(pinnedOrLivePath(corpus.rel), 'utf-8');
+}
+
+/**
+ * One corpus at `CORPUS_PIN`, parsed. A committed copy that fails to parse is a
+ * corrupted pin, and on a depth-1 clone the CORPUS PIN comparison has skipped, so the
+ * parse is the first place it shows: the error names the corpus and the pin rather than
+ * leaving a bare SyntaxError (Gemini on mmnto-ai/totem#3095). The `[Totem Error]` prefix
+ * and the `cause` follow the harness's own convention for this class — a caught parse
+ * failure of a committed artifact — which every pre-existing site of it carries
+ * (`controls.mts`'s artifact reader, `t5-sweep.mts`'s lowering index, `certify-verify.mts`'s
+ * committed manifest).
+ */
+export function parseCorpus<T = { rules?: unknown[] }>(corpus: { id: string; rel: string }): T {
+  const text = readCorpus(corpus);
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new Error(
+      `[Totem Error] corpus ${corpus.id} (${corpus.rel}) at CORPUS_PIN ${CORPUS_PIN.slice(0, 8)} does not parse as JSON — the committed copy under seed/corpus/ is corrupted; restore it from the pin (seed/CORPUS-PIN.md): ${(err as Error).message}`,
+      { cause: err },
+    );
+  }
+}
 
 /**
  * Import the built core barrel. Fails LOUD (Tenet 4) with the exact build command

@@ -746,7 +746,7 @@
     {
       "name": "specimen 87aff037-fail-open-catch-ban — fixture exists: .totem/tests/test-87aff037d7de47a7.md",
       "ok": true,
-      "detail": ".totem/tests/test-87aff037d7de47a7.md"
+      "detail": "spikes/spine-adopt/seed/corpus/tests/test-87aff037d7de47a7.md"
     },
     {
       "name": "specimen 87aff037-fail-open-catch-ban — parseFixture returned a fixture",

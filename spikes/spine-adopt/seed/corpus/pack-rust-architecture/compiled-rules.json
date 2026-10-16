@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "lessonHash": "8cefba950774bcf0",
+      "lessonHeading": "Per-tick heap allocation in ECS system hot paths",
+      "pattern": "",
+      "message": "Per-tick `query.iter().collect()` in an ECS system body allocates a fresh Vec every frame, causing avoidable allocator pressure on the hot path. Use a `Local<Vec<T>>` system parameter with `.clear()` then `.extend(...)` at the top of the system, and iterate via `.iter().copied()`. This keeps the system allocation-free after the first tick while preserving identical semantics.",
+      "engine": "ast-grep",
+      "astGrepPattern": "$Q.iter().collect()",
+      "fileGlobs": ["**/*.rs"],
+      "badExample": "fn hot_system(query: Query<&Transform>) {\n    let v: Vec<_> = query.iter().collect();\n}",
+      "goodExample": "fn cold_system(query: Query<&Transform>, mut buf: Local<Vec<Transform>>) {\n    buf.clear();\n    buf.extend(query.iter().copied());\n}",
+      "severity": "warning",
+      "compiledAt": "2026-05-01T00:00:00.000Z",
+      "createdAt": "2026-05-01T00:00:00.000Z",
+      "unverified": true
+    }
+  ]
+}
