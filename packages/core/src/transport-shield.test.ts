@@ -284,6 +284,18 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     );
     expectDeny('echo "\\\\` `true && gh pr comment 5 --body /x`"', 'msys-body-slash', 'win32');
     expectDeny('echo \\` ; u=`gh pr comment 5 --body /x`', 'msys-body-slash', 'win32');
+    // A backtick body inside the export statement itself, or before the export, runs
+    // without the opt-out (the second Greptile pass on the 3098 round).
+    expectDeny(
+      'export MSYS_NO_PATHCONV=1 u=`gh pr comment 5 --body /x`',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'u=`gh pr comment 5 --body /x`; export MSYS_NO_PATHCONV=1',
+      'msys-body-slash',
+      'win32',
+    );
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -394,6 +406,10 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
       'export MSYS_NO_PATHCONV; MSYS_NO_PATHCONV=1 u=$(gh pr comment 5 --body /x)',
       'win32',
     );
+    // A backtick body inside a statement an earlier export covers inherits the opt-out:
+    // the gate's own cure, applied (the second Greptile pass on the 3098 round).
+    expectAllow('export MSYS_NO_PATHCONV=1; u=`gh pr comment 5 --body /x`', 'win32');
+    expectAllow('export MSYS_NO_PATHCONV=1 && echo `gh pr comment 5 --body /x`', 'win32');
   });
 
   it('allows sed -n (not in place) and a plain in-place substitution', () => {

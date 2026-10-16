@@ -924,6 +924,7 @@ function segmentExportsOptOut(tokens: readonly string[]): boolean {
 function msysSegments(
   text: string,
   withPrefixOptOut = false,
+  coveredRanges?: Array<{ start: number; end: number; covered: boolean }>,
 ): Array<ShellSegment & { optOut?: boolean }> {
   const out: Array<ShellSegment & { optOut?: boolean }> = [];
   let exported = false;
@@ -932,7 +933,18 @@ function msysSegments(
   // `export MSYS_NO_PATHCONV` with no value marks the NAME: a later assignment
   // then lands in the environment, and a substitution in that statement sees it.
   let exportAttr = false;
+  // The offset of each segment in `text`, with the export state in effect BEFORE
+  // it, for a caller that locates a span on the whole text and needs to know
+  // whether an earlier export already covers it (`export MSYS_NO_PATHCONV=1;
+  // u=\`gh …\`` is the cure applied, and a body inside the covered statement
+  // must not be read as munged — Greptile on the 3098 round's second pass).
+  let cursor = 0;
   for (const seg of tokenizeShell(text)) {
+    const start = text.indexOf(seg.raw, cursor);
+    if (start !== -1) {
+      cursor = start + seg.raw.length;
+      coveredRanges?.push({ start, end: cursor, covered: exported });
+    }
     const t = seg.tokens;
     if (t[0] === 'set' && (t[1] === '-a' || t[1] === '+a')) {
       allExport = t[1] === '-a';
@@ -1222,6 +1234,14 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         // unescaped, then scanned. Disclosed over-allow: a `"` inside a single-quoted
         // string inside a span inside double quotes flips the blanker's quote state
         // (read 7 F2; main misses it too).
+        // A span inside a statement an EARLIER export already covers inherits the
+        // opt-out (`export MSYS_NO_PATHCONV=1; u=\`gh …\`` is the cure applied) and
+        // is not read; a span inside the export statement itself, or before it,
+        // runs without the opt-out and is.
+        const ranges: Array<{ start: number; end: number; covered: boolean }> = [];
+        msysSegments(text, true, ranges);
+        const coveredAt = (at: number): boolean =>
+          ranges.some((r) => r.covered && at >= r.start && at < r.end);
         const whole = blankComments(blankSingleQuoted(text));
         for (const openerEscaped of [escaped, escapedClose]) {
           let tick = whole.indexOf('`');
@@ -1235,9 +1255,11 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
               close = whole.indexOf('`', close + 1);
             }
             if (close === -1) break;
-            const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
-            const hit = scan(body, depth + 1);
-            if (hit !== null) return hit;
+            if (!coveredAt(tick)) {
+              const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
+              const hit = scan(body, depth + 1);
+              if (hit !== null) return hit;
+            }
             tick = whole.indexOf('`', close + 1);
           }
         }

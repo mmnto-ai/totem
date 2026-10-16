@@ -8,7 +8,7 @@
 //   node operations-local/transport-shield/replay-transcripts.mjs \
 //     --old <path to a main checkout>/packages/core/dist/index.js \
 //     --new <path to the branch checkout>/packages/core/dist/index.js \
-//     [--platform win32] [--tool Bash] [--transcripts 400] [--min-bytes 0] [--show-changed]
+//     [--platform win32] [--tool Bash] [--transcripts <N, default all>] [--min-bytes 0] [--show-changed]
 //
 // What it reads: every *.jsonl under <home>/.claude/projects (the Claude Code transcript
 // store), newest first, up to --transcripts files of at least --min-bytes; from each, the
@@ -62,7 +62,9 @@ const oldDist = need('old');
 const newDist = need('new');
 const platform = args.get('platform') ?? 'win32';
 const tool = args.get('tool') ?? 'Bash';
-const maxFiles = Number(args.get('transcripts') ?? 400);
+// Every transcript unless the caller bounds it (a default limit would silently miss
+// changes in older files while the header says the whole store is read).
+const maxFiles = args.has('transcripts') ? Number(args.get('transcripts')) : Infinity;
 const minBytes = Number(args.get('min-bytes') ?? 0);
 const showChanged = args.has('show-changed');
 
