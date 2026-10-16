@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "e6690f86b8a808f66ae829dc9323cc8eb35b69ce",
+  "readAt": "2026-10-16T00:25:04Z",
+  "findings": [
+    {
+      "id": "3087-r1-F1",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 1098,
+      "claim": "The A9 header comment is now separated from its arm: the A10 comment and the A10 arm were inserted between them, so the comment labels the wrong code.",
+      "counterexample": "controls-r4.mjs at e6690f86: line 1098 '// A9 — the schema moved, the move is load-bearing, and every produced row validates.', line 1099 '// A10 — ...', line 1103 arm('A10 ...'), line 1140 arm('A9 ...'). The A9 comment belongs directly above line 1140."
+    },
+    {
+      "id": "3082-r1-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/mig-harness.mjs",
+      "line": 100,
+      "claim": "An --only with an empty value (--only \"\", or --only as the last argument) still runs the whole set silently: the new guard never sees it, and no line says the selection was dropped.",
+      "counterexample": "mig-harness.mjs:100-106: ONLY = opt('--only') ? new Set(...) : undefined, and '' is falsy, so ONLY is undefined and the block at :277 is skipped. Measured at e6690f86: --seed seed-20.json --corpus compiled-rules.json --only \"\" ran 20 entries, printed no --only line, exit 1. This is not a zero selection, so it is outside the literal ask of mmnto-ai/totem#3082 ('Refuse an --only that selects zero entries'). But a hand-typed selection that came out empty runs everything, and nothing says so."
+    },
+    {
+      "id": "3082-r1-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 1103,
+      "claim": "A10 runs only in --set mode with a benign inventory (iv on a listed hash), so it never shows the ordering the commit claims (the empty-selection refusal fires before an inventory refusal) and never runs --seed or --r14.",
+      "counterexample": "controls-r4.mjs:1107 writes inventoryFor({[LISTED[0].hash]: ['i','iv']}), which the eager inventory pass at mig-harness.mjs:311-345 accepts in --set mode, so the order of the two refusals is never tested. Probed by hand with an inventory that would itself refuse (iv on ffffffffffffffff, plus iv in a seed run) in all three modes (--set, --seed/--corpus, --seed/--corpus --r14). With --only zzzzzzzz, --only zzzzzzzz,yyyy,zzzzzzzz and --only zzzzzzzz, every run exited 2 with the '--only selected no entry' message, never the inventory message. The code holds; the arm is weaker than the commit's narration. The issue's ask itself ('exit 2, naming the unmatched tokens') is met by A10's regex."
+    },
+    {
+      "id": "3087-r1-F4",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/r4/README.md",
+      "line": 8,
+      "claim": "The invariant 'same verdict on every source string' fails on one class, and the fault is not in this commit: sources with no occurrence of the identifier. A0 refuses them; the mirror returns present:false, which K11 maps to 'absent', so K11 would count the row as unexplained.",
+      "counterexample": "Source 'const a = 1;' (also '' and '.join('): A0 gives refuse ('expected exactly one declaration line, found 0', controls-r4.mjs:251-252), the mirror gives {present:false} (conjuncts.mjs:97), and K11's verdictMirror (controls.mjs:1060) maps that to 'absent', so same=false and gap=false. This is the ONLY divergence class in 1,603 single-terminator insertions plus 300,000 random token-splices (78,975 hits, all refuse/absent). It is by design on the strategy side (it marks a harness that predates the mechanism). The README's 'the two grammars read one source the same way' holds only for sources that name the identifier. Should the README sentence be scoped, or is the absent/refuse pair an accepted equivalence?"
+    },
+    {
+      "id": "3087-r1-F5",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 499,
+      "claim": "An out-of-range braced escape gives the same verdict on both sides, but in controls-r4 itself the RangeError from parsing the harness source is uncaught: allowListFromSource() at :499 runs outside arm()'s try (:456-477), so the script would crash with a stack trace rather than an A0 FAIL followed by the die at :626.",
+      "counterexample": "Measured: base + '// ' plus a braced escape of 110000 gives A0 'throw RangeError: Invalid code point 1114112' and the mirror refusal(3) 'a backslash-u escape outside the code-point range'; 300 f's gives 'Invalid code point Infinity' and refuse. Both are refusals, and K11 maps the throw to refuse (controls.mjs:1053-1054); wrong-36 still throws in A0 and gets refuse in the mirror. Reachability: the harness blob at e6690f86 has 0 occurrences of 'u{', so it is unreachable today and fails closed (nonzero exit) if reached. The commit message already discloses this as a datum. Is a top-level catch wanted?"
+    },
+    {
+      "id": "3087-r1-F6",
+      "severity": "QUESTION",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 238,
+      "claim": "The re-pin is coupled: once strategy's K11 points R4_HARNESS_COMMIT at e6690f86, its gap assertions fail as written until K11_GAP_SOURCES moves from 2 to 0.",
+      "counterexample": "totem-strategy operations/310-migration/controls.mjs:98 has K11_GAP_SOURCES = 2, and :1078 asserts that gapExpected.length === K11_GAP_SOURCES, which also fails while the two stray-terminator files exist. The e6690f86 A0 (extracted with K11's own A0_FUNCTION_RE) run against the mirror over all 39 parity sources: 0 differ, the stray-terminator files wrong-34 and wrong-35 are now refuse/refuse, and wrong-36 is throw to refuse. The commit message states that strategy moves this; listed so the seat can confirm the strategy-side change is owed and tracked."
+    }
+  ],
+  "folded": [
+    "3087-r1-F1",
+    "3082-r1-F2",
+    "3082-r1-F3",
+    "3087-r1-F4",
+    "3087-r1-F5",
+    "3087-r1-F6"
+  ],
+  "verdict": "read 1 on e6690f86 (the whole commit, parent d3dd8437): as typed, 0 BLOCKING, 0 MATERIAL, 3 MINOR, 3 QUESTION. Held at source: the two grammars give one verdict across 1,603 single-terminator insertions and 300,000 random splices (the one differing class is a source that never names the identifier, F4); line numbers agree; CRLF accepted, a lone trailing CR refused, by both; the function stays self-contained and K11's extraction regex still captures it; the early return is fail-closed through the die after A0; the --only guard is inert without --only and with every token matching (A8b, A8c); the refusal precedes the inventory read in all three modes (probed by hand); the run of record's harness sha256 equals the committed blob's. Folded by the seat: F1 (the A9 comment moved back above its arm), F2 (a passed --only with an empty value is a selection of nothing, refused naming the empty token), F3 (A10 measures the ordering with a self-refusing inventory in --set mode and in a seed run, and the empty value), F4 (the README sentence scoped to sources that name the identifier, the absent/refuse pair stated as by design). Answered: F5 (no top-level catch; the throw is unreachable at the committed harness and fails closed with a non-zero exit when reached, and strategy's parity maps it to a refusal, disclosed in the commit message), F6 (strategy's K11_GAP_SOURCES moving from 2 to 0 is owed on the strategy side at the next pin that cites this lineage, carried in the seat's reply mail)."
+}

@@ -37,7 +37,10 @@
 //   A10 an `--only` that selects nothing → exit 2 before any record is read, stderr
 //       naming the unmatched token; a partial match runs the matched entry and names
 //       the unmatched token on stdout (mmnto-ai/totem#3082: a run over zero records
-//       would otherwise PASS vacuously, every counter the exit contract reads at 0)
+//       would otherwise PASS vacuously, every counter the exit contract reads at 0);
+//       the ORDER measured with an inventory that would itself be refused, in --set
+//       mode and in a seed run (the empty selection is the reason named, never the
+//       inventory or the mode); an `--only` with an empty value refused naming `""`
 //   A9  every row this script produced validates against the updated schema in full
 //       (a keyword-subset validator over the schema file; an unimplemented keyword is
 //       an error), the rows carrying `iv` fail the schema at `--base`, and the rows
@@ -1095,7 +1098,6 @@ arm(
   },
 );
 
-// A9 — the schema moved, the move is load-bearing, and every produced row validates.
 // A10 — an --only that selects nothing is refused before any record is read; a partial
 // match runs the matched entry and names the unmatched token (mmnto-ai/totem#3082). The
 // inventory declares iv on the one listed rule the partial run selects, so the eager
@@ -1134,9 +1136,55 @@ arm(
       rows.length === 1 && rows[0].lessonHash === LISTED[0].hash,
       rows.map((row) => row.lessonHash).join(', ') || 'none',
     );
+    // The ORDER the narration claims, measured (the falsification read's F3): with an
+    // inventory that would itself be refused (iv on a hash outside the allow-list, the
+    // A3b class) the empty selection is still the reason named, in --set mode and in a
+    // seed run alike, so the guard sits before the inventory read in every mode.
+    const EMPTY_SELECTION = /--only selected no entry: /;
+    const INVENTORY_REFUSAL = /inventory entry /;
+    const invRefusing = path.join(sub('inv'), 'a10-refusing.json');
+    writeJson(invRefusing, inventoryFor({ ffffffffffffffff: ['i', 'iv'] }, 'A10 (refusing)'));
+    const s = invoke(setArgs(MANIFEST, 'zzzzzzzz', invRefusing, loweredDir, null));
+    expect('ordering, --set: exit 2', s.status === 2, String(s.status));
+    expect(
+      'ordering, --set: the empty selection is named, not the inventory',
+      EMPTY_SELECTION.test(s.stderr) && !INVENTORY_REFUSAL.test(s.stderr),
+      s.stderr.trim().split('\n').pop(),
+    );
+    const d = invoke(
+      commonArgs([
+        '--seed',
+        SEED,
+        '--corpus',
+        CORPUS,
+        '--only',
+        'zzzzzzzz',
+        '--inventory',
+        invRefusing,
+        '--rules',
+        loweredDir,
+      ]),
+    );
+    expect('ordering, seed run: exit 2', d.status === 2, String(d.status));
+    expect(
+      'ordering, seed run: the empty selection is named over the 20-entry set, not the mode',
+      /--only selected no entry: "zzzzzzzz" matches nothing in the 20-entry set/.test(d.stderr) &&
+        !INVENTORY_REFUSAL.test(d.stderr),
+      d.stderr.trim().split('\n').pop(),
+    );
+    // An --only passed with an EMPTY value is a selection of nothing, never an absent
+    // flag (the read's F2): refused naming the empty token.
+    const e = invoke(setArgs(MANIFEST, '', inv, loweredDir, null));
+    expect('empty value: exit 2', e.status === 2, String(e.status));
+    expect(
+      'empty value: the empty token is named',
+      /--only selected no entry: "" matches nothing in the \d+-entry set/.test(e.stderr),
+      e.stderr.trim().split('\n').pop(),
+    );
   },
 );
 
+// A9 — the schema moved, the move is load-bearing, and every produced row validates.
 arm(
   'A9 every produced row validates in full against the updated schema; iv rows fail the base schema',
   (expect) => {

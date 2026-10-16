@@ -97,12 +97,12 @@ const CLI = opt('--cli');
 const INVENTORY_PATH = opt('--inventory');
 const TREE = opt('--tree') ? path.resolve(opt('--tree')) : undefined;
 const OUT = opt('--out');
-const ONLY = opt('--only')
-  ? new Set(
-      opt('--only')
-        .split(',')
-        .map((s) => s.trim()),
-    )
+// A passed --only is a selection even when its value is empty (`--only ""`, or `--only`
+// as the last argument): the empty token then matches nothing and the empty selection
+// is refused below, instead of the flag being read as absent and the whole set running
+// silently (mmnto-ai/totem#3082, the falsification read's F2).
+const ONLY = flag('--only')
+  ? new Set((opt('--only') ?? '').split(',').map((s) => s.trim()))
   : undefined;
 
 const die = (msg) => {
