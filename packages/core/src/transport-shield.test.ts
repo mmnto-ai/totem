@@ -228,6 +228,32 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
       'msys-body-slash',
       'win32',
     );
+    // A backtick body ending in a run of backslashes closes at its backtick unless the
+    // run is exactly one (the Bash tool halves each pair; read 4 F1): with two or more
+    // the statements after it are their own segments, and the gh is read. With one the
+    // span runs on to the next backtick and carries the gh, which is read there.
+    expectDeny(
+      'echo `echo \\`; gh pr comment 5 --body /x; echo `echo z`',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'echo `echo \\\\`; gh pr comment 5 --body /x; echo `echo z`',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'echo `echo \\\\\\`; gh pr comment 5 --body /x; echo `echo z`',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'echo `echo \\\\\\\\`; gh pr comment 5 --body /x; echo `echo z`',
+      'msys-body-slash',
+      'win32',
+    );
+    // The same hole reached the sed row through the shared tokenizer.
+    expectDeny('echo `echo \\\\\\\\`; sed -i "s/a/\\\\\\\\b/" f; echo `echo z`', 'sed-i-escape');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {

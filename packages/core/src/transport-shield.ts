@@ -614,9 +614,19 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       // Keep a backtick substitution whole inside the word, as `$( … )` is below: a
       // `;` or `&&` inside it belongs to the body, not to the outer statement
       // (`u=\`gh … --body /x; echo done\`` is one statement whose body runs gh).
-      // An unterminated backtick is a character.
+      // An unterminated backtick is a character. A closing backtick is escaped only
+      // behind EXACTLY one backslash, the rule the msys-body-slash locator applies to
+      // an opener: the Bash tool halves each backslash pair before bash runs the
+      // command, so a run of two or more is read as closing (read 4 F1: a body ending
+      // in three backslashes as typed closes there, and the statements after it must
+      // not be swallowed into the span).
       let close = i + 1;
-      while (close < command.length && !(command[close] === '`' && command[close - 1] !== '\\')) {
+      while (close < command.length) {
+        if (command[close] === '`') {
+          let n = 0;
+          for (let k = close - 1; k > i && command[k] === '\\'; k -= 1) n += 1;
+          if (n !== 1) break;
+        }
         close += 1;
       }
       if (close < command.length) {
@@ -1341,9 +1351,10 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // and to nothing nested in it, which runs first — so each segment's direct
       // arguments are read with its nested spans blanked, and the nested spans are
       // read on their own, whatever the enclosing prefix says (Greptile on the 3098
-      // round: the nested warning had been lost). At most four levels deep.
-      const scan = (text: string, depth: number): TransportMatch | null => {
-        if (depth > 4) return null;
+      // round: the nested warning had been lost). Every level is read: the recursion
+      // is bounded by the text, since each level is a strict inner slice, and the
+      // previous row warned at any depth (read 4 F3).
+      const scan = (text: string): TransportMatch | null => {
         for (const seg of msysSegments(text, true)) {
           for (const [from, to] of spans(seg.raw)) {
             const inner = seg.raw.slice(from, to);
@@ -1362,13 +1373,13 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
                 };
               }
             }
-            const nested = scan(inner, depth + 1);
+            const nested = scan(inner);
             if (nested !== null) return nested;
           }
         }
         return null;
       };
-      return scan(blanked, 0);
+      return scan(blanked);
     },
   },
 ]);
