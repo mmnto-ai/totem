@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "bdab5216a8dafb26c6a7907c8183b05e3ae1b9ee",
+  "readAt": "2026-10-16T05:19:22Z",
+  "findings": [
+    {
+      "id": "2696-r1-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 978,
+      "claim": "The predicate h.value.includes('=/') over-denies: MSYS stops converting at the first whitespace in an argument, so a =/ that comes after a space, tab or newline reaches gh unchanged, yet the row denies it (invariant clause 2 broken on realistic multi-word comment bodies).",
+      "counterexample": "Measured with argv-echo: 'body=see PATH=/usr/bin' arrives unchanged; 'body=Use --prefix=/usr in the build' unchanged; 'body=x y=/z' unchanged; 'body=x<TAB>y=/z' unchanged; 'body=line1<LF>y=/z' unchanged; 'a b=/c' unchanged. Only a =/ before the first whitespace converts: 'body=a=/b c=/d' arrives as 'body=a=C:/Program Files/Git/b c=/d' (the second one is left alone); 'body=x,y=/z w' as 'body=x,y=C:/Program Files/Git/z w'. The probe shows the row returns deny msys-body-slash for gh api repos/o/r/issues/5/comments -f 'body=see PATH=/usr/bin', for -f 'body=Use --prefix=/usr here' and for -f 'body=x y=/z'. gh api -f body= is mostly used for long markdown comment bodies, and a disposition comment about this very row would be refused. No negative control pins the whitespace boundary. Shape of a fix: test only the part of the value before its first whitespace."
+    },
+    {
+      "id": "2696-r1-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 969,
+      "claim": "A field flag clustered after another short flag (-if, -iF, -ifbody=/x) is not read: the glued scan requires the token to start with -f or -F, and optionsAsWritten matches only the exact flag -f or -F.",
+      "counterexample": "gh api --hostname nonexistent.invalid -if k=v x gets past flag parsing on gh 2.99.0 and reaches the network ('error connecting to nonexistent.invalid'). A bad cluster -zz gives 'unknown shorthand flag', so gh accepts the clustered form. MSYS converts the following body=/x (base measurement). The row returns allow no-match for gh api -if body=/x x, gh api -ifbody=/x x and gh api -iF body=/x x. Agents rarely write clustered shorthand, hence MINOR."
+    },
+    {
+      "id": "2696-r1-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 978,
+      "claim": "MSYS also converts a slash that follows =\" or =(, which the =/ test misses.",
+      "counterexample": "Measured: 'body=\"/gemini review\"' arrives as 'body=\"C:/Program Files/Git/gemini review\"'; 'body=x=\"/y z\"' as 'body=x=\"C:/Program Files/Git/y z\"'; '--field=body=\"/x\"' as '--field=body=\"X:/\"'; 'body=(/x)' as 'body=(C:/Program Files/Git/x)'; 'select(.a==\"/x\")' as 'select(.a==\"C:/Program Files/Git/x\")'. The row returns allow for gh api repos/o/r/issues/5/comments -f 'body=\"/gemini review\"' and for -f 'body=(/x)'. A literal quote in a field value is unusual, hence MINOR."
+    },
+    {
+      "id": "2696-r1-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 938,
+      "claim": "The flag pairing is backwards in the code comment (938), the optionsAsWritten calls (975-976), the changeset and the brief: gh pairs -F with --field (typed, honours @file) and -f with --raw-field (plain string). As a result, the reason given for allowing key=@/path (it is a file reference) holds only for -F.",
+      "counterexample": "gh api --help on 2.99.0: '-F, --field key=value  Add a typed parameter ... (use \"@<path>\" ...)' and '-f, --raw-field key=value  Add a string parameter'. Detection is unaffected, because all four spellings are scanned. But gh api repos/o/r/issues/5/comments -f body=@/tmp/b.md (a raw string, not a file reference) returns allow, while MSYS rewrites it to 'body=@C:/Users/<user>/AppData/Local/Temp/x' (measured with 'body=@/tmp/x'), so gh posts a different literal from the one written. The test at transport-shield.test.ts:199 correctly uses -F."
+    },
+    {
+      "id": "2696-r1-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 983,
+      "claim": "The detail text ('a gh api field value beginning with / (key=/…)') and the changeset ('a gh api field value that begins with a slash … carrying key=/…') describe the first cut's predicate. Since the fold, the row also denies body=k=/v and query=q=/x, whose value does not begin with a slash, so the reason shown to the agent misdescribes the deny.",
+      "counterexample": "Probe: gh api graphql -f query='q=/x' returns deny msys-body-slash, matched '-f query=q=/x', with the 'beginning with /' detail. The fold's commit message names the predicate change, but .changeset/msys-body-slash-gh-api-field.md:5 was not updated."
+    },
+    {
+      "id": "2696-r1-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 962,
+      "claim": "Another gh subcommand takes -f/-F key=value fields, so the rest[0] !== 'api' scope lets a munged field through there: gh workflow run.",
+      "counterexample": "gh workflow run --help (2.99.0): '-F, --field key=value  Add a string parameter in key=value format, respecting @ syntax' and '-f, --raw-field key=value'. gh workflow run ci.yml -f path=/x is converted by MSYS like any key=/x, and the row skips it at line 962. This is outside the invariant as scoped (gh api), and it is not a comment body, hence MINOR. The other subcommands checked (pr create, issue create, release create, gist create, secret set, variable set, label create, pr merge) use -f/-F for --fill, --body-file, --notes-file, --filename, --env-file or --force, so the scope correctly excludes them."
+    },
+    {
+      "id": "2696-r1-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 680,
+      "claim": "This gap predates the PR and affects the --body arm equally: programIndex does not recognise gh when it is spelled gh.exe, follows a compound keyword (then), or runs inside a nested bash -c, so the row allows a munged field in those shapes.",
+      "counterexample": "Probe, all allow no-match: gh.exe api x -f body=/x, C:/bin/gh.exe api x -f body=/x, if true; then gh api x -f body=/x; fi, bash -c 'gh api x -f body=/x'. The cause is at line 680: t === program || t.endsWith('/' + program) plus the WRAPPERS set. Not introduced by this diff. Listed so the seat can decide whether it belongs to a follow-up."
+    },
+    {
+      "id": "2696-r1-F8",
+      "severity": "QUESTION",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 978,
+      "claim": "Is denying key=//x intended? MSYS reduces it to key=/x, which is the documented double-slash escape, so if the author meant /x the posted value is right and the deny is a false positive. A literal //x would be posted wrong. Separately, -F 'body=@/tmp/a=/b' (a file reference whose path contains =/) is denied although MSYS converts it to the correct path.",
+      "counterexample": "Measured: 'key=//x' arrives as 'key=/x'; 'body=x=//y' as 'body=x=/y'; 'body=@//x' as 'body=@/x'; 'body=@/tmp/a=/b' as 'body=@C:/Users/<user>/AppData/Local/Temp/a=/b'. Probe: -f key=//x returns deny (matched '-f key=//x'); -F 'body=@/tmp/a=/b' returns deny. The cure line does not mention //, so the deny does not lead the agent into that escape. The @-path case is exotic."
+    },
+    {
+      "id": "2696-r1-F9",
+      "severity": "QUESTION",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 978,
+      "claim": "A field whose value comes from a variable or command substitution is allowed and cannot be decided statically. Should this undecidable region be disclosed in the comment, as msysSegments discloses its subshell over-allow?",
+      "counterexample": "Probe: -f \"body=$B\", -f body=$(cat f) and -f \"body=$(printf /x)\" all return allow no-match. MSYS converts after expansion, so B=/x posts the Git install path. The --body arm has the same gap (--body \"$B\")."
+    }
+  ],
+  "folded": [
+    "2696-r1-F1",
+    "2696-r1-F3",
+    "2696-r1-F4",
+    "2696-r1-F5",
+    "2696-r1-F6",
+    "2696-r1-F7"
+  ],
+  "verdict": "read 1 on bdab5216 (the msys-body-slash field extension, two commits over 072a4165): as typed, 0 BLOCKING, 1 MATERIAL, 6 MINOR, 2 QUESTION; the leg named the row not converged on F1. Held at source (the leg's probe imports transportShieldEvaluator from the worktree's built core and re-measured every MSYS claim with the argv-echo script): every quoting and spelling of the field flags is denied (-f, -F, --field, --field=, --raw-field=, -f=, -fbody=/x, -f key=/); gh reached through a path, a wrapper, a prefix, a cd chain, a pipe, a subshell ( … ), a background &, or a later newline-separated segment is denied; the three opt-out forms are allowed and an unexported MSYS_NO_PATHCONV=1 true; gh api … is denied; --input with a heredoc body is allowed; --jq filters are outside the invariant; graphql -f query with a slash after :\" is allowed and unconverted; -F body=@/tmp/b.md is allowed; off-api -f forms are allowed; the --body arm is unchanged; linux, darwin and win32 PowerShell allow; the positive controls fail on 072a4165 and the fold's two assertions fail on 4f21b65b; the changeset's package name and bump match the fixed group. Folded by the seat in 1e36ff59: F1 (the predicate reads only the span before the value's first whitespace), F3 (=\"/ and =(/ read), F4 (-F paired with --field typed and @file-aware, -f with --raw-field raw; the @/path exemption typed-only; a raw -f key=@/path denied), F5 (detail text and changeset describe the predicate as it is), F6 (gh workflow run takes the same field flags and is read), F7 in part (gh.exe and the then-keyword spellings read through programIndex). Declined with the reason: F2 (a field flag clustered after another short flag is rare in agent-written commands and exact only with gh api's full short-flag table; disclosed), F7's bash -c nesting (a nested shell string is a different reader). Answered: F8 (key=//x stays denied, consistent with the --body arm and the explicit cure; a typed @-path carrying =/ is allowed after F4), F9 (a variable or substitution VALUE is decided after expansion; disclosed as an over-allow in the row's comment). The seat's own probe beside this read found the shape strategy's seat posted the munged trigger from, u1=$(gh pr comment … --body '/gemini review'), allowed by the row before the fold; folded in 1e36ff59 with the backtick, brace-group and reserved-word shapes, re-armed as read 2."
+}
