@@ -1,6 +1,6 @@
 # Supported Models & AI Tools Reference
 
-> **Last validated:** 2026-07-14 (model-refresh PR: Gemini, Anthropic, and OpenAI orchestrator tiers re-validated against published provider docs; Totem defaults moved to `gemini-3.5-flash` / `claude-sonnet-5`; sampling-param stripping now handled at the orchestrator boundary. Same day, follow-on: `totem init` generated configs moved to the per-role-overrides shape with the same current-generation IDs).
+> **Last validated:** 2026-07-14 (model-refresh PR: Gemini, Anthropic, and OpenAI orchestrator tiers re-validated against published provider docs; Totem defaults moved to `gemini-3.5-flash` / `claude-sonnet-5`; sampling-param stripping now handled at the orchestrator boundary. Same day, follow-on: `totem init` generated configs moved to the per-role-overrides shape with the same current-generation IDs). **Gemini re-validated 2026-10-15** (mmnto-ai/totem#3088): the Gemini defaults moved to `gemini-3.8-flash`; the 2.5 rows and the Gemini CLI note re-grounded on the Gemini API deprecations page (updated 2026-10-12) and the Gemini Code Assist release notes; the Anthropic and OpenAI tables untouched.
 
 Totem supports four LLM provider families for orchestration, and exports project
 knowledge to all major AI coding tools. This document tracks model IDs, tool
@@ -14,22 +14,26 @@ Used by `totem review`, `totem spec`, `totem triage`, `totem lesson extract`, et
 
 ### Google Gemini
 
-| Role                     | Model ID                         | Notes                                                                                                                                            |
-| ------------------------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Flagship (agentic)       | `gemini-3.5-flash`               | GA flagship — coding/agentic; **Totem's default for all Gemini roles since 2026-07-14** ($1.50/$9 flat; beats 3.1 Pro on coding/agentic)         |
-| Previous default         | `gemini-3-flash-preview`         | Preview — superseded as Totem default by `gemini-3.5-flash`                                                                                      |
-| Pro (complex tasks)      | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026). Still preview-only; $2/$12 (→$4/$18 >200k). Fallback if Flash prose quality regresses on docs/spec |
-| Image generation         | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                                          |
-| Fast-lite (newest)       | `gemini-3.1-flash-lite`          | 2.5x faster TTFT than Flash, lowest cost                                                                                                         |
-| Legacy fast (deprecated) | `gemini-2.5-flash`               | **Deprecated June 17, 2026** — do not target for new work; use `gemini-3.5-flash`                                                                |
-| Legacy pro (deprecated)  | `gemini-2.5-pro`                 | **Deprecated June 17, 2026** — do not target for new work; use `gemini-3.1-pro-preview`                                                          |
+| Role                    | Model ID                         | Notes                                                                                                                                                                                                                                               |
+| ----------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flagship (agentic)      | `gemini-3.8-flash`               | Stable; released September 2, 2026, no shutdown date announced. **Totem's default for all Gemini roles since 2026-10-15** (the re-pin recorded on mmnto-ai/totem-strategy#1554): the GA flash for every Gemini role, the posture ruled 2026-07-14   |
+| Newest stable           | `gemini-4-argon`                 | Listed as "New Stable" on the models page (read 2026-10-15). Not a Totem default; the public pages read state no pricing or tier                                                                                                                    |
+| Routed alias            | `gemini-3.5-flash`               | Totem's default from 2026-07-14 to 2026-10-15. The endpoint is not shutting down but **auto-routes API requests to `gemini-3.6-flash`**, and the Gemini CLI rewrites it to `gemini-3.8-flash`; not selectable in AI Studio. Do not target           |
+| Routed alias            | `gemini-3.7-flash`               | Auto-routes API requests to `gemini-3.8-flash`; not selectable in AI Studio. Do not target                                                                                                                                                          |
+| Earlier default         | `gemini-3-flash-preview`         | Preview — Totem's default before 2026-07-14                                                                                                                                                                                                         |
+| Pro (complex tasks)     | `gemini-3.1-pro-preview`         | Replaced `gemini-3-pro-preview` (March 2026). Still preview-only; $2/$12 (→$4/$18 >200k). Fallback if Flash prose quality regresses on docs/spec                                                                                                    |
+| Image generation        | `gemini-3.1-flash-image-preview` | Flash variant optimized for image tasks                                                                                                                                                                                                             |
+| Fast-lite (newest)      | `gemini-3.5-flash-lite`          | The lite the deprecations page points new projects at ("3.5 Flash-Lite or 3.8 Flash"); `gemini-3.1-flash-lite` is the previous lite                                                                                                                 |
+| Legacy (access-limited) | `gemini-2.5-flash`               | **Not deprecated — "No shutdown date announced"** (deprecations page, updated 2026-10-12); served "until further notice", access limited to projects that have used it; new projects are pointed at 3.5 Flash-Lite or 3.8 Flash. Not a Totem target |
+| Legacy (access-limited) | `gemini-2.5-pro`                 | Same status as `gemini-2.5-flash`: not deprecated, no shutdown date announced, access limited to prior users. Not a Totem target                                                                                                                    |
 
 **Listing API:** `GET https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY`
 
 - Auth: API key as query parameter
 - Docs: https://ai.google.dev/api/models
 - Note: `gemini-3-pro-preview` was discontinued March 26, 2026. Use `gemini-3.1-pro-preview`.
-- **Gemini CLI → Antigravity (`agy`):** Google is retiring the Gemini CLI and Gemini Code Assist IDE extensions for consumer (AI Pro / Ultra / free) usage on **June 18, 2026**, folding them into the Antigravity platform (enterprise retains access). `gemini-3.5-flash` is reachable via the Gemini API and Antigravity. Note: Antigravity's `agy` is an _agentic_ CLI (a harness, not a one-shot `-o json` completion tool), so it is **not** a drop-in shell-provider orchestrator target — integration is TBD.
+- **Which path serves a Gemini call:** Totem's Gemini orchestrator is SDK-first — with `@google/genai` installed and `GEMINI_API_KEY` set the call goes to the Gemini API, and the Gemini CLI is the fallback only when the SDK is not installed or the key is missing (`withCliFallback` in `packages/cli/src/orchestrators/orchestrator.ts`). A model id is therefore judged against the API's routing table first, which is why a routed alias such as `gemini-3.5-flash` is never targeted.
+- **Gemini CLI and Code Assist (re-read 2026-10-15):** the Gemini Code Assist release notes state that the Code Assist IDE extensions and the Gemini CLI stopped serving requests for the individual, AI Pro and AI Ultra tiers on June 18, 2026, and point those users to Antigravity and the Antigravity CLI. Measured against that on 2026-10-15, a Gemini CLI 0.64.0 under a personal OAuth login answered a `-m gemini-3.8-flash` prompt on the strategy seat, so the retirement did not hold as written for that path; the CLI's own registry still maps `gemini-3.5-flash` to `gemini-3.8-flash`. New Gemini Code Assist Standard and Enterprise subscriptions cannot be purchased since **October 9, 2026**; existing subscriptions auto-renew through 2026 and auto-renewal ends in 2027 (release notes entry of October 09, 2026; the named alternative is Antigravity). Antigravity's `agy` is an _agentic_ CLI (a harness, not a one-shot `-o json` completion tool), so it is **not** a drop-in shell-provider orchestrator target — integration is TBD.
 
 ### Anthropic (Claude)
 
@@ -130,11 +134,11 @@ generated consumer configs by `totem init`
 ```text
 Embedding:    Gemini gemini-embedding-2-preview  (or OpenAI text-embedding-3-small, Ollama nomic-embed-text)
 Orchestrator: per-role overrides (no ambient default — Tenet-16 corollary):
-              gemini-3.5-flash for docs/spec/shield/triage/extract/reviewlearn,
+              gemini-3.8-flash for docs/spec/shield/triage/extract/reviewlearn,
               anthropic:claude-sonnet-5 for compile;
-              review.lanes: anthropic:claude-sonnet-5 + gemini:gemini-3.5-flash
+              review.lanes: anthropic:claude-sonnet-5 + gemini:gemini-3.8-flash
 totem init:   emitted per detected environment, every role named, no ambient defaultModel:
-              gemini CLI / GEMINI_API_KEY → gemini-3.5-flash
+              gemini CLI / GEMINI_API_KEY → gemini-3.8-flash
               claude CLI                  → 'sonnet' (the CLI's own tier alias)
               ANTHROPIC_API_KEY           → claude-sonnet-5
               OPENAI_API_KEY              → gpt-5.6-terra

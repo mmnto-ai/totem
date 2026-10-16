@@ -41,9 +41,9 @@ const EXPECTED_ROLES = [
   'reviewlearn',
 ] as const;
 const EXPECTED_MODELS = {
-  geminiCli: 'gemini-3.5-flash',
+  geminiCli: 'gemini-3.8-flash',
   claudeCli: 'sonnet',
-  gemini: 'gemini-3.5-flash',
+  gemini: 'gemini-3.8-flash',
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.6-terra',
   ollama: 'gemma4',
