@@ -129,6 +129,44 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
       'msys-body-slash',
       'win32',
     );
+    // Measured: MSYS converts a slash after `="` and `=(` as well; a raw -f key=@/path is
+    // a string that now carries the wrong literal; of a multi-word value only the span
+    // before the first whitespace converts, so the first =/ of `a=/b c=/d` is enough.
+    expectDeny(
+      'gh api repos/o/r/issues/5/comments -f \'body="/gemini review"\'',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny("gh api repos/o/r/issues/5/comments -f 'body=(/x)'", 'msys-body-slash', 'win32');
+    expectDeny('gh api repos/o/r/issues/5/comments -f body=@/tmp/b.md', 'msys-body-slash', 'win32');
+    expectDeny(
+      "gh api repos/o/r/issues/5/comments -f 'body=a=/b c=/d'",
+      'msys-body-slash',
+      'win32',
+    );
+    // gh workflow run takes the same field flags; gh.exe is the Windows spelling.
+    expectDeny('gh workflow run ci.yml -f path=/x', 'msys-body-slash', 'win32');
+    expectDeny('gh.exe api repos/o/r/issues/5/comments -f body=/x', 'msys-body-slash', 'win32');
+  });
+
+  it('denies the gh call inside a command substitution, a backtick, a brace group or after a reserved word (the shape the 2026-10-16 trigger was posted from)', () => {
+    const v = expectDeny(
+      'L=x.md && echo word >> "$L" && u1=$(gh pr comment 1560 -R o/r --body \'/gemini review\') && echo "GCA trigger: $u1"',
+      'msys-body-slash',
+      'win32',
+    );
+    expect(v.provenance.matched).toBe('--body /gemini review');
+    expectDeny("u=$(gh pr comment 5 --body '/gemini review')", 'msys-body-slash', 'win32');
+    expectDeny("echo $(gh pr comment 5 --body '/gemini review')", 'msys-body-slash', 'win32');
+    expectDeny("u=`gh pr comment 5 --body '/gemini review'`", 'msys-body-slash', 'win32');
+    expectDeny("{ gh pr comment 5 --body '/gemini review'; }", 'msys-body-slash', 'win32');
+    expectDeny(
+      "if true; then gh pr comment 5 --body '/gemini review'; fi",
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny('u=$(gh api repos/o/r/issues/5/comments -f body=/x)', 'msys-body-slash', 'win32');
+    expectDeny('x=$(y=$(gh pr comment 5 --body /x))', 'msys-body-slash', 'win32');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -207,6 +245,21 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
     expectAllow('MSYS_NO_PATHCONV=1 gh api repos/o/r/issues/5/comments -f body=/x', 'win32');
     expectAllow('gh api repos/o/r/issues/5/comments -f body=/x', 'win32', 'PowerShell');
     expectAllow('gh api repos/o/r/issues/5/comments -f body=/x', 'linux');
+    // MSYS stops converting at the first whitespace: a =/ later in a multi-word body
+    // is untouched (measured: 'body=see PATH=/usr/bin' arrives unchanged).
+    expectAllow("gh api repos/o/r/issues/5/comments -f 'body=see PATH=/usr/bin'", 'win32');
+    expectAllow(
+      "gh api repos/o/r/issues/5/comments -f 'body=Use --prefix=/usr in the build'",
+      'win32',
+    );
+    expectAllow("gh api repos/o/r/issues/5/comments -f 'body=x y=/z'", 'win32');
+    // A typed file reference whose path carries =/ still converts to the right path.
+    expectAllow("gh api repos/o/r/issues/5/comments -F 'body=@/tmp/a=/b'", 'win32');
+    // gh workflow run with a slash-less value; a $( inside single quotes is literal.
+    expectAllow('gh workflow run ci.yml -f ref=main', 'win32');
+    expectAllow("gh pr comment 5 --body 'see $(gh x --body /y)'", 'win32');
+    // The opt-out inside the substitution applies where the shell applies it.
+    expectAllow("u=$(MSYS_NO_PATHCONV=1 gh pr comment 5 --body '/gemini review')", 'win32');
   });
 
   it('allows sed -n (not in place) and a plain in-place substitution', () => {

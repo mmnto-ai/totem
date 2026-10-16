@@ -667,17 +667,36 @@ const WRAPPERS: ReadonlySet<string> = new Set([
  * -1 when the program is something else — a later mention of the name (`grep
  * gh …`, `git log --grep sed …`) is an argument, never an invocation.
  */
+/** Shell reserved words that can stand before a program in a segment: `{ gh …; }`, `if gh …`, `then gh …`. */
+const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
+  '{',
+  'if',
+  'then',
+  'else',
+  'elif',
+  'do',
+  'while',
+  'until',
+  '!',
+  'time',
+]);
+
 function programIndex(tokens: readonly string[], program: string): number {
   let i = 0;
-  // Assignments and wrappers interleave: `env VAR=x prog`, `VAR=x sudo prog`.
+  // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
+  // `VAR=x sudo prog`, `then VAR=x prog`.
   while (i < tokens.length) {
     const t = tokens[i] as string;
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || WRAPPERS.has(t)) i += 1;
-    else break;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || WRAPPERS.has(t) || RESERVED_BEFORE_PROGRAM.has(t)) {
+      i += 1;
+    } else break;
   }
   const t = tokens[i];
   if (t === undefined) return -1;
-  return t === program || t.endsWith('/' + program) ? i : -1;
+  // A bare name, a path ending in it, or either with the Windows `.exe` suffix
+  // (`gh.exe api …` is how a win32 seat may spell the same invocation).
+  const name = t.endsWith('.exe') ? t.slice(0, -4) : t;
+  return name === program || name.endsWith('/' + program) ? i : -1;
 }
 
 /**
@@ -934,57 +953,113 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       // Scoped to segments whose PROGRAM is `gh`, the one program whose --body / -b
       // takes a free-text body that MSYS path-converts (`-b` means something else on
-      // diff, curl, cp, sort, du, grep), and whose `api` subcommand takes field
-      // options (`-f`/`--field`, `-F`/`--raw-field`) as `key=value` pairs that MSYS
-      // converts AFTER the `=` — measured 2026-10-16 under the Bash tool, a native
-      // program received `body=/gemini review` as `body=C:/Program Files/Git/gemini
-      // review` and `--field=body=/x` as `--field=body=X:/` (mmnto-ai/totem#2696,
-      // the form the --body row did not cover). A `key=@/path` value is a file
-      // reference whose conversion is the intended one, so it stays allowed. The
-      // cure's MSYS_NO_PATHCONV=1 is honoured per segment, as the assignment the
-      // shell would apply.
+      // diff, curl, cp, sort, du, grep), and whose `api` and `workflow run`
+      // subcommands take field options (`-F`/`--field` typed, `-f`/`--raw-field` raw,
+      // plus the glued `-fX` cobra accepts) as `key=value` pairs. Measured 2026-10-16
+      // under the Bash tool, a native program's argv (mmnto-ai/totem#2696, the forms
+      // the --body row did not cover): MSYS converts a slash that follows `=`, `="`
+      // or `=(` anywhere BEFORE the argument's first whitespace (`body=/gemini review`
+      // arrives as `body=C:/Program Files/Git/gemini review`, `body=k=/v` as
+      // `body=k=V:/`, `body="/x"` and `body=(/x)` converted, `body=a=/b c=/d` with
+      // only its first `=/` converted) and leaves a `=/` after a space alone
+      // (`body=see PATH=/usr/bin` unchanged). A typed `-F key=@/path` is a file
+      // reference converted to the right Windows path, which gh then reads, so it is
+      // allowed; a raw `-f key=@/path` is a string that now carries the wrong literal.
+      // A value that is a variable or a substitution is decided after expansion, where
+      // this reader cannot see: a disclosed over-allow. The cure's MSYS_NO_PATHCONV=1
+      // is honoured per segment, as the assignment the shell would apply.
+      //
+      // The gh call can sit inside a command substitution: the munged trigger of
+      // 2026-10-16 was posted from `u1=$(gh pr comment … --body '/gemini review')`,
+      // which no token scan of the outer segment reaches. So each segment's `$( … )`
+      // and backtick bodies are scanned the same way, located on the single-quote-
+      // blanked text (a `$(` inside quotes is literal) and sliced from the segment's
+      // own text, at most four levels deep.
       if (!msysApplies(p)) return null;
       const written = (h: { flag: string; value: string; glued?: boolean }): string =>
         h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
-      const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of msysSegments(blanked)) {
-        const at = programIndex(seg.tokens, 'gh');
-        if (at === -1) continue;
-        const rest = seg.tokens.slice(at + 1);
-        const body = optionsAsWritten(rest, '--body', '-b').find((h) => h.value.startsWith('/'));
-        if (body !== undefined) {
-          return {
-            fragment: written(body),
-            detail:
-              'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
-          };
+      const munged = (value: string, typed: boolean): boolean => {
+        const ws = value.search(/[ \t\r\n]/);
+        const head = ws === -1 ? value : value.slice(0, ws);
+        const eq = head.indexOf('=');
+        if (eq === -1) return false;
+        if (typed && head.slice(eq + 1).startsWith('@')) return false;
+        return (
+          head.includes('=/') ||
+          head.includes('="/') ||
+          head.includes('=(/') ||
+          (!typed && head.includes('=@/'))
+        );
+      };
+      const takesFields = (rest: readonly string[]): boolean =>
+        rest[0] === 'api' || (rest[0] === 'workflow' && rest[1] === 'run');
+      const scan = (text: string, depth: number): TransportMatch | null => {
+        for (const seg of msysSegments(text)) {
+          const at = programIndex(seg.tokens, 'gh');
+          if (at !== -1) {
+            const rest = seg.tokens.slice(at + 1);
+            const body = optionsAsWritten(rest, '--body', '-b').find((h) =>
+              h.value.startsWith('/'),
+            );
+            if (body !== undefined) {
+              return {
+                fragment: written(body),
+                detail:
+                  'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
+              };
+            }
+            if (takesFields(rest)) {
+              const glued = rest
+                .filter(
+                  (t) =>
+                    (t.startsWith('-f') || t.startsWith('-F')) &&
+                    t.length > 2 &&
+                    !t.startsWith('--'),
+                )
+                .map((t) => ({
+                  flag: t.slice(0, 2),
+                  value: t.slice(2),
+                  glued: true,
+                  typed: t[1] === 'F',
+                }));
+              const field = [
+                ...optionsAsWritten(rest, '--field', '-F').map((h) => ({ ...h, typed: true })),
+                ...optionsAsWritten(rest, '--raw-field', '-f').map((h) => ({ ...h, typed: false })),
+                ...glued,
+              ].find((h) => munged(h.value, h.typed));
+              if (field !== undefined) {
+                return {
+                  fragment: written(field),
+                  detail:
+                    'a gh field value (api, workflow run) carrying =/ before its first whitespace is path-converted by MSYS on win32 (a -f body=/gemini review posts the Git install path exactly as --body did; a typed -F key=@/path file reference converts to the right Windows path and is allowed)',
+                };
+              }
+            }
+          }
+          if (depth >= 4) continue;
+          const located = blankSingleQuoted(seg.raw);
+          let cursor = 0;
+          while (cursor < located.length) {
+            const open = located.indexOf('$(', cursor);
+            if (open === -1) break;
+            const end = substitutionEnd(located, open + 1);
+            const inner = seg.raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end);
+            const hit = scan(inner, depth + 1);
+            if (hit !== null) return hit;
+            cursor = end;
+          }
+          let tick = located.indexOf('`');
+          while (tick !== -1) {
+            const close = located.indexOf('`', tick + 1);
+            if (close === -1) break;
+            const hit = scan(seg.raw.slice(tick + 1, close), depth + 1);
+            if (hit !== null) return hit;
+            tick = located.indexOf('`', close + 1);
+          }
         }
-        if (rest[0] !== 'api') continue;
-        // The four field flags as `-f X`, `--field X`, `--field=X`, plus the glued
-        // short form `-fX` cobra accepts (`-fbody=/x` reached a native program as
-        // `-fbody=X:/`). MSYS converts a `/` right after ANY `=` in the value, not
-        // only the first (`body=k=/v` arrived as `body=k=V:/`, `a=/b=c` as
-        // `a=C:/Program Files/Git/b=c`), so the predicate is `=/` anywhere.
-        const glued = rest
-          .filter(
-            (t) =>
-              (t.startsWith('-f') || t.startsWith('-F')) && t.length > 2 && !t.startsWith('--'),
-          )
-          .map((t) => ({ flag: t.slice(0, 2), value: t.slice(2), glued: true }));
-        const field = [
-          ...optionsAsWritten(rest, '--field', '-f'),
-          ...optionsAsWritten(rest, '--raw-field', '-F'),
-          ...glued,
-        ].find((h) => h.value.includes('=/'));
-        if (field !== undefined) {
-          return {
-            fragment: written(field),
-            detail:
-              'a gh api field value beginning with / (key=/…) is path-converted by MSYS on win32 after the = (a -f body=/gemini review posts the Git install path exactly as --body did; a key=@/path file reference converts to the right Windows path and is allowed)',
-          };
-        }
-      }
-      return null;
+        return null;
+      };
+      return scan(blankHeredocBodies(p.command, findHeredocs(p.command)), 0);
     },
   },
   {
