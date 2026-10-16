@@ -167,6 +167,38 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     );
     expectDeny('u=$(gh api repos/o/r/issues/5/comments -f body=/x)', 'msys-body-slash', 'win32');
     expectDeny('x=$(y=$(gh pr comment 5 --body /x))', 'msys-body-slash', 'win32');
+    // The opt-out prefix covers the segment's own program only: the substitution inside
+    // runs first, without it, and an assignment-only statement exports nothing
+    // (measured: MSYS_NO_PATHCONV=1 u1=$(…) posted the Git install path).
+    expectDeny(
+      "MSYS_NO_PATHCONV=1 u1=$(gh pr comment 1560 -R o/r --body '/gemini review') && echo ok",
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny('MSYS_NO_PATHCONV=1 echo $(gh pr comment 5 --body /y)', 'msys-body-slash', 'win32');
+    expectDeny(
+      'env MSYS_NO_PATHCONV=1 echo $(gh pr comment 5 --body /y)',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'MSYS_NO_PATHCONV=1 gh pr comment 5 --body "$(gh pr comment 6 --body /y)"',
+      'msys-body-slash',
+      'win32',
+    );
+    // An unescaped substitution inside a double-quoted body runs.
+    expectDeny('gh pr comment 5 --body "$(gh pr comment 6 --body /y)"', 'msys-body-slash', 'win32');
+    // More spellings the shell runs: GH.EXE, a quoted Windows path, a function body,
+    // time -p, and the glued -b/x short body (measured: -b/x arrives as -bX:/).
+    expectDeny('GH.EXE pr comment 5 --body /x', 'msys-body-slash', 'win32');
+    expectDeny(
+      "'C:\\Program Files\\GitHub CLI\\gh.exe' pr comment 5 --body /x",
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny('f() { gh pr comment 5 --body /x; }; f', 'msys-body-slash', 'win32');
+    expectDeny('time -p gh pr comment 5 --body /x', 'msys-body-slash', 'win32');
+    expectDeny('gh pr comment 5 -b/x', 'msys-body-slash', 'win32');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -258,8 +290,19 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
     // gh workflow run with a slash-less value; a $( inside single quotes is literal.
     expectAllow('gh workflow run ci.yml -f ref=main', 'win32');
     expectAllow("gh pr comment 5 --body 'see $(gh x --body /y)'", 'win32');
-    // The opt-out inside the substitution applies where the shell applies it.
+    // The opt-out inside the substitution applies where the shell applies it, and an
+    // export reaches it.
     expectAllow("u=$(MSYS_NO_PATHCONV=1 gh pr comment 5 --body '/gemini review')", 'win32');
+    expectAllow("export MSYS_NO_PATHCONV=1; u=$(gh pr comment 5 --body '/gemini review')", 'win32');
+    expectAllow("u=$(export MSYS_NO_PATHCONV=1; gh pr comment 5 --body '/gemini review')", 'win32');
+    // Literal text the shell never runs: an escaped opener in a double-quoted body, and
+    // a comment (read 2 F2: the previous row allowed these and a fold must not deny them).
+    expectAllow(
+      'gh pr comment 5 --body "Posted via \\`gh pr comment 5 --body /gemini review\\` which munged"',
+      'win32',
+    );
+    expectAllow('gh pr comment 5 --body "The \\$(gh api x -f body=/y) form"', 'win32');
+    expectAllow('echo hi # $(gh pr comment 5 --body /x)', 'win32');
   });
 
   it('allows sed -n (not in place) and a plain in-place substitution', () => {

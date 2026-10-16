@@ -661,12 +661,6 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   'xargs',
 ]);
 
-/**
- * The index of the segment's PROGRAM when it is `program` (a bare name or a
- * path ending in it), after any `VAR=VALUE` assignments and known wrappers;
- * -1 when the program is something else — a later mention of the name (`grep
- * gh …`, `git log --grep sed …`) is an argument, never an invocation.
- */
 /** Shell reserved words that can stand before a program in a segment: `{ gh …; }`, `if gh …`, `then gh …`. */
 const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
   '{',
@@ -681,22 +675,50 @@ const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
   'time',
 ]);
 
+/**
+ * The index of the segment's PROGRAM when it is `program` (a bare name, a path
+ * ending in it, or either with a Windows `.exe` suffix in any letter case and
+ * with either separator), after any `VAR=VALUE` assignments, known wrappers,
+ * the shell reserved words that can stand before a program, a function header
+ * (`f() {`, `function f {`) and `time`'s `-p`; -1 when the program is something else — a later
+ * mention of the name (`grep gh …`, `git log --grep sed …`) is an argument,
+ * never an invocation. Shared by every row that names a program, so a shape
+ * added here is read by all of them.
+ */
 function programIndex(tokens: readonly string[], program: string): number {
   let i = 0;
   // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
   // `VAR=x sudo prog`, `then VAR=x prog`.
   while (i < tokens.length) {
     const t = tokens[i] as string;
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || WRAPPERS.has(t) || RESERVED_BEFORE_PROGRAM.has(t)) {
+    // A function header: `function f { …` or `f() { …` — the tokenizer reads
+    // grouping parentheses as delimiters that carry no token, so `f() {` arrives
+    // as the name followed by `{`.
+    if (t === 'function') {
+      i += 2;
+      continue;
+    }
+    if (
+      /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
+      WRAPPERS.has(t) ||
+      RESERVED_BEFORE_PROGRAM.has(t) ||
+      (t !== program && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) && tokens[i + 1] === '{') ||
+      (t === '-p' && tokens[i - 1] === 'time')
+    ) {
       i += 1;
     } else break;
   }
   const t = tokens[i];
   if (t === undefined) return -1;
-  // A bare name, a path ending in it, or either with the Windows `.exe` suffix
-  // (`gh.exe api …` is how a win32 seat may spell the same invocation).
-  const name = t.endsWith('.exe') ? t.slice(0, -4) : t;
-  return name === program || name.endsWith('/' + program) ? i : -1;
+  if (t === program || t.endsWith('/' + program)) return i;
+  // The Windows spelling: `gh.exe`, `GH.EXE`, a drive-letter path with either
+  // separator — the file system that runs it is case-insensitive, so the stem is
+  // compared the same way.
+  const lower = t.toLowerCase();
+  if (!lower.endsWith('.exe')) return -1;
+  const stem = lower.slice(0, -4);
+  const p = program.toLowerCase();
+  return stem === p || stem.endsWith('/' + p) || stem.endsWith('\\' + p) ? i : -1;
 }
 
 /**
@@ -886,8 +908,11 @@ function segmentExportsOptOut(tokens: readonly string[]): boolean {
  * subshell `( … )` or a pipeline element is taken as reaching later segments
  * though the shell would not apply it (the tokenizer carries no subshell scope).
  */
-function msysSegments(text: string): ShellSegment[] {
-  const out: ShellSegment[] = [];
+function msysSegments(
+  text: string,
+  withPrefixOptOut = false,
+): Array<ShellSegment & { optOut?: boolean }> {
+  const out: Array<ShellSegment & { optOut?: boolean }> = [];
   let exported = false;
   let allExport = false;
   let assigned = false;
@@ -905,6 +930,11 @@ function msysSegments(text: string): ShellSegment[] {
     if (t.length > 0 && t.every((x) => ASSIGNMENT.test(x)) && t.some(isOptOutAssignment)) {
       assigned = true;
       if (allExport) exported = true;
+      // An assignment-only statement exports nothing, so a substitution inside it
+      // (`MSYS_NO_PATHCONV=1 u=$(gh …)`) runs WITHOUT the opt-out (measured
+      // 2026-10-16: the body posted the Git install path). A caller that scans
+      // substitution bodies asks for such segments and gets them flagged.
+      if (withPrefixOptOut && !exported) out.push({ ...seg, optOut: true });
       continue;
     }
     if (t[0] === 'export' && t.includes(MSYS_OPT_OUT_NAME) && assigned) {
@@ -915,8 +945,53 @@ function msysSegments(text: string): ShellSegment[] {
       exported = true;
       continue;
     }
-    if (exported || segmentOptsOut(t)) continue;
+    if (exported) continue;
+    if (segmentOptsOut(t)) {
+      // The prefix reaches the segment's own program only: a substitution inside
+      // its arguments (`MSYS_NO_PATHCONV=1 echo $(gh …)`) runs first, without it.
+      if (withPrefixOptOut) out.push({ ...seg, optOut: true });
+      continue;
+    }
     out.push(seg);
+  }
+  return out;
+}
+
+/**
+ * The text with every unquoted comment (`# …` to the end of its line, at the
+ * start or after whitespace, `;`, `&`, `|` or `(`) replaced by spaces, length
+ * preserved. Run on single-quote-blanked text; a `#` inside double quotes or
+ * after a backslash is a character, not a comment.
+ */
+function blankComments(text: string): string {
+  let out = '';
+  let inDouble = false;
+  let inComment = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i] as string;
+    if (inComment) {
+      if (ch === '\n') {
+        inComment = false;
+        out += ch;
+      } else out += ' ';
+      continue;
+    }
+    if (ch === '\\' && i + 1 < text.length) {
+      out += ch + (text[i + 1] as string);
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = !inDouble;
+      out += ch;
+      continue;
+    }
+    if (ch === '#' && !inDouble && (i === 0 || ' \t\n;&|('.includes(text[i - 1] as string))) {
+      inComment = true;
+      out += ' ';
+      continue;
+    }
+    out += ch;
   }
   return out;
 }
@@ -973,11 +1048,25 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // 2026-10-16 was posted from `u1=$(gh pr comment … --body '/gemini review')`,
       // which no token scan of the outer segment reaches. So each segment's `$( … )`
       // and backtick bodies are scanned the same way, located on the single-quote-
-      // blanked text (a `$(` inside quotes is literal) and sliced from the segment's
-      // own text, at most four levels deep.
+      // and comment-blanked text (a `$(` inside single quotes or a comment is text the
+      // shell never runs, and so is an opener escaped with a backslash in a
+      // double-quoted body) and sliced from the segment's own text, at most four
+      // levels deep. A segment the opt-out prefix covers still has its substitution
+      // bodies scanned, because the shell runs them BEFORE the prefix applies and an
+      // assignment-only statement exports nothing (read 2 F1, measured: a
+      // `MSYS_NO_PATHCONV=1 u=$(gh …)` posted the Git install path). Disclosed
+      // over-allows: a `$( … )` inside an UNQUOTED heredoc body, which bash expands,
+      // is hidden by the heredoc blanking; a process substitution `<( … )` and ANSI-C
+      // `$'…'` quoting are not read.
       if (!msysApplies(p)) return null;
       const written = (h: { flag: string; value: string; glued?: boolean }): string =>
         h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
+      // An opener preceded by an odd run of backslashes is escaped: literal text.
+      const escaped = (text: string, at: number): boolean => {
+        let n = 0;
+        for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
+        return n % 2 === 1;
+      };
       const munged = (value: string, typed: boolean): boolean => {
         const ws = value.search(/[ \t\r\n]/);
         const head = ws === -1 ? value : value.slice(0, ws);
@@ -994,11 +1083,16 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       const takesFields = (rest: readonly string[]): boolean =>
         rest[0] === 'api' || (rest[0] === 'workflow' && rest[1] === 'run');
       const scan = (text: string, depth: number): TransportMatch | null => {
-        for (const seg of msysSegments(text)) {
-          const at = programIndex(seg.tokens, 'gh');
+        for (const seg of msysSegments(text, true)) {
+          const at = seg.optOut === true ? -1 : programIndex(seg.tokens, 'gh');
           if (at !== -1) {
             const rest = seg.tokens.slice(at + 1);
-            const body = optionsAsWritten(rest, '--body', '-b').find((h) =>
+            // `--body X`, `--body=X`, `-b X`, and the glued `-bX` cobra accepts
+            // (measured: `-b/x` reached a native program as `-bX:/`).
+            const gluedBody = rest
+              .filter((t) => t.startsWith('-b') && t.length > 2 && !t.startsWith('--'))
+              .map((t) => ({ flag: '-b', value: t.slice(2), glued: true }));
+            const body = [...optionsAsWritten(rest, '--body', '-b'), ...gluedBody].find((h) =>
               h.value.startsWith('/'),
             );
             if (body !== undefined) {
@@ -1037,11 +1131,15 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             }
           }
           if (depth >= 4) continue;
-          const located = blankSingleQuoted(seg.raw);
+          const located = blankComments(blankSingleQuoted(seg.raw));
           let cursor = 0;
           while (cursor < located.length) {
             const open = located.indexOf('$(', cursor);
             if (open === -1) break;
+            if (escaped(located, open)) {
+              cursor = open + 2;
+              continue;
+            }
             const end = substitutionEnd(located, open + 1);
             const inner = seg.raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end);
             const hit = scan(inner, depth + 1);
@@ -1050,7 +1148,12 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
           }
           let tick = located.indexOf('`');
           while (tick !== -1) {
-            const close = located.indexOf('`', tick + 1);
+            if (escaped(located, tick)) {
+              tick = located.indexOf('`', tick + 1);
+              continue;
+            }
+            let close = located.indexOf('`', tick + 1);
+            while (close !== -1 && escaped(located, close)) close = located.indexOf('`', close + 1);
             if (close === -1) break;
             const hit = scan(seg.raw.slice(tick + 1, close), depth + 1);
             if (hit !== null) return hit;
