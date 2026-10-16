@@ -199,6 +199,19 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     expectDeny('f() { gh pr comment 5 --body /x; }; f', 'msys-body-slash', 'win32');
     expectDeny('time -p gh pr comment 5 --body /x', 'msys-body-slash', 'win32');
     expectDeny('gh pr comment 5 -b/x', 'msys-body-slash', 'win32');
+    expectDeny('gh pr comment 5 -b=/x', 'msys-body-slash', 'win32');
+    // Backslash runs of two or more before an opener are read as running (the Bash
+    // tool halves each pair before bash sees the command: three as typed reach bash
+    // as two, and the substitution runs — read 3 F1); only exactly one is literal.
+    expectDeny('echo \\\\$(gh pr comment 5 --body /x)', 'msys-body-slash', 'win32');
+    expectDeny('echo \\\\\\$(gh pr comment 5 --body /x)', 'msys-body-slash', 'win32');
+    expectDeny('echo "\\\\\\$(gh pr comment 5 --body /x)"', 'msys-body-slash', 'win32');
+    expectDeny('echo \\\\\\\\$(gh pr comment 5 --body /x)', 'msys-body-slash', 'win32');
+    expectDeny('u=\\\\\\`gh pr comment 5 --body /x\\\\\\`', 'msys-body-slash', 'win32');
+    // Inside backticks bash drops the backslash of \$ before running the body.
+    expectDeny('u=`echo \\$(gh pr comment 5 --body /x)`', 'msys-body-slash', 'win32');
+    // A # inside a ${ … } expansion is word text, not a comment.
+    expectDeny('echo ${x:- #$(gh pr comment 5 --body /x)}', 'msys-body-slash', 'win32');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -303,6 +316,12 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
     );
     expectAllow('gh pr comment 5 --body "The \\$(gh api x -f body=/y) form"', 'win32');
     expectAllow('echo hi # $(gh pr comment 5 --body /x)', 'win32');
+    // The export attribute on the bare name makes a later assignment reach the
+    // substitution (read 3 F6a; measured: the body posted unconverted).
+    expectAllow(
+      'export MSYS_NO_PATHCONV; MSYS_NO_PATHCONV=1 u=$(gh pr comment 5 --body /x)',
+      'win32',
+    );
   });
 
   it('allows sed -n (not in place) and a plain in-place substitution', () => {
@@ -349,13 +368,23 @@ describe('transport-shield — the PowerShell tool (the tool-agnostic rows pinne
 });
 
 describe('transport-shield — the warn rows (allow + advisory)', () => {
-  it('warns on a <rev>:<path> inside $( … ) on win32 without MSYS_NO_PATHCONV=1, and allows it with the prefix', () => {
+  it('warns on a <rev>:<path> inside $( … ) on win32 without MSYS_NO_PATHCONV=1, and allows it with the prefix where the shell applies it', () => {
     const v = run('echo $(git show origin/main:.totem/x.md)', 'win32');
     expect(v.disposition).toBe('warn');
     expect(v.provenance.ref).toBe('msys-rev-path-subshell');
     expect(v.provenance.matched).toBe('origin/main:.totem/x.md');
     expect(v.reason).toContain('MSYS_NO_PATHCONV=1');
-    expectAllow('MSYS_NO_PATHCONV=1 echo $(git show origin/main:.totem/x.md)', 'win32');
+    // A prefix on the OUTER command never reaches the substitution, which runs
+    // first (measured 2026-10-16: the body was converted); the prefix inside it, or
+    // an export before it, does.
+    expect(
+      run('MSYS_NO_PATHCONV=1 echo $(git show origin/main:.totem/x.md)', 'win32').disposition,
+    ).toBe('warn');
+    expect(
+      run('MSYS_NO_PATHCONV=1 u=$(git show origin/main:.totem/x.md)', 'win32').disposition,
+    ).toBe('warn');
+    expectAllow('echo $(MSYS_NO_PATHCONV=1 git show origin/main:.totem/x.md)', 'win32');
+    expectAllow('export MSYS_NO_PATHCONV=1; echo $(git show origin/main:.totem/x.md)', 'win32');
   });
 
   it('does not warn on the rev:path shape off win32 or outside a subshell', () => {
