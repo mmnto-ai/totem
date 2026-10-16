@@ -178,7 +178,11 @@ export const CORPORA = [
  * copy is missing — a fall-through to the live tree for a PINNED path would re-open
  * the drift the pin exists to close.
  */
-export function pinnedOrLivePath(rel: string): string {
+export function pinnedOrLivePath(relAsGiven: string): string {
+  // The map is keyed on the POSIX, root-relative spelling; a caller's backslashes or
+  // a leading `./` are normalised first, so a pinned path in any spelling reaches its
+  // copy and never falls through to the live tree by a spelling accident (read 2's F3).
+  const rel = relAsGiven.replace(/\\/g, '/').replace(/^\.\//, '');
   const copy = PINNED_COPIES.get(rel);
   if (copy === undefined) return path.join(REPO_ROOT, ...rel.split('/'));
   if (!fs.existsSync(copy)) {

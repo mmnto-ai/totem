@@ -54,6 +54,7 @@ import {
   computeRunManifestSha256,
   MANIFEST_ARTIFACT,
   OPA_BIN,
+  pinnedOrLivePath,
   REPO_ROOT,
   sha256,
   SPIKE_ROOT,
@@ -304,7 +305,10 @@ function main(): void {
   const fixtures = [...new Set(rows.flatMap((r) => (r.fixture ? [r.fixture.file] : [])))]
     .sort()
     .map((file) => {
-      const abs = path.join(REPO_ROOT, ...file.split('/'));
+      // The bytes the facts step READS: a pinned fixture's committed copy
+      // (seed/CORPUS-PIN.md), the live tree otherwise — so the manifest binds the
+      // fixture the run used, not a live file the run never opened (read 2's F1).
+      const abs = pinnedOrLivePath(file);
       return { file, sha256: fs.existsSync(abs) ? sha256(fs.readFileSync(abs)) : null };
     });
 

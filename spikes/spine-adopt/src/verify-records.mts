@@ -534,7 +534,9 @@ async function main(): Promise<void> {
       const drift: string[] = [];
       for (const [rel, copy] of PINNED_COPIES) {
         if (!fs.existsSync(copy)) {
-          drift.push(`${rel}: copy absent locally (${path.relative(REPO_ROOT, copy)})`);
+          drift.push(
+            `${rel}: copy absent locally (${path.relative(REPO_ROOT, copy).split(path.sep).join('/')})`,
+          );
           continue;
         }
         const pinned = spawnSync('git', ['cat-file', 'blob', `${CORPUS_PIN}:${rel}`], {

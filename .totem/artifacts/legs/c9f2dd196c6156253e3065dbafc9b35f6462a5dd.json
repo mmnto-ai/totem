@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "c9f2dd196c6156253e3065dbafc9b35f6462a5dd",
+  "readAt": "2026-10-16T04:04:45Z",
+  "findings": [
+    {
+      "id": "2704-r2-F1",
+      "severity": "MATERIAL",
+      "file": "spikes/spine-adopt/src/manifest.mts",
+      "line": 307,
+      "claim": "F2's fold sends the 87aff037 fixture through fixtureAbsPath, which now reads the pinned copy, but the run manifest still hashes that fixture from the LIVE tree. So every manifest regenerated after the fold binds bytes the facts step no longer reads: manifest.fixtures[].sha256 changes from the pinned copy's 5245d599 to the re-keyed live file's 5a4692ab.",
+      "counterexample": "manifest.mts:304-309 does const abs = path.join(REPO_ROOT, ...file.split('/')) and does not go through pinnedOrLivePath. Measured: sha256 of seed/corpus/tests/test-87aff037d7de47a7.md is 5245d599f50e6ff4e3ba573e656561ecef2a9d5c6d066d9cb8e8ebd9e1a33a86, the value the committed artifacts/manifest.json:180 records (generated at d33b607e, before 934296aa). The live .totem/tests/test-87aff037d7de47a7.md is 5a4692ab8ff0f3a34ff83cad1c8353fb22d7175a535eea9b5aeab78bf57b5483. Running SPIKE_RECORD_SET=seed20 npm run manifest in the worktree rewrote artifacts/manifest.json:175 from 5245d599... to 5a4692ab..., while facts.mts:223 reads the copy. No check consumes manifest.fixtures (the only reader is manifest.mts:574 writing it), so nothing fails. The same silent-provenance class as read 1's F2. Fix: pinnedOrLivePath(file) at manifest.mts:307."
+    },
+    {
+      "id": "2704-r2-F2",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/artifacts/lowering-rejects.json",
+      "line": 81,
+      "claim": "c9f2dd19's message says every committed artifact under spikes/spine-adopt/ is now free of a machine-absolute path (measured with a grep over the tree). At c9f2dd19 three committed artifacts still carry the ror worktree path in the same tryCompileSpecimen reason string.",
+      "counterexample": "git grep with the JSON-escaped backslash form matched hits spikes/spine-adopt/artifacts/lowering-rejects.json:81, artifacts/k4-swap/lowering-rejects.json:81 and artifacts/k4-swap/records-verification.json:1068. A fourth hit, wazero-probe/report.go:816, is a false positive. All three were present at a66af48a. The source fix in records.mts:79,87 covers them the next time npm run lower / the K4 seam regenerates them (lower.mts:658 goes through intakeRecordSet, then tryCompileSpecimen). Only the commit's measured claim and the stale artifacts are wrong; the code is right. The message is immutable under merge-forward, so the correction belongs in the PR body or the next commit."
+    },
+    {
+      "id": "2704-r2-F3",
+      "severity": "MINOR",
+      "file": "spikes/spine-adopt/src/lib/spike-env.mts",
+      "line": 182,
+      "claim": "pinnedOrLivePath matches PINNED_COPIES by exact string. A pinned path spelled any other way (backslashes, a leading ./) does not reach the fail-loud branch: it falls through to the live tree, which is the drift the pin exists to close. No caller does this today.",
+      "counterexample": "Measured in the depth-1 clone: pinnedOrLivePath with a backslash-spelled fixture path returned the live file, not the copy. Every caller passes POSIX literals: readCorpus is fed CORPORA[].rel (spike-env.mts:168-172); fixtureAbsPath is fed FixtureRef.file from specimens.mts:55-89 and record-sets.mts:161. These are the only two callers. The risk is latent; normalising or asserting a POSIX key would close it."
+    },
+    {
+      "id": "2704-r2-F4",
+      "severity": "QUESTION",
+      "file": "spikes/spine-adopt/src/verify-records.mts",
+      "line": 528,
+      "claim": "The committed records-verification.json carries the pin-PRESENT row (CORPUS PIN — the 5 committed copies ... byte-identical, line 1556). A depth-1 CI arm always writes the differently-named SKIP row instead, so the committed file can never be byte-identical to a CI regeneration. The comment at verify-records.mts:59-63 claims the two arms are byte-comparable. Is that claim meant to hold modulo clone depth?",
+      "counterexample": "In the depth-1 clone, git cat-file -e 694acffb...^{commit} exits 128 (status not null, error undefined), so the code takes the else-if at :527 and emits the SKIP name at :529; the full worktree emits the name at :553. The same split already existed for SEED PIN (:444 vs the committed row at 1551). The CORPUS PIN block is not gated on recordSet === 'seed20' the way SEED PIN is (:422), so the specimens arm gains a row too. No step compares the committed file against a CI regeneration (no comparator in .github or src), so nothing fails. Separately, the drift detail at :537 uses path.relative with host separators; it fires only on a failing run."
+    }
+  ],
+  "folded": [
+    "2704-r2-F1",
+    "2704-r2-F2",
+    "2704-r2-F3",
+    "2704-r2-F4"
+  ],
+  "verdict": "read 2 on c9f2dd19 (scoped to the two folds bc5bb7ca..c9f2dd19): as typed, 0 BLOCKING, 1 MATERIAL, 2 MINOR, 1 QUESTION; the leg named termination conditional on F1 (nothing BLOCKING across the folds; convergence once F1 is folded or ruled). Held at source: the five copies' blob oids equal the pin's; in a depth-1 clone the copies read without git (500 / 226) and the CORPUS PIN block takes the SKIP branch; recordRelPath is POSIX on both arms; the facts for 87aff037 are byte-identical to the committed files and bundlesSha256 is back at the committed value; no records-verification field is built with host separators; ESLint shows no new unused import. Folded by the seat in the fold commit: F1 (manifest.mts hashes the pinned fixture from its copy through pinnedOrLivePath — measured: a seed20 manifest regeneration records the committed sha 5245d599 for the fixture again), F3 (pinnedOrLivePath normalises its key — backslashes to slashes, a leading ./ dropped — so a pinned path in any spelling reaches its copy). Answered: F2 (the previous commit's claim that every committed spike artifact was free of a machine path was false — the seat's grep under-escaped the JSON form and missed artifacts/lowering-rejects.json and the two k4-swap artifacts, all three carrying the reason string from the checkout that last produced them; the code fix in records.mts is right and regenerates them the next time npm run lower and the K4 control run; a specimens-set npm run lower here rewrote the whole lowered/ tree to the wrong record set, so the seed20 regeneration is left to its own steps, and CORPUS-PIN.md says so; the claim is corrected in the PR body and this fold's message), F4 (the committed records-verification.json carries the pin-present row and a depth-1 arm writes the SKIP row, the split the SEED PIN row already has, with no comparator between them; documented in CORPUS-PIN.md; the drift detail now POSIX). Convergence named by the seat: the fold routes one more reader through the same pin and normalises a key; no further read is armed."
+}
