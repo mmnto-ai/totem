@@ -62,7 +62,8 @@
 //   --inventory <json>   the declared inventory + expectations per lessonHash16
 //   --tree <root>        the pinned tree for the firing-set leg (optional; absent => firingSet null, exit unaffected)
 //   --out <jsonl>        the per-record output (optional)
-//   --only <hash8,...>   restrict the set to these rules (a batch)
+//   --only <hash8,...>   restrict the set to these rules (a batch); a token that matches nothing is named on
+//                        stdout, and a selection of nothing is refused (exit 2) instead of passing vacuously
 //
 // Exit contract (§ 5.1): 0 iff every validate expectation holds, every UNEXPECTED
 // fidelity divergence is zero, and the differential matches the declared
@@ -96,12 +97,12 @@ const CLI = opt('--cli');
 const INVENTORY_PATH = opt('--inventory');
 const TREE = opt('--tree') ? path.resolve(opt('--tree')) : undefined;
 const OUT = opt('--out');
-const ONLY = opt('--only')
-  ? new Set(
-      opt('--only')
-        .split(',')
-        .map((s) => s.trim()),
-    )
+// A passed --only is a selection even when its value is empty (`--only ""`, or `--only`
+// as the last argument): the empty token then matches nothing and the empty selection
+// is refused below, instead of the flag being read as absent and the whole set running
+// silently (mmnto-ai/totem#3082, the falsification read's F2).
+const ONLY = flag('--only')
+  ? new Set((opt('--only') ?? '').split(',').map((s) => s.trim()))
   : undefined;
 
 const die = (msg) => {
@@ -274,8 +275,27 @@ if (SET !== undefined) {
   console.log(`seed: ${SEED} joined to ${CORPUS} — ${entries.length} entries, draw order`);
 }
 if (ONLY) {
-  entries = entries.filter((e) => ONLY.has(e.hash8) || ONLY.has(e.lessonHash));
+  const pool = entries;
+  // One matching rule for both reads below: a token selects an entry by its hash8 or
+  // its lessonHash, and a token that selects no entry is unmatched.
+  const selects = (token, e) => e.hash8 === token || e.lessonHash === token;
+  entries = pool.filter((e) => [...ONLY].some((t) => selects(t, e)));
+  // A token that selects nothing is named, and a selection of nothing is refused
+  // (mmnto-ai/totem#3082): a typo, a hash from another batch or a stale batch file
+  // would otherwise run zero records and PASS vacuously, since every counter the exit
+  // contract reads starts at 0. The refusal sits before the inventory read, so an empty
+  // selection is the reason named, never a declaration that fell outside it.
+  const unmatched = [...ONLY].filter((t) => !pool.some((e) => selects(t, e)));
+  const quoted = unmatched.map((t) => JSON.stringify(t)).join(', ');
+  if (entries.length === 0)
+    die(
+      `--only selected no entry: ${quoted} match${unmatched.length === 1 ? 'es' : ''} nothing in the ${pool.length}-entry set, and a run over zero records would PASS vacuously`,
+    );
   console.log(`--only: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} selected`);
+  if (unmatched.length > 0)
+    console.log(
+      `--only: ${unmatched.length} token${unmatched.length === 1 ? '' : 's'} matched nothing: ${quoted}`,
+    );
 }
 
 const inventory = INVENTORY_PATH ? readJson(INVENTORY_PATH) : {};

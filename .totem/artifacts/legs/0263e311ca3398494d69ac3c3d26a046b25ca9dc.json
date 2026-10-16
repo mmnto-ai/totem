@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "0263e311ca3398494d69ac3c3d26a046b25ca9dc",
+  "readAt": "2026-10-16T00:39:14Z",
+  "findings": [
+    {
+      "id": "3087-r2-F1",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 1145,
+      "claim": "A10's ordering probes assert that the inventory refusal does NOT fire, but the arm never checks that a10-refusing.json is refused when it runs on its own. So the load-bearing premise (this inventory would itself be refused) is narrated in the arm and not measured in the run of record. If the eager pass later accepted the fixture, the two negative assertions would still pass vacuously.",
+      "counterexample": "controls-r4.mjs:1145-1171 writes inventoryFor({ffffffffffffffff:['i','iv']}) and asserts only EMPTY_SELECTION && !INVENTORY_REFUSAL; there is no run with a matching or absent --only on that fixture. Measured by hand and the premise holds today. --set without --only gives exit 2 'inventory entry ffffffffffffffff declares iv ... not in the harness's R4 allow-list' (mig-harness.mjs:321-324). --set --only 2266fc0d gives the same. --seed/--corpus without --only gives exit 2 'inventory entry ffffffffffffffff declares iv ... admissible only in the migration run (--set)' (mig-harness.mjs:317-320). One positive-control invoke per mode in A10 would make the arm carry its own premise."
+    },
+    {
+      "id": "3087-r2-F2",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/README.md",
+      "line": 8,
+      "claim": "The README puts 'no declaration line' in quotes as the reason A0 gives, but A0's message is different text. The strategy-side description in the same clause is accurate.",
+      "counterexample": "controls-r4.mjs:255 pushes `expected exactly one declaration line, found ${declLines.length}`; the string 'no declaration line' appears nowhere in controls-r4.mjs (grep). The strategy side matches source: conjuncts.mjs:64-65 ('Returns { present: false } when the identifier occurs on no line — a harness that predates the mechanism, which admits nothing') and :97, score.mjs:1132-1135 (r4Binding: absent + no declaration -> harness 'absent', admitted []; absent + a declaration -> refusal 3 'predates the R4 mechanism'), and controls.mjs:1057-1060 (K11 verdictMirror maps present:false to 'absent', which would be an unexplained row at :1074 if such a source sat in the battery). A paraphrase without quotes, or the verbatim message, removes the mismatch."
+    },
+    {
+      "id": "3087-r2-F3",
+      "severity": "MINOR",
+      "file": "operations-local/gate5/r4/controls-r4.mjs",
+      "line": 1177,
+      "claim": "The harness comment (mig-harness.mjs:100-103) names two empty-value cases, --only \"\" and --only as the last argument. A10 measures only the first, so in the run of record the second is covered by narration alone.",
+      "counterexample": "controls-r4.mjs:1177 invokes setArgs(MANIFEST, '', ...), and setArgs (:643-653) always places '--only' before '--inventory', so the argv[i+1] === undefined branch of `opt('--only') ?? ''` (mig-harness.mjs:104-106) is never taken in the arm. By hand: `... --core <core> --only` (last) gave exit 2 '--only selected no entry: \"\" matches nothing in the 53-entry set' (--set) and the same over the 20-entry set (seed). The code holds; only the arm's coverage is narrower than the comment."
+    }
+  ],
+  "folded": [
+    "3087-r2-F1",
+    "3087-r2-F2",
+    "3087-r2-F3"
+  ],
+  "verdict": "read 2 on 0263e311 (scoped to the fold of read 1, e6690f86..0263e311): as typed, 0 BLOCKING, 0 MATERIAL, 3 MINOR, 0 QUESTION; the leg named termination (nothing BLOCKING or MATERIAL remains in the fold diff). Held at source: the empty-value fold is no regression against the parent (a following flag is taken as the selection token and refused loudly while its own opt still reads it, on both versions; the only behaviour change is an empty or missing value); the ordering probes' inventory is refused on its own in both modes (measured by the leg, now measured by the arm); every inventory refusal in mig-harness.mjs carries the prefix the arm keys on; the empty argv element survives spawnSync on Windows and the run of record shows it; the run of record's harness sha256 equals the committed blob's; the README's description of the strategy side matches conjuncts.mjs, score.mjs and controls.mjs; the two matching predicates the review fan flagged are equivalent for every token. Folded by the seat: F1 (A10 runs the refusing inventory on its own in --set mode and in a seed run before the ordering probes, asserting exit 2 with the inventory named), F2 (the README paraphrases A0's refusal and quotes its verbatim message), F3 (A10 probes --only as the last argument). Also folded, from the pre-push review fan: one matching rule for the filter and the unmatched read. Convergence named by the seat: the folds change coverage and wording, not the harness's behaviour, and no further read is armed."
+}

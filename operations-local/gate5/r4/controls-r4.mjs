@@ -34,10 +34,19 @@
 //       batches 1 to 4), and the harness at `--base` and the harness here emit the
 //       same stdout, stderr, per-record rows and exit over K3 and over the whole
 //       53-entry set (the change is inert for every existing input)
+//   A10 an `--only` that selects nothing → exit 2 before any record is read, stderr
+//       naming the unmatched token; a partial match runs the matched entry and names
+//       the unmatched token on stdout (mmnto-ai/totem#3082: a run over zero records
+//       would otherwise PASS vacuously, every counter the exit contract reads at 0);
+//       the ORDER measured with an inventory that would itself be refused, in --set
+//       mode and in a seed run (the empty selection is the reason named, never the
+//       inventory or the mode), that inventory first run on its own in each mode as
+//       the premise; an `--only` with an empty value, and `--only` as the last
+//       argument, each refused naming `""`
 //   A9  every row this script produced validates against the updated schema in full
 //       (a keyword-subset validator over the schema file; an unimplemented keyword is
 //       an error), the rows carrying `iv` fail the schema at `--base`, and the rows
-//       without it pass both
+//       without it pass both (A10's rows included: it runs before A9)
 //
 // The allow-list grammar (A0; what strategy's parity control is asked to refuse
 // outside) is a POSITIVE list: exactly one line of the form
@@ -55,6 +64,11 @@
 // a source grammar sees occurrences of the identifier and nothing else; a mutation that
 // never names it is invisible to it, which is why the harness also freezes the array —
 // under ESM strict mode every write to it after the freeze throws, whatever the route.
+// The source must carry no line terminator the grammar does not split on — a bare CR,
+// U+2028 or U+2029 — anywhere, a string literal included: JavaScript ends a line and a
+// `//` comment there, the split is on LF alone, and a shadowing binding after the byte
+// on a `//` line would be exempt and bound at run time (mmnto-ai/totem#3087); refused
+// fail-closed and source-wide, as strategy's mirror refuses it.
 //
 // Usage:
 //   node operations-local/gate5/r4/controls-r4.mjs --scratch <new or empty dir> \
@@ -215,6 +229,27 @@ function parseAllowListSource(src) {
     l
       .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
       .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  // JavaScript ends a line — and a `//` comment — at a bare CR, U+2028 LINE SEPARATOR
+  // and U+2029 PARAGRAPH SEPARATOR as well as at LF, while the split below is on LF
+  // alone (a trailing CR stripped): a shadowing binding after one of those on a `//`
+  // line would be exempt here and bound at run time (mmnto-ai/totem#3087, found by the
+  // strategy scorer's eighth-entry read 2). Refused anywhere in the source, before the
+  // split and fail-closed: inside a string literal JavaScript ends no line, and the
+  // byte is refused all the same, so the two grammars read one source the same way
+  // (strategy's parseR4AllowList refuses the same three bytes). The two separators are
+  // built from their code points so this file never carries the bytes it refuses.
+  const LINE_SEPARATOR = String.fromCharCode(0x2028);
+  const PARAGRAPH_SEPARATOR = String.fromCharCode(0x2029);
+  const strayRe = new RegExp(`\\r(?!\\n)|${LINE_SEPARATOR}|${PARAGRAPH_SEPARATOR}`);
+  const stray = strayRe.exec(src);
+  if (stray !== null) {
+    const name =
+      stray[0] === '\r' ? 'a bare CR' : stray[0] === LINE_SEPARATOR ? 'U+2028' : 'U+2029';
+    violations.push(
+      `line ${src.slice(0, stray.index).split('\n').length}: a line terminator the grammar does not split on (${name}) — JavaScript ends a line there and this scan does not; refused anywhere in the source, fail-closed`,
+    );
+    return { hashes: [], violations };
+  }
   const lines = src.split('\n').map((l) => decodeIdentifierEscapes(l.replace(/\r$/, '')));
   const declRe = /^export const R4_SEVERITY_LOWERING_RULES = \[([^\]]*)\];$/;
   const declLines = lines.map((l, i) => (declRe.test(l) ? i : -1)).filter((i) => i >= 0);
@@ -480,15 +515,18 @@ arm(
     expect('2266fc0dfe824f24 listed', parsed.hashes.includes('2266fc0dfe824f24'));
     expect('87aff037d7de47a7 listed', parsed.hashes.includes('87aff037d7de47a7'));
     // The grammar is exercised on a VALID base (the declaration, two `//` lines, the
-    // freeze line), on the three allowed occurrence forms (each accepted), and on thirty
-    // wrong sources, each built on the valid base so the violation reported is the
-    // defect's own: the five read 1 named; the eleven widening shapes read 2 named and
-    // its non-widening length write; the seven shapes read 3 named (code after a
-    // block-comment opener, a `*` continuation line, a template-literal interior, a decoy
-    // declaration inside a block comment and inside a template literal, a freeze under
-    // `if (0)`, a freeze inside a block comment); and a repeated hash, an indexed write,
-    // a shadowing binding, a missing freeze, a double declaration and a block-comment
-    // mention (no longer exempt).
+    // freeze line), on the three allowed occurrence forms (each accepted), and on
+    // thirty-five wrong sources, each built on the valid base so the violation reported
+    // is the defect's own: the five read 1 named; the eleven widening shapes read 2
+    // named and its non-widening length write; the seven shapes read 3 named (code after
+    // a block-comment opener, a `*` continuation line, a template-literal interior, a
+    // decoy declaration inside a block comment and inside a template literal, a freeze
+    // under `if (0)`, a freeze inside a block comment); a repeated hash, an indexed
+    // write, a shadowing binding, a missing freeze, a double declaration and a
+    // block-comment mention (no longer exempt); CodeRabbit's escaped identifier; and the
+    // four stray-terminator shapes mmnto-ai/totem#3087 named (a shadowing declaration
+    // after a bare CR, after U+2028 and after U+2029 on a `//` line, and U+2028 inside a
+    // string literal), refused source-wide.
     const DECL =
       "export const R4_SEVERITY_LOWERING_RULES = ['2266fc0dfe824f24', '87aff037d7de47a7'];";
     const FREEZE = 'Object.freeze(R4_SEVERITY_LOWERING_RULES);';
@@ -548,6 +586,16 @@ arm(
       // the identifier, which binds the same name and widens the list unfrozen. The
       // escape is assembled at run time so this source file never carries the sequence.
       escapedIdentifier: `/*\n${DECL}\n${FREEZE}\n*/\n${DECL.replace('RULES', `RUL${'\\'}u0045S`).replace("'];", `', ${x}];`)}\n`,
+      // mmnto-ai/totem#3087 (the strategy scorer's eighth-entry read 2): JavaScript ends
+      // a `//` comment at a bare CR, U+2028 or U+2029 and the LF-only split did not, so
+      // the shadowing binding after the byte was exempt under both grammars and bound at
+      // run time. The three bytes are refused anywhere in the source, a string literal
+      // included (fail-closed, source-wide); the separators are built from their code
+      // points so this file never carries them.
+      shadowAfterBareCR: `${base}// shadow\rconst R4_SEVERITY_LOWERING_RULES = [${x}];\n`,
+      shadowAfterLineSeparator: `${base}// shadow${String.fromCharCode(0x2028)}const R4_SEVERITY_LOWERING_RULES = [${x}];\n`,
+      shadowAfterParagraphSeparator: `${base}// shadow${String.fromCharCode(0x2029)}const R4_SEVERITY_LOWERING_RULES = [${x}];\n`,
+      lineSeparatorInString: `${base}const s = 'a${String.fromCharCode(0x2028)}b';\n`,
     };
     for (const [label, source] of Object.entries(wrong)) {
       const v = probe(source).violations;
@@ -557,9 +605,24 @@ arm(
         v.join('; ') || 'no violation',
       );
     }
+    // The four stray-terminator shapes are refused by the terminator clause itself, not
+    // by a later clause that happens to trip: the finding was that no later clause did.
+    for (const label of [
+      'shadowAfterBareCR',
+      'shadowAfterLineSeparator',
+      'shadowAfterParagraphSeparator',
+      'lineSeparatorInString',
+    ]) {
+      const v = probe(wrong[label]).violations;
+      expect(
+        `the ${label} variant is refused as a stray line terminator`,
+        v.length === 1 && v[0].includes('a line terminator the grammar does not split on'),
+        v.join('; ') || 'no violation',
+      );
+    }
     expect(
-      'thirty-one wrong sources probed',
-      Object.keys(wrong).length === 31,
+      'thirty-five wrong sources probed',
+      Object.keys(wrong).length === 35,
       String(Object.keys(wrong).length),
     );
   },
@@ -1034,6 +1097,132 @@ arm(
       `${rowsOf(outNew).length} rows`,
     );
     expect('the whole set ran (53 entries)', /^set: .* 53 rule\(s\)/m.test(rNew.stdout));
+  },
+);
+
+// A10 — an --only that selects nothing is refused before any record is read; a partial
+// match runs the matched entry and names the unmatched token (mmnto-ai/totem#3082). The
+// inventory declares iv on the one listed rule the partial run selects, so the eager
+// inventory refusal (A3b, a declaration outside the selection) cannot be what fires.
+arm(
+  'A10 an --only that selects nothing is refused (exit 2) naming the token; a partial match names the unmatched token on stdout',
+  (expect) => {
+    const inv = path.join(sub('inv'), 'a10.json');
+    writeJson(inv, inventoryFor({ [LISTED[0].hash]: ['i', 'iv'] }, 'A10'));
+    const outEmpty = path.join(sub('out'), 'a10-empty.jsonl');
+    const r = invoke(setArgs(MANIFEST, 'zzzzzzzz', inv, loweredDir, outEmpty));
+    expect('empty selection: exit 2', r.status === 2, String(r.status));
+    expect(
+      'empty selection: stderr names the token and the vacuous PASS it refuses',
+      /--only selected no entry: "zzzzzzzz" matches nothing in the \d+-entry set, and a run over zero records would PASS vacuously/.test(
+        r.stderr,
+      ),
+      r.stderr.trim().split('\n').pop(),
+    );
+    expect(
+      'empty selection: no --only entry line, no row written',
+      !/^--only: \d+ entr/m.test(r.stdout) && rowsOf(outEmpty).length === 0,
+      `${rowsOf(outEmpty).length} row(s)`,
+    );
+    const outPartial = path.join(sub('out'), 'a10-partial.jsonl');
+    const p = invoke(setArgs(MANIFEST, `${LISTED[0].hash8},zzzzzzzz`, inv, loweredDir, outPartial));
+    expect('partial match: exit 0', p.status === 0, String(p.status));
+    expect('partial match: one entry selected', /^--only: 1 entry selected$/m.test(p.stdout));
+    expect(
+      'partial match: the unmatched token is named on stdout',
+      /^--only: 1 token matched nothing: "zzzzzzzz"$/m.test(p.stdout),
+    );
+    const rows = collect(outPartial);
+    expect(
+      'partial match: one row, the selected rule',
+      rows.length === 1 && rows[0].lessonHash === LISTED[0].hash,
+      rows.map((row) => row.lessonHash).join(', ') || 'none',
+    );
+    // The ORDER the narration claims, measured (the falsification read's F3): with an
+    // inventory that would itself be refused (iv on a hash outside the allow-list, the
+    // A3b class) the empty selection is still the reason named, in --set mode and in a
+    // seed run alike, so the guard sits before the inventory read in every mode.
+    const EMPTY_SELECTION = /--only selected no entry: /;
+    const INVENTORY_REFUSAL = /inventory entry /;
+    const invRefusing = path.join(sub('inv'), 'a10-refusing.json');
+    writeJson(invRefusing, inventoryFor({ ffffffffffffffff: ['i', 'iv'] }, 'A10 (refusing)'));
+    // The premise, measured before it is relied on (read 2's F1): run on its own, this
+    // inventory IS refused in both modes — in --set as a hash outside the allow-list, in
+    // a seed run as a declaration outside the migration run — so the two negative
+    // assertions below cannot pass vacuously.
+    const sOwn = invoke(setArgs(MANIFEST, null, invRefusing, loweredDir, null));
+    expect(
+      'premise, --set without --only: the refusing inventory is refused on its own (exit 2, the inventory named)',
+      sOwn.status === 2 &&
+        INVENTORY_REFUSAL.test(sOwn.stderr) &&
+        !EMPTY_SELECTION.test(sOwn.stderr),
+      `${sOwn.status}: ${sOwn.stderr.trim().split('\n').pop()}`,
+    );
+    const dOwn = invoke(
+      commonArgs([
+        '--seed',
+        SEED,
+        '--corpus',
+        CORPUS,
+        '--inventory',
+        invRefusing,
+        '--rules',
+        loweredDir,
+      ]),
+    );
+    expect(
+      'premise, seed run without --only: the refusing inventory is refused on its own (exit 2, the inventory named)',
+      dOwn.status === 2 &&
+        INVENTORY_REFUSAL.test(dOwn.stderr) &&
+        !EMPTY_SELECTION.test(dOwn.stderr),
+      `${dOwn.status}: ${dOwn.stderr.trim().split('\n').pop()}`,
+    );
+    const s = invoke(setArgs(MANIFEST, 'zzzzzzzz', invRefusing, loweredDir, null));
+    expect('ordering, --set: exit 2', s.status === 2, String(s.status));
+    expect(
+      'ordering, --set: the empty selection is named, not the inventory',
+      EMPTY_SELECTION.test(s.stderr) && !INVENTORY_REFUSAL.test(s.stderr),
+      s.stderr.trim().split('\n').pop(),
+    );
+    const d = invoke(
+      commonArgs([
+        '--seed',
+        SEED,
+        '--corpus',
+        CORPUS,
+        '--only',
+        'zzzzzzzz',
+        '--inventory',
+        invRefusing,
+        '--rules',
+        loweredDir,
+      ]),
+    );
+    expect('ordering, seed run: exit 2', d.status === 2, String(d.status));
+    expect(
+      'ordering, seed run: the empty selection is named over the 20-entry set, not the mode',
+      /--only selected no entry: "zzzzzzzz" matches nothing in the 20-entry set/.test(d.stderr) &&
+        !INVENTORY_REFUSAL.test(d.stderr),
+      d.stderr.trim().split('\n').pop(),
+    );
+    // An --only passed with an EMPTY value is a selection of nothing, never an absent
+    // flag (the read's F2): refused naming the empty token.
+    const e = invoke(setArgs(MANIFEST, '', inv, loweredDir, null));
+    expect('empty value: exit 2', e.status === 2, String(e.status));
+    expect(
+      'empty value: the empty token is named',
+      /--only selected no entry: "" matches nothing in the \d+-entry set/.test(e.stderr),
+      e.stderr.trim().split('\n').pop(),
+    );
+    // The other empty-value spelling the harness comment names (read 2's F3): --only as
+    // the LAST argument, no value after it, read as the empty token and refused the same.
+    const last = invoke([...setArgs(MANIFEST, null, inv, loweredDir, null), '--only']);
+    expect('--only as the last argument: exit 2', last.status === 2, String(last.status));
+    expect(
+      '--only as the last argument: the empty token is named',
+      /--only selected no entry: "" matches nothing in the \d+-entry set/.test(last.stderr),
+      last.stderr.trim().split('\n').pop(),
+    );
   },
 );
 
