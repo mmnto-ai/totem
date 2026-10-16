@@ -1,5 +1,14 @@
 # @mmnto/cli
 
+## 2.16.3
+
+### Patch Changes
+
+- b84eda6: `totem init` stamps `gemini-3.8-flash` into a generated config for the Gemini CLI branch (a shell provider running the `gemini` binary) and the `GEMINI_API_KEY` / `GOOGLE_API_KEY` branch (the SDK provider), instead of `gemini-3.5-flash`. The Gemini API auto-routes the old id to `gemini-3.6-flash`, and the Gemini CLI rewrites it to `gemini-3.8-flash` only under its latest-flash GA flag (else it passes through, or maps to `gemini-3-flash` on Code Assist), so a consumer config stamped with it named a model no path served as written; the new id is the current GA flash (released 2026-09-02, no shutdown date announced) on both tables. No other generated default moves, and no gate or hook behaviour changes (mmnto-ai/totem#3088).
+- f9a3737: `totem init --pilot` says what it does. The `--pilot` help text, the init message and the config schema's comment promised warn-only git hooks; the git hook installer never read the pilot config or state, and the only tier the flag reaches is the action gates installed with `--gates`, which take the pilot tier (a deny prints and exits 0; a gate that cannot be evaluated still blocks). The three texts and the roadmap line now describe that, and the "14 days / 50 pushes" line is gone, since nothing consumes the window yet. The init message also says what the run did rather than what the flag is meant to do: whether `pilot: true` was written (only into a yaml or toml config the run generates; a generated `totem.config.ts` does not take it today, mmnto-ai/totem#3083) and whether the state file was initialised, already present, or re-initialised because the existing file was invalid or could not be read; and `init --global --pilot` now says the flag is ignored there instead of ignoring it silently (mmnto-ai/totem#2815, the register fix; the wiring, if wanted, is a feature on its own word). No gate or hook behaviour changes.
+- Updated dependencies [f9a3737]
+  - @mmnto/totem@2.16.3
+
 ## 2.16.2
 
 ### Patch Changes
