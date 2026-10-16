@@ -38,7 +38,7 @@ import {
   CORPORA,
   CORPUS_PIN,
   PINNED_COPIES,
-  readCorpus,
+  parseCorpus,
   REPO_ROOT,
   sha256,
   writeArtifact,
@@ -71,7 +71,7 @@ function legacyCorpusIndex(): Map<string, any> {
   for (const corpus of CORPORA) {
     // The legacy rows AT `CORPUS_PIN` (seed/CORPUS-PIN.md): the records are verified
     // against the corpus the spike was scoped to, never the live file.
-    const parsed = JSON.parse(readCorpus(corpus)) as { rules?: any[] };
+    const parsed = parseCorpus<{ rules?: any[] }>(corpus);
     for (const r of parsed.rules ?? []) index.set(r.lessonHash, r);
   }
   return index;

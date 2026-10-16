@@ -37,7 +37,7 @@ import {
   CORPORA,
   loadCoreBarrel,
   OPA_BIN,
-  readCorpus,
+  parseCorpus,
   REPO_ROOT,
   requireSymbols,
   writeArtifact,
@@ -75,7 +75,7 @@ function readCorpora(): {
     const { id } = corpus;
     // The corpus AT `CORPUS_PIN`, never the live file: the census is a record of the
     // corpus the spike was scoped to (seed/CORPUS-PIN.md).
-    const parsed = JSON.parse(readCorpus(corpus)) as { rules?: CorpusRule[] };
+    const parsed = parseCorpus<{ rules?: CorpusRule[] }>(corpus);
     const rules = parsed.rules ?? [];
     totalRules += rules.length;
     let withPattern = 0;

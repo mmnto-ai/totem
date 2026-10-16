@@ -199,6 +199,28 @@ export function readCorpus(corpus: { id: string; rel: string }): string {
 }
 
 /**
+ * One corpus at `CORPUS_PIN`, parsed. A committed copy that fails to parse is a
+ * corrupted pin, and on a depth-1 clone the CORPUS PIN comparison has skipped, so the
+ * parse is the first place it shows: the error names the corpus and the pin rather than
+ * leaving a bare SyntaxError (Gemini on mmnto-ai/totem#3095). The `[Totem Error]` prefix
+ * and the `cause` follow the harness's own convention for this class — a caught parse
+ * failure of a committed artifact — which every pre-existing site of it carries
+ * (`controls.mts`'s artifact reader, `t5-sweep.mts`'s lowering index, `certify-verify.mts`'s
+ * committed manifest).
+ */
+export function parseCorpus<T = { rules?: unknown[] }>(corpus: { id: string; rel: string }): T {
+  const text = readCorpus(corpus);
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new Error(
+      `[Totem Error] corpus ${corpus.id} (${corpus.rel}) at CORPUS_PIN ${CORPUS_PIN.slice(0, 8)} does not parse as JSON — the committed copy under seed/corpus/ is corrupted; restore it from the pin (seed/CORPUS-PIN.md): ${(err as Error).message}`,
+      { cause: err },
+    );
+  }
+}
+
+/**
  * Import the built core barrel. Fails LOUD (Tenet 4) with the exact build command
  * when the dist is absent — a silently-skipped harness is the failure mode this
  * spike exists to avoid.
