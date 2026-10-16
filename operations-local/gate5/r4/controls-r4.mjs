@@ -40,7 +40,9 @@
 //       would otherwise PASS vacuously, every counter the exit contract reads at 0);
 //       the ORDER measured with an inventory that would itself be refused, in --set
 //       mode and in a seed run (the empty selection is the reason named, never the
-//       inventory or the mode); an `--only` with an empty value refused naming `""`
+//       inventory or the mode), that inventory first run on its own in each mode as
+//       the premise; an `--only` with an empty value, and `--only` as the last
+//       argument, each refused naming `""`
 //   A9  every row this script produced validates against the updated schema in full
 //       (a keyword-subset validator over the schema file; an unimplemented keyword is
 //       an error), the rows carrying `iv` fail the schema at `--base`, and the rows
@@ -1144,6 +1146,37 @@ arm(
     const INVENTORY_REFUSAL = /inventory entry /;
     const invRefusing = path.join(sub('inv'), 'a10-refusing.json');
     writeJson(invRefusing, inventoryFor({ ffffffffffffffff: ['i', 'iv'] }, 'A10 (refusing)'));
+    // The premise, measured before it is relied on (read 2's F1): run on its own, this
+    // inventory IS refused in both modes — in --set as a hash outside the allow-list, in
+    // a seed run as a declaration outside the migration run — so the two negative
+    // assertions below cannot pass vacuously.
+    const sOwn = invoke(setArgs(MANIFEST, null, invRefusing, loweredDir, null));
+    expect(
+      'premise, --set without --only: the refusing inventory is refused on its own (exit 2, the inventory named)',
+      sOwn.status === 2 &&
+        INVENTORY_REFUSAL.test(sOwn.stderr) &&
+        !EMPTY_SELECTION.test(sOwn.stderr),
+      `${sOwn.status}: ${sOwn.stderr.trim().split('\n').pop()}`,
+    );
+    const dOwn = invoke(
+      commonArgs([
+        '--seed',
+        SEED,
+        '--corpus',
+        CORPUS,
+        '--inventory',
+        invRefusing,
+        '--rules',
+        loweredDir,
+      ]),
+    );
+    expect(
+      'premise, seed run without --only: the refusing inventory is refused on its own (exit 2, the inventory named)',
+      dOwn.status === 2 &&
+        INVENTORY_REFUSAL.test(dOwn.stderr) &&
+        !EMPTY_SELECTION.test(dOwn.stderr),
+      `${dOwn.status}: ${dOwn.stderr.trim().split('\n').pop()}`,
+    );
     const s = invoke(setArgs(MANIFEST, 'zzzzzzzz', invRefusing, loweredDir, null));
     expect('ordering, --set: exit 2', s.status === 2, String(s.status));
     expect(
@@ -1180,6 +1213,15 @@ arm(
       'empty value: the empty token is named',
       /--only selected no entry: "" matches nothing in the \d+-entry set/.test(e.stderr),
       e.stderr.trim().split('\n').pop(),
+    );
+    // The other empty-value spelling the harness comment names (read 2's F3): --only as
+    // the LAST argument, no value after it, read as the empty token and refused the same.
+    const last = invoke([...setArgs(MANIFEST, null, inv, loweredDir, null), '--only']);
+    expect('--only as the last argument: exit 2', last.status === 2, String(last.status));
+    expect(
+      '--only as the last argument: the empty token is named',
+      /--only selected no entry: "" matches nothing in the \d+-entry set/.test(last.stderr),
+      last.stderr.trim().split('\n').pop(),
     );
   },
 );

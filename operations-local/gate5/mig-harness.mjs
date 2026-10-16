@@ -276,13 +276,16 @@ if (SET !== undefined) {
 }
 if (ONLY) {
   const pool = entries;
-  entries = pool.filter((e) => ONLY.has(e.hash8) || ONLY.has(e.lessonHash));
+  // One matching rule for both reads below: a token selects an entry by its hash8 or
+  // its lessonHash, and a token that selects no entry is unmatched.
+  const selects = (token, e) => e.hash8 === token || e.lessonHash === token;
+  entries = pool.filter((e) => [...ONLY].some((t) => selects(t, e)));
   // A token that selects nothing is named, and a selection of nothing is refused
   // (mmnto-ai/totem#3082): a typo, a hash from another batch or a stale batch file
   // would otherwise run zero records and PASS vacuously, since every counter the exit
   // contract reads starts at 0. The refusal sits before the inventory read, so an empty
   // selection is the reason named, never a declaration that fell outside it.
-  const unmatched = [...ONLY].filter((t) => !pool.some((e) => e.hash8 === t || e.lessonHash === t));
+  const unmatched = [...ONLY].filter((t) => !pool.some((e) => selects(t, e)));
   const quoted = unmatched.map((t) => JSON.stringify(t)).join(', ');
   if (entries.length === 0)
     die(
