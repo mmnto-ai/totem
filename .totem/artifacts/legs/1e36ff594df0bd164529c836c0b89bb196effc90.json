@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "1e36ff594df0bd164529c836c0b89bb196effc90",
+  "readAt": "2026-10-16T05:36:00Z",
+  "findings": [
+    {
+      "id": "2696-r2-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 997,
+      "claim": "The new substitution scan runs only inside segments that msysSegments keeps. msysSegments drops a segment that is all assignments and includes MSYS_NO_PATHCONV=… (line 905), and a segment whose own prefix opts out (segmentOptsOut, line 918). In both cases the $( … ) bodies inside that segment are never scanned. But the shell does not apply that opt-out to a gh that runs inside the substitution: a prefix assignment reaches only the outer command, and an assignment-only statement exports nothing. The result: misapplying the row's own cure (MSYS_NO_PATHCONV=1) to the exact 2026-10-16 trigger shape is allowed, and the post is munged. This breaks the invariant's clause 'unless MSYS_NO_PATHCONV is set where the shell would apply it'.",
+      "counterexample": "Probe cases2: MSYS_NO_PATHCONV=1 u1=$(gh pr comment 1560 -R o/r --body '/gemini review') && echo ok returns allow/no-match. cases1: MSYS_NO_PATHCONV=1 u=$(gh … --body /y), MSYS_NO_PATHCONV=1 echo $(gh … --body /y), env MSYS_NO_PATHCONV=1 echo $(gh …) and MSYS_NO_PATHCONV=1 gh pr comment 5 --body \"$(gh pr comment 6 --body /y)\" all return allow/no-match. Measured with argv-echo: MSYS_NO_PATHCONV=1 u1=$(node argv-echo.mjs '/gemini review') gives C:/Program Files/Git/gemini review; the prefix-on-echo form, the env-prefix form and the prefix-on-outer-node form each give X:/; u=$(MSYS_NO_PATHCONV=1 node … '/gemini review') gives /gemini review (so the committed negative control is right). No test pins the misplaced opt-out. Shape of a fix: scan the substitution bodies of every tokenized segment, applying only the opt-out state that the body itself or an earlier export establishes, rather than only the segments msysSegments keeps."
+    },
+    {
+      "id": "2696-r2-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1040,
+      "claim": "The locator treats literal text as a substitution. It looks for $( and backticks in blankSingleQuoted(seg.raw). That text keeps an escaped \\$( and an escaped backtick (blankSingleQuoted copies the backslash and the next character as a pair; indexOf still finds the $( or the backtick). It also keeps comment text, because tokenizeShell drops comment tokens but seg.raw still contains the comment. So a gh command quoted as inline markdown code in a double-quoted body, or named in a comment, is denied. The shell never runs that gh, and MSYS leaves the outer body correct. This is a regression the fold introduced: bdab5216 allowed these shapes. It breaks the invariant's 'that the shell would not run as a gh invocation, is allowed', in the shape a disposition comment about this incident would take.",
+      "counterexample": "Probe cases2: gh pr comment 5 --body \"Posted via \\`gh pr comment 5 --body '/gemini review'\\` which munged\" returns deny, matched --body /gemini review\\`, where old returns allow. gh pr comment 5 --body \"The \\$(gh api x -f body=/y) form\" returns deny, where old returns allow. gh api …/comments -f \"body=The \\`gh api -f body=/x\\` form\" returns deny via the inner scan; the outer head body=The is not munged. cases1: echo hi # $(gh pr comment 5 --body /x) returns deny; a newline then # run \\`gh pr comment 5 --body /gemini review\\` later returns deny; echo \"\\$(gh …)\" returns deny. Measured: echo \"literal: \\`node argv-echo.mjs /x\\` and \\$(node argv-echo.mjs /y)\" printed both literally, so nothing ran. The rule is fail-closed and the --body-file cure works, so this is an over-deny, not an over-allow."
+    },
+    {
+      "id": "2696-r2-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1062,
+      "claim": "The scan runs on text with the heredoc bodies blanked out. Bash expands $( … ) inside an unquoted heredoc and runs it, so a gh inside one is allowed. The comment does not disclose this; it discloses only a variable or substitution VALUE.",
+      "counterexample": "Probe cases1: cat <<EOF, a line $(gh pr comment 5 --body /x), EOF returns allow/no-match. Measured: the same heredoc with $(node argv-echo.mjs /x) printed X:/. The quoted <<'EOF' form is correctly allowed."
+    },
+    {
+      "id": "2696-r2-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 698,
+      "claim": "programIndex still misses several shapes in which the shell runs gh. (a) The .exe check is case-sensitive, so GH.EXE and gh.EXE are missed. (b) A quoted Windows path with backslashes is missed. (c) gh after case … in pat), after f() {, after time -p, and inside a process substitution <( … ) (the locator only looks for $() is missed. Separately, X=1 if gh … is denied, although bash runs if as an ordinary command there (not found, rc 127) and gh never runs. That is a negligible over-deny.",
+      "counterexample": "Probe cases1, all allow/no-match: GH.EXE pr comment 5 --body /x, gh.EXE …, 'C:\\Program Files\\GitHub CLI\\gh.exe' pr comment 5 --body /x, case a in a) gh … --body /x ;; esac, f() { gh … --body /x; }; f, time -p gh … --body /x, cat <(gh … --body /x). Measured, each run and converted: NODE.EXE and Node.Exe argv-echo /x gave X:/; the Windows-path C:\\Program Files\\nodejs\\node.exe gave X:/; the case, function, process-substitution and time -p forms gave Z:/, W:/, V:/, U:/. X=1 if node … gave 'if: command not found'. $'it\\'s' $(gh …) (blankSingleQuoted does not know ANSI-C quoting) also allows; measured: the gh-like call ran (Y:/)."
+    },
+    {
+      "id": "2696-r2-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1009,
+      "claim": "Pre-existing, not introduced by the fold, but inside the invariant as stated ('--body/-b begins with /'): the glued short form -b/x is not read by optionsAsWritten, and MSYS converts it.",
+      "counterexample": "Probe cases1: gh pr comment 5 -b/x returns allow/no-match. Measured: argv-echo -b/x gave -bX:/."
+    },
+    {
+      "id": "2696-r2-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 664,
+      "claim": "Two documentation gaps. (a) The new RESERVED_BEFORE_PROGRAM const was inserted between programIndex's JSDoc and the function, so that JSDoc now attaches to the const. It also still says 'after any VAR=VALUE assignments and known wrappers', with no mention of reserved words or .exe. (b) The changeset describes only the msys-body-slash row. Because programIndex is shared, sed-i-escape and inline-body-escape now deny shapes they used to allow; the changeset does not mention that.",
+      "counterexample": "sed -n 660,672p shows the docstring followed directly by the const's own JSDoc. Probe cases1: { sed -i 's/\\(a\\)/x/' f; } returns deny/sed-i-escape; then node -e 'a\\d' and time node.exe -e 'a\\d' return deny/inline-body-escape; old returns allow for all three. The new denies are correct; only the changeset text omits them."
+    }
+  ],
+  "folded": [
+    "2696-r2-F1",
+    "2696-r2-F2",
+    "2696-r2-F4",
+    "2696-r2-F5",
+    "2696-r2-F6"
+  ],
+  "verdict": "read 2 on 1e36ff59 (scoped to the fold bdab5216..1e36ff59): as typed, 0 BLOCKING, 2 MATERIAL, 4 MINOR, 0 QUESTION; the leg named the rule not converged at MATERIAL and recommended one more read scoped to the F1/F2 fold. Held at source (the leg's probe evaluated each command through the built dist and through the two commits' sources transpiled into scratch, and re-measured every shell claim with the argv-echo script): the exact 2026-10-16 trigger chain denies with matched --body /gemini review; backtick, double-quoted $( ), arithmetic-wrapped, multiple-backtick, quoted-paren and unterminated forms deny; a body split by ; | && inside the substitution denies; nesting two and four deep denies and five allows per the disclosed cap; every reserved word before gh denies and a reserved word as an argument allows; gh.exe and a /c/… path to it deny; the field predicate holds on =/x, tab and newline after the first whitespace, the typed and raw @ forms, workflow run and workflow view; the opt-out inside the substitution and an export before it allow; single quotes and bash -c stay literal; the other rows gained no false positives and their new denies are shapes the shell runs; the red check's three failing blocks are the right three; the comment's measurements and the changeset's predicate text match the code. Folded by the seat in the next commit: F1 MATERIAL (a segment the opt-out prefix covers or that is all assignments with the opt-out had its substitution bodies skipped although the shell runs them first, without the prefix — msysSegments now returns such segments flagged when asked and the row descends into their substitutions while skipping their token scan), F2 MATERIAL (an escaped \\$( or backtick in a double-quoted body and a $( inside a comment were read as substitutions — an opener behind an odd run of backslashes is skipped and comments are blanked before locating), F4 in part (GH.EXE and a quoted Windows path with backslashes, a function header, time -p), F5 (the glued -b/x short body), F6 (the programIndex JSDoc restored to the function and naming the shared effect; the changeset names the sed-i-escape and inline-body-escape rows' new reads). Declined with the reason: F3 (a $( … ) inside an unquoted heredoc body is hidden by the heredoc blanking; disclosed in the row's comment, not read), F4's process substitution, case patterns and ANSI-C quoting (rare; disclosed)."
+}
