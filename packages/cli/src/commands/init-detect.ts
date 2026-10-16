@@ -242,11 +242,21 @@ export const INIT_ORCHESTRATOR_ROLES = [
  * (docs/reference/supported-models.md § Updating Defaults, location 3).
  * `claudeCli` is the claude CLI's own tier alias, which tracks that CLI's
  * current Sonnet instead of pinning a dated ID.
+ *
+ * The Gemini id names the current GA flash, never a routed alias, because
+ * it has to be current on both tables a generated config can reach: the
+ * `geminiCli` branch emits a shell provider judged by the Gemini CLI's own
+ * registry, the `gemini` branch an SDK provider judged by the API's routing.
+ * The API auto-routes `gemini-3.5-flash` to `gemini-3.6-flash`, and the
+ * CLI rewrites it to `gemini-3.8-flash` only under its latest-flash GA flag
+ * (else pass-through, or `gemini-3-flash` on Code Assist), so a config
+ * stamped with the old id named a model no path served as written
+ * (mmnto-ai/totem#3088).
  */
 export const INIT_ORCHESTRATOR_MODELS = {
-  geminiCli: 'gemini-3.5-flash',
+  geminiCli: 'gemini-3.8-flash',
   claudeCli: 'sonnet',
-  gemini: 'gemini-3.5-flash',
+  gemini: 'gemini-3.8-flash',
   anthropic: 'claude-sonnet-5',
   openai: 'gpt-5.6-terra',
   ollama: 'gemma4',
