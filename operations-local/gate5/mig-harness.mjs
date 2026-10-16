@@ -62,7 +62,8 @@
 //   --inventory <json>   the declared inventory + expectations per lessonHash16
 //   --tree <root>        the pinned tree for the firing-set leg (optional; absent => firingSet null, exit unaffected)
 //   --out <jsonl>        the per-record output (optional)
-//   --only <hash8,...>   restrict the set to these rules (a batch)
+//   --only <hash8,...>   restrict the set to these rules (a batch); a token that matches nothing is named on
+//                        stdout, and a selection of nothing is refused (exit 2) instead of passing vacuously
 //
 // Exit contract (§ 5.1): 0 iff every validate expectation holds, every UNEXPECTED
 // fidelity divergence is zero, and the differential matches the declared
@@ -274,8 +275,24 @@ if (SET !== undefined) {
   console.log(`seed: ${SEED} joined to ${CORPUS} — ${entries.length} entries, draw order`);
 }
 if (ONLY) {
-  entries = entries.filter((e) => ONLY.has(e.hash8) || ONLY.has(e.lessonHash));
+  const pool = entries;
+  entries = pool.filter((e) => ONLY.has(e.hash8) || ONLY.has(e.lessonHash));
+  // A token that selects nothing is named, and a selection of nothing is refused
+  // (mmnto-ai/totem#3082): a typo, a hash from another batch or a stale batch file
+  // would otherwise run zero records and PASS vacuously, since every counter the exit
+  // contract reads starts at 0. The refusal sits before the inventory read, so an empty
+  // selection is the reason named, never a declaration that fell outside it.
+  const unmatched = [...ONLY].filter((t) => !pool.some((e) => e.hash8 === t || e.lessonHash === t));
+  const quoted = unmatched.map((t) => JSON.stringify(t)).join(', ');
+  if (entries.length === 0)
+    die(
+      `--only selected no entry: ${quoted} match${unmatched.length === 1 ? 'es' : ''} nothing in the ${pool.length}-entry set, and a run over zero records would PASS vacuously`,
+    );
   console.log(`--only: ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} selected`);
+  if (unmatched.length > 0)
+    console.log(
+      `--only: ${unmatched.length} token${unmatched.length === 1 ? '' : 's'} matched nothing: ${quoted}`,
+    );
 }
 
 const inventory = INVENTORY_PATH ? readJson(INVENTORY_PATH) : {};
