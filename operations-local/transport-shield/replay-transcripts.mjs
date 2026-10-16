@@ -8,7 +8,7 @@
 //   node operations-local/transport-shield/replay-transcripts.mjs \
 //     --old <path to a main checkout>/packages/core/dist/index.js \
 //     --new <path to the branch checkout>/packages/core/dist/index.js \
-//     [--platform win32] [--tool Bash] [--transcripts 24] [--min-bytes 200000] [--show-changed]
+//     [--platform win32] [--tool Bash] [--transcripts 400] [--min-bytes 0] [--show-changed]
 //
 // What it reads: every *.jsonl under <home>/.claude/projects (the Claude Code transcript
 // store), newest first, up to --transcripts files of at least --min-bytes; from each, the
@@ -23,9 +23,16 @@
 //
 // Reading the result: an intended change is a shape the fix targets (on mmnto-ai/totem#3098,
 // the two munged trigger chains, allow -> deny); a fix is a verdict the old build got wrong
-// (one false rev:path warning, warn -> allow); anything else is a question for the change.
-// Zero changes is NOT evidence for a rule that fires on shapes the transcripts never carry:
-// name those shapes and probe them on their own.
+// (false rev:path warnings, warn -> allow); a disclosed change is one the changeset names
+// (there, the program locator reading a reserved word before sed -i or node -e: twelve
+// allow -> deny over the full store, true positives on inspection); anything else is a
+// question for the change. The defaults read the whole store (the 24 newest large
+// transcripts showed 3 changes on that branch; the full store 18, every one in a class
+// above). Two limits: it compares the EVALUATOR's verdict (the first deny row, else the
+// first warn), so a row change hidden under an earlier deny does not show — replay a
+// single row by hand when a change touches one; and zero changes is NOT evidence for a
+// rule that fires on shapes the transcripts never carry: name those shapes and probe
+// them on their own.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -55,8 +62,8 @@ const oldDist = need('old');
 const newDist = need('new');
 const platform = args.get('platform') ?? 'win32';
 const tool = args.get('tool') ?? 'Bash';
-const maxFiles = Number(args.get('transcripts') ?? 24);
-const minBytes = Number(args.get('min-bytes') ?? 200_000);
+const maxFiles = Number(args.get('transcripts') ?? 400);
+const minBytes = Number(args.get('min-bytes') ?? 0);
 const showChanged = args.has('show-changed');
 
 const OLD = (await import(pathToFileURL(oldDist).href)).transportShieldEvaluator;

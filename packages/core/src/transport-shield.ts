@@ -1212,27 +1212,34 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         // segment: the tokenizer reads a backtick as a character and splits at `;`
         // inside a span, so a span's two backticks can sit in different segments
         // (`u=\`gh … --body /x; echo done\``, the chained form from the 3098 bot
-        // round). A gh after an operator inside a span is also its own segment
-        // above, so a mispaired span can only lose a gh that sits at the body's
-        // start — and the opener rule over-opens rather than under-opens there.
-        // Inside backticks bash drops the backslash of `\$`, a backslash-backtick and
-        // `\\` before running the body, so the body is unescaped, then scanned.
+        // round). The pairing is run TWICE, with an opener read escaped by bash's
+        // rule (exactly one backslash) and by the Bash tool's measured halving rule
+        // (a run of one or two, and every four after), and either pass's hit denies:
+        // a single pairing that misreads one opener shifts every later backtick and
+        // loses the body of the next real span (read 7 F1), while the union can only
+        // add denies. Inside backticks bash drops the backslash of `\$`, a
+        // backslash-backtick and `\\` before running the body, so each body is
+        // unescaped, then scanned. Disclosed over-allow: a `"` inside a single-quoted
+        // string inside a span inside double quotes flips the blanker's quote state
+        // (read 7 F2; main misses it too).
         const whole = blankComments(blankSingleQuoted(text));
-        let tick = whole.indexOf('`');
-        while (tick !== -1) {
-          if (escaped(whole, tick)) {
-            tick = whole.indexOf('`', tick + 1);
-            continue;
+        for (const openerEscaped of [escaped, escapedClose]) {
+          let tick = whole.indexOf('`');
+          while (tick !== -1) {
+            if (openerEscaped(whole, tick)) {
+              tick = whole.indexOf('`', tick + 1);
+              continue;
+            }
+            let close = whole.indexOf('`', tick + 1);
+            while (close !== -1 && escapedClose(whole, close)) {
+              close = whole.indexOf('`', close + 1);
+            }
+            if (close === -1) break;
+            const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
+            const hit = scan(body, depth + 1);
+            if (hit !== null) return hit;
+            tick = whole.indexOf('`', close + 1);
           }
-          let close = whole.indexOf('`', tick + 1);
-          while (close !== -1 && escapedClose(whole, close)) {
-            close = whole.indexOf('`', close + 1);
-          }
-          if (close === -1) break;
-          const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
-          const hit = scan(body, depth + 1);
-          if (hit !== null) return hit;
-          tick = whole.indexOf('`', close + 1);
         }
         return null;
       };
@@ -1372,7 +1379,12 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         }
         for (const seg of msysSegments(text, true)) {
           for (const [from, to] of spans(seg.raw)) {
-            const inner = seg.raw.slice(from, to);
+            // A heredoc body inside the substitution is text (read 7 F4: a quoted
+            // `<<'EOF'` body carrying a rev:path had warned), blanked as at the top.
+            const inner = blankHeredocBodies(
+              seg.raw.slice(from, to),
+              findHeredocs(seg.raw.slice(from, to)),
+            );
             for (const innerSeg of msysSegments(inner, true)) {
               if (innerSeg.optOut === true) continue;
               let direct = innerSeg.raw;

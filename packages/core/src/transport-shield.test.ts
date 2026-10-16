@@ -272,6 +272,18 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     // over-deny there (bash closes at two and the stray quote swallows the rest, so
     // nothing runs): fail-closed by design after the retreat of the span rule.
     expectDeny('x=`echo \'q\\\\`\'` ; sed -i "s/a/\\\\b/" f', 'sed-i-escape', 'linux');
+    // A literal backtick behind a typed run of two (or five, or six) read as an opener
+    // would pair with the next real opener and lose the real span's body (read 7 F1);
+    // the second pairing pass reads it by the transport's rule, and either pass denies.
+    expectDeny('echo \\\\` ; u=`gh pr comment 5 --body /x`', 'msys-body-slash', 'win32');
+    expectDeny('echo \\\\\\\\\\` ; u=`gh pr comment 5 --body /x`', 'msys-body-slash', 'win32');
+    expectDeny(
+      'echo \\\\` ; echo "`echo a; gh pr comment 5 --body /x`"',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny('echo "\\\\` `true && gh pr comment 5 --body /x`"', 'msys-body-slash', 'win32');
+    expectDeny('echo \\` ; u=`gh pr comment 5 --body /x`', 'msys-body-slash', 'win32');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -452,6 +464,13 @@ describe('transport-shield — the warn rows (allow + advisory)', () => {
         .disposition,
     ).toBe('warn');
     expectAllow('echo $(echo $(MSYS_NO_PATHCONV=1 git show origin/main:.totem/x.md))', 'win32');
+    // A quoted heredoc body inside the substitution is text, not an argument.
+    expectAllow("echo $( cat <<'EOF'\norigin/main:.totem/x.md\nEOF\n )", 'win32');
+    // Past the recursion cap the row warns rather than allows (read 6 F3, read 7 F3).
+    const deep = 'echo $('.repeat(300) + 'git show HEAD:.totem/a' + ')'.repeat(300);
+    const capped = run(deep, 'win32');
+    expect(capped.disposition).toBe('warn');
+    expect(capped.provenance.ref).toBe('msys-rev-path-subshell');
   });
 
   it('does not warn on the rev:path shape off win32 or outside a subshell', () => {
