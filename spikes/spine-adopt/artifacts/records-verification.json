@@ -1065,7 +1065,7 @@
     {
       "name": "specimen 1a7080eb-inline-secrets-agent-config — REJECT ROW (shipped-compile): the shipped compiler refused this record, so it is a scored row rather than an apparatus failure (§ G3)",
       "ok": true,
-      "detail": "specimen 1a7080eb-inline-secrets-agent-config (D:\\Dev\\worktrees\\totem-totem-claude-spike-pin\\spikes\\spine-adopt\\seed\\records\\r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
+      "detail": "specimen 1a7080eb-inline-secrets-agent-config (spikes/spine-adopt/seed/records/r14-1a7080eb-inline-secrets-agent-config.rule.yaml) FAILED compileRuleRecord: Prop 310 § Design 6: target.language 'json' is not registered — the resolution authority is the Map-backed extensionToLanguage registry (built-ins + pack contributions), never a spec-frozen enum. Registered languages: javascript, tsx, typescript. Install the pack that provides this language, or correct the record."
     },
     {
       "name": "specimen 49dd9e4f-llm-character-counting — parseRuleRecord + compileRuleRecord succeed",

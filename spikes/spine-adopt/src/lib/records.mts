@@ -73,7 +73,10 @@ export function tryCompileSpecimen(
   } catch (err) {
     return {
       ok: false,
-      reason: `specimen ${s.id} (${s.recordFile}) FAILED parseRuleRecord: ${(err as Error).message}`,
+      // The repo-relative path, never the absolute one: this reason lands in a
+      // committed artifact's `detail`, and an absolute path records the author's
+      // directory layout (the census artifact writes `<worktree>` for the same reason).
+      reason: `specimen ${s.id} (${recordRelPath(s)}) FAILED parseRuleRecord: ${(err as Error).message}`,
       cause: err,
     };
   }
@@ -81,7 +84,7 @@ export function tryCompileSpecimen(
   if (outcome.kind !== 'compiled') {
     return {
       ok: false,
-      reason: `specimen ${s.id} (${s.recordFile}) FAILED compileRuleRecord: ${outcome.reason ?? '(no reason)'}`,
+      reason: `specimen ${s.id} (${recordRelPath(s)}) FAILED compileRuleRecord: ${outcome.reason ?? '(no reason)'}`,
     };
   }
   return {
