@@ -5,6 +5,7 @@
 // imports are exports-blocked, so this is the only seam that reaches the shipped
 // dispatchers without mutating any workspace or package config.
 
+import { spawnSync } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -107,22 +108,53 @@ export const OPA_BIN = resolveTool(
 
 export const CORE_DIST_BARREL = path.join(REPO_ROOT, 'packages', 'core', 'dist', 'index.js');
 
-/** The four shipped rule corpora, in census order. */
+/**
+ * The commit the four shipped corpora are read AT (`seed/CORPUS-PIN.md`).
+ *
+ * The spike's own last apparatus commit (2026-09-01). The census numbers this spike
+ * records — 500 rules across the four corpora, 226 carrying a non-empty regex
+ * `pattern`, the 226 ADR-103 cites as the compilation-target census — are the
+ * corpora at this commit, and `DECISION.md` scopes the adoption consequence to
+ * "this V1 corpus and ruleset". The live tree moved past it at `934296aa` (the S6
+ * serving-file regeneration: 528 / 229), which failed the intake assertions on
+ * every run from the 2.16.1 cut onward. Reading at the pin keeps the census a record
+ * of its corpus; a deliberate move to a newer corpus moves this pin and the numbers in
+ * `census.mts` together, in one commit, with the ADR citation re-read. Sibling pin:
+ * `SEED_RECORD_PIN` in `record-sets.mts`.
+ */
+export const CORPUS_PIN = '694acffbf8f91c6b06c5bdba3d3519707f2448d0';
+
+/**
+ * The four shipped rule corpora, in census order. `file` is the live-tree path and
+ * stays the LABEL the committed artifacts record (`corpora[].file`, repo-relative);
+ * the CONTENT comes from `readCorpus`, at `CORPUS_PIN`.
+ */
 export const CORPORA = [
-  { id: 'root', file: path.join(REPO_ROOT, '.totem', 'compiled-rules.json') },
-  {
-    id: 'pack-agent-security',
-    file: path.join(REPO_ROOT, 'packages', 'pack-agent-security', 'compiled-rules.json'),
-  },
-  {
-    id: 'pack-agent-workflow',
-    file: path.join(REPO_ROOT, 'packages', 'pack-agent-workflow', 'compiled-rules.json'),
-  },
-  {
-    id: 'pack-rust-architecture',
-    file: path.join(REPO_ROOT, 'packages', 'pack-rust-architecture', 'compiled-rules.json'),
-  },
-] as const;
+  { id: 'root', rel: '.totem/compiled-rules.json' },
+  { id: 'pack-agent-security', rel: 'packages/pack-agent-security/compiled-rules.json' },
+  { id: 'pack-agent-workflow', rel: 'packages/pack-agent-workflow/compiled-rules.json' },
+  { id: 'pack-rust-architecture', rel: 'packages/pack-rust-architecture/compiled-rules.json' },
+].map((c) => ({ ...c, file: path.join(REPO_ROOT, ...c.rel.split('/')) }));
+
+/**
+ * The text of one corpus at `CORPUS_PIN`, by `git show <pin>:<repo-relative path>`
+ * from `REPO_ROOT`. Fails LOUD (Tenet 4) when git is absent, the pin is not in the
+ * checkout's object store (a shallow clone), or the path is absent at the pin — a
+ * fall-through to the live tree would re-open the drift this pin exists to close.
+ */
+export function readCorpus(corpus: { id: string; rel: string }): string {
+  const r = spawnSync('git', ['-C', REPO_ROOT, 'show', `${CORPUS_PIN}:${corpus.rel}`], {
+    encoding: 'utf-8',
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (r.error !== undefined || r.status !== 0) {
+    const why = r.error !== undefined ? r.error.message : (r.stderr ?? '').trim();
+    throw new Error(
+      `corpus ${corpus.id}: cannot read ${corpus.rel} at CORPUS_PIN ${CORPUS_PIN.slice(0, 8)} (${why}) — the census is of the pinned corpus (seed/CORPUS-PIN.md); fetch the pin into this checkout, never fall back to the live tree`,
+    );
+  }
+  return r.stdout;
+}
 
 /**
  * Import the built core barrel. Fails LOUD (Tenet 4) with the exact build command

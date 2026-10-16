@@ -33,7 +33,7 @@ import {
 } from './lib/record-sets.mts';
 import { type CompiledSpecimen, intakeRecordSet, loadCore } from './lib/records.mts';
 import { PINNED_NOW, recordRelPath } from './lib/specimens.mts';
-import { Checks, CORPORA, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
+import { Checks, CORPORA, readCorpus, REPO_ROOT, sha256, writeArtifact } from './lib/spike-env.mts';
 
 const EXEMPLAR_DIST = path.join(
   REPO_ROOT,
@@ -59,8 +59,10 @@ const EXEMPLAR_REFERENT = EXEMPLAR_DIST.slice(REPO_ROOT.length + 1)
 
 function legacyCorpusIndex(): Map<string, any> {
   const index = new Map<string, any>();
-  for (const { file } of CORPORA) {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as { rules?: any[] };
+  for (const corpus of CORPORA) {
+    // The legacy rows AT `CORPUS_PIN` (seed/CORPUS-PIN.md): the records are verified
+    // against the corpus the spike was scoped to, never the live file.
+    const parsed = JSON.parse(readCorpus(corpus)) as { rules?: any[] };
     for (const r of parsed.rules ?? []) index.set(r.lessonHash, r);
   }
   return index;

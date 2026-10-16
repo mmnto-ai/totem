@@ -22,7 +22,6 @@
 //
 // Run: node --experimental-strip-types src/census.mts
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -38,6 +37,7 @@ import {
   CORPORA,
   loadCoreBarrel,
   OPA_BIN,
+  readCorpus,
   REPO_ROOT,
   requireSymbols,
   writeArtifact,
@@ -71,9 +71,11 @@ function readCorpora(): {
   const perCorpus: Record<string, { rules: number; withPattern: number }> = {};
   let totalRules = 0;
 
-  for (const { id, file } of CORPORA) {
-    if (!fs.existsSync(file)) throw new Error(`corpus missing: ${file}`);
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8')) as { rules?: CorpusRule[] };
+  for (const corpus of CORPORA) {
+    const { id } = corpus;
+    // The corpus AT `CORPUS_PIN`, never the live file: the census is a record of the
+    // corpus the spike was scoped to (seed/CORPUS-PIN.md).
+    const parsed = JSON.parse(readCorpus(corpus)) as { rules?: CorpusRule[] };
     const rules = parsed.rules ?? [];
     totalRules += rules.length;
     let withPattern = 0;
