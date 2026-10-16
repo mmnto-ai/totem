@@ -212,6 +212,22 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     expectDeny('u=`echo \\$(gh pr comment 5 --body /x)`', 'msys-body-slash', 'win32');
     // A # inside a ${ … } expansion is word text, not a comment.
     expectDeny('echo ${x:- #$(gh pr comment 5 --body /x)}', 'msys-body-slash', 'win32');
+    // A backtick body is one word even when it carries a ; or && (the tokenizer keeps
+    // it whole, as it keeps $( … )); the Greptile P1 on the 3098 round.
+    expectDeny('u=`gh pr comment 5 --body /x; echo done`', 'msys-body-slash', 'win32');
+    expectDeny('echo `gh pr comment 5 --body /x` && echo done', 'msys-body-slash', 'win32');
+    // An export statement expands its own substitutions BEFORE it exports (the second
+    // Greptile P1): the opt-out reaches later statements only.
+    expectDeny(
+      'export MSYS_NO_PATHCONV=1 u=$(gh pr comment 5 --body /x)',
+      'msys-body-slash',
+      'win32',
+    );
+    expectDeny(
+      'declare -x MSYS_NO_PATHCONV=1 u=$(gh pr comment 5 --body /x)',
+      'msys-body-slash',
+      'win32',
+    );
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
@@ -385,6 +401,13 @@ describe('transport-shield — the warn rows (allow + advisory)', () => {
     ).toBe('warn');
     expectAllow('echo $(MSYS_NO_PATHCONV=1 git show origin/main:.totem/x.md)', 'win32');
     expectAllow('export MSYS_NO_PATHCONV=1; echo $(git show origin/main:.totem/x.md)', 'win32');
+    // A prefix inside the body covers that body's own command, never a substitution
+    // nested in it, which runs first (the Greptile P2 on the 3098 round).
+    expect(
+      run('echo $(MSYS_NO_PATHCONV=1 echo $(git show origin/main:.totem/x.md))', 'win32')
+        .disposition,
+    ).toBe('warn');
+    expectAllow('echo $(echo $(MSYS_NO_PATHCONV=1 git show origin/main:.totem/x.md))', 'win32');
   });
 
   it('does not warn on the rev:path shape off win32 or outside a subshell', () => {

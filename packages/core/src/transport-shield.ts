@@ -610,6 +610,22 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
+    if (ch === '`' && !ps) {
+      // Keep a backtick substitution whole inside the word, as `$( … )` is below: a
+      // `;` or `&&` inside it belongs to the body, not to the outer statement
+      // (`u=\`gh … --body /x; echo done\`` is one statement whose body runs gh).
+      // An unterminated backtick is a character.
+      let close = i + 1;
+      while (close < command.length && !(command[close] === '`' && command[close - 1] !== '\\')) {
+        close += 1;
+      }
+      if (close < command.length) {
+        word += command.slice(i, close + 1);
+        inWord = true;
+        i = close + 1;
+        continue;
+      }
+    }
     if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
       // Keep a command or process substitution whole inside the word, its
       // parentheses balanced OUTSIDE quotes (a `)` inside `"…"` is text): it is
@@ -945,11 +961,23 @@ function msysSegments(
       continue;
     }
     if (t[0] === 'export' && t.includes(MSYS_OPT_OUT_NAME)) {
+      // The statement's own substitutions run BEFORE the export applies (bash expands
+      // the builtin's arguments first), so `export MSYS_NO_PATHCONV u=$(gh …)` runs
+      // gh without the opt-out unless an earlier export already covers it.
+      if (withPrefixOptOut && !exported && !(assigned && exportAttr)) {
+        out.push({ ...seg, optOut: true });
+      }
       exportAttr = true;
       if (assigned) exported = true;
       continue;
     }
     if (segmentExportsOptOut(t)) {
+      // Same ordering: `export MSYS_NO_PATHCONV=1 u=$(gh …)` and `declare -x …`
+      // expand the substitution first and export after, so the statement is
+      // flagged for the callers that scan substitution bodies (Greptile on the
+      // 3098 round, measured: the body posted the converted path); later
+      // segments are covered.
+      if (withPrefixOptOut && !exported) out.push({ ...seg, optOut: true });
       exported = true;
       continue;
     }
@@ -1294,30 +1322,53 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // the substitution inside it BEFORE the prefix applies (the same class as the
       // msys-body-slash row's read 2 F1).
       const blanked = blankSingleQuoted(blankHeredocBodies(p.command, findHeredocs(p.command)));
-      for (const seg of msysSegments(blanked, true)) {
-        const text = seg.raw;
+      // The spans of `$( … )` in a text, as [start of body, end of body) pairs.
+      const spans = (text: string): Array<[number, number]> => {
+        const out: Array<[number, number]> = [];
         let cursor = 0;
         while (cursor < text.length) {
           const open = text.indexOf('$(', cursor);
           if (open === -1) break;
           // Balanced outside quotes: a `)` inside `"…"` never closes the subshell.
           const end = substitutionEnd(text, open + 1);
-          const inner = text.slice(open + 2, text[end - 1] === ')' ? end - 1 : end);
-          // The body judged per ITS segments, so an opt-out inside the substitution
-          // (`$(MSYS_NO_PATHCONV=1 git show …)`) applies where the shell applies it.
-          for (const innerSeg of msysSegments(inner)) {
-            const hit = REV_PATH_TOKEN.exec(innerSeg.raw);
-            if (hit !== null && !(hit[2] as string).includes('//')) {
-              return {
-                fragment: hit[2] as string,
-                detail: 'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
-              };
-            }
-          }
+          out.push([open + 2, text[end - 1] === ')' ? end - 1 : end]);
           cursor = end;
         }
-      }
-      return null;
+        return out;
+      };
+      // A body judged per ITS segments: an opt-out inside the substitution
+      // (`$(MSYS_NO_PATHCONV=1 git show …)`) applies to that segment's own command
+      // and to nothing nested in it, which runs first — so each segment's direct
+      // arguments are read with its nested spans blanked, and the nested spans are
+      // read on their own, whatever the enclosing prefix says (Greptile on the 3098
+      // round: the nested warning had been lost). At most four levels deep.
+      const scan = (text: string, depth: number): TransportMatch | null => {
+        if (depth > 4) return null;
+        for (const seg of msysSegments(text, true)) {
+          for (const [from, to] of spans(seg.raw)) {
+            const inner = seg.raw.slice(from, to);
+            for (const innerSeg of msysSegments(inner, true)) {
+              if (innerSeg.optOut === true) continue;
+              let direct = innerSeg.raw;
+              for (const [a, b] of spans(direct)) {
+                direct = direct.slice(0, a) + ' '.repeat(b - a) + direct.slice(b);
+              }
+              const hit = REV_PATH_TOKEN.exec(direct);
+              if (hit !== null && !(hit[2] as string).includes('//')) {
+                return {
+                  fragment: hit[2] as string,
+                  detail:
+                    'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
+                };
+              }
+            }
+            const nested = scan(inner, depth + 1);
+            if (nested !== null) return nested;
+          }
+        }
+        return null;
+      };
+      return scan(blanked, 0);
     },
   },
 ]);
