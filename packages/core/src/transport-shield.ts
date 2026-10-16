@@ -190,6 +190,14 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  */
 export interface ScanOptions {
   powershell?: boolean;
+  /**
+   * The Bash tool on win32 halves each backslash pair before bash runs the
+   * command (measured: four as typed reach the hook as four and bash as two), so
+   * a backtick behind a typed run of n backslashes is escaped when ceil(n/2) is
+   * odd — n mod 4 of 1 or 2 — where bash's own rule is an odd run. Set by the
+   * rows from the payload; the MSYS rows are that transport by construction.
+   */
+  halvesBackslashPairs?: boolean;
 }
 
 /**
@@ -500,6 +508,7 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  */
 export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
   const ps = opts.powershell === true;
+  const halving = opts.halvesBackslashPairs === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
@@ -614,18 +623,21 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       // Keep a backtick substitution whole inside the word, as `$( … )` is below: a
       // `;` or `&&` inside it belongs to the body, not to the outer statement
       // (`u=\`gh … --body /x; echo done\`` is one statement whose body runs gh).
-      // An unterminated backtick is a character. A closing backtick is escaped only
-      // behind EXACTLY one backslash, the rule the msys-body-slash locator applies to
-      // an opener: the Bash tool halves each backslash pair before bash runs the
-      // command, so a run of two or more is read as closing (read 4 F1: a body ending
-      // in three backslashes as typed closes there, and the statements after it must
-      // not be swallowed into the span).
+      // An unterminated backtick is a character. A closing backtick behind a run of
+      // n backslashes is escaped by the TRANSPORT's rule, not by a fail-closed one:
+      // a close read too early re-pairs every later backtick and hides the
+      // statements after the span, and a close read too late swallows them, so
+      // only the measured rule is right (reads 4 and 5). On the Bash tool on win32
+      // each typed pair is halved before bash runs the command, so n of 1, 2, 5, 6,
+      // … is escaped (a body ending in three as typed closes there); elsewhere
+      // bash's own odd-run rule holds.
       let close = i + 1;
       while (close < command.length) {
         if (command[close] === '`') {
           let n = 0;
           for (let k = close - 1; k > i && command[k] === '\\'; k -= 1) n += 1;
-          if (n !== 1) break;
+          const escapedClose = halving ? n % 4 === 1 || n % 4 === 2 : n % 2 === 1;
+          if (!escapedClose) break;
         }
         close += 1;
       }
@@ -892,6 +904,7 @@ const msysApplies = (p: TransportShieldPayload): boolean =>
 /** The scanners read PowerShell's grammar for the PowerShell tool, bash's otherwise. */
 const scanOpts = (p: TransportShieldPayload): ScanOptions => ({
   powershell: p.tool === 'PowerShell',
+  halvesBackslashPairs: p.tool === 'Bash' && p.platform === 'win32',
 });
 
 /** The variable MSYS reads for its opt-out — its PRESENCE, any value (`=1`, `=0`, empty all switch conversion off). */
@@ -945,7 +958,9 @@ function msysSegments(
   // `export MSYS_NO_PATHCONV` with no value marks the NAME: a later assignment
   // then lands in the environment, and a substitution in that statement sees it.
   let exportAttr = false;
-  for (const seg of tokenizeShell(text)) {
+  // The MSYS rows are the Bash tool on win32 by construction (msysApplies), the
+  // transport that halves backslash pairs.
+  for (const seg of tokenizeShell(text, { halvesBackslashPairs: true })) {
     const t = seg.tokens;
     if (t[0] === 'set' && (t[1] === '-a' || t[1] === '+a')) {
       allExport = t[1] === '-a';
@@ -1126,10 +1141,18 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // sees ceil(n/2) of them. One backslash is literal under both readings; two or
       // more are read as running under at least one of them, and the row stays
       // fail-closed there (a run of two is an over-deny on this transport, disclosed).
-      const escaped = (text: string, at: number): boolean => {
+      const run = (text: string, at: number): number => {
         let n = 0;
         for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
-        return n === 1;
+        return n;
+      };
+      const escaped = (text: string, at: number): boolean => run(text, at) === 1;
+      // A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
+      // the Bash tool on win32, this row's only transport): an early close hides what
+      // follows, so fail-closed does not apply to it (read 5 F1).
+      const escapedClose = (text: string, at: number): boolean => {
+        const n = run(text, at);
+        return n % 4 === 1 || n % 4 === 2;
       };
       const munged = (value: string, typed: boolean): boolean => {
         const ws = value.search(/[ \t\r\n]/);
@@ -1218,7 +1241,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
               continue;
             }
             let close = located.indexOf('`', tick + 1);
-            while (close !== -1 && escaped(located, close)) close = located.indexOf('`', close + 1);
+            while (close !== -1 && escapedClose(located, close)) {
+              close = located.indexOf('`', close + 1);
+            }
             if (close === -1) break;
             // Inside backticks bash drops the backslash of `\$`, a backslash-backtick
             // and `\\` before running the body, so a `\$(` there is a substitution
@@ -1287,7 +1312,7 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       if (p.tool !== 'Bash') return null;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of tokenizeShell(blanked)) {
+      for (const seg of tokenizeShell(blanked, scanOpts(p))) {
         for (const { program, flags } of INLINE_BODIES) {
           const at = programIndex(seg.tokens, program);
           if (at === -1) continue;
@@ -1351,10 +1376,12 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // and to nothing nested in it, which runs first — so each segment's direct
       // arguments are read with its nested spans blanked, and the nested spans are
       // read on their own, whatever the enclosing prefix says (Greptile on the 3098
-      // round: the nested warning had been lost). Every level is read: the recursion
-      // is bounded by the text, since each level is a strict inner slice, and the
-      // previous row warned at any depth (read 4 F3).
-      const scan = (text: string): TransportMatch | null => {
+      // round: the nested warning had been lost). Read to 256 levels: deeper than
+      // any real command, and short of the stack a few thousand levels would blow
+      // (read 5 F2: an uncapped recursion threw at about five thousand, which the
+      // wrapper would have read as a refusal).
+      const scan = (text: string, depth: number): TransportMatch | null => {
+        if (depth > 256) return null;
         for (const seg of msysSegments(text, true)) {
           for (const [from, to] of spans(seg.raw)) {
             const inner = seg.raw.slice(from, to);
@@ -1373,13 +1400,13 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
                 };
               }
             }
-            const nested = scan(inner);
+            const nested = scan(inner, depth + 1);
             if (nested !== null) return nested;
           }
         }
         return null;
       };
-      return scan(blanked);
+      return scan(blanked, 0);
     },
   },
 ]);

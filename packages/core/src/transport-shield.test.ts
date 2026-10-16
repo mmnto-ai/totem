@@ -254,6 +254,21 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     );
     // The same hole reached the sed row through the shared tokenizer.
     expectDeny('echo `echo \\\\\\\\`; sed -i "s/a/\\\\\\\\b/" f; echo `echo z`', 'sed-i-escape');
+    // The close is paired by the transport's rule, not a fail-closed one (read 5 F1): on
+    // the Bash tool on win32 a run of two is ESCAPED (each typed pair is halved), so a
+    // close read there re-pairs every later backtick and hides the gh or sed after the
+    // span. The minimal shape, at two and at five backslashes, through both rows; off
+    // win32 bash's own odd rule applies and a run of two closes.
+    expectDeny("x=`echo 'q\\\\`'` ; gh pr comment 5 --body /x", 'msys-body-slash', 'win32');
+    expectDeny('x=`echo \'q\\\\`\'` ; sed -i "s/a/\\\\b/" f', 'sed-i-escape', 'win32');
+    expectDeny(
+      "echo `echo 'q\\\\\\\\\\`' r` ; gh pr comment 5 --body /x; echo `echo z`",
+      'msys-body-slash',
+      'win32',
+    );
+    // Off win32 bash's own rule closes at two; the stray quote after that close then
+    // runs to the end unterminated, so nothing after it runs and allow is right.
+    expectAllow('x=`echo \'q\\\\`\'` ; sed -i "s/a/\\\\b/" f', 'linux');
   });
 
   it('denies sed -i whose expression carries a backslash', () => {
