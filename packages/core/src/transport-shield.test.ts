@@ -114,6 +114,15 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     );
     // Any key: MSYS converts after the =, whatever the key names.
     expectDeny('gh api -X POST repos/o/r/issues -f title=/x', 'msys-body-slash', 'win32');
+    // A / after ANY = in the value, not only the first (measured: body=k=/v arrives as
+    // body=k=V:/), and cobra's glued short form (-fbody=/x arrives as -fbody=X:/).
+    expectDeny('gh api repos/o/r/issues/5/comments -f body=k=/v', 'msys-body-slash', 'win32');
+    const g = expectDeny(
+      'gh api repos/o/r/issues/5/comments -fbody=/x',
+      'msys-body-slash',
+      'win32',
+    );
+    expect(g.provenance.matched).toBe('-fbody=/x');
     // The field form in a later segment of a chained command.
     expectDeny(
       'git fetch origin && gh api repos/o/r/issues/5/comments -f body=/x',

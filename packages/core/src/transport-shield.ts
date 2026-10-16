@@ -944,8 +944,8 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       // cure's MSYS_NO_PATHCONV=1 is honoured per segment, as the assignment the
       // shell would apply.
       if (!msysApplies(p)) return null;
-      const written = (h: { flag: string; value: string }): string =>
-        h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
+      const written = (h: { flag: string; value: string; glued?: boolean }): string =>
+        h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of msysSegments(blanked)) {
         const at = programIndex(seg.tokens, 'gh');
@@ -960,13 +960,22 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
           };
         }
         if (rest[0] !== 'api') continue;
+        // The four field flags as `-f X`, `--field X`, `--field=X`, plus the glued
+        // short form `-fX` cobra accepts (`-fbody=/x` reached a native program as
+        // `-fbody=X:/`). MSYS converts a `/` right after ANY `=` in the value, not
+        // only the first (`body=k=/v` arrived as `body=k=V:/`, `a=/b=c` as
+        // `a=C:/Program Files/Git/b=c`), so the predicate is `=/` anywhere.
+        const glued = rest
+          .filter(
+            (t) =>
+              (t.startsWith('-f') || t.startsWith('-F')) && t.length > 2 && !t.startsWith('--'),
+          )
+          .map((t) => ({ flag: t.slice(0, 2), value: t.slice(2), glued: true }));
         const field = [
           ...optionsAsWritten(rest, '--field', '-f'),
           ...optionsAsWritten(rest, '--raw-field', '-F'),
-        ].find((h) => {
-          const eq = h.value.indexOf('=');
-          return eq > 0 && h.value[eq + 1] === '/';
-        });
+          ...glued,
+        ].find((h) => h.value.includes('=/'));
         if (field !== undefined) {
           return {
             fragment: written(field),
