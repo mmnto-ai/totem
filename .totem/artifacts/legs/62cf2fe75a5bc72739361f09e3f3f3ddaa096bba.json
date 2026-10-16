@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "62cf2fe75a5bc72739361f09e3f3f3ddaa096bba",
+  "readAt": "2026-10-16T16:24:33Z",
+  "findings": [
+    {
+      "id": "2696-r6-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 611,
+      "claim": "The tokenizer reads an unquoted backslash run before a backtick by pairs, so an odd run is a literal backtick. The transport uses the same n mod 4 rule for an OPENER as for a closer. Measured on the Bash tool on win32 with the shape echo <n backslashes><backtick> ; <program> ; echo <backtick>echo z<backtick>: runs of 1 and 2 are escaped, runs of 3 and 4 open a span. So the mismatch covers typed runs of 3 and 7 as well as 2 and 6. At 3 and 7 the tokenizer misses an opener the transport opens. It then reads the transport's closing backtick as an opener, and the statement after the transport's span is swallowed into a span the rows never read. Read 5 F3 said at n = 1, 3 and 4 the tokenizer agrees with the transport; the n = 3 part is falsified. The fold's disclosure names only the run of two. Combined with the fold's correct close rule, this produces NEW over-allows on msys-body-slash. Before the fold, the old exactly-one close mispaired the next backtick and happened to read the gap as a body.",
+      "counterexample": "Deciding probe: a three-way verdict run (main dist, a0d6d39a source transpiled, worktree dist) plus Bash-tool measurement with the argv-echo program in place of gh, which printed RAN0 (top level). Fold-introduced (main deny, a0d6d39a deny msys-body-slash, 62cf2fe7 ALLOW): echo <3 backslashes><backtick>echo q<5 backslashes><backtick> r<backtick> ; gh pr comment 5 --body /x ; echo <backtick>z<backtick>, and the same with an opener run of 7. Both measured running at top level on the transport. The same root on a0d6d39a and here (main denies): echo <3 backslashes><backtick> x <backtick> ; gh pr comment 5 --body /x ; echo <backtick>z<backtick>, and opener runs 1 or 3 or 7 combined with close runs 3 or 7. Emulated-transport sweep, 760 cases: 64 over-allows, all win32 and none on linux: 8 on gh (2 introduced by this fold) and 56 on sed/node at opener runs of 2, 3, 6 and 7 (all already allowed on a0d6d39a, all denied on main). Fix shape offered: under halving, pair a run that ends at a backtick by the same n mod 4 rule as the close."
+    },
+    {
+      "id": "2696-r6-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 963,
+      "claim": "msysSegments sets halvesBackslashPairs: true for every call, including the msys-body-slash locator's recursive scans of a backtick body. The locator also unescapes that body on the TYPED text. The transport halves once, at the top level; bash then strips one level of backslashes, and the nested body is parsed by bash's own odd rule. So at nested depth the locator halves a second time, and it unescapes before halving. A typed run of two before each nested backtick is read as a literal backtick, while the transport runs a nested substitution. The fold's statement that the MSYS rows are that transport by construction holds at depth 0 only. Main allows these shapes too (it does not read nested backticks), so this is not a regression against main. It is a fold-introduced deny-to-allow against a0d6d39a, whose deny was an accident of mispairing.",
+      "counterexample": "Deciding probe: the three-way run plus Bash-tool measurement. x=<backtick>echo <2 backslashes><backtick> gh pr comment 5 --body /x <2 backslashes><backtick><backtick>; echo \"$x\": main allow, a0d6d39a deny msys-body-slash, 62cf2fe7 ALLOW. With the argv-echo program in place of gh the transport printed RAN2 (it ran in the nested substitution). Same result with an inner opener run of 2 and a close run of 1. Nested sweep, 810 cases: 3 gh over-allows, 2 introduced by this fold."
+    },
+    {
+      "id": "2696-r6-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1384,
+      "claim": "The cap returns null past the limit. A rev-path argument nested more than 257 levels now ALLOWS, where main and a0d6d39a warn. This fail-open is not disclosed; the comment says only deeper than any real command. The comment says 256 levels, but the row warns through 257 and allows from 258. No test pins the cap: no test would fail if the throw came back, and none asserts the beyond-cap verdict.",
+      "counterexample": "Deciding probe: N nested echo $( ... ) around git show HEAD:a/b, timed. Depths 1 to 257: warn on all three builds. Depth 258, 259 and 300: main warn, a0d6d39a warn, 62cf2fe7 allow. Depth 2000: allow in 47 ms. Depth 5000: allow in 115 ms. Depth 10000: allow in 227 ms. No throw at any depth. A grep of both test files finds no 256, depth or RangeError case. Fix shape: return a warn match at the cap, and add one test at about 5000 levels."
+    },
+    {
+      "id": "2696-r6-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 193,
+      "claim": "The ScanOptions doc says the Bash tool on win32 halves each backslash pair before bash runs the command (measured: four as typed reach the hook as four and bash as two). Measured here, a typed unquoted run of four before a letter reaches the program as two. That is bash's own unquoted rule; under halving it would arrive as one. A single-quoted run of four arrives as four. The halving is observed only on runs that end at a backtick. Today this changes no verdict, because the option is read only at the backtick close. A reader who extends it to other contexts would get a wrong model.",
+      "counterexample": "Deciding probe: under the Bash tool, node argv-echo a<4 backslashes>b \"c<4 backslashes>d\" 'e<4 backslashes>f' printed a<2>b, c<2>d, e<4>f. A script file run by bash directly gave the same a<2>b. Fix shape: scope the doc sentence to a run that ends at a backtick."
+    },
+    {
+      "id": "2696-r6-F5",
+      "severity": "QUESTION",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 639,
+      "claim": "Off win32 the close uses bash's odd rule. That rule was measured in bash itself: a script file run by bash, close and opener runs of 1 to 8, odd escaped. Whether the Bash tool on linux or darwin adds no layer before bash is not measured on any surface the leg could reach. Is that premise measured somewhere?",
+      "counterexample": "Deciding probe: a script file run by bash (no tool transport). Close runs 1, 3, 5, 7 escaped and 2, 4, 6, 8 close; opener runs the same. Not measured on a linux tool transport."
+    }
+  ],
+  "folded": [
+    "2696-r6-F3"
+  ],
+  "verdict": "read 6 on 62cf2fe7 (scoped to the shared close predicate and the cap, a0d6d39a..62cf2fe7): as typed, 0 BLOCKING, 1 MATERIAL, 3 MINOR, 1 QUESTION; the leg did not name termination on F1. Held at source: the close predicate matches the transport at runs of one to nine, inside double quotes within a span too; a 160-row close matrix (four shapes, three rows, runs one to eight, two platforms) with zero over-allows and the eight over-denies shared with main; every tokenizer call site threaded or equivalent; no leak into PowerShell mode over 2,592 payloads; the cap changes nothing below it and nothing throws at any depth; the tests assert both disposition and row; the replay re-run at 4,936 real commands with the same three changes. Not folded — the seat STOPPED folding on this MATERIAL and took the operator's word for a design retreat instead: the shared tokenizer's backtick-span rule (introduced in fold 6 for the chained-backtick finding) is removed, so a backtick is a character again and a ; inside a backtick body splits the statement, which is fail-closed for every row and returns the sed-i-escape, inline-body-escape and heredoc rows to main's exact reading; the msys-body-slash row alone reads backtick bodies, located on the whole command text with the conservative pairing (an opener escaped only behind exactly one backslash, where over-opening can only over-deny; a closer by the measured transport rule, this row being the Bash tool on win32 by construction), bodies unescaped as bash does before they are scanned. That answers F1 (the opener side no longer exists in the tokenizer; the row over-opens at two, five and six, fail-closed), F2 (no halving option remains in the tokenizer, so nothing halves at nested depth; the row's closer rule at nested depth is disclosed as approximate), F4 (the ScanOptions doc is gone with the option); F3 folded (the rev-path cap returns a warn, as main warned at any depth); F5 answered (the linux transport is unmeasured on any surface this seat reaches, and after the retreat no shared code depends on it; the row's closer rule applies to win32 only)."
+}
