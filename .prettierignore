@@ -36,6 +36,10 @@ spikes/spine-adopt/wazero-probe/artifacts/
 # the K8 parser-control fixtures and the K3 capture are sha256-pinned copies verified at run time —
 # a prettier rewrap of the chain JSON or the YAML reads as tamper against the pin
 spikes/spine-adopt/seed/controls/
+# The census corpus pin (`spikes/spine-adopt/seed/CORPUS-PIN.md`): byte copies of the four shipped
+# corpora and one corpus fixture at the pin commit, compared blob-for-blob by verify-records — a
+# formatter rewrite would break the pin (same class as `.totem/compiled-rules.json` above).
+spikes/spine-adopt/seed/corpus/
 spikes/spine-adopt/egg-probe/artifacts/
 spikes/serena-pilot/artifacts/
 

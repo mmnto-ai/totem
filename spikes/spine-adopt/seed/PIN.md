@@ -2,6 +2,9 @@
 
 Charter: mmnto-ai/totem-strategy#1154 (`operations/310-seed20-target-preregistration.md`).
 Spec: `.totem/specs/seed20-apparatus.md` § "Hard constraints" 5.
+Sibling pin: `seed/CORPUS-PIN.md` — the census corpus (the four shipped `compiled-rules.json`) and the
+one corpus fixture a seed record references (`87aff037`'s, line 79 below), pinned the same way as
+committed byte copies under `seed/corpus/`.
 
 **Pin:** `78e7f196b93caf0df68a3baba561cce66279563c` — the **cure record pin** (charter v1.5
 § 7 E26; branch `r14/seed-20-translation`, annotated tag `seed20-cure/0e01112d`, both durable).

@@ -5,7 +5,7 @@
 // so the three harnesses cannot drift from each other.
 
 import * as path from 'node:path';
-import { RECORDS_DIR, REPO_ROOT } from './spike-env.mts';
+import { pinnedOrLivePath, RECORDS_DIR, REPO_ROOT } from './spike-env.mts';
 
 /** The pinned test's own id + clock, so specimens (d)/(e) reproduce the pins EXACTLY. */
 export const PINNED_RULE_ID = '0123456789abcdef';
@@ -134,7 +134,12 @@ export function specimen(id: string): Specimen {
 }
 
 export function fixtureAbsPath(ref: FixtureRef): string {
-  return path.join(REPO_ROOT, ref.file);
+  // A fixture a PINNED rule references is read from its committed copy at
+  // `CORPUS_PIN` (seed/CORPUS-PIN.md); every other fixture from the live tree, as
+  // before. The live `.totem/tests/test-87aff037d7de47a7.md` was re-keyed to its
+  // record hash at `934296aa`, which moved the facts artifacts' `fixtureRuleHash`
+  // without failing any check.
+  return pinnedOrLivePath(ref.file);
 }
 
 /** The record's repo-relative path, used as `parseRuleRecord`'s diagnostic filePath. */
