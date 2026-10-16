@@ -934,24 +934,44 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       // Scoped to segments whose PROGRAM is `gh`, the one program whose --body / -b
       // takes a free-text body that MSYS path-converts (`-b` means something else on
-      // diff, curl, cp, sort, du, grep); the cure's MSYS_NO_PATHCONV=1 is honoured
-      // per segment, as the assignment the shell would apply.
+      // diff, curl, cp, sort, du, grep), and whose `api` subcommand takes field
+      // options (`-f`/`--field`, `-F`/`--raw-field`) as `key=value` pairs that MSYS
+      // converts AFTER the `=` — measured 2026-10-16 under the Bash tool, a native
+      // program received `body=/gemini review` as `body=C:/Program Files/Git/gemini
+      // review` and `--field=body=/x` as `--field=body=X:/` (mmnto-ai/totem#2696,
+      // the form the --body row did not cover). A `key=@/path` value is a file
+      // reference whose conversion is the intended one, so it stays allowed. The
+      // cure's MSYS_NO_PATHCONV=1 is honoured per segment, as the assignment the
+      // shell would apply.
       if (!msysApplies(p)) return null;
+      const written = (h: { flag: string; value: string }): string =>
+        h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
       const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
       for (const seg of msysSegments(blanked)) {
         const at = programIndex(seg.tokens, 'gh');
         if (at === -1) continue;
-        const hit = optionsAsWritten(seg.tokens.slice(at + 1), '--body', '-b').find((h) =>
-          h.value.startsWith('/'),
-        );
-        if (hit !== undefined) {
-          const written = hit.flag.endsWith('=')
-            ? `${hit.flag}${hit.value}`
-            : `${hit.flag} ${hit.value}`;
+        const rest = seg.tokens.slice(at + 1);
+        const body = optionsAsWritten(rest, '--body', '-b').find((h) => h.value.startsWith('/'));
+        if (body !== undefined) {
           return {
-            fragment: written,
+            fragment: written(body),
             detail:
               'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
+          };
+        }
+        if (rest[0] !== 'api') continue;
+        const field = [
+          ...optionsAsWritten(rest, '--field', '-f'),
+          ...optionsAsWritten(rest, '--raw-field', '-F'),
+        ].find((h) => {
+          const eq = h.value.indexOf('=');
+          return eq > 0 && h.value[eq + 1] === '/';
+        });
+        if (field !== undefined) {
+          return {
+            fragment: written(field),
+            detail:
+              'a gh api field value beginning with / (key=/…) is path-converted by MSYS on win32 after the = (a -f body=/gemini review posts the Git install path exactly as --body did; a key=@/path file reference converts to the right Windows path and is allowed)',
           };
         }
       }

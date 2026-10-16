@@ -96,6 +96,32 @@ describe('transport-shield — the charter corpus (positive rows are refused)', 
     );
   });
 
+  it('denies a gh api field value beginning with / on win32 (the -f body= form the --body row did not cover)', () => {
+    const v = expectDeny(
+      "gh api repos/mmnto-ai/totem/issues/5/comments -f 'body=/gemini review'",
+      'msys-body-slash',
+      'win32',
+    );
+    expect(v.provenance.matched).toBe('-f body=/gemini review');
+    expect(v.reason).toContain('MSYS_NO_PATHCONV=1');
+    expectDeny('gh api repos/o/r/issues/5/comments --field body=/x', 'msys-body-slash', 'win32');
+    expectDeny('gh api repos/o/r/issues/5/comments --field=body=/x', 'msys-body-slash', 'win32');
+    expectDeny('gh api repos/o/r/issues/5/comments -F body=/x', 'msys-body-slash', 'win32');
+    expectDeny(
+      'gh api repos/o/r/issues/5/comments --raw-field body=/x',
+      'msys-body-slash',
+      'win32',
+    );
+    // Any key: MSYS converts after the =, whatever the key names.
+    expectDeny('gh api -X POST repos/o/r/issues -f title=/x', 'msys-body-slash', 'win32');
+    // The field form in a later segment of a chained command.
+    expectDeny(
+      'git fetch origin && gh api repos/o/r/issues/5/comments -f body=/x',
+      'msys-body-slash',
+      'win32',
+    );
+  });
+
   it('denies sed -i whose expression carries a backslash', () => {
     const v = expectDeny("sed -i 's/\\(a\\)/x/' file.txt", 'sed-i-escape');
     expect(v.reason).toContain('Edit tool');
@@ -157,6 +183,21 @@ describe('transport-shield — the charter corpus (negative rows are allowed)', 
   it('allows the slash body from the Bash tool off win32', () => {
     expectAllow('gh pr comment 5 --body "/gemini review"', 'linux');
     expectAllow('gh pr comment 5 --body "/gemini review"', 'darwin');
+  });
+
+  it('allows the gh api field forms MSYS does not munge into a wrong value', () => {
+    // A file reference converts to the right Windows path — the intended conversion.
+    expectAllow('gh api repos/o/r/issues/5/comments -F body=@/tmp/body.md', 'win32');
+    // An @-prefixed body, a slash-less value, and the JSON --input route.
+    expectAllow("gh api repos/o/r/issues/5/comments -f 'body=@coderabbitai review'", 'win32');
+    expectAllow('gh api repos/o/r/issues -f state=open', 'win32');
+    expectAllow('gh api repos/o/r/issues/5/comments --input body.json', 'win32');
+    // Off the api subcommand, -f is some other flag (gh pr create --fill).
+    expectAllow('gh pr create -f --title x', 'win32');
+    // The opt-out, the PowerShell tool, and a non-win32 platform.
+    expectAllow('MSYS_NO_PATHCONV=1 gh api repos/o/r/issues/5/comments -f body=/x', 'win32');
+    expectAllow('gh api repos/o/r/issues/5/comments -f body=/x', 'win32', 'PowerShell');
+    expectAllow('gh api repos/o/r/issues/5/comments -f body=/x', 'linux');
   });
 
   it('allows sed -n (not in place) and a plain in-place substitution', () => {
