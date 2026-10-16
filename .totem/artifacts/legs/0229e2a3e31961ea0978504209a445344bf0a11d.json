@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "0229e2a3e31961ea0978504209a445344bf0a11d",
+  "readAt": "2026-10-16T17:17:02Z",
+  "findings": [
+    {
+      "id": "2696-r7-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1216,
+      "claim": "The row's comment says a gh after an operator inside a span is its own segment above, so a mispaired span can only lose a gh that sits at the body's start, and the opener rule over-opens rather than under-opens there. Both halves are false. Over-opening is not fail-closed. On this transport a backtick behind a typed run of 2, 5 or 6 backslashes is literal (n mod 4 of 1 or 2). The row reads it as an opener (escaped only when the run is exactly 1). It then pairs it with the NEXT real opener as its closer. That shifts the parity of every later backtick, so the real span's body is never scanned and its real closer is read as an unpaired opener. The gh lost is one at the start of a real span, which is a correctly read opener and not a misread one. A gh after an operator inside a span is lost too when the span sits in double quotes, because the tokenizer does not split at ; or && inside double quotes. Main allows all of these as well, so this is not an over-allow against main. It is a hole in the read this row now claims.",
+      "counterexample": "Evaluator, win32 Bash: echo <2 backslashes>` ; u=`gh pr comment 5 --body /x` gives allow (main allow). Also allowed: the same with five or six backslashes; echo <2 backslashes>` ; echo \"`echo a; gh pr comment 5 --body /x`\"; and echo \"<2 backslashes>` `true && gh pr comment 5 --body /x`\". The control with ONE backslash is denied. Shell, measured under the Bash tool with argv-echo in place of gh: all four shapes RAN the body. Matrix p3 (prefix run 0 to 8 by close run 0 to 8, 81 shapes against the measured transport model): 15 misses, all at a prefix run in {2, 5, 6}. Suggested cure, union-only so it can only over-deny: run the backtick location a second time with the opener paired by the transport rule, and deny if either pass hits."
+    },
+    {
+      "id": "2696-r7-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 769,
+      "claim": "The whole-text locator runs blankSingleQuoted, which tracks double quotes but does not know that a backtick body inside double quotes is a new quoting context. A double quote inside a single-quoted string in such a body flips its double-quote state. The next single quote then blanks to the end of the text, including the closing backtick, so the span is never paired. This is not among the disclosed over-allows. Main misses it too.",
+      "counterexample": "echo \"`echo 'a\"b'; gh pr comment 5 --body /x`\" gives allow (main allow). Shell measured: the body runs."
+    },
+    {
+      "id": "2696-r7-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.test.ts",
+      "line": 1,
+      "claim": "Read 6 F3 is marked folded in code, but no test pins the cap. No test builds a nest of more than 256 levels. Reverting the cap branch to return null, or bringing back the uncapped throw, would pass the suite.",
+      "counterexample": "A grep over both test files for repeat( or 256 or nest finds no depth test. Behaviour measured: warn from 257 levels, with and without a rev:path inside; 258 levels about 2 ms, 5000 about 40 ms, 20000 about 135 ms; no throw."
+    },
+    {
+      "id": "2696-r7-F4",
+      "severity": "MINOR",
+      "file": "operations-local/transport-shield/replay-transcripts.mjs",
+      "line": 58,
+      "claim": "By default the harness reads 24 transcripts of at least 200 KB, out of 674 in the store. It also compares only the evaluator's verdict (the first deny, else the first warn), so a row change hidden under an earlier deny row never shows. The header's three changes over 4,936 commands is true of that sample only. The full store (43,436 distinct Bash commands) shows 18 changes: 2 intended trigger chains, 5 sed-i-escape and 7 inline-body-escape allow to deny (the reserved-word program locator, disclosed, all true positives on inspection), 2 rev-path warn to allow, and 2 rev-path allow to warn. The last two are over-warns from the nested recursion, on a $( cat <<'EOF' … ) whose quoted heredoc body is not blanked. A per-row replay finds one more rev-path change that the evaluator masks. None of this is caused by this fold's code; the harness as committed under-reports the measurement it is cited for.",
+      "counterexample": "Harness at its defaults: 3 changes, exit 1. The same harness with --transcripts 5000 --min-bytes 0: 18 changes. A per-row dump over every transcript, both tools, win32 and linux: msys-rev-path-subshell on win32 has 3 rows going from no match to match where the evaluator shows only 2 allow to warn."
+    }
+  ],
+  "folded": [
+    "2696-r7-F1",
+    "2696-r7-F3",
+    "2696-r7-F4"
+  ],
+  "verdict": "read 7 on 0229e2a3 (the retreat; scoped to 62cf2fe7..0229e2a3): as typed, 0 BLOCKING, 1 MATERIAL, 3 MINOR, 0 QUESTION; the leg did not name termination on F1. Held at source — the retreat's purpose: tokenizeShell differs from main by a comment only, the halving option and its uses are gone, every tokenizer call site is main's; the heredoc rows call only unchanged code; the sed and inline-body rows differ from main only through the program locator, which only adds matches; a constructed matrix of 5,680 backtick shapes (opener and close runs 0 to 8; minimal, chained, double-quote-in-span, nested-escaped and stray-backtick forms) over the four shared rows plus the rev-path row, win32 and linux, Bash and PowerShell — 113,600 row evaluations, every row firing hundreds of times — found zero verdicts different from main; a per-row replay over 50,953 distinct real Bash and PowerShell commands found no change from match to no-match on those rows and zero PowerShell changes; the read-6 F1 and F2 shapes, the plain and chained backtick forms, a field form inside backticks and a span inside double quotes deny; no over-deny on literal text (escaped backtick in a body, a backtick in a comment, inside single quotes, a markdown code span, a quoted heredoc) beyond the disclosed ANSI-C class; the whole-text scan stays under 40 ms on 60 KB commands; the cap warns at 258 and 5,000 levels in milliseconds; the harness runs end to end and exits 1 on this branch, 0 for main against itself, 2 on a missing argument. Folded by the seat in the next commit: F1 MATERIAL (the row's stated read — a mispaired span can lose only a gh at a body's start, and over-opening can only over-deny — was false: a literal backtick behind a typed run of two, five or six read as an opener pairs with the next real opener and loses the real span's body; now two opener pairings, either hit denies), F3 (a 300-level nest pinned as a warn), F4 (the harness defaults read the whole store and the header states the evaluator-level limit; the nested rev-path scan blanks a heredoc inside a substitution, fixing the two over-warns the full store exposed). Disclosed, not folded: F2 (the blanker's quote state across a backtick body inside double quotes; main misses it too). Convergence named by the seat on the next commit."
+}

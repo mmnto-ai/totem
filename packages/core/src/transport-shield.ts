@@ -25,7 +25,12 @@ import type { GateEvaluator, GateVerdict } from './gate-types.js';
  * row — `diff -b`, `curl -b`, `grep gh -b`, a Windows path as a sed operand,
  * `<<` inside a quoted argument, a here-string). A deny on a benign command in
  * the field is a corpus row plus a fix, never a hand-carved exemption; the
- * `--pilot` tier exists for a measurement week.
+ * `--pilot` tier exists for a measurement week. The second measurement, for a
+ * CHANGE to this module: `operations-local/transport-shield/replay-transcripts.mjs`
+ * replays every Bash command in the session transcripts on the machine it runs
+ * on through two builds and prints each verdict that changes — thousands of
+ * real commands against the few dozen here; a change ships with its replay
+ * read (mmnto-ai/totem#3098: three changes over 4,936 commands, each explained).
  *
  * Out of scope by design, disclosed: a bare backslash outside the four named
  * contexts (a heredoc body, a sed -i expression, an inline node/python body, a
@@ -610,6 +615,14 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
+    // A backtick is a character here, as it always was: a backtick substitution is
+    // NOT kept whole as a word. Three scoped reads on mmnto-ai/totem#3098 each found
+    // the next edge of pairing a run of backslashes with a backtick under the Bash
+    // tool's transport, which halves typed pairs in some contexts and not others, so
+    // the shared tokenizer models none of it and keeps splitting at `;`, `&&` and
+    // `|` inside a span, which is fail-closed for every row: a command after an
+    // operator is always its own segment. The one row that must read a backtick
+    // BODY (msys-body-slash) locates spans on the whole command text itself.
     if ((ch === '$' || ch === '<' || ch === '>') && command[i + 1] === '(') {
       // Keep a command or process substitution whole inside the word, its
       // parentheses balanced OUTSIDE quotes (a `)` inside `"…"` is text): it is
@@ -661,23 +674,64 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   'xargs',
 ]);
 
+/** Shell reserved words that can stand before a program in a segment: `{ gh …; }`, `if gh …`, `then gh …`. */
+const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
+  '{',
+  'if',
+  'then',
+  'else',
+  'elif',
+  'do',
+  'while',
+  'until',
+  '!',
+  'time',
+]);
+
 /**
- * The index of the segment's PROGRAM when it is `program` (a bare name or a
- * path ending in it), after any `VAR=VALUE` assignments and known wrappers;
- * -1 when the program is something else — a later mention of the name (`grep
- * gh …`, `git log --grep sed …`) is an argument, never an invocation.
+ * The index of the segment's PROGRAM when it is `program` (a bare name, a path
+ * ending in it, or either with a Windows `.exe` suffix in any letter case and
+ * with either separator), after any `VAR=VALUE` assignments, known wrappers,
+ * the shell reserved words that can stand before a program, a function header
+ * (`f() {`, `function f {`) and `time`'s `-p`; -1 when the program is something else — a later
+ * mention of the name (`grep gh …`, `git log --grep sed …`) is an argument,
+ * never an invocation. Shared by every row that names a program, so a shape
+ * added here is read by all of them.
  */
 function programIndex(tokens: readonly string[], program: string): number {
   let i = 0;
-  // Assignments and wrappers interleave: `env VAR=x prog`, `VAR=x sudo prog`.
+  // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
+  // `VAR=x sudo prog`, `then VAR=x prog`.
   while (i < tokens.length) {
     const t = tokens[i] as string;
-    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || WRAPPERS.has(t)) i += 1;
-    else break;
+    // A function header: `function f { …` or `f() { …` — the tokenizer reads
+    // grouping parentheses as delimiters that carry no token, so `f() {` arrives
+    // as the name followed by `{`.
+    if (t === 'function') {
+      i += 2;
+      continue;
+    }
+    if (
+      /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
+      WRAPPERS.has(t) ||
+      RESERVED_BEFORE_PROGRAM.has(t) ||
+      (t !== program && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) && tokens[i + 1] === '{') ||
+      (t === '-p' && tokens[i - 1] === 'time')
+    ) {
+      i += 1;
+    } else break;
   }
   const t = tokens[i];
   if (t === undefined) return -1;
-  return t === program || t.endsWith('/' + program) ? i : -1;
+  if (t === program || t.endsWith('/' + program)) return i;
+  // The Windows spelling: `gh.exe`, `GH.EXE`, a drive-letter path with either
+  // separator — the file system that runs it is case-insensitive, so the stem is
+  // compared the same way.
+  const lower = t.toLowerCase();
+  if (!lower.endsWith('.exe')) return -1;
+  const stem = lower.slice(0, -4);
+  const p = program.toLowerCase();
+  return stem === p || stem.endsWith('/' + p) || stem.endsWith('\\' + p) ? i : -1;
 }
 
 /**
@@ -867,12 +921,30 @@ function segmentExportsOptOut(tokens: readonly string[]): boolean {
  * subshell `( … )` or a pipeline element is taken as reaching later segments
  * though the shell would not apply it (the tokenizer carries no subshell scope).
  */
-function msysSegments(text: string): ShellSegment[] {
-  const out: ShellSegment[] = [];
+function msysSegments(
+  text: string,
+  withPrefixOptOut = false,
+  coveredRanges?: Array<{ start: number; end: number; covered: boolean }>,
+): Array<ShellSegment & { optOut?: boolean }> {
+  const out: Array<ShellSegment & { optOut?: boolean }> = [];
   let exported = false;
   let allExport = false;
   let assigned = false;
+  // `export MSYS_NO_PATHCONV` with no value marks the NAME: a later assignment
+  // then lands in the environment, and a substitution in that statement sees it.
+  let exportAttr = false;
+  // The offset of each segment in `text`, with the export state in effect BEFORE
+  // it, for a caller that locates a span on the whole text and needs to know
+  // whether an earlier export already covers it (`export MSYS_NO_PATHCONV=1;
+  // u=\`gh …\`` is the cure applied, and a body inside the covered statement
+  // must not be read as munged — Greptile on the 3098 round's second pass).
+  let cursor = 0;
   for (const seg of tokenizeShell(text)) {
+    const start = text.indexOf(seg.raw, cursor);
+    if (start !== -1) {
+      cursor = start + seg.raw.length;
+      coveredRanges?.push({ start, end: cursor, covered: exported });
+    }
     const t = seg.tokens;
     if (t[0] === 'set' && (t[1] === '-a' || t[1] === '+a')) {
       allExport = t[1] === '-a';
@@ -881,23 +953,102 @@ function msysSegments(text: string): ShellSegment[] {
     if (t[0] === 'unset' && t.includes(MSYS_OPT_OUT_NAME)) {
       exported = false;
       assigned = false;
+      exportAttr = false;
       continue;
     }
     if (t.length > 0 && t.every((x) => ASSIGNMENT.test(x)) && t.some(isOptOutAssignment)) {
       assigned = true;
-      if (allExport) exported = true;
+      if (allExport || exportAttr) exported = true;
+      // An assignment-only statement exports nothing (unless the name already
+      // carries the attribute), so a substitution inside it (`MSYS_NO_PATHCONV=1
+      // u=$(gh …)`) runs WITHOUT the opt-out (measured 2026-10-16: the body posted
+      // the Git install path). A caller that scans substitution bodies asks for such
+      // segments and gets them flagged. Disclosed over-allow, unchanged: under
+      // `set -a` a substitution that precedes the opt-out assignment in the same
+      // statement, or is its value, runs before it.
+      if (withPrefixOptOut && !exported) out.push({ ...seg, optOut: true });
       continue;
     }
-    if (t[0] === 'export' && t.includes(MSYS_OPT_OUT_NAME) && assigned) {
-      exported = true;
+    if (t[0] === 'export' && t.includes(MSYS_OPT_OUT_NAME)) {
+      // The statement's own substitutions run BEFORE the export applies (bash expands
+      // the builtin's arguments first), so `export MSYS_NO_PATHCONV u=$(gh …)` runs
+      // gh without the opt-out unless an earlier export already covers it.
+      if (withPrefixOptOut && !exported && !(assigned && exportAttr)) {
+        out.push({ ...seg, optOut: true });
+      }
+      exportAttr = true;
+      if (assigned) exported = true;
       continue;
     }
     if (segmentExportsOptOut(t)) {
+      // Same ordering: `export MSYS_NO_PATHCONV=1 u=$(gh …)` and `declare -x …`
+      // expand the substitution first and export after, so the statement is
+      // flagged for the callers that scan substitution bodies (Greptile on the
+      // 3098 round, measured: the body posted the converted path); later
+      // segments are covered.
+      if (withPrefixOptOut && !exported) out.push({ ...seg, optOut: true });
       exported = true;
       continue;
     }
-    if (exported || segmentOptsOut(t)) continue;
+    if (exported) continue;
+    if (segmentOptsOut(t)) {
+      // The prefix reaches the segment's own program only: a substitution inside
+      // its arguments (`MSYS_NO_PATHCONV=1 echo $(gh …)`) runs first, without it.
+      if (withPrefixOptOut) out.push({ ...seg, optOut: true });
+      continue;
+    }
     out.push(seg);
+  }
+  return out;
+}
+
+/**
+ * The text with every unquoted comment (`# …` to the end of its line, at the
+ * start or after whitespace, `;`, `&`, `|` or `(`) replaced by spaces, length
+ * preserved. Run on single-quote-blanked text; a `#` inside double quotes,
+ * inside a `${ … }` expansion, or after a backslash is a character, not a
+ * comment. A `#` right after an operator `)` is NOT blanked here, although the
+ * tokenizer reads it as a comment: a `$( … )#…` continues its word, and the
+ * locator cannot tell the two `)` apart, so that text stays in scope
+ * (fail-closed, an over-deny the previous row shared).
+ */
+function blankComments(text: string): string {
+  let out = '';
+  let inDouble = false;
+  let inComment = false;
+  let brace = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i] as string;
+    if (inComment) {
+      if (ch === '\n') {
+        inComment = false;
+        out += ch;
+      } else out += ' ';
+      continue;
+    }
+    if (ch === '\\' && i + 1 < text.length) {
+      out += ch + (text[i + 1] as string);
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = !inDouble;
+      out += ch;
+      continue;
+    }
+    if (ch === '$' && text[i + 1] === '{') brace += 1;
+    else if (ch === '}' && brace > 0) brace -= 1;
+    if (
+      ch === '#' &&
+      !inDouble &&
+      brace === 0 &&
+      (i === 0 || ' \t\n;&|('.includes(text[i - 1] as string))
+    ) {
+      inComment = true;
+      out += ' ';
+      continue;
+    }
+    out += ch;
   }
   return out;
 }
@@ -934,28 +1085,187 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       // Scoped to segments whose PROGRAM is `gh`, the one program whose --body / -b
       // takes a free-text body that MSYS path-converts (`-b` means something else on
-      // diff, curl, cp, sort, du, grep); the cure's MSYS_NO_PATHCONV=1 is honoured
-      // per segment, as the assignment the shell would apply.
+      // diff, curl, cp, sort, du, grep), and whose `api` and `workflow run`
+      // subcommands take field options (`-F`/`--field` typed, `-f`/`--raw-field` raw,
+      // plus the glued `-fX` cobra accepts) as `key=value` pairs. Measured 2026-10-16
+      // under the Bash tool, a native program's argv (mmnto-ai/totem#2696, the forms
+      // the --body row did not cover): MSYS converts a slash that follows `=`, `="`
+      // or `=(` anywhere BEFORE the argument's first whitespace (`body=/gemini review`
+      // arrives as `body=C:/Program Files/Git/gemini review`, `body=k=/v` as
+      // `body=k=V:/`, `body="/x"` and `body=(/x)` converted, `body=a=/b c=/d` with
+      // only its first `=/` converted) and leaves a `=/` after a space alone
+      // (`body=see PATH=/usr/bin` unchanged). A typed `-F key=@/path` is a file
+      // reference converted to the right Windows path, which gh then reads, so it is
+      // allowed; a raw `-f key=@/path` is a string that now carries the wrong literal.
+      // A value that is a variable or a substitution is decided after expansion, where
+      // this reader cannot see: a disclosed over-allow. The cure's MSYS_NO_PATHCONV=1
+      // is honoured per segment, as the assignment the shell would apply.
+      //
+      // The gh call can sit inside a command substitution: the munged trigger of
+      // 2026-10-16 was posted from `u1=$(gh pr comment … --body '/gemini review')`,
+      // which no token scan of the outer segment reaches. So each segment's `$( … )`
+      // bodies, and the level's backtick bodies on its whole text, are scanned the
+      // same way, located on the single-quote- and comment-blanked text (a `$(`
+      // inside single quotes or a comment is text the shell never runs, and so is an
+      // opener escaped with a backslash in a double-quoted body) and sliced from the
+      // text itself, at most four levels deep. A segment the opt-out prefix covers still has its substitution
+      // bodies scanned, because the shell runs them BEFORE the prefix applies and an
+      // assignment-only statement exports nothing (read 2 F1, measured: a
+      // `MSYS_NO_PATHCONV=1 u=$(gh …)` posted the Git install path). Disclosed
+      // over-allows: a `$( … )` inside an UNQUOTED heredoc body, which bash expands,
+      // is hidden by the heredoc blanking; a process substitution `<( … )` and ANSI-C
+      // `$'…'` quoting are not read.
       if (!msysApplies(p)) return null;
-      const blanked = blankHeredocBodies(p.command, findHeredocs(p.command));
-      for (const seg of msysSegments(blanked)) {
-        const at = programIndex(seg.tokens, 'gh');
-        if (at === -1) continue;
-        const hit = optionsAsWritten(seg.tokens.slice(at + 1), '--body', '-b').find((h) =>
-          h.value.startsWith('/'),
+      const written = (h: { flag: string; value: string; glued?: boolean }): string =>
+        h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
+      // An opener preceded by EXACTLY one backslash is escaped: literal text. Not
+      // the odd-run rule bash would apply to the text as written, because the Bash
+      // tool halves each backslash pair before bash runs the command (measured, read
+      // 3: four backslashes as typed reach the hook as four and bash as two), so bash
+      // sees ceil(n/2) of them. One backslash is literal under both readings; two or
+      // more are read as running under at least one of them, and the row stays
+      // fail-closed there (a run of two is an over-deny on this transport, disclosed).
+      const run = (text: string, at: number): number => {
+        let n = 0;
+        for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
+        return n;
+      };
+      const escaped = (text: string, at: number): boolean => run(text, at) === 1;
+      // A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
+      // the Bash tool on win32, this row's only transport): an early close hides what
+      // follows, so fail-closed does not apply to it (read 5 F1).
+      const escapedClose = (text: string, at: number): boolean => {
+        const n = run(text, at);
+        return n % 4 === 1 || n % 4 === 2;
+      };
+      const munged = (value: string, typed: boolean): boolean => {
+        const ws = value.search(/[ \t\r\n]/);
+        const head = ws === -1 ? value : value.slice(0, ws);
+        const eq = head.indexOf('=');
+        if (eq === -1) return false;
+        if (typed && head.slice(eq + 1).startsWith('@')) return false;
+        return (
+          head.includes('=/') ||
+          head.includes('="/') ||
+          head.includes('=(/') ||
+          (!typed && head.includes('=@/'))
         );
-        if (hit !== undefined) {
-          const written = hit.flag.endsWith('=')
-            ? `${hit.flag}${hit.value}`
-            : `${hit.flag} ${hit.value}`;
-          return {
-            fragment: written,
-            detail:
-              'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
-          };
+      };
+      const takesFields = (rest: readonly string[]): boolean =>
+        rest[0] === 'api' || (rest[0] === 'workflow' && rest[1] === 'run');
+      const scan = (text: string, depth: number): TransportMatch | null => {
+        for (const seg of msysSegments(text, true)) {
+          const at = seg.optOut === true ? -1 : programIndex(seg.tokens, 'gh');
+          if (at !== -1) {
+            const rest = seg.tokens.slice(at + 1);
+            // `--body X`, `--body=X`, `-b X`, and the glued `-bX` cobra accepts
+            // (measured: `-b/x` reached a native program as `-bX:/`).
+            // (the `-b=X` spelling pflag also accepts loses its `=` on the way to gh)
+            const gluedBody = rest
+              .filter((t) => t.startsWith('-b') && t.length > 2 && !t.startsWith('--'))
+              .map((t) => ({ flag: '-b', value: t.slice(2).replace(/^=/, ''), glued: true }));
+            const body = [...optionsAsWritten(rest, '--body', '-b'), ...gluedBody].find((h) =>
+              h.value.startsWith('/'),
+            );
+            if (body !== undefined) {
+              return {
+                fragment: written(body),
+                detail:
+                  'a gh --body value beginning with / is path-converted by MSYS on win32 (the /gemini review that posted as a Program Files path)',
+              };
+            }
+            if (takesFields(rest)) {
+              const glued = rest
+                .filter(
+                  (t) =>
+                    (t.startsWith('-f') || t.startsWith('-F')) &&
+                    t.length > 2 &&
+                    !t.startsWith('--'),
+                )
+                .map((t) => ({
+                  flag: t.slice(0, 2),
+                  value: t.slice(2),
+                  glued: true,
+                  typed: t[1] === 'F',
+                }));
+              const field = [
+                ...optionsAsWritten(rest, '--field', '-F').map((h) => ({ ...h, typed: true })),
+                ...optionsAsWritten(rest, '--raw-field', '-f').map((h) => ({ ...h, typed: false })),
+                ...glued,
+              ].find((h) => munged(h.value, h.typed));
+              if (field !== undefined) {
+                return {
+                  fragment: written(field),
+                  detail:
+                    'a gh field value (api, workflow run) carrying =/ before its first whitespace is path-converted by MSYS on win32 (a -f body=/gemini review posts the Git install path exactly as --body did; a typed -F key=@/path file reference converts to the right Windows path and is allowed)',
+                };
+              }
+            }
+          }
+          if (depth >= 4) continue;
+          const located = blankComments(blankSingleQuoted(seg.raw));
+          let cursor = 0;
+          while (cursor < located.length) {
+            const open = located.indexOf('$(', cursor);
+            if (open === -1) break;
+            if (escaped(located, open)) {
+              cursor = open + 2;
+              continue;
+            }
+            const end = substitutionEnd(located, open + 1);
+            const inner = seg.raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end);
+            const hit = scan(inner, depth + 1);
+            if (hit !== null) return hit;
+            cursor = end;
+          }
         }
-      }
-      return null;
+        if (depth >= 4) return null;
+        // Backtick bodies are located on the WHOLE text of this level, not per
+        // segment: the tokenizer reads a backtick as a character and splits at `;`
+        // inside a span, so a span's two backticks can sit in different segments
+        // (`u=\`gh … --body /x; echo done\``, the chained form from the 3098 bot
+        // round). The pairing is run TWICE, with an opener read escaped by bash's
+        // rule (exactly one backslash) and by the Bash tool's measured halving rule
+        // (a run of one or two, and every four after), and either pass's hit denies:
+        // a single pairing that misreads one opener shifts every later backtick and
+        // loses the body of the next real span (read 7 F1), while the union can only
+        // add denies. Inside backticks bash drops the backslash of `\$`, a
+        // backslash-backtick and `\\` before running the body, so each body is
+        // unescaped, then scanned. Disclosed over-allow: a `"` inside a single-quoted
+        // string inside a span inside double quotes flips the blanker's quote state
+        // (read 7 F2; main misses it too).
+        // A span inside a statement an EARLIER export already covers inherits the
+        // opt-out (`export MSYS_NO_PATHCONV=1; u=\`gh …\`` is the cure applied) and
+        // is not read; a span inside the export statement itself, or before it,
+        // runs without the opt-out and is.
+        const ranges: Array<{ start: number; end: number; covered: boolean }> = [];
+        msysSegments(text, true, ranges);
+        const coveredAt = (at: number): boolean =>
+          ranges.some((r) => r.covered && at >= r.start && at < r.end);
+        const whole = blankComments(blankSingleQuoted(text));
+        for (const openerEscaped of [escaped, escapedClose]) {
+          let tick = whole.indexOf('`');
+          while (tick !== -1) {
+            if (openerEscaped(whole, tick)) {
+              tick = whole.indexOf('`', tick + 1);
+              continue;
+            }
+            let close = whole.indexOf('`', tick + 1);
+            while (close !== -1 && escapedClose(whole, close)) {
+              close = whole.indexOf('`', close + 1);
+            }
+            if (close === -1) break;
+            if (!coveredAt(tick)) {
+              const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
+              const hit = scan(body, depth + 1);
+              if (hit !== null) return hit;
+            }
+            tick = whole.indexOf('`', close + 1);
+          }
+        }
+        return null;
+      };
+      return scan(blankHeredocBodies(p.command, findHeredocs(p.command)), 0);
     },
   },
   {
@@ -1051,28 +1361,74 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
     find(p) {
       if (!msysApplies(p)) return null;
       // Bodies and single-quoted text blanked first: a `$(` inside either is
-      // literal. Judged per segment, so the opt-out applies where the shell applies it.
+      // literal. Judged per segment, so the opt-out applies where the shell applies
+      // it — and a segment the prefix covers is still read, because the shell runs
+      // the substitution inside it BEFORE the prefix applies (the same class as the
+      // msys-body-slash row's read 2 F1).
       const blanked = blankSingleQuoted(blankHeredocBodies(p.command, findHeredocs(p.command)));
-      for (const seg of msysSegments(blanked)) {
-        const text = seg.raw;
+      // The spans of `$( … )` in a text, as [start of body, end of body) pairs.
+      const spans = (text: string): Array<[number, number]> => {
+        const out: Array<[number, number]> = [];
         let cursor = 0;
         while (cursor < text.length) {
           const open = text.indexOf('$(', cursor);
           if (open === -1) break;
           // Balanced outside quotes: a `)` inside `"…"` never closes the subshell.
           const end = substitutionEnd(text, open + 1);
-          const inner = text.slice(open + 2, text[end - 1] === ')' ? end - 1 : end);
-          const hit = REV_PATH_TOKEN.exec(inner);
-          if (hit !== null && !(hit[2] as string).includes('//')) {
-            return {
-              fragment: hit[2] as string,
-              detail: 'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
-            };
-          }
+          out.push([open + 2, text[end - 1] === ')' ? end - 1 : end]);
           cursor = end;
         }
-      }
-      return null;
+        return out;
+      };
+      // A body judged per ITS segments: an opt-out inside the substitution
+      // (`$(MSYS_NO_PATHCONV=1 git show …)`) applies to that segment's own command
+      // and to nothing nested in it, which runs first — so each segment's direct
+      // arguments are read with its nested spans blanked, and the nested spans are
+      // read on their own, whatever the enclosing prefix says (Greptile on the 3098
+      // round: the nested warning had been lost). Read to 256 levels: deeper than
+      // any real command, and short of the stack a few thousand levels would blow
+      // (read 5 F2: an uncapped recursion threw at about five thousand, which the
+      // wrapper would have read as a refusal).
+      const scan = (text: string, depth: number): TransportMatch | null => {
+        if (depth > 256) {
+          // Beyond the cap the row cannot say, and a warn row that cannot say warns
+          // (main warned at any depth; read 6 F3).
+          return {
+            fragment: '$( … ) nested beyond 256 levels',
+            detail:
+              'a $( … ) nest deeper than this row reads; a <rev>:<path> inside it would be path-converted by MSYS on win32',
+          };
+        }
+        for (const seg of msysSegments(text, true)) {
+          for (const [from, to] of spans(seg.raw)) {
+            // A heredoc body inside the substitution is text (read 7 F4: a quoted
+            // `<<'EOF'` body carrying a rev:path had warned), blanked as at the top.
+            const inner = blankHeredocBodies(
+              seg.raw.slice(from, to),
+              findHeredocs(seg.raw.slice(from, to)),
+            );
+            for (const innerSeg of msysSegments(inner, true)) {
+              if (innerSeg.optOut === true) continue;
+              let direct = innerSeg.raw;
+              for (const [a, b] of spans(direct)) {
+                direct = direct.slice(0, a) + ' '.repeat(b - a) + direct.slice(b);
+              }
+              const hit = REV_PATH_TOKEN.exec(direct);
+              if (hit !== null && !(hit[2] as string).includes('//')) {
+                return {
+                  fragment: hit[2] as string,
+                  detail:
+                    'a <rev>:<path> argument inside $( … ) is path-converted by MSYS on win32',
+                };
+              }
+            }
+            const nested = scan(inner, depth + 1);
+            if (nested !== null) return nested;
+          }
+        }
+        return null;
+      };
+      return scan(blanked, 0);
     },
   },
 ]);

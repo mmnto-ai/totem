@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "9b085e1d188ba7ee1a62ad879db3bee9bfec5517",
+  "readAt": "2026-10-16T15:53:39Z",
+  "findings": [
+    {
+      "id": "2696-r4-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 619,
+      "claim": "The new backtick-span close test in tokenizeShell treats a backtick as escaped whenever the character before it is a backslash, without counting the run. A backtick body that ends in two or more backslashes therefore does not close there. The span runs on to the NEXT backtick in the command and swallows every statement in between into one word, and the deny rows that read tokens never see them. This is not the module's own rule: the msys-body-slash locator's escaped() counts a run as escaped only when it is exactly one backslash (the read-3 F1 fold), because the Bash tool halves each backslash pair before bash runs the command. The fold introduced this over-allow; the gh invocation it lets through posts a munged value.",
+      "counterexample": "Measured under the Bash tool, with the argv-echo script in place of gh. Typed with 3 backslashes before the closing backtick of the first span, then ; node <argv-echo> /x; echo `echo z`: printed a backslash, then X:/, then z. The program ran and its argument was path-converted. With 4 backslashes typed: the same output. With 2 typed: bash reports unexpected EOF while looking for matching backtick and nothing runs. The row's verdict on echo `echo <n backslashes>`; gh pr comment 5 --body /x; echo `echo z`: main and 5f11d750 deny msys-body-slash at n=1..4; 9b085e1d allows at n=2, 3 and 4. The n=3 and n=4 forms run gh with a munged body. The same hole reaches sed-i-escape: echo `echo <4 backslashes>`; sed -i with a backslash in its expression; echo `echo z` is denied on main and 5f11d750 and allowed on 9b085e1d. Fix shape: use the n === 1 rule from the locator for the close test. Under that rule n=2 reads as closing, a fail-closed over-deny of a shape that is a parse error anyway."
+    },
+    {
+      "id": "2696-r4-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 613,
+      "claim": "Keeping a backtick span whole also narrows sed-i-escape and inline-body-escape. A sed -i or node -e / python -c that follows a ; or && INSIDE a backtick body used to be split out into its own segment and read. It is now part of the outer word, and those rows never read inside substitutions, so the verdict goes from deny to allow. This makes backticks behave the same as $( … ), which those rows never read on any side. The same change also removes an old over-deny: a benign body was denied because the closing backtick was glued onto its last token. Neither effect is disclosed in the changeset or in the tokenizer comment. A replay over 21,639 real commands found zero instances.",
+      "counterexample": "x=`cd d; sed -i 's/\\t//' f`: main deny sed-i-escape, 5f11d750 deny, 9b085e1d allow. x=`cd d; node -e \"console.log('\\n')\"`: deny, deny, allow. The parity controls x=$(cd d; sed -i 's/\\t//' f) and x=`sed -i 's/\\t//' f` allow on all three builds. The benign side is a fix: x=`cd d; node -e \"console.log(1)\"` and x=`cd d; python -c 'print(1)'` are deny inline-body-escape on main and 5f11d750 (the old token was console.log(1) with the backtick attached) and allow on 9b085e1d."
+    },
+    {
+      "id": "2696-r4-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1346,
+      "claim": "The comment says the recursive scan reads at most four levels deep. The code (depth > 4 return null, with the top-level call at depth 0) reads the direct arguments of FIVE nested levels. The new cap also costs a warning that main and 5f11d750 gave: they read the level-1 body's raw text, which contains every deeper level, so they warned at any depth. The fold now allows six or more levels. This is a warn row, and the shape is rare.",
+      "counterexample": "Five levels of echo $( … ) around git show HEAD:a/b: warn on all three builds. Six levels: main warn, 5f11d750 warn, 9b085e1d allow. Seven levels: the same."
+    },
+    {
+      "id": "2696-r4-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 963,
+      "claim": "This predates the PR, but it sits in the export branches the fold edited. Any export statement that names MSYS_NO_PATHCONV is read as setting the export attribute, including export -n, which REMOVES it. export -n MSYS_NO_PATHCONV=1 is read as an export through segmentExportsOptOut. Both are over-allows. In the opposite direction, declare -x MSYS_NO_PATHCONV with no value is not read as setting the attribute, so a later assignment followed by gh is over-denied.",
+      "counterexample": "Measured under the Bash tool: export MSYS_NO_PATHCONV=1; export -n MSYS_NO_PATHCONV; node <argv-echo> /x printed X:/ (converted). The shield allows export MSYS_NO_PATHCONV=1; export -n MSYS_NO_PATHCONV; gh pr comment 5 --body /x and export -n MSYS_NO_PATHCONV=1; gh pr comment 5 --body /x on main, 5f11d750 and 9b085e1d alike. declare -x MSYS_NO_PATHCONV; MSYS_NO_PATHCONV=1; gh pr comment 5 --body /x is denied on all three, although the attribute exports the later assignment."
+    }
+  ],
+  "folded": [
+    "2696-r4-F1",
+    "2696-r4-F3"
+  ],
+  "verdict": "read 4 on 9b085e1d (benign-first, all rows; scoped to 5f11d750..9b085e1d): as typed, 0 BLOCKING, 1 MATERIAL, 3 MINOR, 0 QUESTION; the leg did not name termination on F1 and asked for one more read scoped to the close test. Ground truth it established: a three-way replay (main's dist, the previous head's source transpiled, this fold's dist) over 21,639 distinct real Bash commands from 200 session transcripts, 1,090 with a backtick, found ZERO verdict changes between 5f11d750 and 9b085e1d; the tokens and segments of every backtick command are byte-identical between the two once heredoc bodies are blanked as every row blanks them; the module's benign corpus passes; every main-to-branch change is an intended deny (the two munged trigger chains), a removed false warning, or a disclosed reserved-word read. Held at source, by row: inline-body-escape and sed-i-escape keep every verdict on backticks inside double or single quotes, template literals with ; | && or a newline, an unquoted span before or after the body, an unterminated backtick in prose, PowerShell mode; heredoc-escape and heredoc-oversize unchanged (findHeredocs untouched); msys-body-slash keeps every tokenizer-side verdict (quoted backticks in a body, escaped and unterminated backticks, adjacent spans, mixed quoting, # and $( ) inside a span, PowerShell mode) and every export-side verdict except the four newly denied as intended (an export or declare -x statement carrying a gh substitution, the backtick form, the bare-name export form, an export with a gh substitution inside $( )); msys-rev-path-subshell keeps the twelve real warning commands, one to five levels, double-quoted $( ), the // exemption and the inner prefix, newly warns on an export statement carrying a git substitution, and drops two false warnings on a body whose git call carries its own prefix. Folded by the seat in the next commit: F1 MATERIAL (the fold-6 close test treated a backtick as escaped behind ANY backslash; a body ending in two or more backslashes did not close and the span swallowed the statements after it, so a gh there ran unread with a converted body, measured by the leg at three and four backslashes as typed; the close test now counts the run and treats exactly one as escaped, the locator's rule), F3 (the recursion cap read five levels against a comment saying four and lost the warning the previous row gave at any depth; the cap removed, the recursion bounded by the text). Disclosed in the changeset, not changed: F2 (a backtick span is now opaque to the sed-i-escape and inline-body-escape rows, as a $( … ) always was; zero occurrences in the replay; a glued-backtick over-deny removed). Declined with the reason: F4 (export -n read as an export and a bare declare -x name not read as the attribute: pre-existing in the export branches, rare, disclosed)."
+}

@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "ce12044c7ff1306f7087706fe22930f738a82e8b",
+  "readAt": "2026-10-16T05:55:40Z",
+  "findings": [
+    {
+      "id": "2696-r3-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1065,
+      "claim": "The fold's new rule (escaped when an odd run of backslashes precedes $( or a backtick) is the wrong parity for the transport this gate guards. The Bash tool turns each backslash pair into one backslash AFTER the hook reads the command, so bash sees ceil(n/2) backslashes. An opener is literal only when ceil(n/2) is odd, that is when n mod 4 is 1 or 2. n=3 is the fold's new fail-open: the shell runs the gh and MSYS converts its body, yet the row now allows it where 1e36ff59 denied it. n=2 is an over-deny in the other direction. The tests pin only n=1.",
+      "counterexample": "Hook view, measured: a sed-i deny of a sed expression typed with four backslashes shows provenance matched with four backslashes, so the hook sees the command as written. Bash view, measured under the Bash tool with argv-echo: a single-quoted argument typed with two backslashes arrives with one; echo with two backslashes before $(node …) is a bash parse error showing one backslash before $(, so bash got one; echo with three backslashes before $(node … RAN3) prints RAN3, so it ran; the double-quoted three-backslash form prints Y:/, so it ran and was converted; the three-backslash backtick pair prints Q://, so it ran; the double-quoted two-backslash form prints the substitution as literal text. Shield (probe2 rows 1, 2, 4 and 3): the three-backslash $( form outside quotes, the double-quoted three-backslash form and the three-backslash backtick pair each return allow/no-match on the fold and deny on 1e36ff59; the double-quoted two-backslash form returns deny although nothing runs. Shape of a fix: escaped iff ceil(n/2) is odd; or, fail-closed, escaped only when n=1. Rare shape, but it is a fold regression in the fold's own new predicate."
+    },
+    {
+      "id": "2696-r3-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1158,
+      "claim": "A backtick body is passed to the recursive scan without bash's backtick unescaping, in which backslash-dollar, backslash-backtick and a backslash pair lose their backslash. The new escape rule then hides a $( that bash runs. Fold-introduced over-allow; the nested escaped-backtick miss and the double-backslash-$( over-deny predate the fold.",
+      "counterexample": "probe row 38: u=`echo \\$(gh pr comment 5 --body /x)` gives new allow, old deny. Measured from m.sh (pure bash) and directly: the same with node argv-echo /x gives X:/. Row 39 (nested escaped backticks): allow on both commits; measured m9 X:/. Row 40 (a backslash pair before $( inside backticks): deny on both; measured m12 is a syntax error, so nothing runs."
+    },
+    {
+      "id": "2696-r3-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 989,
+      "claim": "blankComments blanks a # after whitespace inside ${ … }, where bash reads the # as word text, not a comment, so a substitution there is hidden. Fold-introduced over-allow.",
+      "counterexample": "probe row 29: echo ${x:- #$(gh pr comment 5 --body /x)} gives new allow, old deny. Measured with x unset: echo ${x:- #$(node argv-echo /x)} prints #X:/."
+    },
+    {
+      "id": "2696-r3-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 989,
+      "claim": "blankComments' boundary set omits an operator ). The header (lines 38-40) says a # after a subshell's or a case pattern's ) begins a comment, and tokenizeShell (624-628) reads it that way. So the new comment model disagrees with the module's stated one model of which text is code. The result is an over-deny, which the old row also produced.",
+      "counterexample": "probe row 24: (true)# $(gh …). probe2 rows 10-11: (cd x)# $(gh …) and case a in a)# $(gh … <LF>;; esac. All deny. Measured: (true)# $(node argv-echo /x) followed by echo after prints only after."
+    },
+    {
+      "id": "2696-r3-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 705,
+      "claim": "The function-header skip (an identifier followed by {) also fires on <cmd> { … where { is an argument, so every row that shares programIndex gains a false positive that 1e36ff59 allowed. This touches the brief's 'the other rows gained no false positives' clause and the header's zero-deny benign budget, though the shape is rare.",
+      "counterexample": "probe rows 41, 46, 47 and probe2 row 14: echo { gh pr comment 5 --body /x gives deny msys-body-slash; echo { sed -i 's/\\\\(a\\\\)/b/' f gives deny sed-i-escape; echo { node -e 'a\\\\d' gives deny inline-body-escape; f { gh … gives deny. Old commit allows all four. Measured: echo { node argv-echo /x prints the text, so node never runs."
+    },
+    {
+      "id": "2696-r3-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 932,
+      "claim": "The opt-out state machine around the new flagged push misjudges two set -a / export-by-name orderings. (a) export MSYS_NO_PATHCONV with no value marks the name exported. A later MSYS_NO_PATHCONV=1 u=$(gh …) therefore reaches gh, but line 937 flags the segment and the row denies. This is a fold-introduced over-deny (the top-level …=1; gh form was already denied). (b) Under set -a, line 932 marks the opt-out exported for the whole statement, but a substitution that comes before the opt-out assignment, or is its value, runs first without it. Over-allow, unchanged from the old commit. (c) Also unchanged from the old commit and not in the header's disclosure: an unset inside the substitution after an outer export.",
+      "counterexample": "probe2 row 9: export MSYS_NO_PATHCONV; MSYS_NO_PATHCONV=1 u=$(gh …) gives new deny, old allow; measured m4 prints /x (not converted). probe2 row 6: set -a; u=$(gh …) MSYS_NO_PATHCONV=1 and probe row 12: set -a; MSYS_NO_PATHCONV=$(gh …) both give allow; measured m2 and m3 print X:/. probe row 13: export …=1; u=$(unset MSYS_NO_PATHCONV; gh …) gives allow; measured m6 prints X:/."
+    },
+    {
+      "id": "2696-r3-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1092,
+      "claim": "The new glued -bX arm misses pflag's -b=VALUE form. Its value is =/x, which does not start with /, so the row allows it, yet MSYS converts it and gh strips the =.",
+      "counterexample": "probe row 63: gh pr comment 5 -b=/x gives allow. Measured: argv-echo -b=/x arrives as -b=X:/. gh 2.99.0 accepts gh completion -s=bash the same as -sbash."
+    },
+    {
+      "id": "2696-r3-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 713,
+      "claim": "The case-insensitive comparison applies only when the name ends in .exe. A bare upper-case GH or Gh runs gh under MSYS bash and is allowed. So is a quoted backslash path without .exe.",
+      "counterexample": "probe rows 52, 53, 59: GH pr comment 5 --body /x, Gh … and a quoted C:\\\\tools\\\\gh … all give allow. Measured: NODE argv-echo /x and Node argv-echo /x both run node and print X:/."
+    },
+    {
+      "id": "2696-r3-F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 1263,
+      "claim": "The same defect, solved in two ways: msys-rev-path-subshell still calls msysSegments without the flag. It therefore keeps read 2 F1's defect, in which a prefix-covered or assignment-only segment's $( … ) is dropped although the shell runs it first, without the prefix. It is a warn row.",
+      "counterexample": "u=$(git show HEAD:a/b) gives warn msys-rev-path-subshell. MSYS_NO_PATHCONV=1 u=$(git show HEAD:a/b) and MSYS_NO_PATHCONV=1 echo $(git show HEAD:a/b) both give allow/no-match."
+    },
+    {
+      "id": "2696-r3-F10",
+      "severity": "QUESTION",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 501,
+      "claim": "Is the transport's collapse of backslash pairs (measured in F1) charted anywhere? It is not in the module header (grep finds no mention). It reaches past this fold: tokenizeShell resolves a backslash pair as bash would, so a body spelled with two backslashes before /x is read as one backslash and /x, while bash receives one backslash and /x and passes /x. This was the case before the fold too. Is it out of scope for mmnto-ai/totem#2696, or owed as an issue?",
+      "counterexample": "probe2 row 5: gh pr comment 5 --body with two backslashes before /x gives allow on both commits. Measured: node argv-echo --body with two backslashes before /x arrives as X:/."
+    }
+  ],
+  "folded": [
+    "2696-r3-F1",
+    "2696-r3-F2",
+    "2696-r3-F3",
+    "2696-r3-F6",
+    "2696-r3-F7",
+    "2696-r3-F9"
+  ],
+  "verdict": "read 3 on ce12044c (scoped to the fold 1e36ff59..ce12044c): as typed, 0 BLOCKING, 1 MATERIAL, 8 MINOR, 1 QUESTION; the leg confirmed read 2's F1 and F2 folded (every counterexample now gives the invariant's verdict, checked through the built dist against the transpiled 1e36ff59) and named the rule not terminated on F1. Held at source: the opt-out state machine with substitutions (an inner prefix, set -a before a prefixed assignment, assign-then-export, export-and, declare -x, a subshell export, an export before a prefix-covered assignment, a prefix on gh itself all allow; a bare assignment then a later statement, and an unset after an export, deny; flagged segments two levels deep deny); blankComments on a quote inside a comment, a#b, $#, ${#x}, a # inside double quotes, a comment with an apostrophe before a real substitution on the next line, a # inside a $( ) body; the escape counter at n=1 in every quoting; programIndex on function as the last token, gh {, function f {, f() { :; }; gh, time -p, gh api -p, GH.EXE, gh.Exe, a quoted C:\\\\tools\\\\gh.exe, ./gh.exe, and the non-gh gh.exe.bak, foo-gh.exe and an unquoted backslash path; the glued -bX on pr create, issue create, pr comment, secret set and the non-body -bfeature; the red-check claim and the changeset's shared-locator sentence. Folded by the seat in the next commit: F1 MATERIAL (escaped iff exactly one backslash: the Bash tool halves each pair before bash sees the command, measured by the leg — four as typed reach the hook as four and bash as two — so the odd-run rule allowed a run of three that runs; the n=1 rule is literal under both readings and fail-closed above), F2 (a backtick body unescaped before the recursive scan), F3 (a # inside ${ … } is word text), F6a (the bare-name export attribute reaches a later assignment's substitution), F7 (the -b=VALUE spelling), F9 (the msys-rev-path-subshell warn row reads prefix-covered segments' substitutions; its one test that took an outer prefix as reaching the substitution corrected to the measured behaviour). Declined with the reason: F4 (a # after an operator ) is not blanked: a $( … )# continues its word and the locator cannot tell the two ) apart; fail-closed over-deny the previous row shared; stated in blankComments' doc), F5 (an identifier followed by { read as a function header also fires on a bare command with a { argument; rare; fail-closed; disclosed), F6b and F6c (a substitution before the opt-out assignment under set -a, or an unset inside the substitution after an outer export: unchanged over-allows, disclosed in the state machine's comment), F8 (a bare upper-case GH: the shared locator keeps bare names case-sensitive so the linux rows are not misled; disclosed). Answered: F10 (the transport's halving of backslash pairs is not charted in the module header and reaches tokenizeShell, which resolves \\\\ as bash would on the text as written; out of this fix's scope; recorded on mmnto-ai/totem#2696 for the operator's ruling). Convergence named by the seat after this fold: three scoped reads, each fold narrower than the last (a shape class, then two predicates, then one parity rule), the last MATERIAL a one-line predicate in the seat's own new code with its n=2..4 controls now pinned; what remains is MINOR, rare-shape or pre-existing and disclosed in the row's comments; no further read is armed."
+}
