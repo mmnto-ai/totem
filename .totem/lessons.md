@@ -1312,11 +1312,11 @@ Identify larger or more specific text markers (like triple backticks) before sma
 
 Fixes to automated extraction logic, such as resolving truncated headings, typically do not retroactively update existing records. Legacy data requires manual intervention or targeted re-syncing to align with updated formatting or validation rules.
 
-## Lesson — FSL intelligence layer licensing is a decided-but-deferred
+## Lesson — Licensing is settled by the covenant: the local toolkit is Apache 2.0
 
-**Tags:** licensing, strategy, v1.0, fsl, architecture
+**Tags:** licensing, covenant, architecture
 
-FSL intelligence layer licensing is a decided-but-deferred strategic decision (#353). Apache 2.0 stays everywhere until v1.0. At v1.0, split @mmnto/core into @mmnto/totem (Apache 2.0, commodity: chunkers, store, config) and @mmnto/totem-engine (FSL 1.1, moat: compiler, drift detector, sanitizer, AST gate). CLA is already in place as the insurance policy. Emergency trigger: execute split immediately if a hyperscaler forks the intelligence layer pre-v1.0.
+Licensing is settled by the covenant (COVENANT.md): the core toolkit, including the enforcement engine, lesson compilation, the MCP server and the self-healing loop, is Apache 2.0, and any federation, hosted service or centralized telemetry introduced later is intended as a separate product while the local toolkit stays Apache 2.0. An earlier plan to split the core package at v1.0 and place the compiler and gates under a different licence is superseded by that covenant and is not to be reintroduced into docs or lessons; the CLA remains in place.
 
 ## Lesson — Custom glob matching functions must be tested
 
