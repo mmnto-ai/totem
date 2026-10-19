@@ -151,8 +151,14 @@ process.stdin.on('end', () => {
   // ref (genuine OR negated) is blocked. Checked before the bare-ref arm because
   // accidental upstream-issue closure is the higher-blast-radius failure.
   if (AUTO_CLOSE_MD_RE.test(filePath) && !AUTO_CLOSE_GITHUB_RE.test(filePath)) {
+    // A totem-close marker's own text ("close: owner/repo#N") reads as a keyword-adjacent
+    // ref, so it is stripped before the scan, as the receipt strips it before its own
+    // (packages/core/src/autoclose/receipt.ts, stripIntentMarkers; mmnto-ai/totem#3103).
+    const acText = joined
+      .replace(/<!--\s*totem-close:[^>]*-->/gi, ' ')
+      .replace(/^[ \t]*totem-close:.*$/gim, ' ');
     const acRe = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
-    const acMatches = [...joined.matchAll(acRe)];
+    const acMatches = [...acText.matchAll(acRe)];
     if (acMatches.length > 0) {
       // Group layout: 1+2 = URL owner/repo+N; 3+4 = qualified owner/repo+N; 5 = bare N.
       const acRefs = acMatches.slice(0, 5).map((m) => (m[1] ? m[1] + '#' + m[2] : m[3] ? m[3] + '#' + m[4] : '#' + m[5])).join(', ');
@@ -161,7 +167,8 @@ process.stdin.on('end', () => {
         'GitHub auto-closes linked issues from a PR body / commit message carrying this pattern (even under negation).\n' +
         'Rephrase to a non-keyword form (`references` / `see` / `tracks`).\n' +
         'For verbatim quotation, prefix with a `<!-- totem-context: <reason> -->` directive on the preceding line.\n' +
-        'mmnto-ai/totem#1762.\n',
+        'For an INTENDED close, add `<!-- totem-close: owner/repo#N -->` on its own line as well (this rule reads past that marker): the auto-close required check and totem pr merge authorize a close by that marker only, never by the keyword.\n' +
+        'mmnto-ai/totem#1762, mmnto-ai/totem#3103.\n',
       );
       process.exit(2);
     }

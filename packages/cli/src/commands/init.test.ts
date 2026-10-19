@@ -2552,6 +2552,11 @@ describe('CLAUDE_PREWRITESHIELD template', () => {
   it('cites the auto-close issue mmnto-ai/totem#1762', () => {
     expect(CLAUDE_PREWRITESHIELD).toContain('mmnto-ai/totem#1762');
   });
+
+  it('names the totem-close marker as the intended-close channel and strips it before the scan (mmnto-ai/totem#3103)', () => {
+    expect(CLAUDE_PREWRITESHIELD).toContain('<!-- totem-close: owner/repo#N -->');
+    expect(CLAUDE_PREWRITESHIELD).toContain('totem-close:[^>]*-->');
+  });
 });
 
 describe('PreWriteShield runtime behavior', () => {
@@ -2686,6 +2691,47 @@ describe('PreWriteShield runtime behavior', () => {
   });
 
   // ─── Auto-close keyword guard (mmnto-ai/totem#1762) ───────────────────────
+
+  it('tells the author the intended-close channel in the refusal (mmnto-ai/totem#3103)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Closes mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toContain('<!-- totem-close: owner/repo#N -->');
+    expect(result.stderr).toContain('mmnto-ai/totem#3103');
+  });
+
+  it('reads past a totem-close marker: a marker-only write passes the auto-close rule (mmnto-ai/totem#3103)', () => {
+    // The marker's own text ("close: owner/repo#N") matches the keyword regex, so
+    // without the strip the cure the message names is refused by the rule that
+    // named it (measured on the 2.16.4 hook: exit 2 on this exact write).
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: '<!-- totem-close: mmnto-ai/totem#131 -->' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('reads past the Totem-Close trailer form too (mmnto-ai/totem#3103)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: { file_path: 'docs/x.md', content: 'Totem-Close: mmnto-ai/totem#131' },
+    });
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('a totem-close marker does not launder a keyword line beside it (mmnto-ai/totem#3103)', () => {
+    const result = runHook({
+      tool_name: 'Write',
+      tool_input: {
+        file_path: 'docs/x.md',
+        content: 'Closes mmnto-ai/totem#131\n<!-- totem-close: mmnto-ai/totem#131 -->',
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/auto-close/i);
+  });
 
   it('exits 2 on a close keyword adjacent to an issue ref in a **/*.md write', () => {
     const result = runHook({
@@ -3261,6 +3307,11 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('checkAutoCloseKeywords(toolName, toolInput)');
     expect(GEMINI_BEFORE_TOOL).toContain('mmnto-ai/totem#1762');
   });
+
+  it('names the totem-close marker in the BeforeTool message and strips it before the scan (mmnto-ai/totem#3103, parity with PreWriteShield)', () => {
+    expect(GEMINI_BEFORE_TOOL).toContain('<!-- totem-close: owner/repo#N -->');
+    expect(GEMINI_BEFORE_TOOL).toContain('totem-close:[^>]*-->');
+  });
 });
 
 describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)', () => {
@@ -3290,6 +3341,20 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
       return { threw: true, message: err instanceof Error ? err.message : String(err) };
     }
   }
+
+  it('names the intended-close channel in the refusal and reads past a totem-close marker (mmnto-ai/totem#3103)', () => {
+    const refused = runBeforeTool('write_file', {
+      file_path: 'docs/x.md',
+      content: 'Closes mmnto-ai/totem#131',
+    });
+    expect(refused.threw).toBe(true);
+    expect(refused.message).toContain('<!-- totem-close: owner/repo#N -->');
+    const markerOnly = runBeforeTool('write_file', {
+      file_path: 'docs/x.md',
+      content: '<!-- totem-close: mmnto-ai/totem#131 -->',
+    });
+    expect(markerOnly.threw).toBe(false);
+  });
 
   it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
     const r = runBeforeTool('write_file', {
