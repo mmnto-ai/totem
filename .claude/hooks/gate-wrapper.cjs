@@ -1702,6 +1702,14 @@ process.stdin.on('end', () => {
   // a spawn that starts inside it still gets the one-second floor (round 3,
   // F2) and times out into the evaluation-failed arm. Either way the wrapper
   // exits with its OWN code, inside the budget plus one floor.
+  //
+  // THE WARN CHANNEL (mmnto-ai/totem#3106): every warn line, and every deny
+  // line the pilot tier lets through, is collected here and, when the run ends
+  // with exit 0, printed ONCE on stdout as the PreToolUse hook's
+  // additionalContext, so the text reaches the agent beside the tool result
+  // instead of only the transcript's stderr. An allow adds nothing; a strict
+  // deny exits 2 with stderr only, as before.
+  const contextLines = [];
   for (let p = 0; p < payloads.length; p++) {
     if (Date.now() >= deadline) {
       process.stderr.write(
@@ -1779,14 +1787,18 @@ process.stdin.on('end', () => {
       continue;
     }
     if (disposition === 'warn') {
-      process.stderr.write('[totem gate-wrapper] ' + event + ' (warn): ' + detail + '\n');
+      const warnLine = event + ' (warn): ' + detail;
+      process.stderr.write('[totem gate-wrapper] ' + warnLine + '\n');
+      contextLines.push(warnLine);
       continue;
     }
     if (disposition === 'deny') {
-      process.stderr.write('[totem gate-wrapper] ' + event + ' (deny): ' + detail + '\n');
+      const denyLine = event + ' (deny): ' + detail;
+      process.stderr.write('[totem gate-wrapper] ' + denyLine + '\n');
       if (tier !== 'pilot') {
         process.exit(2);
       }
+      contextLines.push(denyLine);
       continue;
     }
 
@@ -1798,6 +1810,18 @@ process.stdin.on('end', () => {
     );
     process.exit(2);
   }
-  process.exit(0);
+  if (contextLines.length === 0) {
+    process.exit(0);
+  }
+  // Exit only once stdout has drained: a pipe write can still be pending.
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: contextLines.join('\n'),
+      },
+    }) + '\n',
+    () => process.exit(0),
+  );
 });
 // [totem] end auto-generated

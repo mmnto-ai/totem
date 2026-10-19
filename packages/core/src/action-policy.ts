@@ -16,6 +16,7 @@ import {
   programStart,
   substitutionBodies,
   tokenizeShell,
+  WRAPPER_VALUE_OPTIONS,
 } from './transport-shield.js';
 
 /**
@@ -29,13 +30,16 @@ import {
  * consumer's.
  *
  * A command row matches from the statement's program position (past
- * assignments, wrappers and reserved words), against the program's basename,
- * in every statement the command runs including `$( … )` and backtick bodies;
- * heredoc bodies are text. A shell handed a string (`sh -c`, `pwsh -Command`,
- * `cmd /c`, a heredoc on stdin) is warned on as `opaque-shell-string` when the
- * policy has command rows. Disclosed limits: a renamed program, a script the
- * agent wrote and then runs, and anything a shell string contains match no
- * row.
+ * assignments, reserved words and the wrapper table's wrappers with their
+ * options), against the program's spellings, in every statement the command
+ * runs including `$( … )` bodies, Bash backtick bodies and the substitutions in
+ * an unquoted heredoc; heredoc text is never a statement. A shell handed a
+ * string (`eval`, `sh -c`, `pwsh -Command`, `cmd /c`, text fed to a shell's
+ * stdin) is warned on as `opaque-shell-string` when the policy has command
+ * rows. Not read, and disclosed: a renamed program, a script the agent wrote
+ * and then runs, an interpreter's string, a command reached through another
+ * program's arguments, `Invoke-Expression`, `env -S`, a process substitution, a
+ * `case` arm, a substitution nested deeper than four.
  */
 
 export const ACTION_POLICY_FILE = 'action-policy.json';
@@ -86,15 +90,15 @@ const REF_ENVIRONMENT_UNEVALUABLE = 'environment-unevaluable';
 // ─── Schema (the file boundary) ────────────────────────────────────────────
 
 /** Most `*` a path glob may carry (`**` counts two): bounds the glob's backtracking. */
-export const ACTION_POLICY_PATH_GLOB_STAR_MAX = 4;
+export const ACTION_POLICY_PATH_GLOB_STAR_MAX = 3;
 
 /** Most `*` one command-pattern token may carry (`**` counts two). */
 export const ACTION_POLICY_COMMAND_TOKEN_STAR_MAX = 2;
 
 /**
- * A statement token longer than this is compared by its first this-many
- * characters against a wildcard pattern token; a literal token still compares
- * whole. Bounds the glob's work on a pathological argument.
+ * A statement token or an edited path longer than this is compared by its
+ * first this-many characters against a wildcard glob; against a literal glob
+ * it still compares whole. Bounds the glob's work on a pathological input.
  */
 export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 1024;
 
@@ -108,10 +112,17 @@ const starCount = (text: string): number => text.split('*').length - 1;
 /** A drive-letter, slash or backslash start: an absolute spelling, never repo-relative. */
 const ABSOLUTE_GLOB_RE = /^(?:[/\\]|[A-Za-z]:)/;
 
+/** A `../`, `./` or `~` start: a spelling no repo-relative path can ever have. */
+const NEVER_RELATIVE_GLOB_RE = /^(?:\.\.?[/\\]|~)/;
+
 const pathGlob = nonBlank('path glob')
   .refine((g) => !ABSOLUTE_GLOB_RE.test(g), {
     message:
       'path globs are repo-relative: drop the leading "/", "\\" or drive letter (the gate makes every edited path relative to the repository root first)',
+  })
+  .refine((g) => !NEVER_RELATIVE_GLOB_RE.test(g), {
+    message:
+      'a path glob starting with "../", "./" or "~" can never match: the gate compares the path relative to the repository root, with no leading "./"',
   })
   .refine((g) => starCount(g) <= ACTION_POLICY_PATH_GLOB_STAR_MAX, {
     message: `a path glob may carry at most ${ACTION_POLICY_PATH_GLOB_STAR_MAX} "*" ("**" counts two)`,
@@ -334,10 +345,12 @@ interface RowMatch {
   matched: string;
 }
 
-/** One shell statement: its tokens and its raw text. */
+/** One shell statement: its tokens, its raw text, and whether a pipe feeds it. */
 interface Statement {
   tokens: string[];
   raw: string;
+  /** True when the statement follows a `|` (it is not the first in its pipeline). */
+  piped: boolean;
 }
 
 /** How deep substitution bodies are read (`$( $( … ) )`), the shield's own bound. */
@@ -346,12 +359,24 @@ const SUBSTITUTION_DEPTH_MAX = 4;
 /** Executable suffixes stripped from a program token before it is compared. */
 const PROGRAM_SUFFIXES: readonly string[] = ['.exe', '.cmd'];
 
-/** Shells that run a string given with `-c` (in any short-option cluster). */
-const POSIX_SHELLS: ReadonlySet<string> = new Set(['sh', 'bash', 'zsh', 'dash']);
+/** The program position: past assignments, reserved words, and wrappers with their options. */
+const PROGRAM_START_OPTIONS = { wrapperOptions: WRAPPER_VALUE_OPTIONS };
 
-/** PowerShell hosts and the flags that hand them a string to run. */
+/** POSIX shells that run a string given with `-c` in a short-option cluster. */
+const POSIX_SHELLS: ReadonlySet<string> = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+
+/** PowerShell hosts. */
 const POWERSHELL_HOSTS: ReadonlySet<string> = new Set(['pwsh', 'powershell']);
-const POWERSHELL_STRING_FLAG_RE = /^-(?:c|command|e|ec|encodedcommand)$/i;
+
+/** POSIX shell options that take a separate value (`-o pipefail`, `--rcfile f`). */
+const POSIX_SHELL_VALUE_OPTIONS: ReadonlySet<string> = new Set([
+  '-o',
+  '+o',
+  '-O',
+  '+O',
+  '--rcfile',
+  '--init-file',
+]);
 
 const REF_OPAQUE_SHELL_STRING = 'opaque-shell-string';
 
@@ -384,95 +409,206 @@ function repoRelativePath(filePath: string, root: string): string | null {
 
 const hasWildcard = (glob: string): boolean => /[*?{[]/.test(glob);
 
-/** One token against one pattern token; a long token meets a wildcard by its head. */
-function tokenMatches(token: string, glob: string): boolean {
-  const subject =
-    hasWildcard(glob) && token.length > ACTION_POLICY_WILDCARD_TOKEN_MAX
-      ? token.slice(0, ACTION_POLICY_WILDCARD_TOKEN_MAX)
-      : token;
-  return matchesPathGlob(subject, glob);
+/**
+ * One path or token against one glob; a subject longer than
+ * {@link ACTION_POLICY_WILDCARD_TOKEN_MAX} meets a wildcard glob by its head
+ * and a literal glob whole.
+ */
+function boundedGlobMatches(subject: string, glob: string): boolean {
+  const compared =
+    hasWildcard(glob) && subject.length > ACTION_POLICY_WILDCARD_TOKEN_MAX
+      ? subject.slice(0, ACTION_POLICY_WILDCARD_TOKEN_MAX)
+      : subject;
+  return matchesPathGlob(compared, glob);
 }
 
 /**
- * The program token against the pattern's first token, through the shield's
- * program spellings: the token itself or its name after the last `/`
- * (case-sensitive), or, for a `.exe` / `.cmd` spelling, its lower-cased stem
- * after the last `/` or backslash against the lower-cased pattern token.
+ * The names a program token is compared by: the shield's program spellings
+ * (the token, its name after the last `/`, and on PowerShell after the last
+ * backslash; a `.exe` / `.cmd` spelling's lower-cased stem), plus the token
+ * with a leading `./` dropped (backslashes read as `/` on PowerShell), so
+ * `./scripts/deploy.sh` meets `scripts/deploy.sh`.
  */
-function programMatches(token: string, glob: string): boolean {
-  const names = programSpellings(token, { suffixes: PROGRAM_SUFFIXES });
+function programNames(token: string, powershell: boolean): { exact: string[]; folded: string[] } {
+  const names = programSpellings(token, { suffixes: PROGRAM_SUFFIXES, backslash: powershell });
+  const slashed = powershell ? token.replace(/\\/g, '/') : token;
+  const exact = slashed.startsWith('./') ? [...names.exact, slashed.slice(2)] : names.exact;
+  return { exact, folded: names.folded };
+}
+
+function programMatches(token: string, glob: string, powershell: boolean): boolean {
+  const names = programNames(token, powershell);
   return (
-    names.exact.some((n) => tokenMatches(n, glob)) ||
-    names.folded.some((n) => tokenMatches(n, glob.toLowerCase()))
+    names.exact.some((n) => boundedGlobMatches(n, glob)) ||
+    names.folded.some((n) => boundedGlobMatches(n, glob.toLowerCase()))
   );
 }
 
 /**
  * Whether a statement's program and the arguments after it match every token
- * of `pattern`, in order. The program position is the shield's: past
- * assignments, wrappers (`env`, `sudo`, `time`, `nohup`, `xargs` …) and the
- * reserved words that can stand before a program (`{`, `if`, `then`, `!` …).
+ * of `pattern`, in order. The program position is the shield's
+ * {@link programStart} with the wrapper-option table: past assignments, the
+ * reserved words that can stand before a program, and each wrapper (by
+ * basename) with its options.
  */
-function commandPatternMatches(tokens: readonly string[], pattern: string): boolean {
+function commandPatternMatches(
+  tokens: readonly string[],
+  pattern: string,
+  powershell: boolean,
+): boolean {
   const patternTokens = pattern.trim().split(/\s+/);
-  const start = programStart(tokens);
+  const start = programStart(tokens, undefined, PROGRAM_START_OPTIONS);
   if (tokens.length - start < patternTokens.length) return false;
   return patternTokens.every((glob, i) =>
     i === 0
-      ? programMatches(tokens[start] as string, glob)
-      : tokenMatches(tokens[start + i] as string, glob),
+      ? programMatches(tokens[start] as string, glob, powershell)
+      : boundedGlobMatches(tokens[start + i] as string, glob),
   );
 }
 
 /**
  * Every statement the command runs, read as the shield reads them: heredoc
- * bodies blanked first (a body is text, never a statement), then each segment,
- * then the bodies of its `$( … )` substitutions and, for the Bash tool, the
- * backtick substitutions, recursively to the shield's depth bound. PowerShell's
- * backtick is its escape character, so no backtick body is read there.
+ * bodies blanked first (a body is never a statement), then each segment, then
+ * the bodies of its `$( … )` substitutions and, for the Bash tool, the
+ * backtick substitutions, recursively to the shield's depth bound. In an
+ * UNQUOTED heredoc body bash runs the substitutions, so those bodies are read
+ * too; a quoted-delimiter body (`<<'X'`, `<<"X"`) is text throughout.
+ * PowerShell's backtick is its escape character, so no backtick body is read
+ * there, and its backslashes are path characters.
  */
 function commandStatements(command: string, powershell: boolean, depth = 0): Statement[] {
-  const opts = { powershell };
-  const blanked = blankHeredocBodies(command, findHeredocs(command, opts));
+  const opts = { powershell, literalBackslash: powershell };
+  const spans = findHeredocs(command, opts);
+  const blanked = blankHeredocBodies(command, spans);
   const out: Statement[] = [];
+  const nested = (text: string): void => {
+    if (depth >= SUBSTITUTION_DEPTH_MAX) return;
+    for (const body of substitutionBodies(text)) {
+      out.push(...commandStatements(body, powershell, depth + 1));
+    }
+  };
+  let cursor = 0;
   for (const seg of tokenizeShell(blanked, opts)) {
-    if (seg.tokens.length > 0) out.push(seg);
-    if (depth < SUBSTITUTION_DEPTH_MAX) {
-      for (const body of substitutionBodies(seg.raw)) {
+    const at = blanked.indexOf(seg.raw, cursor);
+    const before = at === -1 ? '' : blanked.slice(0, at);
+    if (at !== -1) cursor = at + seg.raw.length;
+    const piped = before.endsWith('|') && !before.endsWith('||');
+    if (seg.tokens.length > 0) out.push({ tokens: seg.tokens, raw: seg.raw, piped });
+    nested(seg.raw);
+  }
+  const unquotedBodies = spans.filter((s) => !s.quoted).map((s) => s.body);
+  for (const body of unquotedBodies) nested(body);
+  if (!powershell && depth < SUBSTITUTION_DEPTH_MAX) {
+    for (const text of [blanked, ...unquotedBodies]) {
+      for (const body of backtickBodies(text)) {
         out.push(...commandStatements(body, powershell, depth + 1));
       }
-    }
-  }
-  if (!powershell && depth < SUBSTITUTION_DEPTH_MAX) {
-    for (const body of backtickBodies(blanked)) {
-      out.push(...commandStatements(body, powershell, depth + 1));
     }
   }
   return out;
 }
 
+/** What a shell's arguments show: a string flag, stdin fed by text, a script argument. */
+interface ShellArgs {
+  dashC: boolean;
+  stdinText: boolean;
+  inputRedirect: boolean;
+  script: boolean;
+}
+
 /**
- * Whether the statement's program is a shell handed a string this gate does
- * not read: `sh|bash|zsh|dash -c …` (`-c` in any short-option cluster),
- * `pwsh|powershell -Command|-c|-EncodedCommand …`, `cmd /c|/k …`, or a shell
- * reading a heredoc or here-string on stdin.
+ * Read a POSIX shell's arguments up to its first non-option token: a `-c` in a
+ * short-option cluster there, a heredoc or here-string (`<<…`, `0<<…`,
+ * `<<<…`), an input redirection (`<f`, `0< f`), and whether a script argument
+ * follows (never under `-s`). Output redirections are skipped with their
+ * targets.
  */
-function isOpaqueShell(tokens: readonly string[]): boolean {
-  const start = programStart(tokens);
-  const program = tokens[start];
+function readShellArgs(args: readonly string[]): ShellArgs {
+  const out: ShellArgs = { dashC: false, stdinText: false, inputRedirect: false, script: false };
+  let optionsOpen = true;
+  let readsStdin = false;
+  for (let k = 0; k < args.length; k += 1) {
+    const a = args[k] as string;
+    if (/^\d*<</.test(a)) {
+      out.stdinText = true;
+      if (/^\d*<<[<-]?$/.test(a)) k += 1;
+      continue;
+    }
+    if (/^\d*<(?!\()/.test(a)) {
+      out.inputRedirect = true;
+      if (/^\d*<$/.test(a)) k += 1;
+      continue;
+    }
+    if (/^(?:\d*>|&>)/.test(a)) {
+      if (/^(?:\d*>>?|&>>?)$/.test(a)) k += 1;
+      continue;
+    }
+    if (optionsOpen && a === '--') {
+      optionsOpen = false;
+      continue;
+    }
+    if (optionsOpen && /^[-+][A-Za-z-]/.test(a)) {
+      if (/^-[A-Za-z]*c[A-Za-z]*$/.test(a)) out.dashC = true;
+      if (/^-[A-Za-z]*s[A-Za-z]*$/.test(a)) readsStdin = true;
+      if (POSIX_SHELL_VALUE_OPTIONS.has(a)) k += 1;
+      continue;
+    }
+    // With `-s` the shell reads its commands from stdin and the rest are
+    // positional parameters, never a script.
+    out.script = !readsStdin;
+    return out;
+  }
+  return out;
+}
+
+/** A PowerShell option that hands the host a string: a prefix of `-command` or `-encodedcommand`, or `-ec`. */
+function isPowerShellStringFlag(arg: string): boolean {
+  const a = arg.toLowerCase();
+  if (a.length < 2 || !a.startsWith('-') || a.startsWith('--')) return false;
+  return '-command'.startsWith(a) || '-encodedcommand'.startsWith(a) || a === '-ec';
+}
+
+/**
+ * Whether the statement hands a shell a string this gate does not read. After
+ * the wrapper skip, the program (by basename) is `eval`; or a POSIX shell
+ * (`sh`, `bash`, `zsh`, `dash`, `ksh`) with a `-c` in a short-option cluster
+ * before its first non-option token; or `pwsh` / `powershell` with a
+ * `-command` / `-encodedcommand` prefix or `-ec`; or `cmd` with `/c` or `/k`
+ * (glued text included); or any of those shells fed text on stdin by a
+ * heredoc or here-string (glued, `bash<<EOF`, or spaced), or with no script
+ * argument while a pipe feeds it or an input redirection does.
+ */
+function isOpaqueShell(statement: Statement, powershell: boolean): boolean {
+  const { tokens } = statement;
+  const start = programStart(tokens, undefined, PROGRAM_START_OPTIONS);
+  let program = tokens[start];
   if (program === undefined) return false;
-  const names = programSpellings(program, { suffixes: PROGRAM_SUFFIXES });
-  const all = [...names.exact, ...names.folded];
-  const args = tokens.slice(start + 1);
-  const readsHeredoc = args.some((a) => a.startsWith('<<'));
-  if (all.some((n) => POSIX_SHELLS.has(n))) {
-    return readsHeredoc || args.some((a) => /^-[A-Za-z]*c[A-Za-z]*$/.test(a));
+  let args = tokens.slice(start + 1);
+  const glued = program.indexOf('<<');
+  if (glued > 0) {
+    args = [program.slice(glued), ...args];
+    program = program.slice(0, glued);
   }
-  if (all.some((n) => POWERSHELL_HOSTS.has(n.toLowerCase()))) {
-    return readsHeredoc || args.some((a) => POWERSHELL_STRING_FLAG_RE.test(a));
+  const names = programNames(program, powershell);
+  const lower = [...names.exact.map((n) => n.toLowerCase()), ...names.folded];
+  const exact = [...names.exact, ...names.folded];
+  if (exact.includes('eval')) return true;
+  const fedWithoutScript = (read: ShellArgs): boolean =>
+    read.stdinText || (!read.script && (statement.piped || read.inputRedirect));
+  if (exact.some((n) => POSIX_SHELLS.has(n))) {
+    const read = readShellArgs(args);
+    return read.dashC || fedWithoutScript(read);
   }
-  if (all.some((n) => n.toLowerCase() === 'cmd')) {
-    return args.some((a) => /^\/[ck]$/i.test(a));
+  if (lower.some((n) => POWERSHELL_HOSTS.has(n))) {
+    if (args.some(isPowerShellStringFlag)) return true;
+    const read = readShellArgs(args);
+    const script = args.some((a) => /^-f(?:ile)?$/i.test(a) || /\.ps1$/i.test(a));
+    return read.stdinText || (!script && (statement.piped || read.inputRedirect));
+  }
+  if (lower.includes('cmd')) {
+    if (args.some((a) => /^\/[ck]/i.test(a))) return true;
+    const read = readShellArgs(args);
+    return read.stdinText || statement.piped || read.inputRedirect;
   }
   return false;
 }
@@ -480,7 +616,7 @@ function isOpaqueShell(tokens: readonly string[]): boolean {
 function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMatch[] {
   const matches: RowMatch[] = [];
   for (const row of rows) {
-    if ((row.scope.paths ?? []).some((glob) => matchesPathGlob(relPath, glob))) {
+    if ((row.scope.paths ?? []).some((glob) => boundedGlobMatches(relPath, glob))) {
       matches.push({ row, matched: relPath });
     }
   }
@@ -490,11 +626,14 @@ function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMa
 function matchCommandRows(
   rows: readonly ActionPolicyRow[],
   statements: readonly Statement[],
+  powershell: boolean,
 ): RowMatch[] {
   const matches: RowMatch[] = [];
   for (const row of rows) {
     const patterns = row.scope.commands ?? [];
-    const hit = statements.find((s) => patterns.some((p) => commandPatternMatches(s.tokens, p)));
+    const hit = statements.find((s) =>
+      patterns.some((p) => commandPatternMatches(s.tokens, p, powershell)),
+    );
     if (hit) matches.push({ row, matched: bound(hit.raw.trim()) });
   }
   return matches;
@@ -599,10 +738,11 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     matches = matchPathRows(config.rows, rel);
   } else {
     scopeKind = 'command';
-    const statements = commandStatements(parsed.command, parsed.tool === 'PowerShell');
-    matches = matchCommandRows(config.rows, statements);
+    const powershell = parsed.tool === 'PowerShell';
+    const statements = commandStatements(parsed.command, powershell);
+    matches = matchCommandRows(config.rows, statements, powershell);
     if (config.rows.some((r) => (r.scope.commands?.length ?? 0) > 0)) {
-      const hidden = statements.find((s) => isOpaqueShell(s.tokens));
+      const hidden = statements.find((s) => isOpaqueShell(s, powershell));
       if (hidden) opaque = bound(hidden.raw.trim());
     }
   }
@@ -631,30 +771,34 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     skipped.length > 0 ? { skippedForEnvironment: skipped.map((m) => m.row.id) } : {};
   const skippedDeny = skipped.some((m) => m.row.disposition === 'deny');
 
+  const opaqueVerdict = (
+    matchedText: string,
+    extra: Record<string, unknown> = {},
+  ): GateVerdict => ({
+    disposition: 'warn',
+    reason:
+      "This command hands a shell a string (sh -c, pwsh -Command, cmd /c, eval, or text on a shell's stdin); the action-policy gate does not read a shell string, so rows cannot judge what it runs.",
+    provenance: {
+      source,
+      ref: REF_OPAQUE_SHELL_STRING,
+      matched: matchedText,
+      checkedAt,
+      detail: {
+        scopeKind,
+        currentEnvironments,
+        alsoMatched: candidates.map((m) => m.row.id),
+        ...skippedDetail,
+        ...extra,
+      },
+    },
+  });
+
   const decide = (): Decision => {
     const winner = mostSevere(candidates);
     // A shell string the gate does not read warns, unless a row at warn or
     // deny already speaks for the call.
     if (opaque !== null && (winner === undefined || winner.row.disposition === 'display')) {
-      return {
-        verdict: {
-          disposition: 'warn',
-          reason:
-            'This command hands a shell a string (sh -c, pwsh -Command, cmd /c, or a heredoc on stdin); the action-policy gate does not read a shell string, so rows cannot judge what it runs.',
-          provenance: {
-            source,
-            ref: REF_OPAQUE_SHELL_STRING,
-            matched: opaque,
-            checkedAt,
-            detail: {
-              scopeKind,
-              currentEnvironments,
-              alsoMatched: candidates.map((m) => m.row.id),
-              ...skippedDetail,
-            },
-          },
-        },
-      };
+      return { verdict: opaqueVerdict(opaque) };
     }
     if (!winner) {
       return {
@@ -674,6 +818,33 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
 
     const denyMatches = candidates.filter((m) => m.row.disposition === 'deny');
     const named = overriddenRowIds(context);
+    const allNamed = denyMatches.length > 0 && denyMatches.every((m) => named.has(m.row.id));
+    const blocker = skipped.find((m) => m.row.disposition === 'deny');
+    if (winner.row.disposition === 'deny' && allNamed && blocker !== undefined) {
+      // The override is refused: cite the skipped deny row that refuses it.
+      return {
+        verdict: {
+          disposition: 'deny',
+          reason: `${ACTION_POLICY_OVERRIDE_ENV} refused: row ${blocker.row.id} (${blocker.row.action_kind}, deny) names environment "${blocker.row.environment}", which could not be read (${environmentWhy}); the override never applies while such a row is skipped.`,
+          provenance: {
+            source,
+            ref: blocker.row.id,
+            matched: blocker.matched,
+            checkedAt,
+            detail: {
+              actionKind: blocker.row.action_kind,
+              policyDisposition: blocker.row.disposition,
+              environment: blocker.row.environment,
+              currentEnvironments,
+              scopeKind,
+              overrideRefused: true,
+              alsoMatched: candidates.map((m) => m.row.id),
+              ...skippedDetail,
+            },
+          },
+        },
+      };
+    }
     // The first unnamed deny row is what still blocks; with nothing named it is
     // the first deny row, which is the winner (ties go to file order).
     const cited =
@@ -693,13 +864,19 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
       ...skippedDetail,
     };
 
-    const overridable =
-      policyDisposition === 'deny' &&
-      !skippedDeny &&
-      denyMatches.length > 0 &&
-      denyMatches.every((m) => named.has(m.row.id));
+    const overridable = policyDisposition === 'deny' && !skippedDeny && allNamed;
     if (overridable) {
       const ids = denyMatches.map((m) => m.row.id);
+      if (opaque !== null) {
+        // The named deny rows are cleared, but another statement still hands a
+        // shell a string: that warn is the verdict, and it owes no override line.
+        return {
+          verdict: opaqueVerdict(opaque, {
+            overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
+            overriddenRows: ids,
+          }),
+        };
+      }
       return {
         verdict: {
           disposition: 'allow',

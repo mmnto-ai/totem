@@ -1386,7 +1386,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     extraArgs: string[] = [],
     event = 'freeze-check',
     env: NodeJS.ProcessEnv | undefined = undefined,
-  ): { status: number | null; stderr: string } {
+  ): { status: number | null; stderr: string; stdout: string } {
     const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
     const res = spawnSync(process.execPath, [wrapperPath, '--event', event, ...extraArgs], {
       cwd,
@@ -1395,8 +1395,61 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       timeout: 30000,
       ...(env ? { env } : {}),
     });
-    return { status: res.status, stderr: res.stderr ?? '' };
+    return { status: res.status, stderr: res.stderr ?? '', stdout: res.stdout ?? '' };
   }
+
+  /** The one PreToolUse context object the wrapper printed on stdout. */
+  function contextOutput(stdout: string): unknown {
+    const lines = stdout.split('\n').filter((l) => l.trim() !== '');
+    expect(lines).toHaveLength(1);
+    return JSON.parse(lines[0] as string);
+  }
+
+  const contextObject = (additionalContext: string) => ({
+    hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext },
+  });
+
+  // ─── The warn channel (mmnto-ai/totem#3106) ─────────────────────────────
+  //
+  // A warn line, and a deny line the pilot tier lets through, reach the agent
+  // as the hook's additionalContext on stdout, once per run, only on exit 0.
+  describe('warn channel', () => {
+    const EDIT = { tool_name: 'Edit', tool_input: { file_path: 'src/app/main.ts' } };
+    const WARN = { disposition: 'warn', reason: 'heads up', provenance: { ref: 'r' } };
+    const DENY = { disposition: 'deny', reason: 'blocked', provenance: { ref: 'd' } };
+
+    it('a warn verdict exits 0 and prints the context object on stdout', () => {
+      writeStubCli({ verdict: WARN, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(0);
+      expect(contextOutput(stdout)).toEqual(
+        contextObject(`action-policy (warn): heads up [${JSON.stringify(WARN.provenance)}]`),
+      );
+    });
+
+    it('a pilot deny exits 0 and prints the context object on stdout', () => {
+      writeStubCli({ verdict: DENY, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--pilot'], 'action-policy');
+      expect(status).toBe(0);
+      expect(contextOutput(stdout)).toEqual(
+        contextObject(`action-policy (deny): blocked [${JSON.stringify(DENY.provenance)}]`),
+      );
+    });
+
+    it('an allow prints nothing on stdout', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(0);
+      expect(stdout).toBe('');
+    });
+
+    it('a strict deny exits 2 with an empty stdout', () => {
+      writeStubCli({ verdict: DENY, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(2);
+      expect(stdout).toBe('');
+    });
+  });
 
   const EDIT_NO_SUBSYSTEM = { tool_name: 'Edit', tool_input: { file_path: 'src/foo.ts' } };
   const DECLARED = { tool_name: 'Edit', tool_input: { subsystem: 'rule-compilation' } };
@@ -2107,6 +2160,20 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(pilot.status).toBe(0);
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
       expect(pilot.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(2);
+    });
+
+    it('two payloads with one warn each print ONE context object carrying both lines (mmnto-ai/totem#3106)', () => {
+      initGitRepo();
+      const warn = { disposition: 'warn', reason: 'heads up', provenance: {} };
+      writeStubCli({ verdict: warn, exit: 0 });
+      const { status, stdout } = runWrapper(
+        bash('gh pr merge 7; gh pr merge 8'),
+        [],
+        'merge-ready',
+      );
+      expect(status).toBe(0);
+      const line = 'merge-ready (warn): heads up [{}]';
+      expect(contextOutput(stdout)).toEqual(contextObject(`${line}\n${line}`));
     });
 
     it('an arithmetic shift or a comment does not swallow the merge that follows (fold round 2, F1)', () => {

@@ -1195,7 +1195,7 @@ describe('orient action-policy section', () => {
       '  governed touched paths (2 of 3 touched):',
       '    db/migrations/001_init.sql → migrations (deny)',
       '    src/app/main.ts → app-code (display)',
-      '  limit: a renamed program, a script the agent wrote and then runs, and anything a shell string contains match no command row.',
+      "  limit: renamed programs, agent-written scripts, interpreter strings and commands reached through other programs' arguments match no command row; shell strings warn.",
     ]);
   });
 

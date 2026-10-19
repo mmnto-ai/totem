@@ -195,6 +195,14 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  */
 export interface ScanOptions {
   powershell?: boolean;
+  /**
+   * The tokenizer keeps every backslash as a character (PowerShell's own rule:
+   * its escape is the backtick), so a Windows path stays one path token.
+   * Off by default: the shield's rows read bash's backslash rules on both
+   * tools. Read by `tokenizeShell` only (the action-policy gate,
+   * mmnto-ai/totem#3106).
+   */
+  literalBackslash?: boolean;
 }
 
 /**
@@ -509,6 +517,7 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  */
 export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
   const ps = opts.powershell === true;
+  const literalBackslash = opts.literalBackslash === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
@@ -528,12 +537,12 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
   while (i < command.length) {
     const ch = command[i] as string;
     // A line continuation is whitespace, never an operator or a word character.
-    if (ch === '\\' && command[i + 1] === '\n') {
+    if (!literalBackslash && ch === '\\' && command[i + 1] === '\n') {
       flushWord();
       i += 2;
       continue;
     }
-    if (ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
+    if (!literalBackslash && ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
       flushWord();
       i += 3;
       continue;
@@ -594,6 +603,7 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
           word += command[i + 1];
           i += 2;
         } else if (
+          !literalBackslash &&
           command[i] === '\\' &&
           i + 1 < command.length &&
           DQ_ESCAPABLE.has(command[i + 1] as string)
@@ -608,7 +618,7 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
-    if (ch === '\\' && i + 1 < command.length) {
+    if (!literalBackslash && ch === '\\' && i + 1 < command.length) {
       word += command[i + 1];
       inWord = true;
       i += 2;
@@ -718,8 +728,14 @@ export function programIndex(tokens: readonly string[], program: string): number
  * never read as a function name (the `programIndex` caller's own rule).
  * Exported for the action-policy gate (mmnto-ai/totem#3106).
  */
-export function programStart(tokens: readonly string[], program?: string): number {
+export function programStart(
+  tokens: readonly string[],
+  program?: string,
+  opts: ProgramStartOptions = {},
+): number {
+  const table = opts.wrapperOptions;
   let i = 0;
+  let afterWrapper = false;
   // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
   // `VAR=x sudo prog`, `then VAR=x prog`.
   while (i < tokens.length) {
@@ -731,9 +747,23 @@ export function programStart(tokens: readonly string[], program?: string): numbe
       i += 2;
       continue;
     }
+    if (table !== undefined) {
+      const wrapper = wrapperName(t, table);
+      if (wrapper !== undefined) {
+        i = skipWrapperOptions(tokens, i + 1, table[wrapper] ?? []);
+        afterWrapper = true;
+        continue;
+      }
+      if (afterWrapper && t === '--') {
+        // `env FOO=1 -- prog`: the `--` that ends the wrapper's options.
+        afterWrapper = false;
+        i += 1;
+        continue;
+      }
+    }
     if (
       /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
-      WRAPPERS.has(t) ||
+      (table === undefined && WRAPPERS.has(t)) ||
       RESERVED_BEFORE_PROGRAM.has(t) ||
       (t !== program && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) && tokens[i + 1] === '{') ||
       (t === '-p' && tokens[i - 1] === 'time')
@@ -744,6 +774,100 @@ export function programStart(tokens: readonly string[], program?: string): numbe
   return i;
 }
 
+/**
+ * The wrappers a statement runs its program THROUGH, by basename, each with the
+ * options that take a separate value (mmnto-ai/totem#3106). Read by
+ * {@link programStart} when a caller passes it: a `--` ends a wrapper's
+ * options, `--opt=value` is one token, an option the table does not list is
+ * skipped as a flag (so its value, if it had one, is read as the program), and
+ * the token after a listed option is its value. `busybox` takes the next token
+ * as its applet, so the applet is the program. The shield's own rows keep the
+ * flat {@link WRAPPERS} set.
+ */
+export const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  sudo: [
+    '-u',
+    '-g',
+    '-C',
+    '-D',
+    '-h',
+    '-p',
+    '-r',
+    '-t',
+    '-T',
+    '-U',
+    '--user',
+    '--group',
+    '--host',
+    '--prompt',
+    '--chdir',
+  ],
+  env: ['-u', '-C', '-S', '--unset', '--chdir', '--split-string'],
+  nice: ['-n', '--adjustment'],
+  nohup: [],
+  time: ['-f', '-o', '--format', '--output'],
+  xargs: [
+    '-n',
+    '-I',
+    '-L',
+    '-P',
+    '-d',
+    '-a',
+    '-s',
+    '-E',
+    '--max-args',
+    '--replace',
+    '--max-lines',
+    '--max-procs',
+    '--delimiter',
+    '--arg-file',
+    '--max-chars',
+  ],
+  command: [],
+  exec: ['-a'],
+  builtin: [],
+  busybox: [],
+});
+
+/** Options for {@link programStart}. */
+export interface ProgramStartOptions {
+  /**
+   * Recognise wrappers by basename through this table and skip their options
+   * (see {@link WRAPPER_VALUE_OPTIONS}); absent, the flat {@link WRAPPERS} set
+   * is matched by exact token and no option is skipped.
+   */
+  wrapperOptions?: Readonly<Record<string, readonly string[]>>;
+}
+
+/** The table key a token names as a wrapper, by its program spellings. */
+function wrapperName(
+  token: string,
+  table: Readonly<Record<string, readonly string[]>>,
+): string | undefined {
+  const names = programSpellings(token);
+  return [...names.exact, ...names.folded].find((n) => Object.hasOwn(table, n));
+}
+
+/** The index past a wrapper's options starting at `i` (see {@link WRAPPER_VALUE_OPTIONS}). */
+function skipWrapperOptions(
+  tokens: readonly string[],
+  i: number,
+  valueOptions: readonly string[],
+): number {
+  let k = i;
+  while (k < tokens.length) {
+    const t = tokens[k] as string;
+    if (t === '--') return k + 1;
+    if (!t.startsWith('-') || t === '-') return k;
+    if (t.startsWith('--') && t.includes('=')) {
+      k += 1;
+      continue;
+    }
+    k += valueOptions.includes(t) ? 2 : 1;
+  }
+  return k;
+}
+
 /** Options for {@link programSpellings}. */
 export interface ProgramSpellingOptions {
   /**
@@ -751,6 +875,11 @@ export interface ProgramSpellingOptions {
    * Default `['.exe']`, the shield's own spelling.
    */
   suffixes?: readonly string[];
+  /**
+   * Also read the name after the token's last backslash into `exact` (a
+   * PowerShell path with backslash separators). Off by default.
+   */
+  backslash?: boolean;
 }
 
 /**
@@ -770,6 +899,10 @@ export function programSpellings(
   const exact = [token];
   const slash = token.lastIndexOf('/');
   if (slash !== -1) exact.push(token.slice(slash + 1));
+  if (opts.backslash === true) {
+    const cut = Math.max(slash, token.lastIndexOf('\\'));
+    if (cut !== -1 && cut !== slash) exact.push(token.slice(cut + 1));
+  }
   const lower = token.toLowerCase();
   const suffix = (opts.suffixes ?? ['.exe']).find((x) => lower.endsWith(x.toLowerCase()));
   if (suffix === undefined) return { exact, folded: [] };
