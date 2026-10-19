@@ -151,8 +151,20 @@ process.stdin.on('end', () => {
   // ref (genuine OR negated) is blocked. Checked before the bare-ref arm because
   // accidental upstream-issue closure is the higher-blast-radius failure.
   if (AUTO_CLOSE_MD_RE.test(filePath) && !AUTO_CLOSE_GITHUB_RE.test(filePath)) {
+    // A totem-close marker's own text ("close: owner/repo#N") reads as a keyword-adjacent
+    // ref, so a marker whose content is refs only is stripped before the scan
+    // (mmnto-ai/totem#3103). Narrower on purpose than the receipt's stripIntentMarkers
+    // (packages/core/src/autoclose/receipt.ts), which strips any content: here a keyword
+    // sharing a trailer line, a prose line that starts with totem-close:, or a keyword
+    // inside an unterminated marker span stays visible to this rule. Each repetition
+    // starts with a ref and owns the separators after it, so an input the strip does
+    // not match is read in linear time (a nested whitespace quantifier backtracked
+    // exponentially on spaced refs followed by a word).
+    const acText = joined
+      .replace(/<!--\s*totem-close:\s*(?:(?:[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)?#\d+[\s,]*)*-->/gi, ' ')
+      .replace(/^[ \t]*totem-close:[ \t]*(?:(?:[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)?#\d+[ \t,]*)*$/gim, ' ');
     const acRe = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
-    const acMatches = [...joined.matchAll(acRe)];
+    const acMatches = [...acText.matchAll(acRe)];
     if (acMatches.length > 0) {
       // Group layout: 1+2 = URL owner/repo+N; 3+4 = qualified owner/repo+N; 5 = bare N.
       const acRefs = acMatches.slice(0, 5).map((m) => (m[1] ? m[1] + '#' + m[2] : m[3] ? m[3] + '#' + m[4] : '#' + m[5])).join(', ');
@@ -161,7 +173,8 @@ process.stdin.on('end', () => {
         'GitHub auto-closes linked issues from a PR body / commit message carrying this pattern (even under negation).\n' +
         'Rephrase to a non-keyword form (`references` / `see` / `tracks`).\n' +
         'For verbatim quotation, prefix with a `<!-- totem-context: <reason> -->` directive on the preceding line.\n' +
-        'mmnto-ai/totem#1762.\n',
+        'For an INTENDED close, add `<!-- totem-close: owner/repo#N -->` on its own line as well (this rule reads past a marker that carries refs only): the auto-close required check, where it is installed, and totem pr merge authorize a close by that marker only, never by the keyword.\n' +
+        'mmnto-ai/totem#1762, mmnto-ai/totem#3103.\n',
       );
       process.exit(2);
     }

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "adf39d4e70ab28898744259e96b90e5acb84c676",
+  "readAt": "2026-10-19T20:56:51Z",
+  "findings": [
+    {
+      "id": "3103-r1-F1",
+      "severity": "MATERIAL",
+      "file": ".claude/hooks/PreWriteShield.cjs",
+      "line": 158,
+      "claim": "The strip lets through more than marker and trailer text: a keyword on a trailer line, a prose line starting with totem-close:, and a keyword inside an unterminated marker span that crosses newlines all pass. This falsifies the changeset line 'A keyword line beside a marker is still refused'. The regexes are verbatim from receipt.ts stripIntentMarkers, so this repository's required check also strips these and treats the refs as declared; consumers have no backstop.",
+      "counterexample": "Write docs/x.md, content 'Totem-Close: mmnto-ai/totem#131 and also closes mmnto-ai/totem#999': pre-change exit 2, head exit 0 (Gemini twin exit 0). Content 'totem-close: is the marker; this fixes mmnto-ai/totem#999': pre 2, head 0. Content '<!-- totem-close: mmnto-ai/totem#131' NL 'Closes mmnto-ai/totem#999' NL '-->': pre 2, head 0. Content '<!-- totem-close: mmnto-ai/totem#131' NL NL 'This PR closes mmnto-ai/totem#999.' NL NL '<!-- end -->': pre 2, head 0. A blockquote '>' inside the span still exits 2."
+    },
+    {
+      "id": "3103-r1-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init-templates.ts",
+      "line": 936,
+      "claim": "The new refusal line says 'the auto-close required check and totem pr merge authorize a close by that marker only'. The required check is this repository's .github/workflows/autoclose-guard.yml and is not distributed by totem init; totem pr merge fails closed in consumers without squash-only plus a BLANK squash body. The sentence overclaims in the distributed template (also line 632 and the changeset).",
+      "counterexample": "git grep autoclose-guard adf39d4e -- packages returns no hits; pr.ts header steps 1 and 4 assert merge-config posture before evaluating."
+    },
+    {
+      "id": "3103-r1-F3",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 2558,
+      "claim": "toContain('totem-close:[^>]*-->') proves the regex text is present, not that the strip runs before the auto-close scan only. The negative control (line 2724) catches a total strip but not the F1 over-strip, and does not assert the refs list excludes the marker ref. Not covered: the Edit shape on the Claude hook, the trailer on the Gemini twin, directive+keyword+marker, CRLF, and a bare ref in a marker refused by the bare-ref rule. No test locks the tracked hook to the rendered template.",
+      "counterexample": "Reasoned from measured pre-change outputs: every new test except the negative control fails on the pre-change template; the F1 inputs pass all new tests at head while exiting 0."
+    },
+    {
+      "id": "3103-r1-F4",
+      "severity": "MINOR",
+      "file": ".changeset/shield-rule2-intended-close-marker.md",
+      "line": 5,
+      "claim": "'as the receipt's own matcher already does' names the wrong module: the strip is stripIntentMarkers in packages/core/src/autoclose/receipt.ts, not matcher.ts. 'Refreshed by totem init' leaves out totem hook install, which the issue names. Package and patch bump match the issue; no close keyword is next to a digit ref.",
+      "counterexample": "AUTO_CLOSE_REGEX_SOURCE over the changeset text returns []; receipt.ts:117 defines stripIntentMarkers."
+    },
+    {
+      "id": "3103-r1-F5",
+      "severity": "MINOR",
+      "file": ".github/workflows/lint.yml",
+      "line": 195,
+      "claim": "The branch forks at 6a5ca62c, not the stated base 135ea3a9. A diff against 135ea3a9 shows two dependabot pin reverts (lint.yml upload-sarif, spine-spike-linux.yml rust-toolchain) that are main's commits seen in reverse, not branch edits. Bring main forward by merge before pushing.",
+      "counterexample": "git merge-base 135ea3a9 adf39d4e returns 6a5ca62c; git diff --quiet 6a5ca62c 135ea3a9 on the three edited source paths succeeds (identical)."
+    },
+    {
+      "id": "3103-r1-F6",
+      "severity": "QUESTION",
+      "file": "packages/core/src/autoclose/receipt.test.ts",
+      "line": 34,
+      "claim": "Does GitHub act on a closing keyword inside an HTML comment, or on the marker text 'totem-close: owner/repo#N' itself? The answer decides whether the unterminated-marker spans in F1 and the newly allowed marker in .changeset/** (an auto-close surface per hook:28-31) are real close vectors. The autoclose tests assume nothing about how GitHub treats comments.",
+      "counterexample": "Not measured. Write .changeset/a.md with content '<!-- totem-close: mmnto-ai/totem#131 -->': pre-change exit 2, head exit 0."
+    },
+    {
+      "id": "3103-r1-F7",
+      "severity": "QUESTION",
+      "file": ".claude/hooks/PreWriteShield.cjs",
+      "line": 157,
+      "claim": "The issue asked for no behaviour change to either guard; the strip is one. A cure with no behaviour change exists (the marker on the line after its own totem-context directive passes the pre-change hook), so the strip is not the minimal cure. The PR should disclose the behaviour change, the F1 widening, and that this repository's required check has the same widening.",
+      "counterexample": "Pre-change hook, Write docs/x.md, content '<!-- totem-context: intended close -->' NL 'Closes mmnto-ai/totem#131' NL NL '<!-- totem-context: intended close -->' NL '<!-- totem-close: mmnto-ai/totem#131 -->': exit 0."
+    }
+  ],
+  "folded": [
+    "3103-r1-F1",
+    "3103-r1-F2",
+    "3103-r1-F3",
+    "3103-r1-F4",
+    "3103-r1-F5",
+    "3103-r1-F6",
+    "3103-r1-F7"
+  ],
+  "verdict": "Read 1 of the shield rule-2 change at adf39d4e: blocking=0 material=1 minor=4 question=2 folded=7. Folded by the seat in the next commit: F1 MATERIAL (the strip narrowed to markers whose content is refs only, in both templates and the tracked hook; each measured over-allow shape, a keyword sharing a trailer line, a prose line starting with totem-close:, a keyword inside an unterminated span, is now refused and covered by a test); F2 (the message says 'where it is installed' of the required check); F3 (tests added for the Edit shape, the directive-keyword-marker shape, CRLF, several refs, the bare ref in a marker, the Gemini trailer; the negative control asserts the reported refs exclude the marker's; a parity test locks the tracked hook to the template); F4 (the changeset names stripIntentMarkers in receipt.ts and the hook install refresh path); F5 (main merged in before the push). Answered in the pull request body: F6 (whether GitHub links from a keyword inside an HTML comment is unmeasured; the narrowing removes the span vector from this rule, and a refs-only marker in a changeset is the receipt's existing declared-intent contract, unchanged here); F7 (the strip is disclosed as a behaviour change against the issue's letter; the two-directive cure exists and is why the message names the marker as the channel rather than a second directive)."
+}

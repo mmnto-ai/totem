@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "127cfd05e7cdf96465598f56d4a878b9e4726020",
+  "readAt": "2026-10-19T21:13:29Z",
+  "findings": [
+    {
+      "id": "3103-r2-F1",
+      "severity": "MATERIAL",
+      "file": ".claude/hooks/PreWriteShield.cjs",
+      "line": 161,
+      "claim": "The narrowed strip regexes (here and init-templates.ts:622-623, :930-931) backtrack exponentially when the strip fails: whitespace between refs splits ambiguously between the trailing and leading whitespace quantifiers of adjacent iterations. The adf39d4e regexes were linear. No hook timeout is configured; vendor timeout and fail-open behaviour are unmeasured.",
+      "counterexample": "Regex level, node 24: '<!-- totem-close: ' + fourteen bare short refs numbered 1 to 14 joined by 4 spaces + 4 spaces + 'x' (108 chars) took 103397 ms; trailer 'totem-close: ' + the same (103 chars) took 145671 ms; 20 refs 'mmnto-ai/totem#i' joined by single spaces + ' see notes -->' took 57 ms and doubles per ref; the old [^>]*--> regex took 0.0 ms on the same inputs. End to end, Write docs/x.md with 24 single-space refs + trailing word: exit 2 after about 945 ms. Candidate /<!--\\s*totem-close:\\s*(?:(?:OWNER\\/REPO)?#\\d+[\\s,]*)*-->/gi and its trailer twin: n=200 at 0.0 ms, refs-only still stripped."
+    },
+    {
+      "id": "3103-r2-F2",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/init.test.ts",
+      "line": 2558,
+      "claim": "The static assertions (here and :3405) prove only that the HTML-form tail substring is present, not the trailer narrowing or where the strip applies; the parity lock covers only the Claude pair. Untested: space- or newline-separated refs, no-space form, uppercase, trailing comma, double -->, closed marker with a non-keyword trailing word, URL-form marker, exempt paths with a marker, Gemini replace, Gemini prose and span shapes, and any time bound.",
+      "counterexample": "Reasoned from the test diff: 2739, 2751, 2763 and 3451 fail on adf39d4e (old exits 0 on their inputs); the several-refs/CRLF, directive shape, Edit-shape, bare-ref and marker-ref-777 control tests pass on adf39d4e. The F1 inputs pass every test at 127cfd05."
+    },
+    {
+      "id": "3103-r2-F3",
+      "severity": "MINOR",
+      "file": ".changeset/shield-rule2-intended-close-marker.md",
+      "line": 5,
+      "claim": "The fold also newly refuses a closed marker carrying non-ref text and the URL-form marker; neither the changeset nor the first read's deposit verdict discloses this (the verdict also does not disclose the F1 cost). Refusing the URL form matches the receipt, whose INTENT_REF_RE declares nothing from a URL.",
+      "counterexample": "Write docs/x.md '<!-- totem-close: mmnto-ai/totem#131 please -->': adf39d4e exit 0, 127cfd05 exit 2. '<!-- totem-close: https://github.com/mmnto-ai/totem/issues/131 -->': adf39d4e exit 0, 127cfd05 exit 2. Same results on the Gemini write_file and replace paths."
+    }
+  ],
+  "folded": [
+    "3103-r2-F1",
+    "3103-r2-F2",
+    "3103-r2-F3"
+  ],
+  "verdict": "Read 2, scoped to the fold 127cfd05: blocking=0 material=1 minor=2 question=0 folded=3. The first read's over-allow shapes were measured refused and the tracked hook byte-identical to the template. Folded by the seat in the next commit: F1 MATERIAL (each repetition of the strip's pattern now starts with a ref and owns the separators after it, the leg's own measured candidate, in both templates and the tracked hook; a test holds the time bound on the leg's spaced-refs input, which took over a hundred seconds before and is refused flat now); F2 (tests for every refs-only spelling, the non-ref and URL-form markers, the Gemini replace shape with the prose and span inputs; the static assertions hold both regexes verbatim in both templates); F3 (the changeset and the pull request disclose the two further refused shapes and the cost change). Convergence named: the fold replaces a regex with the second read's own measured candidate and adds the bound as a test; a third read would re-measure what the second measured."
+}
