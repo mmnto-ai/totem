@@ -410,8 +410,28 @@ function underivableParked(err: unknown): {
   };
 }
 
-/** The policy file as orient names it. */
-const ACTION_POLICY_SHOWN_FILE = '.totem/action-policy.json';
+/** The `totemDir` a repository uses when its config names none. */
+const DEFAULT_TOTEM_DIR = '.totem';
+
+/**
+ * The configured `totemDir`, resolved as `totem gate check` resolves it (the
+ * config's directory, or the cwd for the global profile, joined with
+ * `config.totemDir`), so orient reads the policy the gate reads; the
+ * default `<repoRoot>/.totem` when no config resolves.
+ */
+async function resolvePolicyTotemDir(cwd: string, repoRoot: string): Promise<string> {
+  const path = await import('node:path');
+  try {
+    const { isGlobalConfigPath, loadConfig, resolveConfigPath } = await import('../utils.js');
+    const configPath = resolveConfigPath(cwd);
+    const config = await loadConfig(configPath);
+    const configRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
+    return path.join(configRoot, config.totemDir ?? DEFAULT_TOTEM_DIR);
+    // totem-context: intentional — with no resolvable totem.config.ts the policy is read at the default totemDir, the same directory an unconfigured repository uses; a missing file there omits the section
+  } catch {
+    return path.join(repoRoot, DEFAULT_TOTEM_DIR);
+  }
+}
 
 /** Refs the gate returns when no row governs the path. */
 const ACTION_POLICY_UNGOVERNED_REFS = new Set([
@@ -426,11 +446,16 @@ const ACTION_POLICY_UNGOVERNED_REFS = new Set([
  * `Write` of that path. `null` when the file is absent (the section is
  * omitted); a load failure is one error, never a thrown orient.
  */
-async function deriveActionPolicy(repoRoot: string): Promise<OrientActionPolicy | null> {
-  const file = ACTION_POLICY_SHOWN_FILE;
+async function deriveActionPolicy(
+  cwd: string,
+  repoRoot: string,
+): Promise<OrientActionPolicy | null> {
   const path = await import('node:path');
-  const { actionPolicyEvaluator, readActionPolicyConfig } = await import('@mmnto/totem');
-  const totemDir = path.join(repoRoot, '.totem');
+  const { ACTION_POLICY_FILE, actionPolicyEvaluator, getGitBranch, readActionPolicyConfig } =
+    await import('@mmnto/totem');
+  const totemDir = await resolvePolicyTotemDir(cwd, repoRoot);
+  const shownDir = path.relative(repoRoot, totemDir).split(path.sep).join('/') || '.';
+  const file = `${shownDir}/${ACTION_POLICY_FILE}`;
   let config;
   try {
     config = readActionPolicyConfig(totemDir);
@@ -461,10 +486,15 @@ async function deriveActionPolicy(repoRoot: string): Promise<OrientActionPolicy 
   // The override's stderr line is the gate's, not orient's: capture and drop
   // it here, and mark the match instead.
   const quiet = (): void => {};
+  // One branch read per orient run, however many paths a row naming an
+  // environment governs (getGitBranch never throws).
+  let branch: string | undefined;
+  const gitBranchReader = (at: string): string => (branch ??= getGitBranch(at));
   for (const touchedPath of touched) {
     try {
       const verdict = actionPolicyEvaluator({ tool: 'Write', path: touchedPath }, totemDir, {
         writeStderr: quiet,
+        gitBranchReader,
       });
       if (ACTION_POLICY_UNGOVERNED_REFS.has(verdict.provenance.ref)) continue;
       const detail = verdict.provenance.detail ?? {};
@@ -491,7 +521,7 @@ function actionPolicyMatchText(m: OrientActionPolicyMatch): string {
 
 /** The disclosed limit of every command-text gate, one sentence. */
 const ACTION_POLICY_LIMIT_LINE =
-  'limit: a governed program invoked by path, inside `sh -c`, or from a script the agent wrote matches no command row.';
+  'limit: a renamed program, a script the agent wrote and then runs, and anything a shell string contains match no command row.';
 
 async function derivePRs(cwd: string): Promise<Section<OrientPr[]>> {
   try {
@@ -691,7 +721,7 @@ async function derive(cwd: string): Promise<DerivedState> {
     derivePRs(cwd),
     deriveIssues(cwd, localSlug),
     deriveBoard(cwd, owner),
-    deriveActionPolicy(repoRoot),
+    deriveActionPolicy(cwd, repoRoot),
   ]);
 
   return {

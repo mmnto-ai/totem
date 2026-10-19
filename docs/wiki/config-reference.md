@@ -244,7 +244,7 @@ It is read at run time by `totem review --gate` itself, so setting it needs no `
 
 ## The Action Policy File (`.totem/action-policy.json`)
 
-The action policy is a separate, tracked JSON file beside `totem.config.ts`'s `.totem/` directory, read by the `action-policy` gate (mmnto-ai/totem#3106). It classifies an agent's edits and shell commands into governed action kinds, each with a disposition, so that a change to a migration directory or a production deploy command is shown, warned on or refused before it runs. Totem ships the format and the engine; the rows are yours. Totem never writes or scaffolds this file.
+The action policy is a separate, tracked JSON file in your `totemDir` (`.totem/` unless `totem.config.ts` names another), read by the `action-policy` gate (mmnto-ai/totem#3106). An edit to a path a row governs, or a shell command whose program and leading arguments match a row, is shown, warned on or refused before it runs, according to the row; a shell string the gate does not read (`sh -c "…"` and its kin) is warned on. Totem ships the format and the engine; the rows are yours. Totem never writes or scaffolds this file.
 
 **Shape.** Every field:
 
@@ -259,7 +259,9 @@ The action policy is a separate, tracked JSON file beside `totem.config.ts`'s `.
   - `disposition` (required): `display`, `warn` or `deny`.
   - `reason` (optional): the text the verdict carries; without it the verdict names the row.
 
-**Example** with three rows: a `deny` path row, a `display` path row, and a `deny` command row that applies only on production branches.
+**Every object is strict.** An unknown key anywhere in the file (a typo such as `enviroment` on a row or `command` in a scope) fails the load and names the key's path, so a misspelling can never silently drop a row's governance. The freeze file is read leniently; this file is not.
+
+**Example** with four rows: a `deny` path row, a `display` path row, a `deny` command row that applies only on production branches, and a row that governs the policy file and the hook settings themselves.
 
 ```json
 {
@@ -286,24 +288,41 @@ The action policy is a separate, tracked JSON file beside `totem.config.ts`'s `.
       "scope": { "commands": ["pnpm db:migrate:prod"] },
       "environment": "prod",
       "disposition": "deny"
+    },
+    {
+      "id": "gate-config",
+      "action_kind": "deploy_config_change",
+      "scope": {
+        "paths": [".totem/action-policy.json", ".claude/settings.json", ".claude/hooks/**"]
+      },
+      "disposition": "deny",
+      "reason": "the policy and its hooks change by review, not by the agent"
     }
   ]
 }
 ```
 
-**Two dialects.** A `paths` entry is a glob in Totem's path-classifier dialect, matched against the edited file made repo-relative with `/` separators: `**` crosses directories, `*` and `?` stay within one segment, braces expand (`*.{yml,yaml}`), matching is case-sensitive, and a bare name is anchored at the root (`README.md` matches only the root README, never `docs/README.md`). Backslashes in the edited path are normalized first, and a path outside the repository is never governed. A `commands` entry is a **token-prefix pattern**: it is split on whitespace, and it matches a shell statement whose first tokens equal the pattern's tokens in order, each token compared as a glob in the same dialect. The command is split into statements the way the transport shield splits it, so a pattern matches after `&&`, `;` or `|`. `pnpm db:migrate:prod` matches `cd apps/api && pnpm db:migrate:prod --force`; it does not match `pnpm db:migrate:prod-report`, because a longer token is not the pattern's token, and it does not match `echo pnpm db:migrate:prod`, because the pattern must start the statement.
+Nothing governs the policy file or the hook settings unless you write a row for them, as `gate-config` does above.
 
-**Environments.** A row naming an environment applies only when the current branch matches one of that environment's `branches` globs. The branch is read once with `git branch --show-current`, and only when a row that matched the path or command names an environment; a policy whose matching rows are all `any` never runs git. When git cannot report the branch, the result is unevaluable: `deny` at the strict tier and `warn` at the pilot tier, citing `environment-unevaluable`, never an allow. A `deny` from a matching `any` row still stands in that case.
+**Path globs.** A `paths` entry is a glob in Totem's path-classifier dialect, matched against the edited file made relative to the repository root (the directory holding `.git`, found by walking up from the `totemDir`; the `totemDir`'s parent when there is no repository), with `/` separators. `**` crosses directories, `*` and `?` stay within one segment, braces expand (`*.{yml,yaml}`), and a bare name is anchored at the root (`README.md` matches only the root README, never `docs/README.md`). Backslashes in the edited path are normalized first, and a path outside the repository is never governed. Globs are repo-relative: one starting with `/`, `\` or a drive letter is refused at load. A path glob may carry at most four `*` (`**` counts two).
+
+**Command patterns.** A `commands` entry is a **token-prefix pattern**: it is split on whitespace, and it matches a shell statement whose program and the arguments after it equal the pattern's tokens in order, each token compared as a glob in the same dialect. The program position is found the way the transport shield finds it: past `VAR=value` assignments, the wrappers `env`, `sudo`, `time`, `nice`, `nohup`, `command`, `exec`, `builtin` and `xargs`, and the reserved words that can stand before a program (`{`, `if`, `then`, `!` and the rest), so `CI=1 pnpm db:migrate:prod` and `if pnpm db:migrate:prod; then …` both reach `pnpm`. The program token is compared by its name after the last `/`, so `vercel deploy --prod` matches `./node_modules/.bin/vercel deploy --prod`; a `.exe` or `.cmd` spelling is compared by its stem, in any letter case, after the last `/` or `\`. Statements are read the way the shield splits them: a pattern matches after `&&`, `;` or `|`, inside a `$( … )` substitution and, on the Bash tool, inside a backtick substitution, while a heredoc body is text and never a statement. `pnpm db:migrate:prod` matches `cd apps/api && pnpm db:migrate:prod --force`; it does not match `pnpm db:migrate:prod-report`, because a longer token is not the pattern's token, and it does not match `echo pnpm db:migrate:prod`, because `echo` is the program. Within a token, `*` stops at `/` and `**` crosses it, so `psql **` matches `psql postgres://host/db`. Each pattern token may carry at most two `*` (`**` counts two), and a statement token longer than 1024 characters is compared by its first 1024 characters against a wildcard token (a literal token is still compared whole).
+
+**Identity is lexical and case-sensitive.** A path or program matches by its spelling, in its letter case (except the `.exe`/`.cmd` stem above). On a case-insensitive file system, write the row for the spelling the agent uses.
+
+**Shell strings.** When the policy has at least one command row and a statement hands a shell a string (`sh`, `bash`, `zsh` or `dash` with `-c`, `pwsh` or `powershell` with `-Command`, `-c` or `-EncodedCommand`, `cmd` with `/c` or `/k`, or a shell reading a heredoc or here-string on stdin), the gate returns `warn` citing `opaque-shell-string`: it does not read the string, so it says so rather than allowing silently, and it never denies on it. A `warn` or `deny` row that matches elsewhere in the same command speaks instead.
+
+**Environments.** A row naming an environment applies only when the current branch matches one of that environment's `branches` globs. The current environments are every declared environment whose globs match, so a branch can be in `staging` and `prod` at once and a `prod` row applies on it. The branch is read once with `git branch --show-current`, and only when a row that matched the path or command names an environment; a policy whose matching rows are all `any` never runs git. When git cannot report a branch (a detached HEAD, the middle of a rebase, or git unavailable), the environment rows that matched are skipped and listed in the verdict's `skippedForEnvironment`, and the result is unevaluable, `environment-unevaluable`, capped at those rows' own dispositions: a skipped `deny` row gives `deny` at the strict tier and `warn` at the pilot tier, a skipped `warn` or `display` row gives `warn`, and it is never an allow. A `deny` from a matching `any` row still stands in that case.
 
 **Several rows.** When more than one row matches, the most severe disposition wins (`deny` over `warn` over `display`), ties going to the earlier row; the others are listed in the verdict's `alsoMatched`.
 
 **`display`.** The gate contract has three verdicts, so a `display` row is reported through the `warn` arm: the call proceeds at both tiers and the reason is printed, with `policyDisposition: "display"` in the verdict's provenance.
 
-**The override.** `TOTEM_ACTION_POLICY_OVERRIDE` is a comma-separated list of row ids. When the winning row is a `deny` row named in it, the verdict becomes `allow`, its provenance keeps the row and records `overriddenBy`, and the gate prints one stderr line naming the row. It never touches a row that is not named, a `warn` or `display` verdict, or an unevaluable environment; it is read from the environment of the call, so set it for the one command that needs it.
+**The override.** `TOTEM_ACTION_POLICY_OVERRIDE` is a comma-separated list of row ids. When every `deny` row that matched the call is named in it, the verdict becomes `allow`, its provenance records `overriddenBy` and the overridden rows, and the gate prints one stderr line naming them; when any matching `deny` row is not named, the verdict stays `deny` and cites the first unnamed one, so you see what still blocks. It never touches a `warn` or `display` verdict, and it never applies while a `deny` row naming an environment was skipped because the branch could not be read. The hook reads the environment of the process running it (the agent session or the harness that launched it), so the variable is set there, before the command is attempted; an inline `TOTEM_ACTION_POLICY_OVERRIDE=… command` prefix is part of the command text, not an override.
 
-**Absent and corrupt files.** With no file, nothing is governed: every call is allowed with `no-policy-file`, `totem orient` omits its ACTION POLICY section, and `totem doctor` reports "No action policy (none configured)". A file that does not parse or does not match the schema (an unknown kind, a duplicate id, an empty scope, an undeclared environment, a missing `version`) never yields a verdict: the gate fails closed and blocks at every tier, `totem doctor` warns naming the file and the first error, and `totem orient` prints one error line for the section.
+**Absent and corrupt files.** With no file, nothing is governed: every call is allowed with `no-policy-file`, `totem orient` omits its ACTION POLICY section, and `totem doctor` reports "No action policy (none configured)". A file that does not parse or does not match the schema (an unknown kind or key, a duplicate id, an empty scope, an absolute or over-wild glob, an undeclared environment, a missing `version`) never yields a verdict: the gate fails closed and blocks at every tier, `totem doctor` warns naming the file and the first error, and `totem orient` prints one error line for the section.
 
-**Disclosed limits.** Command matching reads the command text the agent sends. A governed program invoked by its path, inside `sh -c`, from a script the agent wrote, or under another name matches no command row and is allowed as `no-policy-match`. Add rows for the wrapper shapes your repository uses; actions outside the rows stay with whoever runs the session.
+**Disclosed limits.** The gate reads the command text the agent sends. A renamed program (an alias, a copy, a symlink under another name), a script the agent wrote and then runs, and anything a shell string contains match no command row: the first two are allowed as `no-policy-match`, and the third is warned on as `opaque-shell-string`. Add rows for the wrapper shapes your repository uses; actions outside the rows stay with whoever runs the session.
 
 ## Secrets Management
 

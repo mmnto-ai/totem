@@ -279,7 +279,7 @@ describe('actionPolicyEvaluator: path arm', () => {
       actionKind: 'db_migration',
       policyDisposition: 'deny',
       environment: 'any',
-      currentEnvironment: null,
+      currentEnvironments: null,
       scopeKind: 'path',
       alsoMatched: [],
     });
@@ -415,7 +415,7 @@ describe('actionPolicyEvaluator: environment', () => {
     expect(onProd.provenance.ref).toBe('prod-deploy');
     expect(onProd.provenance.detail).toMatchObject({
       environment: 'prod',
-      currentEnvironment: 'prod',
+      currentEnvironments: ['prod'],
     });
 
     const onFeature = check(
@@ -472,7 +472,7 @@ describe('actionPolicyEvaluator: environment', () => {
     expect(pilot.provenance.ref).toBe('environment-unevaluable');
   });
 
-  it('reports the derived environment as currentEnvironment beside the row environment', () => {
+  it('reports the derived environments beside the row environment, empty when none matched', () => {
     writePolicy({
       version: 1,
       environments: [{ name: 'prod', branches: ['main'] }],
@@ -497,7 +497,7 @@ describe('actionPolicyEvaluator: environment', () => {
       { gitBranchReader: () => 'feat/x' },
     );
     expect(v.provenance.ref).toBe('any-push');
-    expect(v.provenance.detail).toMatchObject({ environment: 'any', currentEnvironment: 'any' });
+    expect(v.provenance.detail).toMatchObject({ environment: 'any', currentEnvironments: [] });
   });
 
   it('is unevaluable when the reader returns an empty string', () => {
@@ -586,7 +586,7 @@ describe('actionPolicyEvaluator: override', () => {
       policyDisposition: 'deny',
     });
     expect(lines).toEqual([
-      `[action-policy] OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing path "db/migrations/1.sql"; row migrations would have denied.\n`,
+      `[action-policy] OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing path "db/migrations/1.sql"; row(s) migrations would have denied.\n`,
     ]);
   });
 
@@ -649,5 +649,495 @@ describe('actionPolicyEvaluator: override', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+// ─── Fold of the pre-merge falsification read (mmnto-ai/totem#3106) ─────
+
+const MIGRATE_DENY = {
+  id: 'migrate',
+  action_kind: 'db_migration',
+  scope: { commands: ['pnpm db:migrate:prod'] },
+  disposition: 'deny',
+};
+
+function bash(command: string) {
+  return { tool: 'Bash', command, platform: 'linux' };
+}
+
+describe('override: every candidate deny row must be named', () => {
+  const TWO_DENY = {
+    version: 1,
+    rows: [
+      {
+        id: 'deny-a',
+        action_kind: 'db_migration',
+        scope: { paths: ['db/**'] },
+        disposition: 'deny',
+      },
+      {
+        id: 'deny-b',
+        action_kind: 'secret_read',
+        scope: { paths: ['db/secrets/**'] },
+        disposition: 'deny',
+      },
+    ],
+  };
+
+  function run(named: string) {
+    const lines: string[] = [];
+    const v = check(
+      { tool: 'Write', path: 'db/secrets/k.sql' },
+      { env: { [ACTION_POLICY_OVERRIDE_ENV]: named }, writeStderr: (l) => void lines.push(l) },
+    );
+    return { v, lines };
+  }
+
+  it('one of two deny rows named: deny citing the unnamed row, no overriddenBy, no stderr', () => {
+    writePolicy(TWO_DENY);
+    const { v, lines } = run('deny-a');
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.ref).toBe('deny-b');
+    expect(v.provenance.detail).not.toHaveProperty('overriddenBy');
+    expect(lines).toEqual([]);
+  });
+
+  it('both deny rows named: allow listing both, one stderr line naming both', () => {
+    writePolicy(TWO_DENY);
+    const { v, lines } = run('deny-b,deny-a');
+    expect(v.disposition).toBe('allow');
+    expect(v.provenance.detail).toMatchObject({
+      overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
+      overriddenRows: ['deny-a', 'deny-b'],
+    });
+    expect(lines).toEqual([
+      `[action-policy] OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing path "db/secrets/k.sql"; row(s) deny-a, deny-b would have denied.\n`,
+    ]);
+  });
+
+  it('never applies when an environment deny row was skipped because the branch was unreadable', () => {
+    writePolicy({
+      version: 1,
+      environments: [{ name: 'prod', branches: ['main'] }],
+      rows: [
+        {
+          id: 'any-deny',
+          action_kind: 'db_migration',
+          scope: { paths: ['db/**'] },
+          disposition: 'deny',
+        },
+        {
+          id: 'prod-deny',
+          action_kind: 'db_migration',
+          scope: { paths: ['db/**'] },
+          environment: 'prod',
+          disposition: 'deny',
+        },
+      ],
+    });
+    const lines: string[] = [];
+    const v = check(
+      { tool: 'Write', path: 'db/1.sql' },
+      {
+        env: { [ACTION_POLICY_OVERRIDE_ENV]: 'any-deny,prod-deny' },
+        writeStderr: (l) => void lines.push(l),
+        gitBranchReader: () => '(unknown)',
+      },
+    );
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.ref).toBe('any-deny');
+    expect(v.provenance.detail).toMatchObject({ skippedForEnvironment: ['prod-deny'] });
+    expect(v.provenance.detail).not.toHaveProperty('overriddenBy');
+    expect(lines).toEqual([]);
+  });
+});
+
+describe('command matching from the program position', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['an assignment prefix', 'FOO=1 pnpm db:migrate:prod'],
+    ['env with an assignment', 'env X=1 pnpm db:migrate:prod'],
+    ['sudo', 'sudo pnpm db:migrate:prod'],
+    ['time', 'time pnpm db:migrate:prod'],
+    ['nohup', 'nohup pnpm db:migrate:prod'],
+    ['xargs', 'echo | xargs pnpm db:migrate:prod'],
+    ['a brace group', '{ pnpm db:migrate:prod; }'],
+    ['an if condition', 'if pnpm db:migrate:prod; then echo ok; fi'],
+    ['a negation', '! pnpm db:migrate:prod'],
+    ['a $( ) substitution', 'out=$(pnpm db:migrate:prod)'],
+    ['a backtick substitution', 'out=`pnpm db:migrate:prod`'],
+    ['a nested substitution', 'echo "$(echo $(pnpm db:migrate:prod))"'],
+  ])('reaches the program after %s', (_label, command) => {
+    const v = check(bash(command));
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.ref).toBe('migrate');
+  });
+
+  it('matches a program invoked by path against its basename', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        {
+          id: 'vercel-prod',
+          action_kind: 'deploy_trigger',
+          scope: { commands: ['vercel deploy --prod'] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    expect(check(bash('./node_modules/.bin/vercel deploy --prod')).provenance.ref).toBe(
+      'vercel-prod',
+    );
+    expect(
+      check({
+        tool: 'PowerShell',
+        command: "'C:\\tools\\VERCEL.CMD' deploy --prod",
+        platform: 'win32',
+      }).provenance.ref,
+    ).toBe('vercel-prod');
+    // A different program whose path merely contains the name is not it.
+    expect(check(bash('./vercel-tools/run deploy --prod')).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('opaque shell strings', () => {
+  it.each([
+    ['sh -c', 'sh -c "pnpm db:migrate:prod"'],
+    ['bash -lc', "bash -lc 'echo hi'"],
+    ['pwsh -Command', 'pwsh -Command "Get-Item x"'],
+    ['powershell -c', 'powershell.exe -c "Get-Item x"'],
+    ['cmd /c', 'cmd /c dir'],
+    ['bash fed a heredoc', 'bash <<EOF\npnpm db:migrate:prod\nEOF'],
+  ])('%s warns as opaque-shell-string when the policy has a command row', (_label, command) => {
+    writePolicy({ version: 1, rows: [MIGRATE_DENY] });
+    const v = check(bash(command));
+    expect(v.disposition).toBe('warn');
+    expect(v.provenance.ref).toBe('opaque-shell-string');
+  });
+
+  it('carries the statement text, bounded, as matched', () => {
+    writePolicy({ version: 1, rows: [MIGRATE_DENY] });
+    const long = `sh -c "${'x'.repeat(200)}"`;
+    expect(check(bash(long)).provenance.matched).toBe(long.slice(0, 80));
+  });
+
+  it('allows a shell string, unwarned, when the policy has no command row', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        { id: 'p', action_kind: 'code_edit', scope: { paths: ['src/**'] }, disposition: 'deny' },
+      ],
+    });
+    const v = check(bash('sh -c "pnpm db:migrate:prod"'));
+    expect(v.disposition).toBe('allow');
+    expect(v.provenance.ref).toBe('no-policy-match');
+  });
+
+  it('lets a deny row elsewhere in the command win over the opaque warn', () => {
+    writePolicy({ version: 1, rows: [MIGRATE_DENY] });
+    const v = check(bash('sh -c "echo x"; pnpm db:migrate:prod'));
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.ref).toBe('migrate');
+  });
+});
+
+describe('heredoc bodies are text', () => {
+  it('allows a heredoc whose body carries a governed line', () => {
+    writePolicy({ version: 1, rows: [MIGRATE_DENY] });
+    const v = check(bash("cat > notes.md <<'X'\npnpm db:migrate:prod\nX"));
+    expect(v.disposition).toBe('allow');
+    expect(v.provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('overlapping environments', () => {
+  it('applies a prod row when staging and prod both match the branch', () => {
+    writePolicy({
+      version: 1,
+      environments: [
+        { name: 'staging', branches: ['release/*'] },
+        { name: 'prod', branches: ['release/*', 'main'] },
+      ],
+      rows: [
+        {
+          id: 'prod-migrate',
+          action_kind: 'db_migration',
+          scope: { commands: ['pnpm db:migrate:prod'] },
+          environment: 'prod',
+          disposition: 'deny',
+        },
+      ],
+    });
+    const v = check(bash('pnpm db:migrate:prod'), { gitBranchReader: () => 'release/1' });
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.ref).toBe('prod-migrate');
+    expect(v.provenance.detail).toMatchObject({ currentEnvironments: ['staging', 'prod'] });
+  });
+});
+
+describe('the repository root as the path base', () => {
+  it('governs an absolute edit under the git root with a nested totemDir', () => {
+    fs.mkdirSync(path.join(tmpRoot, '.git'));
+    const nested = path.join(tmpRoot, 'config', 'totem');
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(
+      path.join(nested, ACTION_POLICY_FILE),
+      JSON.stringify({
+        version: 1,
+        rows: [
+          {
+            id: 'migrations',
+            action_kind: 'db_migration',
+            scope: { paths: ['db/**'] },
+            disposition: 'deny',
+          },
+        ],
+      }),
+    );
+    const abs = path.join(tmpRoot, 'db', '001.sql');
+    const v = actionPolicyEvaluator({ tool: 'Write', path: abs }, nested);
+    expect(v.disposition).toBe('deny');
+    expect(v.provenance.matched).toBe('db/001.sql');
+    const rel = actionPolicyEvaluator({ tool: 'Write', path: 'db/001.sql' }, nested);
+    expect(rel.disposition).toBe('deny');
+  });
+});
+
+describe('strict, bounded schema', () => {
+  const row = (extra: Record<string, unknown>) => ({
+    version: 1,
+    rows: [
+      {
+        id: 'r',
+        action_kind: 'code_edit',
+        scope: { paths: ['a/**'] },
+        disposition: 'deny',
+        ...extra,
+      },
+    ],
+  });
+
+  function loadError(content: unknown): string {
+    writePolicy(content);
+    try {
+      readActionPolicyConfig(totemDir);
+    } catch (err) {
+      return (err as Error).message;
+    }
+    return '';
+  }
+
+  it('rejects the row typo "enviroment" with its path', () => {
+    expect(loadError(row({ enviroment: 'prod' }))).toBe(
+      "[Totem Error] Invalid action-policy.json: rows.0: Unrecognized key(s) in object: 'enviroment'",
+    );
+  });
+
+  it('rejects the scope typo "command" with its path', () => {
+    const bad = {
+      version: 1,
+      rows: [
+        {
+          id: 'r',
+          action_kind: 'code_edit',
+          scope: { paths: ['a/**'], command: ['x'] },
+          disposition: 'deny',
+        },
+      ],
+    };
+    expect(loadError(bad)).toBe(
+      "[Totem Error] Invalid action-policy.json: rows.0.scope: Unrecognized key(s) in object: 'command'",
+    );
+  });
+
+  it.each(['/db/**', '\\db\\x', 'C:/db/**', 'c:db'])(
+    'rejects the absolute path glob %s',
+    (glob) => {
+      const result = ActionPolicyConfigSchema.safeParse({
+        version: 1,
+        rows: [
+          { id: 'r', action_kind: 'code_edit', scope: { paths: [glob] }, disposition: 'deny' },
+        ],
+      });
+      expect(result.error?.issues.map((i) => i.message)).toEqual([
+        'path globs are repo-relative: drop the leading "/", "\\" or drive letter (the gate makes every edited path relative to the repository root first)',
+      ]);
+    },
+  );
+
+  it('bounds path globs at four "*" and command tokens at two', () => {
+    const parse = (scope: Record<string, unknown>) =>
+      ActionPolicyConfigSchema.safeParse({
+        version: 1,
+        rows: [{ id: 'r', action_kind: 'code_edit', scope, disposition: 'deny' }],
+      }).success;
+    expect(parse({ paths: ['**/a/**/*.ts'] })).toBe(false);
+    expect(parse({ paths: ['**/a/**'] })).toBe(true);
+    expect(parse({ commands: ['psql ***'] })).toBe(false);
+    expect(parse({ commands: ['psql ** *x*'] })).toBe(true);
+  });
+
+  it('compares a long token against a wildcard quickly', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        { id: 'p', action_kind: 'code_edit', scope: { paths: ['*a*a*b'] }, disposition: 'deny' },
+        {
+          id: 'c',
+          action_kind: 'code_edit',
+          scope: { commands: ['run *a*b'] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    const started = Date.now();
+    const p = check({ tool: 'Write', path: 'a'.repeat(1000) });
+    const c = check(bash(`run ${'a'.repeat(5000)}`));
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(p.provenance.ref).toBe('no-policy-match');
+    expect(c.provenance.ref).toBe('no-policy-match');
+  });
+
+  it('compares a long literal token whole', () => {
+    const literal = 'x'.repeat(1100);
+    writePolicy({
+      version: 1,
+      rows: [
+        {
+          id: 'c',
+          action_kind: 'code_edit',
+          scope: { commands: [`run ${literal}`] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    expect(check(bash(`run ${literal}`)).provenance.ref).toBe('c');
+    expect(check(bash(`run ${literal}y`)).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('an unreadable environment, capped at the skipped rows', () => {
+  function policy(disposition: string) {
+    return {
+      version: 1,
+      environments: [{ name: 'prod', branches: ['main'] }],
+      rows: [
+        {
+          id: 'prod-row',
+          action_kind: 'deploy_trigger',
+          scope: { commands: ['git push'] },
+          environment: 'prod',
+          disposition,
+        },
+      ],
+    };
+  }
+  const unreadable = { gitBranchReader: () => '' };
+
+  it('a skipped display row yields warn at strict, listing the skipped row', () => {
+    writePolicy(policy('display'));
+    const v = check(bash('git push'), { tier: 'strict', ...unreadable });
+    expect(v.disposition).toBe('warn');
+    expect(v.provenance.ref).toBe('environment-unevaluable');
+    expect(v.provenance.detail).toMatchObject({ skippedForEnvironment: ['prod-row'] });
+  });
+
+  it('a skipped deny row yields deny at strict and warn at pilot', () => {
+    writePolicy(policy('deny'));
+    expect(check(bash('git push'), { tier: 'strict', ...unreadable }).disposition).toBe('deny');
+    expect(check(bash('git push'), { tier: 'pilot', ...unreadable }).disposition).toBe('warn');
+  });
+});
+
+// The false-positive fixture: every (policy, input, expected) triple the
+// classifier is held to, including the disclosed-limit shapes. Every match is
+// an exact glob or token comparison against a declared row, so the budget is
+// zero misclassifications by construction.
+describe('false-positive fixture', () => {
+  const POLICY = {
+    version: 1,
+    environments: [{ name: 'prod', branches: ['main'] }],
+    rows: [
+      {
+        id: 'migrations',
+        action_kind: 'db_migration',
+        scope: { paths: ['db/migrations/**'] },
+        disposition: 'deny',
+      },
+      MIGRATE_DENY,
+      {
+        id: 'vercel-prod',
+        action_kind: 'deploy_trigger',
+        scope: { commands: ['vercel deploy --prod'] },
+        environment: 'prod',
+        disposition: 'deny',
+      },
+      {
+        id: 'psql',
+        action_kind: 'db_data_write',
+        scope: { commands: ['psql **'] },
+        disposition: 'warn',
+      },
+    ],
+  };
+  type Row = [string, Record<string, unknown>, string, string];
+  const ROWS: Row[] = [
+    [
+      'positive control: governed path',
+      { tool: 'Edit', path: 'db/migrations/1.sql' },
+      'deny',
+      'migrations',
+    ],
+    [
+      'negative control: ungoverned path',
+      { tool: 'Edit', path: 'docs/a.md' },
+      'allow',
+      'no-policy-match',
+    ],
+    ['positive control: governed command', bash('pnpm db:migrate:prod'), 'deny', 'migrate'],
+    [
+      'negative control: longer token',
+      bash('pnpm db:migrate:prod-report'),
+      'allow',
+      'no-policy-match',
+    ],
+    [
+      'negative control: pattern as an argument',
+      bash('echo pnpm db:migrate:prod'),
+      'allow',
+      'no-policy-match',
+    ],
+    ['fold: assignment prefix', bash('CI=1 pnpm db:migrate:prod'), 'deny', 'migrate'],
+    ['fold: substitution body', bash('x=$(pnpm db:migrate:prod)'), 'deny', 'migrate'],
+    ['fold: program by path', bash('./node_modules/.bin/pnpm db:migrate:prod'), 'deny', 'migrate'],
+    [
+      'fold: opaque shell string',
+      bash('bash -c "pnpm db:migrate:prod"'),
+      'warn',
+      'opaque-shell-string',
+    ],
+    [
+      'fold: shell on a heredoc',
+      bash('sh <<EOF\npnpm db:migrate:prod\nEOF'),
+      'warn',
+      'opaque-shell-string',
+    ],
+    ['fold: ** crosses / in a token', bash('psql postgres://h/db'), 'warn', 'psql'],
+    ['limit: a renamed program', bash('pn db:migrate:prod'), 'allow', 'no-policy-match'],
+    ['limit: a script the agent wrote', bash('./scripts/migrate.sh'), 'allow', 'no-policy-match'],
+    [
+      'limit: a heredoc with a governed line as text',
+      bash("cat > n.md <<'X'\npnpm db:migrate:prod\nX"),
+      'allow',
+      'no-policy-match',
+    ],
+    ['limit: case-sensitive identity', bash('PNPM db:migrate:prod'), 'allow', 'no-policy-match'],
+  ];
+
+  it.each(ROWS)('%s', (_label, payload, disposition, ref) => {
+    writePolicy(POLICY);
+    const v = check(payload, { gitBranchReader: () => 'main' });
+    expect([v.disposition, v.provenance.ref]).toEqual([disposition, ref]);
   });
 });

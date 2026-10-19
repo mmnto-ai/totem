@@ -43,6 +43,7 @@ vi.mock('../adapters/github-cli-project.js', async () => {
 // runs green with `@google/genai` absent because it never touches embeddings).
 
 const mockSafeExec = vi.fn<() => string>();
+const mockGetGitBranch = vi.fn<(cwd: string) => string>(() => 'main');
 const mockReadRegistry = vi.fn<() => Record<string, unknown>>(() => ({}));
 const embedderTripwire = vi.fn(() => {
   throw new Error('orient must never reach the embedder (#2018 structural guard)');
@@ -68,6 +69,7 @@ vi.mock('@mmnto/totem', async () => {
     safeExec: () => mockSafeExec(),
     readRegistry: () => mockReadRegistry(),
     resolveGitRoot: () => repoRoot,
+    getGitBranch: (cwd: string) => mockGetGitBranch(cwd),
     senseSelectionManifest: (...args: unknown[]) =>
       mockSenseSelectionManifest
         ? mockSenseSelectionManifest(...args)
@@ -1119,6 +1121,8 @@ describe('orient action-policy section', () => {
   beforeEach(() => {
     // clearAllMocks keeps implementations: reset to the empty touched set.
     mockDeriveTouchedPaths.mockImplementation(async () => []);
+    // The policy is read from the configured totemDir, as `gate check` reads it.
+    mockConfigPath = path.join(tmpRoot, 'totem.config.ts');
   });
 
   function writePolicy(content: unknown): void {
@@ -1191,7 +1195,7 @@ describe('orient action-policy section', () => {
       '  governed touched paths (2 of 3 touched):',
       '    db/migrations/001_init.sql → migrations (deny)',
       '    src/app/main.ts → app-code (display)',
-      '  limit: a governed program invoked by path, inside `sh -c`, or from a script the agent wrote matches no command row.',
+      '  limit: a renamed program, a script the agent wrote and then runs, and anything a shell string contains match no command row.',
     ]);
   });
 
@@ -1269,5 +1273,52 @@ describe('orient action-policy section', () => {
     expect(block).toBe(
       '── orient (derived state): mmnto-ai/totem ──\n⚑ action policy: 1 row(s), 400 match(es) — run `totem orient`',
     );
+  });
+
+  it('reads the policy from the configured totemDir, not a hard-coded .totem', async () => {
+    fs.mkdirSync(path.join(tmpRoot, '.git'));
+    const nested = path.join(tmpRoot, 'config', 'totem');
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(path.join(nested, 'action-policy.json'), JSON.stringify(POLICY));
+    mockLoadConfig.mockResolvedValue({ orient: undefined, totemDir: 'config/totem' });
+    mockDeriveTouchedPaths.mockResolvedValue(['db/migrations/001_init.sql']);
+
+    await runJson();
+    expect(parseJson().actionPolicy).toMatchObject({
+      file: 'config/totem/action-policy.json',
+      matches: [{ path: 'db/migrations/001_init.sql', rowId: 'migrations', disposition: 'deny' }],
+    });
+  });
+
+  it('reads the branch at most once per run, however many governed paths name an environment', async () => {
+    writePolicy({
+      version: 1,
+      environments: [{ name: 'prod', branches: ['main'] }],
+      rows: [
+        {
+          id: 'prod-migrations',
+          action_kind: 'db_migration',
+          scope: { paths: ['db/migrations/**'] },
+          environment: 'prod',
+          disposition: 'deny',
+        },
+      ],
+    });
+    mockDeriveTouchedPaths.mockResolvedValue([
+      'db/migrations/1.sql',
+      'db/migrations/2.sql',
+      'db/migrations/3.sql',
+    ]);
+    mockGetGitBranch.mockClear();
+
+    await runJson();
+    expect(mockGetGitBranch).toHaveBeenCalledTimes(1);
+    expect(parseJson().actionPolicy).toMatchObject({
+      matches: [
+        { path: 'db/migrations/1.sql', rowId: 'prod-migrations', disposition: 'deny' },
+        { path: 'db/migrations/2.sql', rowId: 'prod-migrations', disposition: 'deny' },
+        { path: 'db/migrations/3.sql', rowId: 'prod-migrations', disposition: 'deny' },
+      ],
+    });
   });
 });

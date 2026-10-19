@@ -467,8 +467,12 @@ function substitutionEnd(text: string, open: number, powershell = false): number
   return text.length;
 }
 
-/** The command with every heredoc body replaced by spaces (length preserved), so tokenizing never reads a body. */
-function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
+/**
+ * The command with every heredoc body replaced by spaces (length preserved), so
+ * tokenizing never reads a body. Exported for the action-policy gate
+ * (mmnto-ai/totem#3106), which reads statements the same way.
+ */
+export function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
   let out = command;
   for (const s of spans) {
     out = out.slice(0, s.bodyStart) + ' '.repeat(s.bodyEnd - s.bodyStart) + out.slice(s.bodyEnd);
@@ -698,7 +702,23 @@ const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
  * never an invocation. Shared by every row that names a program, so a shape
  * added here is read by all of them.
  */
-function programIndex(tokens: readonly string[], program: string): number {
+export function programIndex(tokens: readonly string[], program: string): number {
+  const i = programStart(tokens, program);
+  const t = tokens[i];
+  if (t === undefined) return -1;
+  const names = programSpellings(t);
+  return names.exact.includes(program) || names.folded.includes(program.toLowerCase()) ? i : -1;
+}
+
+/**
+ * The index of the segment's program POSITION: past any `VAR=VALUE`
+ * assignments, known wrappers, the reserved words that can stand before a
+ * program, a function header and `time`'s `-p` — whatever program sits there.
+ * `tokens.length` when nothing follows the prefix. `program`, when given, is
+ * never read as a function name (the `programIndex` caller's own rule).
+ * Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function programStart(tokens: readonly string[], program?: string): number {
   let i = 0;
   // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
   // `VAR=x sudo prog`, `then VAR=x prog`.
@@ -721,17 +741,41 @@ function programIndex(tokens: readonly string[], program: string): number {
       i += 1;
     } else break;
   }
-  const t = tokens[i];
-  if (t === undefined) return -1;
-  if (t === program || t.endsWith('/' + program)) return i;
-  // The Windows spelling: `gh.exe`, `GH.EXE`, a drive-letter path with either
-  // separator — the file system that runs it is case-insensitive, so the stem is
-  // compared the same way.
-  const lower = t.toLowerCase();
-  if (!lower.endsWith('.exe')) return -1;
-  const stem = lower.slice(0, -4);
-  const p = program.toLowerCase();
-  return stem === p || stem.endsWith('/' + p) || stem.endsWith('\\' + p) ? i : -1;
+  return i;
+}
+
+/** Options for {@link programSpellings}. */
+export interface ProgramSpellingOptions {
+  /**
+   * Executable suffixes stripped (any letter case) to give the folded stem.
+   * Default `['.exe']`, the shield's own spelling.
+   */
+  suffixes?: readonly string[];
+}
+
+/**
+ * The names a program token can stand for, as the shield reads program
+ * spellings: `exact` holds the token itself and the part after its last `/`
+ * (a path ending in the program), compared case-sensitively; `folded` holds,
+ * when the token ends in one of `suffixes` in any letter case, the lower-cased
+ * stem after its last `/` or backslash (the Windows spelling: `gh.exe`,
+ * `GH.EXE`, a drive-letter path with either separator, read the way the
+ * case-insensitive file system that runs it reads it). Exported for the
+ * action-policy gate (mmnto-ai/totem#3106).
+ */
+export function programSpellings(
+  token: string,
+  opts: ProgramSpellingOptions = {},
+): { exact: string[]; folded: string[] } {
+  const exact = [token];
+  const slash = token.lastIndexOf('/');
+  if (slash !== -1) exact.push(token.slice(slash + 1));
+  const lower = token.toLowerCase();
+  const suffix = (opts.suffixes ?? ['.exe']).find((x) => lower.endsWith(x.toLowerCase()));
+  if (suffix === undefined) return { exact, folded: [] };
+  const stem = lower.slice(0, -suffix.length);
+  const cut = Math.max(stem.lastIndexOf('/'), stem.lastIndexOf('\\'));
+  return { exact, folded: [stem.slice(cut + 1)] };
 }
 
 /**
@@ -1053,6 +1097,101 @@ function blankComments(text: string): string {
   return out;
 }
 
+// ─── Substitution body readers ─────────────────────────────────────────────
+
+/** How many backslashes stand immediately before `at`. */
+function backslashRun(text: string, at: number): number {
+  let n = 0;
+  for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
+  return n;
+}
+
+/**
+ * An opener preceded by EXACTLY one backslash is escaped: literal text. Not
+ * the odd-run rule bash would apply to the text as written, because the Bash
+ * tool halves each backslash pair before bash runs the command (measured, read
+ * 3: four backslashes as typed reach the hook as four and bash as two), so bash
+ * sees ceil(n/2) of them. One backslash is literal under both readings; two or
+ * more are read as running under at least one of them, and a reader stays
+ * fail-closed there (a run of two is an over-read on this transport, disclosed).
+ */
+function openerEscaped(text: string, at: number): boolean {
+  return backslashRun(text, at) === 1;
+}
+
+/**
+ * A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
+ * the Bash tool on win32): an early close hides what follows, so fail-closed
+ * does not apply to it (read 5 F1).
+ */
+function closeEscaped(text: string, at: number): boolean {
+  const n = backslashRun(text, at);
+  return n % 4 === 1 || n % 4 === 2;
+}
+
+/**
+ * The bodies of every `$( … )` in one segment's raw text, in order, located on
+ * the single-quote- and comment-blanked text (a `$(` inside single quotes or a
+ * comment is text the shell never runs, and so is an opener escaped with one
+ * backslash) and sliced from the text itself. One level: a caller recurses into
+ * each body. Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function substitutionBodies(raw: string): string[] {
+  const bodies: string[] = [];
+  const located = blankComments(blankSingleQuoted(raw));
+  let cursor = 0;
+  while (cursor < located.length) {
+    const open = located.indexOf('$(', cursor);
+    if (open === -1) break;
+    if (openerEscaped(located, open)) {
+      cursor = open + 2;
+      continue;
+    }
+    const end = substitutionEnd(located, open + 1);
+    bodies.push(raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end));
+    cursor = end;
+  }
+  return bodies;
+}
+
+/**
+ * The bodies of every backtick substitution in `text`, located on the WHOLE
+ * text, not per segment: the tokenizer reads a backtick as a character and
+ * splits at `;` inside a span, so a span's two backticks can sit in different
+ * segments. The pairing is run TWICE, with an opener read escaped by bash's
+ * rule (exactly one backslash) and by the Bash tool's measured halving rule (a
+ * run of one or two, and every four after), and both passes' bodies are
+ * returned: a single pairing that misreads one opener shifts every later
+ * backtick and loses the body of the next real span (read 7 F1), while the
+ * union can only add reads. Inside backticks bash drops the backslash of `\$`,
+ * a backslash-backtick and `\\` before running the body, so each body is
+ * returned unescaped. `skip(at)` drops the span whose opener sits at `at`.
+ * Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function backtickBodies(text: string, skip?: (at: number) => boolean): string[] {
+  const bodies: string[] = [];
+  const whole = blankComments(blankSingleQuoted(text));
+  for (const isOpenerEscaped of [openerEscaped, closeEscaped]) {
+    let tick = whole.indexOf('`');
+    while (tick !== -1) {
+      if (isOpenerEscaped(whole, tick)) {
+        tick = whole.indexOf('`', tick + 1);
+        continue;
+      }
+      let close = whole.indexOf('`', tick + 1);
+      while (close !== -1 && closeEscaped(whole, close)) {
+        close = whole.indexOf('`', close + 1);
+      }
+      if (close === -1) break;
+      if (skip === undefined || !skip(tick)) {
+        bodies.push(text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1'));
+      }
+      tick = whole.indexOf('`', close + 1);
+    }
+  }
+  return bodies;
+}
+
 // ─── The table ─────────────────────────────────────────────────────────────
 
 /**
@@ -1118,26 +1257,6 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       if (!msysApplies(p)) return null;
       const written = (h: { flag: string; value: string; glued?: boolean }): string =>
         h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
-      // An opener preceded by EXACTLY one backslash is escaped: literal text. Not
-      // the odd-run rule bash would apply to the text as written, because the Bash
-      // tool halves each backslash pair before bash runs the command (measured, read
-      // 3: four backslashes as typed reach the hook as four and bash as two), so bash
-      // sees ceil(n/2) of them. One backslash is literal under both readings; two or
-      // more are read as running under at least one of them, and the row stays
-      // fail-closed there (a run of two is an over-deny on this transport, disclosed).
-      const run = (text: string, at: number): number => {
-        let n = 0;
-        for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
-        return n;
-      };
-      const escaped = (text: string, at: number): boolean => run(text, at) === 1;
-      // A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
-      // the Bash tool on win32, this row's only transport): an early close hides what
-      // follows, so fail-closed does not apply to it (read 5 F1).
-      const escapedClose = (text: string, at: number): boolean => {
-        const n = run(text, at);
-        return n % 4 === 1 || n % 4 === 2;
-      };
       const munged = (value: string, typed: boolean): boolean => {
         const ws = value.search(/[ \t\r\n]/);
         const head = ws === -1 ? value : value.slice(0, ws);
@@ -1203,20 +1322,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             }
           }
           if (depth >= 4) continue;
-          const located = blankComments(blankSingleQuoted(seg.raw));
-          let cursor = 0;
-          while (cursor < located.length) {
-            const open = located.indexOf('$(', cursor);
-            if (open === -1) break;
-            if (escaped(located, open)) {
-              cursor = open + 2;
-              continue;
-            }
-            const end = substitutionEnd(located, open + 1);
-            const inner = seg.raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end);
+          for (const inner of substitutionBodies(seg.raw)) {
             const hit = scan(inner, depth + 1);
             if (hit !== null) return hit;
-            cursor = end;
           }
         }
         if (depth >= 4) return null;
@@ -1242,26 +1350,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         msysSegments(text, true, ranges);
         const coveredAt = (at: number): boolean =>
           ranges.some((r) => r.covered && at >= r.start && at < r.end);
-        const whole = blankComments(blankSingleQuoted(text));
-        for (const openerEscaped of [escaped, escapedClose]) {
-          let tick = whole.indexOf('`');
-          while (tick !== -1) {
-            if (openerEscaped(whole, tick)) {
-              tick = whole.indexOf('`', tick + 1);
-              continue;
-            }
-            let close = whole.indexOf('`', tick + 1);
-            while (close !== -1 && escapedClose(whole, close)) {
-              close = whole.indexOf('`', close + 1);
-            }
-            if (close === -1) break;
-            if (!coveredAt(tick)) {
-              const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
-              const hit = scan(body, depth + 1);
-              if (hit !== null) return hit;
-            }
-            tick = whole.indexOf('`', close + 1);
-          }
+        for (const body of backtickBodies(text, coveredAt)) {
+          const hit = scan(body, depth + 1);
+          if (hit !== null) return hit;
         }
         return null;
       };

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "b5f154eebe486f75724824431dcc2e8115898ffe",
+  "readAt": "2026-10-19T22:27:08Z",
+  "findings": [
+    {
+      "id": "3106-r1-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 483,
+      "claim": "The override allows when the WINNING row is named, so it also lets through unnamed deny rows (a second same-scope deny, or an environment-scoped deny when the branch is unreadable); this contradicts the design doc's 'a row not named is unaffected' and docs/wiki/config-reference.md:302 'never touches a row that is not named, ... or an unevaluable environment'.",
+      "counterexample": "Rows push-any and push-any-2 (both deny, git push --force), override=push-any, branch main -> allow, alsoMatched [push-prod, push-any-2]. Rows any-deploy (deny, any) and prod-deploy (deny, env prod), override=any-deploy: branch read throws -> allow, alsoMatched []; branch main -> allow, alsoMatched [prod-deploy]."
+    },
+    {
+      "id": "3106-r1-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 298,
+      "claim": "Command matching compares raw leading tokens, so VAR=x, env, sudo, time, xargs, braces, if, !, $( ) and backtick forms evaluate to allow; the disclosed limits name only path, sh -c, script and rename; the shared shield's programIndex already skips these prefixes.",
+      "counterexample": "FOO=1 pnpm db:migrate:prod, env X=1 ..., sudo ..., time ..., { pnpm db:migrate:prod; }, if ...; then, ! ..., xargs ..., echo $(pnpm db:migrate:prod), and the backtick form: each -> allow no-policy-match against a deny row on pnpm db:migrate:prod."
+    },
+    {
+      "id": "3106-r1-F3",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 302,
+      "claim": "The doc says the override is 'read from the environment of the call, so set it for the one command that needs it'; the hook reads the inherited process env, and an inline prefix produces an unaudited allow through a failed match, not through the override.",
+      "counterexample": "TOTEM_ACTION_POLICY_OVERRIDE=prod-migrate pnpm db:migrate:prod -> allow no-policy-match, no stderr line, no overriddenBy."
+    },
+    {
+      "id": "3106-r1-F4",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 319,
+      "claim": "Heredoc bodies are tokenized as statements (the shield blanks them first, transport-shield.ts:1277), giving false-positive denies against the design's zero-misclassification budget.",
+      "counterexample": "cat > notes.md <<'X' NEWLINE pnpm db:migrate:prod runs the migrations NEWLINE X -> deny prod-migrate; git commit -F - <<EOF NEWLINE see; pnpm db:migrate:prod later NEWLINE EOF -> deny."
+    },
+    {
+      "id": "3106-r1-F5",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 361,
+      "claim": "The current environment is the FIRST environment whose globs match, so a row naming a later overlapping environment never applies; the schema accepts overlap; the changeset says a row applies when the branch matches its environment's globs.",
+      "counterexample": "environments staging:[release/*] then prod:[main, release/*]; prod deny row on fly deploy; branch release/1 -> allow no-policy-match."
+    },
+    {
+      "id": "3106-r1-F6",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 406,
+      "claim": "The config root is taken as the parent of totemDir; with a nested totemDir (allowed by the config schema) every absolute edited path is outside-repo and allowed; orient also hard-codes .totem (packages/cli/src/commands/orient.ts:433) while the gate and doctor use the configured totemDir.",
+      "counterexample": "Policy at config/totem/action-policy.json; Edit of absolute <root>/db/migrations/1.sql -> allow outside-repo; the same path given relative -> deny."
+    },
+    {
+      "id": "3106-r1-F7",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 566,
+      "claim": "There is no false-positive fixture listing the disclosed-limit shapes as expected no-policy-match (a design invariant), and no test for override with two deny rows, override with an unreadable environment, overlapping environments, heredoc bodies or VAR= prefixes; F1, F4 and F5 pass the suite.",
+      "counterexample": "Reasoned: grep for sh -c, by design and limit in the test file finds nothing; the fixture at lines 373-404 holds two deny rows but never sets the override; the suite passes 147/147 with the F1, F4 and F5 behaviour present."
+    },
+    {
+      "id": "3106-r1-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 96,
+      "claim": "Unknown keys are stripped silently (plain z.object, as in the freeze precedent), so a typo can drop command governance without a load error.",
+      "counterexample": "scope {paths:[a/**], command:[pnpm x]} loads with the commands dropped; enviroment:prod (typo) loads as any."
+    },
+    {
+      "id": "3106-r1-F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 286,
+      "claim": "Path and command identity is lexical and case-sensitive, so case variants on case-insensitive filesystems (and symlink aliases, reasoned) escape rows; the docs say case-sensitive but not that this is a bypass.",
+      "counterexample": "Edit DB/Migrations/1.sql -> warn from the **/*.sql display row, not the db/migrations/** deny; PowerShell PNPM db:migrate:prod -> allow no-policy-match."
+    },
+    {
+      "id": "3106-r1-F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/glob.ts",
+      "line": 341,
+      "claim": "A per-token or branch * does not cross /, which is surprising for command arguments and branch names.",
+      "counterexample": "psql * against psql postgres://h/db -c x -> allow; branch glob release/* against release/1.2/hotfix -> no environment match, allow."
+    },
+    {
+      "id": "3106-r1-F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 98,
+      "claim": "An absolute path glob loads but can never match, because edited paths are always repo-relative.",
+      "counterexample": "Row paths [/etc/**] loads; Edit /etc/passwd -> allow outside-repo."
+    },
+    {
+      "id": "3106-r1-F12",
+      "severity": "MINOR",
+      "file": "packages/core/src/sys/glob.ts",
+      "line": 341,
+      "claim": "Multi-star patterns backtrack polynomially and there is no bound on stars, so a consumer pattern can push a long token past the 30 s wrapper budget, which fails closed on every matching statement.",
+      "counterexample": "Command pattern *a*a*a*b against a 1000-char token of a -> 17809 ms (a 100-char token -> 18 ms)."
+    },
+    {
+      "id": "3106-r1-F13",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 433,
+      "claim": "When the environment is unreadable and an any-row deny stands, the environment rows are dropped from alsoMatched, so provenance hides that a row was skipped.",
+      "counterexample": "git push --force with the branch read throwing -> deny push-any, alsoMatched [push-any-2], without push-prod, which matched."
+    },
+    {
+      "id": "3106-r1-F14",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient-touched-paths.ts",
+      "line": 47,
+      "claim": "Working-tree paths come from status --porcelain -z without -uall, so files inside new untracked directories are not seen and the touched count is wrong.",
+      "counterexample": "Untracked db/migrations/1.sql and newdb/migrations/2.sql; porcelain shows ?? db/ and ?? newdb/; orient prints governed touched paths (1 of 3 touched), listing x.sql only."
+    },
+    {
+      "id": "3106-r1-F15",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 466,
+      "claim": "Orient runs the evaluator once per touched path; each call re-reads the policy and spawns git branch when an environment row matches; nothing is cached, and the file can change between reads.",
+      "counterexample": "Reasoned: N touched paths give N policy reads and up to N git processes; no gitBranchReader is passed and nothing is cached."
+    },
+    {
+      "id": "3106-r1-F16",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 296,
+      "claim": "An unreadable environment raises a display or warn environment row to a strict deny, and a detached HEAD or mid-rebase (empty branch) counts as unreadable; should the unreadable result be capped at the row's own disposition, and should the docs name the detached case?",
+      "counterexample": "push-prod (display, env prod) on git push with the branch read throwing, empty, or (unknown) -> deny environment-unevaluable under strict."
+    },
+    {
+      "id": "3106-r1-F17",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 247,
+      "claim": "The docs promise more coverage than the mechanism gives: 'so that a change to a migration directory or a production deploy command is shown, warned on or refused before it runs', while command-substitution, backtick, sh -c and prefix forms are silent allows and the interlock condition 'fails loud on undecidable forms' is not met once undecidable-command is withdrawn.",
+      "counterexample": "echo $(pnpm db:migrate:prod) -> allow no-policy-match with no warn; see 3106-r1-F2."
+    },
+    {
+      "id": "3106-r1-F18",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 306,
+      "claim": "Nothing governs edits to the policy file or the hook settings unless the consumer writes a row for them, and the limits section does not say so; should it?",
+      "counterexample": "Reasoned: Edit .totem/action-policy.json with no row covering it -> allow no-policy-match."
+    }
+  ],
+  "folded": [
+    "3106-r1-F1",
+    "3106-r1-F2",
+    "3106-r1-F3",
+    "3106-r1-F4",
+    "3106-r1-F5",
+    "3106-r1-F6",
+    "3106-r1-F7",
+    "3106-r1-F8",
+    "3106-r1-F9",
+    "3106-r1-F10",
+    "3106-r1-F11",
+    "3106-r1-F12",
+    "3106-r1-F13",
+    "3106-r1-F14",
+    "3106-r1-F15",
+    "3106-r1-F16",
+    "3106-r1-F17",
+    "3106-r1-F18"
+  ],
+  "verdict": "Read 1 of the action-policy gate at b5f154ee: blocking=1 material=6 minor=8 question=3 folded=18 (counts as typed; the read's own summary line said seven and seven). Folded by the seat in the next commit: F1 BLOCKING (the override applies only when every deny row among the candidates is named, cites the first unnamed deny otherwise, and never applies when an environment-scoped deny row was skipped for an unreadable branch); F2 (command patterns match from the shield's program position, so assignment, env, sudo, time, nohup, xargs, brace, if and negation prefixes reach the program, and command-substitution and backtick bodies are read as statements through the shield's own readers); F3 (the override doc states the hook reads its process environment and that an inline prefix is a command prefix, not an override); F4 (heredoc bodies are blanked with the shield's helper before tokenizing; a shell fed by a heredoc falls under the opaque-shell arm); F5 (the current environment is the set of every matching declared environment; a row applies when its name is in the set); F6 (repo-relative paths resolve against the repository root found from totemDir, falling back to its parent; orient reads the configured totemDir); F7 and the design's own fixture clause (a table-driven false-positive fixture enumerating the disclosed-limit shapes, the controls and every fold); F8 (strict schemas: an unknown key fails the load); F9 (lexical, case-sensitive identity disclosed as a limit with the spelling rule; per-platform case folding declined, one dialect everywhere); F10 (`**` documented as the token wildcard that crosses a slash); F11 (an absolute path glob fails the load); F12 (at most two wildcards per command token and four per path glob at load; a token longer than 1024 characters compares by its first 1024 against wildcard tokens); F13 (skipped environment rows listed in detail.skippedForEnvironment); F14 (the working-tree read runs with -uall); F15 (orient passes a memoizing branch reader so the branch is read once per run; caching the policy file across the run declined, small local reads from one run); F16 (the unreadable-environment verdict is capped at the skipped rows' own dispositions, never allow; the detached-HEAD and mid-rebase cases named in the docs); F17 (a bounded opaque-shell-string warn arm for sh, bash, zsh, dash, pwsh, powershell and cmd strings when the policy has command rows, and the config-reference opening sentence rewritten to promise only what the mechanism reads); F18 (the docs say nothing governs the policy file or the hook settings without a row, and the example carries such a row). A second scoped read follows the fold, since it rewires the command arm."
+}

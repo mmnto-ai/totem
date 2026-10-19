@@ -4,16 +4,19 @@ import * as path from 'node:path';
 import { z } from 'zod';
 
 import { TotemConfigError, TotemError } from './errors.js';
-import type {
-  GateContext,
-  GateDisposition,
-  GateEvaluator,
-  GateTier,
-  GateVerdict,
-} from './gate-types.js';
-import { getGitBranch } from './sys/git.js';
+import type { GateContext, GateDisposition, GateEvaluator, GateVerdict } from './gate-types.js';
+import { findRepoRootSync, getGitBranch } from './sys/git.js';
 import { matchesPathGlob } from './sys/glob.js';
-import { MATCHED_FRAGMENT_MAX, tokenizeShell } from './transport-shield.js';
+import {
+  backtickBodies,
+  blankHeredocBodies,
+  findHeredocs,
+  MATCHED_FRAGMENT_MAX,
+  programSpellings,
+  programStart,
+  substitutionBodies,
+  tokenizeShell,
+} from './transport-shield.js';
 
 /**
  * The `action-policy` gate event (mmnto-ai/totem#3106).
@@ -25,9 +28,14 @@ import { MATCHED_FRAGMENT_MAX, tokenizeShell } from './transport-shield.js';
  * citing that row. It ships the format and the engine; the rows are the
  * consumer's.
  *
- * Disclosed limit of every command-text gate: a governed program invoked by
- * path, inside `sh -c`, through a script the agent wrote, or renamed does not
- * match its row and evaluates to `allow` with `no-policy-match`.
+ * A command row matches from the statement's program position (past
+ * assignments, wrappers and reserved words), against the program's basename,
+ * in every statement the command runs including `$( … )` and backtick bodies;
+ * heredoc bodies are text. A shell handed a string (`sh -c`, `pwsh -Command`,
+ * `cmd /c`, a heredoc on stdin) is warned on as `opaque-shell-string` when the
+ * policy has command rows. Disclosed limits: a renamed program, a script the
+ * agent wrote and then runs, and anything a shell string contains match no
+ * row.
  */
 
 export const ACTION_POLICY_FILE = 'action-policy.json';
@@ -77,42 +85,90 @@ const REF_ENVIRONMENT_UNEVALUABLE = 'environment-unevaluable';
 
 // ─── Schema (the file boundary) ────────────────────────────────────────────
 
+/** Most `*` a path glob may carry (`**` counts two): bounds the glob's backtracking. */
+export const ACTION_POLICY_PATH_GLOB_STAR_MAX = 4;
+
+/** Most `*` one command-pattern token may carry (`**` counts two). */
+export const ACTION_POLICY_COMMAND_TOKEN_STAR_MAX = 2;
+
+/**
+ * A statement token longer than this is compared by its first this-many
+ * characters against a wildcard pattern token; a literal token still compares
+ * whole. Bounds the glob's work on a pathological argument.
+ */
+export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 1024;
+
 const slug = (what: string) => z.string().regex(SLUG_RE, `${what} must be a kebab-case slug`);
 
 const nonBlank = (what: string) =>
   z.string().refine((s) => s.trim() !== '', { message: `${what} must be a non-blank string` });
 
+const starCount = (text: string): number => text.split('*').length - 1;
+
+/** A drive-letter, slash or backslash start: an absolute spelling, never repo-relative. */
+const ABSOLUTE_GLOB_RE = /^(?:[/\\]|[A-Za-z]:)/;
+
+const pathGlob = nonBlank('path glob')
+  .refine((g) => !ABSOLUTE_GLOB_RE.test(g), {
+    message:
+      'path globs are repo-relative: drop the leading "/", "\\" or drive letter (the gate makes every edited path relative to the repository root first)',
+  })
+  .refine((g) => starCount(g) <= ACTION_POLICY_PATH_GLOB_STAR_MAX, {
+    message: `a path glob may carry at most ${ACTION_POLICY_PATH_GLOB_STAR_MAX} "*" ("**" counts two)`,
+  });
+
+const commandPattern = nonBlank('command pattern').refine(
+  (p) =>
+    p
+      .trim()
+      .split(/\s+/)
+      .every((t) => starCount(t) <= ACTION_POLICY_COMMAND_TOKEN_STAR_MAX),
+  {
+    message: `each command-pattern token may carry at most ${ACTION_POLICY_COMMAND_TOKEN_STAR_MAX} "*" ("**" counts two)`,
+  },
+);
+
 export const ActionKindSchema = z.enum(ACTION_KINDS);
 
-export const ActionPolicyEnvironmentSchema = z.object({
-  name: slug('environment name').refine((n) => n !== ACTION_POLICY_ANY_ENVIRONMENT, {
-    message: `environment name "${ACTION_POLICY_ANY_ENVIRONMENT}" is reserved for rows that apply on every branch`,
-  }),
-  branches: z
-    .array(nonBlank('branch glob'))
-    .min(1, 'an environment needs at least one branch glob'),
-});
+export const ActionPolicyEnvironmentSchema = z
+  .object({
+    name: slug('environment name').refine((n) => n !== ACTION_POLICY_ANY_ENVIRONMENT, {
+      message: `environment name "${ACTION_POLICY_ANY_ENVIRONMENT}" is reserved for rows that apply on every branch`,
+    }),
+    branches: z
+      .array(nonBlank('branch glob'))
+      .min(1, 'an environment needs at least one branch glob'),
+  })
+  .strict();
 
 export const ActionPolicyScopeSchema = z
   .object({
-    paths: z.array(nonBlank('path glob')).optional(),
-    commands: z.array(nonBlank('command pattern')).optional(),
+    paths: z.array(pathGlob).optional(),
+    commands: z.array(commandPattern).optional(),
   })
+  .strict()
   .refine((s) => (s.paths?.length ?? 0) > 0 || (s.commands?.length ?? 0) > 0, {
     message: 'scope needs at least one non-empty "paths" or "commands" list',
   });
 
 export const ActionPolicyDispositionSchema = z.enum(['display', 'warn', 'deny']);
 
-export const ActionPolicyRowSchema = z.object({
-  id: slug('row id'),
-  action_kind: ActionKindSchema,
-  scope: ActionPolicyScopeSchema,
-  environment: z.string().min(1).default(ACTION_POLICY_ANY_ENVIRONMENT),
-  disposition: ActionPolicyDispositionSchema,
-  reason: z.string().optional(),
-});
+export const ActionPolicyRowSchema = z
+  .object({
+    id: slug('row id'),
+    action_kind: ActionKindSchema,
+    scope: ActionPolicyScopeSchema,
+    environment: z.string().min(1).default(ACTION_POLICY_ANY_ENVIRONMENT),
+    disposition: ActionPolicyDispositionSchema,
+    reason: z.string().optional(),
+  })
+  .strict();
 
+/**
+ * Every object in the file is strict (mmnto-ai/totem#3106): an unknown key
+ * fails the load with its path, so a typo (`enviroment`, `command`) can never
+ * silently drop governance. The freeze file is read leniently; this one is not.
+ */
 export const ActionPolicyConfigSchema = z
   .object({
     version: z.literal(ACTION_POLICY_VERSION),
@@ -120,6 +176,7 @@ export const ActionPolicyConfigSchema = z
     environments: z.array(ActionPolicyEnvironmentSchema).optional(),
     rows: z.array(ActionPolicyRowSchema),
   })
+  .strict()
   .superRefine((config, ctx) => {
     const seen = new Set<string>();
     const declared = new Set((config.environments ?? []).map((e) => e.name));
@@ -277,16 +334,47 @@ interface RowMatch {
   matched: string;
 }
 
+/** One shell statement: its tokens and its raw text. */
+interface Statement {
+  tokens: string[];
+  raw: string;
+}
+
+/** How deep substitution bodies are read (`$( $( … ) )`), the shield's own bound. */
+const SUBSTITUTION_DEPTH_MAX = 4;
+
+/** Executable suffixes stripped from a program token before it is compared. */
+const PROGRAM_SUFFIXES: readonly string[] = ['.exe', '.cmd'];
+
+/** Shells that run a string given with `-c` (in any short-option cluster). */
+const POSIX_SHELLS: ReadonlySet<string> = new Set(['sh', 'bash', 'zsh', 'dash']);
+
+/** PowerShell hosts and the flags that hand them a string to run. */
+const POWERSHELL_HOSTS: ReadonlySet<string> = new Set(['pwsh', 'powershell']);
+const POWERSHELL_STRING_FLAG_RE = /^-(?:c|command|e|ec|encodedcommand)$/i;
+
+const REF_OPAQUE_SHELL_STRING = 'opaque-shell-string';
+
 const bound = (text: string): string => text.slice(0, MATCHED_FRAGMENT_MAX);
 
 /**
- * Repo-relative, `/`-separated form of `filePath`, or null when the path lies
- * outside the config root.
+ * The directory edited paths are made relative to: the repository root found
+ * by walking up from `totemDir` for `.git`, else the parent of `totemDir` when
+ * there is no repository (mmnto-ai/totem#3106).
  */
-function repoRelativePath(filePath: string, configRoot: string): string | null {
+function policyRoot(totemDir: string): string {
+  const abs = path.resolve(totemDir);
+  return findRepoRootSync(abs) ?? path.dirname(abs);
+}
+
+/**
+ * Repo-relative, `/`-separated form of `filePath`, or null when the path lies
+ * outside the root. A relative path is read as already repo-relative.
+ */
+function repoRelativePath(filePath: string, root: string): string | null {
   const slashed = filePath.replace(/\\/g, '/');
   const rel = path.isAbsolute(slashed)
-    ? path.relative(configRoot, slashed).replace(/\\/g, '/')
+    ? path.relative(root, slashed).replace(/\\/g, '/')
     : path.posix.normalize(slashed);
   if (rel === '' || rel === '.' || rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) {
     return null;
@@ -294,11 +382,99 @@ function repoRelativePath(filePath: string, configRoot: string): string | null {
   return rel;
 }
 
-/** Whether a statement's leading tokens match every token of `pattern`, in order. */
-function commandPatternMatches(statementTokens: readonly string[], pattern: string): boolean {
+const hasWildcard = (glob: string): boolean => /[*?{[]/.test(glob);
+
+/** One token against one pattern token; a long token meets a wildcard by its head. */
+function tokenMatches(token: string, glob: string): boolean {
+  const subject =
+    hasWildcard(glob) && token.length > ACTION_POLICY_WILDCARD_TOKEN_MAX
+      ? token.slice(0, ACTION_POLICY_WILDCARD_TOKEN_MAX)
+      : token;
+  return matchesPathGlob(subject, glob);
+}
+
+/**
+ * The program token against the pattern's first token, through the shield's
+ * program spellings: the token itself or its name after the last `/`
+ * (case-sensitive), or, for a `.exe` / `.cmd` spelling, its lower-cased stem
+ * after the last `/` or backslash against the lower-cased pattern token.
+ */
+function programMatches(token: string, glob: string): boolean {
+  const names = programSpellings(token, { suffixes: PROGRAM_SUFFIXES });
+  return (
+    names.exact.some((n) => tokenMatches(n, glob)) ||
+    names.folded.some((n) => tokenMatches(n, glob.toLowerCase()))
+  );
+}
+
+/**
+ * Whether a statement's program and the arguments after it match every token
+ * of `pattern`, in order. The program position is the shield's: past
+ * assignments, wrappers (`env`, `sudo`, `time`, `nohup`, `xargs` …) and the
+ * reserved words that can stand before a program (`{`, `if`, `then`, `!` …).
+ */
+function commandPatternMatches(tokens: readonly string[], pattern: string): boolean {
   const patternTokens = pattern.trim().split(/\s+/);
-  if (statementTokens.length < patternTokens.length) return false;
-  return patternTokens.every((glob, i) => matchesPathGlob(statementTokens[i] as string, glob));
+  const start = programStart(tokens);
+  if (tokens.length - start < patternTokens.length) return false;
+  return patternTokens.every((glob, i) =>
+    i === 0
+      ? programMatches(tokens[start] as string, glob)
+      : tokenMatches(tokens[start + i] as string, glob),
+  );
+}
+
+/**
+ * Every statement the command runs, read as the shield reads them: heredoc
+ * bodies blanked first (a body is text, never a statement), then each segment,
+ * then the bodies of its `$( … )` substitutions and, for the Bash tool, the
+ * backtick substitutions, recursively to the shield's depth bound. PowerShell's
+ * backtick is its escape character, so no backtick body is read there.
+ */
+function commandStatements(command: string, powershell: boolean, depth = 0): Statement[] {
+  const opts = { powershell };
+  const blanked = blankHeredocBodies(command, findHeredocs(command, opts));
+  const out: Statement[] = [];
+  for (const seg of tokenizeShell(blanked, opts)) {
+    if (seg.tokens.length > 0) out.push(seg);
+    if (depth < SUBSTITUTION_DEPTH_MAX) {
+      for (const body of substitutionBodies(seg.raw)) {
+        out.push(...commandStatements(body, powershell, depth + 1));
+      }
+    }
+  }
+  if (!powershell && depth < SUBSTITUTION_DEPTH_MAX) {
+    for (const body of backtickBodies(blanked)) {
+      out.push(...commandStatements(body, powershell, depth + 1));
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether the statement's program is a shell handed a string this gate does
+ * not read: `sh|bash|zsh|dash -c …` (`-c` in any short-option cluster),
+ * `pwsh|powershell -Command|-c|-EncodedCommand …`, `cmd /c|/k …`, or a shell
+ * reading a heredoc or here-string on stdin.
+ */
+function isOpaqueShell(tokens: readonly string[]): boolean {
+  const start = programStart(tokens);
+  const program = tokens[start];
+  if (program === undefined) return false;
+  const names = programSpellings(program, { suffixes: PROGRAM_SUFFIXES });
+  const all = [...names.exact, ...names.folded];
+  const args = tokens.slice(start + 1);
+  const readsHeredoc = args.some((a) => a.startsWith('<<'));
+  if (all.some((n) => POSIX_SHELLS.has(n))) {
+    return readsHeredoc || args.some((a) => /^-[A-Za-z]*c[A-Za-z]*$/.test(a));
+  }
+  if (all.some((n) => POWERSHELL_HOSTS.has(n.toLowerCase()))) {
+    return readsHeredoc || args.some((a) => POWERSHELL_STRING_FLAG_RE.test(a));
+  }
+  if (all.some((n) => n.toLowerCase() === 'cmd')) {
+    return args.some((a) => /^\/[ck]$/i.test(a));
+  }
+  return false;
 }
 
 function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMatch[] {
@@ -313,10 +489,8 @@ function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMa
 
 function matchCommandRows(
   rows: readonly ActionPolicyRow[],
-  command: string,
-  powershell: boolean,
+  statements: readonly Statement[],
 ): RowMatch[] {
-  const statements = tokenizeShell(command, { powershell }).filter((s) => s.tokens.length > 0);
   const matches: RowMatch[] = [];
   for (const row of rows) {
     const patterns = row.scope.commands ?? [];
@@ -335,40 +509,38 @@ function mostSevere(matches: readonly RowMatch[]): RowMatch | undefined {
   return winner;
 }
 
-/** Outcome of deriving the current environment: its name, or unevaluable. */
-type EnvironmentRead = { ok: true; name: string } | { ok: false; why: string };
+/** Outcome of deriving the current environments: every matching name, or unevaluable. */
+type EnvironmentRead = { ok: true; names: string[] } | { ok: false; why: string };
 
-function deriveEnvironment(
+function deriveEnvironments(
   config: ActionPolicyConfig,
-  configRoot: string,
+  root: string,
   context: GateContext | undefined,
 ): EnvironmentRead {
   const reader = context?.gitBranchReader ?? getGitBranch;
   let branch: string;
   try {
-    branch = reader(configRoot).trim();
-    // totem-context: fail-closed conversion, not a swallow: a thrown branch read becomes the unevaluable verdict (deny under strict, warn under pilot, never allow) carrying the read's message
+    branch = reader(root).trim();
+    // totem-context: fail-closed conversion, not a swallow: a thrown branch read becomes the unevaluable verdict (capped at the skipped rows' own dispositions, never allow) carrying the read's message
   } catch (err) {
     return {
       ok: false,
       why: err instanceof Error ? err.message : 'the branch reader threw a non-Error value',
     };
   }
-  if (branch === '') return { ok: false, why: 'the current branch name is empty' };
+  if (branch === '') {
+    return { ok: false, why: 'the current branch name is empty (a detached HEAD)' };
+  }
   if (branch === GIT_BRANCH_UNKNOWN_SENTINEL) {
     return { ok: false, why: 'git could not read the current branch' };
   }
-  const env = (config.environments ?? []).find((e) =>
-    e.branches.some((glob) => matchesPathGlob(branch, glob)),
-  );
-  return { ok: true, name: env ? env.name : ACTION_POLICY_ANY_ENVIRONMENT };
+  const names = (config.environments ?? [])
+    .filter((e) => e.branches.some((glob) => matchesPathGlob(branch, glob)))
+    .map((e) => e.name);
+  return { ok: true, names };
 }
 
 // ─── Evaluator ─────────────────────────────────────────────────────────────
-
-function unevaluableDisposition(tier: GateTier | undefined): GateDisposition {
-  return tier === 'pilot' ? 'warn' : 'deny';
-}
 
 /** The row ids named in the override env var (trimmed, blanks dropped). */
 function overriddenRowIds(context: GateContext | undefined): ReadonlySet<string> {
@@ -382,12 +554,19 @@ function overriddenRowIds(context: GateContext | undefined): ReadonlySet<string>
   );
 }
 
+/** A verdict plus the one stderr line it owes, written only if it is returned. */
+interface Decision {
+  verdict: GateVerdict;
+  notice?: string;
+}
+
 /**
  * action-policy: classify the action against the policy rows and return the
  * most severe matching row's verdict. Synchronous; reads the policy file and,
  * only when a scope-matched row names an environment, the current branch.
  * Writes no file; prints one stderr line through the context writer when the
- * override env var turns a named row's `deny` into `allow`.
+ * override env var turns the candidate `deny` rows, every one named, into
+ * `allow`.
  */
 export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context): GateVerdict => {
   const parsed = parseActionPolicyPayload(payload);
@@ -403,12 +582,13 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     };
   }
 
-  const configRoot = path.dirname(path.resolve(totemDir));
+  const root = policyRoot(totemDir);
   let scopeKind: 'path' | 'command';
   let matches: RowMatch[];
+  let opaque: string | null = null;
   if ('path' in parsed) {
     scopeKind = 'path';
-    const rel = repoRelativePath(parsed.path, configRoot);
+    const rel = repoRelativePath(parsed.path, root);
     if (rel === null) {
       return {
         disposition: 'allow',
@@ -419,94 +599,161 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     matches = matchPathRows(config.rows, rel);
   } else {
     scopeKind = 'command';
-    matches = matchCommandRows(config.rows, parsed.command, parsed.tool === 'PowerShell');
-  }
-
-  const anyRowMatches = matches.filter((m) => m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT);
-  const needsEnvironment = matches.length !== anyRowMatches.length;
-
-  let candidates: RowMatch[] = anyRowMatches;
-  let currentEnvironment: string | null = null;
-  if (needsEnvironment) {
-    const env = deriveEnvironment(config, configRoot, context);
-    if (!env.ok) {
-      const anyWinner = mostSevere(anyRowMatches);
-      if (anyWinner?.row.disposition === 'deny') {
-        candidates = anyRowMatches;
-      } else {
-        const disposition = unevaluableDisposition(context?.tier);
-        const envRows = matches
-          .filter((m) => m.row.environment !== ACTION_POLICY_ANY_ENVIRONMENT)
-          .map((m) => m.row.id);
-        return {
-          disposition,
-          reason: `The current environment could not be derived (${env.why}) while row(s) ${envRows.join(', ')} name an environment (tier=${context?.tier ?? 'strict'} → ${disposition}).`,
-          provenance: {
-            source,
-            ref: REF_ENVIRONMENT_UNEVALUABLE,
-            matched: null,
-            checkedAt,
-            detail: { scopeKind, alsoMatched: matches.map((m) => m.row.id) },
-          },
-        };
-      }
-    } else {
-      currentEnvironment = env.name;
-      candidates = matches.filter(
-        (m) =>
-          m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT || m.row.environment === env.name,
-      );
+    const statements = commandStatements(parsed.command, parsed.tool === 'PowerShell');
+    matches = matchCommandRows(config.rows, statements);
+    if (config.rows.some((r) => (r.scope.commands?.length ?? 0) > 0)) {
+      const hidden = statements.find((s) => isOpaqueShell(s.tokens));
+      if (hidden) opaque = bound(hidden.raw.trim());
     }
   }
 
-  const winner = mostSevere(candidates);
-  if (!winner) {
-    return {
-      disposition: 'allow',
-      reason: 'No action-policy row governs this action.',
-      provenance: { source, ref: REF_NO_POLICY_MATCH, matched: null, checkedAt },
-    };
+  // Environment: read only when a matched row names one.
+  const envMatches = matches.filter((m) => m.row.environment !== ACTION_POLICY_ANY_ENVIRONMENT);
+  let candidates = matches.filter((m) => m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT);
+  let currentEnvironments: string[] | null = null;
+  let skipped: RowMatch[] = [];
+  let environmentWhy = '';
+  if (envMatches.length > 0) {
+    const env = deriveEnvironments(config, root, context);
+    if (env.ok) {
+      currentEnvironments = env.names;
+      candidates = matches.filter(
+        (m) =>
+          m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT ||
+          env.names.includes(m.row.environment),
+      );
+    } else {
+      skipped = envMatches;
+      environmentWhy = env.why;
+    }
   }
+  const skippedDetail =
+    skipped.length > 0 ? { skippedForEnvironment: skipped.map((m) => m.row.id) } : {};
+  const skippedDeny = skipped.some((m) => m.row.disposition === 'deny');
 
-  const { row } = winner;
-  const policyDisposition = row.disposition;
-  const reason = `${row.action_kind} (${policyDisposition}): ${row.reason ?? `governed by row ${row.id}`}`;
-  const detail: Record<string, unknown> = {
-    actionKind: row.action_kind,
-    policyDisposition,
-    environment: row.environment,
-    currentEnvironment,
-    scopeKind,
-    alsoMatched: candidates.filter((m) => m !== winner).map((m) => m.row.id),
+  const decide = (): Decision => {
+    const winner = mostSevere(candidates);
+    // A shell string the gate does not read warns, unless a row at warn or
+    // deny already speaks for the call.
+    if (opaque !== null && (winner === undefined || winner.row.disposition === 'display')) {
+      return {
+        verdict: {
+          disposition: 'warn',
+          reason:
+            'This command hands a shell a string (sh -c, pwsh -Command, cmd /c, or a heredoc on stdin); the action-policy gate does not read a shell string, so rows cannot judge what it runs.',
+          provenance: {
+            source,
+            ref: REF_OPAQUE_SHELL_STRING,
+            matched: opaque,
+            checkedAt,
+            detail: {
+              scopeKind,
+              currentEnvironments,
+              alsoMatched: candidates.map((m) => m.row.id),
+              ...skippedDetail,
+            },
+          },
+        },
+      };
+    }
+    if (!winner) {
+      return {
+        verdict: {
+          disposition: 'allow',
+          reason: 'No action-policy row governs this action.',
+          provenance: {
+            source,
+            ref: REF_NO_POLICY_MATCH,
+            matched: null,
+            checkedAt,
+            ...(skipped.length > 0 ? { detail: { scopeKind, ...skippedDetail } } : {}),
+          },
+        },
+      };
+    }
+
+    const denyMatches = candidates.filter((m) => m.row.disposition === 'deny');
+    const named = overriddenRowIds(context);
+    // The first unnamed deny row is what still blocks; with nothing named it is
+    // the first deny row, which is the winner (ties go to file order).
+    const cited =
+      winner.row.disposition === 'deny'
+        ? (denyMatches.find((m) => !named.has(m.row.id)) ?? winner)
+        : winner;
+    const { row } = cited;
+    const policyDisposition = row.disposition;
+    const reason = `${row.action_kind} (${policyDisposition}): ${row.reason ?? `governed by row ${row.id}`}`;
+    const detail: Record<string, unknown> = {
+      actionKind: row.action_kind,
+      policyDisposition,
+      environment: row.environment,
+      currentEnvironments,
+      scopeKind,
+      alsoMatched: candidates.filter((m) => m !== cited).map((m) => m.row.id),
+      ...skippedDetail,
+    };
+
+    const overridable =
+      policyDisposition === 'deny' &&
+      !skippedDeny &&
+      denyMatches.length > 0 &&
+      denyMatches.every((m) => named.has(m.row.id));
+    if (overridable) {
+      const ids = denyMatches.map((m) => m.row.id);
+      return {
+        verdict: {
+          disposition: 'allow',
+          reason: `Allowed by ${ACTION_POLICY_OVERRIDE_ENV} (audited). Would have denied: ${reason}`,
+          provenance: {
+            source,
+            ref: row.id,
+            matched: cited.matched,
+            checkedAt,
+            detail: { ...detail, overriddenBy: ACTION_POLICY_OVERRIDE_ENV, overriddenRows: ids },
+          },
+        },
+        notice: `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${cited.matched}"; row(s) ${ids.join(', ')} would have denied.\n`,
+      };
+    }
+
+    return {
+      verdict: {
+        disposition: policyDisposition === 'display' ? 'warn' : policyDisposition,
+        reason,
+        provenance: { source, ref: row.id, matched: cited.matched, checkedAt, detail },
+      },
+    };
   };
 
-  if (policyDisposition === 'deny' && overriddenRowIds(context).has(row.id)) {
-    const write = context?.writeStderr ?? ((line: string): void => void process.stderr.write(line));
-    write(
-      `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${winner.matched}"; row ${row.id} would have denied.\n`,
-    );
-    return {
-      disposition: 'allow',
-      reason: `Allowed by ${ACTION_POLICY_OVERRIDE_ENV} (audited). Would have denied: ${reason}`,
-      provenance: {
-        source,
-        ref: row.id,
-        matched: winner.matched,
-        checkedAt,
-        detail: { ...detail, overriddenBy: ACTION_POLICY_OVERRIDE_ENV },
+  let decision = decide();
+  if (skipped.length > 0 && decision.verdict.disposition !== 'deny') {
+    // The environment could not be read while rows naming one matched: never
+    // allow, and never more severe than the skipped rows themselves.
+    const disposition: GateDisposition = skippedDeny && context?.tier !== 'pilot' ? 'deny' : 'warn';
+    const ids = skipped.map((m) => m.row.id);
+    decision = {
+      verdict: {
+        disposition,
+        reason: `The current environment could not be derived (${environmentWhy}) while row(s) ${ids.join(', ')} name an environment (tier=${context?.tier ?? 'strict'} → ${disposition}).`,
+        provenance: {
+          source,
+          ref: REF_ENVIRONMENT_UNEVALUABLE,
+          matched: null,
+          checkedAt,
+          detail: {
+            scopeKind,
+            currentEnvironments: null,
+            alsoMatched: matches.map((m) => m.row.id),
+            ...skippedDetail,
+          },
+        },
       },
     };
   }
 
-  return {
-    disposition: policyDisposition === 'display' ? 'warn' : policyDisposition,
-    reason,
-    provenance: {
-      source,
-      ref: row.id,
-      matched: winner.matched,
-      checkedAt,
-      detail,
-    },
-  };
+  if (decision.notice !== undefined) {
+    const write = context?.writeStderr ?? ((line: string): void => void process.stderr.write(line));
+    write(decision.notice);
+  }
+  return decision.verdict;
 };
