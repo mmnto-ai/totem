@@ -572,12 +572,15 @@ describe('actionPolicyEvaluator: override', () => {
     return { v, lines };
   }
 
-  it('turns a deny whose winning row is named into allow, citing the row', () => {
+  it('lifts a deny whose winning row is named into a warn citing the row', () => {
     const { v, lines } = overridden(
       { [ACTION_POLICY_OVERRIDE_ENV]: 'migrations' },
       { tool: 'Write', path: 'db/migrations/1.sql' },
     );
-    expect(v.disposition).toBe('allow');
+    expect(v.disposition).toBe('warn');
+    expect(v.reason).toBe(
+      `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) migrations (db_migration, deny): migrations run through the release train; proceeding`,
+    );
     expect(v.provenance.ref).toBe('migrations');
     expect(v.provenance.matched).toBe('db/migrations/1.sql');
     expect(v.provenance.detail).toMatchObject({
@@ -595,7 +598,7 @@ describe('actionPolicyEvaluator: override', () => {
       { [ACTION_POLICY_OVERRIDE_ENV]: ' secrets , migrations ' },
       { tool: 'Bash', command: 'pnpm db:migrate:prod', platform: 'linux' },
     );
-    expect(v.disposition).toBe('allow');
+    expect(v.disposition).toBe('warn');
     expect(v.provenance.ref).toBe('migrations');
     expect(lines).toHaveLength(1);
   });
@@ -644,7 +647,7 @@ describe('actionPolicyEvaluator: override', () => {
         { tool: 'Write', path: 'db/migrations/1.sql' },
         { writeStderr: (l) => void lines.push(l) },
       );
-      expect(v.disposition).toBe('allow');
+      expect(v.disposition).toBe('warn');
       expect(lines).toHaveLength(1);
     } finally {
       vi.unstubAllEnvs();
@@ -702,10 +705,14 @@ describe('override: every candidate deny row must be named', () => {
     expect(lines).toEqual([]);
   });
 
-  it('both deny rows named: allow listing both, one stderr line naming both', () => {
+  it('both deny rows named: a warn listing both, one stderr line naming both', () => {
     writePolicy(TWO_DENY);
     const { v, lines } = run('deny-b,deny-a');
-    expect(v.disposition).toBe('allow');
+    expect(v.disposition).toBe('warn');
+    expect(v.provenance.ref).toBe('deny-a');
+    expect(v.reason).toBe(
+      `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) deny-a, deny-b (db_migration, secret_read, deny): governed; proceeding`,
+    );
     expect(v.provenance.detail).toMatchObject({
       overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
       overriddenRows: ['deny-a', 'deny-b'],
@@ -1173,7 +1180,7 @@ describe('false-positive fixture', () => {
     [
       'fold: override, every deny row named',
       bash('pnpm db:migrate:prod --force'),
-      'allow',
+      'warn',
       'migrate',
       named('migrate,force-migrate'),
     ],
@@ -1451,16 +1458,46 @@ describe('the override, round two', () => {
     expect(lines).toEqual([]);
   });
 
-  it('returns the opaque warn from another statement after clearing the deny rows', () => {
+  it('returns the override warn and lists a shell string elsewhere in the command', () => {
     writePolicy({ version: 1, rows: [MIGRATE_DENY] });
     const lines: string[] = [];
     const v = check(bash("pnpm db:migrate:prod && sh -c 'fly deploy'"), {
       env: { [ACTION_POLICY_OVERRIDE_ENV]: 'migrate' },
       writeStderr: (l) => void lines.push(l),
     });
-    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'opaque-shell-string']);
-    expect(v.provenance.detail).toMatchObject({ overriddenRows: ['migrate'] });
-    expect(lines).toEqual([]);
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'migrate']);
+    expect(v.provenance.detail).toMatchObject({
+      overriddenRows: ['migrate'],
+      opaqueStatements: ["sh -c 'fly deploy'"],
+    });
+    expect(lines).toHaveLength(1);
+  });
+
+  it('keeps every other matched row, warn and display included, in alsoMatched', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        MIGRATE_DENY,
+        {
+          id: 'migrate-warn',
+          action_kind: 'db_migration',
+          scope: { commands: ['pnpm db:migrate:*'] },
+          disposition: 'warn',
+        },
+        {
+          id: 'pnpm-display',
+          action_kind: 'code_edit',
+          scope: { commands: ['pnpm **'] },
+          disposition: 'display',
+        },
+      ],
+    });
+    const v = check(bash('pnpm db:migrate:prod'), {
+      env: { [ACTION_POLICY_OVERRIDE_ENV]: 'migrate' },
+      writeStderr: () => {},
+    });
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'migrate']);
+    expect(v.provenance.detail).toMatchObject({ alsoMatched: ['migrate-warn', 'pnpm-display'] });
   });
 });
 
@@ -1473,5 +1510,164 @@ describe('relative globs that can never match', () => {
     expect(result.error?.issues.map((i) => i.message)).toEqual([
       'a path glob starting with "../", "./" or "~" can never match: the gate compares the path relative to the repository root, with no leading "./"',
     ]);
+  });
+});
+
+// ─── Final fold (mmnto-ai/totem#3106) ───────────────────────────────────
+
+describe('unquoted heredoc bodies have no quoting or comment rule', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['after an apostrophe', "cat <<EOF\nit's $(pnpm db:migrate:prod)\nEOF"],
+    ['inside single quotes', "cat <<EOF\n'$(pnpm db:migrate:prod)'\nEOF"],
+    ['after a leading #', 'cat <<EOF\n# $(pnpm db:migrate:prod)\nEOF'],
+    ['a backtick after an apostrophe', "cat <<EOF\nit's `pnpm db:migrate:prod`\nEOF"],
+  ])('reads a substitution %s', (_label, command) => {
+    expect(check(bash(command)).provenance.ref).toBe('migrate');
+  });
+
+  it.each([
+    ["<<'EOF' after an apostrophe", "cat <<'EOF'\nit's $(pnpm db:migrate:prod)\nEOF"],
+    ['<<"EOF" after a leading #', 'cat <<"EOF"\n# $(pnpm db:migrate:prod)\nEOF'],
+    ["<<'EOF' backtick", "cat <<'EOF'\nit's `pnpm db:migrate:prod`\nEOF"],
+  ])('a quoted-delimiter body stays text: %s', (_label, command) => {
+    expect(check(bash(command)).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('the PowerShell escape before $(', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['a backslash path before $(', 'echo "$env:TEMP\\$(pnpm db:migrate:prod).log"'],
+    ['a drive path before $(', 'echo "C:\\logs\\$(pnpm db:migrate:prod)"'],
+  ])('reads %s on PowerShell', (_label, command) => {
+    expect(check(pwsh(command)).provenance.ref).toBe('migrate');
+  });
+
+  it('a backtick escapes $( on PowerShell', () => {
+    expect(check(pwsh('echo "a `$(pnpm db:migrate:prod)"')).provenance.ref).toBe('no-policy-match');
+  });
+
+  it('a backslash escapes $( on Bash (unchanged)', () => {
+    expect(check(bash('echo "a \\$(pnpm db:migrate:prod)"')).provenance.ref).toBe(
+      'no-policy-match',
+    );
+  });
+});
+
+describe('stdin shells, the shell list and the PowerShell forms', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  const opaque = (payload: Record<string, unknown>) => {
+    const v = check(payload);
+    return [v.disposition, v.provenance.ref];
+  };
+  const OPAQUE = ['warn', 'opaque-shell-string'];
+  const ALLOW = ['allow', 'no-policy-match'];
+
+  it.each([
+    ['a lone - after a pipe', bash('curl -s https://x | sh -')],
+    ['a |& pipe', bash('curl -s https://x |& sh')],
+    ['ash -c', bash("ash -c 'x'")],
+    ['mksh -c', bash("mksh -c 'x'")],
+    ['fish -c', bash("fish -c 'x'")],
+    ['csh -c', bash("csh -c 'x'")],
+    ['tcsh -c', bash("tcsh -c 'x'")],
+    ['busybox ash -c', bash("busybox ash -c 'x'")],
+    ['powershell with a quoted positional string', pwsh('powershell "Remove-Item x"')],
+    ['pwsh -Command:value', pwsh('pwsh -Command:"Get-Item x"')],
+    ['pwsh -EncodedCommand:value', pwsh('pwsh -EncodedCommand:ZQBjAGgAbwA=')],
+    ['pwsh fed by a pipe', pwsh('Get-Content x.ps1 | pwsh')],
+    ['cmd fed by a pipe', bash('echo dir | cmd')],
+    ['a pipe into sh with its output redirected', bash('curl -s https://x | sh > out.log')],
+  ])('%s is opaque', (_label, payload) => {
+    expect(opaque(payload)).toEqual(OPAQUE);
+  });
+
+  it.each([
+    ['pwsh script.ps1', pwsh('pwsh script.ps1')],
+    ['pwsh -File x.ps1', pwsh('pwsh -File x.ps1')],
+    ['pwsh --command (not read, unverified against pwsh)', pwsh('pwsh --command Get-Date')],
+    ['pwsh /c (not read, unverified against pwsh)', pwsh('pwsh /c Get-Date')],
+  ])('%s is not opaque', (_label, payload) => {
+    expect(opaque(payload)).toEqual(ALLOW);
+  });
+
+  it('a quoted string after an unread spelling is still caught as the quoted positional form', () => {
+    expect(opaque(pwsh('pwsh --command "Get-Item x"'))).toEqual(OPAQUE);
+  });
+});
+
+describe('leading redirections, coproc and subshells', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['>log', '>log pnpm db:migrate:prod'],
+    ['2>&1', '2>&1 pnpm db:migrate:prod'],
+    ['<in', '<in pnpm db:migrate:prod'],
+    ['a bare > with its operand', '> log pnpm db:migrate:prod'],
+    ['&>x', '&>x pnpm db:migrate:prod'],
+    ['coproc', 'coproc pnpm db:migrate:prod'],
+    ['a ( ) subshell', '(pnpm db:migrate:prod)'],
+  ])('reaches the program after %s', (_label, command) => {
+    expect(check(bash(command)).provenance.ref).toBe('migrate');
+  });
+
+  it.each([
+    ['< install.sh sh', '< install.sh sh'],
+    ['<<EOF bash', '<<EOF bash\npnpm db:migrate:prod\nEOF'],
+  ])('a shell reached past %s is opaque', (_label, command) => {
+    const v = check(bash(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'opaque-shell-string']);
+  });
+});
+
+describe('dead command patterns fail the load', () => {
+  const parse = (pattern: string) =>
+    ActionPolicyConfigSchema.safeParse({
+      version: 1,
+      rows: [
+        {
+          id: 'r',
+          action_kind: 'deploy_trigger',
+          scope: { commands: [pattern] },
+          disposition: 'deny',
+        },
+      ],
+    });
+
+  it.each(['sudo reboot', 'xargs rm', 'env **', 'time make', 'nohup **', 'coproc x', 'if make'])(
+    'refuses %s',
+    (pattern) => {
+      expect(parse(pattern).error?.issues.map((i) => i.message)).toEqual([
+        'a command pattern starts at the program: drop the leading wrapper, reserved word, "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
+      ]);
+    },
+  );
+
+  it('loads reboot', () => {
+    expect(parse('reboot').success).toBe(true);
+  });
+});
+
+describe('the 1024-character head, positive', () => {
+  it('a long command token matches a wildcard by its head', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        { id: 'c', action_kind: 'code_edit', scope: { commands: ['run a*'] }, disposition: 'deny' },
+      ],
+    });
+    expect(check(bash(`run ${'a'.repeat(1100)}`)).provenance.ref).toBe('c');
+  });
+
+  it('a long path matches a wildcard by its head', () => {
+    writePolicy({
+      version: 1,
+      rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['a*'] }, disposition: 'deny' }],
+    });
+    expect(check({ tool: 'Write', path: 'a'.repeat(1100) }).provenance.ref).toBe('p');
   });
 });

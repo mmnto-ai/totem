@@ -1443,6 +1443,23 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(stdout).toBe('');
     });
 
+    it('an overridden verdict (a warn) prints one context object carrying the override line', () => {
+      const lifted = {
+        disposition: 'warn',
+        reason:
+          'TOTEM_ACTION_POLICY_OVERRIDE lifted row(s) migrations (db_migration, deny): governed; proceeding',
+        provenance: { ref: 'migrations', detail: { overriddenBy: 'TOTEM_ACTION_POLICY_OVERRIDE' } },
+      };
+      writeStubCli({ verdict: lifted, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(0);
+      expect(contextOutput(stdout)).toEqual(
+        contextObject(
+          `action-policy (warn): ${lifted.reason} [${JSON.stringify(lifted.provenance)}]`,
+        ),
+      );
+    });
+
     it('a strict deny exits 2 with an empty stdout', () => {
       writeStubCli({ verdict: DENY, exit: 0 });
       const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');

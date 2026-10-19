@@ -14,6 +14,7 @@ import {
   MATCHED_FRAGMENT_MAX,
   programSpellings,
   programStart,
+  RESERVED_BEFORE_PROGRAM,
   substitutionBodies,
   tokenizeShell,
   WRAPPER_VALUE_OPTIONS,
@@ -128,16 +129,37 @@ const pathGlob = nonBlank('path glob')
     message: `a path glob may carry at most ${ACTION_POLICY_PATH_GLOB_STAR_MAX} "*" ("**" counts two)`,
   });
 
-const commandPattern = nonBlank('command pattern').refine(
-  (p) =>
-    p
-      .trim()
-      .split(/\s+/)
-      .every((t) => starCount(t) <= ACTION_POLICY_COMMAND_TOKEN_STAR_MAX),
-  {
-    message: `each command-pattern token may carry at most ${ACTION_POLICY_COMMAND_TOKEN_STAR_MAX} "*" ("**" counts two)`,
-  },
-);
+/**
+ * Whether a pattern's first token names what the gate skips before the
+ * program: a wrapper from the table (by basename), `time`, `coproc` or a
+ * reserved word. Such a pattern could never match, because the comparison
+ * starts at the program.
+ */
+function startsBeforeProgram(pattern: string): boolean {
+  const first = pattern.trim().split(/\s+/)[0] ?? '';
+  const names = programSpellings(first);
+  return (
+    first === 'coproc' ||
+    RESERVED_BEFORE_PROGRAM.has(first) ||
+    [...names.exact, ...names.folded].some((n) => Object.hasOwn(WRAPPER_VALUE_OPTIONS, n))
+  );
+}
+
+const commandPattern = nonBlank('command pattern')
+  .refine(
+    (p) =>
+      p
+        .trim()
+        .split(/\s+/)
+        .every((t) => starCount(t) <= ACTION_POLICY_COMMAND_TOKEN_STAR_MAX),
+    {
+      message: `each command-pattern token may carry at most ${ACTION_POLICY_COMMAND_TOKEN_STAR_MAX} "*" ("**" counts two)`,
+    },
+  )
+  .refine((p) => !startsBeforeProgram(p), {
+    message:
+      'a command pattern starts at the program: drop the leading wrapper, reserved word, "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
+  });
 
 export const ActionKindSchema = z.enum(ACTION_KINDS);
 
@@ -359,11 +381,25 @@ const SUBSTITUTION_DEPTH_MAX = 4;
 /** Executable suffixes stripped from a program token before it is compared. */
 const PROGRAM_SUFFIXES: readonly string[] = ['.exe', '.cmd'];
 
-/** The program position: past assignments, reserved words, and wrappers with their options. */
-const PROGRAM_START_OPTIONS = { wrapperOptions: WRAPPER_VALUE_OPTIONS };
+/**
+ * The program position: past assignments, reserved words, `coproc`, leading
+ * redirections, and wrappers with their options.
+ */
+const PROGRAM_START_OPTIONS = { wrapperOptions: WRAPPER_VALUE_OPTIONS, skipRedirections: true };
 
-/** POSIX shells that run a string given with `-c` in a short-option cluster. */
-const POSIX_SHELLS: ReadonlySet<string> = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
+/** The shells (a closed list) that run a string given with `-c` in a short-option cluster. */
+const POSIX_SHELLS: ReadonlySet<string> = new Set([
+  'sh',
+  'bash',
+  'zsh',
+  'dash',
+  'ksh',
+  'ash',
+  'mksh',
+  'fish',
+  'csh',
+  'tcsh',
+]);
 
 /** PowerShell hosts. */
 const POWERSHELL_HOSTS: ReadonlySet<string> = new Set(['pwsh', 'powershell']);
@@ -481,9 +517,11 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
   const spans = findHeredocs(command, opts);
   const blanked = blankHeredocBodies(command, spans);
   const out: Statement[] = [];
-  const nested = (text: string): void => {
+  // A heredoc body has no quoting or comment rule: an apostrophe, a quoted span
+  // or a `#` there is text, so its substitutions are read raw.
+  const nested = (text: string, heredocBody: boolean): void => {
     if (depth >= SUBSTITUTION_DEPTH_MAX) return;
-    for (const body of substitutionBodies(text)) {
+    for (const body of substitutionBodies(text, { raw: heredocBody, powershell })) {
       out.push(...commandStatements(body, powershell, depth + 1));
     }
   };
@@ -492,15 +530,20 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
     const at = blanked.indexOf(seg.raw, cursor);
     const before = at === -1 ? '' : blanked.slice(0, at);
     if (at !== -1) cursor = at + seg.raw.length;
-    const piped = before.endsWith('|') && !before.endsWith('||');
+    // `|` and bash's `|&` feed the statement; `||` does not.
+    const piped = before.endsWith('|&') || (before.endsWith('|') && !before.endsWith('||'));
     if (seg.tokens.length > 0) out.push({ tokens: seg.tokens, raw: seg.raw, piped });
-    nested(seg.raw);
+    nested(seg.raw, false);
   }
   const unquotedBodies = spans.filter((s) => !s.quoted).map((s) => s.body);
-  for (const body of unquotedBodies) nested(body);
+  for (const body of unquotedBodies) nested(body, true);
   if (!powershell && depth < SUBSTITUTION_DEPTH_MAX) {
-    for (const text of [blanked, ...unquotedBodies]) {
-      for (const body of backtickBodies(text)) {
+    const texts: Array<[string, boolean]> = [
+      [blanked, false],
+      ...unquotedBodies.map((b): [string, boolean] => [b, true]),
+    ];
+    for (const [text, heredocBody] of texts) {
+      for (const body of backtickBodies(text, undefined, { raw: heredocBody })) {
         out.push(...commandStatements(body, powershell, depth + 1));
       }
     }
@@ -547,6 +590,10 @@ function readShellArgs(args: readonly string[]): ShellArgs {
       optionsOpen = false;
       continue;
     }
+    if (optionsOpen && a === '-') {
+      // A lone `-` ends the options; the commands come from stdin.
+      return out;
+    }
     if (optionsOpen && /^[-+][A-Za-z-]/.test(a)) {
       if (/^-[A-Za-z]*c[A-Za-z]*$/.test(a)) out.dashC = true;
       if (/^-[A-Za-z]*s[A-Za-z]*$/.test(a)) readsStdin = true;
@@ -561,28 +608,39 @@ function readShellArgs(args: readonly string[]): ShellArgs {
   return out;
 }
 
-/** A PowerShell option that hands the host a string: a prefix of `-command` or `-encodedcommand`, or `-ec`. */
+/**
+ * A PowerShell option that hands the host a string: a prefix of `-command` or
+ * `-encodedcommand`, or `-ec`, also in the colon spelling (`-Command:…`).
+ * `--command` and `/c` are not read.
+ */
 function isPowerShellStringFlag(arg: string): boolean {
-  const a = arg.toLowerCase();
+  const colon = arg.indexOf(':');
+  const a = (colon === -1 ? arg : arg.slice(0, colon)).toLowerCase();
   if (a.length < 2 || !a.startsWith('-') || a.startsWith('--')) return false;
   return '-command'.startsWith(a) || '-encodedcommand'.startsWith(a) || a === '-ec';
 }
 
 /**
  * Whether the statement hands a shell a string this gate does not read. After
- * the wrapper skip, the program (by basename) is `eval`; or a POSIX shell
- * (`sh`, `bash`, `zsh`, `dash`, `ksh`) with a `-c` in a short-option cluster
+ * the redirection and wrapper skip, the program (by basename) is `eval`; or a
+ * shell from {@link POSIX_SHELLS} with a `-c` in a short-option cluster
  * before its first non-option token; or `pwsh` / `powershell` with a
- * `-command` / `-encodedcommand` prefix or `-ec`; or `cmd` with `/c` or `/k`
+ * `-command` / `-encodedcommand` prefix or `-ec` (colon spellings included),
+ * or a quoted first positional and no `-File`; or `cmd` with `/c` or `/k`
  * (glued text included); or any of those shells fed text on stdin by a
- * heredoc or here-string (glued, `bash<<EOF`, or spaced), or with no script
- * argument while a pipe feeds it or an input redirection does.
+ * heredoc or here-string (glued, spaced, or standing before the program), or
+ * with no script argument (a lone `-` or `-s` ends the options) while a pipe
+ * (`|` or `|&`) or an input redirection feeds it.
  */
 function isOpaqueShell(statement: Statement, powershell: boolean): boolean {
   const { tokens } = statement;
   const start = programStart(tokens, undefined, PROGRAM_START_OPTIONS);
   let program = tokens[start];
   if (program === undefined) return false;
+  // A heredoc or an input redirection standing before the program feeds it too.
+  const lead = tokens.slice(0, start);
+  const leadStdinText = lead.some((t) => /^\d*<</.test(t));
+  const leadInput = lead.some((t) => /^\d*<(?![<(])/.test(t));
   let args = tokens.slice(start + 1);
   const glued = program.indexOf('<<');
   if (glued > 0) {
@@ -594,7 +652,9 @@ function isOpaqueShell(statement: Statement, powershell: boolean): boolean {
   const exact = [...names.exact, ...names.folded];
   if (exact.includes('eval')) return true;
   const fedWithoutScript = (read: ShellArgs): boolean =>
-    read.stdinText || (!read.script && (statement.piped || read.inputRedirect));
+    read.stdinText ||
+    leadStdinText ||
+    (!read.script && (statement.piped || read.inputRedirect || leadInput));
   if (exact.some((n) => POSIX_SHELLS.has(n))) {
     const read = readShellArgs(args);
     return read.dashC || fedWithoutScript(read);
@@ -602,15 +662,39 @@ function isOpaqueShell(statement: Statement, powershell: boolean): boolean {
   if (lower.some((n) => POWERSHELL_HOSTS.has(n))) {
     if (args.some(isPowerShellStringFlag)) return true;
     const read = readShellArgs(args);
-    const script = args.some((a) => /^-f(?:ile)?$/i.test(a) || /\.ps1$/i.test(a));
-    return read.stdinText || (!script && (statement.piped || read.inputRedirect));
+    const file = args.some((a) => /^-f(?:ile)?(?::|$)/i.test(a));
+    if (!file && firstPositionalIsQuoted(statement.raw, program)) return true;
+    const script = file || args.some((a) => /\.ps1$/i.test(a));
+    return (
+      read.stdinText ||
+      leadStdinText ||
+      (!script && (statement.piped || read.inputRedirect || leadInput))
+    );
   }
   if (lower.includes('cmd')) {
     if (args.some((a) => /^\/[ck]/i.test(a))) return true;
     const read = readShellArgs(args);
-    return read.stdinText || statement.piped || read.inputRedirect;
+    return read.stdinText || leadStdinText || statement.piped || read.inputRedirect || leadInput;
   }
   return false;
+}
+
+/**
+ * Whether the first argument after `program` that is not an option starts
+ * with a quote character in the statement's raw text (`powershell "…"`). Read
+ * on whitespace-split raw words, so a quoted value of an option that takes one
+ * (`-ExecutionPolicy Bypass`) ends the search at that value.
+ */
+function firstPositionalIsQuoted(raw: string, program: string): boolean {
+  const words = raw.trim().split(/\s+/);
+  const unquote = (w: string): string => w.replace(/["']/g, '');
+  const at = words.findIndex((w) => {
+    const bare = unquote(w);
+    return bare === program || bare.endsWith(`/${program}`) || bare.endsWith(`\\${program}`);
+  });
+  if (at === -1) return false;
+  const next = words.slice(at + 1).find((w) => !w.startsWith('-'));
+  return next !== undefined && /^["']/.test(next);
 }
 
 function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMatch[] {
@@ -725,6 +809,7 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   let scopeKind: 'path' | 'command';
   let matches: RowMatch[];
   let opaque: string | null = null;
+  let opaqueStatements: string[] = [];
   if ('path' in parsed) {
     scopeKind = 'path';
     const rel = repoRelativePath(parsed.path, root);
@@ -742,8 +827,10 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
     const statements = commandStatements(parsed.command, powershell);
     matches = matchCommandRows(config.rows, statements, powershell);
     if (config.rows.some((r) => (r.scope.commands?.length ?? 0) > 0)) {
-      const hidden = statements.find((s) => isOpaqueShell(s, powershell));
-      if (hidden) opaque = bound(hidden.raw.trim());
+      opaqueStatements = statements
+        .filter((s) => isOpaqueShell(s, powershell))
+        .map((s) => bound(s.raw.trim()));
+      opaque = opaqueStatements[0] ?? null;
     }
   }
 
@@ -866,27 +953,30 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
 
     const overridable = policyDisposition === 'deny' && !skippedDeny && allNamed;
     if (overridable) {
+      // The named deny rows are lifted: the call proceeds with a warn citing the
+      // first of them, every other matched row (warn and display included) kept
+      // in alsoMatched, and any shell string listed rather than dropped.
       const ids = denyMatches.map((m) => m.row.id);
-      if (opaque !== null) {
-        // The named deny rows are cleared, but another statement still hands a
-        // shell a string: that warn is the verdict, and it owes no override line.
-        return {
-          verdict: opaqueVerdict(opaque, {
-            overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
-            overriddenRows: ids,
-          }),
-        };
-      }
+      const first = denyMatches[0] as RowMatch;
+      const kinds = [...new Set(denyMatches.map((m) => m.row.action_kind))].join(', ');
       return {
         verdict: {
-          disposition: 'allow',
-          reason: `Allowed by ${ACTION_POLICY_OVERRIDE_ENV} (audited). Would have denied: ${reason}`,
+          disposition: 'warn',
+          reason: `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) ${ids.join(', ')} (${kinds}, deny): ${first.row.reason ?? 'governed'}; proceeding`,
           provenance: {
             source,
-            ref: row.id,
-            matched: cited.matched,
+            ref: first.row.id,
+            matched: first.matched,
             checkedAt,
-            detail: { ...detail, overriddenBy: ACTION_POLICY_OVERRIDE_ENV, overriddenRows: ids },
+            detail: {
+              ...detail,
+              actionKind: first.row.action_kind,
+              environment: first.row.environment,
+              alsoMatched: candidates.filter((m) => m !== first).map((m) => m.row.id),
+              overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
+              overriddenRows: ids,
+              ...(opaqueStatements.length > 0 ? { opaqueStatements } : {}),
+            },
           },
         },
         notice: `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${cited.matched}"; row(s) ${ids.join(', ')} would have denied.\n`,

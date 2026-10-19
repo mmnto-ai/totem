@@ -1,0 +1,136 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "f015a9ed77acb25febc09aa8eaf92d8db3c99a72",
+  "readAt": "2026-10-19T23:25:34Z",
+  "findings": [
+    {
+      "id": "3106-r3-F1",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 311,
+      "claim": "Substitutions inside an unquoted heredoc body are 'read, because the shell runs them'; the reader blanks single-quoted and comment text in the body (packages/core/src/action-policy.ts:499-505 via packages/core/src/transport-shield.ts:1274 and 1306), shell rules that do not apply inside a heredoc, so such substitutions are not read. Same claim in .changeset/action-policy-gate.md:6.",
+      "counterexample": "Bash, row 'pnpm db:migrate:prod' deny: cat <<EOF\\nit's $(pnpm db:migrate:prod)\\nEOF -> allow no-policy-match; cat <<EOF\\n'$(pnpm db:migrate:prod)'\\nEOF -> allow; cat <<EOF\\n# $(pnpm db:migrate:prod)\\nEOF -> allow; the backtick form after an apostrophe -> allow; control cat <<EOF\\n$(pnpm db:migrate:prod)\\nEOF -> deny r"
+    },
+    {
+      "id": "3106-r3-F2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 311,
+      "claim": "'The bodies of $( ... ) substitutions are read as statements' fails on the PowerShell tool when a single backslash precedes $( : openerEscaped (packages/core/src/transport-shield.ts:1279) applies bash's escape rule although PowerShell backslashes are literal, the fold's own literalBackslash premise.",
+      "counterexample": "PowerShell, row 'pnpm db:migrate:prod' deny: echo \"$env:TEMP\\$(pnpm db:migrate:prod).log\" -> allow no-policy-match; echo \"C:\\logs\\$(pnpm db:migrate:prod)\" -> allow; control echo \"a $(pnpm db:migrate:prod)\" -> deny r"
+    },
+    {
+      "id": "3106-r3-F3",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 340,
+      "claim": "'any of those shells with no script argument ... while a pipe feeds it' is not kept for a lone '-' (end of options, stdin read) or a |& pipe; the opaque arm is warn-only, so the miss is allow instead of warn.",
+      "counterexample": "curl x | sh - -> allow no-policy-match (action-policy.ts:550 reads '-' as a script); curl x |& sh -> allow (action-policy.ts:495, piped false after the & split); control curl x | sh -> warn opaque-shell-string"
+    },
+    {
+      "id": "3106-r3-F4",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 247,
+      "claim": "DISCLOSURE: 'a shell handed a string the gate does not read is warned on' (also docs/wiki/cli-reference.md:125, docs/wiki/enforcement-model.md:90, orient footer 'shell strings warn' at packages/cli/src/commands/orient.ts:523) is categorical, but shells outside the closed list and the Windows PowerShell positional form neither warn nor appear on the not-read list.",
+      "counterexample": "fish -c x, ash -c x, csh -c x, tcsh -c x, mksh -c x, busybox ash -c x, powershell \"Remove-Item x\" -> each allow no-policy-match"
+    },
+    {
+      "id": "3106-r3-F5",
+      "severity": "MINOR",
+      "file": "docs/wiki/cli-reference.md",
+      "line": 125,
+      "claim": "The cli-reference, enforcement-model (docs/wiki/enforcement-model.md:90) and orient footer (packages/cli/src/commands/orient.ts:523) state that shell strings warn without the qualifier 'when the policy has at least one command row' that the code applies (packages/core/src/action-policy.ts:744).",
+      "counterexample": "policy with only a paths row; Bash 'sh -c x' -> allow no-policy-match"
+    },
+    {
+      "id": "3106-r3-F6",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 313,
+      "claim": "DISCLOSURE: a leading redirection or coproc before the program is neither in the program-position rules nor on the not-read list, and a leading-redirected shell gets no opaque warn; conversely a ( ... ) subshell is read but not listed.",
+      "counterexample": ">log pnpm db:migrate:prod, 2>&1 pnpm db:migrate:prod, <in pnpm db:migrate:prod, coproc pnpm db:migrate:prod -> allow; < install.sh sh and <<EOF bash\\nx\\nEOF -> allow; (pnpm db:migrate:prod) -> deny r"
+    },
+    {
+      "id": "3106-r3-F7",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 364,
+      "claim": "DISCLOSURE: a command pattern whose first token is a wrapper or time can never match (the program position skips it) and loads without error; 'Add rows for the wrapper shapes your repository uses' invites such rows.",
+      "counterexample": "pattern 'sudo reboot' vs 'sudo reboot' -> allow; 'xargs rm' vs 'find . | xargs rm' -> allow; 'env **' vs 'env FOO=1 make' -> allow; 'time make' vs 'time make' -> allow; 'nohup **' vs 'nohup make' -> allow; all load; control 'reboot' vs 'sudo reboot' -> deny"
+    },
+    {
+      "id": "3106-r3-F8",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 350,
+      "claim": "DISCLOSURE: an override that clears every deny row also suppresses the report of a warn or display row that matched the same call (the opaque warn survives, a row warn does not); the text says only that the verdict becomes allow and that it never touches a warn verdict.",
+      "counterexample": "rows a deny, b deny, w warn on 'mig'; override 'a,b' -> allow ref a, alsoMatched [b,w], w's warn not reported (packages/core/src/action-policy.ts:867-893)"
+    },
+    {
+      "id": "3106-r3-F9",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 329,
+      "claim": "DISCLOSURE: on PowerShell a leading .\\ is dropped as well as ./ (packages/core/src/action-policy.ts:434-435, pinned by the fold's test), but the text names only ./.",
+      "counterexample": "PowerShell '.\\pnpm db:migrate:prod' -> deny r; the fold test pins '.\\scripts\\deploy.sh --prod' against pattern 'scripts/deploy.sh --prod'"
+    },
+    {
+      "id": "3106-r3-F10",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 247,
+      "claim": "'The config schema requires totemDir to be a relative path, a directory inside the repository': the schema refuses absolute paths only (packages/core/src/config-schema.ts:553-565); the second deposit's F13 verdict rests on this sentence.",
+      "counterexample": "TotemConfigSchema.safeParse with totemDir '../outside/.totem' -> accepted; 'a/../../x' -> accepted; '/abs' -> refused"
+    },
+    {
+      "id": "3106-r3-F11",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 307,
+      "claim": "Test pins missing for kept claims: the long-subject head match (positive half) and the pipe and redirect rows for pwsh and cmd at config-reference.md:340 are unpinned.",
+      "counterexample": "Mutants of the fold evaluator each pass all 186 tests: long subject never matches a wildcard; pwsh ignores a pipe; cmd ignores a pipe; output-redirect skip removed; pwsh -File/.ps1 detection removed. Control: the -s mutant fails 1 test."
+    },
+    {
+      "id": "3106-r3-F12",
+      "severity": "MINOR",
+      "file": ".totem/artifacts/legs/1ef0adda45f446b7f7e08196f2ab8638050ce87e.json",
+      "line": 1,
+      "claim": "The second deposit's verdict scopes the warn channel to 'a display or warn row', but the fold changes the shared wrapper for every gate (freeze-check, transport-shield, merge-ready warns and pilot denies now print additionalContext); the commit message and changeset disclose it, the verdict does not.",
+      "counterexample": "Rendered wrapper, merge-ready on 'gh pr merge 7; gh pr merge 8' with a stub returning warn per payload -> exit 0, one stdout object whose additionalContext holds both merge-ready warn lines"
+    },
+    {
+      "id": "3106-r3-F13",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 247,
+      "claim": "Pre-existing: gate check resolves totemDir from its working directory only (packages/cli/src/utils.ts:93-113, packages/cli/src/commands/gate.ts:222); should the docs say that the hook reads the policy relative to its working directory?",
+      "counterexample": "From the db/ subdirectory of a repository with a project config: gate check with {tool:Edit,path:migrations/1.sql} -> allow no-policy-file, source db/action-policy.json; with no project config and a global profile whose totemDir is '.', the repository's .totem/action-policy.json is not read"
+    },
+    {
+      "id": "3106-r3-F14",
+      "severity": "QUESTION",
+      "file": "docs/wiki/config-reference.md",
+      "line": 337,
+      "claim": "pwsh --command, /c and -Command: spellings are not warned; whether pwsh accepts these parameter prefixes was not verified here. If it does, they are disclosure items.",
+      "counterexample": "PowerShell 'pwsh --command x', 'pwsh /c x', 'pwsh -Command:x' -> each allow no-policy-match"
+    }
+  ],
+  "folded": [
+    "3106-r3-F1",
+    "3106-r3-F2",
+    "3106-r3-F3",
+    "3106-r3-F4",
+    "3106-r3-F5",
+    "3106-r3-F6",
+    "3106-r3-F7",
+    "3106-r3-F8",
+    "3106-r3-F9",
+    "3106-r3-F10",
+    "3106-r3-F11",
+    "3106-r3-F12",
+    "3106-r3-F13",
+    "3106-r3-F14"
+  ],
+  "verdict": "Read 3 of the action-policy gate, scoped to the fold f015a9ed and asked one question (does every public claim equal the mechanism?): blocking=0 material=2 minor=10 question=2 folded=14 (counts as typed). Its answer was NOT CONVERGED on two categorical sentences, both about what the body readers see, and CONVERGED on everything else measured: the wrapper table, the program position, the spellings, the opaque list, the paths, the strict schema, the environment set and cap, the three override rules, orient, doctor, install, the warn channel (one valid context object on stdout for warn and pilot deny, nothing on allow, exit 2 and stderr only on a strict deny, one object for two warning payloads), and the transport shield unchanged (both suites green; a 17,220-input differential with zero verdict changes, every row firing). Folded by the seat in the next commit: F1 (inside an unquoted heredoc body the substitution and backtick readers apply no shell quoting or comment rule, since a heredoc body has none); F2 (on the PowerShell tool a backslash before $( is a character and the backtick is the escape); F3 (a lone - is no script and |& is a pipe); F4 (the shell list gains ash, mksh, fish, csh and tcsh, a quoted positional argument to pwsh or powershell with no -File is a string, and the docs say the list is closed); F5 (the command-row qualifier on all three surfaces); F6 (leading redirections and coproc are skipped to the program, so a redirected shell is opaque; the subshell form is documented as read); F7 (a command pattern whose first token is a wrapper, time or coproc fails the load, and the docs say patterns start at the program); F8 (folded into the override change below: a lifted deny returns warn, and the matched warn or display rows ride alsoMatched); F9 (the .\\ spelling documented); F10 (the sentence names what the schema refuses and where the .. refusal lives); F11 (the five positive pins); F12 (the warn channel's scope stated here for the record: every gate the wrapper serves, freeze-check, transport-shield and merge-ready warns and pilot denies included); F13 (the docs say the hook runs in the project root and a direct gate check resolves its configuration from its working directory like every totem verb); F14 (the -Command:value spelling is read; --command and /c are named as not read, unverified against pwsh). Also in the same commit on the operator's word of 2026-10-19: a lifted deny returns warn, not allow, naming the rows and the variable, so the wrapper's warn channel carries the fact to the agent; and the docs state the override's session scope and the launch-shell discipline, never a user-level variable. Convergence named by the seat: the third read's two mechanism findings are fixed, not narrowed; every other item is a disclosure sentence or a test pin; no fourth read is run, and a shape outside the stated reach found later is a disclosure item."
+}

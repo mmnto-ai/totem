@@ -688,8 +688,12 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   'xargs',
 ]);
 
-/** Shell reserved words that can stand before a program in a segment: `{ gh …; }`, `if gh …`, `then gh …`. */
-const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
+/**
+ * Shell reserved words that can stand before a program in a segment: `{ gh …; }`,
+ * `if gh …`, `then gh …`. Exported for the action-policy gate's pattern check
+ * (mmnto-ai/totem#3106).
+ */
+export const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
   '{',
   'if',
   'then',
@@ -746,6 +750,21 @@ export function programStart(
     if (t === 'function') {
       i += 2;
       continue;
+    }
+    if (opts.skipRedirections === true) {
+      if (t === 'coproc') {
+        i += 1;
+        continue;
+      }
+      if (BARE_REDIRECTION.test(t)) {
+        // A redirection operator standing alone: its operand is the next token.
+        i += 2;
+        continue;
+      }
+      if (GLUED_REDIRECTION.test(t)) {
+        i += 1;
+        continue;
+      }
     }
     if (table !== undefined) {
       const wrapper = wrapperName(t, table);
@@ -829,8 +848,20 @@ export const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> 
   busybox: [],
 });
 
+/** A redirection operator standing alone (`>`, `>>`, `<`, `2>`, `&>`, `<<`, `<<-`, `<<<`, `>&`). */
+const BARE_REDIRECTION = /^(?:\d+|&)?(?:>>?|>&|<&|<<<|<<-?|<)$/;
+
+/** A redirection with its operand glued on (`>log`, `2>&1`, `<in`, `&>x`, `<<EOF`), never a process substitution. */
+const GLUED_REDIRECTION = /^(?:\d+|&)?(?:>>?|>&|<&|<<<|<<-?|<)(?!\()\S/;
+
 /** Options for {@link programStart}. */
 export interface ProgramStartOptions {
+  /**
+   * Skip redirections that stand before the program (`>log prog`, `2>&1 prog`,
+   * `<in prog`, a bare operator with its operand as the next token) and the
+   * reserved word `coproc`. Off by default: the shield's rows do not read them.
+   */
+  skipRedirections?: boolean;
   /**
    * Recognise wrappers by basename through this table and skip their options
    * (see {@link WRAPPER_VALUE_OPTIONS}); absent, the flat {@link WRAPPERS} set
@@ -1263,24 +1294,50 @@ function closeEscaped(text: string, at: number): boolean {
 }
 
 /**
+ * PowerShell's escape: an opener preceded by an odd run of backticks is
+ * literal text; a backslash is an ordinary character.
+ */
+function powershellOpenerEscaped(text: string, at: number): boolean {
+  let n = 0;
+  for (let k = at - 1; k >= 0 && text[k] === '`'; k -= 1) n += 1;
+  return n % 2 === 1;
+}
+
+/** Options for {@link substitutionBodies} and {@link backtickBodies}. */
+export interface BodyReadOptions {
+  /**
+   * Read the text with NO shell quoting or comment rule: an apostrophe, a
+   * single-quoted span or a `#` is ordinary text (an unquoted heredoc body).
+   * Off by default.
+   */
+  raw?: boolean;
+  /**
+   * Read openers by PowerShell's escape rule: a backtick escapes, a backslash
+   * does not. Off by default (bash's rule).
+   */
+  powershell?: boolean;
+}
+
+/**
  * The bodies of every `$( … )` in one segment's raw text, in order, located on
  * the single-quote- and comment-blanked text (a `$(` inside single quotes or a
  * comment is text the shell never runs, and so is an opener escaped with one
  * backslash) and sliced from the text itself. One level: a caller recurses into
  * each body. Exported for the action-policy gate (mmnto-ai/totem#3106).
  */
-export function substitutionBodies(raw: string): string[] {
+export function substitutionBodies(raw: string, opts: BodyReadOptions = {}): string[] {
   const bodies: string[] = [];
-  const located = blankComments(blankSingleQuoted(raw));
+  const located = opts.raw === true ? raw : blankComments(blankSingleQuoted(raw));
+  const escapedAt = opts.powershell === true ? powershellOpenerEscaped : openerEscaped;
   let cursor = 0;
   while (cursor < located.length) {
     const open = located.indexOf('$(', cursor);
     if (open === -1) break;
-    if (openerEscaped(located, open)) {
+    if (escapedAt(located, open)) {
       cursor = open + 2;
       continue;
     }
-    const end = substitutionEnd(located, open + 1);
+    const end = substitutionEnd(located, open + 1, opts.powershell === true);
     bodies.push(raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end));
     cursor = end;
   }
@@ -1301,9 +1358,13 @@ export function substitutionBodies(raw: string): string[] {
  * returned unescaped. `skip(at)` drops the span whose opener sits at `at`.
  * Exported for the action-policy gate (mmnto-ai/totem#3106).
  */
-export function backtickBodies(text: string, skip?: (at: number) => boolean): string[] {
+export function backtickBodies(
+  text: string,
+  skip?: (at: number) => boolean,
+  opts: Pick<BodyReadOptions, 'raw'> = {},
+): string[] {
   const bodies: string[] = [];
-  const whole = blankComments(blankSingleQuoted(text));
+  const whole = opts.raw === true ? text : blankComments(blankSingleQuoted(text));
   for (const isOpenerEscaped of [openerEscaped, closeEscaped]) {
     let tick = whole.indexOf('`');
     while (tick !== -1) {

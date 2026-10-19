@@ -521,7 +521,7 @@ function actionPolicyMatchText(m: OrientActionPolicyMatch): string {
 
 /** The disclosed limit of every command-text gate, one sentence. */
 const ACTION_POLICY_LIMIT_LINE =
-  "limit: renamed programs, agent-written scripts, interpreter strings and commands reached through other programs' arguments match no command row; shell strings warn.";
+  "limit: renamed programs, agent-written scripts, interpreter strings and commands reached through other programs' arguments match no command row; shell strings warn when the policy has a command row.";
 
 async function derivePRs(cwd: string): Promise<Section<OrientPr[]>> {
   try {
