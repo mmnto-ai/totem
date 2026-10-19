@@ -136,6 +136,16 @@ describe('evaluateGate — dispatch', () => {
   it('exposes the known gate events', () => {
     expect(knownGateEvents()).toContain('freeze-check');
   });
+
+  it('registers action-policy under the four-tool matcher (mmnto-ai/totem#3106)', () => {
+    expect(knownGateEvents()).toEqual([
+      'freeze-check',
+      'transport-shield',
+      'merge-ready',
+      'action-policy',
+    ]);
+    expect(gateMatcher('action-policy')).toBe('Write|Edit|Bash|PowerShell');
+  });
 });
 
 // ─── merge-ready through the registry (mmnto-ai/totem#2800) ──────────────

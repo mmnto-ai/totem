@@ -58,6 +58,7 @@ import {
   getGitBranchDiffResult,
   getGitDiffRange,
   getGitLogSince,
+  getGitStatusPorcelainRaw,
   getLatestTag,
   getTagDate,
   inferScopeFromFiles,
@@ -392,6 +393,22 @@ describe('isFileDirty', () => {
       ) as never,
     );
     expect(isFileDirty('/tmp', 'README.md')).toBe(false);
+  });
+});
+
+describe('getGitStatusPorcelainRaw (mmnto-ai/totem#3106)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('runs status --porcelain -z and returns the output untrimmed', () => {
+    const raw = ' M src/a.ts' + String.fromCharCode(0);
+    vi.mocked(crossSpawn.sync).mockReturnValue(ok(raw) as never);
+    expect(getGitStatusPorcelainRaw('/tmp')).toBe(raw);
+    expect(vi.mocked(crossSpawn.sync).mock.calls[0]?.[1]).toEqual(['status', '--porcelain', '-z']);
+  });
+
+  it('throws when git fails, never a clean tree', () => {
+    vi.mocked(crossSpawn.sync).mockReturnValue(fail(new Error('spawn failed')) as never);
+    expect(() => getGitStatusPorcelainRaw('/tmp')).toThrow(/spawn failed/);
   });
 });
 

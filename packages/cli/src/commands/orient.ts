@@ -243,6 +243,42 @@ export interface OrientIndexFreshness {
   stale?: boolean;
 }
 
+/** One policy row as orient lists it (mmnto-ai/totem#3106). */
+export interface OrientActionPolicyRow {
+  id: string;
+  actionKind: string;
+  disposition: 'display' | 'warn' | 'deny';
+  environment: string;
+  /** How many path globs and command patterns the row's scope declares. */
+  scope: { paths: number; commands: number };
+}
+
+/** A touched path the policy governs: the verdict's row and its disposition. */
+export interface OrientActionPolicyMatch {
+  path: string;
+  /** The winning row id, or `environment-unevaluable` when git could not be read. */
+  rowId: string;
+  /** The row's own disposition (`display` kept), else the gate's verdict. */
+  disposition: string;
+  /** True when the override env var turned this row's `deny` into `allow`. */
+  overridden?: true;
+}
+
+/**
+ * The ACTION POLICY section: present only when `.totem/action-policy.json`
+ * exists. A load failure is `{ file, error }`; a touched-set failure keeps the
+ * rows and names itself in `touchedError`.
+ */
+export type OrientActionPolicy =
+  | {
+      file: string;
+      rows: OrientActionPolicyRow[];
+      matches: OrientActionPolicyMatch[];
+      touchedCount: number;
+      touchedError?: string;
+    }
+  | (ErrorEnvelope & { file: string });
+
 export interface OrientReport {
   repo: Section<string>;
   derivedAt: string;
@@ -259,6 +295,8 @@ export interface OrientReport {
    *  "no board configured" (false) from "board configured but empty" (true,
    *  `board: []`) — without it the two collapse to the same shape (Tenet 14). */
   boardConfigured: boolean;
+  /** Absent when the repository carries no `.totem/action-policy.json`. */
+  actionPolicy?: OrientActionPolicy;
 }
 
 // ─── Internal derived state ─────────────────────────────
@@ -286,6 +324,7 @@ interface DerivedState {
   boardItems: BoardItem[] | null;
   issues: Section<IssueDerivation>;
   boardConfigured: boolean;
+  actionPolicy: OrientActionPolicy | null;
 }
 
 function isError<T>(s: Section<T>): s is ErrorEnvelope {
@@ -370,6 +409,89 @@ function underivableParked(err: unknown): {
     freezeChannel: { cohortStatus: 'underivable', warnings: [] },
   };
 }
+
+/** The policy file as orient names it. */
+const ACTION_POLICY_SHOWN_FILE = '.totem/action-policy.json';
+
+/** Refs the gate returns when no row governs the path. */
+const ACTION_POLICY_UNGOVERNED_REFS = new Set([
+  'no-policy-file',
+  'no-policy-match',
+  'outside-repo',
+]);
+
+/**
+ * The ACTION POLICY section (mmnto-ai/totem#3106): the policy's rows, and each
+ * touched path the gate governs, judged by the gate's own evaluator as a
+ * `Write` of that path. `null` when the file is absent (the section is
+ * omitted); a load failure is one error, never a thrown orient.
+ */
+async function deriveActionPolicy(repoRoot: string): Promise<OrientActionPolicy | null> {
+  const file = ACTION_POLICY_SHOWN_FILE;
+  const path = await import('node:path');
+  const { actionPolicyEvaluator, readActionPolicyConfig } = await import('@mmnto/totem');
+  const totemDir = path.join(repoRoot, '.totem');
+  let config;
+  try {
+    config = readActionPolicyConfig(totemDir);
+    // totem-context: a corrupt policy becomes the section's one error line (Tenet 4, surfaced not swallowed); the gate itself fails closed on the same file
+  } catch (err) {
+    return { file, error: errMessage(err) };
+  }
+  if (config === null) return null;
+
+  const rows: OrientActionPolicyRow[] = config.rows.map((r) => ({
+    id: r.id,
+    actionKind: r.action_kind,
+    disposition: r.disposition,
+    environment: r.environment,
+    scope: { paths: r.scope.paths?.length ?? 0, commands: r.scope.commands?.length ?? 0 },
+  }));
+
+  let touched: string[];
+  try {
+    const { deriveTouchedPaths } = await import('./orient-touched-paths.js');
+    touched = await deriveTouchedPaths(repoRoot);
+    // totem-context: an unresolvable branch scope keeps the rows and names itself as one line (Tenet 4); the policy rows are still worth showing
+  } catch (err) {
+    return { file, rows, matches: [], touchedCount: 0, touchedError: errMessage(err) };
+  }
+
+  const matches: OrientActionPolicyMatch[] = [];
+  // The override's stderr line is the gate's, not orient's: capture and drop
+  // it here, and mark the match instead.
+  const quiet = (): void => {};
+  for (const touchedPath of touched) {
+    try {
+      const verdict = actionPolicyEvaluator({ tool: 'Write', path: touchedPath }, totemDir, {
+        writeStderr: quiet,
+      });
+      if (ACTION_POLICY_UNGOVERNED_REFS.has(verdict.provenance.ref)) continue;
+      const detail = verdict.provenance.detail ?? {};
+      const policyDisposition = detail.policyDisposition;
+      matches.push({
+        path: touchedPath,
+        rowId: verdict.provenance.ref,
+        disposition:
+          typeof policyDisposition === 'string' ? policyDisposition : verdict.disposition,
+        ...(detail.overriddenBy !== undefined ? { overridden: true as const } : {}),
+      });
+      // totem-context: a per-path evaluation failure (a path the payload parser refuses) becomes that path's own error row, never a thrown orient
+    } catch (err) {
+      matches.push({ path: touchedPath, rowId: `error: ${errMessage(err)}`, disposition: 'error' });
+    }
+  }
+  return { file, rows, matches, touchedCount: touched.length };
+}
+
+/** One rendered match line body: `path → row (disposition)`. */
+function actionPolicyMatchText(m: OrientActionPolicyMatch): string {
+  return `${m.path} → ${m.rowId} (${m.disposition}${m.overridden ? ', overridden' : ''})`;
+}
+
+/** The disclosed limit of every command-text gate, one sentence. */
+const ACTION_POLICY_LIMIT_LINE =
+  'limit: a governed program invoked by path, inside `sh -c`, or from a script the agent wrote matches no command row.';
 
 async function derivePRs(cwd: string): Promise<Section<OrientPr[]>> {
   try {
@@ -563,12 +685,13 @@ async function derive(cwd: string): Promise<DerivedState> {
   const localSlug = isError(slugResult) ? null : `${slugResult.slug.owner}/${slugResult.slug.name}`;
   const owner = isError(slugResult) ? null : slugResult.slug.owner;
 
-  const [indexFreshness, parkedResult, openPRs, issues, board] = await Promise.all([
+  const [indexFreshness, parkedResult, openPRs, issues, board, actionPolicy] = await Promise.all([
     deriveIndexFreshness(repoRoot),
     deriveParked(repoRoot),
     derivePRs(cwd),
     deriveIssues(cwd, localSlug),
     deriveBoard(cwd, owner),
+    deriveActionPolicy(repoRoot),
   ]);
 
   return {
@@ -582,6 +705,7 @@ async function derive(cwd: string): Promise<DerivedState> {
     boardItems: board.items,
     issues,
     boardConfigured: board.configured,
+    actionPolicy,
   };
 }
 
@@ -607,6 +731,7 @@ function toReport(state: DerivedState): OrientReport {
     epics: isError(state.issues) ? { error: state.issues.error } : state.issues.epics,
     otherOpenIssues: isError(state.issues) ? { error: state.issues.error } : state.issues.others,
     boardConfigured: state.boardConfigured,
+    ...(state.actionPolicy !== null ? { actionPolicy: state.actionPolicy } : {}),
   };
 }
 
@@ -683,6 +808,31 @@ export function renderReport(report: OrientReport): string {
       break;
   }
   for (const w of report.freezeChannel.warnings) out.push(`  ⚠ ${w}`);
+
+  // ACTION POLICY (mmnto-ai/totem#3106) — only when the file exists.
+  if (report.actionPolicy !== undefined) {
+    const ap = report.actionPolicy;
+    out.push(`\n⚑ ACTION POLICY  (${ap.file}; touched = branch diff ∪ working tree)`);
+    if ('error' in ap) {
+      out.push(`  ⚠ could not derive: ${ap.error}`);
+    } else {
+      if (ap.rows.length === 0) out.push('  no rows');
+      for (const r of ap.rows) {
+        out.push(
+          `  • ${r.id}  ${r.actionKind}  ${r.disposition}  env=${r.environment}  scope: ${r.scope.paths} path(s), ${r.scope.commands} command(s)`,
+        );
+      }
+      if (ap.touchedError !== undefined) {
+        out.push(`  ⚠ touched paths could not derive: ${ap.touchedError}`);
+      } else if (ap.matches.length === 0) {
+        out.push(`  no governed touched paths (${ap.touchedCount} touched)`);
+      } else {
+        out.push(`  governed touched paths (${ap.matches.length} of ${ap.touchedCount} touched):`);
+        for (const m of ap.matches) out.push(`    ${actionPolicyMatchText(m)}`);
+      }
+      out.push(`  ${ACTION_POLICY_LIMIT_LINE}`);
+    }
+  }
 
   // OPEN PRs
   out.push('\n◐ OPEN PRs');
@@ -801,6 +951,20 @@ export function renderOrientForSession(report: OrientReport): string {
   // the full orient render carries them).
   if (report.freezeChannel.cohortStatus === 'corrupt') {
     out.push('⛔ ⚠ cohort freeze channel CORRUPT — distributed holds may be invisible');
+  }
+
+  // ACTION POLICY — one counts line (mmnto-ai/totem#3106); `totem orient` has the rows.
+  if (report.actionPolicy !== undefined) {
+    const ap = report.actionPolicy;
+    if ('error' in ap) {
+      out.push(`⚑ action policy: ⚠ could not derive: ${ap.error}`);
+    } else {
+      const touched =
+        ap.touchedError !== undefined
+          ? 'touched paths underivable'
+          : `${ap.matches.length} match(es)`;
+      out.push(`⚑ action policy: ${ap.rows.length} row(s), ${touched} — run \`totem orient\``);
+    }
   }
 
   // OPEN PRs — what's in flight.
@@ -985,6 +1149,9 @@ export async function orientCommand(opts: { json?: boolean; session?: boolean })
         ['coherence', report.coherence],
         ['epics', report.epics],
         ['otherOpenIssues', report.otherOpenIssues],
+        ...(report.actionPolicy !== undefined
+          ? [['actionPolicy', report.actionPolicy] as [string, unknown]]
+          : []),
       ];
       const candidates = sections.map(([name, section]) => {
         const failed = isError(section as Section<unknown>);

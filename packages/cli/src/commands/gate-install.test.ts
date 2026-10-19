@@ -844,6 +844,10 @@ const TRANSPORT_SHIELD: GateInstallSpec = {
   matcher: 'Bash|PowerShell',
 };
 const MERGE_READY: GateInstallSpec = { event: 'merge-ready', matcher: 'Bash|PowerShell' };
+const ACTION_POLICY: GateInstallSpec = {
+  event: 'action-policy',
+  matcher: 'Write|Edit|Bash|PowerShell',
+};
 
 /**
  * Every PreToolUse matcher an entry installing `event` currently appears under.
@@ -1102,6 +1106,28 @@ describe('installGates per-gate matcher (mmnto-ai/totem#2799)', () => {
     expect(gateEntryCount(cwd, 'merge-ready')).toBe(1);
     expect(gateEntryCount(cwd, 'transport-shield')).toBe(1);
     expect(preToolUseEntries(cwd)).toEqual([STRICT_MERGE_READY_ENTRY, STRICT_TRANSPORT_ENTRY]);
+  });
+
+  it('action-policy writes ONE entry under the four-tool matcher (mmnto-ai/totem#3106)', () => {
+    installGates(cwd, [ACTION_POLICY]);
+
+    expect(gateEntryCount(cwd, 'action-policy')).toBe(1);
+    expect(matchersFor(cwd, 'action-policy')).toEqual(['Write|Edit|Bash|PowerShell']);
+    expect(preToolUseEntries(cwd)).toEqual([
+      {
+        matcher: 'Write|Edit|Bash|PowerShell',
+        hooks: [
+          {
+            type: 'command',
+            command: 'node .claude/hooks/gate-wrapper.cjs --event action-policy --strict',
+          },
+        ],
+      },
+    ]);
+    // The registry carries the same matcher the installer wrote.
+    expect(knownGates().find((g) => g.event === 'action-policy')?.matcher).toBe(
+      'Write|Edit|Bash|PowerShell',
+    );
   });
 
   it('a merge-ready tier switch updates the one entry in place', () => {
@@ -1666,6 +1692,128 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     const { status } = runWrapper(BASH_CMD, ['--pilot'], 'nope');
     expect(status).toBe(2);
     expect(stubArgv()).toBeNull();
+  });
+
+  // ─── action-policy projection (mmnto-ai/totem#3106) ────────────────────
+  //
+  // One entry under Write|Edit|Bash|PowerShell: an edit projects its path, a
+  // shell call its command; any other tool, or an empty value, passes through
+  // without ever spawning the CLI (`stubArgv() === null`).
+  describe('action-policy', () => {
+    const DENY_VERDICT = {
+      disposition: 'deny',
+      reason: 'db_migration (deny): migrations run through the release train',
+      provenance: { ref: 'migrations' },
+    };
+
+    it('projects a Write envelope to { tool, path } on stdin', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Write', tool_input: { file_path: '  db/migrations/001.sql  ' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toEqual(['gate', 'check', '--event', 'action-policy', '--payload', '-']);
+      expect(spawnedPayload()).toEqual({ tool: 'Write', path: 'db/migrations/001.sql' });
+    });
+
+    it('projects an Edit envelope carrying only tool_input.path', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper({ tool_name: 'Edit', tool_input: { path: 'src/a.ts' } }, [], 'action-policy');
+      expect(spawnedPayload()).toEqual({ tool: 'Edit', path: 'src/a.ts' });
+    });
+
+    it('projects a Bash envelope to { tool, command, platform } on stdin', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Bash', tool_input: { command: 'pnpm db:migrate:prod --force' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(spawnedPayload()).toEqual({
+        tool: 'Bash',
+        command: 'pnpm db:migrate:prod --force',
+        platform: process.platform,
+      });
+    });
+
+    it('projects a PowerShell envelope with its tool name', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: 'Get-Item x' } },
+        [],
+        'action-policy',
+      );
+      expect(spawnedPayload()).toMatchObject({ tool: 'PowerShell', command: 'Get-Item x' });
+    });
+
+    it('a Read envelope exits 0 without spawning', () => {
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Read', tool_input: { file_path: 'db/migrations/001.sql' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it.each([[{ file_path: '' }], [{ file_path: '   ' }], [{}], [{ file_path: 42 }]])(
+      'a Write with no usable path (%j) exits 0 without spawning',
+      (toolInput) => {
+        writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+        const { status } = runWrapper(
+          { tool_name: 'Write', tool_input: toolInput },
+          [],
+          'action-policy',
+        );
+        expect(status).toBe(0);
+        expect(stubArgv()).toBeNull();
+      },
+    );
+
+    it('a Bash envelope with a blank command exits 0 without spawning', () => {
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Bash', tool_input: { command: '   ' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it('deny → exit 2 under --strict, exit 0 under --pilot, reason on stderr both ways', () => {
+      const envelope = { tool_name: 'Edit', tool_input: { file_path: 'db/migrations/001.sql' } };
+      const denyLine = `[totem gate-wrapper] action-policy (deny): ${DENY_VERDICT.reason} [${JSON.stringify(DENY_VERDICT.provenance)}]\n`;
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const strict = runWrapper(envelope, ['--strict'], 'action-policy');
+      expect(strict.status).toBe(2);
+      expect(strict.stderr).toBe(denyLine);
+
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const pilot = runWrapper(envelope, ['--pilot'], 'action-policy');
+      expect(pilot.status).toBe(0);
+      expect(pilot.stderr).toBe(denyLine);
+    });
+
+    it('a display row (warn arm) exits 0 at both tiers while printing the reason', () => {
+      const envelope = { tool_name: 'Write', tool_input: { file_path: 'src/app/main.ts' } };
+      const verdict = {
+        disposition: 'warn',
+        reason: 'code_edit (display): application code',
+        provenance: { detail: { policyDisposition: 'display' } },
+      };
+      const warnLine = `[totem gate-wrapper] action-policy (warn): ${verdict.reason} [${JSON.stringify(verdict.provenance)}]\n`;
+      for (const tier of ['--strict', '--pilot']) {
+        writeStubCli({ verdict, exit: 0 });
+        const { status, stderr } = runWrapper(envelope, [tier], 'action-policy');
+        expect(status).toBe(0);
+        expect(stderr).toBe(warnLine);
+      }
+    });
   });
 
   // ─── merge-ready projection (mmnto-ai/totem#2800) ──────────────────────
@@ -2918,6 +3066,12 @@ describe('init --gates= routes through the shared installer', () => {
       expect(gateEntryCount(cwd, event)).toBe(1);
       expect(matchersFor(cwd, event)).toEqual([matcher]);
     }
+  });
+
+  it('init --gates=all includes action-policy under the four-tool matcher (mmnto-ai/totem#3106)', async () => {
+    await initCommand({ bare: true, gates: 'all' });
+    expect(gateEntryCount(cwd, 'action-policy')).toBe(1);
+    expect(matchersFor(cwd, 'action-policy')).toEqual(['Write|Edit|Bash|PowerShell']);
   });
 
   it('init --gates=transport-shield installs it under Bash|PowerShell (the pair, not a default)', async () => {

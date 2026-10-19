@@ -642,12 +642,19 @@ describe('transport-shield — side-effect-free and registered', () => {
   it('the registry lists every gate with its matcher, and gateMatcher throws on an unknown event', () => {
     // Spelled out in registry order, so a gate added or moved to another matcher
     // fails here instead of being followed silently (merge-ready joined under
-    // `Bash|PowerShell` in mmnto-ai/totem#2800).
-    expect(knownGateEvents()).toEqual(['freeze-check', TRANSPORT_SHIELD_EVENT, 'merge-ready']);
+    // `Bash|PowerShell` in mmnto-ai/totem#2800; action-policy joined under the
+    // four-tool matcher in mmnto-ai/totem#3106).
+    expect(knownGateEvents()).toEqual([
+      'freeze-check',
+      TRANSPORT_SHIELD_EVENT,
+      'merge-ready',
+      'action-policy',
+    ]);
     expect(knownGates()).toEqual([
       { event: 'freeze-check', matcher: 'Write|Edit' },
       { event: TRANSPORT_SHIELD_EVENT, matcher: 'Bash|PowerShell' },
       { event: 'merge-ready', matcher: 'Bash|PowerShell' },
+      { event: 'action-policy', matcher: 'Write|Edit|Bash|PowerShell' },
     ]);
     expect(gateMatcher('freeze-check')).toBe('Write|Edit');
     expect(gateMatcher(TRANSPORT_SHIELD_EVENT)).toBe('Bash|PowerShell');

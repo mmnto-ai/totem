@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 
+import { ACTION_POLICY_EVENT, actionPolicyEvaluator } from './action-policy.js';
 import { TotemError } from './errors.js';
 import { FREEZE_FILE, readFreezeConfig } from './freeze.js';
 import type {
@@ -89,6 +90,10 @@ const REGISTRY: ReadonlyMap<string, GateDefinition> = new Map<string, GateDefini
   [FREEZE_CHECK_EVENT, { evaluator: freezeCheckEvaluator, matcher: 'Write|Edit' }],
   [TRANSPORT_SHIELD_EVENT, { evaluator: transportShieldEvaluator, matcher: 'Bash|PowerShell' }],
   [MERGE_READY_EVENT, { evaluator: mergeReadyEvaluator, matcher: 'Bash|PowerShell' }],
+  [
+    ACTION_POLICY_EVENT,
+    { evaluator: actionPolicyEvaluator, matcher: 'Write|Edit|Bash|PowerShell' },
+  ],
 ]);
 
 /** The known gate event types — for error messages and host discovery. */

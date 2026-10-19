@@ -242,6 +242,69 @@ It is read at run time by `totem review --gate` itself, so setting it needs no `
 
 **What stays hard.** A failure raised before the config is loaded — a contradictory flag such as `--gate` with `--fail-on`, a config that does not load, or a `hooks.shield.enforce` value outside the three — exits non-zero under every value. A bare `totem review` (no `--gate`) does not read the knob. The `doctor --strict` step of the same hook block is not affected.
 
+## The Action Policy File (`.totem/action-policy.json`)
+
+The action policy is a separate, tracked JSON file beside `totem.config.ts`'s `.totem/` directory, read by the `action-policy` gate (mmnto-ai/totem#3106). It classifies an agent's edits and shell commands into governed action kinds, each with a disposition, so that a change to a migration directory or a production deploy command is shown, warned on or refused before it runs. Totem ships the format and the engine; the rows are yours. Totem never writes or scaffolds this file.
+
+**Shape.** Every field:
+
+- `version` (required): the literal `1`. A file without it, or with any other value, does not load.
+- `_note` (optional): a free-text string for the file's readers; ignored by the gate.
+- `environments` (optional): a list of `{ name, branches }`. `name` is a kebab-case slug and may not be `any` (that word is reserved for rows that apply on every branch). `branches` is a non-empty list of globs over the current branch name.
+- `rows` (required): a list of rows, each with:
+  - `id` (required): a kebab-case slug, unique within the file. Verdicts cite it.
+  - `action_kind` (required): one of `code_edit`, `secret_read`, `db_migration`, `db_data_write`, `deploy_config_change`, `deploy_trigger`, `scheduled_job_change`, `index_rebuild`.
+  - `scope` (required): `{ paths?, commands? }`, with at least one non-empty list. `paths` are path globs; `commands` are command patterns.
+  - `environment` (optional): `any` (the default) or the `name` of a declared environment.
+  - `disposition` (required): `display`, `warn` or `deny`.
+  - `reason` (optional): the text the verdict carries; without it the verdict names the row.
+
+**Example** with three rows: a `deny` path row, a `display` path row, and a `deny` command row that applies only on production branches.
+
+```json
+{
+  "version": 1,
+  "_note": "Governed action classes for this repository.",
+  "environments": [{ "name": "prod", "branches": ["main", "release/*"] }],
+  "rows": [
+    {
+      "id": "migrations",
+      "action_kind": "db_migration",
+      "scope": { "paths": ["db/migrations/**"] },
+      "disposition": "deny",
+      "reason": "migrations ship through the release train"
+    },
+    {
+      "id": "app-code",
+      "action_kind": "code_edit",
+      "scope": { "paths": ["src/app/**"] },
+      "disposition": "display"
+    },
+    {
+      "id": "prod-migrate",
+      "action_kind": "db_migration",
+      "scope": { "commands": ["pnpm db:migrate:prod"] },
+      "environment": "prod",
+      "disposition": "deny"
+    }
+  ]
+}
+```
+
+**Two dialects.** A `paths` entry is a glob in Totem's path-classifier dialect, matched against the edited file made repo-relative with `/` separators: `**` crosses directories, `*` and `?` stay within one segment, braces expand (`*.{yml,yaml}`), matching is case-sensitive, and a bare name is anchored at the root (`README.md` matches only the root README, never `docs/README.md`). Backslashes in the edited path are normalized first, and a path outside the repository is never governed. A `commands` entry is a **token-prefix pattern**: it is split on whitespace, and it matches a shell statement whose first tokens equal the pattern's tokens in order, each token compared as a glob in the same dialect. The command is split into statements the way the transport shield splits it, so a pattern matches after `&&`, `;` or `|`. `pnpm db:migrate:prod` matches `cd apps/api && pnpm db:migrate:prod --force`; it does not match `pnpm db:migrate:prod-report`, because a longer token is not the pattern's token, and it does not match `echo pnpm db:migrate:prod`, because the pattern must start the statement.
+
+**Environments.** A row naming an environment applies only when the current branch matches one of that environment's `branches` globs. The branch is read once with `git branch --show-current`, and only when a row that matched the path or command names an environment; a policy whose matching rows are all `any` never runs git. When git cannot report the branch, the result is unevaluable: `deny` at the strict tier and `warn` at the pilot tier, citing `environment-unevaluable`, never an allow. A `deny` from a matching `any` row still stands in that case.
+
+**Several rows.** When more than one row matches, the most severe disposition wins (`deny` over `warn` over `display`), ties going to the earlier row; the others are listed in the verdict's `alsoMatched`.
+
+**`display`.** The gate contract has three verdicts, so a `display` row is reported through the `warn` arm: the call proceeds at both tiers and the reason is printed, with `policyDisposition: "display"` in the verdict's provenance.
+
+**The override.** `TOTEM_ACTION_POLICY_OVERRIDE` is a comma-separated list of row ids. When the winning row is a `deny` row named in it, the verdict becomes `allow`, its provenance keeps the row and records `overriddenBy`, and the gate prints one stderr line naming the row. It never touches a row that is not named, a `warn` or `display` verdict, or an unevaluable environment; it is read from the environment of the call, so set it for the one command that needs it.
+
+**Absent and corrupt files.** With no file, nothing is governed: every call is allowed with `no-policy-file`, `totem orient` omits its ACTION POLICY section, and `totem doctor` reports "No action policy (none configured)". A file that does not parse or does not match the schema (an unknown kind, a duplicate id, an empty scope, an undeclared environment, a missing `version`) never yields a verdict: the gate fails closed and blocks at every tier, `totem doctor` warns naming the file and the first error, and `totem orient` prints one error line for the section.
+
+**Disclosed limits.** Command matching reads the command text the agent sends. A governed program invoked by its path, inside `sh -c`, from a script the agent wrote, or under another name matches no command row and is allowed as `no-policy-match`. Add rows for the wrapper shapes your repository uses; actions outside the rows stay with whoever runs the session.
+
 ## Secrets Management
 
 Totem uses a local `.totem/secrets.json` file to mask sensitive strings during execution and LLM ingestion. Secrets are **never** committed and are explicitly ignored by `.gitignore`.

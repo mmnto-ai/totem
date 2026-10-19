@@ -82,6 +82,16 @@ vi.mock('@mmnto/totem', async () => {
   };
 });
 
+// ─── touched-path mock (the action-policy section's git reads) ──────────
+//
+// The section's branch diff and working-tree reads live in their own module so
+// these tests hand it a touched set without a repository fixture.
+
+const mockDeriveTouchedPaths = vi.fn<(repoRoot: string) => Promise<string[]>>(async () => []);
+vi.mock('./orient-touched-paths.js', () => ({
+  deriveTouchedPaths: (repoRoot: string) => mockDeriveTouchedPaths(repoRoot),
+}));
+
 // ─── utils mock (config / project number resolution) ────────────────────
 
 const mockLoadConfig = vi.fn();
@@ -1082,5 +1092,182 @@ describe('orient selection manifest (mmnto-ai/totem#2468)', () => {
     expect(r.repo).toBe('mmnto-ai/totem');
     expect(stderr).toContain('selection-manifest sensor failed: sensor exploded');
     expect(fs.existsSync(manifestPath())).toBe(false);
+  });
+});
+
+// ─── ACTION POLICY section (mmnto-ai/totem#3106) ────────────────────────
+
+describe('orient action-policy section', () => {
+  const POLICY = {
+    version: 1,
+    rows: [
+      {
+        id: 'migrations',
+        action_kind: 'db_migration',
+        scope: { paths: ['db/migrations/**'], commands: ['pnpm db:migrate:prod'] },
+        disposition: 'deny',
+      },
+      {
+        id: 'app-code',
+        action_kind: 'code_edit',
+        scope: { paths: ['src/app/**'] },
+        disposition: 'display',
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    // clearAllMocks keeps implementations: reset to the empty touched set.
+    mockDeriveTouchedPaths.mockImplementation(async () => []);
+  });
+
+  function writePolicy(content: unknown): void {
+    fs.writeFileSync(
+      path.join(tmpRoot, '.totem', 'action-policy.json'),
+      typeof content === 'string' ? content : JSON.stringify(content),
+    );
+  }
+
+  async function runText(): Promise<string> {
+    await orientCommand({});
+    return stdout;
+  }
+
+  it('omits the section entirely when the file is absent, in text and JSON', async () => {
+    await runJson();
+    expect(parseJson()).not.toHaveProperty('actionPolicy');
+    expect(mockDeriveTouchedPaths).not.toHaveBeenCalled();
+
+    stdout = '';
+    expect(await runText()).not.toContain('ACTION POLICY');
+  });
+
+  it('renders the rows and the matches for touched paths, the same in text and JSON', async () => {
+    writePolicy(POLICY);
+    mockDeriveTouchedPaths.mockResolvedValue([
+      'README.md',
+      'db/migrations/001_init.sql',
+      'src/app/main.ts',
+    ]);
+
+    await runJson();
+    const r = parseJson();
+    expect(mockDeriveTouchedPaths).toHaveBeenCalledWith(tmpRoot);
+    expect(r.actionPolicy).toEqual({
+      file: '.totem/action-policy.json',
+      rows: [
+        {
+          id: 'migrations',
+          actionKind: 'db_migration',
+          disposition: 'deny',
+          environment: 'any',
+          scope: { paths: 1, commands: 1 },
+        },
+        {
+          id: 'app-code',
+          actionKind: 'code_edit',
+          disposition: 'display',
+          environment: 'any',
+          scope: { paths: 1, commands: 0 },
+        },
+      ],
+      matches: [
+        { path: 'db/migrations/001_init.sql', rowId: 'migrations', disposition: 'deny' },
+        { path: 'src/app/main.ts', rowId: 'app-code', disposition: 'display' },
+      ],
+      touchedCount: 3,
+    });
+
+    stdout = '';
+    const text = await runText();
+    // After the parked section, before the open PRs.
+    const start = text.indexOf('⚑ ACTION POLICY');
+    expect(start).toBeGreaterThan(text.indexOf('⛔ PARKED'));
+    const section = text.slice(start, text.indexOf('◐ OPEN PRs')).trimEnd().split('\n');
+    expect(section).toEqual([
+      '⚑ ACTION POLICY  (.totem/action-policy.json; touched = branch diff ∪ working tree)',
+      '  • migrations  db_migration  deny  env=any  scope: 1 path(s), 1 command(s)',
+      '  • app-code  code_edit  display  env=any  scope: 1 path(s), 0 command(s)',
+      '  governed touched paths (2 of 3 touched):',
+      '    db/migrations/001_init.sql → migrations (deny)',
+      '    src/app/main.ts → app-code (display)',
+      '  limit: a governed program invoked by path, inside `sh -c`, or from a script the agent wrote matches no command row.',
+    ]);
+  });
+
+  it('renders one error line for a corrupt file, never a thrown orient', async () => {
+    writePolicy('{ not json');
+    mockFetchOpenPRs.mockReturnValue([
+      { number: 9, title: 'fix', headRefName: 'fix/y', isDraft: false },
+    ]);
+
+    await runJson();
+    const r = parseJson();
+    expect(r.actionPolicy).toEqual({
+      file: '.totem/action-policy.json',
+      error: expect.stringMatching(/action-policy\.json/),
+    });
+    expect(r.openPRs).toHaveLength(1);
+
+    stdout = '';
+    const text = await runText();
+    const section = text
+      .slice(text.indexOf('⚑ ACTION POLICY'), text.indexOf('◐ OPEN PRs'))
+      .trimEnd()
+      .split('\n');
+    expect(section).toEqual([
+      '⚑ ACTION POLICY  (.totem/action-policy.json; touched = branch diff ∪ working tree)',
+      expect.stringMatching(/^ {2}⚠ could not derive: .*Malformed action-policy\.json/),
+    ]);
+  });
+
+  it('keeps the rows and names a touched-set failure as one line', async () => {
+    writePolicy(POLICY);
+    mockDeriveTouchedPaths.mockRejectedValue(new Error('no base resolved'));
+
+    await runJson();
+    expect(parseJson().actionPolicy).toMatchObject({
+      rows: [{ id: 'migrations' }, { id: 'app-code' }],
+      matches: [],
+      touchedError: 'no base resolved',
+    });
+  });
+
+  it('adds one counts line to the session projection, under its cap', () => {
+    const block = renderOrientForSession({
+      repo: 'mmnto-ai/totem',
+      derivedAt: '2026-06-01T00:00:00.000Z',
+      indexFreshness: { synced: false },
+      parked: [],
+      freezeChannel: { cohortStatus: 'absent-package', warnings: [] },
+      openPRs: [],
+      board: [],
+      coherence: [],
+      epics: [],
+      otherOpenIssues: [],
+      boardConfigured: false,
+      actionPolicy: {
+        file: '.totem/action-policy.json',
+        rows: [
+          {
+            id: 'migrations',
+            actionKind: 'db_migration',
+            disposition: 'deny',
+            environment: 'any',
+            scope: { paths: 1, commands: 0 },
+          },
+        ],
+        matches: Array.from({ length: 400 }, (_, i) => ({
+          path: `db/migrations/${i}.sql`,
+          rowId: 'migrations',
+          disposition: 'deny',
+        })),
+        touchedCount: 400,
+      },
+    });
+    // One counts line, never the 400 matches: the block stays a pointer.
+    expect(block).toBe(
+      '── orient (derived state): mmnto-ai/totem ──\n⚑ action policy: 1 row(s), 400 match(es) — run `totem orient`',
+    );
   });
 });

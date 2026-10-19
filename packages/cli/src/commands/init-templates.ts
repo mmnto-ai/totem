@@ -2820,6 +2820,12 @@ process.stdin.on('end', () => {
   //   merge-ready      | tool_name is Bash or PowerShell   | { repo, pr, branch?, headSha? }
   //                    | AND the command runs \`gh pr merge\`|
   //                    | at COMMAND POSITION               |
+  //   action-policy    | tool_name is Write or Edit AND    | { tool, path }
+  //                    | tool_input.file_path (else .path) |
+  //                    | is a non-empty string; OR         |
+  //                    | tool_name is Bash or PowerShell   | { tool, command, platform }
+  //                    | AND tool_input.command is a       |
+  //                    | non-empty string                  |
   //   (anything else)  | — no projection → fail closed     | —
   //
   // A projection yields ONE payload per gate evaluation — and merge-ready can
@@ -2881,6 +2887,39 @@ process.stdin.on('end', () => {
     // each PR against its own facts (mmnto-ai/totem#2844 round 1).
     for (let m = 0; m < merges.length; m++) {
       payloads.push(JSON.stringify(projectMergeReady(merges[m])));
+    }
+  } else if (event === 'action-policy') {
+    // action-policy's predicate is on an EDITED PATH (Write/Edit) or a SHELL
+    // COMMAND (Bash/PowerShell), classified against the consumer's
+    // .totem/action-policy.json (mmnto-ai/totem#3106). Any other tool, or an
+    // empty path or command, is NOT an applicable gate → pass through (exit 0)
+    // WITHOUT spawning, the transport-shield guardrail's shape.
+    const tool = parsed.tool_name;
+    if (tool === 'Write' || tool === 'Edit') {
+      const rawPath =
+        typeof input.file_path === 'string' && input.file_path.trim() !== ''
+          ? input.file_path
+          : typeof input.path === 'string'
+            ? input.path
+            : '';
+      const filePath = rawPath.trim();
+      if (filePath === '') {
+        process.exit(0);
+      }
+      payloads = [JSON.stringify({ tool: tool, path: filePath })];
+    } else if (tool === 'Bash' || tool === 'PowerShell') {
+      if (typeof input.command !== 'string' || input.command.trim() === '') {
+        process.exit(0);
+      }
+      payloads = [
+        JSON.stringify({
+          tool: tool,
+          command: input.command,
+          platform: process.platform,
+        }),
+      ];
+    } else {
+      process.exit(0);
     }
   } else {
     // A baked --event this wrapper cannot project is an APPLICABLE gate it

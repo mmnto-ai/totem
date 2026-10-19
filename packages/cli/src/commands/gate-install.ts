@@ -39,7 +39,7 @@ import {
  */
 export interface GateInstallSpec {
   event: string;
-  matcher: 'Write|Edit' | 'Bash|PowerShell';
+  matcher: 'Write|Edit' | 'Bash|PowerShell' | 'Write|Edit|Bash|PowerShell';
 }
 
 /**

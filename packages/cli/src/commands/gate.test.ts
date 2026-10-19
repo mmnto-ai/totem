@@ -222,6 +222,7 @@ describe('resolveGates (registry-driven validation)', () => {
       { event: 'freeze-check', matcher: 'Write|Edit' },
       { event: 'transport-shield', matcher: 'Bash|PowerShell' },
       { event: 'merge-ready', matcher: 'Bash|PowerShell' },
+      { event: 'action-policy', matcher: 'Write|Edit|Bash|PowerShell' },
     ]);
     // Order is the registry's, and it is what `--all` installs in.
     expect(resolved.map((g) => g.event)).toEqual(knownGateEvents());

@@ -102,6 +102,35 @@ export {
   readFreezeConfig,
   RULE_COMPILATION_FREEZE_ID,
 } from './freeze.js';
+// action-policy gate (mmnto-ai/totem#3106) — consumer-authored action classes.
+export type {
+  ActionKind,
+  ActionPolicyCommandTool,
+  ActionPolicyConfig,
+  ActionPolicyDisposition,
+  ActionPolicyEnvironment,
+  ActionPolicyPathTool,
+  ActionPolicyPayload,
+  ActionPolicyRow,
+  ActionPolicyScope,
+} from './action-policy.js';
+export {
+  ACTION_KINDS,
+  ACTION_POLICY_ANY_ENVIRONMENT,
+  ACTION_POLICY_EVENT,
+  ACTION_POLICY_FILE,
+  ACTION_POLICY_OVERRIDE_ENV,
+  ACTION_POLICY_VERSION,
+  ActionKindSchema,
+  ActionPolicyConfigSchema,
+  ActionPolicyDispositionSchema,
+  ActionPolicyEnvironmentSchema,
+  actionPolicyEvaluator,
+  ActionPolicyRowSchema,
+  ActionPolicyScopeSchema,
+  parseActionPolicyPayload,
+  readActionPolicyConfig,
+} from './action-policy.js';
 export {
   evaluateGate,
   FREEZE_CHECK_EVENT,
@@ -853,6 +882,7 @@ export {
   getGitDiffStat,
   getGitLogSince,
   getGitStatus,
+  getGitStatusPorcelainRaw,
   getLatestTag,
   getOriginRepoName,
   getTagDate,
