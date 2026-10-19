@@ -616,11 +616,14 @@ function checkAutoCloseKeywords(toolName, toolInput) {
   // (mmnto-ai/totem#3103). Narrower on purpose than the receipt's stripIntentMarkers
   // (packages/core/src/autoclose/receipt.ts), which strips any content: here a keyword
   // sharing a trailer line, a prose line that starts with totem-close:, or a keyword
-  // inside an unterminated marker span stays visible to this rule.
+  // inside an unterminated marker span stays visible to this rule. Each repetition
+  // starts with a ref and owns the separators after it, so an input the strip does
+  // not match is read in linear time (a nested whitespace quantifier backtracked
+  // exponentially on spaced refs followed by a word).
   const acText = filtered
     .join('\\n')
-    .replace(/<!--\\s*totem-close:(?:\\s*(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+\\s*,?)*\\s*-->/gi, ' ')
-    .replace(/^[ \\t]*totem-close:(?:[ \\t]*(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t]*,?)*[ \\t]*$/gim, ' ');
+    .replace(/<!--\\s*totem-close:\\s*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[\\s,]*)*-->/gi, ' ')
+    .replace(/^[ \\t]*totem-close:[ \\t]*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t,]*)*$/gim, ' ');
   const re = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
   const matches = [...acText.matchAll(re)];
   if (matches.length === 0) return;
@@ -925,10 +928,13 @@ process.stdin.on('end', () => {
     // (mmnto-ai/totem#3103). Narrower on purpose than the receipt's stripIntentMarkers
     // (packages/core/src/autoclose/receipt.ts), which strips any content: here a keyword
     // sharing a trailer line, a prose line that starts with totem-close:, or a keyword
-    // inside an unterminated marker span stays visible to this rule.
+    // inside an unterminated marker span stays visible to this rule. Each repetition
+    // starts with a ref and owns the separators after it, so an input the strip does
+    // not match is read in linear time (a nested whitespace quantifier backtracked
+    // exponentially on spaced refs followed by a word).
     const acText = joined
-      .replace(/<!--\\s*totem-close:(?:\\s*(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+\\s*,?)*\\s*-->/gi, ' ')
-      .replace(/^[ \\t]*totem-close:(?:[ \\t]*(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t]*,?)*[ \\t]*$/gim, ' ');
+      .replace(/<!--\\s*totem-close:\\s*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[\\s,]*)*-->/gi, ' ')
+      .replace(/^[ \\t]*totem-close:[ \\t]*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t,]*)*$/gim, ' ');
     const acRe = new RegExp(AUTO_CLOSE_REGEX_SOURCE, 'gi');
     const acMatches = [...acText.matchAll(acRe)];
     if (acMatches.length > 0) {

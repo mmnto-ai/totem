@@ -2555,7 +2555,13 @@ describe('CLAUDE_PREWRITESHIELD template', () => {
 
   it('names the totem-close marker as the intended-close channel and strips it before the scan (mmnto-ai/totem#3103)', () => {
     expect(CLAUDE_PREWRITESHIELD).toContain('<!-- totem-close: owner/repo#N -->');
-    expect(CLAUDE_PREWRITESHIELD).toContain('#\\d+\\s*,?)*\\s*-->');
+    // Both strip regexes, verbatim: the HTML-comment form and the trailer form.
+    expect(CLAUDE_PREWRITESHIELD).toContain(
+      '/<!--\\s*totem-close:\\s*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[\\s,]*)*-->/gi',
+    );
+    expect(CLAUDE_PREWRITESHIELD).toContain(
+      '/^[ \\t]*totem-close:[ \\t]*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t,]*)*$/gim',
+    );
   });
 });
 
@@ -2823,6 +2829,56 @@ describe('PreWriteShield runtime behavior', () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stderr).toMatch(/Bare PR\/issue reference/);
+  });
+
+  it('every refs-only spelling of the marker passes (mmnto-ai/totem#3103, read 2)', () => {
+    const spellings = [
+      '<!-- totem-close: mmnto-ai/totem#131 mmnto-ai/totem#132 -->',
+      '<!-- totem-close:\nmmnto-ai/totem#131\nmmnto-ai/totem#132\n-->',
+      '<!--totem-close:mmnto-ai/totem#131-->',
+      '<!-- TOTEM-CLOSE: mmnto-ai/totem#131 -->',
+      '<!-- totem-close: mmnto-ai/totem#131, -->',
+      'Totem-Close: mmnto-ai/totem#131, mmnto-ai/totem#132,',
+      '<!-- totem-close: mmnto-ai/totem#131 --> -->',
+    ];
+    for (const content of spellings) {
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: { file_path: 'docs/x.md', content },
+      });
+      expect(result.exitCode, content).toBe(0);
+    }
+  });
+
+  it('a marker carrying anything but refs is refused, the URL form included (mmnto-ai/totem#3103, read 2)', () => {
+    // The receipt declares nothing from a URL or from prose inside a marker, so the
+    // write-time rule reads such a marker as ordinary text and its own "close:" trips it.
+    const shapes = [
+      '<!-- totem-close: mmnto-ai/totem#131 please -->',
+      '<!-- totem-close: https://github.com/mmnto-ai/totem/issues/131 -->',
+    ];
+    for (const content of shapes) {
+      const result = runHook({
+        tool_name: 'Write',
+        tool_input: { file_path: 'docs/x.md', content },
+      });
+      expect(result.exitCode, content).toBe(2);
+      expect(result.stderr, content).toMatch(/auto-close/i);
+    }
+  });
+
+  it('a strip that fails to match is read in linear time (mmnto-ai/totem#3103, read 2)', () => {
+    // Fourteen short refs four spaces apart, then a word and no closing marker: the
+    // fold's first regexes took over a hundred seconds here (a nested whitespace
+    // quantifier split the gaps between refs every way); each repetition now starts
+    // with a ref, so the same input is read flat. Refused, since neither line is refs-only.
+    const refs = Array.from({ length: 14 }, (_, i) => 'mmnto-ai/totem#' + (i + 1)).join('    ');
+    const content = '<!-- totem-close: ' + refs + '    x\nTotem-Close: ' + refs + '    x';
+    const started = Date.now();
+    const result = runHook({ tool_name: 'Write', tool_input: { file_path: 'docs/x.md', content } });
+    const elapsedMs = Date.now() - started;
+    expect(result.exitCode).toBe(2);
+    expect(elapsedMs).toBeLessThan(5000);
   });
 
   it('exits 2 on a close keyword adjacent to an issue ref in a **/*.md write', () => {
@@ -3402,7 +3458,13 @@ describe('GEMINI_BEFORE_TOOL write_file/replace extension', () => {
 
   it('names the totem-close marker in the BeforeTool message and strips it before the scan (mmnto-ai/totem#3103, parity with PreWriteShield)', () => {
     expect(GEMINI_BEFORE_TOOL).toContain('<!-- totem-close: owner/repo#N -->');
-    expect(GEMINI_BEFORE_TOOL).toContain('#\\d+\\s*,?)*\\s*-->');
+    // Both strip regexes, verbatim, the same text as the PreWriteShield copy.
+    expect(GEMINI_BEFORE_TOOL).toContain(
+      '/<!--\\s*totem-close:\\s*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[\\s,]*)*-->/gi',
+    );
+    expect(GEMINI_BEFORE_TOOL).toContain(
+      '/^[ \\t]*totem-close:[ \\t]*(?:(?:[A-Za-z0-9._-]+\\/[A-Za-z0-9._-]+)?#\\d+[ \\t,]*)*$/gim',
+    );
   });
 });
 
@@ -3460,6 +3522,27 @@ describe('GEMINI_BEFORE_TOOL auto-close runtime behavior (mmnto-ai/totem#1762)',
     });
     expect(shared.threw).toBe(true);
     expect(shared.message).toContain('mmnto-ai/totem#999');
+  });
+
+  it('the replace shape refuses a prose line and an unterminated span; spaced refs pass (mmnto-ai/totem#3103, read 2)', () => {
+    const prose = runBeforeTool('replace', {
+      file_path: 'docs/x.md',
+      old_string: 'a',
+      new_string: 'totem-close: is the marker; this fixes mmnto-ai/totem#999',
+    });
+    expect(prose.threw).toBe(true);
+    const span = runBeforeTool('replace', {
+      file_path: 'docs/x.md',
+      old_string: 'a',
+      new_string: '<!-- totem-close: mmnto-ai/totem#131\nCloses mmnto-ai/totem#999\n-->',
+    });
+    expect(span.threw).toBe(true);
+    expect(span.message).toContain('mmnto-ai/totem#999');
+    const spaced = runBeforeTool('write_file', {
+      file_path: 'docs/x.md',
+      content: '<!-- totem-close: mmnto-ai/totem#131 mmnto-ai/totem#132 -->',
+    });
+    expect(spaced.threw).toBe(false);
   });
 
   it('throws (blocks) on a close keyword adjacent to an issue ref in a **/*.md write, even negated', () => {
