@@ -2079,3 +2079,43 @@ describe('the override and too-long deny rows', () => {
     expect(lines).toEqual([]);
   });
 });
+
+// ─── Seventh-read fold (mmnto-ai/totem#3106) ────────────────────────────
+
+describe('heredoc end lines', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [FLY_DENY] }));
+
+  it.each([
+    ['<<"E\\"T"', 'cat <<"E\\"T"\nx\nE"T\nfly deploy'],
+    ["<<'E\"T'", 'cat <<\'E"T\'\nx\nE"T\nfly deploy'],
+    ["<<E\\'T", "cat <<E\\'T\nx\nE'T\nfly deploy"],
+  ])(
+    'an end word carrying a quote (%s) opens no string: the command after it is read',
+    (_label, command) => {
+      const v = check(bash(command));
+      expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'fly-deploy']);
+    },
+  );
+
+  it('a plain <<EOT body is still blanked and the command after it read', () => {
+    const v = check(bash('cat <<EOT\nfly deploy is text here\nEOT\nfly deploy'));
+    expect([v.disposition, v.provenance.ref, v.provenance.matched]).toEqual([
+      'deny',
+      'fly-deploy',
+      'fly deploy',
+    ]);
+  });
+
+  it('an end line with a trailing carriage return ends the heredoc', () => {
+    const v = check(bash('cat <<EOT\r\nx\r\nEOT\r\nfly deploy'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['deny', 'fly-deploy']);
+  });
+
+  it('an end word glued to a substitution close warns unterminated-heredoc (documented)', () => {
+    const v = check(bash('x=$(cat <<EOT\nb\nEOT)'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'unterminated-heredoc']);
+    expect(v.reason).toBe(
+      'The gate found no end line it recognises for a heredoc in this command, so it does not read what follows the operator.',
+    );
+  });
+});

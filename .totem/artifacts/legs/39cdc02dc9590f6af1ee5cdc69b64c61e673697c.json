@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "39cdc02dc9590f6af1ee5cdc69b64c61e673697c",
+  "readAt": "2026-10-20T01:41:36Z",
+  "findings": [
+    {
+      "id": "3106-r7-F1",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 722,
+      "claim": "A heredoc delimiter whose end word contains a quote character (<<\"E\\\"T\", <<'E\"T', <<E\\'T) is read correctly, but blankHeredocBodies leaves the end line in the text the tokenizer reads; its quote opens a string that swallows every later statement, so a governed command after the heredoc is silently allowed. The docs (docs/wiki/config-reference.md:311) neither claim nor disclaim this; needs a disclosure sentence.",
+      "counterexample": "cat <<\"E\\\"T\"<LF>x<LF>E\"T<LF>fly deploy -> allow no-policy-match at 250b3ad9, 913a7803 and 39cdc02d; Git bash runs fly deploy; blanked text is 'cat <<\"E\\\"T\"\\n  E\"T\\nfly deploy'. Not a regression."
+    },
+    {
+      "id": "3106-r7-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 625,
+      "claim": "normalizeForScan tracks double quotes without nesting through $( ) or backticks, so a double quote inside a substitution that is itself in double quotes flips its state; it then blanks a $'...' that bash reads as literal text inside double quotes, hiding a live substitution. The docs' ANSI-C sentence does not name this; needs a disclosure sentence.",
+      "counterexample": "normalizeForScan of \"$(: '\"' \\' )$'$(x)'\" returns \"$(: '\"' \\' )$'    '\"; the command echo \"$(: '\"' \\' )$'$(fly deploy)'\" -> allow at all three heads, Git bash runs fly deploy. Not a regression."
+    },
+    {
+      "id": "3106-r7-F3",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 1303,
+      "claim": "The unterminated-heredoc warn fires for spans bash does terminate: a CRLF end line, and an end word glued to ')' or a backtick inside a substitution. They are now loud where they were silent allows, but the reason ('has no end line') and the docs sentence misstate the shape; needs a disclosure sentence.",
+      "counterexample": "cat <<EOT<CR><LF>x<CR><LF>EOT<CR><LF>fly deploy and x=$(cat <<EOT<LF>b<LF>EOT)<LF>fly deploy -> allow / allow / warn(unterminated-heredoc) at 250b3ad9 / 913a7803 / 39cdc02d; Git bash runs fly deploy in both."
+    }
+  ],
+  "folded": [
+    "3106-r7-F1",
+    "3106-r7-F2",
+    "3106-r7-F3"
+  ],
+  "verdict": "Read 7 of the action-policy gate, scoped to 39cdc02d: blocking=0 material=0 minor=3 question=0 folded=3 (counts as typed). CONVERGED by its own line. Held, measured: 111 shapes at 250b3ad9, 913a7803 and 39cdc02d against bash itself, with no shape an earlier head denied allowed now while bash runs the governed command; a random differential of about 30,000 inputs over a token alphabet of quotes, ANSI-C strings, substitutions, continuations, comments, backticks, CRLF and heredoc forms, in which every verdict that moved from deny to allow was a command bash does not run; the normaliser's state machine agreeing with bash on every probe including the corrected premise that a backslash-newline at the end of a comment is not a continuation; the delimiter reader on every listed form; the unterminated warn replacing an allow only, a deny standing, PowerShell unchanged; the shield unchanged (both suites, the opt-in pin with its new assertions, a 1,600-input differential with zero differences). Folded by the seat in the next commit, all in the existing end-line handling or in sentences: F1 (the end line of a heredoc is blanked with the body, so an end word carrying a quote cannot open a string that swallows the rest; pinned); F3 (an end line with a trailing carriage return matches, and the warn's reason reads 'the gate found no end line it recognises'; the glued-to-a-closing-parenthesis form inside a substitution is named as a loud warn in the docs; pinned); F2 (a double quote inside a substitution nested in double quotes is named as not tracked, a sentence). Convergence named by the seat: seven reads, one bot round, fifty-nine findings, seven deposits; from the third read on every finding was the same lexer seam one layer down and every cure moved the reading into the layer that tracks the state or made the unreadable case loud; the two code touches here are end-line handling in the existing blanking, pinned against bash, and re-arm nothing. The standing rule from here: a shape outside the stated reach is a disclosure sentence, not a mechanism change, unless a public claim is shown false or a shape an earlier head denied is allowed while bash runs it."
+}

@@ -622,7 +622,17 @@ function commandStatements(
       sink.unterminated.push(bound((operatorLine ?? '').trim()));
     }
   }
-  const blanked = blankHeredocBodies(command, spans);
+  // On the Bash tool the end line is blanked with the body: an end word that
+  // carries a quote character (`E"T`) must not open a string that swallows the
+  // statements after it.
+  const blankSpans = powershell
+    ? spans
+    : spans.map((s) => {
+        if (s.unterminated) return s;
+        const nl = command.indexOf('\n', s.bodyEnd);
+        return { ...s, bodyEnd: nl === -1 ? command.length : nl };
+      });
+  const blanked = blankHeredocBodies(command, blankSpans);
   const out: Statement[] = [];
   // The raw substitution scanners read text the tokenizer has not normalised,
   // so it is normalised for them first (continuations removed, ANSI-C strings
@@ -1300,7 +1310,7 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
         verdict: {
           disposition: 'warn',
           reason:
-            "A heredoc in this command has no end line, so the command's end could not be found; the action-policy gate does not read what follows the operator.",
+            'The gate found no end line it recognises for a heredoc in this command, so it does not read what follows the operator.',
           provenance: {
             source,
             ref: REF_UNTERMINATED_HEREDOC,

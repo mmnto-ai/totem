@@ -295,6 +295,7 @@ function skipArithmetic(command: string, from: number): number {
 // sync-anchor: findHeredocs-scanner-upstream (the gate wrapper in packages/cli/src/commands/init-templates.ts carries a verbatim port; gate-install.test.ts is the lock)
 export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSpan[] {
   const ps = opts.powershell === true;
+  const bashDelimiters = opts.bashDelimiters === true;
   const spans: HeredocSpan[] = [];
   const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
   const parens: Array<'subst' | 'group'> = [];
@@ -315,7 +316,9 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
         const stop = nl === -1 ? command.length : nl;
         let line = command.slice(at, stop);
         if (h.stripTabs) line = line.replace(/^\t+/, '');
-        if (line === h.delimiter) {
+        // Under the opt-in bash reading a trailing carriage return on the end
+        // line (a CRLF command) is not part of the end word.
+        if (line === h.delimiter || (bashDelimiters && line.replace(/\r$/, '') === h.delimiter)) {
           bodyEnd = at;
           unterminated = false;
           resume = nl === -1 ? command.length : nl + 1;
