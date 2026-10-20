@@ -17,6 +17,7 @@ import {
   RESERVED_BEFORE_PROGRAM,
   substitutionBodies,
   tokenizeShell,
+  WRAPPER_POSITIONALS,
   WRAPPER_VALUE_OPTIONS,
 } from './transport-shield.js';
 
@@ -87,6 +88,7 @@ const REF_NO_POLICY_FILE = 'no-policy-file';
 const REF_NO_POLICY_MATCH = 'no-policy-match';
 const REF_OUTSIDE_REPO = 'outside-repo';
 const REF_ENVIRONMENT_UNEVALUABLE = 'environment-unevaluable';
+const REF_SUBJECT_TOO_LONG = 'subject-too-long';
 
 // ─── Schema (the file boundary) ────────────────────────────────────────────
 
@@ -97,11 +99,13 @@ export const ACTION_POLICY_PATH_GLOB_STAR_MAX = 3;
 export const ACTION_POLICY_COMMAND_TOKEN_STAR_MAX = 2;
 
 /**
- * A statement token or an edited path longer than this is compared by its
- * first this-many characters against a wildcard glob; against a literal glob
- * it still compares whole. Bounds the glob's work on a pathological input.
+ * A statement token or an edited path longer than this is NOT compared
+ * against a glob carrying a wildcard: that comparison is unevaluable, and the
+ * verdict is `subject-too-long` (`deny` under strict, `warn` under pilot, never
+ * `allow`). Against a literal glob it still compares whole. Bounds the glob's
+ * work on a pathological input without a silent bypass.
  */
-export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 512;
+export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 1024;
 
 const slug = (what: string) => z.string().regex(SLUG_RE, `${what} must be a kebab-case slug`);
 
@@ -131,8 +135,8 @@ const pathGlob = nonBlank('path glob')
 
 /**
  * Whether a pattern's first token names what the gate skips before the
- * program: a wrapper from the table (by basename), `time`, `coproc` or a
- * reserved word. Such a pattern could never match, because the comparison
+ * program: a wrapper from the table (by basename), `time`, `coproc`,
+ * `function`, a `NAME=value` assignment or a reserved word. Such a pattern could never match, because the comparison
  * starts at the program.
  */
 function startsBeforeProgram(pattern: string): boolean {
@@ -140,6 +144,8 @@ function startsBeforeProgram(pattern: string): boolean {
   const names = programSpellings(first);
   return (
     first === 'coproc' ||
+    first === 'function' ||
+    /^[A-Za-z_][A-Za-z0-9_]*=/.test(first) ||
     RESERVED_BEFORE_PROGRAM.has(first) ||
     [...names.exact, ...names.folded].some((n) => Object.hasOwn(WRAPPER_VALUE_OPTIONS, n))
   );
@@ -163,7 +169,7 @@ const commandPattern = nonBlank('command pattern')
       return {
         message: /[/\\]/.test(first)
           ? `a command pattern's first token "${first}" has the basename of a wrapper the gate skips before the program, so it could never match: a repository script whose basename is a wrapper's cannot be governed by a command row`
-          : 'a command pattern starts at the program: drop the leading wrapper, reserved word, "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
+          : 'a command pattern starts at the program: drop the leading wrapper, reserved word, assignment, "function", "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
       };
     },
   );
@@ -176,7 +182,11 @@ export const ActionPolicyEnvironmentSchema = z
       message: `environment name "${ACTION_POLICY_ANY_ENVIRONMENT}" is reserved for rows that apply on every branch`,
     }),
     branches: z
-      .array(nonBlank('branch glob'))
+      .array(
+        nonBlank('branch glob').refine((g) => starCount(g) <= ACTION_POLICY_PATH_GLOB_STAR_MAX, {
+          message: `a branch glob may carry at most ${ACTION_POLICY_PATH_GLOB_STAR_MAX} "*" ("**" counts two)`,
+        }),
+      )
       .min(1, 'an environment needs at least one branch glob'),
   })
   .strict();
@@ -392,7 +402,11 @@ const PROGRAM_SUFFIXES: readonly string[] = ['.exe', '.cmd'];
  * The program position: past assignments, reserved words, `coproc`, leading
  * redirections, and wrappers with their options.
  */
-const PROGRAM_START_OPTIONS = { wrapperOptions: WRAPPER_VALUE_OPTIONS, skipRedirections: true };
+const PROGRAM_START_OPTIONS = {
+  wrapperOptions: WRAPPER_VALUE_OPTIONS,
+  wrapperPositionals: WRAPPER_POSITIONALS,
+  skipRedirections: true,
+};
 
 /** The shells (a closed list) that run a string given with `-c` in a short-option cluster. */
 const POSIX_SHELLS: ReadonlySet<string> = new Set([
@@ -406,6 +420,47 @@ const POSIX_SHELLS: ReadonlySet<string> = new Set([
   'fish',
   'csh',
   'tcsh',
+]);
+
+/**
+ * PowerShell host options that take a separate value (lower-cased; a
+ * `-opt:value` spelling carries its own), skipped with their value while the
+ * first positional is sought.
+ */
+const POWERSHELL_VALUE_OPTIONS: ReadonlySet<string> = new Set([
+  '-file',
+  '-f',
+  '-command',
+  '-c',
+  '-commandwithargs',
+  '-encodedcommand',
+  '-e',
+  '-ec',
+  '-encodedarguments',
+  '-ea',
+  '-encodeda',
+  '-executionpolicy',
+  '-ex',
+  '-ep',
+  '-inputformat',
+  '-i',
+  '-if',
+  '-outputformat',
+  '-o',
+  '-of',
+  '-version',
+  '-v',
+  '-configurationname',
+  '-config',
+  '-configurationfile',
+  '-settingsfile',
+  '-workingdirectory',
+  '-wd',
+  '-psconsolefile',
+  '-psc',
+  '-windowstyle',
+  '-w',
+  '-custompipename',
 ]);
 
 /** PowerShell hosts. */
@@ -452,17 +507,29 @@ function repoRelativePath(filePath: string, root: string): string | null {
 
 const hasWildcard = (glob: string): boolean => /[*?{[]/.test(glob);
 
+/** The outcome of one comparison: a match, no match, or not compared (too long for a wildcard). */
+type Compare = 'match' | 'nomatch' | 'unevaluable';
+
 /**
- * One path or token against one glob; a subject longer than
- * {@link ACTION_POLICY_WILDCARD_TOKEN_MAX} meets a wildcard glob by its head
- * and a literal glob whole.
+ * One path or token against one glob. A subject longer than
+ * {@link ACTION_POLICY_WILDCARD_TOKEN_MAX} is not compared against a glob with
+ * a wildcard (`unevaluable`); against a literal glob it compares whole.
  */
-function boundedGlobMatches(subject: string, glob: string): boolean {
-  const compared =
-    hasWildcard(glob) && subject.length > ACTION_POLICY_WILDCARD_TOKEN_MAX
-      ? subject.slice(0, ACTION_POLICY_WILDCARD_TOKEN_MAX)
-      : subject;
-  return matchesPathGlob(compared, glob);
+function boundedGlobCompare(subject: string, glob: string): Compare {
+  if (hasWildcard(glob) && subject.length > ACTION_POLICY_WILDCARD_TOKEN_MAX) return 'unevaluable';
+  return matchesPathGlob(subject, glob) ? 'match' : 'nomatch';
+}
+
+/** Any of several alternatives: a match wins, then an unevaluable one. */
+function anyCompare(results: readonly Compare[]): Compare {
+  if (results.includes('match')) return 'match';
+  return results.includes('unevaluable') ? 'unevaluable' : 'nomatch';
+}
+
+/** All of several parts: a definite mismatch wins, then an unevaluable one. */
+function allCompare(results: readonly Compare[]): Compare {
+  if (results.includes('nomatch')) return 'nomatch';
+  return results.includes('unevaluable') ? 'unevaluable' : 'match';
 }
 
 /**
@@ -479,12 +546,12 @@ function programNames(token: string, powershell: boolean): { exact: string[]; fo
   return { exact, folded: names.folded };
 }
 
-function programMatches(token: string, glob: string, powershell: boolean): boolean {
+function programCompare(token: string, glob: string, powershell: boolean): Compare {
   const names = programNames(token, powershell);
-  return (
-    names.exact.some((n) => boundedGlobMatches(n, glob)) ||
-    names.folded.some((n) => boundedGlobMatches(n, glob.toLowerCase()))
-  );
+  return anyCompare([
+    ...names.exact.map((n) => boundedGlobCompare(n, glob)),
+    ...names.folded.map((n) => boundedGlobCompare(n, glob.toLowerCase())),
+  ]);
 }
 
 /**
@@ -494,18 +561,20 @@ function programMatches(token: string, glob: string, powershell: boolean): boole
  * reserved words that can stand before a program, and each wrapper (by
  * basename) with its options.
  */
-function commandPatternMatches(
+function commandPatternCompare(
   tokens: readonly string[],
   pattern: string,
   powershell: boolean,
-): boolean {
+): Compare {
   const patternTokens = pattern.trim().split(/\s+/);
   const start = programStart(tokens, undefined, PROGRAM_START_OPTIONS);
-  if (tokens.length - start < patternTokens.length) return false;
-  return patternTokens.every((glob, i) =>
-    i === 0
-      ? programMatches(tokens[start] as string, glob, powershell)
-      : boundedGlobMatches(tokens[start + i] as string, glob),
+  if (tokens.length - start < patternTokens.length) return 'nomatch';
+  return allCompare(
+    patternTokens.map((glob, i) =>
+      i === 0
+        ? programCompare(tokens[start] as string, glob, powershell)
+        : boundedGlobCompare(tokens[start + i] as string, glob),
+    ),
   );
 }
 
@@ -521,8 +590,9 @@ function commandPatternMatches(
  */
 function commandStatements(command: string, powershell: boolean, depth = 0): Statement[] {
   const opts = { powershell, literalBackslash: powershell };
-  const spans = findHeredocs(command, opts);
-  const blanked = blankHeredocBodies(command, spans);
+  const joined = powershell ? command : joinLineContinuations(command);
+  const spans = findHeredocs(joined, opts);
+  const blanked = blankHeredocBodies(joined, spans);
   const out: Statement[] = [];
   // A heredoc body has no quoting or comment rule: an apostrophe, a quoted span
   // or a `#` there is text, so its substitutions are read raw.
@@ -535,7 +605,7 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
   let cursor = 0;
   for (const seg of tokenizeShell(blanked, opts)) {
     const at = blanked.indexOf(seg.raw, cursor);
-    const before = at === -1 ? '' : blanked.slice(0, at);
+    const before = at === -1 ? '' : blanked.slice(0, at).trimEnd();
     if (at !== -1) cursor = at + seg.raw.length;
     // `|` and bash's `|&` feed the statement; `||` does not.
     const piped = before.endsWith('|&') || (before.endsWith('|') && !before.endsWith('||'));
@@ -554,6 +624,46 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
         out.push(...commandStatements(body, powershell, depth + 1));
       }
     }
+  }
+  return out;
+}
+
+/**
+ * The command with every backslash-newline outside single quotes deleted, as
+ * bash deletes a line continuation before it splits words, so
+ * `pnpm db:mi\<newline>grate:prod` reads as one token. An escaped backslash
+ * (`\\`) is kept whole. Bash tool only: PowerShell's continuation is the
+ * backtick, and its backslash is a path character.
+ */
+function joinLineContinuations(command: string): string {
+  let out = '';
+  let inSingle = false;
+  for (let i = 0; i < command.length; i += 1) {
+    const ch = command[i] as string;
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      out += ch;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      out += ch;
+      continue;
+    }
+    if (ch === '\\') {
+      if (command[i + 1] === '\n') {
+        i += 1;
+        continue;
+      }
+      if (command[i + 1] === '\r' && command[i + 2] === '\n') {
+        i += 2;
+        continue;
+      }
+      out += ch + (command[i + 1] ?? '');
+      i += 1;
+      continue;
+    }
+    out += ch;
   }
   return out;
 }
@@ -699,34 +809,51 @@ function firstPositionalIsQuoted(raw: string, program: string): boolean {
     return bare === program || bare.endsWith(`/${program}`) || bare.endsWith(`\\${program}`);
   });
   if (at === -1) return false;
-  const next = words.slice(at + 1).find((w) => !w.startsWith('-'));
-  return next !== undefined && /^["']/.test(next);
+  for (let k = at + 1; k < words.length; k += 1) {
+    const w = words[k] as string;
+    if (!w.startsWith('-')) return /^["']/.test(w);
+    // `-opt:value` carries its own value; a listed option takes the next word.
+    if (!w.includes(':') && POWERSHELL_VALUE_OPTIONS.has(w.toLowerCase())) k += 1;
+  }
+  return false;
 }
 
-function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowMatch[] {
-  const matches: RowMatch[] = [];
+/** Rows that matched, and rows whose comparison was unevaluable (a too-long subject). */
+interface RowScan {
+  matches: RowMatch[];
+  tooLong: RowMatch[];
+}
+
+function matchPathRows(rows: readonly ActionPolicyRow[], relPath: string): RowScan {
+  const scan: RowScan = { matches: [], tooLong: [] };
   for (const row of rows) {
-    if ((row.scope.paths ?? []).some((glob) => boundedGlobMatches(relPath, glob))) {
-      matches.push({ row, matched: relPath });
-    }
+    const result = anyCompare((row.scope.paths ?? []).map((g) => boundedGlobCompare(relPath, g)));
+    if (result === 'match') scan.matches.push({ row, matched: relPath });
+    else if (result === 'unevaluable') scan.tooLong.push({ row, matched: bound(relPath) });
   }
-  return matches;
+  return scan;
 }
 
 function matchCommandRows(
   rows: readonly ActionPolicyRow[],
   statements: readonly Statement[],
   powershell: boolean,
-): RowMatch[] {
-  const matches: RowMatch[] = [];
+): RowScan {
+  const scan: RowScan = { matches: [], tooLong: [] };
   for (const row of rows) {
     const patterns = row.scope.commands ?? [];
-    const hit = statements.find((s) =>
-      patterns.some((p) => commandPatternMatches(s.tokens, p, powershell)),
-    );
-    if (hit) matches.push({ row, matched: bound(hit.raw.trim()) });
+    let unevaluable: Statement | undefined;
+    const hit = statements.find((s) => {
+      const result = anyCompare(
+        patterns.map((p) => commandPatternCompare(s.tokens, p, powershell)),
+      );
+      if (result === 'unevaluable' && unevaluable === undefined) unevaluable = s;
+      return result === 'match';
+    });
+    if (hit) scan.matches.push({ row, matched: bound(hit.raw.trim()) });
+    else if (unevaluable) scan.tooLong.push({ row, matched: bound(unevaluable.raw.trim()) });
   }
-  return matches;
+  return scan;
 }
 
 /** The most severe match, ties to file order (the input order). */
@@ -816,6 +943,7 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   let matches: RowMatch[];
   let opaque: string | null = null;
   let opaqueStatements: string[] = [];
+  let tooLong: RowMatch[] = [];
   if ('path' in parsed) {
     scopeKind = 'path';
     const rel = repoRelativePath(parsed.path, root);
@@ -826,12 +954,16 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
         provenance: { source, ref: REF_OUTSIDE_REPO, matched: parsed.path, checkedAt },
       };
     }
-    matches = matchPathRows(config.rows, rel);
+    const scan = matchPathRows(config.rows, rel);
+    matches = scan.matches;
+    tooLong = scan.tooLong;
   } else {
     scopeKind = 'command';
     const powershell = parsed.tool === 'PowerShell';
     const statements = commandStatements(parsed.command, powershell);
-    matches = matchCommandRows(config.rows, statements, powershell);
+    const scan = matchCommandRows(config.rows, statements, powershell);
+    matches = scan.matches;
+    tooLong = scan.tooLong;
     if (config.rows.some((r) => (r.scope.commands?.length ?? 0) > 0)) {
       opaqueStatements = statements
         .filter((s) => isOpaqueShell(s, powershell))
@@ -1018,6 +1150,30 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
             currentEnvironments: null,
             alsoMatched: matches.map((m) => m.row.id),
             ...skippedDetail,
+          },
+        },
+      },
+    };
+  }
+
+  if (tooLong.length > 0 && decision.verdict.disposition !== 'deny') {
+    // A subject too long to compare against a wildcard row: never allow, and
+    // never a silent miss of the row it could have matched.
+    const disposition: GateDisposition = context?.tier === 'pilot' ? 'warn' : 'deny';
+    const ids = tooLong.map((m) => m.row.id);
+    decision = {
+      verdict: {
+        disposition,
+        reason: `A ${scopeKind} subject longer than ${ACTION_POLICY_WILDCARD_TOKEN_MAX} characters met a wildcard in row(s) ${ids.join(', ')}; the gate does not compare it (tier=${context?.tier ?? 'strict'} → ${disposition}).`,
+        provenance: {
+          source,
+          ref: REF_SUBJECT_TOO_LONG,
+          matched: (tooLong[0] as RowMatch).matched,
+          checkedAt,
+          detail: {
+            scopeKind,
+            tooLongFor: ids,
+            alsoMatched: matches.map((m) => m.row.id),
           },
         },
       },

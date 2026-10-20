@@ -3791,3 +3791,33 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
     }
   });
 });
+
+// ─── Wrapper-table parity with core (mmnto-ai/totem#3106) ─────────────────
+//
+// The gate wrapper's TRANSPARENT_WRAPPERS and core's WRAPPER_VALUE_OPTIONS are
+// two tables of the same shell grammar; when the core one lacked a wrapper the
+// wrapper's table had (`timeout`), the action-policy gate read the duration as
+// the program and missed the row (fail-open). This locks them at the NAME
+// level: every transparent wrapper the template lists is a key of core's table.
+// `eval` is excluded: the template marks it `evaluates: true` (it runs its
+// arguments as a string), and core reads it as an opaque shell string instead.
+describe('wrapper table parity with core (mmnto-ai/totem#3106)', () => {
+  it('every TRANSPARENT_WRAPPERS name in the gate wrapper is a key of core WRAPPER_VALUE_OPTIONS', async () => {
+    const core = (await import(pathToFileURL(CORE_TRANSPORT_SHIELD_SRC).href)) as {
+      WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>>;
+    };
+    const start = CLAUDE_GATE_WRAPPER.indexOf('const TRANSPARENT_WRAPPERS = {');
+    expect(start).toBeGreaterThan(-1);
+    const end = CLAUDE_GATE_WRAPPER.indexOf('\n};', start);
+    const body = CLAUDE_GATE_WRAPPER.slice(start, end);
+    const entries = [...body.matchAll(/^ {2}([a-z]+): \{(.*)$/gm)].map((m) => ({
+      name: m[1] as string,
+      line: m[2] as string,
+    }));
+    const names = entries.filter((e) => !e.line.includes('evaluates: true')).map((e) => e.name);
+    expect(names).toEqual(['sudo', 'env', 'timeout', 'nice', 'nohup', 'command', 'exec', 'time']);
+    for (const name of names) {
+      expect(Object.hasOwn(core.WRAPPER_VALUE_OPTIONS, name), name).toBe(true);
+    }
+  });
+});

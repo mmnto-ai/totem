@@ -769,7 +769,9 @@ export function programStart(
     if (table !== undefined) {
       const wrapper = wrapperName(t, table);
       if (wrapper !== undefined) {
-        i = skipWrapperOptions(tokens, i + 1, table[wrapper] ?? []);
+        i =
+          skipWrapperOptions(tokens, i + 1, table[wrapper] ?? []) +
+          (opts.wrapperPositionals?.[wrapper] ?? 0);
         afterWrapper = true;
         continue;
       }
@@ -815,13 +817,24 @@ export const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> 
     '-t',
     '-T',
     '-U',
+    '-R',
+    '-a',
+    '-c',
     '--user',
     '--group',
     '--host',
     '--prompt',
     '--chdir',
+    '--chroot',
+    '--auth-type',
+    '--login-class',
+    '--role',
+    '--type',
+    '--other-user',
+    '--command-timeout',
   ],
   env: ['-u', '-C', '-S', '--unset', '--chdir', '--split-string'],
+  timeout: ['-s', '-k', '--signal', '--kill-after'],
   nice: ['-n', '--adjustment'],
   nohup: [],
   time: ['-f', '-o', '--format', '--output'],
@@ -848,6 +861,15 @@ export const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> 
   busybox: [],
 });
 
+/**
+ * How many positional operands a wrapper takes after its options before the
+ * program (mmnto-ai/totem#3106): `timeout`'s duration. A wrapper not listed
+ * takes none. Read by {@link programStart} beside {@link WRAPPER_VALUE_OPTIONS}.
+ */
+export const WRAPPER_POSITIONALS: Readonly<Record<string, number>> = Object.freeze({
+  timeout: 1,
+});
+
 /** A redirection operator standing alone (`>`, `>>`, `<`, `2>`, `&>`, `<<`, `<<-`, `<<<`, `>&`). */
 const BARE_REDIRECTION = /^(?:\d+|&)?(?:>>?|>&|<&|<<<|<<-?|<)$/;
 
@@ -868,6 +890,8 @@ export interface ProgramStartOptions {
    * is matched by exact token and no option is skipped.
    */
   wrapperOptions?: Readonly<Record<string, readonly string[]>>;
+  /** Positional operands each wrapper takes before the program (see {@link WRAPPER_POSITIONALS}). */
+  wrapperPositionals?: Readonly<Record<string, number>>;
 }
 
 /** The table key a token names as a wrapper, by its program spellings. */

@@ -266,7 +266,8 @@ export interface OrientActionPolicyMatch {
 
 /**
  * The ACTION POLICY section: present only when `.totem/action-policy.json`
- * exists. A load failure is `{ file, error }`; a touched-set failure keeps the
+ * exists. A load failure is `{ file, error }` (`file: null` when the
+ * configuration itself is corrupt or invalid); a touched-set failure keeps the
  * rows and names itself in `touchedError`.
  */
 export type OrientActionPolicy =
@@ -277,7 +278,7 @@ export type OrientActionPolicy =
       touchedCount: number;
       touchedError?: string;
     }
-  | (ErrorEnvelope & { file: string });
+  | (ErrorEnvelope & { file: string | null });
 
 export interface OrientReport {
   repo: Section<string>;
@@ -419,17 +420,23 @@ const DEFAULT_TOTEM_DIR = '.totem';
  * `config.totemDir`), so orient reads the policy the gate reads; the
  * default `<repoRoot>/.totem` when no config resolves.
  */
-async function resolvePolicyTotemDir(cwd: string, repoRoot: string): Promise<string> {
+async function resolvePolicyTotemDir(
+  cwd: string,
+  repoRoot: string,
+): Promise<{ totemDir: string } | ErrorEnvelope> {
   const path = await import('node:path');
   try {
     const { isGlobalConfigPath, loadConfig, resolveConfigPath } = await import('../utils.js');
     const configPath = resolveConfigPath(cwd);
     const config = await loadConfig(configPath);
     const configRoot = isGlobalConfigPath(configPath) ? cwd : path.dirname(configPath);
-    return path.join(configRoot, config.totemDir ?? DEFAULT_TOTEM_DIR);
-    // totem-context: intentional — with no resolvable totem.config.ts the policy is read at the default totemDir, the same directory an unconfigured repository uses; a missing file there omits the section
-  } catch {
-    return path.join(repoRoot, DEFAULT_TOTEM_DIR);
+    return { totemDir: path.join(configRoot, config.totemDir ?? DEFAULT_TOTEM_DIR) };
+    // totem-context: only a MISSING configuration falls back to the default totemDir (the directory an unconfigured repository uses); a corrupt or invalid one is surfaced as the section's error, never silently replaced
+  } catch (err) {
+    if ((err as { code?: unknown } | null)?.code === 'CONFIG_MISSING') {
+      return { totemDir: path.join(repoRoot, DEFAULT_TOTEM_DIR) };
+    }
+    return { error: errMessage(err) };
   }
 }
 
@@ -453,7 +460,9 @@ async function deriveActionPolicy(
   const path = await import('node:path');
   const { ACTION_POLICY_FILE, actionPolicyEvaluator, getGitBranch, readActionPolicyConfig } =
     await import('@mmnto/totem');
-  const totemDir = await resolvePolicyTotemDir(cwd, repoRoot);
+  const resolved = await resolvePolicyTotemDir(cwd, repoRoot);
+  if (isError(resolved)) return { file: null, error: resolved.error };
+  const { totemDir } = resolved;
   const shownDir = path.relative(repoRoot, totemDir).split(path.sep).join('/') || '.';
   const file = `${shownDir}/${ACTION_POLICY_FILE}`;
   let config;
@@ -842,7 +851,9 @@ export function renderReport(report: OrientReport): string {
   // ACTION POLICY (mmnto-ai/totem#3106) — only when the file exists.
   if (report.actionPolicy !== undefined) {
     const ap = report.actionPolicy;
-    out.push(`\n⚑ ACTION POLICY  (${ap.file}; touched = branch diff ∪ working tree)`);
+    out.push(
+      `\n⚑ ACTION POLICY  (${ap.file ?? 'action-policy.json'}; touched = branch diff ∪ working tree)`,
+    );
     if ('error' in ap) {
       out.push(`  ⚠ could not derive: ${ap.error}`);
     } else {

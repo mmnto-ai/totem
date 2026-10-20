@@ -1275,6 +1275,50 @@ describe('orient action-policy section', () => {
     );
   });
 
+  it('falls back to the default .totem only when the configuration is missing', async () => {
+    writePolicy(POLICY);
+    const { TotemConfigError } = await import('@mmnto/totem');
+    mockLoadConfig.mockRejectedValue(
+      new TotemConfigError('No totem config found', 'run totem init', 'CONFIG_MISSING'),
+    );
+    await runJson();
+    expect(parseJson().actionPolicy).toMatchObject({ file: '.totem/action-policy.json' });
+  });
+
+  it('renders one error line for an invalid configuration, other sections still deriving', async () => {
+    writePolicy(POLICY);
+    const { TotemConfigError } = await import('@mmnto/totem');
+    mockLoadConfig.mockRejectedValue(
+      new TotemConfigError(
+        'Invalid totem.config.ts: targets: Required',
+        'fix it',
+        'CONFIG_INVALID',
+      ),
+    );
+    mockFetchOpenPRs.mockReturnValue([
+      { number: 9, title: 'fix', headRefName: 'fix/y', isDraft: false },
+    ]);
+
+    await runJson();
+    const r = parseJson();
+    expect(r.actionPolicy).toEqual({
+      file: null,
+      error: '[Totem Error] Invalid totem.config.ts: targets: Required',
+    });
+    expect(r.openPRs).toHaveLength(1);
+
+    stdout = '';
+    const text = await runText();
+    const section = text
+      .slice(text.indexOf('⚑ ACTION POLICY'), text.indexOf('◐ OPEN PRs'))
+      .trimEnd()
+      .split('\n');
+    expect(section).toEqual([
+      '⚑ ACTION POLICY  (action-policy.json; touched = branch diff ∪ working tree)',
+      '  ⚠ could not derive: [Totem Error] Invalid totem.config.ts: targets: Required',
+    ]);
+  });
+
   it('reads the policy from the configured totemDir, not a hard-coded .totem', async () => {
     fs.mkdirSync(path.join(tmpRoot, '.git'));
     const nested = path.join(tmpRoot, 'config', 'totem');

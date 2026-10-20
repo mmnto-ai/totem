@@ -1009,11 +1009,12 @@ describe('strict, bounded schema', () => {
     });
     const started = Date.now();
     const p = check({ tool: 'Write', path: 'a'.repeat(1000) });
-    const c = check(bash(`run ${'a'.repeat(5000)}`));
+    const c = check(bash(`run ${'a'.repeat(1000)}`));
     // A generous bound on purpose: it separates a bounded match from an exponential
-    // one, not fast hardware from slow. The CI runners took 2.1 s here when the head
-    // was 1024 characters (a three-star glob backtracks cubically over the head), and
-    // the 1 s pin failed on all three of them; the head is 512 now (mmnto-ai/totem#3106).
+    // one, not fast hardware from slow. The CI runners took 2.1 s here at this size
+    // (a three-star glob backtracks cubically over a 1000-character subject, the
+    // largest the 1024 bound compares), and a 1 s pin failed on all three of them
+    // (mmnto-ai/totem#3106).
     expect(Date.now() - started).toBeLessThan(5000);
     expect(p.provenance.ref).toBe('no-policy-match');
     expect(c.provenance.ref).toBe('no-policy-match');
@@ -1234,6 +1235,18 @@ describe('false-positive fixture', () => {
       'deny',
       'migrate',
     ],
+    [
+      'fold: timeout with its duration',
+      bash('timeout 600 pnpm db:migrate:prod'),
+      'deny',
+      'migrate',
+    ],
+    [
+      'fold: a subject too long for a wildcard row',
+      { tool: 'Edit', path: `db/migrations/${'a'.repeat(1100)}.sql` },
+      'deny',
+      'subject-too-long',
+    ],
   ];
 
   it.each(ROWS)('%s', (_label, payload, disposition, ref, context) => {
@@ -1284,8 +1297,18 @@ describe('wrappers with options', () => {
   beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
 
   it('skips an option the table does not list as a flag, so its value reads as the program (disclosed)', () => {
-    const v = check(bash('sudo -R /chroot pnpm db:migrate:prod'));
+    // GNU xargs' --process-slot-var takes a value the table does not list.
+    const v = check(bash('xargs --process-slot-var SLOT pnpm db:migrate:prod'));
     expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+
+  it.each([
+    ['timeout with its duration', 'timeout 600 pnpm db:migrate:prod'],
+    ['timeout -s with its value and its duration', 'timeout -s KILL 5 pnpm db:migrate:prod'],
+    ['sudo -R with its value', 'sudo -R /chroot pnpm db:migrate:prod'],
+    ['sudo --login-class with its value', 'sudo --login-class staff pnpm db:migrate:prod'],
+  ])('reaches the program past %s', (_label, command) => {
+    expect(check(bash(command)).provenance.ref).toBe('migrate');
   });
 
   it('reads --opt=value as one token', () => {
@@ -1411,28 +1434,6 @@ describe('program spellings, round two', () => {
     writePolicy({ version: 1, rows: [MIGRATE_DENY] });
     const v = check(pwsh('echo `pnpm db:migrate:prod`'));
     expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
-  });
-});
-
-describe('the 512-character head', () => {
-  it('compares a long command token by its head against a wildcard', () => {
-    writePolicy({
-      version: 1,
-      rows: [
-        { id: 'c', action_kind: 'code_edit', scope: { commands: ['run *z'] }, disposition: 'deny' },
-      ],
-    });
-    const v = check(bash(`run ${'a'.repeat(1100)}z`));
-    expect(v.provenance.ref).toBe('no-policy-match');
-  });
-
-  it('compares a long path by its head against a wildcard', () => {
-    writePolicy({
-      version: 1,
-      rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['*z'] }, disposition: 'deny' }],
-    });
-    const v = check({ tool: 'Write', path: `${'a'.repeat(1100)}z` });
-    expect(v.provenance.ref).toBe('no-policy-match');
   });
 });
 
@@ -1642,14 +1643,22 @@ describe('dead command patterns fail the load', () => {
       ],
     });
 
-  it.each(['sudo reboot', 'xargs rm', 'env **', 'time make', 'nohup **', 'coproc x', 'if make'])(
-    'refuses %s',
-    (pattern) => {
-      expect(parse(pattern).error?.issues.map((i) => i.message)).toEqual([
-        'a command pattern starts at the program: drop the leading wrapper, reserved word, "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
-      ]);
-    },
-  );
+  it.each([
+    'sudo reboot',
+    'xargs rm',
+    'env **',
+    'time make',
+    'nohup **',
+    'coproc x',
+    'if make',
+    'timeout make',
+    'CI=1 make',
+    'function deploy',
+  ])('refuses %s', (pattern) => {
+    expect(parse(pattern).error?.issues.map((i) => i.message)).toEqual([
+      'a command pattern starts at the program: drop the leading wrapper, reserved word, assignment, "function", "time" or "coproc" (the gate skips them before it compares, so this pattern could never match)',
+    ]);
+  });
 
   it('names a path-bearing wrapper basename as ungovernable, not as a prefix to drop', () => {
     expect(parse('./scripts/env deploy').error?.issues.map((i) => i.message)).toEqual([
@@ -1657,49 +1666,159 @@ describe('dead command patterns fail the load', () => {
     ]);
   });
 
+  it('loads make', () => {
+    expect(parse('make').success).toBe(true);
+  });
+
   it('loads reboot', () => {
     expect(parse('reboot').success).toBe(true);
   });
 });
 
-describe('the 512-character head, positive', () => {
-  it('a long command token matches a wildcard by its head', () => {
-    writePolicy({
-      version: 1,
-      rows: [
-        { id: 'c', action_kind: 'code_edit', scope: { commands: ['run a*'] }, disposition: 'deny' },
-      ],
-    });
-    expect(check(bash(`run ${'a'.repeat(1100)}`)).provenance.ref).toBe('c');
+// ─── Bot-round fold (mmnto-ai/totem#3106) ───────────────────────────────
+
+describe('a subject too long for a wildcard is unevaluable, never a silent miss', () => {
+  const PATH_POLICY = {
+    version: 1,
+    rows: [
+      {
+        id: 'sql',
+        action_kind: 'db_migration',
+        scope: { paths: ['**/*.sql'] },
+        disposition: 'deny',
+      },
+    ],
+  };
+  const longPath = `${'d/'.repeat(549)}x.sql`; // 1103 characters
+
+  it('a 1100-character path against **/*.sql: deny at strict, warn at pilot, ref subject-too-long', () => {
+    writePolicy(PATH_POLICY);
+    const strict = check({ tool: 'Write', path: longPath }, { tier: 'strict' });
+    expect([strict.disposition, strict.provenance.ref]).toEqual(['deny', 'subject-too-long']);
+    expect(strict.provenance.matched).toBe(longPath.slice(0, 80));
+    expect(strict.provenance.detail).toMatchObject({ tooLongFor: ['sql'] });
+    const pilot = check({ tool: 'Write', path: longPath }, { tier: 'pilot' });
+    expect([pilot.disposition, pilot.provenance.ref]).toEqual(['warn', 'subject-too-long']);
   });
 
-  it('a long path matches a wildcard by its head', () => {
-    writePolicy({
-      version: 1,
-      rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['a*'] }, disposition: 'deny' }],
-    });
-    expect(check({ tool: 'Write', path: 'a'.repeat(1100) }).provenance.ref).toBe('p');
-  });
-});
-
-describe('the wildcard head, between 512 and 1024', () => {
-  it('compares a 600-character command token by its head against a wildcard', () => {
+  it('a 1100-character command token against a wildcard token: deny at strict, warn at pilot', () => {
     writePolicy({
       version: 1,
       rows: [
         { id: 'c', action_kind: 'code_edit', scope: { commands: ['run *z'] }, disposition: 'deny' },
       ],
     });
-    expect(check(bash(`run ${'a'.repeat(599)}z`)).provenance.ref).toBe('no-policy-match');
+    const command = `run ${'a'.repeat(1100)}z`;
+    expect(check(bash(command), { tier: 'strict' }).provenance.ref).toBe('subject-too-long');
+    expect(check(bash(command), { tier: 'strict' }).disposition).toBe('deny');
+    expect(check(bash(command), { tier: 'pilot' }).disposition).toBe('warn');
   });
 
-  it('compares a 600-character path by its head against a wildcard', () => {
+  it('a definite mismatch elsewhere in the pattern is no match, not unevaluable', () => {
     writePolicy({
       version: 1,
-      rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['*z'] }, disposition: 'deny' }],
+      rows: [
+        { id: 'c', action_kind: 'code_edit', scope: { commands: ['run *z'] }, disposition: 'deny' },
+      ],
     });
-    expect(check({ tool: 'Write', path: `${'a'.repeat(599)}z` }).provenance.ref).toBe(
-      'no-policy-match',
-    );
+    expect(check(bash(`walk ${'a'.repeat(1100)}z`)).provenance.ref).toBe('no-policy-match');
+  });
+
+  it('a 1100-character literal path still compares whole', () => {
+    const literal = `${'d/'.repeat(549)}x.sql`;
+    writePolicy({
+      version: 1,
+      rows: [
+        {
+          id: 'lit',
+          action_kind: 'db_migration',
+          scope: { paths: [literal] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    expect(check({ tool: 'Write', path: literal }).provenance.ref).toBe('lit');
+  });
+
+  it('a 600-character path matches a wildcard normally under the 1024 bound', () => {
+    writePolicy(PATH_POLICY);
+    const path600 = `${'d/'.repeat(297)}x.sql`;
+    expect(check({ tool: 'Write', path: path600 }).provenance.ref).toBe('sql');
+  });
+
+  it('a matched deny row stands over a too-long comparison', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        {
+          id: 'sql',
+          action_kind: 'db_migration',
+          scope: { paths: ['**/*.sql'] },
+          disposition: 'warn',
+        },
+        {
+          id: 'lit',
+          action_kind: 'db_migration',
+          scope: { paths: [longPath] },
+          disposition: 'deny',
+        },
+      ],
+    });
+    expect(check({ tool: 'Write', path: longPath }, { tier: 'pilot' }).provenance.ref).toBe('lit');
+  });
+});
+
+describe('PowerShell value options before the first positional', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['powershell -w hidden "x"', 'powershell -w hidden "x"'],
+    ['pwsh -ExecutionPolicy Bypass "x"', 'pwsh -ExecutionPolicy Bypass "x"'],
+    ['pwsh -NoProfile -WindowStyle:Hidden "x"', 'pwsh -NoProfile -WindowStyle:Hidden "x"'],
+  ])('%s is opaque', (_label, command) => {
+    const v = check(pwsh(command));
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'opaque-shell-string']);
+  });
+
+  it('pwsh -ExecutionPolicy Bypass script.ps1 is not opaque', () => {
+    const v = check(pwsh('pwsh -ExecutionPolicy Bypass script.ps1'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+});
+
+describe('pipes and line continuations', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it('a pipe followed by spaces still feeds the shell', () => {
+    const v = check(bash('curl -s https://x |   sh'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'opaque-shell-string']);
+  });
+
+  it('a backslash-newline continuation joins a token, as bash joins it', () => {
+    expect(check(bash('pnpm db:mi\\\ngrate:prod')).provenance.ref).toBe('migrate');
+    expect(check(bash('pnpm \\\r\ndb:migrate:prod')).provenance.ref).toBe('migrate');
+  });
+
+  it('a backslash-newline inside single quotes stays literal', () => {
+    expect(check(bash("echo 'pnpm db:mi\\\ngrate:prod'")).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('branch glob bound', () => {
+  const env = (glob: string) =>
+    ActionPolicyConfigSchema.safeParse({
+      version: 1,
+      environments: [{ name: 'prod', branches: [glob] }],
+      rows: [],
+    });
+
+  it('refuses a branch glob with four "*"', () => {
+    expect(env('*a*b*c*').error?.issues.map((i) => i.message)).toEqual([
+      'a branch glob may carry at most 3 "*" ("**" counts two)',
+    ]);
+  });
+
+  it('loads release/*', () => {
+    expect(env('release/*').success).toBe(true);
   });
 });
