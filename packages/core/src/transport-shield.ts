@@ -195,6 +195,35 @@ const DQ_ESCAPABLE: ReadonlySet<string> = new Set(['$', '`', '"', '\\', '\n']);
  */
 export interface ScanOptions {
   powershell?: boolean;
+  /**
+   * The tokenizer keeps every backslash as a character (PowerShell's own rule:
+   * its escape is the backtick), so a Windows path stays one path token.
+   * Off by default: the shield's rows read bash's backslash rules on both
+   * tools. Read by `tokenizeShell` only (the action-policy gate,
+   * mmnto-ai/totem#3106).
+   */
+  literalBackslash?: boolean;
+  /**
+   * Join line continuations as bash does: outside single quotes, a backslash
+   * followed by LF or CRLF is dropped with the newline and the word goes on
+   * (`pnpm db:mi\<newline>grate:prod` is one token); inside single quotes it
+   * stays literal, and a `\\` before a newline is an escaped backslash. An
+   * ANSI-C `$'…'` string is read with its backslash escapes, so an escaped
+   * quote does not open a quoted region. Off by default: the shield's rows
+   * read a continuation as a word break. Read by `tokenizeShell` only (the
+   * action-policy gate, mmnto-ai/totem#3106).
+   */
+  joinContinuations?: boolean;
+  /**
+   * Read a heredoc delimiter as bash reads it: the whole word, its quotes and
+   * backslashes removed to give the end word, the body literal when the word
+   * carried any quote or backslash (`<<E'O'T`, `<<E\OT`, `<<$'EOT'` all end at
+   * `EOT`), and a line continuation inside the word joined first (a backslash
+   * then a newline between `EO` and `T` still reads `EOT`). Off by default: the shield's rows and the gate wrapper's verbatim
+   * port read the delimiter with {@link HEREDOC_AT}. Read by `findHeredocs`
+   * only (the action-policy gate, mmnto-ai/totem#3106).
+   */
+  bashDelimiters?: boolean;
 }
 
 /**
@@ -266,6 +295,7 @@ function skipArithmetic(command: string, from: number): number {
 // sync-anchor: findHeredocs-scanner-upstream (the gate wrapper in packages/cli/src/commands/init-templates.ts carries a verbatim port; gate-install.test.ts is the lock)
 export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSpan[] {
   const ps = opts.powershell === true;
+  const bashDelimiters = opts.bashDelimiters === true;
   const spans: HeredocSpan[] = [];
   const pending: Array<{ delimiter: string; quoted: boolean; stripTabs: boolean }> = [];
   const parens: Array<'subst' | 'group'> = [];
@@ -286,7 +316,9 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
         const stop = nl === -1 ? command.length : nl;
         let line = command.slice(at, stop);
         if (h.stripTabs) line = line.replace(/^\t+/, '');
-        if (line === h.delimiter) {
+        // Under the opt-in bash reading a trailing carriage return on the end
+        // line (a CRLF command) is not part of the end word.
+        if (line === h.delimiter || (bashDelimiters && line.replace(/\r$/, '') === h.delimiter)) {
           bodyEnd = at;
           unterminated = false;
           resume = nl === -1 ? command.length : nl + 1;
@@ -404,6 +436,21 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
       boundary = true;
       continue;
     }
+    if (
+      opts.bashDelimiters === true &&
+      ch === '<' &&
+      command[i + 1] === '<' &&
+      command[i - 1] !== '<' &&
+      command[i + 2] !== '<'
+    ) {
+      const d = readBashDelimiter(command, i);
+      if (d !== null) {
+        pending.push({ stripTabs: d.stripTabs, quoted: d.quoted, delimiter: d.delimiter });
+        i += d.length;
+        boundary = false;
+        continue;
+      }
+    }
     if (ch === '<' && command[i + 1] === '<' && command[i - 1] !== '<' && command[i + 2] !== '<') {
       const m = HEREDOC_AT.exec(command.slice(i));
       if (m !== null) {
@@ -422,6 +469,206 @@ export function findHeredocs(command: string, opts: ScanOptions = {}): HeredocSp
   }
   if (pending.length > 0) consumeBodies(command.length);
   return spans;
+}
+
+/** Characters that end an unquoted heredoc delimiter word. */
+const DELIMITER_STOP: ReadonlySet<string> = new Set([
+  ' ',
+  '\t',
+  '\r',
+  '\n',
+  '<',
+  '>',
+  '(',
+  ')',
+  '|',
+  '&',
+  ';',
+]);
+
+/**
+ * The heredoc operator at `at` (`<<` or `<<-`) read as bash reads its
+ * delimiter word: blanks after the operator skipped; then the word, where a
+ * single- or double-quoted span, an ANSI-C `$'…'` span or a backslash-escaped
+ * character contributes its text without the quoting and marks the body
+ * literal, and a backslash-newline (LF or CRLF) is a line continuation removed
+ * before the word is read. `null` when no word follows.
+ */
+function readBashDelimiter(
+  command: string,
+  at: number,
+): { length: number; delimiter: string; quoted: boolean; stripTabs: boolean } | null {
+  let j = at + 2;
+  const stripTabs = command[j] === '-';
+  if (stripTabs) j += 1;
+  const continuation = (k: number): number => {
+    if (command[k] !== '\\') return 0;
+    if (command[k + 1] === '\n') return 2;
+    if (command[k + 1] === '\r' && command[k + 2] === '\n') return 3;
+    return 0;
+  };
+  for (;;) {
+    const skip = continuation(j);
+    if (skip > 0) j += skip;
+    else if (command[j] === ' ' || command[j] === '\t') j += 1;
+    else break;
+  }
+  let word = '';
+  let quoted = false;
+  while (j < command.length) {
+    const c = command[j] as string;
+    const skip = continuation(j);
+    if (skip > 0) {
+      j += skip;
+      continue;
+    }
+    if (c === '\\') {
+      if (j + 1 < command.length) word += command[j + 1];
+      quoted = true;
+      j += 2;
+      continue;
+    }
+    if (c === "'") {
+      const close = command.indexOf("'", j + 1);
+      const end = close === -1 ? command.length : close;
+      word += command.slice(j + 1, end);
+      quoted = true;
+      j = end + 1;
+      continue;
+    }
+    if (c === '$' && command[j + 1] === "'") {
+      let k = j + 2;
+      while (k < command.length && command[k] !== "'") {
+        if (command[k] === '\\' && k + 1 < command.length) {
+          word += command[k + 1];
+          k += 2;
+        } else {
+          word += command[k];
+          k += 1;
+        }
+      }
+      quoted = true;
+      j = k + 1;
+      continue;
+    }
+    if (c === '"') {
+      let k = j + 1;
+      while (k < command.length && command[k] !== '"') {
+        if (
+          command[k] === '\\' &&
+          k + 1 < command.length &&
+          DQ_ESCAPABLE.has(command[k + 1] as string)
+        ) {
+          word += command[k + 1];
+          k += 2;
+        } else {
+          word += command[k];
+          k += 1;
+        }
+      }
+      quoted = true;
+      j = k + 1;
+      continue;
+    }
+    if (DELIMITER_STOP.has(c)) break;
+    word += c;
+    j += 1;
+  }
+  if (word === '') return null;
+  return { length: Math.min(j, command.length) - at, delimiter: word, quoted, stripTabs };
+}
+
+/** Options for {@link normalizeForScan}. */
+export interface NormalizeOptions {
+  /**
+   * The text is an unquoted heredoc body: no quoting or comment rule applies,
+   * so every backslash-newline is a continuation (an escaped `\\` aside) and
+   * no `$'…'` is special.
+   */
+  heredocBody?: boolean;
+}
+
+/**
+ * Normalise a text for the raw substitution, backtick and heredoc scanners as
+ * the shell's own reading would (mmnto-ai/totem#3106): (a) a backslash-newline
+ * (LF or CRLF) outside single quotes is removed, as bash removes a line
+ * continuation, with `\\` before a newline kept as an escaped backslash; (b)
+ * the contents of an ANSI-C `$'…'` string are blanked length-preservingly (the
+ * `$'` and the closing `'` stay), so no quote inside one is seen by a later
+ * scanner. Single-quoted text and comments are copied unchanged, with the
+ * tokenizer's quote, comment and ANSI-C state. Not used by the shield's own
+ * rows.
+ */
+export function normalizeForScan(text: string, opts: NormalizeOptions = {}): string {
+  let out = '';
+  let inDouble = false;
+  let boundary = true;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i] as string;
+    if (ch === '\\') {
+      if (text[i + 1] === '\n') {
+        i += 2;
+        continue;
+      }
+      if (text[i + 1] === '\r' && text[i + 2] === '\n') {
+        i += 3;
+        continue;
+      }
+      out += ch + (text[i + 1] ?? '');
+      i += 2;
+      boundary = false;
+      continue;
+    }
+    if (opts.heredocBody === true) {
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"') inDouble = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "'") {
+      const close = text.indexOf("'", i + 1);
+      const end = close === -1 ? text.length : close + 1;
+      out += text.slice(i, end);
+      i = end;
+      boundary = false;
+      continue;
+    }
+    if (ch === '$' && text[i + 1] === "'") {
+      let k = i + 2;
+      let blanked = '';
+      while (k < text.length && text[k] !== "'") {
+        if (text[k] === '\\' && k + 1 < text.length) {
+          blanked += text[k + 1] === '\n' ? ' \n' : '  ';
+          k += 2;
+        } else {
+          blanked += text[k] === '\n' ? '\n' : ' ';
+          k += 1;
+        }
+      }
+      out += "$'" + blanked + (k < text.length ? "'" : '');
+      i = k + 1;
+      boundary = false;
+      continue;
+    }
+    if (ch === '#' && boundary) {
+      const nl = text.indexOf('\n', i);
+      const end = nl === -1 ? text.length : nl;
+      out += text.slice(i, end);
+      i = end;
+      continue;
+    }
+    if (ch === '"') inDouble = true;
+    out += ch;
+    boundary = WORD_BOUNDARY.has(ch) || ch === '(';
+    i += 1;
+  }
+  return out;
 }
 
 /**
@@ -467,8 +714,12 @@ function substitutionEnd(text: string, open: number, powershell = false): number
   return text.length;
 }
 
-/** The command with every heredoc body replaced by spaces (length preserved), so tokenizing never reads a body. */
-function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
+/**
+ * The command with every heredoc body replaced by spaces (length preserved), so
+ * tokenizing never reads a body. Exported for the action-policy gate
+ * (mmnto-ai/totem#3106), which reads statements the same way.
+ */
+export function blankHeredocBodies(command: string, spans: readonly HeredocSpan[]): string {
   let out = command;
   for (const s of spans) {
     out = out.slice(0, s.bodyStart) + ' '.repeat(s.bodyEnd - s.bodyStart) + out.slice(s.bodyEnd);
@@ -505,6 +756,8 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
  */
 export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
   const ps = opts.powershell === true;
+  const literalBackslash = opts.literalBackslash === true;
+  const join = opts.joinContinuations === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
@@ -524,14 +777,30 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
   while (i < command.length) {
     const ch = command[i] as string;
     // A line continuation is whitespace, never an operator or a word character.
-    if (ch === '\\' && command[i + 1] === '\n') {
-      flushWord();
+    if (!literalBackslash && ch === '\\' && command[i + 1] === '\n') {
+      if (!join) flushWord();
       i += 2;
       continue;
     }
-    if (ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
-      flushWord();
+    if (!literalBackslash && ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
+      if (!join) flushWord();
       i += 3;
+      continue;
+    }
+    if (join && ch === '$' && command[i + 1] === "'") {
+      // ANSI-C quoting: backslash escapes are read, so `\'` is a quote character.
+      let j = i + 2;
+      while (j < command.length && command[j] !== "'") {
+        if (command[j] === '\\' && j + 1 < command.length) {
+          word += command[j + 1];
+          j += 2;
+        } else {
+          word += command[j];
+          j += 1;
+        }
+      }
+      inWord = true;
+      i = j + 1;
       continue;
     }
     if (ps && command.startsWith('<#', i)) {
@@ -585,11 +854,15 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       inWord = true;
       while (i < command.length && command[i] !== '"') {
-        if (ps && command[i] === '`' && i + 1 < command.length) {
+        if (join && command[i] === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
+          // A CRLF continuation inside double quotes joins too.
+          i += 3;
+        } else if (ps && command[i] === '`' && i + 1 < command.length) {
           // PowerShell's escape inside a double-quoted string is the backtick.
           word += command[i + 1];
           i += 2;
         } else if (
+          !literalBackslash &&
           command[i] === '\\' &&
           i + 1 < command.length &&
           DQ_ESCAPABLE.has(command[i + 1] as string)
@@ -604,7 +877,7 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       continue;
     }
-    if (ch === '\\' && i + 1 < command.length) {
+    if (!literalBackslash && ch === '\\' && i + 1 < command.length) {
       word += command[i + 1];
       inWord = true;
       i += 2;
@@ -674,8 +947,12 @@ const WRAPPERS: ReadonlySet<string> = new Set([
   'xargs',
 ]);
 
-/** Shell reserved words that can stand before a program in a segment: `{ gh …; }`, `if gh …`, `then gh …`. */
-const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
+/**
+ * Shell reserved words that can stand before a program in a segment: `{ gh …; }`,
+ * `if gh …`, `then gh …`. Exported for the action-policy gate's pattern check
+ * (mmnto-ai/totem#3106).
+ */
+export const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
   '{',
   'if',
   'then',
@@ -698,8 +975,30 @@ const RESERVED_BEFORE_PROGRAM: ReadonlySet<string> = new Set([
  * never an invocation. Shared by every row that names a program, so a shape
  * added here is read by all of them.
  */
-function programIndex(tokens: readonly string[], program: string): number {
+export function programIndex(tokens: readonly string[], program: string): number {
+  const i = programStart(tokens, program);
+  const t = tokens[i];
+  if (t === undefined) return -1;
+  const names = programSpellings(t);
+  return names.exact.includes(program) || names.folded.includes(program.toLowerCase()) ? i : -1;
+}
+
+/**
+ * The index of the segment's program POSITION: past any `VAR=VALUE`
+ * assignments, known wrappers, the reserved words that can stand before a
+ * program, a function header and `time`'s `-p` — whatever program sits there.
+ * `tokens.length` when nothing follows the prefix. `program`, when given, is
+ * never read as a function name (the `programIndex` caller's own rule).
+ * Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function programStart(
+  tokens: readonly string[],
+  program?: string,
+  opts: ProgramStartOptions = {},
+): number {
+  const table = opts.wrapperOptions;
   let i = 0;
+  let afterWrapper = false;
   // Assignments, wrappers and reserved words interleave: `env VAR=x prog`,
   // `VAR=x sudo prog`, `then VAR=x prog`.
   while (i < tokens.length) {
@@ -711,9 +1010,40 @@ function programIndex(tokens: readonly string[], program: string): number {
       i += 2;
       continue;
     }
+    if (opts.skipRedirections === true) {
+      if (t === 'coproc') {
+        i += 1;
+        continue;
+      }
+      if (BARE_REDIRECTION.test(t)) {
+        // A redirection operator standing alone: its operand is the next token.
+        i += 2;
+        continue;
+      }
+      if (GLUED_REDIRECTION.test(t)) {
+        i += 1;
+        continue;
+      }
+    }
+    if (table !== undefined) {
+      const wrapper = wrapperName(t, table);
+      if (wrapper !== undefined) {
+        i =
+          skipWrapperOptions(tokens, i + 1, table[wrapper] ?? []) +
+          (opts.wrapperPositionals?.[wrapper] ?? 0);
+        afterWrapper = true;
+        continue;
+      }
+      if (afterWrapper && t === '--') {
+        // `env FOO=1 -- prog`: the `--` that ends the wrapper's options.
+        afterWrapper = false;
+        i += 1;
+        continue;
+      }
+    }
     if (
       /^[A-Za-z_][A-Za-z0-9_]*=/.test(t) ||
-      WRAPPERS.has(t) ||
+      (table === undefined && WRAPPERS.has(t)) ||
       RESERVED_BEFORE_PROGRAM.has(t) ||
       (t !== program && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t) && tokens[i + 1] === '{') ||
       (t === '-p' && tokens[i - 1] === 'time')
@@ -721,17 +1051,178 @@ function programIndex(tokens: readonly string[], program: string): number {
       i += 1;
     } else break;
   }
-  const t = tokens[i];
-  if (t === undefined) return -1;
-  if (t === program || t.endsWith('/' + program)) return i;
-  // The Windows spelling: `gh.exe`, `GH.EXE`, a drive-letter path with either
-  // separator — the file system that runs it is case-insensitive, so the stem is
-  // compared the same way.
-  const lower = t.toLowerCase();
-  if (!lower.endsWith('.exe')) return -1;
-  const stem = lower.slice(0, -4);
-  const p = program.toLowerCase();
-  return stem === p || stem.endsWith('/' + p) || stem.endsWith('\\' + p) ? i : -1;
+  return i;
+}
+
+/**
+ * The wrappers a statement runs its program THROUGH, by basename, each with the
+ * options that take a separate value (mmnto-ai/totem#3106). Read by
+ * {@link programStart} when a caller passes it: a `--` ends a wrapper's
+ * options, `--opt=value` is one token, an option the table does not list is
+ * skipped as a flag (so its value, if it had one, is read as the program), and
+ * the token after a listed option is its value. `busybox` takes the next token
+ * as its applet, so the applet is the program. The shield's own rows keep the
+ * flat {@link WRAPPERS} set.
+ */
+export const WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  sudo: [
+    '-u',
+    '-g',
+    '-C',
+    '-D',
+    '-h',
+    '-p',
+    '-r',
+    '-t',
+    '-T',
+    '-U',
+    '-R',
+    '-a',
+    '-c',
+    '--user',
+    '--group',
+    '--host',
+    '--prompt',
+    '--chdir',
+    '--chroot',
+    '--auth-type',
+    '--login-class',
+    '--role',
+    '--type',
+    '--other-user',
+    '--command-timeout',
+  ],
+  env: ['-u', '-C', '-S', '--unset', '--chdir', '--split-string'],
+  timeout: ['-s', '-k', '--signal', '--kill-after'],
+  nice: ['-n', '--adjustment'],
+  nohup: [],
+  time: ['-f', '-o', '--format', '--output'],
+  xargs: [
+    '-n',
+    '-I',
+    '-L',
+    '-P',
+    '-d',
+    '-a',
+    '-s',
+    '-E',
+    '--max-args',
+    '--replace',
+    '--max-lines',
+    '--max-procs',
+    '--delimiter',
+    '--arg-file',
+    '--max-chars',
+  ],
+  command: [],
+  exec: ['-a'],
+  builtin: [],
+  busybox: [],
+});
+
+/**
+ * How many positional operands a wrapper takes after its options before the
+ * program (mmnto-ai/totem#3106): `timeout`'s duration. A wrapper not listed
+ * takes none. Read by {@link programStart} beside {@link WRAPPER_VALUE_OPTIONS}.
+ */
+export const WRAPPER_POSITIONALS: Readonly<Record<string, number>> = Object.freeze({
+  timeout: 1,
+});
+
+/** A redirection operator standing alone (`>`, `>>`, `<`, `2>`, `&>`, `<<`, `<<-`, `<<<`, `>&`). */
+const BARE_REDIRECTION = /^(?:\d+|&)?(?:>>?|>&|<&|<<<|<<-?|<)$/;
+
+/** A redirection with its operand glued on (`>log`, `2>&1`, `<in`, `&>x`, `<<EOF`), never a process substitution. */
+const GLUED_REDIRECTION = /^(?:\d+|&)?(?:>>?|>&|<&|<<<|<<-?|<)(?!\()\S/;
+
+/** Options for {@link programStart}. */
+export interface ProgramStartOptions {
+  /**
+   * Skip redirections that stand before the program (`>log prog`, `2>&1 prog`,
+   * `<in prog`, a bare operator with its operand as the next token) and the
+   * reserved word `coproc`. Off by default: the shield's rows do not read them.
+   */
+  skipRedirections?: boolean;
+  /**
+   * Recognise wrappers by basename through this table and skip their options
+   * (see {@link WRAPPER_VALUE_OPTIONS}); absent, the flat {@link WRAPPERS} set
+   * is matched by exact token and no option is skipped.
+   */
+  wrapperOptions?: Readonly<Record<string, readonly string[]>>;
+  /** Positional operands each wrapper takes before the program (see {@link WRAPPER_POSITIONALS}). */
+  wrapperPositionals?: Readonly<Record<string, number>>;
+}
+
+/** The table key a token names as a wrapper, by its program spellings. */
+function wrapperName(
+  token: string,
+  table: Readonly<Record<string, readonly string[]>>,
+): string | undefined {
+  const names = programSpellings(token);
+  return [...names.exact, ...names.folded].find((n) => Object.hasOwn(table, n));
+}
+
+/** The index past a wrapper's options starting at `i` (see {@link WRAPPER_VALUE_OPTIONS}). */
+function skipWrapperOptions(
+  tokens: readonly string[],
+  i: number,
+  valueOptions: readonly string[],
+): number {
+  let k = i;
+  while (k < tokens.length) {
+    const t = tokens[k] as string;
+    if (t === '--') return k + 1;
+    if (!t.startsWith('-') || t === '-') return k;
+    if (t.startsWith('--') && t.includes('=')) {
+      k += 1;
+      continue;
+    }
+    k += valueOptions.includes(t) ? 2 : 1;
+  }
+  return k;
+}
+
+/** Options for {@link programSpellings}. */
+export interface ProgramSpellingOptions {
+  /**
+   * Executable suffixes stripped (any letter case) to give the folded stem.
+   * Default `['.exe']`, the shield's own spelling.
+   */
+  suffixes?: readonly string[];
+  /**
+   * Also read the name after the token's last backslash into `exact` (a
+   * PowerShell path with backslash separators). Off by default.
+   */
+  backslash?: boolean;
+}
+
+/**
+ * The names a program token can stand for, as the shield reads program
+ * spellings: `exact` holds the token itself and the part after its last `/`
+ * (a path ending in the program), compared case-sensitively; `folded` holds,
+ * when the token ends in one of `suffixes` in any letter case, the lower-cased
+ * stem after its last `/` or backslash (the Windows spelling: `gh.exe`,
+ * `GH.EXE`, a drive-letter path with either separator, read the way the
+ * case-insensitive file system that runs it reads it). Exported for the
+ * action-policy gate (mmnto-ai/totem#3106).
+ */
+export function programSpellings(
+  token: string,
+  opts: ProgramSpellingOptions = {},
+): { exact: string[]; folded: string[] } {
+  const exact = [token];
+  const slash = token.lastIndexOf('/');
+  if (slash !== -1) exact.push(token.slice(slash + 1));
+  if (opts.backslash === true) {
+    const cut = Math.max(slash, token.lastIndexOf('\\'));
+    if (cut !== -1 && cut !== slash) exact.push(token.slice(cut + 1));
+  }
+  const lower = token.toLowerCase();
+  const suffix = (opts.suffixes ?? ['.exe']).find((x) => lower.endsWith(x.toLowerCase()));
+  if (suffix === undefined) return { exact, folded: [] };
+  const stem = lower.slice(0, -suffix.length);
+  const cut = Math.max(stem.lastIndexOf('/'), stem.lastIndexOf('\\'));
+  return { exact, folded: [stem.slice(cut + 1)] };
 }
 
 /**
@@ -1053,6 +1544,131 @@ function blankComments(text: string): string {
   return out;
 }
 
+// ─── Substitution body readers ─────────────────────────────────────────────
+
+/** How many backslashes stand immediately before `at`. */
+function backslashRun(text: string, at: number): number {
+  let n = 0;
+  for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
+  return n;
+}
+
+/**
+ * An opener preceded by EXACTLY one backslash is escaped: literal text. Not
+ * the odd-run rule bash would apply to the text as written, because the Bash
+ * tool halves each backslash pair before bash runs the command (measured, read
+ * 3: four backslashes as typed reach the hook as four and bash as two), so bash
+ * sees ceil(n/2) of them. One backslash is literal under both readings; two or
+ * more are read as running under at least one of them, and a reader stays
+ * fail-closed there (a run of two is an over-read on this transport, disclosed).
+ */
+function openerEscaped(text: string, at: number): boolean {
+  return backslashRun(text, at) === 1;
+}
+
+/**
+ * A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
+ * the Bash tool on win32): an early close hides what follows, so fail-closed
+ * does not apply to it (read 5 F1).
+ */
+function closeEscaped(text: string, at: number): boolean {
+  const n = backslashRun(text, at);
+  return n % 4 === 1 || n % 4 === 2;
+}
+
+/**
+ * PowerShell's escape: an opener preceded by an odd run of backticks is
+ * literal text; a backslash is an ordinary character.
+ */
+function powershellOpenerEscaped(text: string, at: number): boolean {
+  let n = 0;
+  for (let k = at - 1; k >= 0 && text[k] === '`'; k -= 1) n += 1;
+  return n % 2 === 1;
+}
+
+/** Options for {@link substitutionBodies} and {@link backtickBodies}. */
+export interface BodyReadOptions {
+  /**
+   * Read the text with NO shell quoting or comment rule: an apostrophe, a
+   * single-quoted span or a `#` is ordinary text (an unquoted heredoc body).
+   * Off by default.
+   */
+  raw?: boolean;
+  /**
+   * Read openers by PowerShell's escape rule: a backtick escapes, a backslash
+   * does not. Off by default (bash's rule).
+   */
+  powershell?: boolean;
+}
+
+/**
+ * The bodies of every `$( … )` in one segment's raw text, in order, located on
+ * the single-quote- and comment-blanked text (a `$(` inside single quotes or a
+ * comment is text the shell never runs, and so is an opener escaped with one
+ * backslash) and sliced from the text itself. One level: a caller recurses into
+ * each body. Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function substitutionBodies(raw: string, opts: BodyReadOptions = {}): string[] {
+  const bodies: string[] = [];
+  const located = opts.raw === true ? raw : blankComments(blankSingleQuoted(raw));
+  const escapedAt = opts.powershell === true ? powershellOpenerEscaped : openerEscaped;
+  let cursor = 0;
+  while (cursor < located.length) {
+    const open = located.indexOf('$(', cursor);
+    if (open === -1) break;
+    if (escapedAt(located, open)) {
+      cursor = open + 2;
+      continue;
+    }
+    const end = substitutionEnd(located, open + 1, opts.powershell === true);
+    bodies.push(raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end));
+    cursor = end;
+  }
+  return bodies;
+}
+
+/**
+ * The bodies of every backtick substitution in `text`, located on the WHOLE
+ * text, not per segment: the tokenizer reads a backtick as a character and
+ * splits at `;` inside a span, so a span's two backticks can sit in different
+ * segments. The pairing is run TWICE, with an opener read escaped by bash's
+ * rule (exactly one backslash) and by the Bash tool's measured halving rule (a
+ * run of one or two, and every four after), and both passes' bodies are
+ * returned: a single pairing that misreads one opener shifts every later
+ * backtick and loses the body of the next real span (read 7 F1), while the
+ * union can only add reads. Inside backticks bash drops the backslash of `\$`,
+ * a backslash-backtick and `\\` before running the body, so each body is
+ * returned unescaped. `skip(at)` drops the span whose opener sits at `at`.
+ * Exported for the action-policy gate (mmnto-ai/totem#3106).
+ */
+export function backtickBodies(
+  text: string,
+  skip?: (at: number) => boolean,
+  opts: Pick<BodyReadOptions, 'raw'> = {},
+): string[] {
+  const bodies: string[] = [];
+  const whole = opts.raw === true ? text : blankComments(blankSingleQuoted(text));
+  for (const isOpenerEscaped of [openerEscaped, closeEscaped]) {
+    let tick = whole.indexOf('`');
+    while (tick !== -1) {
+      if (isOpenerEscaped(whole, tick)) {
+        tick = whole.indexOf('`', tick + 1);
+        continue;
+      }
+      let close = whole.indexOf('`', tick + 1);
+      while (close !== -1 && closeEscaped(whole, close)) {
+        close = whole.indexOf('`', close + 1);
+      }
+      if (close === -1) break;
+      if (skip === undefined || !skip(tick)) {
+        bodies.push(text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1'));
+      }
+      tick = whole.indexOf('`', close + 1);
+    }
+  }
+  return bodies;
+}
+
 // ─── The table ─────────────────────────────────────────────────────────────
 
 /**
@@ -1118,26 +1734,6 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
       if (!msysApplies(p)) return null;
       const written = (h: { flag: string; value: string; glued?: boolean }): string =>
         h.glued === true || h.flag.endsWith('=') ? `${h.flag}${h.value}` : `${h.flag} ${h.value}`;
-      // An opener preceded by EXACTLY one backslash is escaped: literal text. Not
-      // the odd-run rule bash would apply to the text as written, because the Bash
-      // tool halves each backslash pair before bash runs the command (measured, read
-      // 3: four backslashes as typed reach the hook as four and bash as two), so bash
-      // sees ceil(n/2) of them. One backslash is literal under both readings; two or
-      // more are read as running under at least one of them, and the row stays
-      // fail-closed there (a run of two is an over-deny on this transport, disclosed).
-      const run = (text: string, at: number): number => {
-        let n = 0;
-        for (let k = at - 1; k >= 0 && text[k] === '\\'; k -= 1) n += 1;
-        return n;
-      };
-      const escaped = (text: string, at: number): boolean => run(text, at) === 1;
-      // A CLOSE is paired by the transport's rule (n mod 4 of 1 or 2 is escaped on
-      // the Bash tool on win32, this row's only transport): an early close hides what
-      // follows, so fail-closed does not apply to it (read 5 F1).
-      const escapedClose = (text: string, at: number): boolean => {
-        const n = run(text, at);
-        return n % 4 === 1 || n % 4 === 2;
-      };
       const munged = (value: string, typed: boolean): boolean => {
         const ws = value.search(/[ \t\r\n]/);
         const head = ws === -1 ? value : value.slice(0, ws);
@@ -1203,20 +1799,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
             }
           }
           if (depth >= 4) continue;
-          const located = blankComments(blankSingleQuoted(seg.raw));
-          let cursor = 0;
-          while (cursor < located.length) {
-            const open = located.indexOf('$(', cursor);
-            if (open === -1) break;
-            if (escaped(located, open)) {
-              cursor = open + 2;
-              continue;
-            }
-            const end = substitutionEnd(located, open + 1);
-            const inner = seg.raw.slice(open + 2, located[end - 1] === ')' ? end - 1 : end);
+          for (const inner of substitutionBodies(seg.raw)) {
             const hit = scan(inner, depth + 1);
             if (hit !== null) return hit;
-            cursor = end;
           }
         }
         if (depth >= 4) return null;
@@ -1242,26 +1827,9 @@ export const TRANSPORT_PATTERNS: ReadonlyArray<TransportPattern> = Object.freeze
         msysSegments(text, true, ranges);
         const coveredAt = (at: number): boolean =>
           ranges.some((r) => r.covered && at >= r.start && at < r.end);
-        const whole = blankComments(blankSingleQuoted(text));
-        for (const openerEscaped of [escaped, escapedClose]) {
-          let tick = whole.indexOf('`');
-          while (tick !== -1) {
-            if (openerEscaped(whole, tick)) {
-              tick = whole.indexOf('`', tick + 1);
-              continue;
-            }
-            let close = whole.indexOf('`', tick + 1);
-            while (close !== -1 && escapedClose(whole, close)) {
-              close = whole.indexOf('`', close + 1);
-            }
-            if (close === -1) break;
-            if (!coveredAt(tick)) {
-              const body = text.slice(tick + 1, close).replace(/\\([$`\\])/g, '$1');
-              const hit = scan(body, depth + 1);
-              if (hit !== null) return hit;
-            }
-            tick = whole.indexOf('`', close + 1);
-          }
+        for (const body of backtickBodies(text, coveredAt)) {
+          const hit = scan(body, depth + 1);
+          if (hit !== null) return hit;
         }
         return null;
       };

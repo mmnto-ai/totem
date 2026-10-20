@@ -3005,6 +3005,73 @@ export async function checkFreezes(cwd: string, totemDir = '.totem'): Promise<Di
   }
 }
 
+/** The repo-relative policy path the action-policy row names. */
+const ACTION_POLICY_DISPLAY_FILE = 'action-policy.json';
+
+/**
+ * The first validation error behind a loader failure: the first zod issue when
+ * the cause carries one, else the error's own message.
+ */
+function firstActionPolicyError(err: unknown): string {
+  const cause = err instanceof Error ? err.cause : undefined;
+  const issues =
+    cause && typeof cause === 'object' && Array.isArray((cause as { issues?: unknown }).issues)
+      ? ((cause as { issues: Array<{ path?: unknown; message?: unknown }> }).issues ?? [])
+      : [];
+  const first = issues[0];
+  if (first && typeof first.message === 'string') {
+    const where =
+      Array.isArray(first.path) && first.path.length > 0 ? first.path.join('.') : '(root)';
+    return `${where}: ${first.message}`;
+  }
+  if (cause instanceof Error) return cause.message;
+  return err instanceof Error ? err.message : 'the policy loader threw a non-Error value';
+}
+
+/**
+ * Sensor-only action-policy row (mmnto-ai/totem#3106): reports whether
+ * `<totemDir>/action-policy.json` is absent, valid (row and action-kind
+ * counts) or unreadable. Never `fail`, and `gateExempt` on every arm: a
+ * corrupt policy is reported loudly here while the `action-policy` gate itself
+ * fails closed on it, so doctor `--strict` at any tier never gates on this row.
+ */
+export async function checkActionPolicy(
+  cwd: string,
+  totemDir = '.totem',
+): Promise<DiagnosticResult> {
+  const name = 'Action policy';
+  const shownFile = `${totemDir}/${ACTION_POLICY_DISPLAY_FILE}`;
+  try {
+    const { readActionPolicyConfig } = await import('@mmnto/totem');
+    const config = readActionPolicyConfig(path.join(cwd, totemDir));
+    if (config === null) {
+      return {
+        name,
+        status: 'pass',
+        message: 'No action policy (none configured)',
+        gateExempt: true,
+      };
+    }
+    const kinds = new Set(config.rows.map((r) => r.action_kind));
+    return {
+      name,
+      status: 'pass',
+      message: `${shownFile}: ${config.rows.length} row(s) across ${kinds.size} action kind(s)`,
+      gateExempt: true,
+    };
+    // totem-context: the loader throws fail-closed on a corrupt policy; doctor reports it as a warn-class sensor row while the gate itself blocks on it
+  } catch (err) {
+    return {
+      name,
+      status: 'warn',
+      message: `${shownFile} is unreadable: ${firstActionPolicyError(err)}`,
+      remediation:
+        'Fix the file — the action-policy gate fails closed (blocks) while it is unreadable. This row never gates (sensor-only).',
+      gateExempt: true,
+    };
+  }
+}
+
 /**
  * Ambient worktree-estate row (mmnto-ai/totem#2580, open question 1 ruled (a)).
  * Quiet when the estate is clean, a named SKIP when nothing is registered, and
@@ -3274,6 +3341,7 @@ export async function doctorCommand(options: DoctorOptions = {}): Promise<Diagno
     await checkStaleRules(cwd, totemDir, doctorThresholds),
     await checkGrandfatheredRules(cwd, totemDir),
     await checkFreezes(cwd, totemDir),
+    await checkActionPolicy(cwd, totemDir),
     await checkStrayTotemMarkers(cwd, totemDir),
     await checkEstate(options.estateSeamsForTest ?? {}),
     // Seat-identity sense (mmnto-ai/totem#2511) — lazily imported so the row's

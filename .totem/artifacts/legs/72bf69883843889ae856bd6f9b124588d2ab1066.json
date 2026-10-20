@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "72bf69883843889ae856bd6f9b124588d2ab1066",
+  "readAt": "2026-10-20T00:18:09Z",
+  "findings": [
+    {
+      "id": "3106-r4-F1",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 852,
+      "claim": "DISCLOSURE: docs/wiki/config-reference.md:313 says leading redirections are skipped to the program; BARE_REDIRECTION/GLUED_REDIRECTION omit >|, bare <> and {fd}>, so those leading forms leave the program unread.",
+      "counterexample": "Bash, deny row 'pnpm db:migrate:prod': '>|log pnpm db:migrate:prod', '>| log ...', '2>|x ...', '<> f ...', '{fd}>log ...' -> allow no-policy-match each; '>|x sh -c \"pnpm db:migrate:prod\"' -> allow (no opaque warn); control '>log pnpm db:migrate:prod' -> deny"
+    },
+    {
+      "id": "3106-r4-F2",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 688,
+      "claim": "DISCLOSURE: docs/wiki/config-reference.md:337 says a quoted first non-option argument with no -File is a string; firstPositionalIsQuoted stops at an option's value, and Windows PowerShell's unquoted positional (default -Command) is not read; the -ExecutionPolicy limit is stated only in the code comment.",
+      "counterexample": "'powershell -nop -w hidden \"Remove-Item x\"' -> allow; 'powershell Remove-Item x' -> allow; 'pwsh -ExecutionPolicy Bypass \"x\"' -> allow. Measured on Windows PowerShell 5.1: an unquoted positional and the -w hidden quoted form both run as commands; pwsh 7 reads a positional as -File, so the 'pwsh \"x\"' warn is a harmless false positive."
+    },
+    {
+      "id": "3106-r4-F3",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 311,
+      "claim": "DISCLOSURE (existed before this fold): a partially quoted heredoc delimiter makes the body literal in bash, but the reader treats it as unquoted and reads substitutions there.",
+      "counterexample": "Bash, deny row 'pnpm db:migrate:prod': cat <<E\\OF / cat <<E'O'F with $(pnpm db:migrate:prod) in the body -> deny on both the old and new code (bash expands nothing); cat <<\"E\"OF -> allow"
+    },
+    {
+      "id": "3106-r4-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 138,
+      "claim": "DISCLOSURE: the load refusal and the runtime skip both match wrappers by basename, so a repository script named env, time, command, nice and so on can never be governed, and the refusal text 'drop the leading wrapper' misleads.",
+      "counterexample": "patterns 'scripts/env', './env deploy', './time' -> refused at load; at runtime './scripts/env pnpm db:migrate:prod' -> deny m (the script is skipped as the env wrapper)"
+    },
+    {
+      "id": "3106-r4-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 1417,
+      "claim": "TEST PIN: no head test uses a subject between 513 and 1024 characters, so reverting ACTION_POLICY_WILDCARD_TOKEN_MAX to 1024 fails no test; the overridden-warn wrapper test covers --strict only.",
+      "counterexample": "Head tests use 1100-character subjects; the same shapes pass on the old code (1024 head): 'run *z' against 'run '+1100 a's+'z' -> no-policy-match on both. Pilot tier measured end to end: exit 0, one additionalContext object; not pinned."
+    }
+  ],
+  "folded": [
+    "3106-r4-F1",
+    "3106-r4-F2",
+    "3106-r4-F3",
+    "3106-r4-F4",
+    "3106-r4-F5"
+  ],
+  "verdict": "Read 4 of the action-policy gate, scoped to the two commits after the third read (7c177575, the fold of read 3 plus the override change; 72bf6988, the CI fix), which had gone to the pull request with no independent read: blocking=0 material=0 minor=5 question=0 folded=5 (counts as typed). CONVERGED by the read's own line. Held, measured: the raw heredoc-body reader with bash's backslash escape honoured and every quoted-delimiter form literal; the PowerShell opener rule (an odd backtick run escapes, a backslash does not, single quotes literal); the leading-redirection and coproc skip on fourteen forms with no program movement on a redirection after the program; the closed shell list, the colon spellings and the quoted positional; the dead-pattern refusals; the override returning warn through the real wrapper at both tiers with one context object, and a strict deny still exit 2; the 512 head at about 12 ms for a three-star glob against a 1000-character subject; the shield opt-in pin asserting the exact call-site argument lists; both shield suites green and an 8,400-input differential with zero verdict changes. Folded by the seat in the next commit, all sentences or pins: F1 (the redirection forms read are listed and >|, <> and {fd}> named as not read); F2 (the PowerShell positional rule's two limits stated: an option's value stops the search, and an unquoted positional, which Windows PowerShell runs as a command, is not read); F3 (a partially quoted delimiter is read as unquoted, a false-deny direction, disclosed); F4 (a repository script whose basename is a wrapper's cannot be governed, stated beside the refusal, whose message now says so); F5 (a head pin with a 600-character subject and the pilot-tier overridden-warn wrapper test). The reads end here: four reads, 50 findings, the last one converged with disclosures only."
+}

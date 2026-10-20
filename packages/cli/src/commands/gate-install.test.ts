@@ -844,6 +844,10 @@ const TRANSPORT_SHIELD: GateInstallSpec = {
   matcher: 'Bash|PowerShell',
 };
 const MERGE_READY: GateInstallSpec = { event: 'merge-ready', matcher: 'Bash|PowerShell' };
+const ACTION_POLICY: GateInstallSpec = {
+  event: 'action-policy',
+  matcher: 'Write|Edit|Bash|PowerShell',
+};
 
 /**
  * Every PreToolUse matcher an entry installing `event` currently appears under.
@@ -1104,6 +1108,28 @@ describe('installGates per-gate matcher (mmnto-ai/totem#2799)', () => {
     expect(preToolUseEntries(cwd)).toEqual([STRICT_MERGE_READY_ENTRY, STRICT_TRANSPORT_ENTRY]);
   });
 
+  it('action-policy writes ONE entry under the four-tool matcher (mmnto-ai/totem#3106)', () => {
+    installGates(cwd, [ACTION_POLICY]);
+
+    expect(gateEntryCount(cwd, 'action-policy')).toBe(1);
+    expect(matchersFor(cwd, 'action-policy')).toEqual(['Write|Edit|Bash|PowerShell']);
+    expect(preToolUseEntries(cwd)).toEqual([
+      {
+        matcher: 'Write|Edit|Bash|PowerShell',
+        hooks: [
+          {
+            type: 'command',
+            command: 'node .claude/hooks/gate-wrapper.cjs --event action-policy --strict',
+          },
+        ],
+      },
+    ]);
+    // The registry carries the same matcher the installer wrote.
+    expect(knownGates().find((g) => g.event === 'action-policy')?.matcher).toBe(
+      'Write|Edit|Bash|PowerShell',
+    );
+  });
+
   it('a merge-ready tier switch updates the one entry in place', () => {
     installGates(cwd, [MERGE_READY], 'pilot');
     expect(gateCommandFor(cwd, 'merge-ready')).toContain('--pilot');
@@ -1360,7 +1386,7 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     extraArgs: string[] = [],
     event = 'freeze-check',
     env: NodeJS.ProcessEnv | undefined = undefined,
-  ): { status: number | null; stderr: string } {
+  ): { status: number | null; stderr: string; stdout: string } {
     const wrapperPath = path.join(cwd, '.claude', 'hooks', 'gate-wrapper.cjs');
     const res = spawnSync(process.execPath, [wrapperPath, '--event', event, ...extraArgs], {
       cwd,
@@ -1369,8 +1395,80 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       timeout: 30000,
       ...(env ? { env } : {}),
     });
-    return { status: res.status, stderr: res.stderr ?? '' };
+    return { status: res.status, stderr: res.stderr ?? '', stdout: res.stdout ?? '' };
   }
+
+  /** The one PreToolUse context object the wrapper printed on stdout. */
+  function contextOutput(stdout: string): unknown {
+    const lines = stdout.split('\n').filter((l) => l.trim() !== '');
+    expect(lines).toHaveLength(1);
+    return JSON.parse(lines[0] as string);
+  }
+
+  const contextObject = (additionalContext: string) => ({
+    hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext },
+  });
+
+  // ─── The warn channel (mmnto-ai/totem#3106) ─────────────────────────────
+  //
+  // A warn line, and a deny line the pilot tier lets through, reach the agent
+  // as the hook's additionalContext on stdout, once per run, only on exit 0.
+  describe('warn channel', () => {
+    const EDIT = { tool_name: 'Edit', tool_input: { file_path: 'src/app/main.ts' } };
+    const WARN = { disposition: 'warn', reason: 'heads up', provenance: { ref: 'r' } };
+    const DENY = { disposition: 'deny', reason: 'blocked', provenance: { ref: 'd' } };
+
+    it('a warn verdict exits 0 and prints the context object on stdout', () => {
+      writeStubCli({ verdict: WARN, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(0);
+      expect(contextOutput(stdout)).toEqual(
+        contextObject(`action-policy (warn): heads up [${JSON.stringify(WARN.provenance)}]`),
+      );
+    });
+
+    it('a pilot deny exits 0 and prints the context object on stdout', () => {
+      writeStubCli({ verdict: DENY, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--pilot'], 'action-policy');
+      expect(status).toBe(0);
+      expect(contextOutput(stdout)).toEqual(
+        contextObject(`action-policy (deny): blocked [${JSON.stringify(DENY.provenance)}]`),
+      );
+    });
+
+    it('an allow prints nothing on stdout', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(0);
+      expect(stdout).toBe('');
+    });
+
+    it('an overridden verdict (a warn) prints one context object carrying the override line, at --strict and --pilot', () => {
+      const lifted = {
+        disposition: 'warn',
+        reason:
+          'TOTEM_ACTION_POLICY_OVERRIDE lifted row(s) migrations (db_migration, deny): governed; proceeding',
+        provenance: { ref: 'migrations', detail: { overriddenBy: 'TOTEM_ACTION_POLICY_OVERRIDE' } },
+      };
+      for (const tier of ['--strict', '--pilot']) {
+        writeStubCli({ verdict: lifted, exit: 0 });
+        const { status, stdout } = runWrapper(EDIT, [tier], 'action-policy');
+        expect(status).toBe(0);
+        expect(contextOutput(stdout)).toEqual(
+          contextObject(
+            `action-policy (warn): ${lifted.reason} [${JSON.stringify(lifted.provenance)}]`,
+          ),
+        );
+      }
+    });
+
+    it('a strict deny exits 2 with an empty stdout', () => {
+      writeStubCli({ verdict: DENY, exit: 0 });
+      const { status, stdout } = runWrapper(EDIT, ['--strict'], 'action-policy');
+      expect(status).toBe(2);
+      expect(stdout).toBe('');
+    });
+  });
 
   const EDIT_NO_SUBSYSTEM = { tool_name: 'Edit', tool_input: { file_path: 'src/foo.ts' } };
   const DECLARED = { tool_name: 'Edit', tool_input: { subsystem: 'rule-compilation' } };
@@ -1668,6 +1766,128 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
     expect(stubArgv()).toBeNull();
   });
 
+  // ─── action-policy projection (mmnto-ai/totem#3106) ────────────────────
+  //
+  // One entry under Write|Edit|Bash|PowerShell: an edit projects its path, a
+  // shell call its command; any other tool, or an empty value, passes through
+  // without ever spawning the CLI (`stubArgv() === null`).
+  describe('action-policy', () => {
+    const DENY_VERDICT = {
+      disposition: 'deny',
+      reason: 'db_migration (deny): migrations run through the release train',
+      provenance: { ref: 'migrations' },
+    };
+
+    it('projects a Write envelope to { tool, path } on stdin', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Write', tool_input: { file_path: '  db/migrations/001.sql  ' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toEqual(['gate', 'check', '--event', 'action-policy', '--payload', '-']);
+      expect(spawnedPayload()).toEqual({ tool: 'Write', path: 'db/migrations/001.sql' });
+    });
+
+    it('projects an Edit envelope carrying only tool_input.path', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper({ tool_name: 'Edit', tool_input: { path: 'src/a.ts' } }, [], 'action-policy');
+      expect(spawnedPayload()).toEqual({ tool: 'Edit', path: 'src/a.ts' });
+    });
+
+    it('projects a Bash envelope to { tool, command, platform } on stdin', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Bash', tool_input: { command: 'pnpm db:migrate:prod --force' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(spawnedPayload()).toEqual({
+        tool: 'Bash',
+        command: 'pnpm db:migrate:prod --force',
+        platform: process.platform,
+      });
+    });
+
+    it('projects a PowerShell envelope with its tool name', () => {
+      writeStubCli({ verdict: ALLOW_VERDICT, exit: 0 });
+      runWrapper(
+        { tool_name: 'PowerShell', tool_input: { command: 'Get-Item x' } },
+        [],
+        'action-policy',
+      );
+      expect(spawnedPayload()).toMatchObject({ tool: 'PowerShell', command: 'Get-Item x' });
+    });
+
+    it('a Read envelope exits 0 without spawning', () => {
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Read', tool_input: { file_path: 'db/migrations/001.sql' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it.each([[{ file_path: '' }], [{ file_path: '   ' }], [{}], [{ file_path: 42 }]])(
+      'a Write with no usable path (%j) exits 0 without spawning',
+      (toolInput) => {
+        writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+        const { status } = runWrapper(
+          { tool_name: 'Write', tool_input: toolInput },
+          [],
+          'action-policy',
+        );
+        expect(status).toBe(0);
+        expect(stubArgv()).toBeNull();
+      },
+    );
+
+    it('a Bash envelope with a blank command exits 0 without spawning', () => {
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const { status } = runWrapper(
+        { tool_name: 'Bash', tool_input: { command: '   ' } },
+        [],
+        'action-policy',
+      );
+      expect(status).toBe(0);
+      expect(stubArgv()).toBeNull();
+    });
+
+    it('deny → exit 2 under --strict, exit 0 under --pilot, reason on stderr both ways', () => {
+      const envelope = { tool_name: 'Edit', tool_input: { file_path: 'db/migrations/001.sql' } };
+      const denyLine = `[totem gate-wrapper] action-policy (deny): ${DENY_VERDICT.reason} [${JSON.stringify(DENY_VERDICT.provenance)}]\n`;
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const strict = runWrapper(envelope, ['--strict'], 'action-policy');
+      expect(strict.status).toBe(2);
+      expect(strict.stderr).toBe(denyLine);
+
+      writeStubCli({ verdict: DENY_VERDICT, exit: 0 });
+      const pilot = runWrapper(envelope, ['--pilot'], 'action-policy');
+      expect(pilot.status).toBe(0);
+      expect(pilot.stderr).toBe(denyLine);
+    });
+
+    it('a display row (warn arm) exits 0 at both tiers while printing the reason', () => {
+      const envelope = { tool_name: 'Write', tool_input: { file_path: 'src/app/main.ts' } };
+      const verdict = {
+        disposition: 'warn',
+        reason: 'code_edit (display): application code',
+        provenance: { detail: { policyDisposition: 'display' } },
+      };
+      const warnLine = `[totem gate-wrapper] action-policy (warn): ${verdict.reason} [${JSON.stringify(verdict.provenance)}]\n`;
+      for (const tier of ['--strict', '--pilot']) {
+        writeStubCli({ verdict, exit: 0 });
+        const { status, stderr } = runWrapper(envelope, [tier], 'action-policy');
+        expect(status).toBe(0);
+        expect(stderr).toBe(warnLine);
+      }
+    });
+  });
+
   // ─── merge-ready projection (mmnto-ai/totem#2800) ──────────────────────
   //
   // The gate installs under Bash|PowerShell, so this branch sees EVERY shell
@@ -1959,6 +2179,20 @@ describe('gate-wrapper.cjs disposition → exit code', () => {
       expect(pilot.status).toBe(0);
       expect(spawnedPayload()).toMatchObject({ pr: 8 });
       expect(pilot.stderr.match(/merge-ready \(deny\)/g)).toHaveLength(2);
+    });
+
+    it('two payloads with one warn each print ONE context object carrying both lines (mmnto-ai/totem#3106)', () => {
+      initGitRepo();
+      const warn = { disposition: 'warn', reason: 'heads up', provenance: {} };
+      writeStubCli({ verdict: warn, exit: 0 });
+      const { status, stdout } = runWrapper(
+        bash('gh pr merge 7; gh pr merge 8'),
+        [],
+        'merge-ready',
+      );
+      expect(status).toBe(0);
+      const line = 'merge-ready (warn): heads up [{}]';
+      expect(contextOutput(stdout)).toEqual(contextObject(`${line}\n${line}`));
     });
 
     it('an arithmetic shift or a comment does not swallow the merge that follows (fold round 2, F1)', () => {
@@ -2920,6 +3154,12 @@ describe('init --gates= routes through the shared installer', () => {
     }
   });
 
+  it('init --gates=all includes action-policy under the four-tool matcher (mmnto-ai/totem#3106)', async () => {
+    await initCommand({ bare: true, gates: 'all' });
+    expect(gateEntryCount(cwd, 'action-policy')).toBe(1);
+    expect(matchersFor(cwd, 'action-policy')).toEqual(['Write|Edit|Bash|PowerShell']);
+  });
+
   it('init --gates=transport-shield installs it under Bash|PowerShell (the pair, not a default)', async () => {
     await initCommand({ bare: true, gates: 'transport-shield' });
     expect(gateEntryCount(cwd, 'transport-shield')).toBe(1);
@@ -3548,6 +3788,36 @@ describe('heredoc scanner parity with core (mmnto-ai/totem#2857)', () => {
       expect(spans, delimiter).toHaveLength(1);
       expect(spans[0].delimiter, delimiter).toBe(delimiter);
       expect(spans[0].unterminated, delimiter).toBe(false);
+    }
+  });
+});
+
+// ─── Wrapper-table parity with core (mmnto-ai/totem#3106) ─────────────────
+//
+// The gate wrapper's TRANSPARENT_WRAPPERS and core's WRAPPER_VALUE_OPTIONS are
+// two tables of the same shell grammar; when the core one lacked a wrapper the
+// wrapper's table had (`timeout`), the action-policy gate read the duration as
+// the program and missed the row (fail-open). This locks them at the NAME
+// level: every transparent wrapper the template lists is a key of core's table.
+// `eval` is excluded: the template marks it `evaluates: true` (it runs its
+// arguments as a string), and core reads it as an opaque shell string instead.
+describe('wrapper table parity with core (mmnto-ai/totem#3106)', () => {
+  it('every TRANSPARENT_WRAPPERS name in the gate wrapper is a key of core WRAPPER_VALUE_OPTIONS', async () => {
+    const core = (await import(pathToFileURL(CORE_TRANSPORT_SHIELD_SRC).href)) as {
+      WRAPPER_VALUE_OPTIONS: Readonly<Record<string, readonly string[]>>;
+    };
+    const start = CLAUDE_GATE_WRAPPER.indexOf('const TRANSPARENT_WRAPPERS = {');
+    expect(start).toBeGreaterThan(-1);
+    const end = CLAUDE_GATE_WRAPPER.indexOf('\n};', start);
+    const body = CLAUDE_GATE_WRAPPER.slice(start, end);
+    const entries = [...body.matchAll(/^ {2}([a-z]+): \{(.*)$/gm)].map((m) => ({
+      name: m[1] as string,
+      line: m[2] as string,
+    }));
+    const names = entries.filter((e) => !e.line.includes('evaluates: true')).map((e) => e.name);
+    expect(names).toEqual(['sudo', 'env', 'timeout', 'nice', 'nohup', 'command', 'exec', 'time']);
+    for (const name of names) {
+      expect(Object.hasOwn(core.WRAPPER_VALUE_OPTIONS, name), name).toBe(true);
     }
   });
 });

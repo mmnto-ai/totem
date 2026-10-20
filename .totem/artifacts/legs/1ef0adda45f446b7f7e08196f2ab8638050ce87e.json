@@ -1,0 +1,127 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "1ef0adda45f446b7f7e08196f2ab8638050ce87e",
+  "readAt": "2026-10-19T22:56:42Z",
+  "findings": [
+    {
+      "id": "3106-r2-F1",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 436,
+      "claim": "Heredoc bodies are blanked whole before substitutions are read, so $( ) and backtick bodies inside an UNQUOTED heredoc, which bash executes, are silent allows; docs/wiki/config-reference.md:309 says a heredoc body is text and never a statement, and the module claims every statement the command runs including $( ) is read.",
+      "counterexample": "cat <<EOF NEWLINE $(fly deploy) NEWLINE EOF -> allow no-policy-match; cat > notes.sh <<EOF NEWLINE backtick fly deploy backtick NEWLINE EOF -> allow; git commit -m \"$(cat <<EOF NEWLINE feat: $(fly deploy) NEWLINE EOF NEWLINE )\" -> allow; PowerShell $x = @\" NEWLINE $(fly deploy) NEWLINE \"@ -> deny fly (inconsistent)."
+    },
+    {
+      "id": "3106-r2-F2",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 309,
+      "claim": "The docs and changeset say the program position is found past the wrappers env, sudo, nice, xargs and the rest, but programStart skips only a literal wrapper token, so a wrapper carrying options or spelled by path never reaches the program: a silent allow that no limit discloses.",
+      "counterexample": "sudo -u root pnpm db:migrate:prod, sudo -E ..., nice -n 5 ..., env -i ..., xargs -n1 ..., /usr/bin/sudo pnpm db:migrate:prod -> each allow no-policy-match; bare sudo pnpm db:migrate:prod -> deny."
+    },
+    {
+      "id": "3106-r2-F3",
+      "severity": "MATERIAL",
+      "file": "docs/wiki/config-reference.md",
+      "line": 325,
+      "claim": "The Disclosed limits paragraph says anything a shell string contains is warned on as opaque-shell-string, but isOpaqueShell (packages/core/src/action-policy.ts:460-478) catches only the listed spellings; many shell-string forms are silent allows.",
+      "counterexample": "eval 'pnpm db:migrate:prod', echo pnpm db:migrate:prod | sh, cat x.sh | bash, busybox sh -c '...', /usr/bin/env bash -c 'x', find . -exec sh -c '...' ';', python -c ..., node -e ..., pwsh -enc AAAA, powershell -EncodedC AAAA, pwsh -Comm 'x', Invoke-Expression '...', cmd /c\"pnpm db:migrate:prod\" (glued), bash<<EOF (glued), bash<<<'x', sh 0<<EOF -> each allow no-policy-match, no warn."
+    },
+    {
+      "id": "3106-r2-F4",
+      "severity": "MINOR",
+      "file": "docs/wiki/config-reference.md",
+      "line": 325,
+      "claim": "Other silent-allow command forms lie outside the stated limits; the fold dropped 'invoked by path' from the limits, yet a PowerShell backslash path without a suffix and a ./-prefixed spelling of a slash-bearing pattern still miss.",
+      "counterexample": "cat <(fly deploy) -> allow; a substitution nested five deep -> allow; case x in x) pnpm db:migrate:prod;; esac -> allow; PowerShell C:\\tools\\pnpm db:migrate:prod -> allow; ./scripts/deploy.sh against pattern scripts/deploy.sh -> allow."
+    },
+    {
+      "id": "3106-r2-F5",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 89,
+      "claim": "The four-star path-glob bound does not bound the path arm, because edited paths are never truncated (unlike command tokens), so the deposit's F12 cure covers commands only.",
+      "counterexample": "Path glob *a*a*a*b (accepted at load) against a 1000-char path -> 17929 ms; against a 250-char path -> 537 ms."
+    },
+    {
+      "id": "3106-r2-F6",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 981,
+      "claim": "Several claimed cures are unpinned: the long-token test uses 3- and 2-star patterns and passes on b5f154ee; mutants survive the full suite.",
+      "counterexample": "Mutation of the fold source, all 106 tests passing: truncation removed; stderr notice written before the cap; backtick bodies read on PowerShell; opaque arm ignoring display winners; -e|-ec|-encodedcommand dropped; cmd /k dropped."
+    },
+    {
+      "id": "3106-r2-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 638,
+      "claim": "An override of a deny row silently clears the opaque-shell warn for an unrelated shell string in the same command.",
+      "counterexample": "pnpm db:migrate:prod && sh -c 'fly deploy' with TOTEM_ACTION_POLICY_OVERRIDE=prod-migrate -> allow, overriddenRows [prod-migrate], no opaque-shell-string warn."
+    },
+    {
+      "id": "3106-r2-F8",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 679,
+      "claim": "When the override is refused because an environment deny row was skipped, the deny cites a row the operator named, not the blocker (pinned by the test at packages/core/src/action-policy.test.ts:718), against the doc's 'cites the first unnamed one, so you see what still blocks'.",
+      "counterexample": "Override push-any,push-any-2,push-prod with the branch read throwing -> deny ref push-any, reason 'governed by row push-any'; push-prod only in skippedForEnvironment."
+    },
+    {
+      "id": "3106-r2-F9",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 1059,
+      "claim": "The false-positive fixture does not enumerate every fold as the deposit's F7 decision states: no rows for the override, the environment set, an unreadable environment, wrapper prefixes, backticks, .exe/.cmd or an unquoted heredoc; its vercel-prod row is never exercised.",
+      "counterexample": "Reasoned from the fixture's 15 ROWS entries: their labels and inputs cover none of the listed shapes."
+    },
+    {
+      "id": "3106-r2-F10",
+      "severity": "MINOR",
+      "file": "packages/core/src/transport-shield.ts",
+      "line": 736,
+      "claim": "Two false positives: the function-header rule reads 'echo {' as a function header, and a script argument -c reads as a shell string.",
+      "counterexample": "echo { pnpm db:migrate:prod } -> deny prod-migrate; bash script.sh -c foo -> warn opaque-shell-string."
+    },
+    {
+      "id": "3106-r2-F11",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 109,
+      "claim": "Relative path globs that can never match still load (a residual of the deposit's F11).",
+      "counterexample": "Path globs ../** and ~/x/** load OK; a ../ path always resolves outside-repo."
+    },
+    {
+      "id": "3106-r2-F12",
+      "severity": "MINOR",
+      "file": "docs/wiki/enforcement-model.md",
+      "line": 90,
+      "claim": "The enforcement-model sentence still names a fixed .totem/action-policy.json while the rest of the fold says the file is in the totemDir.",
+      "counterexample": "Text: 'action-policy reads the consumer's .totem/action-policy.json'."
+    },
+    {
+      "id": "3106-r2-F13",
+      "severity": "QUESTION",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 365,
+      "claim": "With a totemDir outside the repository, the root is that directory's own repository or its parent, so absolute and relative spellings of the same file are judged differently; is an out-of-repo totemDir supported, and should the root then come from the repository the hook runs in?",
+      "counterexample": "totemDir a sibling of the repo, row db/migrations/**: Edit <root>/db/migrations/1.sql -> allow no-policy-match; Edit db/migrations/1.sql -> deny migrations."
+    }
+  ],
+  "folded": [
+    "3106-r2-F1",
+    "3106-r2-F2",
+    "3106-r2-F3",
+    "3106-r2-F4",
+    "3106-r2-F5",
+    "3106-r2-F6",
+    "3106-r2-F7",
+    "3106-r2-F8",
+    "3106-r2-F9",
+    "3106-r2-F10",
+    "3106-r2-F11",
+    "3106-r2-F12",
+    "3106-r2-F13"
+  ],
+  "verdict": "Read 2 of the action-policy gate, scoped to the fold 1ef0adda: blocking=0 material=3 minor=9 question=1 folded=13 (counts as typed). Held, measured: the override in every shape, the capped unevaluable verdict, the environment set, strict schemas, the bounds, the repository root, orient's configured totemDir, -uall, the memoized branch reader, and the transport shield refactor (a differential of 37,632 inputs over both revisions with zero verdict changes). The three material findings are the mirror of the first read: the mechanism is now narrower than its claims. Folded by the seat in the next commit, with every doc claim rewritten to name exactly what the code reads: F1 (only a quoted-delimiter heredoc body is text; substitution and backtick bodies inside an unquoted body are read as statements); F2 (wrappers are recognised by basename and their options skipped through a bounded table of each wrapper's value-taking options, with the table in the docs and an unknown option disclosed as reading the next token); F3 (the opaque-shell arm widens to shells by basename after the wrappers, busybox sh, eval, the PowerShell option prefixes of -Command and -EncodedCommand, a glued /c string, a glued or redirected heredoc or here-string, and a shell with no script reading a pipe or standard input; interpreters such as python -c and node -e, find -exec and xargs arguments, Invoke-Expression, process substitution, case arms and a substitution nested deeper than four are named as not read); F4 (a PowerShell backslash path and a ./-prefixed spelling match by basename and by normalised path; the rest disclosed); F5 (path globs at most three stars and a path compared by its first 1024 characters against a wildcard glob); F6 (a pinning test for each surviving mutant); F7 (an opaque warn from another statement survives an override); F8 (a refused override cites the skipped environment deny row and says why); F9 (fixture rows for every fold and the vercel-prod row exercised); F10 (a -c is a shell string only before the first non-option token; the function-header false positive disclosed); F11 (globs starting with ../, ./ or ~ fail the load); F12 (the model page names the configured totemDir); F13 (a totemDir outside the repository is unsupported by the config schema's own words and the docs say so; the root rule is unchanged). The warn channel folded in the same commit on the operator's word of 2026-10-19: the wrapper prints one hookSpecificOutput.additionalContext JSON object on stdout when its final exit is 0 and a payload warned or a pilot-tier deny was reported, so a display or warn row reaches the agent beside the tool result. Convergence named for the third read: its question is whether every claim in the docs, the changeset and the orient footer equals the mechanism, not whether another shape exists; a shape outside the stated reach is a disclosure item, not a fold."
+}

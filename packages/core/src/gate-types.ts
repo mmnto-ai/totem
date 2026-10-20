@@ -77,6 +77,13 @@ export interface GateContext {
   env?: NodeJS.ProcessEnv;
   /** Sink for a gate's agent-facing stderr lines (default `process.stderr.write`). */
   writeStderr?: (line: string) => void;
+  /**
+   * The current-branch seam for gates that read it (mmnto-ai/totem#3106), on
+   * the `ghRunner` precedent: called with the repository root, returns the
+   * branch name. Production leaves it unset and the gate reads `getGitBranch`;
+   * tests inject a branch without a git fixture.
+   */
+  gitBranchReader?: (cwd: string) => string;
 }
 
 /**
@@ -94,10 +101,12 @@ export type GateEvaluator = (
  * The PreToolUse tool matcher a gate installs under (mmnto-ai/totem#2799).
  * Carried by the core registry so the installer never guesses: a gate over
  * file writes matches `Write|Edit`; a gate over shell commands matches
- * `Bash|PowerShell`. Extend the union when a gate over a third tool family
- * lands — never widen an existing gate's matcher.
+ * `Bash|PowerShell`; a gate over both families matches
+ * `Write|Edit|Bash|PowerShell` (`action-policy`, mmnto-ai/totem#3106). Extend
+ * the union when a gate over another tool family lands — never widen an
+ * existing gate's matcher.
  */
-export type GateMatcher = 'Write|Edit' | 'Bash|PowerShell';
+export type GateMatcher = 'Write|Edit' | 'Bash|PowerShell' | 'Write|Edit|Bash|PowerShell';
 
 /** A registry entry: the evaluator plus the matcher its host entry installs under. */
 export interface GateDefinition {

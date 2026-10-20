@@ -9,7 +9,7 @@ import type { ConfigFormat, EmbeddingTier } from './init-detect.js';
 // Bump REFLEX_VERSION whenever the AI_PROMPT_BLOCK content changes materially.
 // This allows `totem init` to detect stale blocks and offer upgrades.
 
-export const REFLEX_VERSION = 17;
+export const REFLEX_VERSION = 18;
 export const REFLEX_START = '<!-- totem:reflexes:start -->';
 export const REFLEX_END = '<!-- totem:reflexes:end -->';
 export const REFLEX_VERSION_RE = /<!-- totem:reflexes:version:(\d+) -->/;
@@ -50,7 +50,7 @@ Totem provides CLI commands that map to your development lifecycle. Use them at 
 3. **Before Push:** Run \`totem lint\` — the deterministic enforcement floor (zero LLM, ~2s). **Before PR:** \`totem review\` runs supplementary AI lanes over the diff (~18s) — advisory sensors, not a merge gate; known limits are disclosed in the run output (LLM window truncation on large diffs; non-code files skipped). Your team's own review discipline decides what constitutes the review of record.
 4. **End of Session:** Run \`totem handoff\` to generate a snapshot for the next agent session with current progress and open threads.
 5. **Managed hooks self-repair:** \`totem init\` distributes \`.totem/prepare.cjs\` and wires \`package.json\` \`prepare\` to it only when no \`prepare\` script exists. The wrapper runs \`totem hook install\` on every \`pnpm install\`, drift-repairing the managed Claude/Gemini hooks — no manual re-install needed.
-6. **Action gates (PreToolUse):** a gate installed with \`totem gate install <event>\` is evaluated by the repo-local \`@mmnto/cli\` first and by a \`totem\` on PATH when that is absent; an applicable gate that neither can evaluate fails closed and its message names the exits. A \`Bash|PowerShell\`-matched gate applies to a fresh clone's bootstrap commands (install, build), so bootstrap such a clone from a terminal outside the harness when no \`totem\` is on PATH (mmnto-ai/totem#2799, mmnto-ai/totem#2822).
+6. **Action gates (PreToolUse):** a gate installed with \`totem gate install <event>\` is evaluated by the repo-local \`@mmnto/cli\` first and by a \`totem\` on PATH when that is absent; an applicable gate that neither can evaluate fails closed and its message names the exits. A gate's warn verdict, and a deny at the pilot tier, reach you beside the tool result through the hook's context field: read them, they are the gate speaking about the call you just made. A \`Bash|PowerShell\`-matched gate applies to a fresh clone's bootstrap commands (install, build), so bootstrap such a clone from a terminal outside the harness when no \`totem\` is on PATH (mmnto-ai/totem#2799, mmnto-ai/totem#2822).
 
 ### Cloud / PR Review Bots
 [FOR CLOUD BOTS ONLY — e.g., Gemini Code Assist, GitHub Copilot PR Review]
@@ -2847,6 +2847,12 @@ process.stdin.on('end', () => {
   //   merge-ready      | tool_name is Bash or PowerShell   | { repo, pr, branch?, headSha? }
   //                    | AND the command runs \`gh pr merge\`|
   //                    | at COMMAND POSITION               |
+  //   action-policy    | tool_name is Write or Edit AND    | { tool, path }
+  //                    | tool_input.file_path (else .path) |
+  //                    | is a non-empty string; OR         |
+  //                    | tool_name is Bash or PowerShell   | { tool, command, platform }
+  //                    | AND tool_input.command is a       |
+  //                    | non-empty string                  |
   //   (anything else)  | — no projection → fail closed     | —
   //
   // A projection yields ONE payload per gate evaluation — and merge-ready can
@@ -2908,6 +2914,39 @@ process.stdin.on('end', () => {
     // each PR against its own facts (mmnto-ai/totem#2844 round 1).
     for (let m = 0; m < merges.length; m++) {
       payloads.push(JSON.stringify(projectMergeReady(merges[m])));
+    }
+  } else if (event === 'action-policy') {
+    // action-policy's predicate is on an EDITED PATH (Write/Edit) or a SHELL
+    // COMMAND (Bash/PowerShell), classified against the consumer's
+    // .totem/action-policy.json (mmnto-ai/totem#3106). Any other tool, or an
+    // empty path or command, is NOT an applicable gate → pass through (exit 0)
+    // WITHOUT spawning, the transport-shield guardrail's shape.
+    const tool = parsed.tool_name;
+    if (tool === 'Write' || tool === 'Edit') {
+      const rawPath =
+        typeof input.file_path === 'string' && input.file_path.trim() !== ''
+          ? input.file_path
+          : typeof input.path === 'string'
+            ? input.path
+            : '';
+      const filePath = rawPath.trim();
+      if (filePath === '') {
+        process.exit(0);
+      }
+      payloads = [JSON.stringify({ tool: tool, path: filePath })];
+    } else if (tool === 'Bash' || tool === 'PowerShell') {
+      if (typeof input.command !== 'string' || input.command.trim() === '') {
+        process.exit(0);
+      }
+      payloads = [
+        JSON.stringify({
+          tool: tool,
+          command: input.command,
+          platform: process.platform,
+        }),
+      ];
+    } else {
+      process.exit(0);
     }
   } else {
     // A baked --event this wrapper cannot project is an APPLICABLE gate it
@@ -3054,6 +3093,14 @@ process.stdin.on('end', () => {
   // a spawn that starts inside it still gets the one-second floor (round 3,
   // F2) and times out into the evaluation-failed arm. Either way the wrapper
   // exits with its OWN code, inside the budget plus one floor.
+  //
+  // THE WARN CHANNEL (mmnto-ai/totem#3106): every warn line, and every deny
+  // line the pilot tier lets through, is collected here and, when the run ends
+  // with exit 0, printed ONCE on stdout as the PreToolUse hook's
+  // additionalContext, so the text reaches the agent beside the tool result
+  // instead of only the transcript's stderr. An allow adds nothing; a strict
+  // deny exits 2 with stderr only, as before.
+  const contextLines = [];
   for (let p = 0; p < payloads.length; p++) {
     if (Date.now() >= deadline) {
       process.stderr.write(
@@ -3131,14 +3178,18 @@ process.stdin.on('end', () => {
       continue;
     }
     if (disposition === 'warn') {
-      process.stderr.write('[totem gate-wrapper] ' + event + ' (warn): ' + detail + '\\n');
+      const warnLine = event + ' (warn): ' + detail;
+      process.stderr.write('[totem gate-wrapper] ' + warnLine + '\\n');
+      contextLines.push(warnLine);
       continue;
     }
     if (disposition === 'deny') {
-      process.stderr.write('[totem gate-wrapper] ' + event + ' (deny): ' + detail + '\\n');
+      const denyLine = event + ' (deny): ' + detail;
+      process.stderr.write('[totem gate-wrapper] ' + denyLine + '\\n');
       if (tier !== 'pilot') {
         process.exit(2);
       }
+      contextLines.push(denyLine);
       continue;
     }
 
@@ -3150,7 +3201,19 @@ process.stdin.on('end', () => {
     );
     process.exit(2);
   }
-  process.exit(0);
+  if (contextLines.length === 0) {
+    process.exit(0);
+  }
+  // Exit only once stdout has drained: a pipe write can still be pending.
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: contextLines.join('\\n'),
+      },
+    }) + '\\n',
+    () => process.exit(0),
+  );
 });
 ${TOTEM_FILE_END}
 `;

@@ -60,10 +60,16 @@ export type ParsedSettings = z.infer<typeof ClaudeSettingsSchema>;
  * PreToolUse matcher values Totem installs under. `Bash|PowerShell` is the
  * shell-command family the `transport-shield` gate registers on
  * (mmnto-ai/totem#2799); `Write|Edit` is the file-write family freeze-check and
- * PreWriteShield use. No schema change: `PreToolUseEntrySchema` already accepts
- * any string matcher, so a settings file round-trips unknown matchers untouched.
+ * PreWriteShield use; `Write|Edit|Bash|PowerShell` is both families, the one
+ * entry the `action-policy` gate installs (mmnto-ai/totem#3106). No schema
+ * change: `PreToolUseEntrySchema` already accepts any string matcher, so a
+ * settings file round-trips unknown matchers untouched.
  */
-export type PreToolUseMatcher = 'Bash' | 'Write|Edit' | 'Bash|PowerShell';
+export type PreToolUseMatcher =
+  | 'Bash'
+  | 'Write|Edit'
+  | 'Bash|PowerShell'
+  | 'Write|Edit|Bash|PowerShell';
 
 /** Outcome of a settings-merge attempt. */
 export type ScaffoldOutcome = { action: 'created' | 'merged' | 'skipped'; err?: string };

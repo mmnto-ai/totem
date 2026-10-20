@@ -242,6 +242,128 @@ It is read at run time by `totem review --gate` itself, so setting it needs no `
 
 **What stays hard.** A failure raised before the config is loaded — a contradictory flag such as `--gate` with `--fail-on`, a config that does not load, or a `hooks.shield.enforce` value outside the three — exits non-zero under every value. A bare `totem review` (no `--gate`) does not read the knob. The `doctor --strict` step of the same hook block is not affected.
 
+## The Action Policy File (`.totem/action-policy.json`)
+
+The action policy is a separate, tracked JSON file in your configured `totemDir` (`.totem/` unless `totem.config.ts` names another), read by the `action-policy` gate (mmnto-ai/totem#3106). The config schema refuses an absolute `totemDir` and `totem init` refuses a `..` segment; a `totemDir` outside the repository is unsupported, and the root then falls back to its parent. The policy governs the repository that contains the `totemDir`. The installed hook runs in the project root; a direct `totem gate check` resolves its configuration from its working directory, like every totem verb. An edit to a path a row governs, or a shell statement whose program and leading arguments match a row, is shown, warned on or refused before it runs, according to the row; when the policy has a command row, a shell handed a string the gate does not read is warned on. Totem ships the format and the engine; the rows are yours. Totem never writes or scaffolds this file.
+
+**Shape.** Every field:
+
+- `version` (required): the literal `1`. A file without it, or with any other value, does not load.
+- `_note` (optional): a free-text string for the file's readers; ignored by the gate.
+- `environments` (optional): a list of `{ name, branches }`. `name` is a kebab-case slug and may not be `any` (that word is reserved for rows that apply on every branch). `branches` is a non-empty list of globs over the current branch name, each with at most three `*` (`**` counts two).
+- `rows` (required): a list of rows, each with:
+  - `id` (required): a kebab-case slug, unique within the file. Verdicts cite it.
+  - `action_kind` (required): one of `code_edit`, `secret_read`, `db_migration`, `db_data_write`, `deploy_config_change`, `deploy_trigger`, `scheduled_job_change`, `index_rebuild`.
+  - `scope` (required): `{ paths?, commands? }`, with at least one non-empty list. `paths` are path globs; `commands` are command patterns.
+  - `environment` (optional): `any` (the default) or the `name` of a declared environment.
+  - `disposition` (required): `display`, `warn` or `deny`.
+  - `reason` (optional): the text the verdict carries; without it the verdict names the row.
+
+**Every object is strict.** An unknown key anywhere in the file (a typo such as `enviroment` on a row or `command` in a scope) fails the load and names the key's path, so a misspelling can never silently drop a row's governance. The freeze file is read leniently; this file is not.
+
+**Example** with four rows: a `deny` path row, a `display` path row, a `deny` command row that applies only on production branches, and a row that governs the policy file and the hook settings themselves.
+
+```json
+{
+  "version": 1,
+  "_note": "Governed action classes for this repository.",
+  "environments": [{ "name": "prod", "branches": ["main", "release/*"] }],
+  "rows": [
+    {
+      "id": "migrations",
+      "action_kind": "db_migration",
+      "scope": { "paths": ["db/migrations/**"] },
+      "disposition": "deny",
+      "reason": "migrations ship through the release train"
+    },
+    {
+      "id": "app-code",
+      "action_kind": "code_edit",
+      "scope": { "paths": ["src/app/**"] },
+      "disposition": "display"
+    },
+    {
+      "id": "prod-migrate",
+      "action_kind": "db_migration",
+      "scope": { "commands": ["pnpm db:migrate:prod"] },
+      "environment": "prod",
+      "disposition": "deny"
+    },
+    {
+      "id": "gate-config",
+      "action_kind": "deploy_config_change",
+      "scope": {
+        "paths": [".totem/action-policy.json", ".claude/settings.json", ".claude/hooks/**"]
+      },
+      "disposition": "deny",
+      "reason": "the policy and its hooks change by review, not by the agent"
+    }
+  ]
+}
+```
+
+Nothing governs the policy file or the hook settings unless you write a row for them, as `gate-config` does above.
+
+**Path globs.** A `paths` entry is a glob in Totem's path-classifier dialect, matched against the edited file made relative to the repository root (the directory holding `.git`, found by walking up from the `totemDir`; the `totemDir`'s parent when there is no repository), with `/` separators. `**` crosses directories, `*` and `?` stay within one segment, braces expand (`*.{yml,yaml}`), and a bare name is anchored at the root (`README.md` matches only the root README, never `docs/README.md`). Backslashes in the edited path are normalized first, and a path outside the repository is never governed. A glob is refused at load when it starts with `/`, `\` or a drive letter (globs are repo-relative), or with `../`, `./` or `~` (no repo-relative path starts that way), or carries more than three `*` (`**` counts two; `**/*.sql` and `db/**/migrations/*.sql` load, `*a*a*a*b` does not). A path or token longer than 1024 characters is not compared against a glob with a wildcard, unless the glob's literal head before its first wildcard does not start it, which is a plain no-match (`src/**` never matches a long `db/…` path). Such an unevaluable comparison counts only for a row that applies on the current branch (a row naming an environment the branch is not in is not considered; when the branch cannot be read it counts). Unless a matched row already denies, the verdict cites `subject-too-long` and is capped at those rows' own dispositions: a `deny` row gives `deny` at the strict tier and `warn` at the pilot tier, a `warn` or `display` row gives `warn`, never an allow; an override naming every such `deny` row lifts them to the override's `warn`. Against a literal glob a subject is compared whole at any length.
+
+**Command patterns.** A `commands` entry is a **token-prefix pattern**: it is split on whitespace, and it matches a shell statement whose program and the arguments after it equal the pattern's tokens in order, each token compared as a glob in the same dialect. Within a token, `*` stops at `/` and `**` crosses it, so `psql **` matches `psql postgres://host/db`. Each pattern token may carry at most two `*` (`**` counts two); a statement token longer than 1024 characters meets a wildcard token under the `subject-too-long` rule above.
+
+_Which statements are read._ On the Bash tool the tokenizer joins a line continuation as bash does: outside single quotes, a backslash followed by a newline (LF or CRLF) is dropped and the word goes on, so a token split across lines is read joined; inside single quotes it stays literal, a `\\` before a newline is an escaped backslash, an ANSI-C `$'…'` string is read with its backslash escapes, and heredoc bodies are blanked first, so nothing in a body is joined by the tokenizer. The same reading reaches the raw substitution scanners: each statement's text and each unquoted heredoc body is normalised before its `$( … )` and backtick bodies are read (a continuation removed, so `$\<newline>(fly deploy)` is a substitution; the contents of an ANSI-C `$'…'` string blanked, so a quote inside one hides nothing). An escape inside `$'…'` that spells a program name (`$'\x70npm'`) is not decoded. A double quote inside a substitution that is itself inside double quotes is not tracked by the normaliser, so an ANSI-C string after such a nesting may be blanked although bash reads it as text. A command is split into statements the way the transport shield splits it, at `&&`, `||`, `;`, `|`, `|&`, `&` and newlines; a `( … )` subshell's statements are read like any others. The bodies of `$( … )` substitutions are read as statements, and on the Bash tool so are backtick substitutions (on PowerShell the backtick is the escape character and is not read), each nested to four levels. A `$(` is literal text after one backslash on the Bash tool and after a backtick on PowerShell, where a backslash is an ordinary character (`"C:\logs\$(…)"` is read). A heredoc body is text, not a statement. In an unquoted-delimiter heredoc (`<<EOF`) the `$( … )` and backtick substitutions inside the body are read, because the shell runs them, with no quoting or comment rule (an apostrophe, a single-quoted span or a `#` in the body is ordinary text); a quoted-delimiter body (`<<'EOF'`, `<<"EOF"`) is text throughout. The delimiter is read as bash reads it: the whole word, its quotes and backslashes removed to give the end line, and the body literal when the word carried any quote or backslash, so `<<E'O'T`, `<<E\OT`, `<<E"O"T`, `<<'E'OT`, `<<$'EOT'` and `<<\EOT` all end at `EOT` with a literal body, and a continuation inside the word is joined first (`<<EO\<newline>T` reads `EOT`). The end line is matched whole, a trailing carriage return aside, and is blanked with the body, so an end word carrying a quote (`<<"E\"T"`, end line `E"T`) opens no string. When the gate finds no end line it recognises for a heredoc in the command, it returns a `warn` citing `unterminated-heredoc`, the operator line as `matched`, and does not read what follows; that includes an end word glued to a closing parenthesis or a backtick inside a substitution (`x=$(cat <<EOT` … `EOT)`), which the gate warns on rather than reads; a `deny` or `warn` found elsewhere in the command stands and lists it. A PowerShell here-string (`@" … "@`) is not parsed as one: it reads as a double-quoted string, so a `$( … )` inside it is read as a substitution.
+
+_Where the program is._ The program is the first token after `VAR=value` assignments, redirections standing before it (`>x`, `>>x`, `2>x`, `2>>x`, `2>&1`, `<x`, `&>x`, `&>>x`, `>&2`, `>&-`, `0<&3`, each glued to its operand or with the operand as the next token; `>|`, `{fd}>` and a separated `<>` are not read, so a program after them is not reached), the reserved word `coproc`, the reserved words that can stand before a program (`{`, `if`, `then`, `else`, `elif`, `do`, `while`, `until`, `!`, `time`), a function header (`f() {`, `function f {`; the locator reads any `name {` as one, so `echo { x }` reads `x` as the program), and the wrappers below, each recognised by its basename (so `/usr/bin/sudo` counts) with its options skipped:
+
+| Wrapper              | Options that take a separate value                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sudo`               | `-u -g -C -D -h -p -r -t -T -U -R -a -c --user --group --host --prompt --chdir --chroot --auth-type --login-class --role --type --other-user --command-timeout` |
+| `env`                | `-u -C -S --unset --chdir --split-string`                                                                                                                       |
+| `timeout`            | `-s -k --signal --kill-after`; then one positional, the duration                                                                                                |
+| `nice`               | `-n --adjustment`                                                                                                                                               |
+| `nohup`              | none                                                                                                                                                            |
+| `time`               | `-f -o --format --output`                                                                                                                                       |
+| `xargs`              | `-n -I -L -P -d -a -s -E --max-args --replace --max-lines --max-procs --delimiter --arg-file --max-chars`                                                       |
+| `command`, `builtin` | none                                                                                                                                                            |
+| `exec`               | `-a`                                                                                                                                                            |
+| `busybox`            | none; the next token is the applet, so `busybox sh -c` is a shell                                                                                               |
+
+A `--` ends a wrapper's options, `--opt=value` is one token, the token after a listed option is its value, and an option the table does not list is skipped as a flag, so its value, if it had one, is read as the program (`xargs --process-slot-var SLOT pnpm …` reads `SLOT` as the program).
+
+_How the program is compared._ The pattern's first token is compared against the program token, against its name after the last `/` (so `vercel deploy --prod` matches `./node_modules/.bin/vercel deploy --prod`), on PowerShell against its name after the last backslash too (`C:\tools\pnpm`), and against the token with a leading `./` dropped, or `.\` on PowerShell (so `scripts/deploy.sh` matches `./scripts/deploy.sh` and `.\scripts\deploy.sh`). A `.exe` or `.cmd` spelling is compared by its stem, in any letter case, after the last `/` or `\`. `pnpm db:migrate:prod` matches `cd apps/api && sudo -u deploy pnpm db:migrate:prod --force`; it does not match `pnpm db:migrate:prod-report`, because a longer token is not the pattern's token, and it does not match `echo pnpm db:migrate:prod`, because `echo` is the program.
+
+**Identity is lexical and case-sensitive.** A path or program matches by its spelling, in its letter case (except the `.exe`/`.cmd` stem above). On a case-insensitive file system, write the row for the spelling the agent uses.
+
+**Shell strings.** When the policy has at least one command row, the gate returns `warn` citing `opaque-shell-string` for a statement whose program, after the redirection and wrapper skip, is:
+
+- `eval`;
+- a shell from this closed list, `sh`, `bash`, `zsh`, `dash`, `ksh`, `ash`, `mksh`, `fish`, `csh`, `tcsh` (also as a `busybox` applet), with a `-c` in a short-option cluster before its first non-option argument (`bash -lc '…'`; `bash script.sh -c foo` is a script run, not a string);
+- `pwsh` or `powershell` with an option that is a case-insensitive prefix of `-command` (at least `-c`) or of `-encodedcommand` (at least `-e`), or `-ec`, in the colon spelling too (`-Command:…`), or with a first non-option argument that starts with a quote character and no `-File` or prefix of it (`-f`, `-fi`, `-fil`, with or without a `:value`) (`powershell "Remove-Item x"`; `pwsh script.ps1` and `pwsh -Fi x.ps1 "arg"` are script runs). That search reads whitespace-split words, skipping each host option with the value it takes (`-File`, `-Command`, `-CommandWithArgs`, `-EncodedCommand`, `-EncodedArguments`, `-ExecutionPolicy`, `-InputFormat`, `-OutputFormat`, `-Version`, `-ConfigurationName`, `-ConfigurationFile`, `-SettingsFile`, `-WorkingDirectory`, `-PSConsoleFile`, `-WindowStyle`, `-CustomPipeName` and their short forms, or an unambiguous prefix of one with at least two letters after the dash, such as `-Exec` or `-Window`; a `-opt:value` spelling carries its own, and a quoted value with spaces runs to its closing quote), so `powershell -w hidden "x"`, `pwsh -Exec Bypass "x"` and `pwsh -wd "a b" "x"` are read. An ambiguous prefix, or an option outside that list, is skipped as a flag, so a value it takes ends the search at that value (`pwsh -Foo bar "x"` is not read); a prefix that two listed names share, an alias such as `-ps`, is ambiguous and ends the search the same way, and so does a quoted value carrying a backtick-escaped quote, and an unquoted positional, which Windows PowerShell runs as a command and pwsh reads as a file, is not read. The `--command` and `/c` spellings are not read as options (not verified against pwsh);
+- `cmd` with `/c` or `/k`, glued text included (`/c"dir"`);
+- any of those shells fed text on stdin by a heredoc or here-string, glued, spaced or standing before the program (`bash<<EOF`, `bash <<'EOF'`, `bash<<<x`, `sh 0<<EOF`, `<<EOF bash`);
+- any of those shells with no script argument (a lone `-`, or `-s`, ends the options with the commands on stdin) while a pipe feeds it (`curl … | sh`, `curl … |& sh`, whatever its output redirection) or an input redirection does (`sh < install.sh`, `< install.sh sh`).
+
+It never denies on such a statement and never allows it silently. A `warn` or `deny` row that matches elsewhere in the same command speaks instead; a lone `display` row does not.
+
+**Environments.** A row naming an environment applies only when the current branch matches one of that environment's `branches` globs. The current environments are every declared environment whose globs match, so a branch can be in `staging` and `prod` at once and a `prod` row applies on it. The branch is read once with `git branch --show-current`, and only when a row that matched the path or command, or met a too-long subject, names an environment; a policy whose matching rows are all `any` never runs git. When git cannot report a branch (a detached HEAD, the middle of a rebase, or git unavailable), the environment rows that matched are skipped and listed in the verdict's `skippedForEnvironment`, and the result is unevaluable, `environment-unevaluable`, capped at those rows' own dispositions: a skipped `deny` row gives `deny` at the strict tier and `warn` at the pilot tier, a skipped `warn` or `display` row gives `warn`, and it is never an allow. A `deny` from a matching `any` row still stands in that case.
+
+**Several rows.** When more than one row matches, the most severe disposition wins (`deny` over `warn` over `display`), ties going to the earlier row; the others are listed in the verdict's `alsoMatched`.
+
+**How a verdict reaches the agent.** A `warn` row, and a `display` row (the gate contract has three verdicts, so `display` is reported through the `warn` arm with `policyDisposition: "display"` in its provenance), never block at either tier: the call proceeds, and the reason reaches the agent beside the tool result through the hook's context field, as well as on stderr. A `deny` at the strict tier blocks the call, and its reason reaches the agent as the blocked call's error; at the pilot tier it is reported the way a `warn` is.
+
+**The override.** `TOTEM_ACTION_POLICY_OVERRIDE` is a comma-separated list of row ids. When every `deny` row that matched the call is named in it, those rows are lifted: the verdict is `warn`, citing the first lifted row, with the reason `TOTEM_ACTION_POLICY_OVERRIDE lifted row(s) <ids> (<kinds>, deny): <the row's reason, or governed>; proceeding`, and its provenance records `overriddenBy`, the overridden rows, every other matched row (warn and display rows included) in `alsoMatched`, and any shell string elsewhere in the command in `opaqueStatements`; the gate also prints one stderr line naming the rows. The lifted row's warn reaches the agent beside the tool result. When any matching `deny` row is not named, the verdict stays `deny` and cites the first unnamed one, so you see what still blocks; when a `deny` row naming an environment was skipped because the branch could not be read, or met a too-long subject while the branch could not be read, the override is refused and the verdict cites that row and says why. When a matched `deny` row and a too-long `deny` row are both lifted, the verdict's `overriddenRows` and the stderr line name them all. It never touches a `warn` or `display` verdict. The hook reads the variable from the environment of the process running it (the agent session, or the harness that launched it), so it lifts the named rows for every command of the session it was launched into: set it in the launch shell of a dedicated session for the one action, and unset it after. Never set it as a user-level variable, which would lift the rows in every later session on the machine. An inline `TOTEM_ACTION_POLICY_OVERRIDE=… command` prefix is part of the command text, not an override.
+
+**Absent and corrupt files.** With no file, nothing is governed: every call is allowed with `no-policy-file`, `totem orient` omits its ACTION POLICY section, and `totem doctor` reports "No action policy (none configured)". A file that does not parse or does not match the schema (an unknown kind or key, a duplicate id, an empty scope, an absolute, never-relative or over-wild glob, a command pattern that starts before the program, an over-wild branch glob, an undeclared environment, a missing `version`) never yields a verdict: the gate fails closed and blocks at every tier, `totem doctor` warns naming the file and the first error, and `totem orient` prints one error line for the section. Orient reads the policy at the configured `totemDir`; with no project configuration a global profile's `totemDir` applies, joined to the working directory, and with no configuration at all the default `.totem`; when it is present but corrupt or invalid, the section is that one error line, naming the configuration error, if a policy file exists at the default `.totem`, and is omitted otherwise.
+
+**What the gate does not read.** The gate reads the command text the agent sends, through the readers above and no others. These match no command row and are allowed as `no-policy-match`:
+
+- a renamed program (an alias, a copy, a symlink under another name), and a script the agent wrote and then runs;
+- an interpreter's string: `python -c`, `node -e`, `ruby -e` and their kin;
+- a command reached through another program's arguments, as with `find -exec` or the program `xargs` reads from its input;
+- `Invoke-Expression` and `env -S` strings;
+- a process substitution `<( … )`, a `case` arm, and a substitution nested deeper than four levels;
+- a PowerShell here-string's body as anything but a double-quoted string;
+- a program reached through an option the wrapper table does not list as taking a value.
+
+A command pattern starts at the program: one whose first token is a wrapper from the table, `time`, `coproc`, `function`, a `NAME=value` assignment or a reserved word could never match and fails the load. Because the program position skips a wrapper by its basename, a repository script whose basename is a wrapper's (`env`, `time`, `nice`, `command` and the rest of the table) cannot be governed by a command row either; a pattern naming one by path (`./scripts/env`) fails the load with that reason. Add rows for the program shapes your repository uses; actions outside the rows stay with whoever runs the session.
+
 ## Secrets Management
 
 Totem uses a local `.totem/secrets.json` file to mask sensitive strings during execution and LLM ingestion. Secrets are **never** committed and are explicitly ignored by `.gitignore`.

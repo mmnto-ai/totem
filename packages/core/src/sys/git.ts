@@ -49,6 +49,22 @@ export function getGitStatus(cwd: string): string {
   }
 }
 
+/**
+ * The working tree's status as `git status --porcelain -z -uall` prints it
+ * (`-uall`: a file inside a new untracked directory is listed itself), raw and
+ * untrimmed: NUL-terminated records whose paths are never C-quoted, and whose
+ * first record's status column may open with a space a trim would eat. THROWS
+ * on a git failure (unlike {@link getGitStatus}): a caller judging governed
+ * paths must not read a failed status as a clean tree (mmnto-ai/totem#3106).
+ */
+export function getGitStatusPorcelainRaw(cwd: string): string {
+  return safeExec('git', ['status', '--porcelain', '-z', '-uall'], {
+    cwd,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
+    trim: false,
+  });
+}
+
 export function getGitDiff(mode: 'staged' | 'all', cwd: string): string {
   const args = mode === 'staged' ? ['diff', '--staged'] : ['diff', 'HEAD'];
   try {

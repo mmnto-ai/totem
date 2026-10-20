@@ -6,12 +6,14 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EstateExecFn, TotemRegistry } from '@mmnto/totem';
+import { ActionPolicyConfigSchema } from '@mmnto/totem';
 
 import { cleanTmpDir } from '../test-utils.js';
 import type { DiagnosticResult } from './doctor.js';
 import {
   AGENTS_MD_REDIRECT_PATTERN,
   BYPASS_THRESHOLD,
+  checkActionPolicy,
   checkAgentsMdCanonical,
   checkCompiledRules,
   checkConfig,
@@ -1207,6 +1209,7 @@ const EXPECTED_DIAGNOSTIC_NAMES = [
   'Stale Rules',
   'Grandfathered Rules',
   'Freeze state',
+  'Action policy',
   'Stray Markers',
   'Estate',
   'Seat Identity',
@@ -3876,6 +3879,98 @@ describe('checkFreezes', () => {
     const result = await checkFreezes(tmpDir);
     expect(result.status).toBe('warn');
     expect(result.message).toContain('underivable');
+  });
+});
+
+// ─── checkActionPolicy (mmnto-ai/totem#3106 — sensor-only policy surfacing) ──
+
+describe('checkActionPolicy', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'totem-doctor-action-policy-'));
+    fs.mkdirSync(path.join(tmpDir, '.totem'), { recursive: true });
+  });
+
+  afterEach(() => {
+    cleanTmpDir(tmpDir);
+  });
+
+  function writePolicy(content: unknown): void {
+    fs.writeFileSync(
+      path.join(tmpDir, '.totem', 'action-policy.json'),
+      typeof content === 'string' ? content : JSON.stringify(content),
+    );
+  }
+
+  it('passes with "none configured" when the file is absent', async () => {
+    const result = await checkActionPolicy(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toBe('No action policy (none configured)');
+  });
+
+  it('passes with the row count and the distinct action-kind count when valid', async () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        {
+          id: 'migrations',
+          action_kind: 'db_migration',
+          scope: { paths: ['db/migrations/**'] },
+          disposition: 'deny',
+        },
+        {
+          id: 'seed',
+          action_kind: 'db_migration',
+          scope: { commands: ['pnpm db:seed'] },
+          disposition: 'warn',
+        },
+        {
+          id: 'app',
+          action_kind: 'code_edit',
+          scope: { paths: ['src/**'] },
+          disposition: 'display',
+        },
+      ],
+    });
+    const result = await checkActionPolicy(tmpDir);
+    expect(result.status).toBe('pass');
+    expect(result.message).toBe('.totem/action-policy.json: 3 row(s) across 2 action kind(s)');
+  });
+
+  it('warns (never fails) on a corrupt file, naming the file, and never gates under --strict', async () => {
+    writePolicy('{ not json');
+    let parseMessage = '';
+    try {
+      JSON.parse('{ not json');
+    } catch (err) {
+      parseMessage = (err as Error).message;
+    }
+    const result = await checkActionPolicy(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toBe(`.totem/action-policy.json is unreadable: ${parseMessage}`);
+    expect(doctorGateFailed([result], 'fail')).toBe(false);
+    expect(doctorGateFailed([result], 'warn')).toBe(false);
+  });
+
+  it('warns on a schema-invalid file naming the first error, and never gates under --strict', async () => {
+    const policy = {
+      version: 1,
+      rows: [
+        { id: 'a', action_kind: 'not_a_kind', scope: { paths: ['x'] }, disposition: 'warn' },
+        { id: 'b', action_kind: 'code_edit', scope: {}, disposition: 'nope' },
+      ],
+    };
+    writePolicy(policy);
+    const firstIssue = ActionPolicyConfigSchema.safeParse(policy).error?.issues[0];
+    expect(firstIssue?.path.join('.')).toBe('rows.0.action_kind');
+    const result = await checkActionPolicy(tmpDir);
+    expect(result.status).toBe('warn');
+    expect(result.message).toBe(
+      `.totem/action-policy.json is unreadable: rows.0.action_kind: ${firstIssue?.message}`,
+    );
+    expect(doctorGateFailed([result], 'fail')).toBe(false);
+    expect(doctorGateFailed([result], 'warn')).toBe(false);
   });
 });
 
