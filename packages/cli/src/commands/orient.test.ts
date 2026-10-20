@@ -1285,6 +1285,19 @@ describe('orient action-policy section', () => {
     expect(parseJson().actionPolicy).toMatchObject({ file: '.totem/action-policy.json' });
   });
 
+  it('omits the section for an invalid configuration when no policy file is at the default directory', async () => {
+    const { TotemConfigError } = await import('@mmnto/totem');
+    mockLoadConfig.mockRejectedValue(
+      new TotemConfigError(
+        'Invalid totem.config.ts: targets: Required',
+        'fix it',
+        'CONFIG_INVALID',
+      ),
+    );
+    await runJson();
+    expect(parseJson()).not.toHaveProperty('actionPolicy');
+  });
+
   it('renders one error line for an invalid configuration, other sections still deriving', async () => {
     writePolicy(POLICY);
     const { TotemConfigError } = await import('@mmnto/totem');

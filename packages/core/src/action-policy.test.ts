@@ -1008,13 +1008,13 @@ describe('strict, bounded schema', () => {
       ],
     });
     const started = Date.now();
-    const p = check({ tool: 'Write', path: 'a'.repeat(1000) });
-    const c = check(bash(`run ${'a'.repeat(1000)}`));
+    const p = check({ tool: 'Write', path: 'a'.repeat(1024) });
+    const c = check(bash(`run ${'a'.repeat(1024)}`));
     // A generous bound on purpose: it separates a bounded match from an exponential
-    // one, not fast hardware from slow. The CI runners took 2.1 s here at this size
-    // (a three-star glob backtracks cubically over a 1000-character subject, the
-    // largest the 1024 bound compares), and a 1 s pin failed on all three of them
-    // (mmnto-ai/totem#3106).
+    // one, not fast hardware from slow. The bound compares a subject of up to 1024
+    // characters against a wildcard, and this is that largest subject; the CI
+    // runners took 2.1 s at about this size (a three-star glob backtracks cubically),
+    // and a 1 s pin failed on all three of them (mmnto-ai/totem#3106).
     expect(Date.now() - started).toBeLessThan(5000);
     expect(p.provenance.ref).toBe('no-policy-match');
     expect(c.provenance.ref).toBe('no-policy-match');
@@ -1820,5 +1820,117 @@ describe('branch glob bound', () => {
 
   it('loads release/*', () => {
     expect(env('release/*').success).toBe(true);
+  });
+});
+
+// ─── Fifth-read fold (mmnto-ai/totem#3106) ──────────────────────────────
+
+describe('line continuations, joined by the tokenizer', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([
+    ['a quoted heredoc whose body line ends in \\', "cat <<'EOT'\nx\\\nEOT\npnpm db:migrate:prod"],
+    ['the <<"EOT" form', 'cat <<"EOT"\nx\\\nEOT\npnpm db:migrate:prod'],
+    ['after a double-quoted apostrophe', 'git commit -m "don\'t"; pnpm db:mi\\\ngrate:prod'],
+    ['after a comment with an apostrophe', "# it's\npnpm db:mi\\\ngrate:prod"],
+    [
+      'after a quoted heredoc body with an apostrophe',
+      "cat <<'EOT'\nit's\nEOT\npnpm db:mi\\\ngrate:prod",
+    ],
+    ["after an ANSI-C $'…' string", "echo $'a\\'b'; pnpm db:mi\\\ngrate:prod"],
+    ['an LF continuation', 'pnpm db:mi\\\ngrate:prod'],
+    ['a CRLF continuation', 'pnpm \\\r\ndb:migrate:prod'],
+  ])('reads the governed command %s', (_label, command) => {
+    expect(check(bash(command)).provenance.ref).toBe('migrate');
+  });
+
+  it('a continuation inside single quotes stays literal', () => {
+    expect(check(bash("echo 'x\\\ny'; echo 'pnpm db:mi\\\ngrate:prod'")).provenance.ref).toBe(
+      'no-policy-match',
+    );
+  });
+
+  it('a \\\\ before a newline is an escaped backslash, not a continuation', () => {
+    expect(check(bash('pnpm db:mi\\\\\ngrate:prod')).provenance.ref).toBe('no-policy-match');
+  });
+});
+
+describe('subject-too-long, capped and filtered', () => {
+  const longDb = `db/${'d/'.repeat(549)}x.sql`; // over 1100 characters
+
+  const policy = (rows: unknown[], environments?: unknown[]) =>
+    writePolicy({ version: 1, ...(environments ? { environments } : {}), rows });
+
+  it.each(['display', 'warn'])(
+    'a %s row with a too-long subject yields warn at strict',
+    (disposition) => {
+      policy([{ id: 'r', action_kind: 'code_edit', scope: { paths: ['db/**'] }, disposition }]);
+      const v = check({ tool: 'Write', path: longDb }, { tier: 'strict' });
+      expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'subject-too-long']);
+    },
+  );
+
+  it('a glob whose literal head cannot start the subject is a plain no-match', () => {
+    policy([
+      { id: 'r', action_kind: 'code_edit', scope: { paths: ['src/**'] }, disposition: 'deny' },
+    ]);
+    const v = check({ tool: 'Write', path: longDb });
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+
+  it('a prod-environment deny row on a feature branch is not considered', () => {
+    policy(
+      [
+        {
+          id: 'prod-sql',
+          action_kind: 'db_migration',
+          scope: { paths: ['**/*.sql'] },
+          environment: 'prod',
+          disposition: 'deny',
+        },
+      ],
+      [{ name: 'prod', branches: ['main'] }],
+    );
+    const v = check({ tool: 'Write', path: longDb }, { gitBranchReader: () => 'feat/x' });
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
+  });
+
+  it('an override naming the too-long deny row lifts it to the override warn', () => {
+    policy([
+      {
+        id: 'sql',
+        action_kind: 'db_migration',
+        scope: { paths: ['**/*.sql'] },
+        disposition: 'deny',
+      },
+    ]);
+    const lines: string[] = [];
+    const v = check(
+      { tool: 'Write', path: longDb },
+      { env: { [ACTION_POLICY_OVERRIDE_ENV]: 'sql' }, writeStderr: (l) => void lines.push(l) },
+    );
+    expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'sql']);
+    expect(v.reason).toBe(
+      `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) sql (db_migration, deny): governed; proceeding`,
+    );
+    expect(v.provenance.detail).toMatchObject({ overriddenRows: ['sql'], tooLongFor: ['sql'] });
+    expect(lines).toHaveLength(1);
+  });
+});
+
+describe('PowerShell value option prefixes', () => {
+  beforeEach(() => writePolicy({ version: 1, rows: [MIGRATE_DENY] }));
+
+  it.each([['pwsh -Exec Bypass "x"'], ['powershell -Window Hidden "x"'], ['pwsh -wd "a b" "x"']])(
+    '%s is opaque',
+    (command) => {
+      const v = check(pwsh(command));
+      expect([v.disposition, v.provenance.ref]).toEqual(['warn', 'opaque-shell-string']);
+    },
+  );
+
+  it('an option outside the set is a flag, so its value ends the search (documented)', () => {
+    const v = check(pwsh('pwsh -Foo bar "x"'));
+    expect([v.disposition, v.provenance.ref]).toEqual(['allow', 'no-policy-match']);
   });
 });

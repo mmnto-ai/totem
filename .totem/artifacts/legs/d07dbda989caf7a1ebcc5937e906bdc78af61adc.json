@@ -1,0 +1,73 @@
+{
+  "schemaVersion": "1.1.0",
+  "diffSha": "d07dbda989caf7a1ebcc5937e906bdc78af61adc",
+  "readAt": "2026-10-20T00:59:31Z",
+  "findings": [
+    {
+      "id": "3106-r5-F1",
+      "severity": "BLOCKING",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 593,
+      "claim": "joinLineContinuations runs before heredoc detection and joins inside a quoted-delimiter heredoc body, where bash does not; a body line ending in a backslash swallows the closing delimiter and every later statement is read as heredoc text (regression from 250b3ad9)",
+      "counterexample": "row pnpm db:migrate:prod deny, Bash: cat <<'EOT' LF x\\ LF EOT LF pnpm db:migrate:prod -> 250b3ad9 deny|mig, d07dbda9 allow|no-policy-match; same with <<\"EOT\""
+    },
+    {
+      "id": "3106-r5-F2",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 638,
+      "claim": "joinLineContinuations toggles single-quote state on any apostrophe (inside double quotes, in a comment, in a heredoc body, in $'...'), after which no continuation is joined although bash joins it",
+      "counterexample": "git commit -m \"don't\"; pnpm db:mi\\ LF grate:prod -> allow|no-policy-match (unsplit control -> deny|mig); '# it's' LF pnpm db:mi\\ LF grate:prod -> allow; echo $'a\\'b'; pnpm db:mi\\ LF grate:prod -> allow"
+    },
+    {
+      "id": "3106-r5-F3",
+      "severity": "MATERIAL",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 1159,
+      "claim": "subject-too-long escalates to strict deny regardless of the row's disposition (display/warn), its environment (a row not applying on the current branch), or a literal prefix that cannot match, and the override cannot lift it; the sibling environment-unevaluable arm is capped at the rows' own dispositions",
+      "counterexample": "1104-char path under db/, strict: display row docs/** -> deny subject-too-long; warn row **/*.md -> deny; src/** -> deny; env row ** (prod on main, branch feature/x) -> deny while a short path -> allow; TOTEM_ACTION_POLICY_OVERRIDE naming the row -> deny"
+    },
+    {
+      "id": "3106-r5-F4",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.ts",
+      "line": 816,
+      "claim": "POWERSHELL_VALUE_OPTIONS matches whole spellings only; unambiguous prefixes pwsh accepts (-Exec, -Window) and quoted values with spaces end the search, missing the quoted command (pwsh prefix grammar inferred, not verified at source)",
+      "counterexample": "pwsh -Exec Bypass \"x\" -> allow|no-policy-match; powershell -Window Hidden \"x\" -> allow; pwsh -wd \"a b\" \"x\" -> allow; while pwsh -ExecutionPolicy Bypass \"x\" -> warn opaque-shell-string"
+    },
+    {
+      "id": "3106-r5-F5",
+      "severity": "MINOR",
+      "file": "packages/cli/src/commands/orient.ts",
+      "line": 464,
+      "claim": "an invalid configuration renders the ACTION POLICY section with an error even when no action-policy.json exists, contradicting the docs' 'With no file ... totem orient omits its ACTION POLICY section' and the type comment",
+      "counterexample": "temp git repo, totem.yaml 'targets: 5', no policy file: orient --json -> actionPolicy {file:null, error:'[Totem Error] Invalid configuration in totem.yaml: targets: Expected array, received number'}"
+    },
+    {
+      "id": "3106-r5-F6",
+      "severity": "MINOR",
+      "file": ".changeset/action-policy-gate.md",
+      "line": 6,
+      "claim": "changeset still says command patterns never start with 'a wrapper, time, coproc or a reserved word' (assignment and function now refused), its wrapper parenthetical omits timeout, and line continuations and the branch-glob bound are absent",
+      "counterexample": "pattern 'CI=1 make' and 'function deploy' fail the load at d07dbda9 (measured); the changeset sentence lists neither"
+    },
+    {
+      "id": "3106-r5-F7",
+      "severity": "MINOR",
+      "file": "packages/core/src/action-policy.test.ts",
+      "line": 1016,
+      "claim": "timing-pin comment calls a 1000-character subject 'the largest the 1024 bound compares'; the bound compares up to 1024",
+      "counterexample": "*a*a*c against 1024 'a' is compared (allow, 73 ms locally); the pin measures 1000, not the bound"
+    }
+  ],
+  "folded": [
+    "3106-r5-F1",
+    "3106-r5-F2",
+    "3106-r5-F3",
+    "3106-r5-F4",
+    "3106-r5-F5",
+    "3106-r5-F6",
+    "3106-r5-F7"
+  ],
+  "verdict": "Read 5 of the action-policy gate, scoped to the bot-round fold d07dbda9: blocking=1 material=2 minor=4 question=0 folded=7 (counts as typed). NOT CONVERGED by its own line on F1 to F3. Held, measured: the pipe rule with whitespace and tabs, the PowerShell value-option skip on the listed spellings, the branch-glob bound, the prompt-block clause and its version pin, timeout and the sudo value options through every spelling measured, the parity test against the wrapper template, the shield unchanged (both suites, the opt-in pin, a 1,932-input differential with zero changes and rows firing), the public surface clean. The blocker is a regression the seat's own fold decision introduced: a whole-text continuation join before heredoc detection. Folded by the seat in the next commit: F1 and F2 (the join moves into the shell tokenizer as an opt-in that drops a backslash-newline while building an unquoted or double-quoted word, so quotes, comments and the already-blanked heredoc bodies are respected; the whole-text join is deleted); F3 (the too-long verdict considers only rows that apply on the current branch, treats a glob whose literal prefix cannot match as a plain no-match, is capped at the too-long rows' own dispositions as the environment arm is, and is lifted by an override naming the row); F4 (value options match by unambiguous prefix as the string flags do, a quoted value with spaces is consumed to its closing quote, and the remaining limit is disclosed); F5 (with an invalid configuration the section renders its error line only when a policy file exists at the default directory, else it is omitted as documented); F6 (the changeset sentences); F7 (the pin's subject is 1024 characters and its comment says so). A sixth scoped read follows the fold, since it moves the join into the tokenizer and re-shapes the too-long arm."
+}

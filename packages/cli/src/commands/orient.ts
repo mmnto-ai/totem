@@ -461,7 +461,14 @@ async function deriveActionPolicy(
   const { ACTION_POLICY_FILE, actionPolicyEvaluator, getGitBranch, readActionPolicyConfig } =
     await import('@mmnto/totem');
   const resolved = await resolvePolicyTotemDir(cwd, repoRoot);
-  if (isError(resolved)) return { file: null, error: resolved.error };
+  if (isError(resolved)) {
+    // An invalid configuration is reported only where a policy is visible: with
+    // no policy file at the default directory the section is omitted, as it is
+    // for any repository without one.
+    const fs = await import('node:fs');
+    const visible = fs.existsSync(path.join(repoRoot, DEFAULT_TOTEM_DIR, ACTION_POLICY_FILE));
+    return visible ? { file: null, error: resolved.error } : null;
+  }
   const { totemDir } = resolved;
   const shownDir = path.relative(repoRoot, totemDir).split(path.sep).join('/') || '.';
   const file = `${shownDir}/${ACTION_POLICY_FILE}`;

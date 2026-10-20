@@ -513,10 +513,16 @@ type Compare = 'match' | 'nomatch' | 'unevaluable';
 /**
  * One path or token against one glob. A subject longer than
  * {@link ACTION_POLICY_WILDCARD_TOKEN_MAX} is not compared against a glob with
- * a wildcard (`unevaluable`); against a literal glob it compares whole.
+ * a wildcard (`unevaluable`, or `nomatch` when the glob's literal head does not
+ * start it); against a literal glob it compares whole.
  */
 function boundedGlobCompare(subject: string, glob: string): Compare {
-  if (hasWildcard(glob) && subject.length > ACTION_POLICY_WILDCARD_TOKEN_MAX) return 'unevaluable';
+  if (hasWildcard(glob) && subject.length > ACTION_POLICY_WILDCARD_TOKEN_MAX) {
+    // The glob's literal head before its first wildcard must still start the
+    // subject: `src/**` can never match a `db/…` path, however long.
+    const head = glob.slice(0, glob.search(/[*?{[]/));
+    return subject.startsWith(head) ? 'unevaluable' : 'nomatch';
+  }
   return matchesPathGlob(subject, glob) ? 'match' : 'nomatch';
 }
 
@@ -589,10 +595,11 @@ function commandPatternCompare(
  * there, and its backslashes are path characters.
  */
 function commandStatements(command: string, powershell: boolean, depth = 0): Statement[] {
-  const opts = { powershell, literalBackslash: powershell };
-  const joined = powershell ? command : joinLineContinuations(command);
-  const spans = findHeredocs(joined, opts);
-  const blanked = blankHeredocBodies(joined, spans);
+  // On the Bash tool the tokenizer joins line continuations as bash does
+  // (heredoc bodies are blanked first, so nothing in a body is joined).
+  const opts = { powershell, literalBackslash: powershell, joinContinuations: !powershell };
+  const spans = findHeredocs(command, opts);
+  const blanked = blankHeredocBodies(command, spans);
   const out: Statement[] = [];
   // A heredoc body has no quoting or comment rule: an apostrophe, a quoted span
   // or a `#` there is text, so its substitutions are read raw.
@@ -624,46 +631,6 @@ function commandStatements(command: string, powershell: boolean, depth = 0): Sta
         out.push(...commandStatements(body, powershell, depth + 1));
       }
     }
-  }
-  return out;
-}
-
-/**
- * The command with every backslash-newline outside single quotes deleted, as
- * bash deletes a line continuation before it splits words, so
- * `pnpm db:mi\<newline>grate:prod` reads as one token. An escaped backslash
- * (`\\`) is kept whole. Bash tool only: PowerShell's continuation is the
- * backtick, and its backslash is a path character.
- */
-function joinLineContinuations(command: string): string {
-  let out = '';
-  let inSingle = false;
-  for (let i = 0; i < command.length; i += 1) {
-    const ch = command[i] as string;
-    if (inSingle) {
-      if (ch === "'") inSingle = false;
-      out += ch;
-      continue;
-    }
-    if (ch === "'") {
-      inSingle = true;
-      out += ch;
-      continue;
-    }
-    if (ch === '\\') {
-      if (command[i + 1] === '\n') {
-        i += 1;
-        continue;
-      }
-      if (command[i + 1] === '\r' && command[i + 2] === '\n') {
-        i += 2;
-        continue;
-      }
-      out += ch + (command[i + 1] ?? '');
-      i += 1;
-      continue;
-    }
-    out += ch;
   }
   return out;
 }
@@ -812,10 +779,35 @@ function firstPositionalIsQuoted(raw: string, program: string): boolean {
   for (let k = at + 1; k < words.length; k += 1) {
     const w = words[k] as string;
     if (!w.startsWith('-')) return /^["']/.test(w);
-    // `-opt:value` carries its own value; a listed option takes the next word.
-    if (!w.includes(':') && POWERSHELL_VALUE_OPTIONS.has(w.toLowerCase())) k += 1;
+    // `-opt:value` carries its own value; a listed option takes the next word,
+    // a quoted value with spaces running to its closing quote. Any other option
+    // is skipped as a flag, so a value it takes ends the search.
+    if (w.includes(':') || !isPowerShellValueOption(w)) continue;
+    k += 1;
+    const value = words[k];
+    const quote = value?.[0];
+    if (value !== undefined && (quote === '"' || quote === "'")) {
+      const closed = (x: string, first: boolean): boolean =>
+        x.endsWith(quote) && (!first || x.length > 1);
+      if (!closed(value, true)) {
+        while (k + 1 < words.length && !closed(words[k + 1] as string, false)) k += 1;
+        k += 1;
+      }
+    }
   }
   return false;
+}
+
+/**
+ * A PowerShell host option that takes a value: a listed name, or an
+ * unambiguous prefix of one with at least two letters after the dash (the way
+ * the host matches `-Exec` to `-ExecutionPolicy`). An ambiguous prefix is not.
+ */
+function isPowerShellValueOption(word: string): boolean {
+  const w = word.toLowerCase();
+  if (POWERSHELL_VALUE_OPTIONS.has(w)) return true;
+  if (w.length < 3) return false;
+  return [...POWERSHELL_VALUE_OPTIONS].filter((o) => o.startsWith(w)).length === 1;
 }
 
 /** Rows that matched, and rows whose comparison was unevaluable (a too-long subject). */
@@ -978,16 +970,20 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   let currentEnvironments: string[] | null = null;
   let skipped: RowMatch[] = [];
   let environmentWhy = '';
-  if (envMatches.length > 0) {
+  const tooLongNamesEnvironment = tooLong.some(
+    (m) => m.row.environment !== ACTION_POLICY_ANY_ENVIRONMENT,
+  );
+  if (envMatches.length > 0 || tooLongNamesEnvironment) {
     const env = deriveEnvironments(config, root, context);
     if (env.ok) {
       currentEnvironments = env.names;
-      candidates = matches.filter(
-        (m) =>
-          m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT ||
-          env.names.includes(m.row.environment),
-      );
-    } else {
+      const applies = (m: RowMatch): boolean =>
+        m.row.environment === ACTION_POLICY_ANY_ENVIRONMENT ||
+        env.names.includes(m.row.environment);
+      candidates = matches.filter(applies);
+      // A too-long comparison counts only for a row that applies on this branch.
+      tooLong = tooLong.filter(applies);
+    } else if (envMatches.length > 0) {
       skipped = envMatches;
       environmentWhy = env.why;
     }
@@ -1157,27 +1153,71 @@ export const actionPolicyEvaluator: GateEvaluator = (payload, totemDir, context)
   }
 
   if (tooLong.length > 0 && decision.verdict.disposition !== 'deny') {
-    // A subject too long to compare against a wildcard row: never allow, and
-    // never a silent miss of the row it could have matched.
-    const disposition: GateDisposition = context?.tier === 'pilot' ? 'warn' : 'deny';
+    // A subject too long to compare against a wildcard row that applies here:
+    // never allow, never a silent miss, and never more severe than the rows
+    // themselves. A matched deny elsewhere has already stood.
     const ids = tooLong.map((m) => m.row.id);
-    decision = {
-      verdict: {
-        disposition,
-        reason: `A ${scopeKind} subject longer than ${ACTION_POLICY_WILDCARD_TOKEN_MAX} characters met a wildcard in row(s) ${ids.join(', ')}; the gate does not compare it (tier=${context?.tier ?? 'strict'} → ${disposition}).`,
-        provenance: {
-          source,
-          ref: REF_SUBJECT_TOO_LONG,
-          matched: (tooLong[0] as RowMatch).matched,
-          checkedAt,
-          detail: {
-            scopeKind,
-            tooLongFor: ids,
-            alsoMatched: matches.map((m) => m.row.id),
+    const tooLongDeny = tooLong.filter((m) => m.row.disposition === 'deny');
+    const named = overriddenRowIds(context);
+    if (tooLongDeny.length > 0 && tooLongDeny.every((m) => named.has(m.row.id))) {
+      // Every too-long deny row is named: lifted, like any other deny.
+      const lifted = tooLongDeny.map((m) => m.row.id);
+      const first = tooLongDeny[0] as RowMatch;
+      const kinds = [...new Set(tooLongDeny.map((m) => m.row.action_kind))].join(', ');
+      decision = {
+        verdict: {
+          disposition: 'warn',
+          reason: `${ACTION_POLICY_OVERRIDE_ENV} lifted row(s) ${lifted.join(', ')} (${kinds}, deny): ${first.row.reason ?? 'governed'}; proceeding`,
+          provenance: {
+            source,
+            ref: first.row.id,
+            matched: first.matched,
+            checkedAt,
+            detail: {
+              scopeKind,
+              tooLongFor: ids,
+              overriddenBy: ACTION_POLICY_OVERRIDE_ENV,
+              overriddenRows: lifted,
+              alsoMatched: matches.map((m) => m.row.id),
+            },
           },
         },
-      },
-    };
+        notice: `${ACTION_POLICY_NOTICE_PREFIX} OVERRIDE (${ACTION_POLICY_OVERRIDE_ENV}): allowing ${scopeKind} "${first.matched}"; row(s) ${lifted.join(', ')} would have denied.\n`,
+      };
+    } else if (tooLongDeny.length > 0 || decision.verdict.disposition === 'allow') {
+      const disposition: GateDisposition =
+        tooLongDeny.length > 0 && context?.tier !== 'pilot' ? 'deny' : 'warn';
+      decision = {
+        verdict: {
+          disposition,
+          reason: `A ${scopeKind} subject longer than ${ACTION_POLICY_WILDCARD_TOKEN_MAX} characters met a wildcard in row(s) ${ids.join(', ')}; the gate does not compare it (tier=${context?.tier ?? 'strict'} → ${disposition}).`,
+          provenance: {
+            source,
+            ref: REF_SUBJECT_TOO_LONG,
+            matched: (tooLong[0] as RowMatch).matched,
+            checkedAt,
+            detail: {
+              scopeKind,
+              tooLongFor: ids,
+              alsoMatched: matches.map((m) => m.row.id),
+            },
+          },
+        },
+      };
+    } else {
+      // Already a warn, and the too-long rows cap at warn: keep the verdict
+      // and name the rows it could not compare.
+      decision = {
+        ...decision,
+        verdict: {
+          ...decision.verdict,
+          provenance: {
+            ...decision.verdict.provenance,
+            detail: { ...decision.verdict.provenance.detail, tooLongFor: ids },
+          },
+        },
+      };
+    }
   }
 
   if (decision.notice !== undefined) {

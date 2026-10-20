@@ -73,14 +73,21 @@ describe("the shield's own call sites pass no opt-in option", () => {
     expect(callArguments('backtickBodies')).toEqual(['text, coveredAt']);
   });
 
-  it('tokenizeShell and findHeredocs never receive literalBackslash', () => {
+  it('tokenizeShell and findHeredocs never receive literalBackslash or joinContinuations', () => {
     for (const args of [...callArguments('tokenizeShell'), ...callArguments('findHeredocs')]) {
-      expect(args).not.toMatch(/literalBackslash/);
+      expect(args).not.toMatch(/literalBackslash|joinContinuations/);
     }
   });
 
   it('no option name of the opt-in set appears as an object key outside its definition', () => {
-    for (const key of ['wrapperOptions', 'skipRedirections', 'literalBackslash', 'backslash']) {
+    for (const key of [
+      'wrapperOptions',
+      'wrapperPositionals',
+      'skipRedirections',
+      'literalBackslash',
+      'joinContinuations',
+      'backslash',
+    ]) {
       const uses = [...SOURCE.matchAll(new RegExp(`\\b${key}\\s*:`, 'g'))];
       expect(uses, key).toHaveLength(0);
     }

@@ -203,6 +203,17 @@ export interface ScanOptions {
    * mmnto-ai/totem#3106).
    */
   literalBackslash?: boolean;
+  /**
+   * Join line continuations as bash does: outside single quotes, a backslash
+   * followed by LF or CRLF is dropped with the newline and the word goes on
+   * (`pnpm db:mi\<newline>grate:prod` is one token); inside single quotes it
+   * stays literal, and a `\\` before a newline is an escaped backslash. An
+   * ANSI-C `$'…'` string is read with its backslash escapes, so an escaped
+   * quote does not open a quoted region. Off by default: the shield's rows
+   * read a continuation as a word break. Read by `tokenizeShell` only (the
+   * action-policy gate, mmnto-ai/totem#3106).
+   */
+  joinContinuations?: boolean;
 }
 
 /**
@@ -518,6 +529,7 @@ const CONTROL_OPERATORS = ['&&', '||', '|', ';', '\n'];
 export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSegment[] {
   const ps = opts.powershell === true;
   const literalBackslash = opts.literalBackslash === true;
+  const join = opts.joinContinuations === true;
   const segments: ShellSegment[] = [];
   let tokens: string[] = [];
   let word = '';
@@ -538,13 +550,29 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
     const ch = command[i] as string;
     // A line continuation is whitespace, never an operator or a word character.
     if (!literalBackslash && ch === '\\' && command[i + 1] === '\n') {
-      flushWord();
+      if (!join) flushWord();
       i += 2;
       continue;
     }
     if (!literalBackslash && ch === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
-      flushWord();
+      if (!join) flushWord();
       i += 3;
+      continue;
+    }
+    if (join && ch === '$' && command[i + 1] === "'") {
+      // ANSI-C quoting: backslash escapes are read, so `\'` is a quote character.
+      let j = i + 2;
+      while (j < command.length && command[j] !== "'") {
+        if (command[j] === '\\' && j + 1 < command.length) {
+          word += command[j + 1];
+          j += 2;
+        } else {
+          word += command[j];
+          j += 1;
+        }
+      }
+      inWord = true;
+      i = j + 1;
       continue;
     }
     if (ps && command.startsWith('<#', i)) {
@@ -598,7 +626,10 @@ export function tokenizeShell(command: string, opts: ScanOptions = {}): ShellSeg
       i += 1;
       inWord = true;
       while (i < command.length && command[i] !== '"') {
-        if (ps && command[i] === '`' && i + 1 < command.length) {
+        if (join && command[i] === '\\' && command[i + 1] === '\r' && command[i + 2] === '\n') {
+          // A CRLF continuation inside double quotes joins too.
+          i += 3;
+        } else if (ps && command[i] === '`' && i + 1 < command.length) {
           // PowerShell's escape inside a double-quoted string is the backtick.
           word += command[i + 1];
           i += 2;
