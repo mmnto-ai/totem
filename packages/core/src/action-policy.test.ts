@@ -1651,6 +1651,12 @@ describe('dead command patterns fail the load', () => {
     },
   );
 
+  it('names a path-bearing wrapper basename as ungovernable, not as a prefix to drop', () => {
+    expect(parse('./scripts/env deploy').error?.issues.map((i) => i.message)).toEqual([
+      'a command pattern\'s first token "./scripts/env" has the basename of a wrapper the gate skips before the program, so it could never match: a repository script whose basename is a wrapper\'s cannot be governed by a command row',
+    ]);
+  });
+
   it('loads reboot', () => {
     expect(parse('reboot').success).toBe(true);
   });
@@ -1673,5 +1679,27 @@ describe('the 512-character head, positive', () => {
       rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['a*'] }, disposition: 'deny' }],
     });
     expect(check({ tool: 'Write', path: 'a'.repeat(1100) }).provenance.ref).toBe('p');
+  });
+});
+
+describe('the wildcard head, between 512 and 1024', () => {
+  it('compares a 600-character command token by its head against a wildcard', () => {
+    writePolicy({
+      version: 1,
+      rows: [
+        { id: 'c', action_kind: 'code_edit', scope: { commands: ['run *z'] }, disposition: 'deny' },
+      ],
+    });
+    expect(check(bash(`run ${'a'.repeat(599)}z`)).provenance.ref).toBe('no-policy-match');
+  });
+
+  it('compares a 600-character path by its head against a wildcard', () => {
+    writePolicy({
+      version: 1,
+      rows: [{ id: 'p', action_kind: 'code_edit', scope: { paths: ['*z'] }, disposition: 'deny' }],
+    });
+    expect(check({ tool: 'Write', path: `${'a'.repeat(599)}z` }).provenance.ref).toBe(
+      'no-policy-match',
+    );
   });
 });
