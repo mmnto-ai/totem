@@ -1010,7 +1010,11 @@ describe('strict, bounded schema', () => {
     const started = Date.now();
     const p = check({ tool: 'Write', path: 'a'.repeat(1000) });
     const c = check(bash(`run ${'a'.repeat(5000)}`));
-    expect(Date.now() - started).toBeLessThan(1000);
+    // A generous bound on purpose: it separates a bounded match from an exponential
+    // one, not fast hardware from slow. The CI runners took 2.1 s here when the head
+    // was 1024 characters (a three-star glob backtracks cubically over the head), and
+    // the 1 s pin failed on all three of them; the head is 512 now (mmnto-ai/totem#3106).
+    expect(Date.now() - started).toBeLessThan(5000);
     expect(p.provenance.ref).toBe('no-policy-match');
     expect(c.provenance.ref).toBe('no-policy-match');
   });
@@ -1410,7 +1414,7 @@ describe('program spellings, round two', () => {
   });
 });
 
-describe('the 1024-character head', () => {
+describe('the 512-character head', () => {
   it('compares a long command token by its head against a wildcard', () => {
     writePolicy({
       version: 1,
@@ -1652,7 +1656,7 @@ describe('dead command patterns fail the load', () => {
   });
 });
 
-describe('the 1024-character head, positive', () => {
+describe('the 512-character head, positive', () => {
   it('a long command token matches a wildcard by its head', () => {
     writePolicy({
       version: 1,

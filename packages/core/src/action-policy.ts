@@ -101,7 +101,7 @@ export const ACTION_POLICY_COMMAND_TOKEN_STAR_MAX = 2;
  * first this-many characters against a wildcard glob; against a literal glob
  * it still compares whole. Bounds the glob's work on a pathological input.
  */
-export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 1024;
+export const ACTION_POLICY_WILDCARD_TOKEN_MAX = 512;
 
 const slug = (what: string) => z.string().regex(SLUG_RE, `${what} must be a kebab-case slug`);
 
